@@ -1,12 +1,17 @@
 {
-  "name": "scaffold-tmp",
+  "name": "comunidad-latina",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check:rls": "node scripts/rls-enumerator.mjs",
+    "db:seed": "node scripts/seed.mjs",
+    "db:migrate": "node scripts/apply-migrations.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
