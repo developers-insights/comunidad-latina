@@ -1,26 +1,409 @@
+/*
+ * COMUNIDAD LATINA — Design tokens (Capa 1 + Capa 2)
+ * Fuente de verdad: docs/investigacion/13-diseno-ux-premium.md §2 (rige tal cual).
+ *
+ * Arquitectura:
+ *  - @theme            → primitivos fijos (neutros cálidos, tipografía, radios, easings).
+ *  - :root / .dark     → tokens semánticos runtime (--cl-*): light por default,
+ *                        dark como paleta tonal propia (§2.8), NUNCA inversión.
+ *  - @theme inline     → mapea los semánticos runtime a utilities de Tailwind.
+ *  - Marca del tenant  → el root layout pisa --color-brand-* con un inline style
+ *                        generado por lib/tenant/brand-pipeline (Capa 3).
+ *
+ * Utilities semánticas para el resto del enjambre:
+ *  bg-canvas · bg-surface · bg-surface-subtle · bg-surface-raised
+ *  text-foreground · text-foreground-secondary · text-foreground-muted · text-placeholder
+ *  border-border · border-border-subtle
+ *  *-success / *-success-bg · warning · danger · info (fijos, nunca de marca)
+ *  *-brand / *-brand-50…900 / *-brand-foreground (color del tenant, 4 usos permitidos)
+ *  shadow-xs…xl · shadow-bezel · shadow-focus-ring
+ *  ease-out-premium · ease-in-premium · ease-spring · rounded-sm…2xl
+ */
+
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* dark mode por clase (un theme-switcher puede setear .dark; el default sigue
+   a prefers-color-scheme vía el bloque @media de abajo) */
+@custom-variant dark (&:where(.dark, .dark *));
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@theme {
+  /* ── Se elimina la paleta default de Tailwind: la Capa 1 es la única paleta ── */
+  --color-*: initial;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  --color-white: #ffffff;
+  --color-black: #0d0c08;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  /* ── Escala de neutros cálidos (§2.3) — NUNCA gris frío ── */
+  --color-neutral-0: #ffffff;
+  --color-neutral-25: #fcfcfb;
+  --color-neutral-50: #f7f6f3;
+  --color-neutral-100: #efede8;
+  --color-neutral-200: #e2dfd7;
+  --color-neutral-300: #c8c3b8;
+  --color-neutral-400: #a39c8c;
+  --color-neutral-500: #7a7364;
+  --color-neutral-600: #5c564a;
+  --color-neutral-700: #3d392f;
+  --color-neutral-800: #24211b;
+  --color-neutral-900: #17150f;
+  --color-neutral-950: #0d0c08;
+
+  /* ── Marca (Capa 3) — defaults azul #1A5EDB; el layout los pisa por tenant ── */
+  --color-brand-50: #eef4fd;
+  --color-brand-100: #dce8fb;
+  --color-brand-200: #b6cff6;
+  --color-brand-300: #86adef;
+  --color-brand-400: #5389e7;
+  --color-brand-500: #2c6ce0;
+  --color-brand-600: #1a5edb;
+  --color-brand-700: #154cb2;
+  --color-brand-800: #113d8e;
+  --color-brand-900: #0d2e6b;
+  --color-brand: #1a5edb;
+  --color-brand-foreground: #ffffff;
+
+  /* ── Tipografía (§2.2) — variables conectadas en layout.tsx ── */
+  --font-display: var(--font-general-sans), var(--font-jakarta), -apple-system,
+    "Segoe UI", sans-serif;
+  --font-sans: var(--font-jakarta), system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace;
+
+  /* Escala tipográfica (§2.2, base 16px) */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.875rem;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 2.25rem;
+  --text-3xl: 2.25rem;
+  --text-3xl--line-height: 2.75rem;
+  --text-4xl: 3rem;
+  --text-4xl--line-height: 3.5rem;
+
+  /* ── Radios squircle-leaning (§2.4) — nunca esquinas duras ── */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-2xl: 32px;
+  --radius-full: 9999px;
+
+  /* ── Motion tokens (§2.7) — nunca linear ni ease-in-out genérico ── */
+  --ease-out-premium: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in-premium: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Focus ring (§2.5/§3.2): 3px, deriva de la marca del tenant */
+  --shadow-focus-ring: 0 0 0 3px var(--color-brand-200);
+
+  --animate-shimmer: shimmer 1.8s linear infinite;
+  --animate-spin-smooth: spin 0.8s linear infinite;
+
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ── Semánticos runtime (Capa 2): light default + dark como paleta propia ── */
+@theme inline {
+  --color-canvas: var(--cl-canvas);
+  --color-surface: var(--cl-surface);
+  --color-surface-subtle: var(--cl-surface-subtle);
+  --color-surface-raised: var(--cl-surface-raised);
+  --color-bezel-shell: var(--cl-bezel-shell);
+  --color-foreground: var(--cl-foreground);
+  --color-foreground-secondary: var(--cl-foreground-secondary);
+  --color-foreground-muted: var(--cl-foreground-muted);
+  --color-placeholder: var(--cl-placeholder);
+  --color-border: var(--cl-border);
+  --color-border-subtle: var(--cl-border-subtle);
+  --color-scrim: var(--cl-scrim);
+
+  /* Semánticos de estado FIJOS (§2.3) — jamás derivan de la marca */
+  --color-success: var(--cl-success);
+  --color-success-bg: var(--cl-success-bg);
+  --color-warning: var(--cl-warning);
+  --color-warning-bg: var(--cl-warning-bg);
+  --color-danger: var(--cl-danger);
+  --color-danger-bg: var(--cl-danger-bg);
+  --color-info: var(--cl-info);
+  --color-info-bg: var(--cl-info-bg);
+
+  /* Dorado del nivel Premium del Trust Score (gramática fija §3.3) */
+  --color-gold: var(--cl-gold);
+
+  /* Sombras difusas cálidas (§2.5); en dark → borde 1px + sombra a negro */
+  --shadow-xs: var(--cl-shadow-xs);
+  --shadow-sm: var(--cl-shadow-sm);
+  --shadow-md: var(--cl-shadow-md);
+  --shadow-lg: var(--cl-shadow-lg);
+  --shadow-xl: var(--cl-shadow-xl);
+  --shadow-bezel: var(--cl-shadow-bezel);
+}
+
+:root {
+  --cl-canvas: var(--color-neutral-25);
+  --cl-surface: var(--color-neutral-0);
+  --cl-surface-subtle: var(--color-neutral-50);
+  --cl-surface-raised: var(--color-neutral-0);
+  --cl-bezel-shell: var(--color-neutral-50);
+  --cl-bezel-highlight: rgba(255, 255, 255, 0.6);
+  --cl-foreground: var(--color-neutral-900);
+  --cl-foreground-secondary: var(--color-neutral-600);
+  --cl-foreground-muted: var(--color-neutral-500);
+  --cl-placeholder: var(--color-neutral-400);
+  --cl-border: var(--color-neutral-200);
+  --cl-border-subtle: var(--color-neutral-100);
+  --cl-scrim: rgba(13, 12, 8, 0.5);
+
+  /* Valores exactos §2.3 */
+  --cl-success: #1a7f5a;
+  --cl-success-bg: #e8f5ee;
+  --cl-warning: #b7791f;
+  --cl-warning-bg: #fbf2e3;
+  --cl-danger: #c23b3b;
+  --cl-danger-bg: #fbeaea;
+  --cl-info: #2b6cb0;
+  --cl-info-bg: #e9f1fa;
+  --cl-gold: #b7791f;
+
+  /* Sombras exactas §2.5 */
+  --cl-shadow-xs: 0 1px 2px rgba(23, 21, 15, 0.04);
+  --cl-shadow-sm: 0 2px 8px -2px rgba(23, 21, 15, 0.06);
+  --cl-shadow-md: 0 8px 24px -8px rgba(23, 21, 15, 0.1);
+  --cl-shadow-lg: 0 16px 48px -12px rgba(23, 21, 15, 0.14);
+  --cl-shadow-xl: 0 24px 64px -16px rgba(23, 21, 15, 0.18);
+  --cl-shadow-bezel: 0 1px 2px rgba(23, 21, 15, 0.04),
+    0 8px 24px -8px rgba(23, 21, 15, 0.08);
+  --cl-skeleton-highlight: rgba(255, 255, 255, 0.65);
+
+  /* Duraciones (§2.7) — usar con duration-(--duration-*) o en CSS propio */
+  --duration-instant: 100ms;
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+  --duration-page: 500ms;
+
+  /* Iconografía (§2.6) y targets táctiles (§3.2) */
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+  --icon-xl: 32px;
+  --touch-target-min: 44px;
+
+  color-scheme: light;
+}
+
+/* Dark mode (§2.8): paleta tonal propia. Superficies se ACLARAN al elevarse,
+   texto nunca blanco puro, sombras → borde sutil + sombra hacia negro profundo.
+   Los tonos de estado se recalibran para contraste AA sobre fondo oscuro
+   (los valores light de §2.3 no alcanzan 4.5:1 en dark — validado aparte). */
+.dark {
+  --cl-canvas: var(--color-neutral-900);
+  --cl-surface: var(--color-neutral-800);
+  --cl-surface-subtle: var(--color-neutral-950);
+  --cl-surface-raised: #2b2820;
+  --cl-bezel-shell: rgba(0, 0, 0, 0.1);
+  --cl-bezel-highlight: rgba(255, 255, 255, 0.04);
+  --cl-foreground: var(--color-neutral-50);
+  --cl-foreground-secondary: var(--color-neutral-300);
+  --cl-foreground-muted: var(--color-neutral-400);
+  --cl-placeholder: var(--color-neutral-500);
+  --cl-border: rgba(255, 255, 255, 0.1);
+  --cl-border-subtle: rgba(255, 255, 255, 0.06);
+  --cl-scrim: rgba(0, 0, 0, 0.65);
+
+  --cl-success: #46b184;
+  --cl-success-bg: #12271d;
+  --cl-warning: #d9a044;
+  --cl-warning-bg: #2a2010;
+  --cl-danger: #e26a6a;
+  --cl-danger-bg: #2e1514;
+  --cl-info: #6fa6e0;
+  --cl-info-bg: #121f2e;
+  --cl-gold: #d2a24c;
+
+  --cl-shadow-xs: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --cl-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 2px 8px -2px rgba(0, 0, 0, 0.45);
+  --cl-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 8px 24px -8px rgba(0, 0, 0, 0.55);
+  --cl-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 16px 48px -12px rgba(0, 0, 0, 0.6);
+  --cl-shadow-xl: 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 24px 64px -16px rgba(0, 0, 0, 0.65);
+  --cl-shadow-bezel: 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 8px 24px -8px rgba(0, 0, 0, 0.5);
+  --cl-skeleton-highlight: rgba(255, 255, 255, 0.06);
+
+  color-scheme: dark;
+}
+
+/* Sin toggle explícito, el sistema decide (mismos valores que .dark) */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    --cl-canvas: var(--color-neutral-900);
+    --cl-surface: var(--color-neutral-800);
+    --cl-surface-subtle: var(--color-neutral-950);
+    --cl-surface-raised: #2b2820;
+    --cl-bezel-shell: rgba(0, 0, 0, 0.1);
+    --cl-bezel-highlight: rgba(255, 255, 255, 0.04);
+    --cl-foreground: var(--color-neutral-50);
+    --cl-foreground-secondary: var(--color-neutral-300);
+    --cl-foreground-muted: var(--color-neutral-400);
+    --cl-placeholder: var(--color-neutral-500);
+    --cl-border: rgba(255, 255, 255, 0.1);
+    --cl-border-subtle: rgba(255, 255, 255, 0.06);
+    --cl-scrim: rgba(0, 0, 0, 0.65);
+
+    --cl-success: #46b184;
+    --cl-success-bg: #12271d;
+    --cl-warning: #d9a044;
+    --cl-warning-bg: #2a2010;
+    --cl-danger: #e26a6a;
+    --cl-danger-bg: #2e1514;
+    --cl-info: #6fa6e0;
+    --cl-info-bg: #121f2e;
+    --cl-gold: #d2a24c;
+
+    --cl-shadow-xs: 0 0 0 1px rgba(255, 255, 255, 0.06);
+    --cl-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 2px 8px -2px rgba(0, 0, 0, 0.45);
+    --cl-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.07),
+      0 8px 24px -8px rgba(0, 0, 0, 0.55);
+    --cl-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 16px 48px -12px rgba(0, 0, 0, 0.6);
+    --cl-shadow-xl: 0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 24px 64px -16px rgba(0, 0, 0, 0.65);
+    --cl-shadow-bezel: 0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 8px 24px -8px rgba(0, 0, 0, 0.5);
+    --cl-skeleton-highlight: rgba(255, 255, 255, 0.06);
+
+    color-scheme: dark;
+  }
+}
+
+/* ── Estilos base ── */
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  /* Selection con marca suave */
+  ::selection {
+    background-color: color-mix(in oklab, var(--color-brand) 22%, transparent);
+  }
+
+  /* Foco visible SIEMPRE (WCAG AA) — anillo 3px derivado de la marca */
+  :where(a, button, input, select, textarea, summary, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid transparent; /* forced-colors */
+    outline-offset: 2px;
+    box-shadow: var(--shadow-focus-ring);
+  }
+
+  /* Scrollbar sutil, del mismo mundo cálido */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--cl-border) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--cl-border);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Reduced motion: variante estática de TODO (§3.2/§5) */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ── Utilities propias ── */
+
+/* Skeleton shimmer (§5.2) — usar via <Skeleton /> de components/ui */
+@utility skeleton {
+  background-color: var(--color-surface-subtle);
+  background-image: linear-gradient(
+    100deg,
+    transparent 35%,
+    var(--cl-skeleton-highlight) 50%,
+    transparent 65%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* Expande el hit-area de un control chico hasta 44×44px sin cambiar su tamaño
+   visual (§3.2). El elemento debe poder posicionarse (se fuerza relative). */
+@utility touch-hitbox {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, var(--touch-target-min));
+    height: max(100%, var(--touch-target-min));
+    translate: -50% -50%;
+  }
+}
+
+/* Números que no saltan (precios, Trust Score) — alias semántico */
+@utility numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Oculta la scrollbar en carruseles horizontales (tabs, chips) */
+@utility scrollbar-none {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }

@@ -1,0 +1,18 @@
+export const common = {
+  appName: "Comunidad Latina",
+  loading: "Cargando…",
+  retry: "Reintentar",
+  save: "Guardar",
+  cancel: "Cancelar",
+  back: "Atrás",
+  continue: "Continuar",
+  enter: "Entrar",
+  start: "Empezá",
+  understood: "Entendido",
+  seeMore: "Ver más",
+  close: "Cerrar",
+  search: "Buscar",
+  offline: "Sin conexión — mostrando lo último guardado",
+  comingSoonTitle: "Muy pronto",
+  comingSoonBody: "Estamos terminando de configurar esta parte. Va a estar disponible muy pronto.",
+} as const;

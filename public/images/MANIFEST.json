@@ -1,0 +1,55 @@
+{
+  "generated_at": "2026-07-06",
+  "generator": "nanobanana MCP (Gemini image generation), session comunidad-latina",
+  "art_direction": "Calidez de comunidad latina + rigor fintech (Revolut/Mercado Pago) + claridad Linear. Neutros cálidos #FCFCFB/#F7F6F3/#17150F, acento azul #1A5EDB.",
+  "assets": [
+    {
+      "file": "hero-community.png",
+      "format": "png",
+      "aspect_ratio": "16:9",
+      "approx_dimensions": "1376x768",
+      "description": "Fotografía editorial: familia dominicana llegando a su barrio en Queens NY al atardecer, luz dorada, línea elevada del subte de fondo. Espacio negativo a la izquierda para copy. Nota: la caja de mudanza tiene escritura diegética ('FRÁGIL').",
+      "surface": "Hero de la landing principal (dominicanos.com)"
+    },
+    {
+      "file": "hero-vivienda.png",
+      "format": "png",
+      "aspect_ratio": "16:9",
+      "approx_dimensions": "1376x768",
+      "description": "Departamento luminoso y digno en Queens visto desde la puerta: luz natural cálida, plantas, ladrillo expuesto, acentos azules suaves. Sin personas, sin texto.",
+      "surface": "Hero / cabecera del módulo Vivienda"
+    },
+    {
+      "file": "onboarding-welcome.png",
+      "format": "png",
+      "aspect_ratio": "4:5",
+      "approx_dimensions": "944x1176",
+      "description": "Ilustración flat premium con textura sutil: comunidad adulta que recibe a quien llega con su valija. Paleta beige/arena + charcoal + acento azul #1A5EDB. Sin texto.",
+      "surface": "Pantalla de bienvenida del onboarding"
+    },
+    {
+      "file": "empty-state-search.png",
+      "format": "png",
+      "aspect_ratio": "1:1",
+      "approx_dimensions": "1024x1024",
+      "description": "Ilustración de línea fina sobre fondo beige claro: brújula + mapa plegado con pin de barrio en azul #1A5EDB. Minimalista estilo Linear/Stripe.",
+      "surface": "Empty state de búsqueda (sin resultados)"
+    },
+    {
+      "file": "og-default.png",
+      "format": "png",
+      "aspect_ratio": "16:9",
+      "approx_dimensions": "1376x768",
+      "description": "Composición abstracta de marca: arcos y círculos azul #1A5EDB sobre beige cálido y arena, grano sutil, sensación fintech-cálida. Sin texto.",
+      "surface": "Imagen Open Graph por defecto (meta og:image en todo el sitio)"
+    },
+    {
+      "file": "guia-cover-itin.png",
+      "format": "png",
+      "aspect_ratio": "16:9",
+      "approx_dimensions": "1376x768",
+      "description": "Fotografía editorial cenital: escritorio de madera cálido con documentos ordenados, café, anteojos, planta, luz de mañana. Texto de documentos ilegible.",
+      "surface": "Cover de la guía 'Cómo sacar tu ITIN'"
+    }
+  ]
+}
