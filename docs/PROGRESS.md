@@ -1,40 +1,56 @@
-# PROGRESS — Plan Maestro Comunidad Latina
+# PROGRESS — Comunidad Latina
 
-**Última actualización:** 2026-07-06.
-**Estado:** ✅ **PLAN MAESTRO V4 COMPLETO — orientada a construcción.** Listo para la sesión de Fable 5.
+**Última actualización:** 2026-07-06 (sesión de construcción con Fable 5 ultracode).
+**Estado:** ✅ **R0 + R1 + R2 CONSTRUIDOS Y VERDES.** Producto funcional de punta a punta en el tenant piloto `dominicanos`.
 
-## Objetivo (intacto)
-Construir el **PRODUCTO COMPLETO** — red social white-label multi-tenant (PWA) para la diáspora latina; Geovanny opera y monetiza el comercio local. **Decisión del cliente (2026-07-06): construir ya, completo, con Fable 5 orquestando agentes** (no MVP recortado, no validar-antes-de-construir). Fuente/guía: https://geovanny-estudio.onrender.com/
+## Qué está construido y verificado
 
-## Qué es la V4 (en una línea)
-Mismo objetivo que siempre (producto completo multi-tenant), reorientada de "ruta validada con gates que bloquean" a **"construir el producto completo por rebanadas verticales (R0→R5), con la validación de mercado corriendo en paralelo (Geovanny) sin frenar el código"**, y con las correcciones del **segundo pase adversarial** integradas en la arquitectura, la economía y el copy.
+### R0 — Cimientos (✅)
+- **DB multi-tenant**: 15 migraciones aplicadas en Supabase (`ktmbtpuhqqofdkisqseq`), 23 tablas, RLS `FORCE` + 4 policies nombradas en TODAS, helpers `app.*` (tenancy por JWT `app_metadata`, uuid v7), storage con policies por tenant, pg_cron TTL (mensajes 90d, notificaciones 60d, audit 365d), pgmq, 4 RPCs security-definer.
+- **Anti-honeypot §5.4 implementado**: sin teléfono, `profiles_private` (needs del onboarding solo-dueño), geo aproximada (`area_label`/`geo_zone`), trust sin grafo de avales, verificación = flag booleano, TTLs.
+- **Gate**: `npm run check:rls` → **VERDE (26 superficies)**. Advisors Supabase: solo WARNs intencionales (ver "Pendientes").
+- **Design system premium**: tokens completos del brief 13 (neutros cálidos, semánticos, Double-Bezel, motion), General Sans + Plus Jakarta Sans, componentes ui/ + trust/ (gramática fija de TrustScore).
+- **Infra**: middleware multi-tenant (Host→tenant, dev `?t=`), brand pipeline OKLCH con validación WCAG (con test), clientes Supabase SSR, degradación elegante (`lib/config/services.ts` + `<ProximamentePremium>`).
+- **Assets**: 6 imágenes premium generadas con nanobanana en `public/images/`.
 
-## Cadena de tareas
-- [✅] A — 7 informes técnicos + A2 — 5 power-ups + diseño (13).
-- [✅] V1 (técnica) → `docs/versiones/PLAN_MAESTRO_v1.md`.
-- [✅] V2 (integrada) → `docs/versiones/PLAN_MAESTRO_v2.md`.
-- [✅] 1er abogado del diablo (sobre V2) → `docs/investigacion/VEREDICTO-abogado-del-diablo.md`.
-- [✅] V3 (ruta validada) → `docs/versiones/PLAN_MAESTRO_v3.md`.
-- [✅] **2º abogado del diablo (sobre V3, 4 fiscales + web 2026)** → `docs/investigacion/VEREDICTO-V3-segundo-pase.md`.
-- [✅] **V4 (orientada a construcción)** → `docs/PLAN_MAESTRO.md` (18 secciones).
-- [✅] `.env.example` + `docs/SETUP-ENV.md` (variables por prioridad).
-- [▶️ SIGUIENTE] **Construcción con Fable 5 (ultracode)** — arrancar por R0 (cimientos) → R1 (wedge con moat). Ver `docs/HANDOFF.md`.
+### R1 — Wedge con moat (✅)
+- **/propiedades**: búsqueda full-text español, filtros, keyset pagination, detalle según wireframe §4.d (banda de verificación SOLO con `verification_check found_active`, ScamShieldNotice siempre, ubicación aproximada, CTA sticky contacto protegido → RPC).
+- **/escudo**: verificador notario/abogado (resultado binario con copy legal: registro + fecha + disclaimer; estado honesto si no hay registro conectado), reportes (RPC `report_scam`), educación anti-estafa.
+- **/bienvenida**: onboarding "Recién Llegado" 5 pasos <60s, needs → `profiles_private`.
+- **/mensajes**: conversaciones pending/accepted, moderación de texto OpenAI, aviso anti-estafa fijo, TTL comunicado como feature.
+- **/negocios/presencia**: planes `[EJEMPLO]` §18, degradación premium sin Stripe; webhook Stripe production-ready (firma + idempotencia `payment_events`) **pendiente de firma senior**.
+- **Landing premium** + /guias con fuentes oficiales + JSON-LD + PWA (Serwist en Next 16, manifest por tenant, InstallPrompt, offline).
 
-## Correcciones que la V4 aplicó sobre la V3 (del 2º veredicto)
-1. **Números honestos:** 15 negocios pagando = **8% del opex**, no break-even; real ~160 cuentas / ~$8k MRR/dominio (§6.2). Ingreso **no atado al listado** para vencer el churn estructural (§7).
-2. **Moat desde la 1ª rebanada:** Escudo Anti-Estafa determinístico + verificador notario/abogado entran en R1 — el wedge no sale desnudo contra Zillow (§3, §13).
-3. **Arquitectura anti-honeypot (minimización agresiva de datos):** login sin teléfono, geo aproximada, TTL corto, mensajería E2E, verificación fuera de la DB (§5.4). El riesgo ICE no se "resuelve" borrando el documento; se mitiga guardando lo mínimo.
-4. **Copy legalmente seguro:** nunca "verificado/de confianza" (deber de cuidado, Roommates.com, negligent misrepresentation); descriptor literal + disclaimer + seguro E&O (§11.2).
-5. **Marca con uso genuino,** no specimen manufacturado (= sham use → cancelación por fraude, §11.1).
-6. **Senior humano = límite de velocidad** dimensionado; su firma bloquea el 1er dato real (§14.4).
-7. **09 superado por §3:** el informe 09 aún describe el Escudo "que promete" (tóxico); el enjambre construye §3.
-8. **Validación en paralelo,** no bloqueante (§10).
+### R2 — Red social + admin (✅)
+- **/feed**: 5 pestañas, composer con moderación, 3 tipos de card estructuralmente distintos, likes optimistas (triggers de counters en DB), anti-scroll (botón "Ver más").
+- **/profesionales, /eventos**: directorios con la misma regla estricta de verificación; /publicar soporta property|professional|event.
+- **/notificaciones**: unificadas + **Broadcast Global pull-model** con receipts; campana en header.
+- **/admin**: moderación (cola con score IA), dominio (stats, aprobaciones, reportes), global (crear tenant con preview del brand pipeline, broadcast) — todo gateado por `app_metadata.role` server-side + `audit_log`.
 
-## Archivos clave
-- `docs/PLAN_MAESTRO.md` — **V4, el norte.**
-- `docs/HANDOFF.md` — arranque de la construcción (Fable 5).
-- `docs/investigacion/VEREDICTO-V3-segundo-pase.md` — por qué la V4 corrige lo que corrige.
-- `.env.example` + `docs/SETUP-ENV.md` — variables (Supabase desbloquea el arranque).
+### Verificación (todo corrido en esta sesión)
+`tsc` 0 errores · `next build` verde (33 rutas) · 12 tests vitest · lint 0 errores · enumerador RLS verde · smoke-test visual (landing, /propiedades, /feed) en 375px.
 
-## Reanudar
-Leer `docs/PLAN_MAESTRO.md` (V4) + `docs/HANDOFF.md`. La construcción arranca por **R0** (motor multi-tenant + auth + anti-honeypot + PWA + diseño) → **R1** (wedge con moat). NO cambiar el objetivo. Decisiones de Geovanny en §16 (solo el senior de seguridad bloquea el 1er dato real; el resto corre en paralelo). Datos de ejemplo para destrabar: §18.
+### Proceso (cómo se construyó)
+5 workflows ultracode: esquema adversarial (autor max + 3 fiscales × 2 rondas + corrector), assets nanobanana, fundaciones (2 agentes paralelos + integrador), R1 (7 módulos paralelos + integrador + 2 fiscales + corrector, 14 findings), R2 (4 módulos + integrador + fiscal max + corrector, 4 findings). ~30 agentes, ~4.1M tokens de subagentes.
+
+## Datos demo
+- Tenants: `dominicanos` (#1A5EDB) y `comunidadlatina` (#C2410C). En dev: `http://localhost:3000/?t=dominicanos`.
+- Usuarios (password `Demo123!demo`): `maria@demo.comunidadlatina.com` (member) · `carlos@...` (domain_admin) · `geovanny@...` (global_admin).
+- 9 listings de Queens, 3 guías con fuentes oficiales, 5 posts + comentarios + reacciones, 1 verification_check.
+
+## Pendientes (en orden)
+1. **🔴 GATES HUMANOS antes del primer dato real (§5.2/§14.4 — NO construibles por agentes):** pentest humano adversarial + **firma de ingeniero senior** sobre migraciones y webhook Stripe. Sin esto NO se expone a usuarios reales.
+2. **Credenciales faltantes** (degradan con elegancia hoy): Stripe (test) → activa pagos reales del flujo ya construido · Resend → emails · Google Vision → moderación de imagen (hoy: pending_review) · Sentry → observabilidad (exigida antes de producción) · Vercel → deploy + dominios.
+3. **Hardening menor detectado por advisors:** los 3 buckets públicos permiten LISTAR archivos (enumeración de paths con user ids) — restringir la SELECT policy de `storage.objects` a paths propios o quitar listing público. Anotado, no bloqueante en dev.
+4. **R3 (siguiente rebanada):** moat de IA (Asistente RAG con guardrails §3, pgvector ya instalado), matching, Stripe Connect/Creator, boost. **R4:** 2º dominio real + Playbook. Requiere decisiones de Geovanny §16.
+5. Deuda técnica menor: renombrar `middleware`→`proxy` (deprecación Next 16), `metadataBase` en layout, unificar `lib/trust/levels` con `components/trust/levels`, E2E de mensajería (gate §5.4, hoy TTL 90d), CA cert para el enumerador en CI (`SUPABASE_DB_CA_CERT_PATH`).
+
+## Cómo correr
+```
+npm run dev              # app en localhost:3000 (tenant dominicanos por default)
+npm run build            # build producción (--webpack por Serwist)
+npm run typecheck | test | lint
+npm run check:rls        # gate RLS (RLS_ENUMERATOR_ALLOW_INSECURE_TLS=1 en dev)
+npm run db:migrate       # aplica migraciones nuevas de supabase/migrations/
+npm run db:seed          # seed idempotente
+```
