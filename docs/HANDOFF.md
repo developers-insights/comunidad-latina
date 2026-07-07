@@ -1,22 +1,24 @@
-# HANDOFF — Comunidad Latina (post-construcción R0-R2)
+# HANDOFF — Comunidad Latina (post-construcción R0-R3 + polish)
 
-**Fecha:** 2026-07-06. La sesión de construcción con Fable 5 (ultracode) terminó con **R0+R1+R2 verdes y commiteados**. Este handoff arranca la próxima sesión.
+**Fecha:** 2026-07-07. La sesión de construcción con Fable 5 (ultracode) terminó con **R0+R1+R2+R3 + revisión integral + polish premium, todo verde y commiteado**. El producto está completo; lo que resta son gates humanos y credenciales.
 
 ## Leé primero (en este orden)
 1. `docs/PROGRESS.md` — estado real, pendientes priorizados, cómo correr.
-2. `docs/PLAN_MAESTRO.md` (V4) — el norte; roadmap §13 (siguen R3/R4).
+2. `docs/PLAN_MAESTRO.md` (V4) — el norte; roadmap §13 (queda R4 escala + R5 moonshots).
 3. `docs/ARQUITECTURA.md` — contrato técnico vigente (respetarlo en todo código nuevo).
 
 ## Hecho y verificado (resumen de una línea por rebanada)
 - **R0**: motor multi-tenant + RLS FORCE total + anti-honeypot + design system premium + PWA — enumerador VERDE.
 - **R1**: vivienda verificada + Escudo determinístico + onboarding + contacto protegido + pagos degradados + landing/guías.
 - **R2**: feed 5 pestañas + directorios + notificaciones/broadcast + 3 paneles admin por rol.
-- Gates automáticos: tsc/build(33 rutas)/tests/lint/RLS todos verdes. Smoke visual OK.
+- **R3**: Asistente RAG legal-safe (calibrado, verificado en vivo) + Stripe Identity/Boost + emails + Sentry + Matching + Copiloto + producción (sitemap/robots/errores/headers/rate-limit).
+- **Revisión integral** (23 findings) + **Polish premium** (splash, transiciones, micro-interacciones, celebraciones).
+- Gates automáticos: tsc/build(47 rutas)/tests/lint/RLS(29 superficies) todos verdes. Smoke visual OK (landing, /asistente, /feed).
 
 ## Próxima tarea sugerida (elegir según contexto)
-- **Si hay credenciales nuevas** (Stripe test, Resend, Vision, Sentry): ponerlas en `.env.local` — el código ya las consume; probar el flujo de pago end-to-end en modo test y pedir la **firma senior del webhook** antes de cualquier cobro real.
-- **Si toca seguir construyendo**: R3 según §13 (Asistente Comunitario RAG con guardrails duros §3 — pgvector ya está instalado; Matching; Copiloto). ⚠️ El "Asistente de Trámites" requiere revisión de abogado ANTES (UPL).
-- **Si toca preparar el go-live**: pentest humano + firma senior (bloqueantes §14.4), Vercel Pro + dominios, Sentry, hardening del listado de buckets (PROGRESS pendiente #3), specimen de marca con uso genuino (§11.1, deadline octubre).
+- **Mañana con las credenciales** (Stripe test, Resend, Sentry, Meshy, Gemini): ponerlas en `.env.local` (los placeholders ya están) — el código ya las consume; probar el flujo de pago/identity end-to-end en modo test y pedir la **firma senior del webhook** antes de cualquier cobro real. Con Meshy/Gemini, correr el agente de assets para sumar los detalles 3D reales.
+- **Go-live**: pentest humano + firma senior (bloqueantes §14.4), Vercel Pro + dominios, hardening del listado de buckets + leaked-password protection (PROGRESS pendiente #3), specimen de marca con uso genuino (§11.1, deadline octubre).
+- **Seguir construyendo**: R4 (2º dominio real + Playbook de Nacimiento de Tenant) / R5 (moonshots). El "Asistente de Trámites" (I-130/I-765/TPS/DACA) sigue vetado hasta revisión de abogado (UPL).
 
 ## Gotchas para la próxima sesión
 - Migraciones: **forward-only**, agregar `00XX_*.sql` nuevas (nunca editar aplicadas) y correr `npm run db:migrate` + `npm run check:rls`. Toda tabla nueva con `tenant_id` necesita RLS FORCE + 4 policies o el gate ROMPE.
