@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { CheckCircle, Circle } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
@@ -110,12 +111,12 @@ export function TrustScoreSheet({
         ))}
       </ul>
 
-      <a
+      <Link
         href={learnMoreHref}
         className="mt-6 mb-2 inline-block text-sm font-semibold text-brand underline-offset-4 hover:underline"
       >
         Leer cómo funciona el Trust Score
-      </a>
+      </Link>
     </BottomSheet>
   );
 }

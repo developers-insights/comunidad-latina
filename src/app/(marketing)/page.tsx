@@ -1,43 +1,331 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
-import { ShieldCheck } from "@phosphor-icons/react/dist/ssr";
+import {
+  ArrowRight,
+  BookOpenText,
+  CalendarCheck,
+  HandPalm,
+  HouseLine,
+  MagnifyingGlass,
+  SealCheck,
+  ShieldCheck,
+  Storefront,
+} from "@phosphor-icons/react/dist/ssr";
 import { getTenant } from "@/lib/tenant/resolve";
-import { t } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
+import { BezelCard, buttonVariants } from "@/components/ui";
+import { COPY, gentilicioDe } from "@/components/marketing/copy";
+import {
+  fetchPublishedGuides,
+  fetchRecentProperties,
+  toGuideCardData,
+} from "@/components/marketing/data";
+import { GuideCard } from "@/components/marketing/guide-card";
+import { ListingMiniCard } from "@/components/marketing/listing-mini-card";
+import { JsonLd } from "@/components/marketing/json-ld";
+import { Reveal } from "@/components/marketing/reveal";
 
-// Placeholder premium — el agente LANDING reemplaza esta página completa.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
 
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getTenant();
+  const gentilicio = gentilicioDe(tenant.slug);
+  const description = `El lugar donde ${gentilicio} que llegan encuentran a su gente y resuelven su vida — vivienda sin estafas, guías de trámites en tu idioma y verificación contra registros oficiales.`;
+
   return {
-    title: `${tenant.name} — Tu comunidad, verificada`,
-    description: `La comunidad de ${tenant.name} para encontrar vivienda, gente y ayuda real — con verificación anti-estafa.`,
+    title: `${tenant.name} — Tu comunidad, sin estafas`,
+    description,
+    keywords: [
+      `comunidad ${tenant.slug}`,
+      "vivienda sin estafas",
+      "apartamentos queens",
+      "guías para inmigrantes",
+      "ITIN sin SSN",
+      "licencia de conducir NY",
+      "escudo anti-estafa",
+    ],
+    openGraph: {
+      title: `${tenant.name} — Tu comunidad, sin estafas`,
+      description,
+      type: "website",
+      locale: "es_US",
+      images: [{ url: "/images/og-default.png", width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${tenant.name} — Tu comunidad, sin estafas`,
+      description,
+    },
   };
 }
 
+const PILLAR_ICONS = {
+  vivienda: HouseLine,
+  escudo: ShieldCheck,
+  guias: BookOpenText,
+} as const;
+
+const STEP_ICONS = [MagnifyingGlass, CalendarCheck, HandPalm] as const;
+
 export default async function MarketingHome() {
   const tenant = await getTenant();
+  const [guides, listings] = await Promise.all([
+    fetchPublishedGuides(3),
+    fetchRecentProperties(4),
+  ]);
+  const featuredGuides = guides.map(toGuideCardData);
+  const gentilicio = gentilicioDe(tenant.slug);
 
   return (
-    <section className="mx-auto flex w-full max-w-3xl flex-col items-center px-4 py-24 text-center sm:py-32">
-      <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-1.5 text-sm text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-        <ShieldCheck size={16} className="text-[var(--color-brand)]" aria-hidden />
-        Comunidad con verificación anti-estafa
-      </span>
+    <>
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          name: tenant.name,
+          url: SITE_URL,
+          logo: `${SITE_URL}/images/og-default.png`,
+          description: COPY.hero.h1(gentilicio),
+        }}
+      />
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          name: tenant.name,
+          url: SITE_URL,
+          inLanguage: "es",
+        }}
+      />
 
-      <h1 className="max-w-xl text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-        {tenant.name}
-      </h1>
+      {/* (a) Hero */}
+      <section className="relative isolate overflow-hidden bg-neutral-900">
+        <div className="absolute inset-0 -z-10">
+          <Image
+            src="/images/hero-community.png"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/60 to-neutral-950/35"
+          />
+        </div>
 
-      <p className="mt-5 max-w-md text-lg leading-relaxed text-neutral-500 dark:text-neutral-400">
-        Encontrá dónde vivir, gente de tu país y ayuda de verdad — sin miedo a que te estafen.
-      </p>
+        <div className="mx-auto flex w-full max-w-5xl flex-col items-start px-4 pb-24 pt-28 sm:pb-32 sm:pt-40">
+          <Reveal>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-sm font-medium text-white backdrop-blur-sm">
+              <ShieldCheck size={16} weight="fill" aria-hidden="true" />
+              {COPY.hero.badge}
+            </span>
+          </Reveal>
 
-      <Link
-        href="/entrar"
-        className="mt-10 flex min-h-12 items-center rounded-full bg-[var(--color-brand)] px-8 text-base font-semibold text-[var(--color-brand-foreground)] transition-transform duration-150 hover:opacity-90 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
-      >
-        {t("common", "enter")}
-      </Link>
-    </section>
+          <Reveal delay={0.08}>
+            <h1 className="mt-6 max-w-2xl font-display text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl">
+              {COPY.hero.h1(gentilicio)}
+            </h1>
+          </Reveal>
+
+          <Reveal delay={0.16}>
+            <p className="mt-5 max-w-xl text-lg leading-relaxed text-neutral-100/90">
+              {COPY.hero.subhead}
+            </p>
+          </Reveal>
+
+          <Reveal delay={0.24} className="mt-9 flex flex-wrap items-center gap-3">
+            <Link href="/registro" className={buttonVariants({ variant: "primary", size: "lg" })}>
+              {COPY.hero.ctaPrimary}
+            </Link>
+            <Link
+              href="/propiedades"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "lg" }),
+                "border-white/40 text-white hover:bg-white/10",
+              )}
+            >
+              {COPY.hero.ctaSecondary}
+            </Link>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* (b) Resolvé tu llegada — solo lo VIVO hoy (§2.3, honesto) */}
+      <section className="mx-auto w-full max-w-5xl px-4 py-16 sm:py-24">
+        <Reveal>
+          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+            {COPY.pillars.title}
+          </h2>
+          <p className="mt-3 max-w-xl text-foreground-secondary">{COPY.pillars.subtitle}</p>
+        </Reveal>
+
+        <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-3">
+          {COPY.pillars.items.map((pillar, index) => {
+            const Icon = PILLAR_ICONS[pillar.key];
+            return (
+              <Reveal key={pillar.key} delay={index * 0.08} className="h-full">
+                <Link href={pillar.href} className="group block h-full">
+                  <BezelCard className="h-full" coreClassName="flex h-full flex-col gap-3 p-6">
+                    <span className="flex size-11 items-center justify-center rounded-md bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                      <Icon size={24} weight="light" aria-hidden="true" />
+                    </span>
+                    <h3 className="font-display text-lg font-semibold">{pillar.title}</h3>
+                    <p className="text-sm leading-relaxed text-foreground-secondary">
+                      {pillar.body}
+                    </p>
+                    <span className="mt-auto inline-flex items-center gap-1 pt-2 text-sm font-medium text-brand-700 transition-transform duration-(--duration-fast) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0 dark:text-brand-300">
+                      {pillar.cta}
+                      <ArrowRight size={16} aria-hidden="true" />
+                    </span>
+                  </BezelCard>
+                </Link>
+              </Reveal>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* (c) Social proof estructural: cómo funciona la verificación */}
+      <section className="border-y border-border-subtle bg-surface">
+        <div className="mx-auto w-full max-w-5xl px-4 py-16 sm:py-24">
+          <Reveal>
+            <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+              {COPY.verification.title}
+            </h2>
+            <p className="mt-3 text-foreground-secondary">{COPY.verification.subtitle}</p>
+          </Reveal>
+
+          <ol className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-3">
+            {COPY.verification.steps.map((step, index) => {
+              const Icon = STEP_ICONS[index];
+              return (
+                <Reveal key={step.title} delay={index * 0.08}>
+                  <li className="flex flex-col gap-3">
+                    <span className="flex size-11 items-center justify-center rounded-full bg-surface-subtle text-foreground">
+                      <Icon size={22} weight="light" aria-hidden="true" />
+                    </span>
+                    <h3 className="font-display text-base font-semibold">
+                      <span className="numeric mr-1.5 text-foreground-muted">{index + 1}.</span>
+                      {step.title}
+                    </h3>
+                    <p className="text-sm leading-relaxed text-foreground-secondary">
+                      {step.body}
+                    </p>
+                  </li>
+                </Reveal>
+              );
+            })}
+          </ol>
+
+          {/* Ejemplo literal del copy legal §11 */}
+          <Reveal delay={0.2} className="mt-12">
+            <p className="mb-3 text-sm font-medium text-foreground-muted">
+              {COPY.verification.exampleLabel}
+            </p>
+            <BezelCard variant="success" className="max-w-2xl" coreClassName="p-5">
+              <p className="flex items-start gap-2 text-sm font-medium text-success">
+                <SealCheck size={18} weight="fill" className="mt-0.5 shrink-0" aria-hidden="true" />
+                {COPY.verification.exampleDescriptor}
+              </p>
+              <p className="mt-2 pl-6 text-sm text-foreground-secondary">
+                {COPY.verification.exampleDisclaimer}
+              </p>
+            </BezelCard>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* (d) Guías destacadas (de la DB) */}
+      {featuredGuides.length > 0 && (
+        <section className="mx-auto w-full max-w-5xl px-4 py-16 sm:py-24">
+          <Reveal className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+                {COPY.guides.title}
+              </h2>
+              <p className="mt-3 max-w-xl text-foreground-secondary">{COPY.guides.subtitle}</p>
+            </div>
+            <Link
+              href="/guias"
+              className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-700 dark:text-brand-300"
+            >
+              {COPY.guides.allLink}
+              <ArrowRight size={16} aria-hidden="true" />
+            </Link>
+          </Reveal>
+
+          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {featuredGuides.map((guide, index) => (
+              <Reveal key={guide.slug} delay={index * 0.08} className="h-full">
+                <GuideCard guide={guide} className="h-full" />
+              </Reveal>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* (e) Propiedades recientes (reales, de la DB) */}
+      {listings.length > 0 && (
+        <section className="border-t border-border-subtle bg-surface-subtle/50">
+          <div className="mx-auto w-full max-w-5xl px-4 py-16 sm:py-24">
+            <Reveal className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+                  {COPY.listings.title}
+                </h2>
+                <p className="mt-3 max-w-xl text-foreground-secondary">
+                  {COPY.listings.subtitle}
+                </p>
+              </div>
+              <Link
+                href="/propiedades"
+                className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-700 dark:text-brand-300"
+              >
+                {COPY.listings.allLink}
+                <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            </Reveal>
+
+            <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {listings.map((listing, index) => (
+                <Reveal key={listing.id} delay={index * 0.06} className="h-full">
+                  <ListingMiniCard listing={listing} className="h-full" />
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* (f) Banda para negocios */}
+      <section className="mx-auto w-full max-w-5xl px-4 py-16 sm:py-24">
+        <Reveal>
+          <BezelCard variant="featured" coreClassName="flex flex-col items-start gap-4 p-8 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                <Storefront size={26} weight="light" aria-hidden="true" />
+              </span>
+              <div>
+                <h2 className="font-display text-xl font-bold tracking-tight">
+                  {COPY.business.title}
+                </h2>
+                <p className="mt-1.5 max-w-md text-sm leading-relaxed text-foreground-secondary">
+                  {COPY.business.body}
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/negocios/presencia"
+              className={cn(buttonVariants({ variant: "outline", size: "md" }), "shrink-0")}
+            >
+              {COPY.business.cta}
+            </Link>
+          </BezelCard>
+        </Reveal>
+      </section>
+    </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -22,7 +22,9 @@ export function useFocusTrap(
   onEscape?: () => void,
 ) {
   const onEscapeRef = useRef(onEscape);
-  onEscapeRef.current = onEscape;
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  });
 
   useEffect(() => {
     if (!active) return;
@@ -80,8 +82,11 @@ export function useBodyScrollLock(active: boolean) {
 }
 
 /** true recién tras el mount — evita portales durante SSR/hidratación. */
+const emptySubscribe = () => () => {};
 export function useMounted(): boolean {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  return mounted;
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 }

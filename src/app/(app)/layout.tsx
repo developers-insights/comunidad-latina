@@ -4,6 +4,7 @@ import { brandThemeToStyle } from "@/lib/tenant/brand-pipeline";
 import { Header } from "@/components/shell/header";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { OfflineBanner } from "@/components/shell/offline-banner";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 
 /**
  * Shell de la app autenticada: Header + contenido mobile-first centrado + BottomNav.
@@ -22,6 +23,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <Header tenant={tenant} />
       <main className="mx-auto w-full max-w-lg flex-1 px-4 pb-28 pt-4">{children}</main>
       <BottomNav />
+      <InstallPrompt />
     </div>
   );
 }
