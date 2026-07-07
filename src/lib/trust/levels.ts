@@ -23,9 +23,6 @@ export const TRUST_LEVELS: readonly TrustLevel[] = [
   { id: "diamante", min: 90, max: 100, label: "Diamante" },
 ] as const;
 
-/** La barra de Trust Score siempre tiene 5 segmentos (uno por nivel). */
-export const TRUST_SEGMENTS = 5;
-
 export function clampScore(score: number): number {
   if (Number.isNaN(score)) return 0;
   return Math.min(100, Math.max(0, Math.round(score)));
@@ -36,19 +33,8 @@ export function getTrustLevel(score: number): TrustLevel {
   return TRUST_LEVELS.find((level) => clamped >= level.min && clamped <= level.max) ?? TRUST_LEVELS[0];
 }
 
-/** Segmentos llenos de la barra (1–5): el índice del nivel alcanzado. */
-export function trustSegmentsFilled(score: number): number {
-  return TRUST_LEVELS.indexOf(getTrustLevel(score)) + 1;
-}
-
-/** "87 · Confiable" — formato inline junto al nombre del autor. */
-export function formatTrustScore(score: number): string {
-  const clamped = clampScore(score);
-  return `${clamped} · ${getTrustLevel(clamped).label}`;
-}
-
-/** aria-label del badge: "Trust Score 87, nivel Confiable". */
-export function trustScoreAriaLabel(score: number): string {
-  const clamped = clampScore(score);
-  return `Trust Score ${clamped}, nivel ${getTrustLevel(clamped).label}`;
-}
+// La capa VISUAL de niveles (Icon/textClass/segmentClass + segmentos llenos)
+// vive en @/components/trust/levels — se deriva del nivel canónico de acá.
+// Se eliminaron trustSegmentsFilled/formatTrustScore/trustScoreAriaLabel/
+// TRUST_SEGMENTS por no tener consumidores (evita dos definiciones de
+// "segmentos llenos" que puedan divergir).

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/lib/types/database.types";
@@ -32,3 +33,21 @@ export async function createClient() {
     },
   );
 }
+
+/**
+ * Usuario autenticado del request, cache()-eado: si varios Server Components de
+ * un mismo árbol lo piden, se hace UNA sola llamada a Supabase Auth por request
+ * (React dedupe). Sigue siendo el `getUser()` networked que VALIDA el JWT — no
+ * se cambia la semántica de seguridad. El refresh del token lo hace el
+ * middleware (patrón @supabase/ssr); acá solo se lee el usuario ya validado.
+ *
+ * Preferir este helper sobre `(await createClient()).auth.getUser()` en páginas
+ * y layouts para no serializar dos veces la misma verificación de auth.
+ */
+export const getCurrentUser = cache(async () => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+});

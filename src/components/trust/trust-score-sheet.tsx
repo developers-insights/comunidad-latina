@@ -5,7 +5,7 @@ import { CheckCircle, Circle } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import {
-  filledSegments,
+  levelSegments,
   TRUST_LEVELS,
   type TrustLevel,
 } from "./levels";
@@ -42,7 +42,7 @@ export function TrustScoreSheet({
   learnMoreHref = "/escudo/trust-score",
 }: TrustScoreSheetProps) {
   const config = TRUST_LEVELS[level];
-  const filled = filledSegments(score);
+  const filled = levelSegments(level);
 
   return (
     <BottomSheet open={open} onClose={onClose} title={`Trust Score de ${name}`}>

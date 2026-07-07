@@ -3,7 +3,7 @@ import { MagicWand, MapPin, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, Chip, EmptyState, buttonVariants } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { getTrustLevel } from "@/lib/trust/levels";
+import { toTrustProps } from "@/lib/trust/signals";
 import type { Json, Tables } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
 import { BusinessTrustBadge, type OwnerTrust } from "./business-trust-badge";
@@ -46,41 +46,19 @@ function categoriaLabel(attrs: Json): string | null {
   return CATEGORIA_LABELS[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
-/** Señales del Trust Score desde el jsonb — parse defensivo, nunca lanza. */
-function parseSignals(value: Json): { label: string; achieved: boolean }[] {
-  if (!Array.isArray(value)) return [];
-  const signals: { label: string; achieved: boolean }[] = [];
-  for (const item of value) {
-    if (item !== null && typeof item === "object" && !Array.isArray(item)) {
-      const record = item as Record<string, unknown>;
-      if (typeof record.label === "string" && record.label.length > 0) {
-        signals.push({ label: record.label, achieved: Boolean(record.achieved) });
-      }
-    }
-  }
-  return signals;
-}
-
-const TRUST_LEVEL_IDS = ["nuevo", "verificado", "confiable", "premium", "diamante"] as const;
-
+/**
+ * Trust Score del dueño → props del badge. Usa la fuente única
+ * (@/lib/trust/signals): las mismas señales que ve el usuario en vivienda,
+ * mensajes y profesionales. `identity_verified` viene del perfil del dueño.
+ */
 function buildOwnerTrust(
   score: Tables<"trust_scores"> | undefined,
   ownerName: string,
+  identityVerified: boolean,
 ): OwnerTrust | null {
-  if (!score) return null;
-  const level = (TRUST_LEVEL_IDS as readonly string[]).includes(score.level)
-    ? (score.level as OwnerTrust["level"])
-    : getTrustLevel(score.score).id;
-  const signals = parseSignals(score.signals);
-  return {
-    name: ownerName,
-    score: score.score,
-    level,
-    signals:
-      signals.length > 0
-        ? signals
-        : [{ label: "Cuenta creada en la comunidad", achieved: true }],
-  };
+  const props = toTrustProps(score ?? null, identityVerified);
+  if (!props) return null;
+  return { name: ownerName, ...props };
 }
 
 export default async function NegociosPage() {
@@ -110,13 +88,17 @@ export default async function NegociosPage() {
   );
   const trustByOwner = new Map<string, Tables<"trust_scores">>();
   const nameByOwner = new Map<string, string>();
+  const verifiedByOwner = new Map<string, boolean>();
   if (ownerIds.length > 0) {
     const [{ data: scores }, { data: owners }] = await Promise.all([
       supabase.from("trust_scores").select("*").in("profile_id", ownerIds),
-      supabase.from("profiles").select("id, display_name").in("id", ownerIds),
+      supabase.from("profiles").select("id, display_name, identity_verified").in("id", ownerIds),
     ]);
     for (const score of scores ?? []) trustByOwner.set(score.profile_id, score);
-    for (const owner of owners ?? []) nameByOwner.set(owner.id, owner.display_name);
+    for (const owner of owners ?? []) {
+      nameByOwner.set(owner.id, owner.display_name);
+      verifiedByOwner.set(owner.id, owner.identity_verified ?? false);
+    }
   }
 
   return (
@@ -205,7 +187,11 @@ export default async function NegociosPage() {
               ? (nameByOwner.get(negocio.created_by) ?? negocio.publisher_name ?? "")
               : "";
             const ownerTrust = negocio.created_by
-              ? buildOwnerTrust(trustByOwner.get(negocio.created_by), ownerName)
+              ? buildOwnerTrust(
+                  trustByOwner.get(negocio.created_by),
+                  ownerName,
+                  verifiedByOwner.get(negocio.created_by) ?? false,
+                )
               : null;
 
             return (

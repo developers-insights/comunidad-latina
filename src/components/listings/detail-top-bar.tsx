@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, DotsThree, Heart, ShareNetwork } from "@phosphor-icons/react/dist/ssr";
+import { ArrowLeft, DotsThree, ShareNetwork } from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, Button, Textarea, useToast } from "@/components/ui";
 import { ReportScamButton } from "@/components/trust";
 import { reportScamAction } from "@/app/(app)/mensajes/actions";
@@ -90,19 +90,8 @@ export function DetailTopBar({ title, listingId }: { title: string; listingId: s
         <ArrowLeft size={22} aria-hidden="true" />
       </button>
       <div className="flex items-center gap-1">
-        <button
-          type="button"
-          aria-label={COPY.detail.save}
-          onClick={() =>
-            toast({
-              title: COPY.detail.saveSoonTitle,
-              description: COPY.detail.saveSoonBody,
-            })
-          }
-          className={iconButtonClass}
-        >
-          <Heart size={22} aria-hidden="true" />
-        </button>
+        {/* "Guardar" se resuelve con ausencia hasta que la feature exista
+            (§4.d: ausencia, no un botón que confiese estar sin terminar). */}
         <button
           type="button"
           aria-label={COPY.detail.share}

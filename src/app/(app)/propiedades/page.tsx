@@ -3,7 +3,6 @@ import Link from "next/link";
 import { CaretDown, Megaphone, Plus } from "@phosphor-icons/react/dist/ssr";
 import { Chip, EmptyState, Skeleton, buttonVariants } from "@/components/ui";
 import {
-  AlertButton,
   COPY,
   ListingCard,
   ListingFilters,
@@ -192,10 +191,9 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
     listingIds.length > 0
       ? supabase
           .from("verification_checks")
-          .select("subject_id, registry, registry_url, license_number, checked_at")
+          .select("subject_id, result, registry, registry_url, license_number, checked_at")
           .eq("tenant_id", tenant.id)
           .eq("subject_kind", "listing")
-          .eq("result", "found_active")
           .in("subject_id", listingIds)
           .order("checked_at", { ascending: false })
       : Promise.resolve({ data: [] as never[] }),
@@ -211,26 +209,36 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
           .select("profile_id, score, level, signals")
           .in("profile_id", publisherIds)
       : Promise.resolve({ data: [] as never[] }),
-    supabase
-      .from("listings")
-      .select("area_label")
-      .eq("tenant_id", tenant.id)
-      .eq("kind", "property")
-      .eq("status", "published")
-      .not("area_label", "is", null)
-      .limit(200),
+    // Las zonas del filtro solo se derivan en la PRIMERA página (sin cursor):
+    // en "cargar más" los chips ya se renderizaron, así que evitamos escanear
+    // hasta 200 filas de nuevo.
+    cursor
+      ? Promise.resolve({ data: [] as { area_label: string | null }[] })
+      : supabase
+          .from("listings")
+          .select("area_label")
+          .eq("tenant_id", tenant.id)
+          .eq("kind", "property")
+          .eq("status", "published")
+          .not("area_label", "is", null)
+          .limit(200),
   ]);
 
+  // Sólo el check MÁS RECIENTE por sujeto decide (viene ordenado checked_at desc).
+  // Registramos ese primero visto para NO dejar que un found_active viejo pise a un
+  // expired/mismatch posterior; y sólo mostramos sello si ese último es found_active.
   const verificationByListing = new Map<string, VerificationView>();
+  const latestCheckSeen = new Set<string>();
   for (const check of checksResult.data ?? []) {
-    if (check.subject_id && !verificationByListing.has(check.subject_id)) {
-      verificationByListing.set(check.subject_id, {
-        registry: check.registry,
-        registryUrl: check.registry_url,
-        licenseNumber: check.license_number,
-        dateLabel: formatDate(check.checked_at, { locale: tenant.locale, style: "long" }),
-      });
-    }
+    if (!check.subject_id || latestCheckSeen.has(check.subject_id)) continue;
+    latestCheckSeen.add(check.subject_id);
+    if (check.result !== "found_active") continue;
+    verificationByListing.set(check.subject_id, {
+      registry: check.registry,
+      registryUrl: check.registry_url,
+      licenseNumber: check.license_number,
+      dateLabel: formatDate(check.checked_at, { locale: tenant.locale, style: "long" }),
+    });
   }
 
   const profileById = new Map((profilesResult.data ?? []).map((p) => [p.id, p]));
@@ -315,7 +323,15 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
           illustration="/images/empty-state-search.png"
           title={isSearching ? COPY.list.emptySearchTitle : COPY.list.emptyTitle}
           message={isSearching ? COPY.list.emptySearchMessage : COPY.list.emptyMessage}
-          action={<AlertButton />}
+          action={
+            <Link
+              href="/publicar"
+              className={buttonVariants({ variant: "primary", size: "md" })}
+            >
+              <Plus size={18} aria-hidden="true" />
+              {COPY.list.emptyPublishCta}
+            </Link>
+          }
         />
       ) : (
         <div className="flex flex-col gap-4">

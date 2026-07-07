@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
   BookOpen,
@@ -9,7 +10,7 @@ import {
   Sparkle,
 } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, Chip, Skeleton, buttonVariants } from "@/components/ui";
-import { formatListingPrice, listingPhotoUrl } from "@/components/listings";
+import { formatListingPrice, isOptimizableSrc, listingPhotoUrl } from "@/components/listings";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getMatches, type MatchItem } from "@/lib/matching";
@@ -123,15 +124,23 @@ function MatchCard({ item, locale }: { item: MatchItem; locale: string }) {
           {item.reason}
         </p>
 
-        {item.photoPath && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={listingPhotoUrl(item.photoPath)}
-            alt=""
-            loading="lazy"
-            className="h-24 w-full rounded-md object-cover"
-          />
-        )}
+        {item.photoPath &&
+          (() => {
+            const src = listingPhotoUrl(item.photoPath);
+            return isOptimizableSrc(src) ? (
+              <div className="relative h-24 w-full overflow-hidden rounded-md bg-surface-subtle">
+                <Image src={src} alt="" fill sizes="248px" className="object-cover" />
+              </div>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element -- URL externa de seed/API: host fuera del allowlist de next/image
+              <img
+                src={src}
+                alt=""
+                loading="lazy"
+                className="h-24 w-full rounded-md object-cover"
+              />
+            );
+          })()}
 
         <div className="flex flex-wrap items-center gap-1.5">
           <Chip size="sm" icon={meta.icon}>

@@ -3,6 +3,10 @@ import type { TrustLevel } from "@/components/trust";
 import type { TrustSignal } from "@/components/trust";
 import { formatMoney } from "@/lib/utils";
 
+// Gramática de señales de confianza: FUENTE ÚNICA en @/lib/trust/signals.
+// Se re-exportan acá para no romper los imports existentes de @/components/listings.
+export { toTrustLevel, buildTrustSignals } from "@/lib/trust/signals";
+
 /**
  * Helpers puros del módulo VIVIENDA. Sin dependencias de servidor:
  * usables desde Server Components y client components por igual.
@@ -96,60 +100,8 @@ export function parsePropertyAttrs(attrs: Json): PropertyAttrs {
 // ---------------------------------------------------------------------------
 // Trust Score del publicador
 // ---------------------------------------------------------------------------
-
-const TRUST_LEVEL_IDS = new Set(["nuevo", "verificado", "confiable", "premium", "diamante"]);
-
-export function toTrustLevel(level: string | null | undefined): TrustLevel {
-  return level && TRUST_LEVEL_IDS.has(level) ? (level as TrustLevel) : "nuevo";
-}
-
-/**
- * signals jsonb de trust_scores → lista legible para el TrustScoreSheet.
- * Nunca inventa señales: solo traduce las que existen; las faltantes van
- * en gris como "todavía no" (regla §4.c: ausencia, nunca castigo).
- */
-export function buildTrustSignals(
-  signals: Json,
-  identityVerified: boolean,
-): TrustSignal[] {
-  const record =
-    signals !== null && typeof signals === "object" && !Array.isArray(signals)
-      ? (signals as Record<string, unknown>)
-      : {};
-
-  const months = asFiniteNumber(record.months_in_community) ?? 0;
-  const transactions = asFiniteNumber(record.transactions_ok) ?? 0;
-  const endorsements = asFiniteNumber(record.endorsements_count) ?? 0;
-
-  const monthsLabel =
-    months >= 12
-      ? `En la comunidad hace ${Math.floor(months / 12)} ${Math.floor(months / 12) === 1 ? "año" : "años"}`
-      : months >= 1
-        ? `En la comunidad hace ${months} ${months === 1 ? "mes" : "meses"}`
-        : "Tiempo en la comunidad";
-
-  return [
-    {
-      label: identityVerified ? "Identidad verificada (documento)" : "Verificar su identidad",
-      achieved: identityVerified,
-    },
-    { label: monthsLabel, achieved: months >= 1 },
-    {
-      label:
-        transactions > 0
-          ? `${transactions} ${transactions === 1 ? "transacción" : "transacciones"} sin disputa`
-          : "Transacciones sin disputa",
-      achieved: transactions > 0,
-    },
-    {
-      label:
-        endorsements > 0
-          ? `${endorsements} ${endorsements === 1 ? "vecino verificado la avala" : "vecinos verificados la avalan"}`
-          : "Avales de vecinos verificados",
-      achieved: endorsements > 0,
-    },
-  ];
-}
+// `toTrustLevel` y `buildTrustSignals` viven en @/lib/trust/signals (fuente
+// única) y se re-exportan al tope de este archivo.
 
 /** Nombre de pila para el TrustScoreSheet ("Trust Score de Rosa"). */
 export function firstNameOf(displayName: string): string {

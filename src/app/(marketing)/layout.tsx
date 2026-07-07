@@ -16,6 +16,12 @@ export default async function MarketingLayout({ children }: { children: ReactNod
       style={brandThemeToStyle(tenant.brandHex) as CSSProperties}
       className="flex min-h-dvh flex-col bg-canvas text-foreground"
     >
+      <a
+        href="#contenido"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground focus:shadow-lg focus:ring-[3px] focus:ring-[var(--color-brand-200)]"
+      >
+        Saltar al contenido
+      </a>
       <header className="sticky top-0 z-40 border-b border-border-subtle bg-surface/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-4">
           <Link
@@ -45,7 +51,9 @@ export default async function MarketingLayout({ children }: { children: ReactNod
         </div>
       </header>
 
-      <main className="flex-1">{children}</main>
+      <main id="contenido" tabIndex={-1} className="flex-1 focus:outline-none">
+        {children}
+      </main>
 
       {/* (g) Footer premium */}
       <footer className="border-t border-border-subtle bg-surface">

@@ -115,8 +115,8 @@ export default function EscudoPage() {
         <p className="mt-2 font-medium text-foreground">{COPY.whatNot}</p>
       </div>
 
-      {/* 3 secciones */}
-      <nav aria-label={COPY.title} className="flex flex-col gap-3">
+      {/* 4 secciones */}
+      <nav aria-label="Herramientas del Escudo" className="flex flex-col gap-3">
         <SectionCard
           href="/escudo/verificar"
           icon={IdentificationCard}

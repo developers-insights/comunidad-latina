@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import {
-  filledSegments,
+  levelSegments,
   TRUST_LEVELS,
   type TrustLevel,
 } from "./levels";
@@ -30,7 +30,7 @@ export function TrustScoreBadge({
   className,
 }: TrustScoreBadgeProps) {
   const config = TRUST_LEVELS[level];
-  const filled = filledSegments(score);
+  const filled = levelSegments(level);
   const isCard = size === "card";
 
   return (

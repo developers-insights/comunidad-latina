@@ -143,8 +143,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       {mounted &&
         createPortal(
+          // Sin aria-live en el contenedor: cada ToastCard gestiona su propio
+          // anuncio por-item (role="alert" asertivo para danger, role="status"
+          // cortés para el resto). Un aria-live="polite" acá degradaría los
+          // avisos críticos anidados a cortés en NVDA/VoiceOver.
           <div
-            aria-live="polite"
             className={cn(
               "pointer-events-none fixed inset-x-0 z-[70] flex flex-col items-center gap-2 px-4",
               // por encima del bottom-nav (64px) + safe area

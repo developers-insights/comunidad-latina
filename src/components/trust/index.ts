@@ -1,6 +1,6 @@
 export {
   TRUST_LEVELS,
-  filledSegments,
+  levelSegments,
   type TrustLevel,
   type TrustLevelConfig,
 } from "./levels";

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -33,25 +34,15 @@ type Params = Promise<{ id: string }>;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function generateMetadata({ params }: { params: Params }) {
-  const { id } = await params;
-  if (!UUID_RE.test(id)) return { title: "Propiedad" };
+/**
+ * Lectura de la propiedad, cache()-eada por request: `generateMetadata` y el
+ * cuerpo de la página comparten la MISMA fila con un solo round-trip a la DB
+ * (React dedupe la llamada dentro del request). Selecciona el superset que el
+ * detalle necesita. RLS ya limita qué filas existen para este usuario.
+ */
+const fetchListingById = cache(async (id: string) => {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("listings")
-    .select("title")
-    .eq("id", id)
-    .maybeSingle();
-  return { title: data?.title ?? "Propiedad" };
-}
-
-export default async function PropiedadDetallePage({ params }: { params: Params }) {
-  const { id } = await params;
-  if (!UUID_RE.test(id)) notFound();
-
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-
-  const { data: listing } = await supabase
+  return supabase
     .from("listings")
     .select(
       "id, tenant_id, kind, title, description, price_amount, price_currency, price_period, attrs, area_label, photos, status, created_by, publisher_name, publisher_kind, source, created_at",
@@ -59,27 +50,50 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
     .eq("id", id)
     .eq("kind", "property")
     .maybeSingle();
+});
+
+export async function generateMetadata({ params }: { params: Params }) {
+  const { id } = await params;
+  if (!UUID_RE.test(id)) return { title: "Propiedad" };
+  const { data } = await fetchListingById(id);
+  return { title: data?.title ?? "Propiedad" };
+}
+
+export default async function PropiedadDetallePage({ params }: { params: Params }) {
+  const { id } = await params;
+  if (!UUID_RE.test(id)) notFound();
+
+  const [tenant, supabase, { data: listing }] = await Promise.all([
+    getTenant(),
+    createClient(),
+    fetchListingById(id),
+  ]);
 
   // RLS ya limita qué filas existen para este usuario (published | propias | staff).
   if (!listing || listing.tenant_id !== tenant.id) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   // ---------------------------------------------------------------------
-  // Verificación vinculada (regla estricta: SOLO found_active → banda;
-  // sin check → ausencia, jamás un negativo)
+  // getUser() y la verificación vinculada son independientes → en paralelo.
+  // Verificación (regla estricta: SOLO found_active → banda; sin check →
+  // ausencia, jamás un negativo).
   // ---------------------------------------------------------------------
-  const { data: checks } = await supabase
-    .from("verification_checks")
-    .select("registry, registry_url, license_number, checked_at")
-    .eq("tenant_id", tenant.id)
-    .eq("subject_kind", "listing")
-    .eq("subject_id", listing.id)
-    .eq("result", "found_active")
-    .order("checked_at", { ascending: false })
-    .limit(1);
+  const [
+    {
+      data: { user },
+    },
+    { data: checks },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase
+      .from("verification_checks")
+      .select("registry, registry_url, license_number, checked_at")
+      .eq("tenant_id", tenant.id)
+      .eq("subject_kind", "listing")
+      .eq("subject_id", listing.id)
+      .eq("result", "found_active")
+      .order("checked_at", { ascending: false })
+      .limit(1),
+  ]);
 
   const check = checks?.[0];
   const verification: VerificationView | null = check

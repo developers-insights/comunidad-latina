@@ -6,8 +6,8 @@ import {
   Buildings,
   ChatCircle,
   HouseSimple,
+  ShieldCheck,
   UserCircle,
-  UsersThree,
   type Icon,
 } from "@phosphor-icons/react";
 import { t } from "@/lib/i18n";
@@ -18,7 +18,7 @@ type NavItem = { href: string; label: string; icon: Icon };
 const ITEMS: NavItem[] = [
   { href: "/feed", label: t("nav", "feed"), icon: HouseSimple },
   { href: "/propiedades", label: t("nav", "properties"), icon: Buildings },
-  { href: "/comunidad", label: t("nav", "community"), icon: UsersThree },
+  { href: "/escudo", label: t("nav", "shield"), icon: ShieldCheck },
   { href: "/mensajes", label: t("nav", "messages"), icon: ChatCircle },
   { href: "/perfil", label: t("nav", "profile"), icon: UserCircle },
 ];

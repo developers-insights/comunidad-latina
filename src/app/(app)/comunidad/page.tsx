@@ -1,40 +1,11 @@
-import Link from "next/link";
-import { UsersThree } from "@phosphor-icons/react/dist/ssr";
-import { EmptyState, buttonVariants } from "@/components/ui";
-import { t } from "@/lib/i18n";
+import { redirect } from "next/navigation";
 
-// Placeholder premium — el agente SOCIAL (R2) reemplaza esta página con el
-// espacio real de la comunidad. Mientras tanto: estado vacío con guía y
-// acción concreta (§3.5 — ningún destino de la navegación puede dar 404).
-
-export const metadata = { title: "Comunidad" };
-
-const COPY = {
-  emptyTitle: "Tu comunidad se está preparando",
-  emptyMessage:
-    "Muy pronto vas a poder compartir novedades, hacer preguntas y encontrarte con tu gente acá. Mientras terminamos esta parte, mirá lo que ya está publicado.",
-  emptyCta: "Ver propiedades",
-} as const;
-
+/**
+ * La "Comunidad" ya vive en el feed social (R2). Esta ruta se mantiene solo
+ * para no romper enlaces/bookmarks antiguos y redirige al feed real — nunca
+ * una página que confiese estar sin terminar (§1.3 / §4.d: ausencia, no
+ * negativo). La navegación primaria surface /escudo en su lugar.
+ */
 export default function ComunidadPage() {
-  return (
-    <>
-      <h1 className="mb-6 font-display text-2xl font-bold tracking-tight text-foreground">
-        {t("nav", "community")}
-      </h1>
-      <EmptyState
-        icon={<UsersThree weight="light" />}
-        title={COPY.emptyTitle}
-        message={COPY.emptyMessage}
-        action={
-          <Link
-            href="/propiedades"
-            className={buttonVariants({ variant: "primary", size: "md" })}
-          >
-            {COPY.emptyCta}
-          </Link>
-        }
-      />
-    </>
-  );
+  redirect("/feed");
 }

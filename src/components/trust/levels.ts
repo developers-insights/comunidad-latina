@@ -60,7 +60,15 @@ export const TRUST_LEVELS: Record<TrustLevel, TrustLevelConfig> = {
   },
 };
 
-/** Segmentos llenos (0–5) para un score 0–100. */
-export function filledSegments(score: number): number {
-  return Math.max(0, Math.min(5, Math.round(score / 20)));
+/** Orden canónico de los niveles (uno por segmento de la barra). */
+const TRUST_LEVEL_ORDER = Object.keys(TRUST_LEVELS) as TrustLevel[];
+
+/**
+ * Segmentos llenos (1–5) de la barra: se derivan del NIVEL canónico, no del
+ * score crudo, para que la barra nunca contradiga la etiqueta (§3.3 — la
+ * confianza es un sistema visual consistente). Cada nivel nombrado mapea a
+ * exactamente un segmento.
+ */
+export function levelSegments(level: TrustLevel): number {
+  return TRUST_LEVEL_ORDER.indexOf(level) + 1;
 }

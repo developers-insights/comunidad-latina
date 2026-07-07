@@ -225,18 +225,24 @@ export async function getMatches(
     // sin check found_active NO se dice "verificado").
     const verifiedIds = new Set<string>();
     if (listingRows.length > 0) {
+      // Traemos TODOS los checks (no sólo found_active) ordenados por fecha desc:
+      // sólo el MÁS RECIENTE por sujeto decide. Un found_active viejo invalidado
+      // por un expired/mismatch posterior no debe contar como verificado.
       const { data: checks } = await supabase
         .from("verification_checks")
-        .select("subject_id")
+        .select("subject_id, result, checked_at")
         .eq("tenant_id", tenant.id)
         .eq("subject_kind", "listing")
-        .eq("result", "found_active")
         .in(
           "subject_id",
           listingRows.map((row) => row.id),
-        );
+        )
+        .order("checked_at", { ascending: false });
+      const latestSeen = new Set<string>();
       for (const check of checks ?? []) {
-        if (check.subject_id) verifiedIds.add(check.subject_id);
+        if (!check.subject_id || latestSeen.has(check.subject_id)) continue;
+        latestSeen.add(check.subject_id);
+        if (check.result === "found_active") verifiedIds.add(check.subject_id);
       }
     }
 

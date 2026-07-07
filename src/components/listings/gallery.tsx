@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
+import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 import { FALLBACK_PHOTO, isOptimizableSrc } from "./helpers";
@@ -30,6 +31,13 @@ export function ListingGallery({ photos, title, className }: ListingGalleryProps
     if (!track || track.clientWidth === 0) return;
     const index = Math.round(track.scrollLeft / track.clientWidth);
     setCurrent(Math.min(total, Math.max(1, index + 1)));
+  }
+
+  /** Desplaza una foto — habilita navegación por teclado y por botón. */
+  function scrollByStep(direction: 1 | -1) {
+    const track = trackRef.current;
+    if (!track) return;
+    track.scrollBy({ left: direction * track.clientWidth, behavior: "smooth" });
   }
 
   return (
@@ -72,12 +80,44 @@ export function ListingGallery({ photos, title, className }: ListingGalleryProps
       </div>
 
       {total > 1 && (
-        <span
-          aria-live="polite"
-          className="numeric absolute bottom-3 right-3 rounded-full bg-scrim px-2.5 py-1 text-xs font-semibold text-white"
-        >
-          {COPY.detail.photoCounter(current, total)}
-        </span>
+        <>
+          {/* Controles prev/next: habilitan navegación por teclado (no solo
+              swipe/scroll con puntero). ≥44px, con foco visible. */}
+          <button
+            type="button"
+            aria-label={COPY.detail.galleryPrev}
+            onClick={() => scrollByStep(-1)}
+            disabled={current <= 1}
+            className={cn(
+              "absolute left-2 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full",
+              "bg-scrim text-white backdrop-blur-sm transition-opacity duration-(--duration-fast)",
+              "hover:bg-scrim/90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+              "disabled:pointer-events-none disabled:opacity-0",
+            )}
+          >
+            <CaretLeft size={20} weight="bold" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label={COPY.detail.galleryNext}
+            onClick={() => scrollByStep(1)}
+            disabled={current >= total}
+            className={cn(
+              "absolute right-2 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full",
+              "bg-scrim text-white backdrop-blur-sm transition-opacity duration-(--duration-fast)",
+              "hover:bg-scrim/90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+              "disabled:pointer-events-none disabled:opacity-0",
+            )}
+          >
+            <CaretRight size={20} weight="bold" aria-hidden="true" />
+          </button>
+          <span
+            aria-live="polite"
+            className="numeric absolute bottom-3 right-3 rounded-full bg-scrim px-2.5 py-1 text-xs font-semibold text-white"
+          >
+            {COPY.detail.photoCounter(current, total)}
+          </span>
+        </>
       )}
     </div>
   );

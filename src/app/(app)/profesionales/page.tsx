@@ -112,10 +112,9 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
     listingIds.length > 0
       ? supabase
           .from("verification_checks")
-          .select("subject_id, registry, registry_url, license_number, checked_at")
+          .select("subject_id, result, registry, registry_url, license_number, checked_at")
           .eq("tenant_id", tenant.id)
           .eq("subject_kind", "listing")
-          .eq("result", "found_active")
           .in("subject_id", listingIds)
           .order("checked_at", { ascending: false })
       : Promise.resolve({ data: [] as never[] }),
@@ -133,16 +132,21 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
       : Promise.resolve({ data: [] as never[] }),
   ]);
 
+  // Sólo el check MÁS RECIENTE por sujeto decide (viene ordenado checked_at desc).
+  // Un found_active viejo NO debe pisar a un expired/mismatch posterior: mostramos
+  // el sello únicamente si ese último check es found_active.
   const verificationByListing = new Map<string, VerificationView>();
+  const latestCheckSeen = new Set<string>();
   for (const check of checksResult.data ?? []) {
-    if (check.subject_id && !verificationByListing.has(check.subject_id)) {
-      verificationByListing.set(check.subject_id, {
-        registry: check.registry,
-        registryUrl: check.registry_url,
-        licenseNumber: check.license_number,
-        dateLabel: formatDate(check.checked_at, { locale: tenant.locale, style: "long" }),
-      });
-    }
+    if (!check.subject_id || latestCheckSeen.has(check.subject_id)) continue;
+    latestCheckSeen.add(check.subject_id);
+    if (check.result !== "found_active") continue;
+    verificationByListing.set(check.subject_id, {
+      registry: check.registry,
+      registryUrl: check.registry_url,
+      licenseNumber: check.license_number,
+      dateLabel: formatDate(check.checked_at, { locale: tenant.locale, style: "long" }),
+    });
   }
 
   const profileById = new Map((profilesResult.data ?? []).map((p) => [p.id, p]));

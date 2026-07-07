@@ -6,4 +6,4 @@ export { MessageBubble } from "./message-bubble";
 export { ScrollAnchor } from "./scroll-anchor";
 export { ThreadHeader, type ThreadHeaderProps } from "./thread-header";
 export { ThreadRefresh } from "./thread-refresh";
-export { toTrustLevel, toTrustProps, toTrustSignals } from "./trust";
+export { toTrustLevel, toTrustProps, buildTrustSignals } from "./trust";
