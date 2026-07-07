@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 /**
  * next.config.ts — propiedad del módulo PWA (ARQUITECTURA.md §2).
@@ -84,12 +85,68 @@ function supabaseRemotePattern(): RemotePattern | null {
 
 const envPattern = supabaseRemotePattern();
 
+// ---------------------------------------------------------------------------
+// Security headers (módulo PRODUCTION READINESS — edición aditiva, coordinada
+// con el módulo emails-sentry que envuelve este config con withSentryConfig).
+// ---------------------------------------------------------------------------
+
+/**
+ * CSP en modo REPORT-ONLY para empezar: reporta violaciones sin romper nada.
+ * ⚠️ Pasar a `Content-Security-Policy` (enforcing) recién después de validar
+ * en staging que no hay violaciones legítimas (revisar console/Sentry).
+ *
+ * - script-src: 'unsafe-inline' es requisito de Next.js (scripts inline de
+ *   hidratación); js.stripe.com para Stripe.js (Checkout/Identity).
+ * - connect-src: Supabase (REST + Realtime wss), OpenAI (moderación/RAG),
+ *   Sentry ingest, Stripe API.
+ * - img-src: blob:/data: (previews de upload) + Storage de Supabase.
+ */
+const cspReportOnly = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://js.stripe.com",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://*.supabase.co",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com",
+  "frame-src https://js.stripe.com https://hooks.stripe.com",
+  "worker-src 'self' blob:",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+const securityHeaders = [
+  // HSTS: 2 años + subdominios. Vercel sirve todo por HTTPS, así que es seguro.
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload",
+  },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  // Nada de la app necesita ser embebida en iframes de terceros (anti-clickjacking).
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // Permissions mínimas: no usamos cámara/mic/geo desde el navegador.
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=(), payment=(self)",
+  },
+  { key: "Content-Security-Policy-Report-Only", value: cspReportOnly },
+];
+
 const nextConfig: NextConfig = {
   // Explícito y vacío: sin esto, `next dev` (Turbopack) ABORTA al ver el
   // `webpack()` que inyecta withSerwist ("webpack config and no turbopack
   // config"). En dev Serwist está disabled, así que Turbopack puede ignorar
   // ese webpack() tranquilamente.
   turbopack: {},
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: securityHeaders,
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {
@@ -102,4 +159,25 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSerwist(nextConfig);
+const baseConfig = withSerwist(nextConfig);
+
+/**
+ * Sentry (módulo OBSERVABILIDAD): withSentryConfig SOLO si hay DSN en build.
+ * Sin DSN (hoy) el build queda idéntico al de siempre — cero riesgo. Con DSN,
+ * inyecta la instrumentación de webpack y (si además hay SENTRY_AUTH_TOKEN)
+ * sube source maps al proyecto SENTRY_ORG/SENTRY_PROJECT.
+ */
+export default process.env.NEXT_PUBLIC_SENTRY_DSN
+  ? withSentryConfig(baseConfig, {
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      silent: !process.env.CI,
+      // Source maps más completos para stack traces legibles en prod…
+      widenClientFileUpload: true,
+      // …pero jamás públicos: se borran del bundle tras subirlos.
+      sourcemaps: { deleteSourcemapsAfterUpload: true },
+      // Tree-shake de los logger statements del SDK en producción.
+      disableLogger: true,
+    })
+  : baseConfig;

@@ -4,6 +4,10 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications/notify";
+import { getTenant } from "@/lib/tenant/resolve";
+import { sendEmailInBackground } from "@/lib/email";
+import { getRecipientEmail } from "@/lib/email/recipients";
+import { leadReceivedEmail } from "@/lib/email/templates";
 
 /**
  * Server actions del módulo VIVIENDA (lado detalle).
@@ -72,7 +76,8 @@ export async function requestContactAction(
       .eq("id", parsed.data)
       .maybeSingle();
     if (listing?.created_by && listing.created_by !== user.id) {
-      await createNotification(createAdminClient(), {
+      const admin = createAdminClient();
+      await createNotification(admin, {
         tenantId: listing.tenant_id,
         profileId: listing.created_by,
         kind: "contact_request",
@@ -80,6 +85,23 @@ export async function requestContactAction(
         body: "Entrá a Mensajes para aceptar o ignorar la solicitud.",
         href: "/mensajes",
       });
+
+      // Email "lead recibido" al dueño (módulo EMAILS, fire-and-forget).
+      // Minimización §11: del interesado viaja SOLO su display_name.
+      const [tenant, ownerEmail, { data: requester }] = await Promise.all([
+        getTenant(),
+        getRecipientEmail(admin, listing.created_by),
+        supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+      ]);
+      if (ownerEmail) {
+        const lead = leadReceivedEmail({
+          listingTitle: listing.title,
+          requesterDisplayName: requester?.display_name ?? "Alguien de la comunidad",
+          tenantName: tenant.name,
+          brandHex: tenant.brandHex,
+        });
+        sendEmailInBackground({ to: ownerEmail, subject: lead.subject, html: lead.html });
+      }
     }
   } catch (notifyError) {
     // Sin PII: solo el error técnico.

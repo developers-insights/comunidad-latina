@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { limit, DAY_MS } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -93,6 +94,15 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, needsAuth: true, error: "Para publicar necesitás entrar a tu cuenta." };
+  }
+
+  // Rate limit: 10 publicaciones/día por usuario (anti-flood de avisos).
+  if (!limit(`publicar:${user.id}`, 10, DAY_MS).ok) {
+    return {
+      ok: false,
+      error:
+        "Ya creaste varios avisos hoy. Para cuidar la calidad del directorio, esperá hasta mañana para publicar otro.",
+    };
   }
 
   const attrs: Record<string, string | number> = {};

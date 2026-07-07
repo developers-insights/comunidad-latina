@@ -1,7 +1,14 @@
 # PROGRESS — Comunidad Latina
 
-**Última actualización:** 2026-07-06 (sesión de construcción con Fable 5 ultracode).
-**Estado:** ✅ **R0 + R1 + R2 CONSTRUIDOS Y VERDES.** Producto funcional de punta a punta en el tenant piloto `dominicanos`.
+**Última actualización:** 2026-07-07 (sesión de construcción con Fable 5 ultracode, continuación).
+**Estado:** ✅ **R0 + R1 + R2 + R3 CONSTRUIDOS Y VERDES.** Producto completo con moat de IA en el tenant piloto `dominicanos`. 47 rutas.
+
+## R3 — Moat de IA + producción (✅ 2026-07-07)
+- **Asistente Comunitario RAG** (`/asistente`, wireframe §4.e): pgvector + `match_chunks` (definer, solo published), streaming, guardrails duros legal-safe (nunca consejo/plazos/elegibilidad; cita fuente+fecha; deriva a profesional verificado), rate limit (10/h auth, 3/sesión anon), telemetría mínima con hash (nunca la pregunta en claro, TTL 30d). **21 chunks ya embebidos** (guías+listings) — re-generar con `npm run rag:embed`.
+- **Stripe Identity** (`/perfil/verificar`): sesión atada al usuario, webhook → flag booleano + trust +25 (el documento nunca toca la DB). **Boost** (`/impulsar/[id]`): checkout one-time, webhook activa, chip "Destacado · Publicidad" (FTC), datos de pago solo-service (0018).
+- **Emails Resend** (bienvenida/lead/mensaje — sin contenido privado) + **Sentry** completo guarded (scrub PII) + **Matching "Para vos"** (determinístico, razón visible) + **Copiloto de Negocios** (`/negocios/copiloto`).
+- **Producción**: sitemap/robots dinámicos, error pages premium, security headers (CSP report-only), rate limiting, README, migraciones 0016-0018 aplicadas (hardening por fiscal: retención extra en conversaciones/reportes/payment_events/receipts).
+- Gates: tsc 0 · build verde (47 rutas) · 12 tests · lint OK · **RLS GATE VERDE (29 superficies)** · fiscal legal-IA (max) + seguridad: 11 findings corregidos.
 
 ## Qué está construido y verificado
 

@@ -5,6 +5,10 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications/notify";
+import { getTenant } from "@/lib/tenant/resolve";
+import { sendEmailInBackground } from "@/lib/email";
+import { getRecipientEmail } from "@/lib/email/recipients";
+import { newMessageEmail } from "@/lib/email/templates";
 import { isOpenAIConfigured } from "@/lib/config/services";
 
 /**
@@ -150,7 +154,8 @@ export async function sendMessageAction(input: {
       .select("display_name")
       .eq("id", user.id)
       .maybeSingle();
-    await createNotification(createAdminClient(), {
+    const admin = createAdminClient();
+    const notified = await createNotification(admin, {
       tenantId: conversation.tenant_id,
       profileId: recipientId,
       kind: "message",
@@ -161,6 +166,26 @@ export async function sendMessageAction(input: {
       href: `/mensajes/${conversationId}`,
       dedupeUnread: true,
     });
+
+    // Email "mensaje nuevo" (módulo EMAILS, fire-and-forget). Anti-ruido:
+    // si la notificación se dedupeó (ya tiene una sin leer de este hilo),
+    // tampoco mandamos otro email — un solo aviso hasta que abra el chat.
+    // Privacidad: el email JAMÁS incluye el contenido del mensaje.
+    if (notified.ok && !notified.deduped) {
+      const [tenant, recipientEmail] = await Promise.all([
+        getTenant(),
+        getRecipientEmail(admin, recipientId),
+      ]);
+      if (recipientEmail) {
+        const mail = newMessageEmail({
+          senderDisplayName: me?.display_name ?? "Alguien de la comunidad",
+          conversationId,
+          tenantName: tenant.name,
+          brandHex: tenant.brandHex,
+        });
+        sendEmailInBackground({ to: recipientEmail, subject: mail.subject, html: mail.html });
+      }
+    }
   } catch (notifyError) {
     // Sin PII: solo el error técnico, nunca el contenido del mensaje.
     console.warn(

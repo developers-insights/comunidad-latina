@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { CaretDown, Plus } from "@phosphor-icons/react/dist/ssr";
-import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
+import { CaretDown, Megaphone, Plus } from "@phosphor-icons/react/dist/ssr";
+import { Chip, EmptyState, Skeleton, buttonVariants } from "@/components/ui";
 import {
   AlertButton,
   COPY,
@@ -133,13 +133,59 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
   const hasMore = (rows ?? []).length > PAGE_SIZE;
 
   // -------------------------------------------------------------------------
+  // Boost (§7): destacados primero, SOLO en la primera página (sin cursor).
+  // HONESTO por diseño (FTC): cada uno lleva el chip "Destacado · Publicidad".
+  // Pagar visibilidad no toca Trust Score ni verificación.
+  // -------------------------------------------------------------------------
+  const boostedIds = new Set<string>();
+  let boostedExtra: typeof pageRows = [];
+  const sinFiltros =
+    !filters.q && filters.precio === null && filters.hab === null && !filters.zona;
+  if (!cursor) {
+    const { data: activeBoosts } = await supabase
+      .from("boosts")
+      .select("listing_id")
+      .eq("tenant_id", tenant.id)
+      .eq("status", "active")
+      .gt("ends_at", new Date().toISOString())
+      .order("ends_at", { ascending: false })
+      .limit(4);
+    for (const boost of activeBoosts ?? []) boostedIds.add(boost.listing_id);
+
+    // Destacados que no entraron por fecha: solo en la vista sin filtros
+    // (con filtros activos jamás se inyecta un resultado que no matchea).
+    const missingIds = [...boostedIds].filter(
+      (id) => !pageRows.some((row) => row.id === id),
+    );
+    if (sinFiltros && missingIds.length > 0) {
+      const { data: extra } = await supabase
+        .from("listings")
+        .select(
+          "id, title, price_amount, price_currency, price_period, area_label, photos, attrs, created_by, publisher_name, source, created_at",
+        )
+        .eq("tenant_id", tenant.id)
+        .eq("kind", "property")
+        .eq("status", "published")
+        .in("id", missingIds);
+      boostedExtra = extra ?? [];
+    }
+  }
+
+  // Boosted-first estable: destacados arriba, el resto en su orden natural.
+  const orderedRows = [
+    ...boostedExtra,
+    ...pageRows.filter((row) => boostedIds.has(row.id)),
+    ...pageRows.filter((row) => !boostedIds.has(row.id)),
+  ];
+
+  // -------------------------------------------------------------------------
   // Batch 1: verificaciones found_active de estos listings (regla estricta)
   // Batch 2: perfiles + trust scores de los publicadores con cuenta
   // Batch 3: zonas disponibles para el filtro
   // -------------------------------------------------------------------------
-  const listingIds = pageRows.map((row) => row.id);
+  const listingIds = orderedRows.map((row) => row.id);
   const publisherIds = [
-    ...new Set(pageRows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
+    ...new Set(orderedRows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
   ];
 
   const [checksResult, profilesResult, trustResult, zonesResult] = await Promise.all([
@@ -198,7 +244,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
     ),
   ].sort((a, b) => a.localeCompare(b, "es"));
 
-  const cards: ListingCardModel[] = pageRows.map((row) => {
+  const cards: ListingCardModel[] = orderedRows.map((row) => {
     let publisher: PublisherView = null;
     if (row.created_by) {
       const profile = profileById.get(row.created_by);
@@ -273,9 +319,20 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
         />
       ) : (
         <div className="flex flex-col gap-4">
-          {cards.map((card) => (
-            <ListingCard key={card.id} listing={card} />
-          ))}
+          {cards.map((card) =>
+            boostedIds.has(card.id) ? (
+              // Chip FTC: el lugar pago SIEMPRE se marca como publicidad.
+              <div key={card.id} className="flex flex-col gap-1.5">
+                <Chip variant="brand" size="sm" className="w-fit">
+                  <Megaphone size={14} weight="fill" aria-hidden="true" />
+                  Destacado · Publicidad
+                </Chip>
+                <ListingCard listing={card} />
+              </div>
+            ) : (
+              <ListingCard key={card.id} listing={card} />
+            ),
+          )}
 
           {hasMore && (
             <Link

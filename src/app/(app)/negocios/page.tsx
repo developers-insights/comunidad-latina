@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MapPin, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { MagicWand, MapPin, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, Chip, EmptyState, buttonVariants } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -23,6 +23,10 @@ const COPY = {
   vacioMensaje:
     "Los comercios de la comunidad van a aparecer acá. Si tenés un negocio, este es tu lugar.",
   vacioCta: "Sumar mi negocio",
+  copilotoTitulo: "¿Tenés un negocio? Probá el Copiloto",
+  copilotoTexto:
+    "Mejores títulos, mejor descripción e ideas de post — sugerencias de IA que revisás vos.",
+  copilotoCta: "Abrir el Copiloto",
 } as const;
 
 /** Etiquetas legibles para las categorías más comunes de `attrs.category`. */
@@ -82,6 +86,9 @@ function buildOwnerTrust(
 export default async function NegociosPage() {
   const tenant = await getTenant();
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { data: negocios } = await supabase
     .from("listings")
@@ -146,6 +153,34 @@ export default async function NegociosPage() {
           {COPY.bannerCta}
         </Link>
       </BezelCard>
+
+      {/* Entrada al Copiloto de Negocios (módulo MATCHING+COPILOTO) — solo logueados */}
+      {user && (
+        <BezelCard className="mt-4" coreClassName="flex flex-col gap-3 p-5">
+          <div className="flex items-start gap-3">
+            <span
+              aria-hidden="true"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand"
+            >
+              <MagicWand size={22} weight="light" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-display text-base font-semibold text-foreground">
+                {COPY.copilotoTitulo}
+              </p>
+              <p className="mt-0.5 text-sm text-foreground-secondary">
+                {COPY.copilotoTexto}
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/negocios/copiloto"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "self-start")}
+          >
+            {COPY.copilotoCta}
+          </Link>
+        </BezelCard>
+      )}
 
       {rows.length === 0 ? (
         <EmptyState

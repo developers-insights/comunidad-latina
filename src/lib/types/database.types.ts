@@ -60,6 +60,79 @@ export type Database = {
           },
         ]
       }
+      boosts: {
+        Row: {
+          amount_cents: number
+          buyer_id: string
+          created_at: string
+          currency: string
+          duration_days: number
+          ends_at: string | null
+          id: string
+          listing_id: string
+          package: string
+          starts_at: string | null
+          status: string
+          stripe_checkout_session_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          buyer_id: string
+          created_at?: string
+          currency?: string
+          duration_days: number
+          ends_at?: string | null
+          id?: string
+          listing_id: string
+          package: string
+          starts_at?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          buyer_id?: string
+          created_at?: string
+          currency?: string
+          duration_days?: number
+          ends_at?: string | null
+          id?: string
+          listing_id?: string
+          package?: string
+          starts_at?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boosts_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boosts_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boosts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       broadcast_receipts: {
         Row: {
           broadcast_id: string

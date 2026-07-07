@@ -129,3 +129,69 @@ export function precioPorMes(plan: PlanPresencia, intervalo: Intervalo): number 
 export function montoCentavos(plan: PlanPresencia, intervalo: Intervalo): number {
   return (intervalo === "mensual" ? plan.precioMensualUsd : plan.precioAnualUsd) * 100;
 }
+
+// ---------------------------------------------------------------------------
+// Boost geolocalizado (PLAN §7) — pago ONE-TIME, no suscripción
+// ---------------------------------------------------------------------------
+
+export type BoostId = "7d" | "14d" | "30d";
+
+export interface BoostPackage {
+  id: BoostId;
+  /** Días que dura el impulso. */
+  dias: number;
+  /** USD, cobro único. */
+  precioUsd: number;
+  nombre: string;
+  /** Qué obtiene, en criollo y HONESTO (es publicidad, se marca como tal). */
+  descripcion: string;
+  /** Paquete recomendado (⭐ destacado en la UI). */
+  recomendado: boolean;
+}
+
+/**
+ * [EJEMPLO] (PLAN §18): precios de ejemplo del Boost para validar el modelo.
+ * La decisión de pricing real es humana previa al go-live — el Checkout usa
+ * `price_data` inline con estos montos.
+ *
+ * Principios §7 (no negociables):
+ * - El alcance es la ZONA del listing (su `area_label`/`geo_zone`, ya
+ *   aproximados por §5.4) — no se recolecta geo nueva para esto.
+ * - El resultado se marca SIEMPRE como "Destacado" con aclaración de que es
+ *   publicidad (FTC §255: paid placement se divulga, sin excepciones).
+ * - Pagar visibilidad JAMÁS altera Trust Score ni verificación.
+ */
+export const BOOST_PACKAGES: Record<BoostId, BoostPackage> = {
+  "7d": {
+    id: "7d",
+    dias: 7,
+    precioUsd: 10,
+    nombre: "7 días",
+    descripcion: "Tu aviso primero en tu zona durante una semana.",
+    recomendado: false,
+  },
+  "14d": {
+    id: "14d",
+    dias: 14,
+    precioUsd: 25,
+    nombre: "14 días",
+    descripcion: "Dos semanas destacado — el equilibrio que más eligen.",
+    recomendado: true,
+  },
+  "30d": {
+    id: "30d",
+    dias: 30,
+    precioUsd: 45,
+    nombre: "30 días",
+    descripcion: "Un mes entero al frente de tu comunidad.",
+    recomendado: false,
+  },
+};
+
+/** Orden canónico de render en /impulsar. */
+export const BOOST_IDS: readonly BoostId[] = ["7d", "14d", "30d"];
+
+/** Monto a cobrar en centavos para el Checkout one-time del boost. */
+export function boostMontoCentavos(boost: BoostPackage): number {
+  return boost.precioUsd * 100;
+}

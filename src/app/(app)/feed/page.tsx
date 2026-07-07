@@ -20,6 +20,8 @@ import {
   type FeedTabId,
   type GuideCardModel,
 } from "@/components/feed";
+import { ParaVos, ParaVosSkeleton } from "@/components/matching";
+import { AssistantEntryCard } from "@/components/assistant";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -97,6 +99,13 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
         </p>
       </header>
 
+      {/* Acceso discreto al Asistente Comunitario (módulo ASISTENTE) */}
+      {isFirstPage && (
+        <div className="mb-3">
+          <AssistantEntryCard />
+        </div>
+      )}
+
       <FeedTabs active={tab} />
 
       <div className="mt-4 flex flex-col gap-4">
@@ -106,6 +115,12 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
               <PostComposer viewerName={viewerName} viewerAvatarUrl={viewerAvatarUrl} />
             ) : (
               <ComposerInvite />
+            )}
+            {/* Matching "Para vos" (módulo MATCHING): solo logueados; primera página. */}
+            {user && isFirstPage && (
+              <Suspense fallback={<ParaVosSkeleton />}>
+                <ParaVos userId={user.id} />
+              </Suspense>
             )}
             <ParaTiFeed
               tenantId={tenant.id}

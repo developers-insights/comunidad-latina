@@ -11,10 +11,12 @@
     "typecheck": "tsc --noEmit",
     "check:rls": "node scripts/rls-enumerator.mjs",
     "db:seed": "node scripts/seed.mjs",
-    "db:migrate": "node scripts/apply-migrations.mjs"
+    "db:migrate": "node scripts/apply-migrations.mjs",
+    "rag:embed": "node scripts/embed-content.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
+    "@sentry/nextjs": "^10.63.0",
     "@stripe/stripe-js": "^9.9.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.0",

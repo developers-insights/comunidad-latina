@@ -1,6 +1,14 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bathtub, Bed, MapPin, Ruler, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, Banner, BezelCard, Chip } from "@/components/ui";
+import {
+  Bathtub,
+  Bed,
+  MapPin,
+  RocketLaunch,
+  Ruler,
+  Storefront,
+} from "@phosphor-icons/react/dist/ssr";
+import { Avatar, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui";
 import { ScamShieldNotice } from "@/components/trust";
 import {
   COPY,
@@ -19,7 +27,7 @@ import {
 } from "@/components/listings";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 type Params = Promise<{ id: string }>;
 
@@ -197,6 +205,17 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
           )}
           {attrs.sqft !== null && <Chip icon={<Ruler />}>{COPY.detail.sqft(attrs.sqft)}</Chip>}
         </div>
+      )}
+
+      {/* Boost §7: solo el dueño de un aviso publicado puede impulsarlo */}
+      {isOwner && listing.status === "published" && (
+        <Link
+          href={`/impulsar/${listing.id}`}
+          className={cn(buttonVariants({ variant: "outline", size: "md" }), "mt-4 w-full")}
+        >
+          <RocketLaunch size={18} aria-hidden="true" />
+          Impulsar este aviso
+        </Link>
       )}
 
       {publisherCard && (

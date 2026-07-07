@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { limit, DAY_MS } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -43,6 +44,8 @@ const COPY = {
     "No encontramos esa publicación en tu comunidad. Revisá que el link sea de esta app y esté completo.",
   genericError:
     "No pudimos enviar el reporte en este momento — no es tu culpa. Probá de nuevo en unos minutos.",
+  tooManyReports:
+    "Ya enviaste varios reportes hoy — gracias por cuidar la comunidad. Para que el equipo pueda revisarlos bien, esperá hasta mañana para enviar otro.",
 } as const;
 
 const baseSchema = z.object({
@@ -112,6 +115,12 @@ export async function reportarEstafaAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { status: "error", message: COPY.unauthenticated };
+
+  // Rate limit: 10 reportes/día por usuario (anti-spam de reportes; el peso
+  // real del reporte igual lo decide el Trust Score en la DB).
+  if (!limit(`reporte:${user.id}`, 10, DAY_MS).ok) {
+    return { status: "error", message: COPY.tooManyReports };
+  }
 
   const { error } = await supabase.rpc("report_scam", {
     p_target_kind: targetKind,

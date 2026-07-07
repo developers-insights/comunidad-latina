@@ -1,9 +1,13 @@
 "use server";
 
 import { z } from "zod";
+import { headers } from "next/headers";
+import { limit, HOUR_MS, clientIpFromHeaders } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenant } from "@/lib/tenant/resolve";
+import { sendEmailInBackground } from "@/lib/email";
+import { welcomeEmail } from "@/lib/email/templates";
 import { COUNTRY_CODES } from "@/components/auth/countries";
 import type { ActionResult } from "@/components/auth/action-result";
 
@@ -19,6 +23,8 @@ const COPY = {
   needsMin: "Elegí al menos una opción.",
   areaShort: "Contanos tu zona o barrio (solo la zona, nunca tu dirección).",
   noSession: "Tu sesión se cerró — entrá de nuevo para continuar.",
+  tooManyAttempts:
+    "Hiciste varios intentos seguidos. Esperá un rato y probá de nuevo — tu cuenta va a estar acá.",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -58,6 +64,22 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
     return { ok: false, fieldErrors: firstIssuePerField(parsed.error.issues) };
   }
   const { displayName, email, password } = parsed.data;
+
+  // Rate limit: 5 registros/hora por IP. La IP se usa SOLO como key en memoria
+  // del limiter (expira con la ventana) — jamás se persiste ni se loguea (§11).
+  //
+  // ⚠️ LIMITACIÓN CONOCIDA (aceptada para lanzar en Vercel): la fuente de IP
+  // (x-real-ip / primer hop de x-forwarded-for, ver clientIpFromHeaders) asume
+  // que la plataforma normaliza esos headers — cierto en Vercel, NO garantizado
+  // self-hosted o detrás de otro proxy (ahí el primer hop es spoofeable y hay
+  // que revisar la cadena). Además el limiter es in-memory por instancia
+  // (límite efectivo = max × instancias) — plan de migración a Upstash ya
+  // documentado en lib/rate-limit.
+  const headerStore = await headers();
+  const ip = clientIpFromHeaders(headerStore);
+  if (!limit(`registro:${ip}`, 5, HOUR_MS).ok) {
+    return { ok: false, formError: COPY.tooManyAttempts };
+  }
 
   const tenant = await getTenant();
 
@@ -116,6 +138,15 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
     });
     return { ok: false, formError: COPY.genericError };
   }
+
+  // Email de bienvenida (módulo EMAILS): fire-and-forget — si Resend no está
+  // configurado se saltea con log; jamás afecta el registro.
+  const welcome = welcomeEmail({
+    displayName,
+    tenantName: tenant.name,
+    brandHex: tenant.brandHex,
+  });
+  sendEmailInBackground({ to: email, subject: welcome.subject, html: welcome.html });
 
   return { ok: true };
 }
