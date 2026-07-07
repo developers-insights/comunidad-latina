@@ -41,7 +41,7 @@
 ## Pendientes (en orden)
 1. **🔴 GATES HUMANOS antes del primer dato real (§5.2/§14.4 — NO construibles por agentes):** pentest humano adversarial + **firma de ingeniero senior** sobre migraciones y webhook Stripe. Sin esto NO se expone a usuarios reales.
 2. **Credenciales faltantes** (degradan con elegancia hoy): Stripe (test) → activa pagos reales del flujo ya construido · Resend → emails · Google Vision → moderación de imagen (hoy: pending_review) · Sentry → observabilidad (exigida antes de producción) · Vercel → deploy + dominios.
-3. **Hardening menor detectado por advisors:** los 3 buckets públicos permiten LISTAR archivos (enumeración de paths con user ids) — restringir la SELECT policy de `storage.objects` a paths propios o quitar listing público. Anotado, no bloqueante en dev.
+3. **Hardening menor detectado por advisors:** (a) los 3 buckets públicos permiten LISTAR archivos (enumeración de paths con user ids) — restringir la SELECT policy de `storage.objects` a paths propios o quitar listing público; (b) habilitar **Leaked Password Protection** (HaveIBeenPwned) en Supabase Dashboard → Auth → Providers → Password (toggle manual, 1 click). Anotado, no bloqueante en dev.
 4. **R3 (siguiente rebanada):** moat de IA (Asistente RAG con guardrails §3, pgvector ya instalado), matching, Stripe Connect/Creator, boost. **R4:** 2º dominio real + Playbook. Requiere decisiones de Geovanny §16.
 5. Deuda técnica menor: renombrar `middleware`→`proxy` (deprecación Next 16), `metadataBase` en layout, unificar `lib/trust/levels` con `components/trust/levels`, E2E de mensajería (gate §5.4, hoy TTL 90d), CA cert para el enumerador en CI (`SUPABASE_DB_CA_CERT_PATH`).
 
