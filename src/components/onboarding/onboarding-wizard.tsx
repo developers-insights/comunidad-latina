@@ -21,6 +21,8 @@ import { RegisterForm } from "@/components/auth/register-form";
 import { FormError } from "@/components/auth/form-error";
 import { ZoneInput } from "@/components/onboarding/zone-input";
 import { Button, ProgressDots, useToast } from "@/components/ui";
+import { Celebration, useCelebration } from "@/components/motion";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 const COPY = {
   back: "Volver al paso anterior",
@@ -62,6 +64,8 @@ const TOTAL_STEPS = 5;
 export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
   const router = useRouter();
   const { toast } = useToast();
+  const { celebrating, celebrate } = useCelebration();
+  const reduceMotion = usePrefersReducedMotion();
 
   const [step, setStep] = useState(1);
   const [registered, setRegistered] = useState(isLoggedIn);
@@ -119,15 +123,25 @@ export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
           console.warn("[onboarding] no se pudo guardar el perfil");
         }
       }
-      // Paso 5 — recompensa inmediata: aterrizar en la comunidad ya filtrada.
+      // Paso 5 — recompensa: una celebración breve y elegante, después
+      // aterrizamos en la comunidad ya filtrada. Con reduced-motion el destello
+      // es un fade corto, así que esperamos menos antes de navegar.
+      celebrate();
       toast({ title: `${COPY.toastTitle} ${zone}`, variant: "success" });
-      router.push(`/propiedades?zona=${encodeURIComponent(zone)}`);
-      router.refresh();
+      const href = `/propiedades?zona=${encodeURIComponent(zone)}`;
+      window.setTimeout(
+        () => {
+          router.push(href);
+          router.refresh();
+        },
+        reduceMotion ? 350 : 900,
+      );
     });
   }
 
   return (
     <div className="flex min-h-[70dvh] flex-col gap-6">
+      <Celebration active={celebrating} message="¡Bienvenido a tu comunidad!" />
       {/* Barra superior: atrás siempre presente (menos en el paso 1) */}
       <div className="flex h-11 items-center">
         {step > 1 && (

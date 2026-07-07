@@ -24,6 +24,12 @@ export const COPY = {
       "Vivienda revisada, guías paso a paso para tus trámites y un escudo que revisa registros oficiales antes de que entregues un peso. Estamos empezando por lo más urgente: que consigas dónde vivir sin que te roben el depósito.",
     ctaPrimary: "Sumate a tu comunidad",
     ctaSecondary: "Explorar sin cuenta",
+    /** Señales de confianza del hero — hechos verificables, sin métricas infladas. */
+    trustSignals: [
+      "Verificado contra registros oficiales",
+      "Sin dirección exacta hasta el contacto real",
+      "Guías con cada fuente citada y fechada",
+    ],
   },
 
   pillars: {

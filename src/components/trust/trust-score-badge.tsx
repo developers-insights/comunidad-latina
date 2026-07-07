@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/motion";
 import {
   levelSegments,
   TRUST_LEVELS,
@@ -73,14 +74,14 @@ export function TrustScoreBadge({
             />
           ))}
         </span>
-        <span
+        <AnimatedNumber
+          value={score}
+          silent
           className={cn(
             "numeric font-semibold text-foreground",
             isCard ? "text-lg" : "text-sm",
           )}
-        >
-          {score}
-        </span>
+        />
         <span
           className={cn(
             "font-medium",

@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn, formatDate } from "@/lib/utils";
 import { IDENTITY_SESSION_COOKIE } from "../identity-session";
+import { IdentityCelebration } from "./identity-celebration";
 
 export const metadata = { title: "Verificación de identidad" };
 
@@ -96,6 +97,7 @@ export default async function ResultadoVerificacionPage() {
           coreClassName="flex flex-col items-center gap-3 px-6 py-10 text-center"
           role="status"
         >
+          <IdentityCelebration message={COPY.verificadaTitulo} />
           <SealCheck size={56} weight="fill" aria-hidden="true" className="text-success" />
           <p className="font-display text-xl font-bold text-foreground">
             {COPY.verificadaTitulo}

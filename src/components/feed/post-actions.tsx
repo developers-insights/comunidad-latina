@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ChatCircle, Heart, ShareNetwork } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui";
+import { LikeBurst } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 
@@ -51,14 +52,13 @@ export function PostActions({
   const [count, setCount] = useState(likeCount);
   const [, startTransition] = useTransition();
 
-  function toggleLike() {
+  function toggleLike(nextLiked: boolean) {
     if (!viewerId) {
       router.push(`/entrar?next=${encodeURIComponent(pathname || "/feed")}`);
       return;
     }
 
     // Optimista: la UI responde <100ms; si la DB dice que no, se revierte.
-    const nextLiked = !liked;
     setLiked(nextLiked);
     setCount((current) => Math.max(0, current + (nextLiked ? 1 : -1)));
     try {
@@ -124,20 +124,22 @@ export function PostActions({
 
   return (
     <div className={cn("flex items-center gap-1", className)}>
-      <button
-        type="button"
-        onClick={toggleLike}
-        aria-pressed={liked}
-        aria-label={liked ? COPY.post.unlike : COPY.post.like}
-        className={cn(actionClass, liked && "text-danger")}
-      >
-        <Heart
-          size={18}
-          weight={liked ? "fill" : "regular"}
-          aria-hidden="true"
-        />
-        <span className="numeric">{count}</span>
-      </button>
+      <span className={cn("flex items-center", liked && "text-danger")}>
+        <LikeBurst
+          active={liked}
+          onToggle={toggleLike}
+          label={liked ? COPY.post.unlike : COPY.post.like}
+          particleColor="var(--color-danger)"
+          className={cn(actionClass, "pr-1", liked && "text-danger")}
+        >
+          <Heart
+            size={18}
+            weight={liked ? "fill" : "regular"}
+            aria-hidden="true"
+          />
+          <span className="numeric">{count}</span>
+        </LikeBurst>
+      </span>
 
       {isDetail ? (
         <span className={cn(actionClass, "hover:bg-transparent active:scale-100")} aria-label={COPY.post.comments}>

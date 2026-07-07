@@ -1,12 +1,17 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { Reveal as MotionReveal } from "@/components/motion";
 
 /**
- * Animación de entrada sutil para secciones de la landing (§2.7):
- * fade + translate corto con el easing premium, una sola vez al entrar al
- * viewport. Con prefers-reduced-motion renderiza estático (sin animar).
+ * Reveal de la landing (§2.7). Antes tenía su propia implementación con framer;
+ * ahora delega en el primitivo canónico `@/components/motion` (IntersectionObserver
+ * + CSS, sin framer) para no duplicar la lógica de reveal en el repo.
+ *
+ * Se mantiene la firma histórica de la landing: `delay` en SEGUNDOS (para no tocar
+ * los ~20 call sites `delay={0.08}`). Acá lo convertimos a los milisegundos que
+ * espera el primitivo. prefers-reduced-motion ya está resuelto adentro (aparece
+ * estático, sin animar) y el contenido va en el DOM desde el server → no hunde el LCP.
  */
 export function Reveal({
   children,
@@ -14,25 +19,13 @@ export function Reveal({
   className,
 }: {
   children: ReactNode;
-  /** Segundos de delay para escalonar tarjetas hermanas. */
+  /** Segundos de delay para escalonar tarjetas hermanas (firma histórica). */
   delay?: number;
   className?: string;
 }) {
-  const reduceMotion = useReducedMotion();
-
-  if (reduceMotion) {
-    return <div className={className}>{children}</div>;
-  }
-
   return (
-    <motion.div
-      className={className}
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-64px" }}
-      transition={{ duration: 0.55, delay, ease: [0.32, 0.72, 0, 1] }}
-    >
+    <MotionReveal delay={Math.round(delay * 1000)} y={24} className={className}>
       {children}
-    </motion.div>
+    </MotionReveal>
   );
 }

@@ -4,6 +4,7 @@ import localFont from "next/font/local";
 import { getTenant } from "@/lib/tenant/resolve";
 import { brandThemeToStyle } from "@/lib/tenant/brand-pipeline";
 import { ToastProvider } from "@/components/ui/toast";
+import { SplashScreen } from "@/components/experience/splash-screen";
 import "./globals.css";
 
 // Display: General Sans variable (Fontshare), self-hosted en src/fonts/
@@ -49,11 +50,18 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
-};
+// theme-color por tenant: tiñe la barra del navegador / status bar móvil con la
+// marca del tenant (premium multi-tenant). El hex real lo da la DB; el fallback
+// resuelve al azul default. Se calcula por request como el resto del theming.
+export async function generateViewport(): Promise<Viewport> {
+  const tenant = await getTenant();
+  return {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+    themeColor: tenant.brandHex,
+  };
+}
 
 export default async function RootLayout({
   children,
@@ -74,6 +82,9 @@ export default async function RootLayout({
     >
       <body className="flex min-h-full flex-col bg-canvas font-sans text-foreground">
         <ToastProvider>{children}</ToastProvider>
+        {/* Splash de entrada premium: overlay que se desvanece encima del
+            contenido ya hidratado (no bloquea el LCP), una vez por sesión. */}
+        <SplashScreen brandHex={tenant.brandHex} name={tenant.name} />
       </body>
     </html>
   );

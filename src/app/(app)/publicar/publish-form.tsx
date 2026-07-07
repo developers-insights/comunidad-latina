@@ -25,6 +25,7 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { Celebration, useCelebration } from "@/components/motion";
 import { COPY } from "@/components/listings";
 import { createListingDraft, finalizeListing } from "./actions";
 
@@ -106,6 +107,7 @@ async function preparePhoto(file: File): Promise<{ blob: Blob; ext: string }> {
 
 export function PublishForm({ tenantId }: { tenantId: string }) {
   const { toast } = useToast();
+  const { celebrating, celebrate } = useCelebration();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(0);
@@ -282,6 +284,9 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
         return;
       }
       setDone(finalized.status);
+      // Celebración sutil solo cuando el aviso quedó publicado de verdad (no en
+      // "queda en revisión", que es un estado de espera, no un logro cerrado).
+      if (finalized.status === "published") celebrate();
     } catch {
       setError(C.errors.generic);
     } finally {
@@ -295,6 +300,10 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
   if (done) {
     const published = done === "published";
     return (
+      <>
+      {published && (
+        <Celebration active={celebrating} message={C.success.publishedTitle} />
+      )}
       <BezelCard
         variant={published ? "success" : "default"}
         coreClassName="flex flex-col items-center gap-3 px-6 py-10 text-center"
@@ -323,6 +332,7 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
           </Button>
         </div>
       </BezelCard>
+      </>
     );
   }
 

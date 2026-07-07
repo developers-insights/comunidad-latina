@@ -1,0 +1,26 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Comunidad Latina">
+  <defs>
+    <linearGradient id="clShieldFill" x1="64" y1="8" x2="64" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2C6CE0"/>
+      <stop offset="1" stop-color="#154CB2"/>
+    </linearGradient>
+    <linearGradient id="clShieldGloss" x1="64" y1="8" x2="64" y2="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- Shield silhouette: use currentColor so tenants can retint the whole mark -->
+  <path fill="currentColor"
+    d="M64 8 20 24v40c0 27.6 18.4 47.4 44 56 25.6-8.6 44-28.4 44-56V24L64 8Z"/>
+  <path fill="url(#clShieldFill)"
+    d="M64 8 20 24v40c0 27.6 18.4 47.4 44 56 25.6-8.6 44-28.4 44-56V24L64 8Z"/>
+  <path fill="url(#clShieldGloss)"
+    d="M64 8 20 24v40c0 27.6 18.4 47.4 44 56 25.6-8.6 44-28.4 44-56V24L64 8Z"/>
+  <path fill="none" stroke="#86ADEF" stroke-opacity="0.45" stroke-width="1.5"
+    d="M64 15 27 28.5V64c0 24.2 15.9 41.9 37 49.9 21.1-8 37-25.7 37-49.9V28.5L64 15Z"/>
+  <!-- CL monogram: C as an open ring, L nested inside -->
+  <path fill="none" stroke="#FCFCFB" stroke-width="9" stroke-linecap="round"
+    d="M78 47a22 22 0 1 0 0 34"/>
+  <path fill="none" stroke="#FCFCFB" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"
+    d="M62 45v34h20"/>
+</svg>

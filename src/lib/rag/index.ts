@@ -70,7 +70,23 @@ const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
 /** Defaults alineados con la firma SQL de match_chunks (0017). */
 export const DEFAULT_MATCH_COUNT = 6;
-export const DEFAULT_MIN_SIMILARITY = 0.75;
+/**
+ * Umbral de similitud coseno CALIBRADO empíricamente (scripts/diagnose-rag.mjs)
+ * contra el índice real con text-embedding-3-small. Medición sobre las 4
+ * preguntas sugeridas del asistente:
+ *   - "¿Cómo saco mi ITIN?"           → guía ITIN exacta a 0.748
+ *   - "¿Qué hago si me para ICE?"     → guía de derechos ante ICE a 0.589
+ *   - "vivienda sin crédito"          → listings de vivienda a 0.454 (relevante)
+ *   - "estafas de alquiler"           → listings a 0.387 (NO relevante: no hay
+ *                                        guía anti-estafa embebida → debe caer
+ *                                        en el fallback honesto + derivación)
+ * 0.42 captura los tres matches genuinos y rechaza el ruido de 0.387. El 0.75
+ * original (default de una métrica distinta) rechazaba TODO, incluida la guía
+ * que respondía la pregunta — el moat citaba "no sé" sobre su propio contenido.
+ * text-embedding-3-small: los buenos matches temáticos viven en ~0.45-0.75, no
+ * cerca de 1.0.
+ */
+export const DEFAULT_MIN_SIMILARITY = 0.42;
 
 // Una pregunta real nunca necesita más; acota costo/latencia del peor caso.
 const MAX_QUERY_CHARS = 2_000;
@@ -93,7 +109,7 @@ export type MatchedChunk = {
 export type SearchChunksOptions = {
   /** 1-20 (clamp en SQL). Default 6. */
   matchCount?: number;
-  /** 0-1. Default 0.75 — alto a propósito: sin fuentes fuertes, "no sé". */
+  /** 0-1. Default 0.42 (calibrado, ver DEFAULT_MIN_SIMILARITY): sin fuentes relevantes, "no sé". */
   minSimilarity?: number;
 };
 

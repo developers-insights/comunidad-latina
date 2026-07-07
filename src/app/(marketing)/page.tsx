@@ -110,28 +110,41 @@ export default async function MarketingHome() {
             sizes="100vw"
             className="object-cover"
           />
+          {/* Overlay vertical: legibilidad del texto sobre la foto (§2.4). */}
           <div
             aria-hidden="true"
-            className="absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/60 to-neutral-950/35"
+            className="absolute inset-0 bg-gradient-to-t from-neutral-950/92 via-neutral-950/62 to-neutral-950/30"
+          />
+          {/* Refuerzo lateral desde la izquierda: la columna de texto queda
+              siempre sobre zona oscura, sin ensuciar la foto a la derecha. */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-gradient-to-r from-neutral-950/55 via-neutral-950/10 to-transparent"
+          />
+          {/* Glow sutil con la marca del tenant: profundidad premium, muy tenue. */}
+          <div
+            aria-hidden="true"
+            className="absolute -left-40 top-1/2 -z-0 hidden size-[36rem] -translate-y-1/2 rounded-full opacity-[0.16] blur-3xl sm:block"
+            style={{ background: "radial-gradient(closest-side, var(--color-brand-500), transparent)" }}
           />
         </div>
 
         <div className="mx-auto flex w-full max-w-5xl flex-col items-start px-4 pb-24 pt-28 sm:pb-32 sm:pt-40">
           <Reveal>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-sm font-medium text-white backdrop-blur-sm">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-sm font-medium text-white shadow-sm backdrop-blur-md">
               <ShieldCheck size={16} weight="fill" aria-hidden="true" />
               {COPY.hero.badge}
             </span>
           </Reveal>
 
           <Reveal delay={0.08}>
-            <h1 className="mt-6 max-w-2xl font-display text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl">
+            <h1 className="mt-7 max-w-3xl font-display text-[2rem] font-bold leading-[1.08] tracking-tight text-white [text-shadow:0_2px_24px_rgba(0,0,0,0.35)] sm:text-4xl lg:text-[3.25rem] lg:leading-[1.05]">
               {COPY.hero.h1(gentilicio)}
             </h1>
           </Reveal>
 
           <Reveal delay={0.16}>
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-neutral-100/90">
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-neutral-100/90">
               {COPY.hero.subhead}
             </p>
           </Reveal>
@@ -150,6 +163,18 @@ export default async function MarketingHome() {
               {COPY.hero.ctaSecondary}
             </Link>
           </Reveal>
+
+          {/* Trust bar: señales de confianza premium, sobrias, sin números inventados. */}
+          <Reveal delay={0.32} className="mt-10 w-full">
+            <ul className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-white/15 pt-6 text-sm text-neutral-100/85">
+              {COPY.hero.trustSignals.map((signal) => (
+                <li key={signal} className="inline-flex items-center gap-2">
+                  <SealCheck size={16} weight="fill" className="shrink-0 text-white/70" aria-hidden="true" />
+                  {signal}
+                </li>
+              ))}
+            </ul>
+          </Reveal>
         </div>
       </section>
 
@@ -167,7 +192,14 @@ export default async function MarketingHome() {
             const Icon = PILLAR_ICONS[pillar.key];
             return (
               <Reveal key={pillar.key} delay={index * 0.08} className="h-full">
-                <Link href={pillar.href} className="group block h-full">
+                <Link
+                  href={pillar.href}
+                  className={cn(
+                    "group block h-full rounded-xl",
+                    "transition-[transform,box-shadow] duration-(--duration-base) ease-(--ease-out-premium)",
+                    "hover:-translate-y-0.5 hover:shadow-md motion-reduce:hover:translate-y-0",
+                  )}
+                >
                   <BezelCard className="h-full" coreClassName="flex h-full flex-col gap-3 p-6">
                     <span className="flex size-11 items-center justify-center rounded-md bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
                       <Icon size={24} weight="light" aria-hidden="true" />
@@ -250,10 +282,14 @@ export default async function MarketingHome() {
             </div>
             <Link
               href="/guias"
-              className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-700 dark:text-brand-300"
+              className="group inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-700 dark:text-brand-300"
             >
               {COPY.guides.allLink}
-              <ArrowRight size={16} aria-hidden="true" />
+              <ArrowRight
+                size={16}
+                aria-hidden="true"
+                className="transition-transform duration-(--duration-fast) ease-(--ease-out-premium) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0"
+              />
             </Link>
           </Reveal>
 
@@ -282,10 +318,14 @@ export default async function MarketingHome() {
               </div>
               <Link
                 href="/propiedades"
-                className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-700 dark:text-brand-300"
+                className="group inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-700 dark:text-brand-300"
               >
                 {COPY.listings.allLink}
-                <ArrowRight size={16} aria-hidden="true" />
+                <ArrowRight
+                  size={16}
+                  aria-hidden="true"
+                  className="transition-transform duration-(--duration-fast) ease-(--ease-out-premium) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0"
+                />
               </Link>
             </Reveal>
 

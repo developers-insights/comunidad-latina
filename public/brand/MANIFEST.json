@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-07-07",
+  "generator": "Agente ASSETS VISUALES/3D PREMIUM — nanobanana MCP (Gemini) para rasters + SVG a mano. Meshy no disponible (sin MESHY_API_KEY); se usó nanobanana + fallback SVG premium.",
+  "art_direction": "Escudo geométrico + monograma CL. Fintech-cálido (Revolut/Mercado Pago) con claridad Linear. Acento azul #1A5EDB, neutros cálidos #FCFCFB/#F7F6F3/#17150F.",
+  "assets": [
+    {
+      "file": "brand-mark.svg",
+      "format": "svg",
+      "method": "SVG a mano (vectorial, nítido a cualquier escala)",
+      "description": "Emblema de marca principal: escudo geométrico con gradiente azul, gloss superior, borde interior claro y monograma CL (C como arco abierto + L anidada) en crema. La silueta usa currentColor → retintable por tenant.",
+      "surface": "Header, splash, cualquier lugar de marca. Se renderiza vía <BrandMark> (src/components/experience/brand-mark.tsx) con shine premium opcional en hover."
+    },
+    {
+      "file": "favicon.svg",
+      "format": "svg",
+      "method": "SVG a mano",
+      "description": "Favicon cuadrado con esquinas redondeadas: fondo azul #1A5EDB + monograma CL en crema. Escala nítida para pestaña/PWA.",
+      "surface": "Favicon del sitio (link rel=icon type=image/svg+xml)."
+    },
+    {
+      "file": "../../assets-source/brand-raster/brand-emblem.png",
+      "format": "png",
+      "aspect_ratio": "1:1",
+      "approx_dimensions": "1024x1024",
+      "method": "nanobanana MCP (Gemini)",
+      "status": "archived",
+      "description": "Emblema de marca rasterizado: escudo azul #1A5EDB con monograma CL crema, gloss sutil, grano y borde interior. Versión de alta resolución del brand-mark, apta para maskable/splash.",
+      "surface": "No usado en el build actual (el emblema en runtime es el SVG brand-mark). Archivado fuera de public/ para no versionar ~350KB muertos en el deploy; re-importar a public/brand/ si se necesita para maskable/splash."
+    },
+    {
+      "file": "../../assets-source/brand-raster/escudo-3d.png",
+      "format": "png",
+      "aspect_ratio": "1:1",
+      "approx_dimensions": "1024x1024",
+      "method": "nanobanana MCP (Gemini)",
+      "status": "archived",
+      "description": "Escudo 3D premium (material glass-cerámico, gradiente azul, check blanco, sombra suave) sobre fondo crema. Trust mark dimensional para el Escudo Anti-Estafa.",
+      "surface": "No usado en el build actual. Archivado fuera de public/; re-importar a public/brand/ si el Escudo Anti-Estafa adopta el trust mark rasterizado."
+    },
+    {
+      "file": "../../assets-source/brand-raster/texture-mesh.png",
+      "format": "png",
+      "aspect_ratio": "1:1",
+      "approx_dimensions": "1024x1024",
+      "method": "nanobanana MCP (Gemini)",
+      "status": "archived",
+      "description": "Textura de fondo ultra sutil: arcos concéntricos y líneas geométricas casi imperceptibles sobre crema cálido, con grano suave. No reduce legibilidad del texto encima.",
+      "surface": "No usado en el build actual. Archivado fuera de public/; re-importar a public/brand/ si se activa el fondo decorativo de secciones premium."
+    }
+  ]
+}
