@@ -2,6 +2,8 @@
 
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createNotification } from "@/lib/notifications/notify";
 
 /**
  * Server actions del módulo VIVIENDA (lado detalle).
@@ -58,6 +60,33 @@ export async function requestContactAction(
       ok: false,
       error: "No pudimos enviar tu solicitud — probá de nuevo en un ratito.",
     };
+  }
+
+  // Aviso al dueño del listing (best-effort, §12): el insert de notifications
+  // es solo del sistema (RLS with check false), por eso va con admin client.
+  // Si algo falla acá, la solicitud de contacto ya salió — jamás se rompe.
+  try {
+    const { data: listing } = await supabase
+      .from("listings")
+      .select("title, created_by, tenant_id")
+      .eq("id", parsed.data)
+      .maybeSingle();
+    if (listing?.created_by && listing.created_by !== user.id) {
+      await createNotification(createAdminClient(), {
+        tenantId: listing.tenant_id,
+        profileId: listing.created_by,
+        kind: "contact_request",
+        title: `Alguien quiere contactarte por "${listing.title}"`,
+        body: "Entrá a Mensajes para aceptar o ignorar la solicitud.",
+        href: "/mensajes",
+      });
+    }
+  } catch (notifyError) {
+    // Sin PII: solo el error técnico.
+    console.warn("[vivienda] no se pudo notificar al dueño del listing:", {
+      listingId: parsed.data,
+      message: notifyError instanceof Error ? notifyError.message : "error desconocido",
+    });
   }
 
   return { ok: true, conversationId: typeof data === "string" ? data : "" };

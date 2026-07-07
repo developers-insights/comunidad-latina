@@ -1,7 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { Tenant } from "@/lib/tenant/resolve";
+import { createClient } from "@/lib/supabase/server";
 import { HeaderActions } from "@/components/shell/header-actions";
+import { NotificationBell } from "@/components/notifications";
 
 const SUPABASE_ORIGIN = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/+$/, "");
 
@@ -13,12 +15,27 @@ function isOptimizableSrc(src: string): boolean {
   );
 }
 
+/** Count de notificaciones sin leer del usuario (RLS: solo las propias). */
+async function getUnreadCount(): Promise<number> {
+  try {
+    const supabase = await createClient();
+    const { count, error } = await supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .is("read_at", null);
+    return !error && typeof count === "number" ? count : 0;
+  } catch {
+    return 0; // Sin sesión o sin DB: campana sin badge, nunca un error.
+  }
+}
+
 /**
  * Header del shell autenticado: zona de logo del tenant (única zona de marca
- * masiva permitida), selector de ubicación y campana de notificaciones
- * (placeholders con feedback inmediato — los cablean SOCIAL/notificaciones).
+ * masiva permitida), selector de ubicación (placeholder, lo cablea SOCIAL)
+ * y campana de notificaciones real (módulo NOTIFICACIONES).
  */
-export function Header({ tenant, className }: { tenant: Tenant; className?: string }) {
+export async function Header({ tenant, className }: { tenant: Tenant; className?: string }) {
+  const unread = await getUnreadCount();
   const headerClass = [
     "sticky top-0 z-40 border-b border-neutral-200/70 bg-white/85 backdrop-blur-md",
     "dark:border-neutral-800 dark:bg-neutral-900/85",
@@ -55,6 +72,7 @@ export function Header({ tenant, className }: { tenant: Tenant; className?: stri
         </Link>
 
         <HeaderActions />
+        <NotificationBell initialUnread={unread} />
       </div>
     </header>
   );

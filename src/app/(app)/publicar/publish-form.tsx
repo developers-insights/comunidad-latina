@@ -30,6 +30,38 @@ import { createListingDraft, finalizeListing } from "./actions";
 
 const C = COPY.publish;
 
+// Campos específicos de professional/event (módulo DIRECTORIOS) — copy local
+// para no tocar el COPY de vivienda.
+const DIR_COPY = {
+  professional: {
+    categoryLabel: "Rubro",
+    categoryError: "Elegí un rubro para tu perfil.",
+    credentialsLabel: "Credenciales",
+    credentialsPlaceholder: "Ej.: Matrícula NY #12345, CPA",
+    credentialsHelp:
+      "Separalas con comas. Si sos abogado o notario, después podés verificar tu matrícula en el Escudo.",
+  },
+  event: {
+    dateLabel: "Fecha y hora del evento",
+    dateError: "Decinos cuándo es el evento.",
+  },
+} as const;
+
+const PROFESSIONAL_CATEGORY_OPTIONS = [
+  { value: "abogado", label: "Abogado" },
+  { value: "contador", label: "Contador" },
+  { value: "notario", label: "Notario" },
+  { value: "salud", label: "Salud" },
+  { value: "educacion", label: "Educación" },
+  { value: "otro", label: "Otro" },
+] as const;
+
+type ProfessionalCategory = (typeof PROFESSIONAL_CATEGORY_OPTIONS)[number]["value"];
+
+function isProfessionalCategory(value: string): value is ProfessionalCategory {
+  return PROFESSIONAL_CATEGORY_OPTIONS.some((option) => option.value === value);
+}
+
 type Kind = "property" | "business" | "professional" | "event" | "job";
 
 const KIND_OPTIONS: Array<{ value: Kind; label: string; Icon: typeof House }> = [
@@ -92,6 +124,10 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
   const [areaLabel, setAreaLabel] = useState("");
   const [exactAddress, setExactAddress] = useState("");
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  // Campos específicos de professional/event
+  const [category, setCategory] = useState("");
+  const [credentials, setCredentials] = useState("");
+  const [eventStartsAt, setEventStartsAt] = useState("");
 
   // El borrador se crea una sola vez — reintentos no duplican avisos.
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -107,6 +143,12 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
     if (current === 2 && isProperty) {
       const amount = Number(price);
       if (!Number.isFinite(amount) || amount <= 0) return C.errors.priceRequired;
+    }
+    if (current === 2 && kind === "professional" && !category) {
+      return DIR_COPY.professional.categoryError;
+    }
+    if (current === 2 && kind === "event" && !eventStartsAt) {
+      return DIR_COPY.event.dateError;
     }
     if (current === 3 && areaLabel.trim().length < 3) return C.errors.zoneShort;
     return null;
@@ -172,6 +214,9 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
     setAreaLabel("");
     setExactAddress("");
     setPhotos([]);
+    setCategory("");
+    setCredentials("");
+    setEventStartsAt("");
     setDraftId(null);
   }
 
@@ -198,6 +243,10 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
           sqft: isProperty && sqft ? Number(sqft) : null,
           areaLabel: areaLabel.trim(),
           exactAddress: exactAddress.trim() || null,
+          category:
+            kind === "professional" && isProfessionalCategory(category) ? category : null,
+          credentials: kind === "professional" ? credentials.trim() || null : null,
+          eventStartsAt: kind === "event" && eventStartsAt ? eventStartsAt : null,
         });
         if (!result.ok) {
           setError(result.error);
@@ -418,6 +467,53 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
                 />
               </Field>
             </div>
+          )}
+
+          {kind === "professional" && (
+            <>
+              <Field htmlFor="pub-category" label={DIR_COPY.professional.categoryLabel}>
+                <Select
+                  id="pub-category"
+                  value={category}
+                  onChange={(event) => setCategory(event.target.value)}
+                >
+                  <option value="" disabled>
+                    Elegí un rubro…
+                  </option>
+                  {PROFESSIONAL_CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field
+                htmlFor="pub-credentials"
+                label={DIR_COPY.professional.credentialsLabel}
+                help={DIR_COPY.professional.credentialsHelp}
+                optional
+              >
+                <Input
+                  id="pub-credentials"
+                  value={credentials}
+                  maxLength={200}
+                  placeholder={DIR_COPY.professional.credentialsPlaceholder}
+                  onChange={(event) => setCredentials(event.target.value)}
+                />
+              </Field>
+            </>
+          )}
+
+          {kind === "event" && (
+            <Field htmlFor="pub-event-date" label={DIR_COPY.event.dateLabel}>
+              <Input
+                id="pub-event-date"
+                type="datetime-local"
+                value={eventStartsAt}
+                onChange={(event) => setEventStartsAt(event.target.value)}
+                className="numeric"
+              />
+            </Field>
           )}
         </div>
       )}

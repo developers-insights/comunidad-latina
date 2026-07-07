@@ -28,6 +28,14 @@ import { isVisionConfigured } from "@/lib/config/services";
 
 const KINDS = ["property", "business", "professional", "event", "job"] as const;
 const PERIODS = ["month", "week", "day", "one_time"] as const;
+const PROFESSIONAL_CATEGORIES = [
+  "abogado",
+  "contador",
+  "notario",
+  "salud",
+  "educacion",
+  "otro",
+] as const;
 
 const draftSchema = z
   .object({
@@ -41,10 +49,25 @@ const draftSchema = z
     sqft: z.number().int().min(1).max(100_000).nullish(),
     areaLabel: z.string().trim().min(3).max(80),
     exactAddress: z.string().trim().max(200).nullish(),
+    // Campos específicos de professional/event (módulo DIRECTORIOS)
+    category: z.enum(PROFESSIONAL_CATEGORIES).nullish(),
+    credentials: z.string().trim().max(200).nullish(),
+    eventStartsAt: z
+      .string()
+      .trim()
+      .max(40)
+      .refine((value) => !Number.isNaN(new Date(value).getTime()), "fecha inválida")
+      .nullish(),
   })
   .superRefine((value, ctx) => {
     if (value.kind === "property" && (value.priceAmount === null || value.priceAmount === undefined)) {
       ctx.addIssue({ code: "custom", path: ["priceAmount"], message: "precio requerido" });
+    }
+    if (value.kind === "professional" && !value.category) {
+      ctx.addIssue({ code: "custom", path: ["category"], message: "rubro requerido" });
+    }
+    if (value.kind === "event" && !value.eventStartsAt) {
+      ctx.addIssue({ code: "custom", path: ["eventStartsAt"], message: "fecha requerida" });
     }
   });
 
@@ -72,11 +95,22 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
     return { ok: false, needsAuth: true, error: "Para publicar necesitás entrar a tu cuenta." };
   }
 
-  const attrs: Record<string, number> = {};
+  const attrs: Record<string, string | number> = {};
   if (input.kind === "property") {
     if (input.bedrooms !== null && input.bedrooms !== undefined) attrs.bedrooms = input.bedrooms;
     if (input.bathrooms !== null && input.bathrooms !== undefined) attrs.bathrooms = input.bathrooms;
     if (input.sqft !== null && input.sqft !== undefined) attrs.sqft = input.sqft;
+  }
+  if (input.kind === "professional") {
+    if (input.category) attrs.category = input.category;
+    if (input.credentials) attrs.credentials = input.credentials;
+  }
+  if (input.kind === "event") {
+    if (input.eventStartsAt) {
+      // Canónico ISO (mismo formato que el seed: attrs.starts_at)
+      attrs.starts_at = new Date(input.eventStartsAt).toISOString();
+    }
+    attrs.venue_area = input.areaLabel;
   }
 
   const { data: created, error } = await supabase

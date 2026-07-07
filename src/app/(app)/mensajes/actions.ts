@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createNotification } from "@/lib/notifications/notify";
 import { isOpenAIConfigured } from "@/lib/config/services";
 
 /**
@@ -133,6 +134,40 @@ export async function sendMessageAction(input: {
     body,
   });
   if (insertError) return { ok: false, code: "error" };
+
+  // Aviso a la contraparte (best-effort, §12): la conversación ya está
+  // accepted (validado arriba). El insert de notifications es solo del
+  // sistema (RLS with check false) → admin client. dedupeUnread evita una
+  // notificación por mensaje: mientras tenga una sin leer de este hilo, no
+  // se apila otra. Si falla, el mensaje ya se entregó — no se rompe nada.
+  try {
+    const recipientId =
+      conversation.created_by === user.id
+        ? conversation.counterpart_id
+        : conversation.created_by;
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    await createNotification(createAdminClient(), {
+      tenantId: conversation.tenant_id,
+      profileId: recipientId,
+      kind: "message",
+      title: me?.display_name
+        ? `${me.display_name} te escribió`
+        : "Tenés un mensaje nuevo",
+      body: "Abrí la conversación para leerlo.",
+      href: `/mensajes/${conversationId}`,
+      dedupeUnread: true,
+    });
+  } catch (notifyError) {
+    // Sin PII: solo el error técnico, nunca el contenido del mensaje.
+    console.warn(
+      "[mensajes] no se pudo notificar a la contraparte:",
+      notifyError instanceof Error ? notifyError.message : "error desconocido",
+    );
+  }
 
   revalidatePath(`/mensajes/${conversationId}`);
   revalidatePath("/mensajes");
