@@ -4,6 +4,7 @@ import { brandThemeToStyle } from "@/lib/tenant/brand-pipeline";
 import { Header } from "@/components/shell/header";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { OfflineBanner } from "@/components/shell/offline-banner";
+import { TenantMismatchBanner } from "@/components/shell/tenant-mismatch-banner";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 
 /**
@@ -27,6 +28,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       </a>
       <OfflineBanner />
       <Header tenant={tenant} />
+      <TenantMismatchBanner />
       <main
         id="contenido"
         tabIndex={-1}

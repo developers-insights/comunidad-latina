@@ -38,7 +38,21 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-const DEMO_PASSWORD = 'Demo123!demo';
+// La password de los usuarios demo JAMÁS vive en el repo: el seed apunta a la
+// misma base que cualquier deploy, así que una password commiteada es una
+// puerta abierta al panel (uno de los usuarios demo es global_admin).
+// Definila en .env.local (o exportala en la shell) antes de correr el seed:
+//   SEED_DEMO_PASSWORD='...'
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD;
+
+if (!DEMO_PASSWORD || DEMO_PASSWORD.length < 12) {
+  console.error(
+    '✘ Falta SEED_DEMO_PASSWORD (mínimo 12 caracteres) en .env.local.\n' +
+      '  Los usuarios demo incluyen un global_admin: no se siembra con una password conocida.\n' +
+      "  Generá una: node -e \"console.log('Demo-'+require('crypto').randomBytes(12).toString('base64url')+'-26')\"",
+  );
+  process.exit(1);
+}
 
 const summary = [];
 function log(action, detail) {
@@ -574,7 +588,7 @@ async function main() {
 
   // -------------------------------------------------------------------------
   console.log(`\n✔ Seed completo (${summary.filter((s) => s.startsWith('create')).length} creados, ${summary.filter((s) => s.startsWith('skip')).length} ya existían).`);
-  console.log('  Usuarios demo (password Demo123!demo):');
+  console.log('  Usuarios demo (password: la de SEED_DEMO_PASSWORD):');
   console.log('   - maria@demo.comunidadlatina.com     → member @ dominicanos');
   console.log('   - carlos@demo.comunidadlatina.com    → domain_admin @ dominicanos');
   console.log('   - geovanny@demo.comunidadlatina.com  → global_admin @ comunidadlatina\n');

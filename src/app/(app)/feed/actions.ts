@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getTenant } from "@/lib/tenant/resolve";
+import { requireTenantMatch } from "@/lib/tenant/guard";
 import type { Json } from "@/lib/types/database.types";
 import { isVisionConfigured } from "@/lib/config/services";
 import {
@@ -65,7 +65,9 @@ const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
 export type CreatePostResult =
   | { ok: true; status: "published" | "pending_review" }
-  | { ok: false; code: "invalid" | "unauthenticated" | "photo" | "error" };
+  | { ok: false; code: "invalid" | "unauthenticated" | "photo" | "error" }
+  /** El JWT y el header apuntan a comunidades distintas — copy ya resuelto. */
+  | { ok: false; code: "tenant-mismatch"; message: string };
 
 /** Registra en audit_log (via admin) un acto privilegiado — best effort. */
 async function auditAdminAction(input: {
@@ -114,11 +116,20 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     return { ok: false, code: "photo" };
   }
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, code: "unauthenticated" };
+  // Guard ANTES de moderar y ANTES de subir la foto. La subida va con el admin
+  // client (bypassea la RLS de storage, desvío #2): sin este chequeo, la foto
+  // de un usuario cuyo JWT es de otro tenant aterrizaba en el prefijo
+  // {tenant_id} EQUIVOCADO del bucket y recién después la RLS rechazaba el
+  // insert de `posts` — archivo huérfano, sin fila, sin audit_log.
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") return { ok: false, code: "unauthenticated" };
+    if (guard.reason === "tenant-mismatch") {
+      return { ok: false, code: "tenant-mismatch", message: guard.message };
+    }
+    return { ok: false, code: "error" };
+  }
+  const { tenant, supabase, user } = guard;
 
   // ---- Moderación de texto ANTES de publicar (§8) -------------------------
   const moderation = await moderateText(body);
@@ -231,7 +242,9 @@ const commentSchema = z.object({
 
 export type CreateCommentResult =
   | { ok: true }
-  | { ok: false; code: "invalid" | "unauthenticated" | "flagged" | "error" };
+  | { ok: false; code: "invalid" | "unauthenticated" | "flagged" | "error" }
+  /** El JWT y el header apuntan a comunidades distintas — copy ya resuelto. */
+  | { ok: false; code: "tenant-mismatch"; message: string };
 
 export async function createCommentAction(input: {
   postId: string;
@@ -241,11 +254,17 @@ export async function createCommentAction(input: {
   if (!parsed.success) return { ok: false, code: GENERIC_INVALID };
   const { postId, body } = parsed.data;
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, code: "unauthenticated" };
+  // Guard antes de moderar: sin coincidencia de tenant, `comments_insert` va a
+  // rechazar igual — no gastamos una llamada a la API de moderación.
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") return { ok: false, code: "unauthenticated" };
+    if (guard.reason === "tenant-mismatch") {
+      return { ok: false, code: "tenant-mismatch", message: guard.message };
+    }
+    return { ok: false, code: "error" };
+  }
+  const { tenant, supabase, user } = guard;
 
   const moderation = await moderateText(body);
 

@@ -13,6 +13,13 @@ export type Tenant = {
   currency: string;
   modules: Record<string, boolean>;
   theme: Record<string, unknown> | null;
+  /**
+   * `true` cuando la fila NO vino de la DB y `id` es un placeholder (DB caída,
+   * seed pendiente, slug inexistente). Sirve para pintar branding igual —
+   * degradación elegante §7 — pero JAMÁS para comparar contra el `tenant_id`
+   * del JWT: ver `classifyTenantMatch` en `./match`.
+   */
+  isFallback: boolean;
 };
 
 export const TENANT_COOKIE = "cl-tenant";
@@ -46,6 +53,7 @@ export const DEFAULT_TENANTS: Record<string, Tenant> = {
     currency: "USD",
     modules: DEFAULT_MODULES,
     theme: null,
+    isFallback: true,
   },
   comunidadlatina: {
     id: "00000000-0000-4000-8000-000000000002", // placeholder — el id real lo da la DB
@@ -57,6 +65,7 @@ export const DEFAULT_TENANTS: Record<string, Tenant> = {
     currency: "USD",
     modules: DEFAULT_MODULES,
     theme: null,
+    isFallback: true,
   },
 };
 
@@ -115,6 +124,8 @@ function mapTenantRow(row: Record<string, unknown>, fallback: Tenant): Tenant {
     currency: asString(row.currency) ?? fallback.currency,
     modules: (asRecord(row.modules) as Record<string, boolean> | null) ?? fallback.modules,
     theme: asRecord(row.theme) ?? fallback.theme,
+    // La fila vino de la DB: `id` es real, así que se puede comparar con el JWT.
+    isFallback: false,
   };
 }
 
@@ -156,5 +167,6 @@ export const getTenant = cache(async (): Promise<Tenant> => {
     // DB no disponible o aún sin sembrar — seguimos con el fallback.
   }
 
+  // `fallback.isFallback === true`: branding sí, comparación contra el JWT no.
   return fallback;
 });

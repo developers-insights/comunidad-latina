@@ -5,7 +5,7 @@ import { isStripeConfigured } from "@/lib/config/services";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { BOOST_PACKAGES, boostMontoCentavos, getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getTenant } from "@/lib/tenant/resolve";
 
 /** Copy de errores del módulo — cálido, sin jerga técnica. */
@@ -68,11 +68,16 @@ export async function crearBoostCheckout(
     return { status: "no_configurado" };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { status: "sin_sesion" };
+  // Guard ANTES del rate limit y del chequeo de ownership: con el tenant del
+  // header divergente, el `listing.tenant_id !== tenant.id` de abajo daba
+  // `errorNoEsTuyo` sobre un aviso que SÍ era del usuario. Ahora el aviso es
+  // verdadero, y no se le quema el cupo horario por un intento imposible.
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") return { status: "sin_sesion" };
+    return { status: "error", message: guard.message };
+  }
+  const { supabase, user } = guard;
 
   // Rate limit por usuario ANTES de tocar Stripe/DB: sin esto, un logueado
   // podía generar filas pending_payment + Checkout Sessions sin tope (la

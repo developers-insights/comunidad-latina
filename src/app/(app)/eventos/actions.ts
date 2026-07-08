@@ -1,8 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getTenant } from "@/lib/tenant/resolve";
+import { requireTenantMatch } from "@/lib/tenant/guard";
 
 /**
  * Server actions del módulo DIRECTORIOS (lado eventos).
@@ -31,13 +30,17 @@ export async function toggleEventInterestAction(
   }
   const eventId = parsed.data;
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { ok: false, needsAuth: true, error: "Para anotarte necesitás entrar a tu cuenta." };
+  // Sin coincidencia de tenant el toggle miente en las dos direcciones: la
+  // lectura filtrada por el tenant del header no encuentra la reaction que sí
+  // existe, y el insert que sigue rebota contra la RLS.
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") {
+      return { ok: false, needsAuth: true, error: "Para anotarte necesitás entrar a tu cuenta." };
+    }
+    return { ok: false, error: guard.message };
   }
+  const { tenant, supabase, user } = guard;
 
   // ¿Ya está anotada esta persona? (toggle)
   const { data: existing, error: readError } = await supabase
