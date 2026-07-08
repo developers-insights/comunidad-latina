@@ -3,6 +3,32 @@
 **Última actualización:** 2026-07-08 (guard de divergencia de tenant).
 **Estado:** ✅ **R0 + R1 + R2 + R3 CONSTRUIDOS + REVISIÓN INTEGRAL + POLISH PREMIUM + EMBLEMAS 3D + GUARD DE TENANT.** Producto completo listo para los gates humanos. 47 rutas.
 
+## Deploy de demo en producción (⚠️ 2026-07-08)
+
+**URL:** https://comunidad-latina-taupe.vercel.app · proyecto Vercel `comunidad-latina` (team `manuels-projects-66819a23`).
+`comunidad-latina.vercel.app` estaba tomado por otra cuenta.
+
+> ⚠️ **Los gates humanos del pendiente #1 SIGUEN ABIERTOS.** Esto es una URL de demo, decidida a conciencia,
+> apuntando a la base REAL (`ktmbtpuhqqofdkisqseq`). No es un go-live. No cargar datos de personas reales.
+
+- **URL pública, sin protección de deployment.** Se desactivó `ssoProtection` (venía en `all_except_custom_domains`,
+  que dejaba todo detrás del SSO de Vercel y el cliente no podía abrirlo). Para volver a cerrarla:
+  `PATCH /v9/projects/<id> {"ssoProtection":{"deploymentType":"all_except_custom_domains"}}`.
+- **`framework` era `null`** (el proyecto se creó con `vercel project add`, sin preset) → Vercel no aplicaba el
+  routing de Next y **todo daba 404** aunque el build fuera verde. Corregido a `nextjs`.
+- **Env de producción: solo 7 vars reales.** Stripe/Resend/Vision/Sentry quedan **sin setear** a propósito → los
+  flags de `lib/config/services.ts` dan `false` y la degradación elegante funciona (verificado: el botón de plan
+  abre "Muy pronto — Estamos terminando de configurar los pagos").
+  ⚠️ En `.env.local` esas llaves son comentarios (`STRIPE_SECRET_KEY=  # sk_test_…`) y `@next/env` los recorta a `""`.
+  **Si se pegan literales en el dashboard de Vercel, `Boolean()` da `true` y la degradación muere.**
+- **`robots.txt` → `Disallow: /`** en cualquier host que no sea un dominio real (ver `src/app/robots.ts`).
+- **Limitación de la demo:** en producción `isProduction` mata `MODERATION_DEV_AUTO_APPROVE` y Vision no está
+  configurado → **todo listing nace `pending_review`**. Para que aparezca hay que aprobarlo en `/admin/moderacion`
+  (entrar como `carlos` o `geovanny`). Los posts de texto del feed sí se publican al toque.
+- **Sin push a GitHub:** el remote `INSIGHTSAPPS/comunidad-latina` pide credenciales interactivas. El deploy sube
+  archivos locales, no depende de Git. Commit local: `e26a406`.
+- Credenciales demo: rotadas, fuera del repo (ver "Datos demo").
+
 ## Guard de divergencia de tenant (✅ 2026-07-08)
 
 El tenant del REQUEST (header `x-tenant-slug`, del Host o de `?t=`) y el del USUARIO (JWT
