@@ -64,8 +64,10 @@ que formatea distinto en el server (UTC) que en el browser.
 - **Limitación de la demo:** en producción `isProduction` mata `MODERATION_DEV_AUTO_APPROVE` y Vision no está
   configurado → **todo listing nace `pending_review`**. Para que aparezca hay que aprobarlo en `/admin/moderacion`
   (entrar como `carlos` o `geovanny`). Los posts de texto del feed sí se publican al toque.
-- **Sin push a GitHub:** el remote `INSIGHTSAPPS/comunidad-latina` pide credenciales interactivas. El deploy sube
-  archivos locales, no depende de Git. Commit local: `e26a406`.
+- **Push a GitHub: ✅ resuelto.** El remote `INSIGHTSAPPS/comunidad-latina` es privado y **solo lo ve la cuenta
+  `gh` INSIGHTSAPPS**, no `manu-180`. Con esa cuenta activa, `git push` autentica sin pedir password. El deploy
+  igual sube archivos locales y **no depende de Git** (el proyecto Vercel no tiene conexión con el repo, así que
+  un push NO dispara build: hay que correr `vercel deploy --prod`).
 - Credenciales demo: rotadas, fuera del repo (ver "Datos demo").
 
 ## Guard de divergencia de tenant (✅ 2026-07-08)
