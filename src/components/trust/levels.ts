@@ -28,9 +28,17 @@ export interface TrustLevelConfig {
    * Nunca reemplaza al `Icon`: convive con él. Ver `TrustLevelMark`.
    */
   emblem: EmblemName;
-  /** Color del texto/ícono del nivel. */
+  /**
+   * El nivel escrito como PALABRAS ("· Premium", "Nivel: Diamante"). Es texto:
+   * va el tono `-ink` del rol, que globals.css valida a ≥4.5:1 (WCAG 1.4.3)
+   * contra las cinco superficies de cada tema. Nunca el relleno.
+   */
   textClass: string;
-  /** Color de los segmentos llenos de la barra. */
+  /**
+   * Relleno de los segmentos llenos de la barra. Es un objeto gráfico, no texto:
+   * se queda el tono base. La barra va `aria-hidden` y el nivel se dice al lado
+   * en letras, así que no carga información por su cuenta.
+   */
   segmentClass: string;
 }
 
@@ -46,7 +54,7 @@ export const TRUST_LEVELS: Record<TrustLevel, TrustLevelConfig> = {
     label: "Verificado",
     Icon: SealCheck,
     emblem: "nivel-verificado",
-    textClass: "text-info",
+    textClass: "text-info-ink",
     segmentClass: "bg-info",
   },
   confiable: {
@@ -55,23 +63,29 @@ export const TRUST_LEVELS: Record<TrustLevel, TrustLevelConfig> = {
     // Mismo objeto que el hero del Escudo Anti-Estafa: un escudo verde significa
     // "protegido" en TODO el producto, no una cosa distinta por pantalla.
     emblem: "escudo-check",
-    textClass: "text-success",
+    textClass: "text-success-ink",
     segmentClass: "bg-success",
   },
   premium: {
     label: "Premium",
     Icon: Star,
     emblem: "nivel-premium",
-    textClass: "text-gold",
+    // El dorado de §2.3 (#b7791f) da 3.64:1 contra `bg-surface`: alcanza para el
+    // emblema y los segmentos, no para la palabra "Premium". `gold-ink` es ese
+    // mismo dorado oscurecido en OKLCH — sigue leyéndose dorado, no marrón.
+    textClass: "text-gold-ink",
     segmentClass: "bg-gold",
   },
   diamante: {
     label: "Diamante",
     Icon: Diamond,
-    // Cristal incoloro a propósito: `text-brand` varía por tenant (azul en
+    // Cristal incoloro a propósito: el tono de marca varía por tenant (azul en
     // `dominicanos`, naranja en `comunidadlatina`) y un raster no puede variar.
     emblem: "nivel-diamante",
-    textClass: "text-brand",
+    // `text-brand` (el RELLENO de la marca) sólo se valida a ≥3:1 contra el canvas:
+    // con un tenant de hue claro la palabra "Diamante" quedaba ilegible. `brand-ink`
+    // es el único tono de marca que el pipeline valida a ≥4.5:1 para cualquier tenant.
+    textClass: "text-brand-ink",
     segmentClass: "bg-brand",
   },
 };

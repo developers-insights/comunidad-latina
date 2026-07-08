@@ -28,9 +28,11 @@
  *               text-placeholder · text-on-surface-inverse
  *  bordes       border-border · border-border-subtle · border-border-strong
  *  estado       success · warning · danger · info (+ -bg, + on-*) — FIJOS, jamás de marca
- *               success-ink / warning-ink → el MISMO rol, pero como TEXTO
+ *               success-ink / warning-ink / danger-ink / info-ink → el MISMO rol,
+ *               pero como TEXTO
  *  marca        brand · brand-foreground · brand-hover · brand-ink · brand-tint
- *               brand-subtle · brand-50…900
+ *               brand-subtle · brand-strong · brand-50…900
+ *  trust        gold (relleno del nivel Premium) · gold-ink (ese nivel como TEXTO)
  *  sobre media  text-on-media · bg-media-scrim · bg-media-shade · bg-media-backdrop
  *               (constantes: una foto es oscura en los dos temas)
  *  overlays     bg-scrim (backdrop de diálogos; SÍ depende del tema)
@@ -38,17 +40,36 @@
  *  sombras      shadow-xs…xl · shadow-bezel · shadow-focus-ring
  *  motion       ease-out-premium · ease-in-premium · ease-spring · --duration-*
  *
+ * ═══ LAS TRES FAMILIAS DE UN MISMO COLOR ═══
+ * Un color de señal (estado, marca, dorado) tiene TRES tonos, no uno. Confundirlos
+ * es el bug de contraste más caro del proyecto, y ya se cometió cuatro veces:
+ *
+ *   `x`        RELLENO. Es el color del objeto gráfico: el ícono, la barra, el
+ *              borde, el fondo del botón. Umbral WCAG 1.4.11 → ≥3:1. NO es texto.
+ *   `x-ink`    TEXTO. El mismo rol escrito como palabras, sobre cualquier
+ *              superficie del tema (canvas, surface, surface-subtle,
+ *              surface-raised, surface-hover) y sobre su propio `x-bg`.
+ *              Umbral WCAG 1.4.3 → ≥4.5:1 contra las SEIS. Sin asteriscos.
+ *   `on-x`     TEXTO ENCIMA DEL RELLENO SÓLIDO (el label adentro de `bg-x`). ≥4.5:1.
+ *
+ * Cuando el relleno ya llega a 4.5:1 contra todo (los estados en dark, `danger` e
+ * `info` en light), el `-ink` es un alias del relleno: mismo valor, un solo lugar.
+ * Cuando no llega, el `-ink` tiene valor propio. El relleno NUNCA se toca: lo
+ * congela §2.3 y lo consumen `bg-warning`, `border-warning`, la barra del score…
+ *
  * Reglas de contraste que NO son obvias y ya costaron un bug cada una:
- *  · `text-foreground-muted` sólo llega a AA sobre `bg-canvas` (4.58:1) y
- *    `bg-surface` (4.70:1). Sobre `bg-surface-subtle` da 4.35:1 y sobre
- *    `bg-surface-hover` 4.02:1 → ahí va `text-foreground-secondary`.
- *  · El fill de un estado NO es su color de texto: `text-warning` sobre
- *    `bg-warning-bg` da 3.28:1 y `text-success` 4.43:1. Para TEXTO usar
- *    `text-warning-ink` / `text-success-ink`. Para ÍCONOS (objeto gráfico,
- *    umbral 3:1) el fill está bien. `danger` (4.53:1) e `info` (4.76:1) pasan.
+ *  · Como TEXTO nunca se escribe `text-warning` / `text-success` / `text-danger` /
+ *    `text-info` / `text-gold` / `text-brand`. Va la variante `-ink`. El fill de
+ *    §2.3 daba 3.28:1 (warning), 4.43:1 (success) y 3.64:1 (gold) sobre fondo claro.
  *  · El tono de RELLENO de la marca (`bg-brand`, `--color-brand`) se valida a
- *    ≥3:1 contra el canvas (WCAG 1.4.11), NO a 4.5:1. Como TEXTO va
- *    `text-brand-ink`, que el pipeline sí valida a AA por tenant.
+ *    ≥3:1 contra el canvas (WCAG 1.4.11), NO a 4.5:1: con un tenant de hue claro
+ *    baja hasta 2.63:1 contra `bg-surface`. Como TEXTO va `text-brand-ink`, y como
+ *    BORDE QUE IDENTIFICA UN ESTADO va `border-brand-strong` — nunca `bg-brand`.
+ *  · `border-brand-subtle` es DECORACIÓN (1.59:1 en light, 2.07:1 en dark). Sirve
+ *    para teñir un borde que ya es redundante; jamás para señalar un estado solo.
+ *  · `text-foreground-muted` llega a AA sobre las cuatro superficies claras
+ *    (4.53–5.30:1) desde que se oscureció a #716b5c. No hace falta degradar a
+ *    `text-foreground-secondary` por contraste — sólo por jerarquía.
  */
 
 @import "tailwindcss";
@@ -219,11 +240,13 @@
   --color-focus-ring: var(--cl-focus-ring);
 
   /* Semánticos de estado FIJOS (§2.3) — jamás derivan de la marca.
-     `on-*`  = color de texto/ícono ENCIMA del fill sólido (bg-success…).
-     `*-ink` = el estado usado como TEXTO sobre superficie o sobre su propio
-               `-bg`. El fill de §2.3 no llega a 4.5:1 ahí (warning 3.28:1,
-               success 4.43:1) pero sí supera el 3:1 de objeto gráfico, así que
-               los ÍCONOS siguen usando el fill. Mismo desdoble que brand/brand-ink. */
+     Las tres familias del comentario de arriba, una por sufijo:
+       `x`      → RELLENO: ícono, barra, borde, fondo del botón. ≥3:1 (1.4.11).
+       `on-x`   → texto/ícono ENCIMA del fill sólido (el label de `bg-success`).
+       `x-ink`  → el estado como TEXTO, sobre CUALQUIER superficie del tema y
+                  sobre su propio `-bg`. ≥4.5:1 contra las seis, en los dos temas.
+     Los cuatro estados tienen `-ink` aunque a veces sea un alias del fill: el call
+     site no tiene que acordarse de cuál pasa y cuál no. Escribís texto → `-ink`. */
   --color-success: var(--cl-success);
   --color-success-bg: var(--cl-success-bg);
   --color-success-ink: var(--cl-success-ink);
@@ -234,13 +257,18 @@
   --color-on-warning: var(--cl-on-warning);
   --color-danger: var(--cl-danger);
   --color-danger-bg: var(--cl-danger-bg);
+  --color-danger-ink: var(--cl-danger-ink);
   --color-on-danger: var(--cl-on-danger);
   --color-info: var(--cl-info);
   --color-info-bg: var(--cl-info-bg);
+  --color-info-ink: var(--cl-info-ink);
   --color-on-info: var(--cl-on-info);
 
-  /* Dorado del nivel Premium del Trust Score (gramática fija §3.3) */
+  /* Dorado del nivel Premium del Trust Score (gramática fija §3.3).
+     `gold` es el relleno del emblema y de los segmentos de la barra; `gold-ink`
+     es la palabra "Premium". No tiene `-bg`: el dorado nunca es un fondo teñido. */
   --color-gold: var(--cl-gold);
+  --color-gold-ink: var(--cl-gold-ink);
 
   /* Marca dependiente del tema (§2.8). --color-brand y --color-brand-foreground
      NO van acá: tienen que existir como custom property real porque hay call
@@ -249,6 +277,7 @@
   --color-brand-ink: var(--cl-brand-ink);
   --color-brand-tint: var(--cl-brand-tint);
   --color-brand-subtle: var(--cl-brand-subtle);
+  --color-brand-strong: var(--cl-brand-strong);
 
   /* Sombras difusas cálidas (§2.5); en dark → borde 1px + sombra a negro */
   --shadow-xs: var(--cl-shadow-xs);
@@ -293,11 +322,26 @@
   --cl-light-bezel-highlight: rgba(255, 255, 255, 0.6);
   --cl-light-foreground: var(--color-neutral-900);
   --cl-light-foreground-secondary: var(--color-neutral-600);
-  --cl-light-foreground-muted: var(--color-neutral-500);
+  /* NO es neutral-500 (#7a7364). Ese tono da 4.35:1 sobre `bg-surface-subtle` y
+     4.02:1 sobre `bg-surface-hover`: AA (1.4.3) pide 4.5:1 y el texto muted cae
+     sobre esas dos superficies todo el tiempo (~71 call sites de bg-surface-subtle,
+     y cada card con `hover:bg-surface-subtle` mueve el fondo bajo su timestamp).
+     Este es el MISMO neutro cálido, un paso más oscuro: oklch(0.528 0.024 86) —
+     la rampa de §2.3 entre el 500 y el 600. Ratios: 5.30 surface · 5.17 canvas ·
+     4.91 surface-subtle · 4.53 surface-hover. Se eligió mover el texto y no la
+     superficie porque `bg-surface-subtle` pinta fondos y bordes en toda la app:
+     aclararlo lo hubiera fundido con el canvas (§2.8: "subtle" es una superficie
+     HUNDIDA), mientras que oscurecer el texto sólo sube contraste. */
+  --cl-light-foreground-muted: #716b5c;
   /* neutral-400 (el "placeholder" nominal de §2.3) da 2.73:1 sobre bg-surface:
-     el placeholder es texto (WCAG 1.4.3), no decoración. neutral-500 → 4.70:1.
-     Queda igual que foreground-muted: se distinguen por contexto, no por tono. */
-  --cl-light-placeholder: var(--color-neutral-500);
+     el placeholder es texto (WCAG 1.4.3), no decoración.
+     Sigue a foreground-muted por REFERENCIA, no por coincidencia: los dos tonos
+     eran neutral-500 y "se distinguen por contexto, no por tono". Escrito así no
+     pueden divergir cuando uno de los dos se mueve. Hoy todos los controles
+     comparten `fieldControlClass` (bg-surface) y los composers ponen un control
+     transparente sobre bg-surface-raised, así que el placeholder cae en 4.53–5.30:1;
+     el día que un buscador se pinte sobre bg-surface-subtle, sigue siendo AA. */
+  --cl-light-placeholder: var(--cl-light-foreground-muted);
   --cl-light-border: var(--color-neutral-200);
   --cl-light-border-subtle: var(--color-neutral-100);
   /* borde fuerte / hover: reemplaza `hover:border-neutral-300` */
@@ -306,24 +350,36 @@
   --cl-light-skeleton-highlight: rgba(255, 255, 255, 0.65);
 
   /* Estado — valores exactos §2.3 (FILL). `on-*` validado ≥4.5:1 sobre su fill.
-     `*-ink` = el mismo estado como TEXTO: el fill de §2.3 no llega a AA sobre su
-     propio `-bg` (warning 3.28:1, success 4.43:1). El fill NO se toca: §2.3 lo
-     congela y lo usan bg-warning, border-warning, la barra del score, etc. */
+     `*-ink` = el mismo estado como TEXTO, ≥4.5:1 contra su `-bg` Y contra las
+     cinco superficies del tema. Cuando el fill ya cumple (danger, info) el ink
+     es un ALIAS: un solo valor, cero deriva. El fill NO se toca: §2.3 lo congela
+     y lo usan bg-warning, border-warning, la barra del score, etc. */
   --cl-light-success: #1a7f5a;
   --cl-light-success-bg: #e8f5ee;
-  --cl-light-success-ink: #177252; /* 5.25:1 sobre success-bg, 5.89:1 sobre surface */
+  --cl-light-success-ink: #177252; /* 5.25 bg · 5.89 surface · 5.03 surface-hover */
   --cl-light-on-success: var(--color-neutral-0); /* 4.97:1 */
   --cl-light-warning: #b7791f;
   --cl-light-warning-bg: #fbf2e3;
-  --cl-light-warning-ink: #8f5c10; /* 5.10:1 sobre warning-bg, 5.67:1 sobre surface */
+  --cl-light-warning-ink: #8f5c10; /* 5.10 bg · 5.67 surface · 4.84 surface-hover */
   --cl-light-on-warning: var(--color-neutral-950); /* 5.37:1 (blanco daría 3.64) */
   --cl-light-danger: #c23b3b;
   --cl-light-danger-bg: #fbeaea;
+  /* El rojo de §2.3 ya es AA como texto contra las seis (4.51–5.27:1): el ink es
+     el fill. Existe igual, para que el call site nunca tenga que averiguarlo. */
+  --cl-light-danger-ink: var(--cl-light-danger);
   --cl-light-on-danger: var(--color-neutral-0); /* 5.27:1 */
   --cl-light-info: #2b6cb0;
   --cl-light-info-bg: #e9f1fa;
+  --cl-light-info-ink: var(--cl-light-info); /* 4.63–5.42:1: el fill ya es AA como texto */
   --cl-light-on-info: var(--color-neutral-0); /* 5.42:1 */
   --cl-light-gold: #b7791f;
+  /* Mismo hex que `warning` — coincidencia de §2.3, no un vínculo semántico: el
+     dorado del nivel Premium y el ámbar de advertencia son roles distintos y cada
+     uno tiene su propio ink, así que pueden separarse sin tocarse.
+     Es el dorado oscurecido en OKLCH a lightness 0.532 conservando croma (0.110)
+     y hue (70) — sigue leyéndose dorado, no marrón.
+     4.60 surface-hover · 4.98 surface-subtle · 5.24 canvas · 5.38 surface. */
+  --cl-light-gold-ink: #945f0e;
 
   /* Marca light — la calcula el brand pipeline y la inyecta el ROOT layout.
      Los fallbacks resuelven al azul default cuando no hay inline style. */
@@ -332,7 +388,26 @@
   --cl-light-brand-hover: var(--brand-light-hover, var(--color-brand-700));
   --cl-light-brand-ink: var(--brand-light-ink, var(--color-brand-700));
   --cl-light-brand-tint: var(--brand-light-tint, var(--color-brand-50));
+  /* DECORATIVO. 1.59:1 contra `bg-surface`: tiñe de marca un borde cuyo estado ya
+     se comunica por otra vía (el radio nativo de post-menu, el punto de
+     notification-item). Si el borde es el ÚNICO diferenciador → `brand-strong`. */
   --cl-light-brand-subtle: var(--color-brand-200);
+  /*
+   * Borde/objeto gráfico de marca que SÍ identifica un estado (WCAG 1.4.11, ≥3:1).
+   *
+   * No puede ser `--cl-light-brand` (el relleno del CTA): el pipeline sólo lo
+   * valida a ≥3:1 contra el CANVAS, y contra `bg-surface` —que es más claro— cae
+   * hasta 2.63:1 con un tenant de hue claro (barrido de 72 tenants sintéticos).
+   * Tampoco un hex fijo: tiene que ser la marca del tenant.
+   *
+   * `brand-ink` es el único tono de marca que el pipeline valida a ≥4.5:1 contra
+   * el fondo más claro de su tema, así que contra CUALQUIER superficie sobra el
+   * 3:1 que pide un borde: piso medido 5.48:1 en light y 7.13:1 en dark sobre esos
+   * mismos 72 tenants. Es un alias a propósito, no una copia: si mañana el borde
+   * necesita un tono propio, este es el lugar donde diverge, y ningún call site
+   * se entera. El nombre dice el ROL (borde fuerte), no el tono.
+   */
+  --cl-light-brand-strong: var(--cl-light-brand-ink);
 
   /* Indicador de foco: en light es el tono de TEXTO de la marca (AA por tenant,
      6.6–7.2:1 contra el canvas). brand-200 acá era invisible (1.33–1.44:1). */
@@ -367,8 +442,9 @@
   --cl-dark-foreground-secondary: var(--color-neutral-300);
   --cl-dark-foreground-muted: var(--color-neutral-400);
   /* neutral-500 daba 3.41:1 sobre bg-surface y 3.13:1 sobre surface-raised
-     (diálogos). neutral-400 → 5.88:1 / 5.39:1. */
-  --cl-dark-placeholder: var(--color-neutral-400);
+     (diálogos). neutral-400 → 5.88:1 / 5.39:1. Misma referencia que en light:
+     el placeholder ES el tono muted, en el contexto de un control. */
+  --cl-dark-placeholder: var(--cl-dark-foreground-muted);
   --cl-dark-border: rgba(255, 255, 255, 0.1);
   --cl-dark-border-subtle: rgba(255, 255, 255, 0.06);
   /* reemplaza `dark:hover:border-neutral-600`; rgba para funcionar sobre
@@ -379,21 +455,28 @@
 
   --cl-dark-success: #46b184;
   --cl-dark-success-bg: #12271d;
-  /* En dark el fill YA es AA como texto (5.91:1 sobre success-bg, 6.90:1 sobre
-     surface): el desdoble ink sólo hace falta en light. Mismo tono, un solo valor. */
+  /* En dark los fills se recalibraron para ser AA como texto contra las seis
+     superficies (5.08–7.34:1): el ink es el fill. Mismo tono, un solo valor. */
   --cl-dark-success-ink: var(--cl-dark-success);
   --cl-dark-on-success: var(--color-neutral-950); /* 7.34:1 (blanco daría 2.66) */
   --cl-dark-warning: #d9a044;
   --cl-dark-warning-bg: #2a2010;
-  --cl-dark-warning-ink: var(--cl-dark-warning); /* 6.90:1 sobre warning-bg */
+  --cl-dark-warning-ink: var(--cl-dark-warning); /* 6.90 bg · 5.83 surface-hover */
   --cl-dark-on-warning: var(--color-neutral-950); /* 8.44:1 */
   --cl-dark-danger: #e26a6a;
   --cl-dark-danger-bg: #2e1514;
+  /* Único fill dark que NO alcanza para texto en toda superficie: 4.19:1 sobre
+     `bg-surface-hover` (una fila de menú con "Eliminar" bajo el cursor). Aclarado
+     en OKLCH a lightness 0.696, croma y hue intactos → 4.68:1 ahí y 5.89:1 sobre
+     su `-bg`. El fill #e26a6a no se movió: `bg-danger` y `on-danger` siguen igual. */
+  --cl-dark-danger-ink: #ec7372;
   --cl-dark-on-danger: var(--color-neutral-950); /* 6.06:1 (blanco daría 3.23) */
   --cl-dark-info: #6fa6e0;
   --cl-dark-info-bg: #121f2e;
+  --cl-dark-info-ink: var(--cl-dark-info); /* 5.28–7.65:1: el fill ya es AA como texto */
   --cl-dark-on-info: var(--color-neutral-950); /* 7.65:1 */
   --cl-dark-gold: #d2a24c;
+  --cl-dark-gold-ink: var(--cl-dark-gold); /* 5.80–8.40:1: el dorado dark ya es AA */
 
   /* Marca dark — el pipeline sube ~10% de L y desatura ~12% (§2.8), y valida el
      CTA contra el canvas oscuro. Fallbacks: escalones de la escala default. */
@@ -402,7 +485,10 @@
   --cl-dark-brand-hover: var(--brand-dark-hover, var(--color-brand-600));
   --cl-dark-brand-ink: var(--brand-dark-ink, var(--color-brand-300));
   --cl-dark-brand-tint: var(--brand-dark-tint, #1d2b43);
+  /* DECORATIVO, igual que en light: 2.07:1 contra `bg-surface`. */
   --cl-dark-brand-subtle: var(--color-brand-700);
+  /* Ver el bloque de --cl-light-brand-strong. En dark el piso es 7.13:1. */
+  --cl-dark-brand-strong: var(--cl-dark-brand-ink);
 
   /* En dark, brand-200 (escalón casi blanco de la escala) da 12.6–13.4:1 contra
      el canvas oscuro: exactamente lo que se quiere de un anillo de foco. */
@@ -450,17 +536,21 @@
   --cl-on-warning: var(--cl-light-on-warning);
   --cl-danger: var(--cl-light-danger);
   --cl-danger-bg: var(--cl-light-danger-bg);
+  --cl-danger-ink: var(--cl-light-danger-ink);
   --cl-on-danger: var(--cl-light-on-danger);
   --cl-info: var(--cl-light-info);
   --cl-info-bg: var(--cl-light-info-bg);
+  --cl-info-ink: var(--cl-light-info-ink);
   --cl-on-info: var(--cl-light-on-info);
   --cl-gold: var(--cl-light-gold);
+  --cl-gold-ink: var(--cl-light-gold-ink);
   --cl-brand: var(--cl-light-brand);
   --cl-brand-foreground: var(--cl-light-brand-foreground);
   --cl-brand-hover: var(--cl-light-brand-hover);
   --cl-brand-ink: var(--cl-light-brand-ink);
   --cl-brand-tint: var(--cl-light-brand-tint);
   --cl-brand-subtle: var(--cl-light-brand-subtle);
+  --cl-brand-strong: var(--cl-light-brand-strong);
   --cl-shadow-xs: var(--cl-light-shadow-xs);
   --cl-shadow-sm: var(--cl-light-shadow-sm);
   --cl-shadow-md: var(--cl-light-shadow-md);
@@ -531,17 +621,21 @@
   --cl-on-warning: var(--cl-dark-on-warning);
   --cl-danger: var(--cl-dark-danger);
   --cl-danger-bg: var(--cl-dark-danger-bg);
+  --cl-danger-ink: var(--cl-dark-danger-ink);
   --cl-on-danger: var(--cl-dark-on-danger);
   --cl-info: var(--cl-dark-info);
   --cl-info-bg: var(--cl-dark-info-bg);
+  --cl-info-ink: var(--cl-dark-info-ink);
   --cl-on-info: var(--cl-dark-on-info);
   --cl-gold: var(--cl-dark-gold);
+  --cl-gold-ink: var(--cl-dark-gold-ink);
   --cl-brand: var(--cl-dark-brand);
   --cl-brand-foreground: var(--cl-dark-brand-foreground);
   --cl-brand-hover: var(--cl-dark-brand-hover);
   --cl-brand-ink: var(--cl-dark-brand-ink);
   --cl-brand-tint: var(--cl-dark-brand-tint);
   --cl-brand-subtle: var(--cl-dark-brand-subtle);
+  --cl-brand-strong: var(--cl-dark-brand-strong);
   --cl-shadow-xs: var(--cl-dark-shadow-xs);
   --cl-shadow-sm: var(--cl-dark-shadow-sm);
   --cl-shadow-md: var(--cl-dark-shadow-md);
@@ -585,17 +679,21 @@
     --cl-on-warning: var(--cl-dark-on-warning);
     --cl-danger: var(--cl-dark-danger);
     --cl-danger-bg: var(--cl-dark-danger-bg);
+    --cl-danger-ink: var(--cl-dark-danger-ink);
     --cl-on-danger: var(--cl-dark-on-danger);
     --cl-info: var(--cl-dark-info);
     --cl-info-bg: var(--cl-dark-info-bg);
+    --cl-info-ink: var(--cl-dark-info-ink);
     --cl-on-info: var(--cl-dark-on-info);
     --cl-gold: var(--cl-dark-gold);
+    --cl-gold-ink: var(--cl-dark-gold-ink);
     --cl-brand: var(--cl-dark-brand);
     --cl-brand-foreground: var(--cl-dark-brand-foreground);
     --cl-brand-hover: var(--cl-dark-brand-hover);
     --cl-brand-ink: var(--cl-dark-brand-ink);
     --cl-brand-tint: var(--cl-dark-brand-tint);
     --cl-brand-subtle: var(--cl-dark-brand-subtle);
+    --cl-brand-strong: var(--cl-dark-brand-strong);
     --cl-shadow-xs: var(--cl-dark-shadow-xs);
     --cl-shadow-sm: var(--cl-dark-shadow-sm);
     --cl-shadow-md: var(--cl-dark-shadow-md);
@@ -604,6 +702,193 @@
     --cl-shadow-bezel: var(--cl-dark-shadow-bezel);
     --cl-theme-dark: 1;
     color-scheme: dark;
+  }
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  IMPRESIÓN / "Guardar como PDF"
+ *
+ *  La página que la gente imprime es /guias/[slug]: trámites, ITIN, papeles que
+ *  se llevan a una oficina. El navegador NO imprime `background-color` por
+ *  default, pero SÍ imprime `color`. En dark eso dejaba `body { color: #f7f6f3 }`
+ *  contra papel blanco: 1.08:1 — la hoja salía en blanco.
+ *
+ *  Por eso el tema se fuerza a LIGHT dentro de @media print, gane quien gane
+ *  afuera. Tres selectores, uno por cada camino a dark:
+ *    · `:root`                        → tema light explícito o sin resolver
+ *    · `:root.dark`                   → (0,2,0) le gana a `.dark` (0,1,0)
+ *    · `:root:not(.light):not(.dark)` → (0,3,0), empata con el @media del SO y
+ *                                       gana por orden de fuente (viene después)
+ *  El bloque va SIN capa: las declaraciones sin capa le ganan a cualquier
+ *  utility de Tailwind (que vive en `@layer utilities`), así que ni display:none
+ *  ni box-shadow:none necesitan !important.
+ *
+ *  No hay un "diseño de impresión": el objetivo es que se LEA. Nada más.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+@media print {
+  :root,
+  :root.light,
+  :root.dark,
+  :root:not(.light):not(.dark) {
+    --cl-canvas: var(--cl-light-canvas);
+    --cl-surface: var(--cl-light-surface);
+    --cl-surface-subtle: var(--cl-light-surface-subtle);
+    --cl-surface-raised: var(--cl-light-surface-raised);
+    --cl-surface-hover: var(--cl-light-surface-hover);
+    --cl-surface-inverse: var(--cl-light-surface-inverse);
+    --cl-on-surface-inverse: var(--cl-light-on-surface-inverse);
+    --cl-bezel-shell: var(--cl-light-bezel-shell);
+    --cl-bezel-highlight: var(--cl-light-bezel-highlight);
+    --cl-foreground: var(--cl-light-foreground);
+    --cl-foreground-secondary: var(--cl-light-foreground-secondary);
+    --cl-foreground-muted: var(--cl-light-foreground-muted);
+    --cl-placeholder: var(--cl-light-placeholder);
+    --cl-border: var(--cl-light-border);
+    --cl-border-subtle: var(--cl-light-border-subtle);
+    --cl-border-strong: var(--cl-light-border-strong);
+    --cl-scrim: var(--cl-light-scrim);
+    --cl-skeleton-highlight: var(--cl-light-skeleton-highlight);
+    --cl-focus-ring: var(--cl-light-focus-ring);
+    --cl-success: var(--cl-light-success);
+    --cl-success-bg: var(--cl-light-success-bg);
+    --cl-success-ink: var(--cl-light-success-ink);
+    --cl-on-success: var(--cl-light-on-success);
+    --cl-warning: var(--cl-light-warning);
+    --cl-warning-bg: var(--cl-light-warning-bg);
+    --cl-warning-ink: var(--cl-light-warning-ink);
+    --cl-on-warning: var(--cl-light-on-warning);
+    --cl-danger: var(--cl-light-danger);
+    --cl-danger-bg: var(--cl-light-danger-bg);
+    --cl-danger-ink: var(--cl-light-danger-ink);
+    --cl-on-danger: var(--cl-light-on-danger);
+    --cl-info: var(--cl-light-info);
+    --cl-info-bg: var(--cl-light-info-bg);
+    --cl-info-ink: var(--cl-light-info-ink);
+    --cl-on-info: var(--cl-light-on-info);
+    --cl-gold: var(--cl-light-gold);
+    --cl-gold-ink: var(--cl-light-gold-ink);
+    --cl-brand: var(--cl-light-brand);
+    --cl-brand-foreground: var(--cl-light-brand-foreground);
+    --cl-brand-hover: var(--cl-light-brand-hover);
+    --cl-brand-ink: var(--cl-light-brand-ink);
+    --cl-brand-tint: var(--cl-light-brand-tint);
+    --cl-brand-subtle: var(--cl-light-brand-subtle);
+    --cl-brand-strong: var(--cl-light-brand-strong);
+    --cl-shadow-xs: var(--cl-light-shadow-xs);
+    --cl-shadow-sm: var(--cl-light-shadow-sm);
+    --cl-shadow-md: var(--cl-light-shadow-md);
+    --cl-shadow-lg: var(--cl-light-shadow-lg);
+    --cl-shadow-xl: var(--cl-light-shadow-xl);
+    --cl-shadow-bezel: var(--cl-light-shadow-bezel);
+    --cl-theme-dark: 0;
+    color-scheme: light;
+  }
+
+  /* El papel ya es blanco; lo que importa es que la tinta sea oscura. */
+  html,
+  body {
+    background: var(--color-white);
+    color: var(--color-foreground);
+  }
+
+  /* Sombras difusas, blur y velos no existen sobre papel: sólo ensucian. */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none;
+    text-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  /*
+   * Chrome que no se imprime. `header:not(main header)` deja pasar el <header>
+   * del <article> de la guía (título, tiempo de lectura) y saca el header sticky
+   * del layout, que vive fuera de <main>. `nav` cubre bottom-nav, tabs y las tres
+   * columnas de links del footer; `button` cubre el toggle de tema, el de idioma
+   * y "Guardar sin conexión".
+   *
+   * ⚠️ ACÁ VIVÍAN `[role="status"]` y `[aria-live]`, y eran un BUG.
+   * Parecían decir "el banner offline y el de tenant mismatch", pero en `src/`
+   * hay 33 nodos con esos atributos y varios son el CONTENIDO, no el chrome: la
+   * burbuja de respuesta del asistente (assistant-message.tsx), el veredicto del
+   * verificador de estafas (verificador-form.tsx), el comprobante de "impulsado
+   * hasta tal fecha" (impulsar/[listingId]) y el resultado de la verificación de
+   * identidad. Un `aria-live` no dice "esto es decoración": dice "esto apareció
+   * recién y hay que anunciarlo" — que es justo lo que la persona quería llevarse
+   * en la hoja. Y como @media print no depende del tema, eso rompía también al
+   * usuario en light, que antes imprimía bien. Nunca más un rol de ARIA como
+   * proxy de "esto es chrome".
+   *
+   * El hook explícito es `.cl-print-hide` (no es una utility de Tailwind: es de
+   * la casa, como `.skeleton`). Lo llevan el banner offline, el de tenant
+   * mismatch, la torre de toasts y —vía la base de `buttonVariants`— todo <a>
+   * que se ve botón. Un `<Link>` con pinta de botón es un control: en papel no
+   * lleva a ninguna parte.
+   *
+   * El <footer> NO se esconde, a propósito: adentro vive el disclaimer §11
+   * ("Esto NO garantiza la conducta de ninguna persona o negocio. Nunca envíes
+   * dinero por adelantado."), que §11 exige mostrar SIEMPRE. La hoja que alguien
+   * lleva a una oficina de trámites es justo donde esa advertencia tiene que
+   * seguir estando. Sus links ya se van con `nav`.
+   */
+  header:not(main header),
+  nav,
+  dialog,
+  [role="dialog"],
+  button,
+  [role="button"],
+  .cl-print-hide,
+  .skeleton {
+    display: none;
+  }
+
+  /*
+   * LAS TINTAS `on-*` NO SOBREVIVEN SOLAS AL PAPEL.
+   *
+   * `text-brand-foreground`, `text-on-success`, `text-on-danger`, `text-on-info`
+   * y `text-on-surface-inverse` son claras POR DEFINICIÓN: existen para leerse
+   * encima de un relleno saturado. El navegador no imprime `background-color`,
+   * así que ese relleno desaparece y la tinta queda sobre papel blanco:
+   * medido con culori en el scope de print → 1.00:1, 1.00:1, 1.00:1, 1.00:1 y
+   * 1.08:1. (`on-warning` no está en la lista: ya es #0d0c08 — 19.57:1.)
+   *
+   * Hay dos maneras de arreglarlo y elegí la segunda:
+   *  (a) volver oscura la tinta en el scope de print. Cuesta cero clases, pero
+   *      el día que alguien tilde "Gráficos de fondo" en el diálogo de impresión
+   *      el relleno SÍ se imprime y la tinta oscura cae a 3.19:1 sobre `brand`,
+   *      3.46:1 sobre `danger`, 3.37:1 sobre `info` y 1.14:1 sobre
+   *      `surface-inverse`. Se cambia un fallo por otro.
+   *  (b) forzar el relleno a imprimirse — que es literalmente para lo que existe
+   *      `print-color-adjust: exact`. El par conserva los ratios ya validados en
+   *      pantalla (brand-foreground 5.73:1, on-success 4.97:1, on-danger 5.27:1)
+   *      y se lee igual con o sin "Gráficos de fondo".
+   *
+   * La mayoría de los portadores son controles y ya se fueron con `button`. Queda
+   * lo que NO es control: el badge de identidad verificada y el contador de fotos
+   * de la galería. Esos llevan `.cl-print-fill`.
+   *
+   * `print-color-adjust` se HEREDA: marcar el contenedor alcanza para su ícono.
+   */
+  .cl-print-fill {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Un enlace partido entre dos hojas es ilegible; un título huérfano, feo. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid-page;
+  }
+
+  li,
+  blockquote,
+  figure {
+    break-inside: avoid-page;
   }
 }
 
@@ -636,9 +921,12 @@
     background-color: color-mix(in oklab, var(--color-brand) 22%, transparent);
   }
 
-  /* Foco visible SIEMPRE (WCAG AA) — anillo 3px derivado de la marca */
+  /* Foco visible SIEMPRE (WCAG AA) — anillo 3px derivado de la marca.
+     El outline transparente NO es la cobertura de forced-colors (eso vive en su
+     propio @media, abajo): sólo apaga el anillo default del navegador para que no
+     se duplique con el box-shadow. */
   :where(a, button, input, select, textarea, summary, [role="button"], [tabindex]):focus-visible {
-    outline: 2px solid transparent; /* forced-colors */
+    outline: 2px solid transparent;
     outline-offset: 2px;
     box-shadow: var(--shadow-focus-ring);
   }
@@ -670,6 +958,65 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  FORCED COLORS (contraste alto de Windows, "Windows High Contrast Mode")
+ *
+ *  El modo reemplaza la paleta del autor por la del sistema y, entre otras cosas,
+ *  fuerza `box-shadow: none`. Nuestro indicador de foco REAL es un box-shadow
+ *  (--shadow-focus-ring): sin este bloque, navegar con teclado en contraste alto
+ *  es navegar a ciegas. Acá se restituye con un outline de verdad.
+ *
+ *  Mismo problema con todo afford que se comunica SÓLO por fondo: el chip de
+ *  categoría seleccionado (`bg-brand-tint`), la tab activa, el item actual del
+ *  bottom-nav. Sus fondos se fuerzan a Canvas y quedan idénticos al no
+ *  seleccionado. Se mapean al par Highlight/HighlightText, que es exactamente lo
+ *  que el sistema usa para "esto está seleccionado".
+ *
+ *  Va SIN capa: las declaraciones sin capa le ganan a las utilities de Tailwind
+ *  (`focus-visible:outline-none`, `bg-brand-tint`) sin necesidad de !important.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+@media (forced-colors: active) {
+  /* El anillo de foco, de vuelta — ahora como outline, que el modo sí respeta. */
+  :where(a, button, input, select, textarea, summary, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  /*
+   * Estado "seleccionado / activo / actual". `forced-color-adjust: none` devuelve
+   * el control del color, y se pinta con colores DEL SISTEMA (no de la marca),
+   * que es lo único legible contra cualquier tema de contraste alto.
+   * El selector de descendientes existe porque `forced-color-adjust` se hereda:
+   * sin él, un `text-brand-ink` adentro del chip seguiría pintándose de marca
+   * sobre un fondo Highlight.
+   */
+  :where([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]) {
+    forced-color-adjust: none;
+    background-color: Highlight;
+    color: HighlightText;
+    border-color: HighlightText;
+  }
+
+  :where([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]) * {
+    color: HighlightText;
+    background-color: transparent;
+    border-color: HighlightText;
+  }
+
+  /*
+   * Barras de progreso y medidores (admin/score-bar): el relleno ES un
+   * background-color, no hay glifo abajo. Forzado a Canvas, el medidor
+   * desaparece. Se conservan los colores del autor y se dibuja el riel con un
+   * outline (no un border: no queremos correr el layout de una barra de 6px).
+   */
+  :where([role="meter"], [role="progressbar"]) {
+    forced-color-adjust: none;
+    outline: 1px solid CanvasText;
   }
 }
 

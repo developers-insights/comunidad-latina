@@ -2,10 +2,11 @@
   "generated_at": "2026-07-06",
   "generator": "nanobanana MCP (Gemini image generation), session comunidad-latina",
   "art_direction": "Calidez de comunidad latina + rigor fintech (Revolut/Mercado Pago) + claridad Linear. Neutros cálidos #FCFCFB/#F7F6F3/#17150F, acento azul #1A5EDB.",
+  "formats_note": "OJO: los archivos que terminan en .png y dicen \"format\": \"jpeg\" SON JPEG (magic bytes ffd8ffe0); el generador les puso extensión .png. Los navegadores olfatean el contenido y los muestran igual, pero un JPEG NO PUEDE tener canal alpha. Esa confusión ya costó un defecto: empty-state-search se analizó como \"PNG opaco al que se le extrae el alpha\" cuando en realidad había que reencodearlo. El campo \"format\" de cada entrada dice el formato REAL, medido con sharp, no el que sugiere la extensión.",
   "assets": [
     {
       "file": "hero-community.png",
-      "format": "png",
+      "format": "jpeg",
       "aspect_ratio": "16:9",
       "approx_dimensions": "1376x768",
       "description": "Fotografía editorial: familia dominicana llegando a su barrio en Queens NY al atardecer, luz dorada, línea elevada del subte de fondo. Espacio negativo a la izquierda para copy. Nota: la caja de mudanza tiene escritura diegética ('FRÁGIL').",
@@ -22,7 +23,7 @@
     },
     {
       "file": "hero-vivienda.png",
-      "format": "png",
+      "format": "jpeg",
       "aspect_ratio": "16:9",
       "approx_dimensions": "1376x768",
       "description": "Departamento luminoso y digno en Queens visto desde la puerta: luz natural cálida, plantas, ladrillo expuesto, acentos azules suaves. Sin personas, sin texto.",
@@ -30,23 +31,28 @@
     },
     {
       "file": "onboarding-welcome.png",
-      "format": "png",
+      "format": "jpeg",
       "aspect_ratio": "4:5",
-      "approx_dimensions": "944x1176",
+      "approx_dimensions": "928x1152",
       "description": "Ilustración flat premium con textura sutil: comunidad adulta que recibe a quien llega con su valija. Paleta beige/arena + charcoal + acento azul #1A5EDB. Sin texto.",
-      "surface": "Pantalla de bienvenida del onboarding"
+      "surface": "Pantalla de bienvenida del onboarding",
+      "art_direction_note": "Es OPACO y claro, y así se queda: acá el rectángulo es la ilustración, no su fondo. Con object-cover en 384x128 se ve la banda de filas 422..731 a ancho completo, donde el dibujo toca los cuatro bordes (stdev 55.6 por canal; el tono dominante es apenas el 9% de la banda). Un panel a sangre con esquinas redondeadas puede ser claro sobre una página oscura — se lee como una foto. Lo que NO puede ser claro es una placa de fondo plano, que es lo que era empty-state-search (86% de un solo beige). No recortarlo ni ponerle borde."
     },
     {
       "file": "empty-state-search.png",
       "format": "png",
       "aspect_ratio": "1:1",
-      "approx_dimensions": "1024x1024",
-      "description": "Ilustración de línea fina sobre fondo beige claro: brújula + mapa plegado con pin de barrio en azul #1A5EDB. Minimalista estilo Linear/Stripe.",
-      "surface": "Empty state de búsqueda (sin resultados)"
+      "approx_dimensions": "512x512",
+      "description": "Ilustración de línea fina SIN FONDO: brújula + mapa plegado con pin de barrio. Dos tintas planas: trazo #898272 y pin --color-brand-600 (#1A5EDB). Minimalista estilo Linear/Stripe.",
+      "surface": "Empty state de búsqueda (sin resultados) en 9 pantallas + /~offline. Precacheada por el service worker (next.config.ts). Se renderiza con <img> pelado sobre el fondo de la página.",
+      "transform_note": "POR QUÉ. El asset generado era un JPEG opaco de 1024x1024 con extensión .png: fondo beige #f1ece6 en el 86% de los píxeles, promedio #ede9e2. Contra el canvas dark (#17150f) ese campo daba 15.08:1 — un bloque encendido flotando en nueve pantallas, y también offline. Un JPEG no tiene canal alpha, así que no alcanzaba con recortar: hubo que reencodear a PNG de verdad. Se descartó (a) meterlo en una placa (una placa clara sobre página oscura sigue siendo un rectángulo claro), (c) dos assets con <picture media=prefers-color-scheme> (el tema lo manda una clase en <html>, no la media query: un usuario en light con el SO en dark recibiría el asset equivocado) y (d) no mostrarlo en dark (pierde calidez justo donde el producto la necesita).",
+      "technique_note": "CÓMO. Descomposición de dos tintas por mínimos cuadrados no negativos. Sobre un fondo plano B=#f1ece6, todo píxel cumple P = B + a1·(Ck−B) + a2·(Cu−B), con Ck=#181509 (trazo) y Cu=#235fc1 (pin) medidos del propio archivo. Son 3 ecuaciones y 2 incógnitas: se resuelven a1,a2 (proyectando al ortante no negativo), y de ahí alpha = a1+a2 y color = lerp(tinta, acento, a2/(a1+a2)). Se hace así y no por umbral de croma o luminancia porque la DIRECCIÓN del vector (P−B) no depende de la cobertura, sólo de qué tinta es: el 4:2:0 del JPEG desaturó el contorno del pin (azulez 69 contra 98 del disco) y cualquier umbral lo leía como trazo gris — la descomposición lo recupera como 78% azul. Tampoco se un-mattea el color (dividir por alpha amplifica el ruido del JPEG): como la tinta se reemplaza igual, sólo hace falta la cobertura. Black-point de 0.02 sobre alpha: corta el lóbulo de ruido del JPEG (718k px por debajo de 0.015) sin tocar el antialiasing real, que arranca justo en 0.02. Downscale 1024→512 premultiplicado a mano, bajando dos grayscale (cobertura y cobertura·fracción-de-marca) y recomponiendo: es la única forma exacta de reducir una imagen de dos tintas con alpha sin franjas en el borde tinta↔acento.",
+      "ink_note": "TINTAS. Trazo #898272 = oklch(0.608 0.025 87): el punto max-min donde el contraste contra la superficie más clara de light (#ffffff, 3.82:1) iguala al de la más clara de dark (#2b2820, 3.85:1). Cae en la rampa cálida de §2.3, entre neutral-500 (0.557) y neutral-400 (0.694). Piso 3.26:1 y techo 5.12:1 sobre las ocho superficies de los dos temas. Es decorativa y aria-hidden, así que WCAG no le exige piso: el objetivo es simetría perceptual, que no se apague en dark ni se lave en light. Acento #1A5EDB = --color-brand-600 exacto (el JPEG lo tenía corrido a #235fc1); 5.73:1 en light, 3.19:1 sobre el canvas dark. Resultado: 93.99% de píxeles transparentes, 0 píxeles beige sobre el canvas dark, 19.1 KB contra los 349.8 KB del JPEG.",
+      "filename_note": "El nombre NO cambia a propósito: lo referencian 9 call sites, ~offline/page.tsx y el precache del service worker en next.config.ts. Esa entrada se versiona con el md5 del contenido (publicFileRevision), así que al reemplazar los bytes el SW re-precachea solo, sin tocar next.config.ts."
     },
     {
       "file": "og-default.png",
-      "format": "png",
+      "format": "jpeg",
       "aspect_ratio": "16:9",
       "approx_dimensions": "1376x768",
       "description": "Composición abstracta de marca: arcos y círculos azul #1A5EDB sobre beige cálido y arena, grano sutil, sensación fintech-cálida. Sin texto.",
@@ -54,7 +60,7 @@
     },
     {
       "file": "guia-cover-itin.png",
-      "format": "png",
+      "format": "jpeg",
       "aspect_ratio": "16:9",
       "approx_dimensions": "1376x768",
       "description": "Fotografía editorial cenital: escritorio de madera cálido con documentos ordenados, café, anteojos, planta, luz de mañana. Texto de documentos ilegible.",

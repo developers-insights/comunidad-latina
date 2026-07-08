@@ -114,15 +114,28 @@ export default async function MensajesPage() {
             const other = iAmCreator ? conversation.counterpart : conversation.creator;
             const otherName = other?.display_name ?? "Miembro de la comunidad";
             const last = lastByConversation.get(conversation.id) ?? null;
+            // WCAG 1.4.1: una solicitud pendiente recibida NO se distingue sólo por el
+            // borde de marca. Lleva además su propia línea de texto ("Quiere contactarte
+            // por…") y la fila Aceptar/Ignorar, que ninguna otra fila del inbox muestra.
+            // Si alguna vez se sacan esas dos, el color queda solo y hace falta un label.
             const isPendingReceived = conversation.status === "pending" && !iAmCreator;
             const isPendingSent = conversation.status === "pending" && iAmCreator;
 
             return (
               <li
                 key={conversation.id}
+                // `border` NO va en la base: si estuviera, `border-2` de la rama
+                // y `border` competirían por border-width y ganaría la que Tailwind
+                // emita última, no la del ternario.
+                // `border-brand-strong` (≥3:1 contra bg-surface para cualquier
+                // tenant) porque acá el borde SÍ identifica un estado — WCAG 1.4.11.
+                // Y el ancho no es adorno: en forced-colors todos los border-color
+                // pasan a CanvasText y el color deja de diferenciar; el ANCHO no.
                 className={cn(
-                  "rounded-lg border bg-surface shadow-xs",
-                  isPendingReceived ? "border-brand-subtle" : "border-border-subtle",
+                  "rounded-lg bg-surface shadow-xs",
+                  isPendingReceived
+                    ? "border-2 border-brand-strong"
+                    : "border border-border-subtle",
                 )}
               >
                 <Link

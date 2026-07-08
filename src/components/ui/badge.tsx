@@ -10,13 +10,13 @@ const badgeVariants = cva(
       variant: {
         neutral: "bg-surface-subtle text-foreground-secondary",
         brand: "bg-brand-tint text-brand-ink",
-        // Es TEXTO de 12px sobre el `-bg` de su propio estado: ahí el fill de
-        // §2.3 no llega a AA (success 4.43:1, warning 3.28:1) y va el `-ink`.
-        // danger (4.53:1) e info (4.76:1) sí pasan y usan el fill.
+        // Es TEXTO de 12px sobre el `-bg` de su propio estado: siempre el `-ink`.
+        // En light danger/info aliasean el fill; en dark el rojo diverge. El call
+        // site no tiene que saberlo: escribís texto → `-ink`.
         success: "bg-success-bg text-success-ink",
         warning: "bg-warning-bg text-warning-ink",
-        danger: "bg-danger-bg text-danger",
-        info: "bg-info-bg text-info",
+        danger: "bg-danger-bg text-danger-ink",
+        info: "bg-info-bg text-info-ink",
       },
     },
     defaultVariants: {

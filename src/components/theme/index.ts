@@ -8,7 +8,8 @@
  *                                           remonte y sigue al toggle en caliente
  *
  * Uso:
- *   <ThemeToggle />                       → el botón sol↔luna (44×44)
+ *   <ThemeToggle />                       → sol↔luna (44×44) + "Seguir al sistema"
+ *                                           al lado, sólo si hay preferencia explícita
  *   const { theme, resolvedTheme, setTheme, toggle } = useTheme();
  *
  * Regla: nadie escribe `dark:` ni toca `document.documentElement.classList`.

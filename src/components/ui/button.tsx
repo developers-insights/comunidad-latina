@@ -10,6 +10,15 @@ const buttonVariants = cva(
     "active:scale-[0.97]",
     "disabled:pointer-events-none disabled:opacity-45",
     "aria-busy:pointer-events-none",
+    // No es una utility de Tailwind: es el hook de @media print de globals.css,
+    // hermano de `.skeleton`. El bloque de impresión ya esconde `button`, pero
+    // `buttonVariants` se usa muchísimo sobre <Link> (~40 call sites), y un <a>
+    // no matchea ese selector. El variant `primary` es `bg-brand
+    // text-brand-foreground`: sin el fondo —que el navegador no imprime— el
+    // label salía blanco sobre papel blanco, 1.00:1. Ese era el CTA final de
+    // /guias/[slug], la página que la gente imprime y lleva a un trámite.
+    // Un control impreso no lleva a ninguna parte: se va con el resto del chrome.
+    "cl-print-hide",
   ],
   {
     variants: {

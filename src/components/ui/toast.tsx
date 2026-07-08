@@ -179,6 +179,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               "pointer-events-none fixed inset-x-0 z-[70] flex flex-col items-center gap-2 px-4",
               // por encima del bottom-nav (64px) + safe area
               "bottom-[calc(4.5rem+env(safe-area-inset-bottom))]",
+              // Un toast es efímero por definición: nunca en la hoja impresa.
+              // Antes lo tapaba el `[role="status"]` del @media print, que vivía
+              // en cada ToastCard; ahora la torre entera se marca de una.
+              "cl-print-hide",
             )}
           >
             <AnimatePresence>

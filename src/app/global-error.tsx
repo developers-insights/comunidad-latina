@@ -1,25 +1,50 @@
 "use client";
 
+import { useEffect, useLayoutEffect } from "react";
+import { DARK_THEME_COLOR, type ResolvedTheme } from "@/components/theme/constants";
+import { applyToDocument, getSnapshot } from "@/components/theme/theme-store";
+
 /**
  * global-error (§3.5): último recurso — se muestra si falla el ROOT layout,
  * o sea cuando el design system (globals.css, fuentes, providers) puede no
- * existir. Por eso es 100 % autónomo: HTML propio, un <style> inline, cero
- * imports de componentes y cero JS.
+ * existir. Por eso es casi autónomo: HTML propio, un <style> inline, cero
+ * componentes.
+ *
+ * ── Los dos únicos imports ────────────────────────────────────────────────
+ * `constants.ts` no importa nada y `theme-store.ts` sólo importa `constants.ts`:
+ * dos módulos hoja, sin React, sin JSX y sin CSS. A propósito NO se importa desde
+ * el barrel `@/components/theme`, que arrastraría <ThemeScript>, <ThemeToggle> y
+ * <ThemeColorSync> al chunk de la pantalla que aparece cuando ya falló todo.
  *
  * ── Tema oscuro sin depender de nada ──────────────────────────────────────
  * Acá no hay Tailwind ni tokens: `globals.css` lo importa el root layout, que es
  * exactamente lo que se acaba de romper. Los valores de abajo son copia literal
  * de las dos paletas de globals.css (`--cl-light-*` / `--cl-dark-*`).
  *
- * Se resuelve por CASCADA, no por JS — el store de tema, el provider y hasta la
- * hidratación pueden no existir cuando esto renderiza (y puede renderizar en el
- * server). El <style> cubre los tres casos, igual que globals.css:
+ * La BASE se resuelve por CASCADA, no por JS — el store de tema, el provider y
+ * hasta la hidratación pueden no existir cuando esto renderiza (y puede renderizar
+ * en el server). El <style> cubre los tres casos, igual que globals.css:
  *   1. `.dark`  en <html> → oscuro (la estampó el script pre-paint, si llegó a correr)
  *   2. `.light` en <html> → claro forzado
  *   3. sin clase          → manda el SO (`@media (prefers-color-scheme: dark)`)
- * Resultado: un error jamás cambia el tema debajo del usuario, y si el árbol se
- * rompió antes del script pre-paint, un celular en dark igual ve una pantalla
- * oscura — nunca el flash blanco cegador que había antes.
+ * Si el JS muere, con eso solo la pantalla ya sale legible: un celular en dark ve
+ * una pantalla oscura, nunca el flash blanco cegador que había antes.
+ *
+ * Encima de esa base van DOS refuerzos con JS, porque la cascada sola pierde la
+ * ELECCIÓN del usuario (que puede ser distinta de la del SO):
+ *   · `className` en el render — React trata a <html> como HostSingleton: al montar
+ *     este árbol BORRA todos los atributos del <html> real y aplica sólo los props
+ *     de acá (react-dom, `acquireSingletonInstance`). O sea que NO alcanza con "no
+ *     pasar className para no pisar la elección del usuario": la elección se pierde
+ *     igual. El render del cliente corre ANTES del commit que borra los atributos,
+ *     así que leer el store acá es seguro.
+ *   · `applyToDocument()` en un layout effect — el className NO cubre el caso
+ *     SSR: si el root layout tiró en el server, esta pantalla llega como HTML sin
+ *     clase y React, al hidratar, no parchea los atributos que no matchean. El
+ *     className del cliente nunca aterriza en el DOM. Corre antes del paint, así
+ *     que no hay ni un frame con el tema equivocado, y `reset()` devuelve al
+ *     usuario a la app con SU tema (después el <ThemeColorSync /> del root layout
+ *     lo reafirma, porque el remonte vuelve a borrar los atributos del <html>).
  *
  * Por qué NO `light-dark()`: pide Chrome 123 / Safari 17.5 / Firefox 120 y el
  * piso soportado por Next 16 es Chrome 111 / Safari 16.4 / Firefox 111
@@ -39,33 +64,38 @@ const COPY = {
   retry: "Reintentar",
 } as const;
 
-/** Espejo de THEME_STORAGE_KEY. Literal a propósito: cero imports (ver arriba). */
-const THEME_KEY = "cl-theme";
+/**
+ * Color de la barra del navegador / status bar. Es el CANVAS de esta pantalla,
+ * no la marca: en light el root layout tiñe el chrome con `tenant.brandHex`, que
+ * acá no existe (vive en `getTenant()`). Pintar el azul default sería mostrarle
+ * al usuario la marca de OTRO tenant; el canvas se funde con la pantalla y no
+ * miente. En dark los dos coinciden: DARK_THEME_COLOR ES `--cl-dark-canvas`.
+ */
+const CHROME_COLOR = {
+  light: "#fcfcfb", // --cl-light-canvas
+  dark: DARK_THEME_COLOR, // #17150F = --cl-dark-canvas
+} as const;
 
 /**
- * El tema, resuelto en el render del cliente.
- *
- * React trata a <html> como HostSingleton: al montar este árbol BORRA todos los
- * atributos del <html> real y aplica sólo los props de acá (react-dom,
- * `acquireSingletonInstance`). O sea que NO alcanza con "no pasar className para
- * no pisar la elección del usuario": la elección se pierde igual. Hay que
- * volver a calcularla y pasarla. El render del cliente corre ANTES del commit
- * que borra los atributos, así que leer el storage acá es seguro.
+ * El tema efectivo, leído del store (no de `localStorage` a mano): si el storage
+ * está bloqueado, la elección de ESTA sesión sólo vive en la memoria del store.
  *
  * En el server devuelve `undefined`: no hay storage ni matchMedia, y sin clase
  * manda el `@media (prefers-color-scheme: dark)` del <style> de abajo — que es
- * la respuesta correcta cuando no se sabe nada del usuario.
+ * la respuesta correcta cuando no se sabe nada del usuario. El try/catch cubre a
+ * los browsers sin `matchMedia`, donde el store tira.
  */
-function resolveThemeClass(): "light" | "dark" | undefined {
+function resolveThemeClass(): ResolvedTheme | undefined {
   if (typeof window === "undefined") return undefined;
   try {
-    const stored = localStorage.getItem(THEME_KEY);
-    if (stored === "dark" || stored === "light") return stored;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    return getSnapshot().resolvedTheme ?? undefined;
   } catch {
-    return undefined; // storage bloqueado: que decida el @media
+    return undefined; // que decida el @media
   }
 }
+
+/** `useLayoutEffect` avisa por consola si corre en el server (y acá corre). */
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /**
  * Paleta dark declarada UNA sola vez y reusada por los dos selectores que la
@@ -109,14 +139,46 @@ export default function GlobalError({
 }) {
   console.error("[app] global-error", { digest: error.digest });
 
+  const resolved = resolveThemeClass();
+
+  // Deps vacías a propósito: acá no hay toggle ni nadie suscripto al store, así
+  // que el tema no puede cambiar mientras esta pantalla está montada.
+  useIsomorphicLayoutEffect(() => {
+    const theme = resolveThemeClass();
+    if (theme === undefined) return; // sin JS útil: manda el @media del <style>
+
+    applyToDocument(theme);
+
+    // Se pisa el `content` de TODAS las metas, no se agrega una: el browser
+    // aplica la PRIMERA que matchea, y cuando el boundary monta en el cliente ya
+    // hay una meta anterior en el <head> —la que dejó el script pre-paint— que
+    // React no conoce y que no va a desaparecer. Los `media` quedan como están:
+    // si las dos dicen el mismo color, cuál matchea deja de importar.
+    for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+      meta.setAttribute("content", CHROME_COLOR[theme]);
+    }
+  }, []);
+
   return (
     // suppressHydrationWarning: el server no puede saber el tema, el cliente sí.
-    // El className NO es opcional: sin él, React deja el <html> sin clase (borra
-    // los atributos al adquirir el singleton) y la pantalla de error —y la app
-    // entera, después de "Reintentar"— quedan siguiendo al SO en vez de a la
-    // elección del usuario. Ver resolveThemeClass().
-    <html lang={COPY.lang} className={resolveThemeClass()} suppressHydrationWarning>
+    <html lang={COPY.lang} className={resolved} suppressHydrationWarning>
       <head>
+        {/* `generateViewport()` es metadata del root layout y global-error lo
+            REEMPLAZA, así que Next no emite nada acá: sin esta meta el celular
+            renderiza la pantalla de error a ancho desktop y la achica.
+            Sin `viewport-fit=cover` a propósito (el root layout sí lo usa): este
+            <body> no tiene padding de safe-area, y sin `cover` el browser ya
+            mantiene el contenido fuera del notch. */}
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        {/* Las dos metas con `media` hacen que el color del chrome sea correcto
+            aunque el JS esté muerto — el SO decide, igual que el @media del
+            <style>. Con JS, el layout effect les pisa el `content` con el tema
+            RESUELTO, que es la elección del usuario y puede no coincidir con el
+            SO. Estáticas en server y cliente: no hay mismatch de hidratación. */}
+        <meta name="theme-color" media="(prefers-color-scheme: light)" content={CHROME_COLOR.light} />
+        <meta name="theme-color" media="(prefers-color-scheme: dark)" content={CHROME_COLOR.dark} />
+
         <style dangerouslySetInnerHTML={{ __html: STYLES }} />
       </head>
       {/* Los fallbacks de var() son la red de la red: si ni el <style> llegara,

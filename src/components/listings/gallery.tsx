@@ -115,9 +115,13 @@ export function ListingGallery({ photos, title, className }: ListingGalleryProps
           >
             <CaretRight size={20} weight="bold" aria-hidden="true" />
           </button>
+          {/* `cl-print-fill`: las flechas son <button> y el @media print se las
+              lleva, pero este contador no. `text-on-media` es tinta clara sobre el
+              velo `bg-media-scrim`, y un velo es background-color: el navegador no
+              lo imprime. Sin el velo el "3 / 7" quedaba casi blanco sobre la foto. */}
           <span
             aria-live="polite"
-            className="numeric absolute bottom-3 right-3 rounded-full bg-media-scrim px-2.5 py-1 text-xs font-semibold text-on-media"
+            className="cl-print-fill numeric absolute bottom-3 right-3 rounded-full bg-media-scrim px-2.5 py-1 text-xs font-semibold text-on-media"
           >
             {COPY.detail.photoCounter(current, total)}
           </span>

@@ -41,6 +41,10 @@ export function NotificationItem({ notification }: { notification: NotificationI
         type="button"
         onClick={handleClick}
         aria-busy={pending || undefined}
+        // `border-brand-subtle` acá es DECORACIÓN (1.59:1 light / 2.07:1 dark contra
+        // bg-surface), no la señal de "no leída": esa la dan el punto de abajo y el
+        // peso del título. Se queda `-subtle` a propósito. Ojo si algún día se sacan
+        // esos dos: el borde solo no alcanza para identificar el estado (1.4.11).
         className={cn(
           "flex w-full min-h-11 items-start gap-3 rounded-lg border px-4 py-3.5 text-left transition-colors",
           "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
@@ -49,6 +53,9 @@ export function NotificationItem({ notification }: { notification: NotificationI
             : "border-brand-subtle bg-surface shadow-xs hover:bg-surface-subtle",
         )}
       >
+        {/* Lo que diferencia es la PRESENCIA del punto, no su tono: `bg-brand` baja
+            hasta 2.64:1 contra bg-surface con un tenant de hue claro. El afford que
+            no depende del color es el peso del título (semibold vs medium). */}
         <span
           aria-hidden="true"
           className={cn(

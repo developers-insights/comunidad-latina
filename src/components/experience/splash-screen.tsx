@@ -111,7 +111,11 @@ export function SplashScreen({
           // Presentacional puro: no participa del árbol de accesibilidad ni
           // recibe foco. pointer-events se cortan al empezar a salir.
           onPointerDown={dismiss}
-          className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6 bg-canvas"
+          // `cl-print-hide`: overlay efímero y `aria-hidden`. Si alguien manda a
+          // imprimir mientras está arriba, tapaba la hoja entera con el monograma
+          // —y su `text-brand-foreground` es tinta clara sobre un fondo inline que
+          // el navegador tampoco imprime.
+          className="cl-print-hide fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6 bg-canvas"
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           initial={{ opacity: 1 }}
           // Al empezar a salir liberamos el puntero: el tap que lo descartó (o

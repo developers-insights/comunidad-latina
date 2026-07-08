@@ -320,6 +320,14 @@ function StepCountry({
   return (
     <section className="flex flex-col gap-5" aria-labelledby="ob-step1">
       {/* Solo en pantallas altas: en 375×667 la grilla debe verse sin scroll (§3.1) */}
+      {/* Este asset es OPACO y claro, y aun así se queda: acá sí lee como panel.
+          object-cover recorta una banda central donde el dibujo toca los cuatro
+          bordes (stdev 55.6, tono dominante 9% de la banda), así que el
+          rectángulo es la ILUSTRACIÓN, no su fondo — como una foto. Es el caso
+          contrario al de empty-state-search.png, que era 86% de un beige plano:
+          ahí el rectángulo era el fondo y en dark flotaba como un bloque claro.
+          Un panel a sangre con esquinas redondeadas puede ser claro en dark;
+          una placa de fondo plano, no. No lo recortes ni le pongas borde. */}
       <div className="relative hidden h-32 w-full overflow-hidden rounded-lg [@media(min-height:760px)]:block">
         <Image
           src="/images/onboarding-welcome.png"

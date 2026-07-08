@@ -126,6 +126,11 @@ export function PostMenu({ postId, viewerId }: PostMenuProps) {
               return (
                 <label
                   key={option.key}
+                  // `border-brand-subtle` acá es DECORACIÓN (1.59:1 light / 2.07:1 dark
+                  // contra bg-surface): tiñe de marca la opción elegida, pero no es lo
+                  // que comunica la selección. Eso lo hace el radio nativo de abajo, que
+                  // el sistema operativo dibuja con su propio contraste. Por eso se queda
+                  // `-subtle` y no `-strong`: no es la única señal, y no tiene que gritar.
                   className={cn(
                     "flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-4 py-2.5 text-sm",
                     "transition-colors duration-(--duration-fast)",

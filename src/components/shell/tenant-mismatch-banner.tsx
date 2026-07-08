@@ -13,6 +13,10 @@ import { tenantMismatchBanner } from "@/lib/tenant/match";
  * El link usa `?t=<slug>`, que el middleware persiste a la cookie `cl-tenant`.
  * En producción los dominios son distintos (las cookies no cruzan) y esta
  * divergencia es inalcanzable: esto es una red de seguridad para dev y previews.
+ *
+ * `cl-print-hide`: es chrome de navegación, no contenido. Se marca explícito acá
+ * y no con un `[role="status"]` en el @media print — ese selector también matchea
+ * <Banner> usados como contenido y el resultado del verificador de estafas.
  */
 export async function TenantMismatchBanner() {
   const mismatch = await getTenantMismatch();
@@ -21,7 +25,7 @@ export async function TenantMismatchBanner() {
   const copy = tenantMismatchBanner(mismatch.current.name, mismatch.home?.name ?? null);
 
   return (
-    <Banner variant="warning" className="border-b border-border">
+    <Banner variant="warning" className="cl-print-hide border-b border-border">
       <p className="font-semibold">{copy.title}</p>
       <p className="mt-0.5 text-foreground-secondary">{copy.body}</p>
       {mismatch.home && (

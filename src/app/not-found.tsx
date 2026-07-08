@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { Compass, Buildings, ShieldCheck, BookOpen } from "@phosphor-icons/react/dist/ssr";
+import { ThemeToggle } from "@/components/theme";
 import { EmptyState, buttonVariants } from "@/components/ui";
 
 /**
  * 404 global en español cálido (§3.5): nunca la pantalla genérica de Next
  * en inglés — para nuestro público, "esto parece roto" lee como otra trampa.
  * Además del CTA principal, links útiles a lo que la gente busca de verdad.
+ *
+ * El toggle de tema va acá por lo mismo que en error.tsx: este `not-found` es el
+ * de la raíz, así que renderiza dentro del root layout —el único que no monta
+ * toggle— y reemplaza a los layouts de grupo con su header. Sin esto, entrar a
+ * un link vencido apagaba el único control de tema de la pantalla.
  */
 
 const COPY = {
@@ -22,7 +28,10 @@ const COPY = {
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-dvh items-center justify-center px-4">
+    <div className="relative flex min-h-dvh items-center justify-center px-4">
+      {/* Primero en el DOM porque es lo primero que se lee arriba a la derecha;
+          `top` respeta el notch (el root layout usa viewportFit: cover). */}
+      <ThemeToggle className="absolute right-2 top-[max(0.5rem,env(safe-area-inset-top))] z-10" />
       <div className="w-full max-w-md">
         <EmptyState
           icon={<Compass weight="light" />}

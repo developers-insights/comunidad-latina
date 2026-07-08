@@ -16,14 +16,13 @@ export function ScoreBar({ score }: { score: number | null }) {
 
   const clamped = Math.max(0, Math.min(100, Math.round(score)));
   // `bar` = fill (objeto gráfico, umbral 3:1) · `text` = tinta (12px, 4.5:1).
-  // El fill de success/warning de §2.3 no llega a AA como texto en light; el de
-  // danger sí (5.27:1 sobre bg-surface), por eso es el único sin `-ink`.
+  // Los tres usan `-ink`: es la regla, no una excepción por estado.
   const tone =
     clamped <= 30
       ? { bar: "bg-success", text: "text-success-ink", label: "riesgo bajo" }
       : clamped <= 70
         ? { bar: "bg-warning", text: "text-warning-ink", label: "riesgo medio" }
-        : { bar: "bg-danger", text: "text-danger", label: "riesgo alto" };
+        : { bar: "bg-danger", text: "text-danger-ink", label: "riesgo alto" };
 
   return (
     <div className="flex items-center gap-2" aria-label={`Puntaje de IA ${clamped} de 100 — ${tone.label}`}>

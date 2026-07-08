@@ -38,6 +38,8 @@ function block(pattern: RegExp): string {
   return match![1];
 }
 
+const theme = declarations(block(/^@theme \{([\s\S]*?)^\}/m));
+const themeInline = declarations(block(/^@theme inline \{([\s\S]*?)^\}/m));
 const root = declarations(block(/^:root \{([\s\S]*?)^\}/m));
 const darkClass = declarations(block(/^\.dark \{([\s\S]*?)^\}/m));
 const media = declarations(
@@ -45,6 +47,45 @@ const media = declarations(
     /@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\.light\):not\(\.dark\) \{([\s\S]*?)^ {2}\}/m,
   ),
 );
+const printReset = declarations(
+  block(
+    /@media print \{\s*:root,\s*:root\.light,\s*:root\.dark,\s*:root:not\(\.light\):not\(\.dark\) \{([\s\S]*?)^ {2}\}/m,
+  ),
+);
+
+/**
+ * Resuelve una cadena de `var(--a, var(--b))` hasta el literal, con el mismo
+ * algoritmo del navegador: gana el scope, y si el token no existe se cae al
+ * fallback. Sin inline style del tenant, la marca resuelve a los escalones
+ * default de `@theme` — que es justo el peor caso que queremos anclar.
+ */
+function splitTopLevelComma(value: string): [string, string | null] {
+  let depth = 0;
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === "(") depth++;
+    else if (value[i] === ")") depth--;
+    else if (value[i] === "," && depth === 0) return [value.slice(0, i), value.slice(i + 1)];
+  }
+  return [value, null];
+}
+
+function resolveVar(value: string, scope: Map<string, string>, depth = 0): string {
+  const trimmed = value.trim();
+  if (depth > 30) throw new Error(`ciclo de var() resolviendo ${value}`);
+  if (!trimmed.startsWith("var(")) return trimmed;
+  const inner = trimmed.slice(4, trimmed.lastIndexOf(")"));
+  const [name, fallback] = splitTopLevelComma(inner);
+  const key = name.trim();
+  if (scope.has(key)) return resolveVar(scope.get(key)!, scope, depth + 1);
+  if (fallback !== null) return resolveVar(fallback, scope, depth + 1);
+  throw new Error(`${key} no está definido y no tiene fallback`);
+}
+
+const merge = (...maps: Map<string, string>[]) => new Map(maps.flatMap((m) => [...m]));
+const LIGHT_SCOPE = merge(theme, themeInline, root);
+const DARK_SCOPE = merge(theme, themeInline, root, darkClass);
+const PRINT_SCOPE = merge(theme, themeInline, root, darkClass, printReset);
+const color = (token: string, scope: Map<string, string>) => resolveVar(`var(${token})`, scope);
 
 /** Alias = token semántico activo. Excluye las paletas `--cl-light-*` / `--cl-dark-*`. */
 function aliasNames(decls: Map<string, string>): string[] {
@@ -140,6 +181,10 @@ describe("globals.css — el contrato con el resto del enjambre", () => {
       "--color-focus-ring",
       "--color-success-ink",
       "--color-warning-ink",
+      "--color-danger-ink",
+      "--color-info-ink",
+      "--color-gold-ink",
+      "--color-brand-strong",
     ]) {
       expect(CSS, `falta ${token}`).toContain(`${token}:`);
     }
@@ -155,59 +200,168 @@ describe("globals.css — el contrato con el resto del enjambre", () => {
   });
 });
 
+/**
+ * LA MATRIZ. Se resuelve desde el CSS real, no desde hex copiados a mano: si
+ * alguien mueve un token y rompe AA, explota acá y no en producción.
+ *
+ * El contrato de las tres familias (documentado arriba de globals.css):
+ *   `x`      RELLENO      → objeto gráfico, ≥3:1 (WCAG 1.4.11)
+ *   `x-ink`  TEXTO        → ≥4.5:1 contra TODA superficie del tema y su `-bg`
+ *   `on-x`   SOBRE EL FILL → ≥4.5:1 contra `x`
+ */
 describe("contraste de los tokens que no derivan del tenant", () => {
-  /** Los `-bg`, superficies y tintas de estado son fijos: se pueden medir acá. */
-  const LIGHT = { surface: "#ffffff", canvas: "#fcfcfb", subtle: "#f7f6f3", hover: "#efede8" };
-  const DARK = { surface: "#24211b", canvas: "#17150f", raised: "#2b2820" };
   const AA = 4.5;
+  const UI = 3;
+  /** Cada superficie sobre la que puede caer texto. `surface-hover` incluido. */
+  const SURFACES = [
+    "--color-canvas",
+    "--color-surface",
+    "--color-surface-subtle",
+    "--color-surface-raised",
+    "--color-surface-hover",
+  ];
+  const THEMES: [string, Map<string, string>][] = [
+    ["light", LIGHT_SCOPE],
+    ["dark", DARK_SCOPE],
+  ];
 
-  it("el fill de success/warning NO es AA como texto: por eso existe `-ink`", () => {
-    expect(wcagContrast("#1a7f5a", "#e8f5ee")).toBeLessThan(AA); // 4.43:1
-    expect(wcagContrast("#b7791f", "#fbf2e3")).toBeLessThan(AA); // 3.28:1
+  /** El ratio de `token` contra la superficie PEOR de su tema. */
+  function worstOnSurfaces(token: string, scope: Map<string, string>): number {
+    return Math.min(...SURFACES.map((s) => wcagContrast(color(token, scope), color(s, scope))));
+  }
+
+  it("el fill de success/warning/gold NO es AA como texto: por eso existe `-ink`", () => {
+    // Es la razón de ser de toda la familia. Si esto dejara de ser cierto,
+    // el desdoble sobra — y hay que borrarlo, no dejarlo por inercia.
+    expect(wcagContrast("#1a7f5a", "#e8f5ee")).toBeLessThan(AA); // success/success-bg 4.43:1
+    expect(wcagContrast("#b7791f", "#fbf2e3")).toBeLessThan(AA); // warning/warning-bg 3.28:1
+    expect(wcagContrast("#b7791f", "#ffffff")).toBeLessThan(AA); // gold/surface       3.64:1
   });
 
-  it.each([
-    ["success-ink", "#177252", "#e8f5ee"],
-    ["warning-ink", "#8f5c10", "#fbf2e3"],
-  ])("light: text-%s es AA sobre su -bg y sobre las superficies claras", (_n, ink, bg) => {
-    expect(wcagContrast(ink, bg)).toBeGreaterThanOrEqual(AA);
-    for (const surface of Object.values(LIGHT)) {
-      expect(wcagContrast(ink, surface)).toBeGreaterThanOrEqual(AA);
+  describe.each(THEMES)("tema %s", (_theme, scope) => {
+    it.each([
+      "--color-foreground",
+      "--color-foreground-secondary",
+      "--color-foreground-muted",
+      "--color-placeholder",
+    ])("%s es AA sobre TODAS las superficies (1.4.3)", (token) => {
+      expect(worstOnSurfaces(token, scope)).toBeGreaterThanOrEqual(AA);
+    });
+
+    it.each(["success", "warning", "danger", "info"])(
+      "%s-ink es AA sobre su -bg y sobre TODAS las superficies",
+      (state) => {
+        const ink = color(`--color-${state}-ink`, scope);
+        expect(wcagContrast(ink, color(`--color-${state}-bg`, scope))).toBeGreaterThanOrEqual(AA);
+        expect(worstOnSurfaces(`--color-${state}-ink`, scope)).toBeGreaterThanOrEqual(AA);
+      },
+    );
+
+    it("gold-ink es AA sobre TODAS las superficies (el dorado no tiene -bg)", () => {
+      expect(worstOnSurfaces("--color-gold-ink", scope)).toBeGreaterThanOrEqual(AA);
+    });
+
+    it.each(["success", "warning", "danger", "info"])(
+      "on-%s es AA sobre el relleno sólido de su estado",
+      (state) => {
+        const on = color(`--color-on-${state}`, scope);
+        expect(wcagContrast(on, color(`--color-${state}`, scope))).toBeGreaterThanOrEqual(AA);
+      },
+    );
+
+    it.each(["success", "warning", "danger", "info", "gold"])(
+      "el relleno de %s llega al 3:1 de objeto gráfico sobre canvas y surface",
+      (state) => {
+        for (const surface of ["--color-canvas", "--color-surface"]) {
+          const ratio = wcagContrast(color(`--color-${state}`, scope), color(surface, scope));
+          expect(ratio).toBeGreaterThanOrEqual(UI);
+        }
+      },
+    );
+
+    it("brand-strong identifica un estado: ≥3:1 sobre toda superficie (1.4.11)", () => {
+      // Con los fallbacks de @theme. El barrido por tenant vive en el pipeline.
+      expect(worstOnSurfaces("--color-brand-strong", scope)).toBeGreaterThanOrEqual(UI);
+    });
+
+    it("brand-subtle es DECORATIVO: no llega a 3:1 y por eso nunca señala solo", () => {
+      const ratio = wcagContrast(color("--color-brand-subtle", scope), color("--color-surface", scope));
+      expect(ratio).toBeLessThan(UI);
+    });
+
+    it("el anillo de foco se ve contra canvas y surface", () => {
+      for (const surface of ["--color-canvas", "--color-surface"]) {
+        expect(
+          wcagContrast(color("--color-focus-ring", scope), color(surface, scope)),
+        ).toBeGreaterThanOrEqual(UI);
+      }
+    });
+  });
+
+  it("el placeholder ES el tono muted, por referencia y no por copia", () => {
+    expect(root.get("--cl-light-placeholder")).toBe("var(--cl-light-foreground-muted)");
+    expect(root.get("--cl-dark-placeholder")).toBe("var(--cl-dark-foreground-muted)");
+  });
+
+  it("danger/info en light aliasean su fill; en dark sólo danger necesita tono propio", () => {
+    // Un `-ink` que es alias no es un token de más: el call site nunca tiene que
+    // averiguar cuál de los cuatro estados pasa AA y cuál no. Siempre `-ink`.
+    expect(root.get("--cl-light-danger-ink")).toBe("var(--cl-light-danger)");
+    expect(root.get("--cl-light-info-ink")).toBe("var(--cl-light-info)");
+    expect(root.get("--cl-dark-info-ink")).toBe("var(--cl-dark-info)");
+    expect(root.get("--cl-dark-gold-ink")).toBe("var(--cl-dark-gold)");
+    // #e26a6a daba 4.19:1 sobre bg-surface-hover: una fila de menú con "Eliminar".
+    expect(wcagContrast("#e26a6a", "#322e25")).toBeLessThan(AA);
+    expect(root.get("--cl-dark-danger-ink")).toBe("#ec7372");
+  });
+});
+
+describe("@media print — la guía impresa tiene que leerse (12a)", () => {
+  it("los tokens vuelven a sus valores light aunque el usuario esté en dark", () => {
+    for (const token of themeInline.keys()) {
+      expect(color(token, PRINT_SCOPE), `${token} no volvió a light al imprimir`).toBe(
+        color(token, LIGHT_SCOPE),
+      );
     }
   });
 
-  it.each([
-    ["success", "#46b184", "#12271d"],
-    ["warning", "#d9a044", "#2a2010"],
-  ])("dark: el fill de %s ya es AA como texto (el -ink lo aliasea)", (_n, ink, bg) => {
-    expect(wcagContrast(ink, bg)).toBeGreaterThanOrEqual(AA);
-    for (const surface of Object.values(DARK)) {
-      expect(wcagContrast(ink, surface)).toBeGreaterThanOrEqual(AA);
-    }
+  it("el bloque print revierte TODOS los alias que pisa .dark", () => {
+    const sinRevertir = [...darkClass.keys()].filter((name) => !printReset.has(name));
+    expect(sinRevertir).toEqual([]);
   });
 
-  it("danger e info sí pasan como texto sobre su -bg: no necesitan `-ink`", () => {
-    expect(wcagContrast("#c23b3b", "#fbeaea")).toBeGreaterThanOrEqual(AA);
-    expect(wcagContrast("#2b6cb0", "#e9f1fa")).toBeGreaterThanOrEqual(AA);
-    expect(CSS).not.toContain("--color-danger-ink");
-    expect(CSS).not.toContain("--color-info-ink");
+  it("el texto del body es tinta oscura sobre papel blanco", () => {
+    // En dark, `body { color: #f7f6f3 }` daba 1.08:1 contra el papel: hoja en blanco.
+    expect(wcagContrast(color("--color-foreground", DARK_SCOPE), "#ffffff")).toBeLessThan(1.5);
+    expect(
+      wcagContrast(color("--color-foreground", PRINT_SCOPE), "#ffffff"),
+    ).toBeGreaterThanOrEqual(7);
   });
 
-  it("el placeholder es texto (1.4.3) y llega a AA sobre el fondo de los inputs", () => {
-    // input.tsx/textarea/select se pintan sobre bg-surface en los dos temas.
-    expect(root.get("--cl-light-placeholder")).toBe("var(--color-neutral-500)");
-    expect(root.get("--cl-dark-placeholder")).toBe("var(--color-neutral-400)");
-    expect(wcagContrast("#7a7364", LIGHT.surface)).toBeGreaterThanOrEqual(AA); // 4.70:1
-    expect(wcagContrast("#a39c8c", DARK.surface)).toBeGreaterThanOrEqual(AA); // 5.88:1
-    expect(wcagContrast("#a39c8c", DARK.raised)).toBeGreaterThanOrEqual(AA); // 5.39:1 (diálogos)
+  it("esconde el chrome sin llevarse puesto el <header> del artículo", () => {
+    // `header:not(main header)` — el <header> del <article> de la guía vive dentro
+    // de <main> y trae el título; el sticky del layout no.
+    expect(CSS).toMatch(/header:not\(main header\)/);
+  });
+});
+
+describe("@media (forced-colors: active) — el foco real es box-shadow (12b)", () => {
+  it("restituye un outline de verdad: forced-colors borra el box-shadow", () => {
+    expect(CSS).toMatch(/@media \(forced-colors: active\)/);
+    expect(CSS).toMatch(/outline: 2px solid Highlight/);
   });
 
-  it("text-foreground-muted NO es AA sobre surface-subtle ni surface-hover", () => {
-    // Regla documentada en globals.css: ahí va text-foreground-secondary.
-    expect(wcagContrast("#7a7364", LIGHT.subtle)).toBeLessThan(AA); // 4.35:1
-    expect(wcagContrast("#7a7364", LIGHT.hover)).toBeLessThan(AA); // 4.02:1
-    expect(wcagContrast("#5c564a", LIGHT.subtle)).toBeGreaterThanOrEqual(AA); // secondary: 6.74:1
-    expect(wcagContrast("#5c564a", LIGHT.hover)).toBeGreaterThanOrEqual(AA); // 6.22:1
+  it("los estados que sólo se comunican por fondo se mapean a Highlight", () => {
+    // chips seleccionados, tabs activas, item actual del bottom-nav.
+    expect(CSS).toContain('[aria-pressed="true"]');
+    expect(CSS).toContain('[aria-selected="true"]');
+    expect(CSS).toContain('[aria-current="page"]');
+    expect(CSS).toContain("forced-color-adjust: none");
+  });
+
+  it("el comentario `forced-colors` del focus ring ya no simula una cobertura falsa", () => {
+    // Sobre el CSS con comentarios: `CSS` los tiene borrados y el test sería vacuo.
+    expect(GLOBALS).not.toMatch(/outline: 2px solid transparent; \/\* forced-colors \*\//);
   });
 });
 

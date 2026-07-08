@@ -199,17 +199,21 @@ export default function AprenderPage() {
         <h2 className="font-display text-base font-semibold text-foreground">
           {COPY.ctaTitle}
         </h2>
+        {/* Los dos <Link> se ven botón pero no pasan por buttonVariants, así que
+            no heredan su `cl-print-hide`: el hook del @media print va a mano. El
+            primero es `bg-brand text-brand-foreground` y sin su fondo —que el
+            navegador no imprime— el label salía blanco sobre papel blanco. */}
         <div className="flex w-full flex-col gap-2">
           <Link
             href="/escudo/verificar"
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-brand-foreground shadow-xs transition-colors duration-(--duration-fast) hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+            className="cl-print-hide inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-brand-foreground shadow-xs transition-colors duration-(--duration-fast) hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           >
             <IdentificationCard size={18} aria-hidden="true" />
             {COPY.ctaVerificar}
           </Link>
           <Link
             href="/escudo/reportar"
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-5 text-sm font-semibold text-foreground transition-colors duration-(--duration-fast) hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+            className="cl-print-hide inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-5 text-sm font-semibold text-foreground transition-colors duration-(--duration-fast) hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           >
             <Flag size={18} aria-hidden="true" />
             {COPY.ctaReportar}
