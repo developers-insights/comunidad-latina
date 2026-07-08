@@ -1,5 +1,6 @@
-import { ShieldWarning, ArrowRight } from "@phosphor-icons/react/dist/ssr";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
+import { Emblem } from "@/components/ui/emblem";
 
 /**
  * Aviso amarillo del Escudo Anti-Estafa (§4.d): posición y estilo FIJOS
@@ -50,11 +51,10 @@ export function ScamShieldNotice({
         className,
       )}
     >
-      <ShieldWarning
-        size={24}
-        aria-hidden="true"
-        className="mt-0.5 shrink-0 text-warning"
-      />
+      {/* El emblema es la firma visual del moat: el usuario aprende a
+          reconocerlo. Lazy: este aviso vive dentro del detalle de un listing,
+          nunca sobre el pliegue, y el público está en datos móviles (§3.4). */}
+      <Emblem name="escudo-alerta" size={40} className="-mt-0.5 shrink-0" />
       <div className="min-w-0 text-sm text-foreground">
         <p>
           <strong className="font-semibold">{copy.lead}</strong> {copy.body}

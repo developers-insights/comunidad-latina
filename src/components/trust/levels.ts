@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   Star,
 } from "@phosphor-icons/react/dist/ssr";
+import type { EmblemName } from "@/components/ui/emblem";
 
 /**
  * Gramática visual FIJA del Trust Score (§3.3 del design brief):
@@ -20,7 +21,13 @@ export type TrustLevel =
 
 export interface TrustLevelConfig {
   label: string;
+  /** Ícono de línea (Phosphor, §2.6). Es el fallback en tamaños chicos. */
   Icon: Icon;
+  /**
+   * Emblema 3D del nivel, para los tamaños grandes (≥ `EMBLEM_MIN_SIZE`).
+   * Nunca reemplaza al `Icon`: convive con él. Ver `TrustLevelMark`.
+   */
+  emblem: EmblemName;
   /** Color del texto/ícono del nivel. */
   textClass: string;
   /** Color de los segmentos llenos de la barra. */
@@ -31,30 +38,39 @@ export const TRUST_LEVELS: Record<TrustLevel, TrustLevelConfig> = {
   nuevo: {
     label: "Nuevo",
     Icon: Plant,
+    emblem: "nivel-nuevo",
     textClass: "text-foreground-muted",
     segmentClass: "bg-foreground-muted",
   },
   verificado: {
     label: "Verificado",
     Icon: SealCheck,
+    emblem: "nivel-verificado",
     textClass: "text-info",
     segmentClass: "bg-info",
   },
   confiable: {
     label: "Confiable",
     Icon: ShieldCheck,
+    // Mismo objeto que el hero del Escudo Anti-Estafa: un escudo verde significa
+    // "protegido" en TODO el producto, no una cosa distinta por pantalla.
+    emblem: "escudo-check",
     textClass: "text-success",
     segmentClass: "bg-success",
   },
   premium: {
     label: "Premium",
     Icon: Star,
+    emblem: "nivel-premium",
     textClass: "text-gold",
     segmentClass: "bg-gold",
   },
   diamante: {
     label: "Diamante",
     Icon: Diamond,
+    // Cristal incoloro a propósito: `text-brand` varía por tenant (azul en
+    // `dominicanos`, naranja en `comunidadlatina`) y un raster no puede variar.
+    emblem: "nivel-diamante",
     textClass: "text-brand",
     segmentClass: "bg-brand",
   },

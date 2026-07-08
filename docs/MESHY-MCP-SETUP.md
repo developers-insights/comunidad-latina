@@ -1,57 +1,81 @@
-# Conectar el MCP de Meshy (3D premium)
+# Meshy (3D premium) — estado y cómo usarlo
 
-**Estado (2026-07-07):** el MCP de Meshy **NO está configurado** en esta máquina. En
-`~/.claude.json` solo hay `blender`, `google-ads` y `nanobanana`. La `MESHY_API_KEY`
-en `C:\MisProyectos\Armagedon\horno-survivor\.env.local` está **vacía**. Por eso el 3D
-premium del proyecto salió por nanobanana + SVG. Para sumar 3D real de Meshy hay que
-conectarlo una vez.
+**Estado (2026-07-08):** la `MESHY_API_KEY` **existe y funciona** (está en `~/.claude.json`,
+dentro del bloque `mcpServers["meshy-mcp-server"].env`). Los emblemas 3D del Escudo y del
+Trust Score se generaron con ella: 585 créditos gastados, balance 2340 → **1755**.
 
-## Paso 1 — Conseguir la API key
-1. Entrá a https://www.meshy.ai/settings/api
-2. Creá una API key (empieza con `msy_...`).
+## ⚠️ El MCP está mal configurado en Windows (falla al arrancar)
 
-## Paso 2 — Conectar el MCP (una sola vez, global para Claude Code)
-La forma más simple (autodetecta Claude Code y escribe la config sola):
+Las tools `mcp__meshy-mcp-server__*` aparecen listadas, pero el server **no levanta**:
 
-```bash
-npx add-mcp @meshy-ai/meshy-mcp-server --env MESHY_API_KEY=msy_TU_API_KEY
+```
+[MCPHealthCheck] meshy-mcp-server is unavailable (spawn npx ENOENT)
 ```
 
-**O** a mano, agregando este bloque a `~/.claude.json` dentro de `"mcpServers"`
-(al lado de `nanobanana`), reemplazando la key:
+La causa: en `~/.claude.json` el server usa `"command": "npx"` directo. En Windows `npx` es
+un `.cmd`, no un ejecutable — `spawn` no lo encuentra. Los otros servers de este equipo
+(`nanobanana`, `blender`) usan `cmd /c npx`, que sí funciona.
+
+**Fix (una línea, requiere reiniciar Claude Code):** en `~/.claude.json`, cambiar
 
 ```json
-"meshy": {
+"meshy-mcp-server": { "command": "npx", "args": ["-y", "@meshy-ai/meshy-mcp-server"], ... }
+```
+
+por
+
+```json
+"meshy-mcp-server": {
   "type": "stdio",
   "command": "cmd",
   "args": ["/c", "npx", "-y", "@meshy-ai/meshy-mcp-server"],
-  "env": {
-    "MESHY_API_KEY": "msy_TU_API_KEY"
-  }
+  "env": { "MESHY_API_KEY": "msy_..." }
 }
 ```
 
-(Uso `cmd /c npx` porque es el patrón que ya funciona para `nanobanana` en este equipo.)
+## Mientras tanto: la REST API, que es lo que se usó
 
-## Paso 3 — Reiniciar Claude Code
-Cerrá y reabrí la sesión (o `/mcp` en una sesión interactiva) para que levante el server.
-Cuando esté, las tools `mcp__meshy__*` (text-to-3D, image-to-3D, text-to-texture) quedan
-disponibles y puedo generar los detalles 3D reales.
+No hace falta el MCP. El pipeline de emblemas pega contra la API directo y es
+reproducible — ver [`assets-source/emblems/`](../assets-source/emblems/):
 
-## Dónde poner la key para que YO la use en el proyecto (además del MCP)
-Ya dejé el placeholder en `.env.local`:
+```bash
+export MESHY_API_KEY=msy_...              # nunca se commitea
+node assets-source/emblems/generate.mjs --all          # 39 cr por emblema
+node assets-source/emblems/process.mjs assets-source/emblems/out/alpha
 ```
-MESHY_API_KEY=
-```
-Completalo con la misma `msy_...`. El pipeline de assets puede consumirla directo por API
-(sin depender del MCP) si hiciera falta.
 
-## Alternativa que YA está conectada (sin Meshy)
-El MCP de **Blender** (ya activo) trae generación text/image→3D vía **Hyper3D (Rodin)** y
-**Hunyuan3D** (`generate_hyper3d_model_via_text`, `generate_hunyuan3d_model`, …). Si querés
-3D sin esperar a Meshy, se puede usar eso.
+Endpoints usados (todos bajo `https://api.meshy.ai/openapi`):
+
+| Endpoint | Para qué | Costo |
+|---|---|---|
+| `GET  /v1/balance` | créditos | 0 |
+| `POST /v1/text-to-image` | concepto art-dirigido (`nano-banana-pro`) | 9 cr |
+| `POST /v1/image-to-3d` | malla + textura; acepta `input_task_id` para encadenar sin descargar | 30 cr |
+| `GET  /v1/{kind}/{id}` | polling (`SUCCEEDED`/`FAILED`) | 0 |
+
+### Ajustes que importan (hallados empíricamente, no adivinados)
+
+- **`enable_pbr: false`** — con PBR el render sale brillante y frío; rompe el look mate.
+- **`remove_lighting: false`** — conserva la luz cálida horneada del concepto. Con `true`,
+  Meshy re-ilumina con su estudio frío y el verde esmeralda se vuelve menta.
+- **`alpha_thumbnail: true`** — devuelve `alpha_thumbnail_url`: un render PNG 512×512 RGBA
+  del modelo 3D, con fondo transparente. **Es la salida que se consume**; no hace falta
+  Blender ni un renderer propio.
+- `thumbnail_urls.front/back/left/right` NO son vistas ortográficas: son la misma cámara 3/4
+  sobre fondo oscuro. No sirven para un ícono frontal.
+
+### Limitación conocida
+
+`image-to-3d` **no reconstruye bien objetos transparentes ni siluetas planas**. El diamante
+necesitó 5 iteraciones: pedía una gema de vidrio y devolvía una placa de esmalte con reborde
+oscuro (el mesh extruye un slab y el canto queda sin luz), o un pedrusco grumoso. Se resolvió
+pidiendo un **sólido facetado opaco**, con el mismo lenguaje material que el resto del set.
+
+## Alternativa ya conectada (sin Meshy)
+
+El MCP de **Blender** (activo) trae text/image→3D vía **Hyper3D (Rodin)** y **Hunyuan3D**.
+Requiere Blender abierto con el addon.
 
 ---
 Fuentes: [meshy-dev/meshy-mcp-server](https://github.com/meshy-dev/meshy-mcp-server) ·
-[@meshy-ai/meshy-mcp-server (npm)](https://www.npmjs.com/package/@meshy-ai/meshy-mcp-server) ·
 [Meshy API settings](https://www.meshy.ai/settings/api)

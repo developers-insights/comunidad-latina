@@ -14,6 +14,10 @@ export {
   type ScamShieldVariant,
 } from "./scam-shield-notice";
 export {
+  TrustLevelMark,
+  type TrustLevelMarkProps,
+} from "./trust-level-mark";
+export {
   TrustScoreBadge,
   type TrustScoreBadgeProps,
 } from "./trust-score-badge";

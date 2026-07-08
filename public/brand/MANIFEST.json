@@ -1,51 +1,108 @@
 {
-  "generated_at": "2026-07-07",
-  "generator": "Agente ASSETS VISUALES/3D PREMIUM — nanobanana MCP (Gemini) para rasters + SVG a mano. Meshy no disponible (sin MESHY_API_KEY); se usó nanobanana + fallback SVG premium.",
-  "art_direction": "Escudo geométrico + monograma CL. Fintech-cálido (Revolut/Mercado Pago) con claridad Linear. Acento azul #1A5EDB, neutros cálidos #FCFCFB/#F7F6F3/#17150F.",
-  "assets": [
+  "generated_at": "2026-07-08",
+  "generator": "Meshy (REST): text-to-image nano-banana-pro -> image-to-3d meshy-6 -> alpha_thumbnail (render 512x512 RGBA del modelo 3D) -> sharp -> WebP 256x256 q82. Pipeline reproducible en assets-source/emblems/ (generate.mjs + prompts.mjs + process.mjs).",
+  "art_direction": "Emblemas mate premium, esmalte de coleccionable. Luz cálida clave desde arriba-izquierda, relleno ambiental suave, sin especular duro. Misma cámara y mismo material en todo el set -> se lee como una familia. Fondos transparentes.",
+  "reglas": {
+    "nada_de_3d_en_vivo": "El 3D se usa para GENERAR el modelo; se envía un raster de ~9 KB. Nada de WebGL/three.js/Spline: el público objetivo está en datos móviles y gama baja (brief 13, §3.4).",
+    "3d_selectivo": "Solo en momentos de confianza y emoción. La iconografía FUNCIONAL sigue siendo Phosphor línea (§2.6). Por debajo de 28px (EMBLEM_MIN_SIZE) se usa el ícono de línea: un render 3D a 14px es puré.",
+    "sin_color_de_marca": "Un raster no puede variar por tenant y `brandHex` sí varía (#1A5EDB en `dominicanos`, #C2410C en `comunidadlatina`). Por eso NINGÚN emblema usa el color de marca: solo neutros cálidos y colores semánticos, que son fijos por guardrail (§6). El diamante es cristal incoloro por esa razón exacta, aunque el nivel se tiña con `text-brand`."
+  },
+  "emblemas": [
+    {
+      "file": "emblems/escudo-check.webp",
+      "kb": 10.5,
+      "color": "success #1A7F5A",
+      "superficies": [
+        "src/app/(app)/escudo/page.tsx — hero 88px, `priority` (único visual sobre el pliegue)",
+        "Trust Score nivel \"Confiable\" vía TRUST_LEVELS.confiable.emblem"
+      ],
+      "nota": "Un objeto, un significado: el escudo verde es \"protegido\" en TODO el producto. Por eso el nivel Confiable no tiene emblema propio.",
+      "meshy": { "image": "019f3f72-e868-7796-a3d0-3a0fcace7c01", "model": "019f3f77-3259-78b5-88a6-e3daa0e65cf7" }
+    },
+    {
+      "file": "emblems/escudo-alerta.webp",
+      "kb": 8.0,
+      "color": "warning #B7791F",
+      "superficies": ["src/components/trust/scam-shield-notice.tsx — 40px, lazy"],
+      "nota": "La firma visual del moat. Posición y estilo fijos en todos los verticales (§4.d): el usuario aprende a reconocerlo.",
+      "meshy": { "image": "019f3f7a-1285-7420-9fbd-7c563b9012bb", "model": "019f3f7a-9d2a-73f0-94cb-69289da43278" }
+    },
+    {
+      "file": "emblems/sello-check.webp",
+      "kb": 8.8,
+      "color": "success #1A7F5A",
+      "superficies": ["src/components/trust/verification-card.tsx — 72px, status found_active"],
+      "nota": "Sello de notario: el resultado de consultar un registro oficial se lee como un sello, no como un ícono de sistema.",
+      "meshy": { "image": "019f3f7a-138b-7970-b057-f6917d52dfd1", "model": "019f3f7a-9c9b-73ef-b598-dcb9def7bc30" }
+    },
+    {
+      "file": "emblems/sello-x.webp",
+      "kb": 8.9,
+      "color": "danger #C23B3B",
+      "superficies": ["src/components/trust/verification-card.tsx — 72px, status not_found"],
+      "nota": "Binario y grande (§3.3): verde o rojo, nunca un gris que deje duda.",
+      "meshy": { "image": "019f3f7a-2297-7427-9d60-a9fda2eb983b", "model": "019f3f7a-ab97-799c-948a-995e90805fc7" }
+    },
+    {
+      "file": "emblems/nivel-nuevo.webp",
+      "kb": 9.0,
+      "color": "neutro cálido (el nivel es gris)",
+      "superficies": ["Trust Score nivel \"Nuevo\" — badge card 32px, sheet 72px"],
+      "nota": "Brote. Visualmente humilde a propósito: es el piso de la escalera.",
+      "meshy": { "image": "019f3f7c-2557-74ac-8d7f-e6107ffcda4a", "model": "019f3f7c-94e7-7448-a2bc-1f8b4055790c" }
+    },
+    {
+      "file": "emblems/nivel-verificado.webp",
+      "kb": 10.1,
+      "color": "info #2B6CB0",
+      "superficies": ["Trust Score nivel \"Verificado\""],
+      "meshy": { "image": "019f3f7c-4b49-74b5-a689-752e5ca8c4af", "model": "019f3f7c-e574-7a14-82d1-2a01324feaa6" }
+    },
+    {
+      "file": "emblems/nivel-premium.webp",
+      "kb": 8.2,
+      "color": "gold #B7791F",
+      "superficies": ["Trust Score nivel \"Premium\""],
+      "nota": "v1 salió blanca perla: \"satin sheen\" + \"matte ceramic\" empujan a perla. Se forzó el color con nombre + hex + negativo explícito.",
+      "meshy": { "image": "019f3f80-d414-760c-8d08-67af83ef5c13", "model": "019f3f81-627d-7535-aa78-c54ef36317ea" }
+    },
+    {
+      "file": "emblems/nivel-diamante.webp",
+      "kb": 7.3,
+      "color": "cristal azul hielo, sin color de marca",
+      "superficies": ["Trust Score nivel \"Diamante\""],
+      "nota": "5 iteraciones. v1 rosa (\"lilac glints\" literal); v2/v3 planos con reborde oscuro — el LOOK compartido decía \"collectible enamel pin\", que convierte una gema en placa con engaste; v4 limpio pero sin facetas y casi blanco; v5 (esta) pide las facetas de la corona una por una. `image-to-3d` desatura respecto del concepto, así que process.mjs le devuelve el azul (TONE) para que separe del lienzo #FCFCFB.",
+      "meshy": { "image": "019f3f8e-5941-7e6a-b711-a1b55f21ea41", "model": "019f3f8f-2a46-7816-a912-aef65ffa0ceb" }
+    }
+  ],
+  "vectoriales": [
     {
       "file": "brand-mark.svg",
       "format": "svg",
-      "method": "SVG a mano (vectorial, nítido a cualquier escala)",
-      "description": "Emblema de marca principal: escudo geométrico con gradiente azul, gloss superior, borde interior claro y monograma CL (C como arco abierto + L anidada) en crema. La silueta usa currentColor → retintable por tenant.",
-      "surface": "Header, splash, cualquier lugar de marca. Se renderiza vía <BrandMark> (src/components/experience/brand-mark.tsx) con shine premium opcional en hover."
+      "description": "Emblema de marca vectorial: escudo con gradiente azul, gloss, borde interior y monograma CL. Se renderiza vía <BrandMark> (src/components/experience/brand-mark.tsx) con shine en hover.",
+      "estado": "⚠️ <BrandMark> NO SE USA EN NINGÚN LADO — es código muerto. (El MANIFEST anterior afirmaba que vivía en el header y el splash; era falso.) El splash usa su propio monograma tenant-coloreado y el header, texto. Decidir: darle un hogar o borrar el componente."
     },
     {
       "file": "favicon.svg",
       "format": "svg",
-      "method": "SVG a mano",
-      "description": "Favicon cuadrado con esquinas redondeadas: fondo azul #1A5EDB + monograma CL en crema. Escala nítida para pestaña/PWA.",
-      "surface": "Favicon del sitio (link rel=icon type=image/svg+xml)."
-    },
-    {
-      "file": "../../assets-source/brand-raster/brand-emblem.png",
-      "format": "png",
-      "aspect_ratio": "1:1",
-      "approx_dimensions": "1024x1024",
-      "method": "nanobanana MCP (Gemini)",
-      "status": "archived",
-      "description": "Emblema de marca rasterizado: escudo azul #1A5EDB con monograma CL crema, gloss sutil, grano y borde interior. Versión de alta resolución del brand-mark, apta para maskable/splash.",
-      "surface": "No usado en el build actual (el emblema en runtime es el SVG brand-mark). Archivado fuera de public/ para no versionar ~350KB muertos en el deploy; re-importar a public/brand/ si se necesita para maskable/splash."
-    },
-    {
-      "file": "../../assets-source/brand-raster/escudo-3d.png",
-      "format": "png",
-      "aspect_ratio": "1:1",
-      "approx_dimensions": "1024x1024",
-      "method": "nanobanana MCP (Gemini)",
-      "status": "archived",
-      "description": "Escudo 3D premium (material glass-cerámico, gradiente azul, check blanco, sombra suave) sobre fondo crema. Trust mark dimensional para el Escudo Anti-Estafa.",
-      "surface": "No usado en el build actual. Archivado fuera de public/; re-importar a public/brand/ si el Escudo Anti-Estafa adopta el trust mark rasterizado."
-    },
-    {
-      "file": "../../assets-source/brand-raster/texture-mesh.png",
-      "format": "png",
-      "aspect_ratio": "1:1",
-      "approx_dimensions": "1024x1024",
-      "method": "nanobanana MCP (Gemini)",
-      "status": "archived",
-      "description": "Textura de fondo ultra sutil: arcos concéntricos y líneas geométricas casi imperceptibles sobre crema cálido, con grano suave. No reduce legibilidad del texto encima.",
-      "surface": "No usado en el build actual. Archivado fuera de public/; re-importar a public/brand/ si se activa el fondo decorativo de secciones premium."
+      "description": "Favicon cuadrado: fondo azul #1A5EDB + monograma CL crema."
     }
-  ]
+  ],
+  "no_enviados": [
+    {
+      "file": "../../assets-source/brand-raster/brand-emblem-3d.png",
+      "description": "Escudo 3D azul con monograma CL embossed (hue corregido a #1A5EDB; el render venía índigo #3848B8).",
+      "por_que_no_se_envia": "Se evaluó como ícono PWA contra el actual (squircle plano + CL) renderizando ambos a 48px, el tamaño real de un launcher: el escudo inclinado achica las letras hasta volverlas una mancha. El ícono plano gana. Cambiarlo era una regresión de legibilidad."
+    },
+    {
+      "file": "../../assets-source/emblems/alpha/*.png",
+      "description": "Renders alpha 512² de Meshy — la fuente de los WebP. Permiten re-correr process.mjs sin gastar créditos.",
+      "por_que_no_se_envia": "Son fuente, no runtime."
+    }
+  ],
+  "no_tocado": {
+    "splash-screen.tsx": "El splash es el primer paint y hoy no pide red (monograma + CSS). Meterle un raster arriesga un emblema en blanco justo en la primera impresión, para un público en 3G y iPhone SE (§3.4). Además su tile lleva `brandHex` del tenant, que un raster no puede replicar.",
+    "public/icons/*": "Ver `no_enviados`."
+  },
+  "costo": "8 emblemas × 39 créditos Meshy (9 concepto + 30 modelo) = 312 cr enviados. Con las 5 iteraciones del diamante, 2 de la estrella, el piloto PBR descartado y el emblema de marca no enviado: 585 cr gastados en total (balance 2340 -> 1755)."
 }

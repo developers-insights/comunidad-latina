@@ -6,6 +6,13 @@ export { BottomSheet, type BottomSheetProps } from "./bottom-sheet";
 export { Button, buttonVariants, type ButtonProps } from "./button";
 export { Chip, type ChipProps } from "./chip";
 export { Dialog, type DialogProps } from "./dialog";
+export {
+  Emblem,
+  EMBLEM_MIN_SIZE,
+  EMBLEM_SOURCES,
+  type EmblemName,
+  type EmblemProps,
+} from "./emblem";
 export { EmptyState, type EmptyStateProps } from "./empty-state";
 export { Field, type FieldProps } from "./field";
 export { Input, fieldControlClass, type InputProps } from "./input";

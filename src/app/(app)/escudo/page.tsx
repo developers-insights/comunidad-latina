@@ -6,10 +6,9 @@ import {
   Compass,
   Flag,
   IdentificationCard,
-  ShieldCheck,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
-import { BezelCard } from "@/components/ui";
+import { BezelCard, Emblem } from "@/components/ui";
 
 /**
  * Hub del Escudo Anti-Estafa (moat §3): verificación DETERMINÍSTICA contra
@@ -95,12 +94,10 @@ export default function EscudoPage() {
     <div className="flex flex-col gap-6">
       {/* Hero compacto */}
       <header className="flex flex-col items-center gap-3 pt-2 text-center">
-        <span
-          aria-hidden="true"
-          className="flex size-16 items-center justify-center rounded-full bg-success-bg text-success"
-        >
-          <ShieldCheck size={34} weight="fill" />
-        </span>
+        {/* El emblema del moat, en su casa. Sin el círculo verde de antes: un
+            escudo verde sobre un disco verde se apelmaza. `priority` porque es
+            lo único visual sobre el pliegue — son ~10 KB, no mueve el LCP. */}
+        <Emblem name="escudo-check" size={88} priority />
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           {COPY.title}
         </h1>

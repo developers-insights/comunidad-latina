@@ -1,6 +1,6 @@
-import { CheckCircle, XCircle } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { BezelCard } from "@/components/ui/bezel-card";
+import { Emblem } from "@/components/ui/emblem";
 
 /**
  * Resultado del verificador de profesionales (Escudo Anti-Estafa, §3.3):
@@ -38,21 +38,10 @@ export function VerificationCard({
       coreClassName="flex flex-col items-center gap-3 px-6 py-8 text-center"
       role="status"
     >
-      {found ? (
-        <CheckCircle
-          size={48}
-          weight="fill"
-          aria-hidden="true"
-          className="text-success"
-        />
-      ) : (
-        <XCircle
-          size={48}
-          weight="fill"
-          aria-hidden="true"
-          className="text-danger"
-        />
-      )}
+      {/* Sello 3D: el resultado de consultar un registro oficial se lee como un
+          sello, no como un ícono de sistema. Binario y grande (§3.3) — verde o
+          rojo, nunca un gris que deje duda. */}
+      <Emblem name={found ? "sello-check" : "sello-x"} size={72} />
 
       {found ? (
         <>

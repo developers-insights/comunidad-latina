@@ -1,7 +1,41 @@
 # PROGRESS — Comunidad Latina
 
-**Última actualización:** 2026-07-07 (sesión de construcción con Fable 5 ultracode, continuación).
-**Estado:** ✅ **R0 + R1 + R2 + R3 CONSTRUIDOS + REVISIÓN INTEGRAL + POLISH PREMIUM.** Producto completo listo para los gates humanos. 47 rutas.
+**Última actualización:** 2026-07-08 (sesión de assets 3D premium).
+**Estado:** ✅ **R0 + R1 + R2 + R3 CONSTRUIDOS + REVISIÓN INTEGRAL + POLISH PREMIUM + EMBLEMAS 3D.** Producto completo listo para los gates humanos. 47 rutas.
+
+## Emblemas 3D premium (✅ 2026-07-08)
+
+**8 emblemas 3D** generados con Meshy (REST; el MCP está roto en Windows — ver [MESHY-MCP-SETUP.md](MESHY-MCP-SETUP.md))
+y cableados en las superficies de confianza. Pipeline reproducible en [`assets-source/emblems/`](../assets-source/emblems/).
+
+- **Pipeline:** `text-to-image` (nano-banana-pro, concepto art-dirigido) → `image-to-3d` (meshy-6, malla+textura)
+  → `alpha_thumbnail` (render 512² RGBA, fondo transparente) → sharp → **WebP 256², ~9 KB c/u (96 KB los 8)**.
+  Nada de 3D en vivo: el 3D genera el modelo, se envía un raster. Público en 3G y gama baja (§3.4).
+- **Cableado:** hero de `/escudo` (88px, `priority`) · `ScamShieldNotice` (40px, lazy) · `VerificationCard`
+  (72px, sello verde/rojo) · `TrustScoreBadge` variante card (32px) · `TrustScoreSheet` (72px, momento "level-up").
+- **Umbral `EMBLEM_MIN_SIZE = 28px`**: debajo de eso sigue el ícono Phosphor de línea (§2.6). El badge inline
+  (14px) no cambió — un render 3D a esa escala es puré. El fallback de línea **no es degradación**: es la
+  representación correcta en su tamaño. `AnimatedNumber` intacto.
+- **Regla dura descubierta:** un raster **no puede llevar el color de marca** (varía por tenant: #1A5EDB vs
+  #C2410C). Por eso ningún emblema lo usa — solo neutros + semánticos, fijos por guardrail (§6). El diamante
+  es cristal incoloro por esa razón, aunque el nivel se tiña con `text-brand`.
+- **Un objeto, un significado:** el nivel "Confiable" reutiliza el mismo escudo verde que el hero del Escudo
+  Anti-Estafa. Un escudo verde es "protegido" en todo el producto.
+- **Costo:** 585 cr (2340 → 1755). El diamante necesitó 5 iteraciones: `image-to-3d` no reconstruye gemas
+  transparentes, y el `LOOK` compartido decía "collectible enamel pin", que convierte una gema en una placa
+  con engaste. Se resolvió pidiendo un sólido facetado opaco.
+
+**Decisiones de NO hacer** (documentadas en [`public/brand/MANIFEST.json`](../public/brand/MANIFEST.json)):
+- **Splash sin tocar.** Es el primer paint y hoy no pide red (monograma + CSS). Un raster ahí arriesga un
+  emblema en blanco en la primera impresión, con conexión pobre. Además su tile lleva el `brandHex` del tenant.
+- **Ícono PWA sin tocar.** Se renderizaron ambos candidatos a 48px (tamaño real de launcher): el escudo 3D
+  inclinado achica el "CL" hasta volverlo una mancha. El squircle plano actual gana. El emblema de marca 3D
+  quedó archivado en `assets-source/brand-raster/brand-emblem-3d.png`.
+- **🔎 Hallazgo:** `<BrandMark>` (`src/components/experience/brand-mark.tsx`) **no se usa en ningún lado** —
+  es código muerto. El MANIFEST anterior afirmaba que vivía en el header y el splash; era falso. Decidir:
+  darle un hogar o borrarlo.
+
+Gates: `tsc` 0 · `build` verde · 12 tests · `lint` 0 errores · smoke-test visual a 375px (/escudo, aviso anti-estafa, hoja del Trust Score).
 
 ## Revisión integral + Polish premium (✅ 2026-07-07)
 - **Revisión integral**: 6 fiscales adversariales en paralelo (correctness, seguridad+anti-honeypot, UX premium, performance, arquitectura, accesibilidad) → 23 findings únicos aplicados (5 críticos, 8 mayores, 10 menores).
@@ -56,7 +90,7 @@
 3. **Hardening menor (requiere Dashboard — `storage.objects` lo posee `supabase_storage_admin`, ni el MCP ni el rol `postgres` pueden tocarlo):** (a) **listado de buckets** — SQL listo en [`supabase/manual/harden-storage-listing.sql`](../supabase/manual/harden-storage-listing.sql), pegar en Dashboard → SQL Editor (scopea el SELECT/list al dueño; cierra la enumeración de user_ids vía `avatars`; el acceso público por URL no se ve afectado; hoy buckets vacíos → riesgo 0); (b) **Leaked Password Protection** (HaveIBeenPwned) en Dashboard → Auth → Providers → Password (toggle, 1 click). Ambos van en el mismo pase que el pentest/firma senior.
 4. **Siguiente construcción:** **R4** (2º dominio real + Playbook de Nacimiento de Tenant) / **R5** (moonshots). Requiere decisiones de Geovanny §16. El "Asistente de Trámites" sigue vetado hasta abogado (UPL).
 5. Deuda técnica menor: renombrar `middleware`→`proxy` (deprecación Next 16), E2E de mensajería (gate §5.4, hoy TTL 90d), CA cert para el enumerador en CI (`SUPABASE_DB_CA_CERT_PATH`). (Ya resueltos por la revisión integral: `metadataBase` en layout ✓, `lib/trust/signals` como fuente única ✓.)
-6. **MCP de Meshy** (3D premium) — NO conectado. Instrucciones en [`docs/MESHY-MCP-SETUP.md`](MESHY-MCP-SETUP.md): key en https://www.meshy.ai/settings/api → `npx add-mcp @meshy-ai/meshy-mcp-server --env MESHY_API_KEY=msy_...`. Placeholder ya en `.env.local`. Alternativa ya activa: Blender MCP (Hyper3D/Hunyuan3D).
+6. **MCP de Meshy** — la key funciona, pero el server **no arranca en Windows**: `~/.claude.json` usa `"command": "npx"` y `npx` es un `.cmd` (`spawn ENOENT`). Fix de una línea (`cmd /c npx`) + reinicio, en [`docs/MESHY-MCP-SETUP.md`](MESHY-MCP-SETUP.md). Mientras tanto el pipeline de emblemas pega contra la REST API directo y es reproducible ([`assets-source/emblems/`](../assets-source/emblems/)).
 
 ## Cómo correr
 ```

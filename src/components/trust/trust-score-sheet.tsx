@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CheckCircle, Circle } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { TrustLevelMark } from "./trust-level-mark";
 import {
   levelSegments,
   TRUST_LEVELS,
@@ -47,6 +48,10 @@ export function TrustScoreSheet({
   return (
     <BottomSheet open={open} onClose={onClose} title={`Trust Score de ${name}`}>
       <div className="flex flex-col items-center gap-2 py-4">
+        {/* El momento "level-up": acá el nivel es el protagonista, no un adorno
+            junto al número. Emblema 3D grande; la hoja abre por tap, así que
+            nunca compite con el LCP de la pantalla. */}
+        <TrustLevelMark level={level} size={72} className="mb-1" />
         <span
           aria-hidden="true"
           className="flex items-center gap-1.5"
@@ -70,6 +75,7 @@ export function TrustScoreSheet({
             config.textClass,
           )}
         >
+          {/* Ícono de línea a escala de texto (§2.6) — el emblema ya está arriba. */}
           <config.Icon size={16} aria-hidden="true" />
           Nivel: {config.label}
         </p>

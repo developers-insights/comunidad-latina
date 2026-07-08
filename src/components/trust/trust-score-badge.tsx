@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/motion";
+import { TrustLevelMark } from "./trust-level-mark";
 import {
   levelSegments,
   TRUST_LEVELS,
@@ -53,11 +54,9 @@ export function TrustScoreBadge({
           isCard ? "gap-2.5" : "gap-1.5",
         )}
       >
-        <config.Icon
-          size={isCard ? 20 : 14}
-          aria-hidden="true"
-          className={cn("shrink-0", config.textClass)}
-        />
+        {/* card: emblema 3D del nivel (hay superficie para leerlo como objeto).
+            inline: ícono de línea a escala de texto — un render a 14px es puré. */}
+        <TrustLevelMark level={level} size={isCard ? 32 : 14} />
         {/* Barra de 5 segmentos */}
         <span
           aria-hidden="true"
