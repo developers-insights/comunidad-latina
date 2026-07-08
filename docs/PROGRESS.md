@@ -1,12 +1,19 @@
 # PROGRESS — Comunidad Latina
 
-**Última actualización:** 2026-07-08 (merge de 5 agentes + push + deploy).
+**Última actualización:** 2026-07-08 (2ª tanda de agentes: impresión + a11y + theme toggle).
 **Estado:** ✅ **R0 + R1 + R2 + R3 + REVISIÓN INTEGRAL + POLISH + EMBLEMAS 3D + GUARD DE TENANT + DESIGN TOKENS.** Producto completo listo para los gates humanos. 53 rutas.
 
 ## Merge integral + push + deploy (✅ 2026-07-08)
 
-`main` = `cd7b2dd`, pusheado a `INSIGHTSAPPS/comunidad-latina` (privado) y desplegado a
-https://comunidad-latina-taupe.vercel.app. Gates: `tsc` 0 · `lint` 0 errores · **272 tests** · `build` verde (53 rutas).
+`main` = `b5a7493`, pusheado a `INSIGHTSAPPS/comunidad-latina` (privado) y desplegado a
+https://comunidad-latina-taupe.vercel.app. Gates: `tsc` 0 · `lint` 0 errores · **760 tests** · `build` verde.
+
+**2ª tanda (`agents/print-y-a11y`, `b5a7493`)** — 30 archivos, +2686/−254. Los agentes siguieron trabajando
+~10 min después del primer deploy, otra vez sin commitear. Hoja de impresión (12 bloques `@media print` +
+`cl-print-hide` en 13 superficies de chrome), 53 atributos `aria-*` nuevos, `theme-toggle.tsx`, y cuatro suites
+de tests (contraste WCAG de tokens, invariantes de tema, contrato de impresión, toggle). Tests: 272 → **760**.
+Verificado en prod: el toggle voltea el `--color-focus-ring` de `#9c3104` (light) a un tinte casi blanco de la
+marca (dark), sobre canvas `#17150f`.
 
 Se unieron dos líneas de trabajo paralelas:
 
