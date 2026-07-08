@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Camera, PaperPlaneRight, Question, X } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Button, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { createPostAction } from "@/app/(app)/feed/actions";
 import { COPY } from "./copy";
 
@@ -102,6 +103,15 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
 
       if (result.code === "unauthenticated") {
         router.push("/entrar?next=/feed");
+        return;
+      }
+      if (result.code === "tenant-mismatch") {
+        toast({
+          title: TENANT_GUARD_COPY.mismatchTitle,
+          description: result.message,
+          variant: "warning",
+          duration: 8000,
+        });
         return;
       }
       if (result.code === "photo") {

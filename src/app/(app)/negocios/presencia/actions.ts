@@ -7,7 +7,7 @@ import {
   montoCentavos,
   PLANES_PRESENCIA,
 } from "@/lib/stripe";
-import { createClient } from "@/lib/supabase/server";
+import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getTenant } from "@/lib/tenant/resolve";
 
 /** Copy de errores del módulo — cálido, sin jerga técnica. */
@@ -60,11 +60,15 @@ export async function iniciarSuscripcion(
     return { status: "no_configurado" };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { status: "sin_sesion" };
+  // Guard antes de crear la business_account y antes de abrir el Checkout: sin
+  // coincidencia de tenant la RLS rechaza el insert y quedaría una Session
+  // pagable sin cuenta detrás.
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") return { status: "sin_sesion" };
+    return { status: "error", message: guard.message };
+  }
+  const { supabase, user } = guard;
 
   const plan = PLANES_PRESENCIA[planId];
 

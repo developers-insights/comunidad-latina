@@ -1,8 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getTenant } from "@/lib/tenant/resolve";
+import { requireTenantMatch } from "@/lib/tenant/guard";
 import { formatDate } from "@/lib/utils";
 
 /**
@@ -77,8 +76,16 @@ export async function verificarLicenciaAction(
 
   const { kind, license } = parsed.data;
 
-  const tenant = await getTenant();
-  const supabase = await createClient();
+  // El verificador acepta consultas ANÓNIMAS, así que solo cortamos ante una
+  // divergencia real. Con el tenant del header ≠ el del JWT, la RLS de
+  // verification_checks devuelve cero filas y el verificador contestaría
+  // "registro no conectado" sobre una matrícula que sí está verificada:
+  // inventar (o negar) un resultado está prohibido por §11 del contrato.
+  const guard = await requireTenantMatch();
+  if (!guard.ok && guard.reason === "tenant-mismatch") {
+    return { status: "error", message: guard.message };
+  }
+  const { tenant, supabase, user } = guard;
 
   const { data: check, error } = await supabase
     .from("verification_checks")
@@ -120,10 +127,6 @@ export async function verificarLicenciaAction(
   // insertar al pipeline server-side (with check false para JWT de usuario):
   // si rechaza, degradamos a log (§5.6) — nunca rompemos ni inventamos.
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
     if (user) {
       const { error: queueError } = await supabase
         .from("moderation_queue")

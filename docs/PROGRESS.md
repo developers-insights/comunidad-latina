@@ -1,7 +1,66 @@
 # PROGRESS — Comunidad Latina
 
-**Última actualización:** 2026-07-08 (sesión de assets 3D premium).
-**Estado:** ✅ **R0 + R1 + R2 + R3 CONSTRUIDOS + REVISIÓN INTEGRAL + POLISH PREMIUM + EMBLEMAS 3D.** Producto completo listo para los gates humanos. 47 rutas.
+**Última actualización:** 2026-07-08 (guard de divergencia de tenant).
+**Estado:** ✅ **R0 + R1 + R2 + R3 CONSTRUIDOS + REVISIÓN INTEGRAL + POLISH PREMIUM + EMBLEMAS 3D + GUARD DE TENANT.** Producto completo listo para los gates humanos. 47 rutas.
+
+## Deploy de demo en producción (⚠️ 2026-07-08)
+
+**URL:** https://comunidad-latina-taupe.vercel.app · proyecto Vercel `comunidad-latina` (team `manuels-projects-66819a23`).
+`comunidad-latina.vercel.app` estaba tomado por otra cuenta.
+
+> ⚠️ **Los gates humanos del pendiente #1 SIGUEN ABIERTOS.** Esto es una URL de demo, decidida a conciencia,
+> apuntando a la base REAL (`ktmbtpuhqqofdkisqseq`). No es un go-live. No cargar datos de personas reales.
+
+- **URL pública, sin protección de deployment.** Se desactivó `ssoProtection` (venía en `all_except_custom_domains`,
+  que dejaba todo detrás del SSO de Vercel y el cliente no podía abrirlo). Para volver a cerrarla:
+  `PATCH /v9/projects/<id> {"ssoProtection":{"deploymentType":"all_except_custom_domains"}}`.
+- **`framework` era `null`** (el proyecto se creó con `vercel project add`, sin preset) → Vercel no aplicaba el
+  routing de Next y **todo daba 404** aunque el build fuera verde. Corregido a `nextjs`.
+- **Env de producción: solo 7 vars reales.** Stripe/Resend/Vision/Sentry quedan **sin setear** a propósito → los
+  flags de `lib/config/services.ts` dan `false` y la degradación elegante funciona (verificado: el botón de plan
+  abre "Muy pronto — Estamos terminando de configurar los pagos").
+  ⚠️ En `.env.local` esas llaves son comentarios (`STRIPE_SECRET_KEY=  # sk_test_…`) y `@next/env` los recorta a `""`.
+  **Si se pegan literales en el dashboard de Vercel, `Boolean()` da `true` y la degradación muere.**
+- **`robots.txt` → `Disallow: /`** en cualquier host que no sea un dominio real (ver `src/app/robots.ts`).
+- **Limitación de la demo:** en producción `isProduction` mata `MODERATION_DEV_AUTO_APPROVE` y Vision no está
+  configurado → **todo listing nace `pending_review`**. Para que aparezca hay que aprobarlo en `/admin/moderacion`
+  (entrar como `carlos` o `geovanny`). Los posts de texto del feed sí se publican al toque.
+- **Sin push a GitHub:** el remote `INSIGHTSAPPS/comunidad-latina` pide credenciales interactivas. El deploy sube
+  archivos locales, no depende de Git. Commit local: `e26a406`.
+- Credenciales demo: rotadas, fuera del repo (ver "Datos demo").
+
+## Guard de divergencia de tenant (✅ 2026-07-08)
+
+El tenant del REQUEST (header `x-tenant-slug`, del Host o de `?t=`) y el del USUARIO (JWT
+`app_metadata.tenant_id`, lo único que gobierna la RLS) podían divergir sin que nada lo verificara.
+**En producción es inalcanzable** (dominios registrables distintos → las cookies de sesión no cruzan);
+afectaba dev y previews de Vercel, donde `?t=` es el único modo de cambiar de comunidad.
+
+- **Regla pura** en [`src/lib/tenant/match.ts`](../src/lib/tenant/match.ts) (`classifyTenantMatch`) + **cableado**
+  en [`src/lib/tenant/guard.ts`](../src/lib/tenant/guard.ts) (`requireTenantMatch`, `server-only`, espejo de
+  `app/admin/guard.ts`). 27 tests nuevos (39 en total).
+- **Trampa del fallback:** `getTenant()` degrada a un `id` PLACEHOLDER cuando la DB no responde o el slug no
+  existe. Compararlo contra el JWT convertía un hipo de infra —o un `?t=` mal tipeado— en "estás en la comunidad
+  equivocada". Nuevo campo `Tenant.isFallback` → estado `tenant-unavailable` con el copy genérico de §7.
+  **Nunca afirmar de más.**
+- **La lectura NO se bloquea** (cross-tenant a propósito por SEO, policy `listings_select`): solo escrituras.
+  Aviso no-bloqueante `<TenantMismatchBanner>` en el shell de `(app)/`, con vuelta en un click.
+  **Se muestra a todos los roles**, incluido `global_admin`: `listings_insert` no tiene escape para staff
+  (solo `listings_update`), así que en otro tenant tampoco puede publicar — el aviso también es cierto para él.
+- **8 paths cubiertos.** Además de las 6 escrituras (listings, listing_private_details, posts, comments,
+  reactions, business_accounts), dos que **mentían** bajo divergencia: `impulsar` decía *"Solo el dueño puede
+  impulsarlo"* sobre un aviso propio, y el **verificador del Escudo** decía *"registro no conectado"* sobre una
+  matrícula sí verificada (contradecía §11: nunca inventar ni negar un resultado).
+- **🐛 Bug real corregido (reproducido y verificado en vivo):** `createPostAction` subía la foto con el **admin
+  client** (bypassea la RLS de storage) al prefijo `{tenant_id}` del **tenant equivocado**, y recién después la
+  RLS rechazaba el insert de `posts` → **archivo huérfano, sin fila, sin audit_log**. Por eso el guard corre
+  ANTES de todo efecto colateral (rate limit, storage, Stripe), y no como traducción del error de RLS.
+  Medido con service-role: **sin guard 1 objeto huérfano; con guard 0.** Happy path intacto (posts 3 → 4).
+- **Gotcha de testing:** se agregó [`vitest.config.ts`](../vitest.config.ts) (no existía) con el alias `@/*` y un
+  stub de `server-only` (`src/test/`), que fuera de un render RSC lanza a propósito.
+
+Gates: `tsc` 0 · `lint` 0 errores · **39 tests** · `build` verde (47 rutas) · smoke-test en vivo con
+`maria@demo` (Dominicanos) navegando `?t=comunidadlatina`.
 
 ## Emblemas 3D premium (✅ 2026-07-08)
 
@@ -81,7 +140,10 @@ Gates: `tsc` 0 · `build` verde · 12 tests · `lint` 0 errores · smoke-test vi
 
 ## Datos demo
 - Tenants: `dominicanos` (#1A5EDB) y `comunidadlatina` (#C2410C). En dev: `http://localhost:3000/?t=dominicanos`.
-- Usuarios (password `Demo123!demo`): `maria@demo.comunidadlatina.com` (member) · `carlos@...` (domain_admin) · `geovanny@...` (global_admin).
+- Usuarios: `maria@demo.comunidadlatina.com` (member) · `carlos@...` (domain_admin) · `geovanny@...` (global_admin).
+  **La password NO se documenta acá** (2026-07-08): la vieja `Demo123!demo` estaba en el repo y uno de los tres
+  es `global_admin` sobre la MISMA base que usa cualquier deploy → cualquiera con la URL entraba al panel global.
+  Rotadas y fuera del repo. El seed ahora exige `SEED_DEMO_PASSWORD` en `.env.local` y aborta sin ella.
 - 9 listings de Queens, 3 guías con fuentes oficiales, 5 posts + comentarios + reacciones, 1 verification_check.
 
 ## Pendientes (en orden)

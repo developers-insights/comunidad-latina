@@ -13,7 +13,33 @@ function baseUrl(): string {
   return (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 }
 
+/**
+ * Solo los dominios REALES del producto se indexan (los mismos de DOMAIN_TENANTS
+ * en `lib/tenant/resolve.ts`). Un deploy de demo en `*.vercel.app`, un preview o
+ * localhost, jamás: indexarlos generaría contenido duplicado que le compite al
+ * dominio real — justo el SEO que motiva la lectura cross-tenant de `listings_select`.
+ */
+const INDEXABLE_HOSTS = new Set([
+  "dominicanos.com",
+  "www.dominicanos.com",
+  "comunidadlatina.com",
+  "www.comunidadlatina.com",
+]);
+
+function isIndexable(): boolean {
+  try {
+    return INDEXABLE_HOSTS.has(new URL(baseUrl()).hostname.toLowerCase());
+  } catch {
+    return false; // NEXT_PUBLIC_SITE_URL mal formada → no indexar (fail-closed).
+  }
+}
+
 export default function robots(): MetadataRoute.Robots {
+  // Demo / preview / local → nada de crawling, y sin sitemap que seguir.
+  if (!isIndexable()) {
+    return { rules: [{ userAgent: "*", disallow: "/" }] };
+  }
+
   return {
     rules: [
       {

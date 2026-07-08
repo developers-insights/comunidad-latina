@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { PaperPlaneRight } from "@phosphor-icons/react/dist/ssr";
 import { Spinner, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { createCommentAction } from "@/app/(app)/feed/actions";
 import { COPY } from "./copy";
 
@@ -48,6 +49,15 @@ export function CommentComposer({ postId }: { postId: string }) {
       }
       if (result.code === "unauthenticated") {
         router.push(`/entrar?next=${encodeURIComponent(`/feed/${postId}`)}`);
+        return;
+      }
+      if (result.code === "tenant-mismatch") {
+        toast({
+          title: TENANT_GUARD_COPY.mismatchTitle,
+          description: result.message,
+          variant: "warning",
+          duration: 8000,
+        });
         return;
       }
       if (result.code === "flagged") {

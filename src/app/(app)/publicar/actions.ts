@@ -2,9 +2,8 @@
 
 import { z } from "zod";
 import { limit, DAY_MS } from "@/lib/rate-limit";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getTenant } from "@/lib/tenant/resolve";
+import { requireTenantMatch } from "@/lib/tenant/guard";
 import { isVisionConfigured } from "@/lib/config/services";
 
 /**
@@ -78,31 +77,39 @@ export type CreateDraftResult =
   | { ok: true; listingId: string }
   | { ok: false; error: string; needsAuth?: boolean };
 
-const GENERIC_ERROR =
-  "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo en un ratito.";
+const COPY = {
+  invalid: "Revisá los datos del aviso — hay algo incompleto.",
+  needsAuth: "Para publicar necesitás entrar a tu cuenta.",
+  tooManyToday:
+    "Ya creaste varios avisos hoy. Para cuidar la calidad del directorio, esperá hasta mañana para publicar otro.",
+  genericError:
+    "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo en un ratito.",
+} as const;
+
+const GENERIC_ERROR = COPY.genericError;
 
 export async function createListingDraft(rawInput: DraftInput): Promise<CreateDraftResult> {
   const parsed = draftSchema.safeParse(rawInput);
   if (!parsed.success) {
-    return { ok: false, error: "Revisá los datos del aviso — hay algo incompleto." };
+    return { ok: false, error: COPY.invalid };
   }
   const input = parsed.data;
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { ok: false, needsAuth: true, error: "Para publicar necesitás entrar a tu cuenta." };
+  // Guard ANTES del rate limit: si el tenant del JWT no coincide con el del
+  // header, la RLS va a rechazar el insert — no le quemamos la cuota diaria
+  // al usuario por una escritura que no podía prosperar.
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") {
+      return { ok: false, needsAuth: true, error: COPY.needsAuth };
+    }
+    return { ok: false, error: guard.message };
   }
+  const { tenant, supabase, user } = guard;
 
   // Rate limit: 10 publicaciones/día por usuario (anti-flood de avisos).
   if (!limit(`publicar:${user.id}`, 10, DAY_MS).ok) {
-    return {
-      ok: false,
-      error:
-        "Ya creaste varios avisos hoy. Para cuidar la calidad del directorio, esperá hasta mañana para publicar otro.",
-    };
+    return { ok: false, error: COPY.tooManyToday };
   }
 
   const attrs: Record<string, string | number> = {};
@@ -186,13 +193,14 @@ export async function finalizeListing(rawInput: {
   }
   const { listingId, photoPaths } = parsed.data;
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { ok: false, needsAuth: true, error: "Para publicar necesitás entrar a tu cuenta." };
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") {
+      return { ok: false, needsAuth: true, error: COPY.needsAuth };
+    }
+    return { ok: false, error: guard.message };
   }
+  const { tenant, supabase, user } = guard;
 
   // Paths canónicos {tenant_id}/{listing_id}/{archivo} — nada fuera del folder del aviso.
   const pathPattern = new RegExp(
