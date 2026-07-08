@@ -220,7 +220,7 @@ export function LoginForm({
         {COPY.noAccount}{" "}
         <Link
           href="/registro"
-          className="font-semibold text-brand underline-offset-4 hover:underline"
+          className="font-semibold text-brand-ink underline-offset-4 hover:underline"
         >
           {COPY.goRegister}
         </Link>

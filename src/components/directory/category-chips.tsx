@@ -54,10 +54,10 @@ export function CategoryChips({ className }: { className?: string }) {
             className={cn(
               "min-h-11 shrink-0 whitespace-nowrap rounded-full border px-4 text-sm font-semibold",
               "transition-[background-color,border-color,color,transform] duration-(--duration-fast) ease-(--ease-spring)",
-              "active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+              "active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
               selected
-                ? "border-brand bg-brand-50 text-brand-700"
-                : "border-border bg-surface text-foreground-secondary hover:border-neutral-300",
+                ? "border-brand bg-brand-tint text-brand-ink"
+                : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
             )}
           >
             {option.label}

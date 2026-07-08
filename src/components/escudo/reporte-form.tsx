@@ -85,9 +85,9 @@ const KIND_ICONS: Record<TargetKind, Icon> = {
 const optionCardClass = cn(
   "flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3",
   "transition-[border-color,background-color] duration-(--duration-fast) ease-(--ease-out-premium)",
-  "hover:border-neutral-300 dark:hover:border-neutral-600",
-  "has-[:checked]:border-brand has-[:checked]:bg-brand-50",
-  "has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-[var(--color-brand-200)]",
+  "hover:border-border-strong",
+  "has-[:checked]:border-brand has-[:checked]:bg-brand-tint",
+  "has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-focus-ring",
 );
 
 function ReporteExitoso() {
@@ -111,7 +111,7 @@ function ReporteExitoso() {
       </p>
       <Link
         href="/escudo"
-        className="mt-2 inline-flex h-11 items-center rounded-md bg-surface-subtle px-5 text-sm font-semibold text-foreground transition-colors duration-(--duration-fast) hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)] dark:hover:bg-neutral-700/60"
+        className="mt-2 inline-flex h-11 items-center rounded-md bg-surface-subtle px-5 text-sm font-semibold text-foreground transition-colors duration-(--duration-fast) hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
       >
         {COPY.successBack}
       </Link>
@@ -172,7 +172,7 @@ export function ReporteForm({
                 aria-hidden="true"
                 className={cn(
                   "shrink-0",
-                  kind === value ? "text-brand-700" : "text-foreground-muted",
+                  kind === value ? "text-brand-ink" : "text-foreground-muted",
                 )}
               />
               <span className="min-w-0">
@@ -260,9 +260,9 @@ export function ReporteForm({
               className={cn(
                 "inline-flex h-11 cursor-pointer items-center rounded-full border border-border bg-surface px-4 text-sm font-medium text-foreground-secondary",
                 "transition-[border-color,background-color,color] duration-(--duration-fast) ease-(--ease-out-premium)",
-                "hover:border-neutral-300 dark:hover:border-neutral-600",
-                "has-[:checked]:border-brand has-[:checked]:bg-brand-50 has-[:checked]:text-brand-700",
-                "has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-[var(--color-brand-200)]",
+                "hover:border-border-strong",
+                "has-[:checked]:border-brand has-[:checked]:bg-brand-tint has-[:checked]:text-brand-ink",
+                "has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-focus-ring",
               )}
             >
               <input

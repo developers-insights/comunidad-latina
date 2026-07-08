@@ -228,7 +228,7 @@ export function AssistantChat({ isAnon, initialAnonRemaining }: AssistantChatPro
         <div className="flex flex-col items-center gap-3 px-2 pb-6 pt-6 text-center">
           <span
             aria-hidden="true"
-            className="flex size-20 items-center justify-center rounded-full bg-brand-50 text-brand-700"
+            className="flex size-20 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
           >
             <Compass size={40} weight="light" />
           </span>
@@ -254,8 +254,8 @@ export function AssistantChat({ isAnon, initialAnonRemaining }: AssistantChatPro
                 className={cn(
                   "min-h-11 rounded-md border border-border bg-surface px-4 py-3 text-left text-sm text-foreground shadow-xs",
                   "transition-[transform,border-color,background-color] duration-(--duration-fast) ease-(--ease-spring)",
-                  "hover:border-brand-300 hover:bg-brand-50/40 active:scale-[0.98]",
-                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+                  "hover:border-brand-subtle hover:bg-brand-tint/40 active:scale-[0.98]",
+                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
                 )}
               >
                 “{suggestion}”

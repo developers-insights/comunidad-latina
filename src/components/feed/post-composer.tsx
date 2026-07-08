@@ -169,9 +169,11 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
                 onClick={clearPhoto}
                 aria-label={COPY.composer.removePhoto}
                 className={cn(
-                  "absolute right-2 top-2 flex size-9 items-center justify-center rounded-full bg-neutral-900/70 text-white",
+                  // Flota sobre la preview de la foto → tokens de media, constantes
+                  // en ambos temas: el velo no se aclara con el tema light.
+                  "absolute right-2 top-2 flex size-9 items-center justify-center rounded-full bg-media-scrim text-on-media",
                   "transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.92]",
-                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-white/60",
+                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60",
                 )}
               >
                 <X size={18} aria-hidden="true" />
@@ -199,7 +201,7 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
             "flex size-11 items-center justify-center rounded-md text-foreground-secondary",
             "transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring)",
             "hover:bg-surface-subtle active:scale-[0.94]",
-            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
             "disabled:pointer-events-none disabled:opacity-45",
           )}
         >
@@ -216,7 +218,7 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
             "flex min-h-11 select-none items-center gap-1.5 rounded-md px-3 text-sm font-medium",
             "transition-[transform,background-color,color] duration-(--duration-fast) ease-(--ease-spring)",
             "active:scale-[0.96]",
-            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
             "disabled:pointer-events-none disabled:opacity-45",
             isQuestion
               ? "bg-info-bg text-info"

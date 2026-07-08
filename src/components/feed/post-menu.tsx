@@ -87,7 +87,7 @@ export function PostMenu({ postId, viewerId }: PostMenuProps) {
           "flex size-11 shrink-0 items-center justify-center rounded-md text-foreground-secondary",
           "transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring)",
           "hover:bg-surface-subtle active:scale-[0.94]",
-          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
         )}
       >
         <DotsThree size={22} weight="bold" aria-hidden="true" />
@@ -130,7 +130,7 @@ export function PostMenu({ postId, viewerId }: PostMenuProps) {
                     "flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-4 py-2.5 text-sm",
                     "transition-colors duration-(--duration-fast)",
                     selected
-                      ? "border-brand-200 bg-brand-50 font-medium text-brand-800"
+                      ? "border-brand-subtle bg-brand-tint font-medium text-brand-ink"
                       : "border-border bg-surface text-foreground hover:bg-surface-subtle",
                   )}
                 >

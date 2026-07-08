@@ -5,6 +5,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { brandThemeToStyle } from "@/lib/tenant/brand-pipeline";
 import { ToastProvider } from "@/components/ui/toast";
 import { SplashScreen } from "@/components/experience/splash-screen";
+import { DARK_THEME_COLOR, ThemeColorSync, ThemeScript } from "@/components/theme";
 import "./globals.css";
 
 // Display: General Sans variable (Fontshare), self-hosted en src/fonts/
@@ -50,16 +51,25 @@ export const metadata: Metadata = {
   },
 };
 
-// theme-color por tenant: tiñe la barra del navegador / status bar móvil con la
-// marca del tenant (premium multi-tenant). El hex real lo da la DB; el fallback
-// resuelve al azul default. Se calcula por request como el resto del theming.
+// theme-color: tiñe la barra del navegador / status bar del celular.
+//   · light → la marca del tenant (premium multi-tenant).
+//   · dark  → el canvas oscuro; con la marca quedaba una franja de color arriba
+//             de una app oscura.
+// Las dos metas con `media` hacen que el server ya acierte sin JS. Sus `media`
+// siguen al SO, no al toggle, así que <ThemeScript /> las reemplaza por una sola
+// meta con el tema RESUELTO antes del primer paint, y <ThemeColorSync /> pisa el
+// content cuando el usuario cambia de tema en caliente.
+// Ref: node_modules/next/dist/docs/01-app/03-api-reference/04-functions/generate-viewport.md
 export async function generateViewport(): Promise<Viewport> {
   const tenant = await getTenant();
   return {
     width: "device-width",
     initialScale: 1,
     viewportFit: "cover",
-    themeColor: tenant.brandHex,
+    themeColor: [
+      { media: "(prefers-color-scheme: light)", color: tenant.brandHex },
+      { media: "(prefers-color-scheme: dark)", color: DARK_THEME_COLOR },
+    ],
   };
 }
 
@@ -70,7 +80,8 @@ export default async function RootLayout({
 }>) {
   const tenant = await getTenant();
   // Capa 3 del design system: el hex del tenant pasa por el brand pipeline y
-  // pisa las variables --color-brand-* definidas en globals.css.
+  // pisa las variables --color-brand-* / --brand-light-* / --brand-dark-* de
+  // globals.css. Se inyecta ACÁ Y SOLO ACÁ: los layouts hijos NO deben repetirlo.
   const brandStyle = brandThemeToStyle(tenant.brandHex);
 
   return (
@@ -80,11 +91,17 @@ export default async function RootLayout({
       className={`${generalSans.variable} ${jakarta.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        {/* Antes del primer paint: estampa .light/.dark en <html> y deja el
+            <meta name="theme-color"> en el color del tema resuelto. */}
+        <ThemeScript brandHex={tenant.brandHex} />
+      </head>
       <body className="flex min-h-full flex-col bg-canvas font-sans text-foreground">
         <ToastProvider>{children}</ToastProvider>
         {/* Splash de entrada premium: overlay que se desvanece encima del
             contenido ya hidratado (no bloquea el LCP), una vez por sesión. */}
         <SplashScreen brandHex={tenant.brandHex} name={tenant.name} />
+        <ThemeColorSync brandHex={tenant.brandHex} />
       </body>
     </html>
   );

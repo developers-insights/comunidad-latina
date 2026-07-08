@@ -152,8 +152,8 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
             className={cn(
               "flex w-16 shrink-0 flex-col items-center justify-center rounded-lg py-2.5",
               date && !date.isPast
-                ? "bg-brand-50 text-brand-700"
-                : "bg-surface-subtle text-foreground-muted",
+                ? "bg-brand-tint text-brand-ink"
+                : "bg-surface-subtle text-foreground-secondary",
             )}
           >
             {date ? (

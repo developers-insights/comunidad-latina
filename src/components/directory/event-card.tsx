@@ -46,8 +46,8 @@ export function EventCard({ event }: { event: EventCardModel }) {
             className={cn(
               "flex w-16 shrink-0 flex-col items-center justify-center rounded-lg py-2",
               event.date && !event.date.isPast
-                ? "bg-brand-50 text-brand-700"
-                : "bg-surface-subtle text-foreground-muted",
+                ? "bg-brand-tint text-brand-ink"
+                : "bg-surface-subtle text-foreground-secondary",
             )}
           >
             {event.date ? (
@@ -75,7 +75,7 @@ export function EventCard({ event }: { event: EventCardModel }) {
                 COPY.events.dateToConfirm
               )}
             </p>
-            <h3 className="mt-1 font-display text-base font-bold leading-snug text-foreground group-hover:text-brand-700">
+            <h3 className="mt-1 font-display text-base font-bold leading-snug text-foreground group-hover:text-brand-ink">
               {event.title}
             </h3>
             {event.venueArea && (
@@ -115,7 +115,7 @@ export function EventCard({ event }: { event: EventCardModel }) {
       <Link
         href={`/eventos/${event.id}`}
         aria-label={event.title}
-        className="absolute inset-0 rounded-[var(--radius-xl)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+        className="absolute inset-0 rounded-[var(--radius-xl)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
       />
     </div>
   );

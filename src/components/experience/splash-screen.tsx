@@ -11,12 +11,19 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
  * el contenido real vive detrás y su LCP no depende de este componente —
  * el splash simplemente se desvanece encima.
  *
- * - Monograma de marca (inicial del tenant + brandHex) que hace fade+scale
- *   con --ease-spring, un halo de marca que respira y el nombre revelándose.
+ * - Monograma de marca (inicial del tenant) que hace fade+scale con
+ *   --ease-spring, un halo de marca que respira y el nombre revelándose.
  * - Auto-dismiss ~1.1s; skippable con tap, click o cualquier tecla.
  * - prefers-reduced-motion: no aparece (retorno instantáneo, cero motion).
  * - aria-hidden + role presentacional: invisible para lectores de pantalla,
  *   no atrapa foco (nada focuseable dentro, pointer-events se liberan al irse).
+ *
+ * Tema: el overlay es `bg-canvas`, así que en dark arranca oscuro y NUNCA hay
+ * flash blanco al abrir la app. El acento sale de `var(--color-brand)` —el tono
+ * de marca del TEMA ACTIVO, ya validado por el brand pipeline— y no del hex
+ * crudo: en dark el monograma iba a quedar sobre el fill claro con un
+ * `text-brand-foreground` calculado para el fill oscuro. `brandHex` queda como
+ * fallback del var(), que es lo único que puede fallar acá.
  *
  * Recibe brandHex + name por props desde el layout: NO fetchea nada.
  */
@@ -123,7 +130,9 @@ export function SplashScreen({
               style={{
                 width: 132,
                 height: 132,
-                background: `radial-gradient(circle, ${brandHex}33 0%, transparent 70%)`,
+                // color-mix reemplaza al viejo `${brandHex}33` (alpha 0x33 = 20%):
+                // el hex crudo no se puede componer con una custom property.
+                background: `radial-gradient(circle, color-mix(in oklab, var(--color-brand, ${brandHex}) 20%, transparent) 0%, transparent 70%)`,
               }}
               initial={{ opacity: 0, scale: 0.6 }}
               animate={{ opacity: [0, 1, 0.7], scale: [0.6, 1.15, 1] }}
@@ -134,7 +143,7 @@ export function SplashScreen({
               style={{
                 width: 84,
                 height: 84,
-                background: brandHex,
+                background: `var(--color-brand, ${brandHex})`,
               }}
               initial={{ opacity: 0, scale: 0.7, y: 6 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -146,7 +155,11 @@ export function SplashScreen({
               >
                 {initial}
               </span>
-              {/* Shimmer de marca que barre el escudo una vez */}
+              {/* Shimmer de marca que barre el escudo una vez.
+                  El blanco NO es un color de UI: es un reflejo especular sobre el
+                  fill de marca (misma familia que el gloss del <BrandMark />). Una
+                  luz no se oscurece porque el usuario prendió el tema dark, así que
+                  es constante a propósito y no le corresponde token semántico. */}
               <motion.span
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 overflow-hidden rounded-[28px]"
@@ -183,7 +196,7 @@ export function SplashScreen({
           >
             <motion.span
               className="block h-full rounded-full"
-              style={{ background: brandHex }}
+              style={{ background: `var(--color-brand, ${brandHex})` }}
               initial={{ width: "0%" }}
               animate={{ width: "100%" }}
               transition={{ duration: VISIBLE_MS / 1000, ease: "linear" }}

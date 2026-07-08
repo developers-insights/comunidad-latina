@@ -365,10 +365,10 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
                   className={cn(
                     "flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-lg border p-3",
                     "transition-[border-color,background-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
-                    "active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+                    "active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
                     selected
-                      ? "border-brand bg-brand-50 text-brand-700"
-                      : "border-border bg-surface text-foreground-secondary hover:border-neutral-300",
+                      ? "border-brand bg-brand-tint text-brand-ink"
+                      : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
                   )}
                 >
                   <Icon size={26} weight={selected ? "fill" : "regular"} aria-hidden="true" />
@@ -577,7 +577,7 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
                   type="button"
                   aria-label={C.steps.photos.removeLabel}
                   onClick={() => removePhoto(index)}
-                  className="absolute right-1 top-1 flex size-8 items-center justify-center rounded-full bg-scrim text-white focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+                  className="absolute right-1 top-1 flex size-8 items-center justify-center rounded-full bg-media-scrim text-on-media focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
                 >
                   <X size={14} aria-hidden="true" />
                 </button>
@@ -591,8 +591,8 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
                 className={cn(
                   "flex aspect-square flex-col items-center justify-center gap-1.5 rounded-md",
                   "border border-dashed border-border text-foreground-muted",
-                  "transition-colors duration-(--duration-fast) hover:border-brand hover:text-brand",
-                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+                  "transition-colors duration-(--duration-fast) hover:border-brand hover:text-brand-ink",
+                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
                 )}
               >
                 <ImageSquare size={24} aria-hidden="true" />

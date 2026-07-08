@@ -59,7 +59,7 @@ function SourceCard({ source }: { source: AssistantSource }) {
   return (
     <Link
       href={source.href}
-      className="group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+      className="group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
     >
       <BezelCard coreClassName="flex items-center gap-3 p-3.5">
         <span className="min-w-0 flex-1">
@@ -108,7 +108,7 @@ function FeedbackRow({ queryId }: { queryId: string }) {
         type="button"
         onClick={() => vote(true)}
         aria-label={COPY.feedback.up}
-        className="touch-hitbox flex size-8 items-center justify-center rounded-full text-foreground-muted transition-[color,transform] duration-(--duration-fast) ease-(--ease-spring) hover:text-success active:scale-[0.9] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+        className="touch-hitbox flex size-8 items-center justify-center rounded-full text-foreground-muted transition-[color,transform] duration-(--duration-fast) ease-(--ease-spring) hover:text-success active:scale-[0.9] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
       >
         <ThumbsUp size={16} aria-hidden="true" />
       </button>
@@ -116,7 +116,7 @@ function FeedbackRow({ queryId }: { queryId: string }) {
         type="button"
         onClick={() => vote(false)}
         aria-label={COPY.feedback.down}
-        className="touch-hitbox flex size-8 items-center justify-center rounded-full text-foreground-muted transition-[color,transform] duration-(--duration-fast) ease-(--ease-spring) hover:text-danger active:scale-[0.9] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+        className="touch-hitbox flex size-8 items-center justify-center rounded-full text-foreground-muted transition-[color,transform] duration-(--duration-fast) ease-(--ease-spring) hover:text-danger active:scale-[0.9] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
       >
         <ThumbsDown size={16} aria-hidden="true" />
       </button>
@@ -128,7 +128,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
     return (
       <li className="flex justify-end">
-        <p className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-br-sm bg-brand-50 px-4 py-2.5 text-base text-foreground">
+        <p className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-br-sm bg-brand-tint px-4 py-2.5 text-base text-foreground">
           {message.text}
         </p>
       </li>
@@ -142,7 +142,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
       {/* Avatar propio del asistente: brújula, nunca "robot IA" genérico */}
       <span
         aria-hidden="true"
-        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-700"
+        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
       >
         <Compass size={18} />
       </span>

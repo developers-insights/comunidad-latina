@@ -8,7 +8,7 @@ export const fieldControlClass = cn(
   "w-full rounded-md border border-border bg-surface text-base text-foreground",
   "placeholder:text-placeholder",
   "transition-[border-color,box-shadow] duration-(--duration-fast) ease-(--ease-out-premium)",
-  "hover:border-neutral-300 dark:hover:border-neutral-600",
+  "hover:border-border-strong",
   "focus-visible:border-brand",
   "disabled:cursor-not-allowed disabled:opacity-50",
   "aria-invalid:border-danger",

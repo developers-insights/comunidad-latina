@@ -1,9 +1,9 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { getTenant } from "@/lib/tenant/resolve";
-import { brandThemeToStyle } from "@/lib/tenant/brand-pipeline";
 import { t } from "@/lib/i18n";
 import { Badge, buttonVariants } from "@/components/ui";
+import { ThemeToggle } from "@/components/theme";
 import { COPY } from "@/components/marketing/copy";
 import { LanguageToggle } from "@/components/marketing/language-toggle";
 
@@ -12,13 +12,10 @@ export default async function MarketingLayout({ children }: { children: ReactNod
   const tenant = await getTenant();
 
   return (
-    <div
-      style={brandThemeToStyle(tenant.brandHex) as CSSProperties}
-      className="flex min-h-dvh flex-col bg-canvas text-foreground"
-    >
+    <div className="flex min-h-dvh flex-col bg-canvas text-foreground">
       <a
         href="#contenido"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground focus:shadow-lg focus:ring-[3px] focus:ring-[var(--color-brand-200)]"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground focus:shadow-lg focus:ring-[3px] focus:ring-focus-ring"
       >
         Saltar al contenido
       </a>
@@ -26,28 +23,33 @@ export default async function MarketingLayout({ children }: { children: ReactNod
         <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-4">
           <Link
             href="/"
-            className="rounded-full font-display text-lg font-bold tracking-tight text-brand"
+            className="rounded-full font-display text-lg font-bold tracking-tight text-brand-ink"
           >
             {tenant.name}
           </Link>
 
-          <nav aria-label="Principal" className="flex items-center gap-1 sm:gap-2">
-            <Link
-              href="/guias"
-              className="hidden min-h-11 items-center rounded-md px-3 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground sm:inline-flex"
-            >
-              Guías
-            </Link>
-            <Link
-              href="/propiedades"
-              className="hidden min-h-11 items-center rounded-md px-3 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground sm:inline-flex"
-            >
-              Propiedades
-            </Link>
-            <Link href="/entrar" className={buttonVariants({ variant: "primary", size: "sm" })}>
-              {t("common", "enter")}
-            </Link>
-          </nav>
+          {/* El toggle de tema no es navegación: vive al lado del nav, no adentro. */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            <ThemeToggle />
+
+            <nav aria-label="Principal" className="flex items-center gap-1 sm:gap-2">
+              <Link
+                href="/guias"
+                className="hidden min-h-11 items-center rounded-md px-3 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground sm:inline-flex"
+              >
+                Guías
+              </Link>
+              <Link
+                href="/propiedades"
+                className="hidden min-h-11 items-center rounded-md px-3 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground sm:inline-flex"
+              >
+                Propiedades
+              </Link>
+              <Link href="/entrar" className={buttonVariants({ variant: "primary", size: "sm" })}>
+                {t("common", "enter")}
+              </Link>
+            </nav>
+          </div>
         </div>
       </header>
 
@@ -60,7 +62,7 @@ export default async function MarketingLayout({ children }: { children: ReactNod
         <div className="mx-auto w-full max-w-5xl px-4 py-12 sm:py-16">
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
             <div className="lg:col-span-1">
-              <p className="font-display text-lg font-bold tracking-tight text-brand">
+              <p className="font-display text-lg font-bold tracking-tight text-brand-ink">
                 {tenant.name}
               </p>
               <p className="mt-2 max-w-xs text-sm leading-relaxed text-foreground-secondary">

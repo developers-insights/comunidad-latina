@@ -235,7 +235,7 @@ export function CopilotoForm({ listings }: { listings: PrefillListing[] }) {
           <BezelCard coreClassName="flex flex-col items-center gap-2 px-6 py-10 text-center">
             <span
               aria-hidden="true"
-              className="flex size-12 items-center justify-center rounded-full bg-brand-50 text-brand"
+              className="flex size-12 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
             >
               <Lightbulb size={24} weight="light" />
             </span>

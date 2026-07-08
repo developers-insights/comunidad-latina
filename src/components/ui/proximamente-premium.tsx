@@ -28,7 +28,7 @@ export function ProximamentePremium({
     >
       <span
         aria-hidden="true"
-        className="flex size-12 items-center justify-center rounded-full bg-brand-50 text-brand [&>svg]:size-6"
+        className="flex size-12 items-center justify-center rounded-full bg-brand-tint text-brand-ink [&>svg]:size-6"
       >
         {icon ?? <Sparkle size={24} weight="light" />}
       </span>

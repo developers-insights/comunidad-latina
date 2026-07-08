@@ -39,6 +39,13 @@ const COPY = {
 
 const initialState: GlobalActionState = { status: "idle" };
 
+/**
+ * Valor por defecto del <input type="color"> — es un DATO (la marca inicial que
+ * el admin va a elegir), no un color de UI. Por eso es un hex crudo y no un
+ * token: nunca pinta cromo de la app, solo siembra el campo.
+ */
+const DEFAULT_BRAND_HEX = "#1A5EDB";
+
 export function CreateTenantForm() {
   const [state, formAction, actionPending] = useActionState(createTenant, initialState);
   const [, startTransition] = useTransition();
@@ -46,7 +53,7 @@ export function CreateTenantForm() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [summary, setSummary] = useState<{ name: string; slug: string; domain: string }>();
 
-  const [hex, setHex] = useState("#1A5EDB");
+  const [hex, setHex] = useState(DEFAULT_BRAND_HEX);
   const theme = useMemo(() => buildBrandScale(hex), [hex]);
 
   // Cierra el diálogo cuando la action terminó (éxito o error visible abajo).
@@ -109,7 +116,7 @@ export function CreateTenantForm() {
           <input
             type="color"
             aria-label={COPY.hex}
-            value={/^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#1A5EDB"}
+            value={/^#[0-9a-fA-F]{6}$/.test(hex) ? hex : DEFAULT_BRAND_HEX}
             onChange={(event) => setHex(event.target.value)}
             className="h-11 w-14 shrink-0 cursor-pointer rounded-md border border-border bg-surface p-1"
           />

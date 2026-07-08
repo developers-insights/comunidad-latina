@@ -188,14 +188,14 @@ export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
                       "flex min-h-14 items-center gap-3.5 rounded-lg border px-4 py-3 text-left",
                       "transition-[border-color,background-color,transform] duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.98]",
                       selected
-                        ? "border-brand bg-brand-50"
-                        : "border-border bg-surface hover:border-neutral-300 dark:hover:border-neutral-600",
+                        ? "border-brand bg-brand-tint"
+                        : "border-border bg-surface hover:border-border-strong",
                     )}
                   >
                     <need.Icon
                       size={24}
                       aria-hidden="true"
-                      className={selected ? "text-brand" : "text-foreground-secondary"}
+                      className={selected ? "text-brand-ink" : "text-foreground-secondary"}
                     />
                     <span className="flex-1 text-base font-medium text-foreground">
                       {need.label}
@@ -349,8 +349,8 @@ function StepCountry({
                 "flex min-h-[100px] flex-col items-center justify-center gap-1.5 rounded-lg border px-2 py-4",
                 "transition-[border-color,background-color,transform] duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.97]",
                 isSelected
-                  ? "border-brand bg-brand-50"
-                  : "border-border bg-surface hover:border-neutral-300 dark:hover:border-neutral-600",
+                  ? "border-brand bg-brand-tint"
+                  : "border-border bg-surface hover:border-border-strong",
               )}
             >
               {/* Código país estilizado — nunca emoji de bandera como único indicador */}

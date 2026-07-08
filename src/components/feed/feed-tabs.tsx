@@ -30,7 +30,7 @@ export function FeedTabs({ active }: { active: FeedTabId }) {
                 className={cn(
                   "relative flex min-h-11 items-center whitespace-nowrap px-3.5 pb-2.5 pt-2 text-sm font-semibold",
                   "transition-colors duration-(--duration-fast)",
-                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
                   isActive
                     ? "text-foreground"
                     : "text-foreground-muted hover:text-foreground-secondary",

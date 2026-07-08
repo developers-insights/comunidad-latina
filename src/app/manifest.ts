@@ -33,6 +33,17 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     orientation: "portrait",
     lang: tenant.locale === "en" ? "en" : "es",
     dir: "ltr",
+    // El manifest se congela en la INSTALACIÓN: no reacciona al toggle ni a
+    // prefers-color-scheme. background_color es el color de la splash nativa
+    // mientras la PWA arranca (Android 12+ también lo usa detrás del ícono).
+    // Se queda en el canvas LIGHT (--cl-light-canvas) a propósito:
+    //  · el default del producto es light y la mayoría instala sin haber tocado
+    //    el toggle;
+    //  · un mid-tone o un oscuro se ve sucio detrás del ícono maskable;
+    //  · la splash dura ~300ms y <ThemeScript /> ya pintó el tema real cuando
+    //    el WebView entrega el primer frame.
+    // theme_color sí puede ser la marca: el pipeline garantiza su contraste, y
+    // <meta name="theme-color"> (que sí es dinámico) manda una vez que abrió.
     background_color: "#FCFCFB",
     theme_color: tenant.brandHex,
     categories: ["social", "lifestyle", "news"],

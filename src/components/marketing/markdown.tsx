@@ -52,7 +52,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
             href={link[2]}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-medium text-brand-700 underline decoration-brand-200 underline-offset-2 transition-colors hover:decoration-brand-700 dark:text-brand-300 dark:decoration-brand-700"
+            className="font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 transition-colors hover:decoration-brand-ink"
           >
             {link[1]}
           </a>,

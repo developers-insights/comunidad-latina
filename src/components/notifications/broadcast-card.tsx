@@ -62,12 +62,12 @@ export function BroadcastCard({ broadcast }: { broadcast: BroadcastCardData }) {
       <div className="flex items-start gap-3">
         <span
           aria-hidden="true"
-          className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-700"
+          className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
         >
           <Megaphone size={20} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-ink">
             {COPY.eyebrow}
           </p>
           <h2 className="mt-1 font-display text-base font-semibold text-foreground">

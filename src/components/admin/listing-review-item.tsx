@@ -89,7 +89,7 @@ export function ListingReviewItem({ listing }: { listing: ListingReviewData }) {
         {detailHref && (
           <Link
             href={detailHref}
-            className="flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-foreground-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+            className="flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-foreground-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           >
             {COPY.open}
           </Link>

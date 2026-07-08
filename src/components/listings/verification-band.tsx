@@ -41,7 +41,7 @@ export function VerificationBand({ verification, className }: VerificationBandPr
         className={cn(
           "flex min-h-11 w-full items-start gap-3 rounded-lg bg-success-bg px-4 py-3 text-left",
           "transition-transform duration-(--duration-instant) ease-(--ease-spring) active:scale-[0.99]",
-          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
         )}
       >
         <ShieldCheck
@@ -54,7 +54,7 @@ export function VerificationBand({ verification, className }: VerificationBandPr
           <span className="font-semibold">{COPY.detail.verificationBandLead}:</span>{" "}
           licencia activa según {verification.registry} al {verification.dateLabel}.
         </span>
-        <span className="flex shrink-0 items-center gap-1 pt-0.5 text-xs font-semibold text-success">
+        <span className="flex shrink-0 items-center gap-1 pt-0.5 text-xs font-semibold text-success-ink">
           {expanded ? COPY.detail.verificationBandHide : COPY.detail.verificationBandDetail}
           <CaretDown
             size={12}

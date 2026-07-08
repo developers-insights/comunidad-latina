@@ -11,12 +11,12 @@ export function AssistantEntryCard() {
   return (
     <Link
       href="/asistente"
-      className="group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+      className="group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
     >
       <BezelCard coreClassName="flex items-center gap-3 p-4">
         <span
           aria-hidden="true"
-          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-700"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
         >
           <Compass size={22} />
         </span>

@@ -26,6 +26,9 @@ const ITEMS: NavItem[] = [
 /**
  * Bottom nav del shell (mobile-first). Activo = color de marca + peso Fill.
  * Targets ≥44px, safe-area para notch, ícono + texto siempre (nunca solo ícono).
+ *
+ * Barra sticky = superficie elevada: `bg-surface/92` (no canvas), translúcida
+ * sobre el blur, con hairline `border-border` que se ve en ambos temas.
  */
 export function BottomNav() {
   const pathname = usePathname();
@@ -33,7 +36,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label={t("nav", "mainNav")}
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200/70 bg-white/92 backdrop-blur-md dark:border-neutral-800 dark:bg-neutral-900/92"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/92 backdrop-blur-md"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <ul className="mx-auto flex w-full max-w-lg items-stretch">
@@ -47,10 +50,10 @@ export function BottomNav() {
                 className={cn(
                   "flex min-h-14 flex-col items-center justify-center gap-0.5 py-1.5",
                   "text-[11px] font-medium transition-colors duration-150",
-                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-[var(--color-brand-200)]",
+                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring",
                   active
-                    ? "text-[var(--color-brand)]"
-                    : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200",
+                    ? "text-brand-ink"
+                    : "text-foreground-muted hover:text-foreground",
                 )}
               >
                 <IconComponent size={24} weight={active ? "fill" : "regular"} aria-hidden />

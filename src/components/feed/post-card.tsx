@@ -88,7 +88,7 @@ export function PostCard({
           <Link
             href={`/feed/${post.id}`}
             aria-label={COPY.post.openPost}
-            className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+            className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           >
             {body}
           </Link>

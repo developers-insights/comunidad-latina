@@ -20,16 +20,19 @@ export function MessageBubble({
         className={cn(
           "max-w-[80%] rounded-2xl px-4 py-2.5",
           isOwn
-            ? "rounded-br-md bg-brand-50 text-foreground"
+            ? "rounded-br-md bg-brand-tint text-foreground"
             : "rounded-bl-md bg-surface-subtle text-foreground",
         )}
       >
         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
           {body}
         </p>
+        {/* `foreground-secondary`, no `-muted`: las dos burbujas se pintan sobre
+            superficies tintadas (brand-tint / surface-subtle) y ahí `-muted` da
+            4.35–4.41:1 en light. A 10px eso es texto normal (AA 4.5:1). */}
         <p
           className={cn(
-            "mt-1 text-[10px] text-foreground-muted",
+            "mt-1 text-[10px] text-foreground-secondary",
             isOwn ? "text-right" : "text-left",
           )}
         >

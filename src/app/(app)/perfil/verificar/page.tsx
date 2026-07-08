@@ -113,7 +113,7 @@ export default async function VerificarIdentidadPage() {
             <div className="flex items-center gap-2.5">
               <span
                 aria-hidden="true"
-                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand"
+                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
               >
                 <LockKey size={20} weight="light" />
               </span>

@@ -53,7 +53,7 @@ export default function VerificarPage() {
         <p className="text-sm text-foreground-secondary">{COPY.lead}</p>
         <a
           href="#como-verificamos"
-          className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:rounded-sm focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+          className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-ink underline-offset-4 hover:underline focus-visible:outline-none focus-visible:rounded-sm focus-visible:ring-[3px] focus-visible:ring-focus-ring"
         >
           {COPY.howAnchor}
         </a>
@@ -94,7 +94,7 @@ export default function VerificarPage() {
                 href={source.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-h-11 items-center gap-1.5 text-sm text-brand-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:rounded-sm focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+                className="inline-flex min-h-11 items-center gap-1.5 text-sm text-brand-ink underline-offset-4 hover:underline focus-visible:outline-none focus-visible:rounded-sm focus-visible:ring-[3px] focus-visible:ring-focus-ring"
               >
                 {source.label}
                 <ArrowSquareOut size={14} aria-hidden="true" className="shrink-0" />

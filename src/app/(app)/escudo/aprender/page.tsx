@@ -106,7 +106,7 @@ function SignalCard({ signal, index }: { signal: Signal; index: number }) {
       <div className="flex items-start gap-3">
         <span
           aria-hidden="true"
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 font-display text-sm font-bold tabular-nums text-brand-700"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-tint font-display text-sm font-bold tabular-nums text-brand-ink"
         >
           {index + 1}
         </span>
@@ -122,7 +122,7 @@ function SignalCard({ signal, index }: { signal: Signal; index: number }) {
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">
           Qué hacer
         </p>
-        <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-5 text-sm text-foreground-secondary marker:text-brand-700">
+        <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-5 text-sm text-foreground-secondary marker:text-brand-ink">
           {signal.actions.map((action) => (
             <li key={action}>{action}</li>
           ))}
@@ -202,14 +202,14 @@ export default function AprenderPage() {
         <div className="flex w-full flex-col gap-2">
           <Link
             href="/escudo/verificar"
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-brand-foreground shadow-xs transition-colors duration-(--duration-fast) hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-brand-foreground shadow-xs transition-colors duration-(--duration-fast) hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           >
             <IdentificationCard size={18} aria-hidden="true" />
             {COPY.ctaVerificar}
           </Link>
           <Link
             href="/escudo/reportar"
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-5 text-sm font-semibold text-foreground transition-colors duration-(--duration-fast) hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-5 text-sm font-semibold text-foreground transition-colors duration-(--duration-fast) hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           >
             <Flag size={18} aria-hidden="true" />
             {COPY.ctaReportar}

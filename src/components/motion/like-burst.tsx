@@ -65,7 +65,7 @@ export function LikeBurst({
       className={cn(
         "relative inline-flex items-center justify-center rounded-full",
         "transition-transform duration-(--duration-instant) ease-(--ease-spring)",
-        "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand-200",
+        "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-focus-ring",
         !reduce && bursting && styles.likePop,
         className,
       )}

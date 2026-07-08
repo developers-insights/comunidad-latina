@@ -34,10 +34,10 @@ export function LanguageToggle() {
             variant: "info",
           })
         }
-        className={cn(baseClass, "gap-1.5 text-foreground-muted hover:bg-surface-subtle")}
+        className={cn(baseClass, "gap-1.5 text-foreground-secondary hover:bg-surface-subtle")}
       >
         EN
-        <span className="rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground-muted">
+        <span className="rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground-secondary">
           {COPY.footer.soon}
         </span>
       </button>

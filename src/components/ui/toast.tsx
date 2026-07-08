@@ -27,9 +27,16 @@ export interface ToastOptions {
   title: string;
   description?: string;
   variant?: ToastVariant;
-  /** ms visibles; default 4500. Los danger no se auto-descartan. */
+  /**
+   * ms visibles. Default 4500 — 7000 para danger, que suele traer más texto y
+   * peor momento para leerlo. `0` = persistente (solo se cierra a mano).
+   */
   duration?: number;
 }
+
+/** Un aviso de error trae más texto y llega en mal momento: más aire para leerlo. */
+const DEFAULT_DURATION_MS = 4500;
+const DANGER_DURATION_MS = 7000;
 
 interface ToastItem extends Required<Pick<ToastOptions, "title" | "variant">> {
   id: string;
@@ -67,16 +74,34 @@ function ToastCard({
   item: ToastItem;
   onDismiss: (id: string) => void;
 }) {
+  // El aviso se auto-descarta, pero NUNCA debajo de los ojos de quien lo lee:
+  // el reloj se pausa con el mouse encima o con el foco dentro (teclado, lector
+  // de pantalla) y retoma el tiempo que le quedaba al salir. Sin esto, un error
+  // de 7s se le escapa a quien lee despacio — el motivo por el que los danger
+  // eran persistentes.
+  const [paused, setPaused] = useState(false);
+  const remainingRef = useRef(item.duration);
+
   useEffect(() => {
-    if (item.duration <= 0) return;
-    const timer = window.setTimeout(() => onDismiss(item.id), item.duration);
-    return () => window.clearTimeout(timer);
-  }, [item.id, item.duration, onDismiss]);
+    if (item.duration <= 0 || paused) return;
+    const startedAt = Date.now();
+    const timer = window.setTimeout(() => onDismiss(item.id), remainingRef.current);
+    return () => {
+      window.clearTimeout(timer);
+      // Descontamos lo consumido; al reanudar arranca desde el resto.
+      remainingRef.current = Math.max(0, remainingRef.current - (Date.now() - startedAt));
+    };
+  }, [item.id, item.duration, paused, onDismiss]);
 
   return (
     <motion.div
       layout
       role={item.variant === "danger" ? "alert" : "status"}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      // onFocus/onBlur en React son focusin/focusout: burbujean desde el botón cerrar.
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
       initial={{ opacity: 0, y: 16, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 8, transition: { duration: 0.15 } }}
@@ -130,7 +155,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         title: options.title,
         description: options.description,
         variant,
-        duration: options.duration ?? (variant === "danger" ? 0 : 4500),
+        duration:
+          options.duration ??
+          (variant === "danger" ? DANGER_DURATION_MS : DEFAULT_DURATION_MS),
       },
     ]);
     return id;

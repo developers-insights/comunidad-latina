@@ -59,7 +59,7 @@ export async function ParaVos({ userId }: { userId: string }) {
           <div className="flex items-start gap-3">
             <span
               aria-hidden="true"
-              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
             >
               <Sparkle size={22} weight="light" />
             </span>
@@ -119,7 +119,7 @@ function MatchCard({ item, locale }: { item: MatchItem; locale: string }) {
         coreClassName="flex h-full flex-col gap-2.5 p-4"
       >
         {/* La razón del match — SIEMPRE visible, arriba de todo. */}
-        <p className="flex items-start gap-1.5 text-xs font-medium text-brand-700">
+        <p className="flex items-start gap-1.5 text-xs font-medium text-brand-ink">
           <Sparkle size={14} weight="fill" aria-hidden="true" className="mt-0.5 shrink-0" />
           {item.reason}
         </p>

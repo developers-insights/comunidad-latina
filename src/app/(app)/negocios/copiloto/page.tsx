@@ -68,7 +68,7 @@ export default async function CopilotoPage() {
         <h1 className="flex items-center gap-2.5 font-display text-2xl font-bold tracking-tight text-foreground">
           <span
             aria-hidden="true"
-            className="flex size-9 items-center justify-center rounded-full bg-brand-50 text-brand"
+            className="flex size-9 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
           >
             <MagicWand size={20} weight="light" />
           </span>
@@ -87,7 +87,7 @@ export default async function CopilotoPage() {
         >
           <span
             aria-hidden="true"
-            className="flex size-12 items-center justify-center rounded-full bg-brand-50 text-brand"
+            className="flex size-12 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
           >
             <Storefront size={24} weight="light" />
           </span>

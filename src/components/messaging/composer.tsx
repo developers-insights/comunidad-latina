@@ -104,9 +104,9 @@ export function Composer({ conversationId }: { conversationId: string }) {
         className={cn(
           "flex size-11 shrink-0 select-none items-center justify-center rounded-full bg-brand text-brand-foreground shadow-xs",
           "transition-[transform,background-color,opacity] duration-(--duration-fast) ease-(--ease-spring)",
-          "hover:bg-brand-700 active:scale-[0.94]",
+          "hover:bg-brand-hover active:scale-[0.94]",
           "disabled:pointer-events-none disabled:opacity-45",
-          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
         )}
       >
         {isPending ? (

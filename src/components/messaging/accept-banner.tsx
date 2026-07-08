@@ -41,7 +41,7 @@ export function AcceptBanner({
     <BezelCard className="text-center">
       <span
         aria-hidden="true"
-        className="mx-auto flex size-12 items-center justify-center rounded-full bg-brand-50 text-brand"
+        className="mx-auto flex size-12 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
       >
         <HandWaving size={26} />
       </span>

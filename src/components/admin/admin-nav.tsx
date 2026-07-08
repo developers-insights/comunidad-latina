@@ -73,7 +73,7 @@ export function AdminNav({
               className={cn(
                 "relative flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap px-4 text-sm font-medium",
                 "transition-colors duration-(--duration-fast) ease-(--ease-out-premium)",
-                "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+                "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
                 active
                   ? "text-foreground"
                   : "text-foreground-secondary hover:text-foreground",

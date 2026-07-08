@@ -82,7 +82,7 @@ export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps
       <Link
         href="/mensajes"
         aria-label="Volver a mensajes"
-        className="flex size-11 shrink-0 items-center justify-center rounded-full text-foreground-secondary transition-colors hover:bg-surface-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+        className="flex size-11 shrink-0 items-center justify-center rounded-full text-foreground-secondary transition-colors hover:bg-surface-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
       >
         <ArrowLeft size={22} aria-hidden="true" />
       </Link>
@@ -106,7 +106,7 @@ export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps
             (listing.href ? (
               <Link
                 href={listing.href}
-                className="truncate text-xs font-medium text-brand underline-offset-4 hover:underline"
+                className="truncate text-xs font-medium text-brand-ink underline-offset-4 hover:underline"
               >
                 {COPY.thread.viewListing}: {listing.title}
               </Link>
@@ -122,7 +122,7 @@ export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps
         type="button"
         aria-label={COPY.thread.moreActions}
         onClick={() => setMenuOpen(true)}
-        className="flex size-11 shrink-0 items-center justify-center rounded-full text-foreground-secondary transition-colors hover:bg-surface-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+        className="flex size-11 shrink-0 items-center justify-center rounded-full text-foreground-secondary transition-colors hover:bg-surface-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
       >
         <DotsThree size={26} weight="bold" aria-hidden="true" />
       </button>
@@ -178,9 +178,9 @@ export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps
                   className={cn(
                     "flex min-h-11 w-full cursor-pointer select-none items-center gap-3 rounded-md border px-4 py-2.5 text-left text-sm font-medium",
                     "transition-[background-color,border-color] duration-(--duration-fast)",
-                    "focus-within:ring-[3px] focus-within:ring-[var(--color-brand-200)]",
+                    "focus-within:ring-[3px] focus-within:ring-focus-ring",
                     selected
-                      ? "border-brand bg-brand-50 text-brand-700"
+                      ? "border-brand bg-brand-tint text-brand-ink"
                       : "border-border bg-surface text-foreground hover:bg-surface-subtle",
                   )}
                 >

@@ -56,7 +56,7 @@ export function NotificationBell({ initialUnread }: { initialUnread: number }) {
     <Link
       href="/notificaciones"
       aria-label={COPY.label(unread)}
-      className="relative flex size-11 items-center justify-center rounded-full text-neutral-600 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)] dark:text-neutral-400 dark:hover:bg-neutral-800"
+      className="relative flex size-11 shrink-0 items-center justify-center rounded-full text-foreground-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
     >
       <Bell size={22} aria-hidden />
       {unread > 0 && (

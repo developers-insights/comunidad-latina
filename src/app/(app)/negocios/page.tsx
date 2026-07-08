@@ -117,7 +117,7 @@ export default async function NegociosPage() {
         <div className="flex items-start gap-3">
           <span
             aria-hidden="true"
-            className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand"
+            className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
           >
             <Storefront size={22} weight="light" />
           </span>
@@ -142,7 +142,7 @@ export default async function NegociosPage() {
           <div className="flex items-start gap-3">
             <span
               aria-hidden="true"
-              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
             >
               <MagicWand size={22} weight="light" />
             </span>

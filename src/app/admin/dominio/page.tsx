@@ -229,7 +229,7 @@ export default async function DominioPage() {
               <dt className="text-xs text-foreground-muted">{stat.label}</dt>
               <dd
                 className={`mt-0.5 text-2xl font-bold tabular-nums ${
-                  stat.alert ? "text-warning" : "text-foreground"
+                  stat.alert ? "text-warning-ink" : "text-foreground"
                 }`}
               >
                 {stat.value.toLocaleString("es-US")}

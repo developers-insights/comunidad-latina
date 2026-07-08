@@ -12,6 +12,15 @@
       "surface": "Hero de la landing principal (dominicanos.com)"
     },
     {
+      "file": "hero-community-mobile.webp",
+      "format": "webp",
+      "aspect_ratio": "768:1401 (0.548)",
+      "approx_dimensions": "1200x2189",
+      "description": "Recomposición vertical de hero-community.png: misma familia, mismo atardecer, cámara atrás y arriba. El cielo ocupa los dos tercios superiores y la familia camina en el tercio inferior. Generada con la original como referencia; la vereda del primer plano se extendió 25px con sharp (espejo + desenfoque progresivo) para que las caras aterricen debajo del texto del hero.",
+      "surface": "Hero de la landing principal en <640px (art direction vía getImageProps + <picture>, ver components/marketing/hero-backdrop.tsx)",
+      "art_direction_note": "El recorte de object-cover es solo horizontal, así que la vertical mapea 1:1: la fila r del master cae en r/1401 del alto del hero. No recortar ni reencuadrar sin recalcular hero-backdrop.tsx."
+    },
+    {
       "file": "hero-vivienda.png",
       "format": "png",
       "aspect_ratio": "16:9",

@@ -2,29 +2,75 @@
  * COMUNIDAD LATINA — Design tokens (Capa 1 + Capa 2)
  * Fuente de verdad: docs/investigacion/13-diseno-ux-premium.md §2 (rige tal cual).
  *
+ * ═══ CONTRATO PARA EL RESTO DEL ENJAMBRE ═══
+ * En JSX NO se escribe NUNCA un color crudo (bg-white, bg-neutral-800,
+ * text-neutral-500, #hex) ni una utility `dark:`. TODO el theming pasa por
+ * tokens semánticos que se voltean solos. Si necesitás una `dark:`, falta un
+ * token semántico: pedilo, no lo parchees.
+ *
  * Arquitectura:
- *  - @theme            → primitivos fijos (neutros cálidos, tipografía, radios, easings).
- *  - :root / .dark     → tokens semánticos runtime (--cl-*): light por default,
- *                        dark como paleta tonal propia (§2.8), NUNCA inversión.
- *  - @theme inline     → mapea los semánticos runtime a utilities de Tailwind.
- *  - Marca del tenant  → el root layout pisa --color-brand-* con un inline style
+ *  - @theme            → primitivos fijos (neutros cálidos, tipografía, radios,
+ *                        easings) + constantes de media (no dependen del tema).
+ *  - :root             → PALETAS light y dark completas (`--cl-light-*` /
+ *                        `--cl-dark-*`), fuente única de cada valor + los ALIAS
+ *                        activos (`--cl-*`), en light por default.
+ *  - .dark / @media    → reapuntan los ALIAS a la paleta dark. Sólo indirección:
+ *                        cero valores literales duplicados.
+ *  - @theme inline     → mapea los alias a utilities de Tailwind.
+ *  - Marca del tenant  → el ROOT layout (y sólo él) pisa --color-brand-* y
+ *                        --brand-light-* / --brand-dark-* con un inline style
  *                        generado por lib/tenant/brand-pipeline (Capa 3).
  *
- * Utilities semánticas para el resto del enjambre:
- *  bg-canvas · bg-surface · bg-surface-subtle · bg-surface-raised
- *  text-foreground · text-foreground-secondary · text-foreground-muted · text-placeholder
- *  border-border · border-border-subtle
- *  *-success / *-success-bg · warning · danger · info (fijos, nunca de marca)
- *  *-brand / *-brand-50…900 / *-brand-foreground (color del tenant, 4 usos permitidos)
- *  shadow-xs…xl · shadow-bezel · shadow-focus-ring
- *  ease-out-premium · ease-in-premium · ease-spring · rounded-sm…2xl
+ * Vocabulario:
+ *  superficies  bg-canvas · bg-surface · bg-surface-subtle · bg-surface-raised
+ *               bg-surface-hover · bg-surface-inverse
+ *  texto        text-foreground · text-foreground-secondary · text-foreground-muted
+ *               text-placeholder · text-on-surface-inverse
+ *  bordes       border-border · border-border-subtle · border-border-strong
+ *  estado       success · warning · danger · info (+ -bg, + on-*) — FIJOS, jamás de marca
+ *               success-ink / warning-ink → el MISMO rol, pero como TEXTO
+ *  marca        brand · brand-foreground · brand-hover · brand-ink · brand-tint
+ *               brand-subtle · brand-50…900
+ *  sobre media  text-on-media · bg-media-scrim · bg-media-shade · bg-media-backdrop
+ *               (constantes: una foto es oscura en los dos temas)
+ *  overlays     bg-scrim (backdrop de diálogos; SÍ depende del tema)
+ *  foco         ring-focus-ring · shadow-focus-ring (nunca `ring-brand-200` a mano)
+ *  sombras      shadow-xs…xl · shadow-bezel · shadow-focus-ring
+ *  motion       ease-out-premium · ease-in-premium · ease-spring · --duration-*
+ *
+ * Reglas de contraste que NO son obvias y ya costaron un bug cada una:
+ *  · `text-foreground-muted` sólo llega a AA sobre `bg-canvas` (4.58:1) y
+ *    `bg-surface` (4.70:1). Sobre `bg-surface-subtle` da 4.35:1 y sobre
+ *    `bg-surface-hover` 4.02:1 → ahí va `text-foreground-secondary`.
+ *  · El fill de un estado NO es su color de texto: `text-warning` sobre
+ *    `bg-warning-bg` da 3.28:1 y `text-success` 4.43:1. Para TEXTO usar
+ *    `text-warning-ink` / `text-success-ink`. Para ÍCONOS (objeto gráfico,
+ *    umbral 3:1) el fill está bien. `danger` (4.53:1) e `info` (4.76:1) pasan.
+ *  · El tono de RELLENO de la marca (`bg-brand`, `--color-brand`) se valida a
+ *    ≥3:1 contra el canvas (WCAG 1.4.11), NO a 4.5:1. Como TEXTO va
+ *    `text-brand-ink`, que el pipeline sí valida a AA por tenant.
  */
 
 @import "tailwindcss";
 
-/* dark mode por clase (un theme-switcher puede setear .dark; el default sigue
-   a prefers-color-scheme vía el bloque @media de abajo) */
-@custom-variant dark (&:where(.dark, .dark *));
+/*
+ * La variante `dark:` DEBE matchear exactamente los mismos casos en que los
+ * tokens semánticos voltean, o la app queda mitad clara mitad oscura:
+ *  1. clase explícita `.dark` (la estampa el script pre-paint), y
+ *  2. preferencia del SO cuando no hay ninguna clase explícita (no-JS).
+ * Es la red de seguridad, no el objetivo: el objetivo sigue siendo CERO `dark:`
+ * en src/. Verificado contra Tailwind 4.3 (bloque + @slot por rama).
+ */
+@custom-variant dark {
+  &:where(.dark, .dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not(.light):not(.dark), :root:not(.light):not(.dark) *) {
+      @slot;
+    }
+  }
+}
 
 @theme {
   /* ── Se elimina la paleta default de Tailwind: la Capa 1 es la única paleta ── */
@@ -50,7 +96,10 @@
   --color-neutral-900: #17150f;
   --color-neutral-950: #0d0c08;
 
-  /* ── Marca (Capa 3) — defaults azul #1A5EDB; el layout los pisa por tenant ── */
+  /* ── Marca (Capa 3) — defaults azul #1A5EDB; el ROOT layout los pisa por tenant.
+        --color-brand y --color-brand-foreground se REDEFINEN abajo en :root a
+        partir del tema activo. Acá quedan sólo para que Tailwind genere las
+        utilities y como último fallback si el inline style no llegara. ── */
   --color-brand-50: #eef4fd;
   --color-brand-100: #dce8fb;
   --color-brand-200: #b6cff6;
@@ -63,6 +112,18 @@
   --color-brand-900: #0d2e6b;
   --color-brand: #1a5edb;
   --color-brand-foreground: #ffffff;
+
+  /* ── Contenido sobre MEDIA (fotos, video) — constantes en ambos temas ──
+        Una foto no se aclara porque el usuario prendió el tema light: lo que va
+        encima de una foto (o de su scrim) es SIEMPRE claro sobre oscuro.
+        · on-media       → texto, íconos, hairlines y fills translúcidos encima.
+        · media-scrim    → velo plano detrás de ese texto (AA sobre foto blanca).
+        · media-shade    → tinta de los degradados de legibilidad (usar con /N).
+        · media-backdrop → color sólido detrás de un <Image> antes de que cargue. */
+  --color-on-media: #f7f6f3;
+  --color-media-scrim: rgba(13, 12, 8, 0.62);
+  --color-media-shade: #0d0c08;
+  --color-media-backdrop: #17150f;
 
   /* ── Tipografía (§2.2) — variables conectadas en layout.tsx ── */
   --font-display: var(--font-general-sans), var(--font-jakarta), -apple-system,
@@ -102,8 +163,12 @@
   --ease-in-premium: cubic-bezier(0.4, 0, 1, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  /* Focus ring (§2.5/§3.2): 3px, deriva de la marca del tenant */
-  --shadow-focus-ring: 0 0 0 3px var(--color-brand-200);
+  /* Focus ring (§2.5/§3.2): 3px, deriva de la marca del tenant y VOLTEA con el
+     tema. `--color-brand-200` a secas era un tono casi blanco por construcción
+     (LIGHTNESS[200] = 0.885 en el pipeline, para cualquier tenant): 1.38:1
+     contra el canvas claro — o sea, en light el anillo no existía. §2.8:
+     "nunca un borde que desaparece en un tema". */
+  --shadow-focus-ring: 0 0 0 3px var(--cl-focus-ring);
 
   --animate-shimmer: shimmer 1.8s linear infinite;
   --animate-spin-smooth: spin 0.8s linear infinite;
@@ -118,12 +183,28 @@
   }
 }
 
-/* ── Semánticos runtime (Capa 2): light default + dark como paleta propia ── */
+/*
+ * Progreso del tema como NÚMERO interpolable: 0 = light, 1 = dark.
+ * Lo consume <ThemeToggle /> para hacer el morph sol↔luna con calc() puro —
+ * sin estado de React, correcto ya en el primer paint. Registrado con @property
+ * para que transicione suave; si el navegador no lo soporta, salta de 0 a 1 y
+ * el ícono simplemente cambia sin animar.
+ */
+@property --cl-theme-dark {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+/* ── Semánticos runtime (Capa 2) → utilities de Tailwind ── */
 @theme inline {
   --color-canvas: var(--cl-canvas);
   --color-surface: var(--cl-surface);
   --color-surface-subtle: var(--cl-surface-subtle);
   --color-surface-raised: var(--cl-surface-raised);
+  --color-surface-hover: var(--cl-surface-hover);
+  --color-surface-inverse: var(--cl-surface-inverse);
+  --color-on-surface-inverse: var(--cl-on-surface-inverse);
   --color-bezel-shell: var(--cl-bezel-shell);
   --color-foreground: var(--cl-foreground);
   --color-foreground-secondary: var(--cl-foreground-secondary);
@@ -131,20 +212,43 @@
   --color-placeholder: var(--cl-placeholder);
   --color-border: var(--cl-border);
   --color-border-subtle: var(--cl-border-subtle);
+  --color-border-strong: var(--cl-border-strong);
   --color-scrim: var(--cl-scrim);
+  /* Indicador de foco (§3.2). Se usa como `ring-focus-ring`; la regla base de
+     :focus-visible lo aplica sola vía --shadow-focus-ring. */
+  --color-focus-ring: var(--cl-focus-ring);
 
-  /* Semánticos de estado FIJOS (§2.3) — jamás derivan de la marca */
+  /* Semánticos de estado FIJOS (§2.3) — jamás derivan de la marca.
+     `on-*`  = color de texto/ícono ENCIMA del fill sólido (bg-success…).
+     `*-ink` = el estado usado como TEXTO sobre superficie o sobre su propio
+               `-bg`. El fill de §2.3 no llega a 4.5:1 ahí (warning 3.28:1,
+               success 4.43:1) pero sí supera el 3:1 de objeto gráfico, así que
+               los ÍCONOS siguen usando el fill. Mismo desdoble que brand/brand-ink. */
   --color-success: var(--cl-success);
   --color-success-bg: var(--cl-success-bg);
+  --color-success-ink: var(--cl-success-ink);
+  --color-on-success: var(--cl-on-success);
   --color-warning: var(--cl-warning);
   --color-warning-bg: var(--cl-warning-bg);
+  --color-warning-ink: var(--cl-warning-ink);
+  --color-on-warning: var(--cl-on-warning);
   --color-danger: var(--cl-danger);
   --color-danger-bg: var(--cl-danger-bg);
+  --color-on-danger: var(--cl-on-danger);
   --color-info: var(--cl-info);
   --color-info-bg: var(--cl-info-bg);
+  --color-on-info: var(--cl-on-info);
 
   /* Dorado del nivel Premium del Trust Score (gramática fija §3.3) */
   --color-gold: var(--cl-gold);
+
+  /* Marca dependiente del tema (§2.8). --color-brand y --color-brand-foreground
+     NO van acá: tienen que existir como custom property real porque hay call
+     sites con `var(--color-brand)`. Se redefinen en :root, más abajo. */
+  --color-brand-hover: var(--cl-brand-hover);
+  --color-brand-ink: var(--cl-brand-ink);
+  --color-brand-tint: var(--cl-brand-tint);
+  --color-brand-subtle: var(--cl-brand-subtle);
 
   /* Sombras difusas cálidas (§2.5); en dark → borde 1px + sombra a negro */
   --shadow-xs: var(--cl-shadow-xs);
@@ -155,41 +259,226 @@
   --shadow-bezel: var(--cl-shadow-bezel);
 }
 
-:root {
-  --cl-canvas: var(--color-neutral-25);
-  --cl-surface: var(--color-neutral-0);
-  --cl-surface-subtle: var(--color-neutral-50);
-  --cl-surface-raised: var(--color-neutral-0);
-  --cl-bezel-shell: var(--color-neutral-50);
-  --cl-bezel-highlight: rgba(255, 255, 255, 0.6);
-  --cl-foreground: var(--color-neutral-900);
-  --cl-foreground-secondary: var(--color-neutral-600);
-  --cl-foreground-muted: var(--color-neutral-500);
-  --cl-placeholder: var(--color-neutral-400);
-  --cl-border: var(--color-neutral-200);
-  --cl-border-subtle: var(--color-neutral-100);
-  --cl-scrim: rgba(13, 12, 8, 0.5);
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  PALETAS + ALIAS
+ *
+ *  Estrategia elegida contra la duplicación (opción (a) del brief):
+ *  cada VALOR vive en exactamente un lugar (`--cl-light-*` o `--cl-dark-*`).
+ *  Lo que se repite en `.dark` y en el `@media` es sólo la INDIRECCIÓN
+ *  (`--cl-x: var(--cl-dark-x)`), que no puede divergir en valor — y aun así
+ *  hay un test que verifica que las dos listas sean idénticas y que cada token
+ *  tenga su par light/dark: src/components/theme/theme-tokens.test.ts
+ *
+ *  Por qué NO light-dark(): pide Chrome 123 / Safari 17.5 / Firefox 120, y el
+ *  piso soportado por Next 16 (node_modules/next/dist/docs/03-architecture/
+ *  supported-browsers.md) es Chrome 111 / Safari 16.4 / Firefox 111. Esta PWA
+ *  apunta a Android de gama media: robustez > elegancia. Además light-dark()
+ *  sólo acepta colores y acá también voltean sombras multicapa.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
 
-  /* Valores exactos §2.3 */
-  --cl-success: #1a7f5a;
-  --cl-success-bg: #e8f5ee;
-  --cl-warning: #b7791f;
-  --cl-warning-bg: #fbf2e3;
-  --cl-danger: #c23b3b;
-  --cl-danger-bg: #fbeaea;
-  --cl-info: #2b6cb0;
-  --cl-info-bg: #e9f1fa;
-  --cl-gold: #b7791f;
+:root {
+  /* ───────────────────── PALETA LIGHT (valores, fuente única) ──────────────── */
+  --cl-light-canvas: var(--color-neutral-25);
+  --cl-light-surface: var(--color-neutral-0);
+  --cl-light-surface-subtle: var(--color-neutral-50);
+  --cl-light-surface-raised: var(--color-neutral-0);
+  /* superficie de hover: reemplaza `hover:bg-neutral-100` */
+  --cl-light-surface-hover: var(--color-neutral-100);
+  /* barra intencionalmente invertida (offline banner) */
+  --cl-light-surface-inverse: var(--color-neutral-800);
+  --cl-light-on-surface-inverse: var(--color-neutral-50);
+  --cl-light-bezel-shell: var(--color-neutral-50);
+  --cl-light-bezel-highlight: rgba(255, 255, 255, 0.6);
+  --cl-light-foreground: var(--color-neutral-900);
+  --cl-light-foreground-secondary: var(--color-neutral-600);
+  --cl-light-foreground-muted: var(--color-neutral-500);
+  /* neutral-400 (el "placeholder" nominal de §2.3) da 2.73:1 sobre bg-surface:
+     el placeholder es texto (WCAG 1.4.3), no decoración. neutral-500 → 4.70:1.
+     Queda igual que foreground-muted: se distinguen por contexto, no por tono. */
+  --cl-light-placeholder: var(--color-neutral-500);
+  --cl-light-border: var(--color-neutral-200);
+  --cl-light-border-subtle: var(--color-neutral-100);
+  /* borde fuerte / hover: reemplaza `hover:border-neutral-300` */
+  --cl-light-border-strong: var(--color-neutral-300);
+  --cl-light-scrim: rgba(13, 12, 8, 0.5);
+  --cl-light-skeleton-highlight: rgba(255, 255, 255, 0.65);
+
+  /* Estado — valores exactos §2.3 (FILL). `on-*` validado ≥4.5:1 sobre su fill.
+     `*-ink` = el mismo estado como TEXTO: el fill de §2.3 no llega a AA sobre su
+     propio `-bg` (warning 3.28:1, success 4.43:1). El fill NO se toca: §2.3 lo
+     congela y lo usan bg-warning, border-warning, la barra del score, etc. */
+  --cl-light-success: #1a7f5a;
+  --cl-light-success-bg: #e8f5ee;
+  --cl-light-success-ink: #177252; /* 5.25:1 sobre success-bg, 5.89:1 sobre surface */
+  --cl-light-on-success: var(--color-neutral-0); /* 4.97:1 */
+  --cl-light-warning: #b7791f;
+  --cl-light-warning-bg: #fbf2e3;
+  --cl-light-warning-ink: #8f5c10; /* 5.10:1 sobre warning-bg, 5.67:1 sobre surface */
+  --cl-light-on-warning: var(--color-neutral-950); /* 5.37:1 (blanco daría 3.64) */
+  --cl-light-danger: #c23b3b;
+  --cl-light-danger-bg: #fbeaea;
+  --cl-light-on-danger: var(--color-neutral-0); /* 5.27:1 */
+  --cl-light-info: #2b6cb0;
+  --cl-light-info-bg: #e9f1fa;
+  --cl-light-on-info: var(--color-neutral-0); /* 5.42:1 */
+  --cl-light-gold: #b7791f;
+
+  /* Marca light — la calcula el brand pipeline y la inyecta el ROOT layout.
+     Los fallbacks resuelven al azul default cuando no hay inline style. */
+  --cl-light-brand: var(--brand-light, var(--color-brand-600));
+  --cl-light-brand-foreground: var(--brand-light-foreground, var(--color-white));
+  --cl-light-brand-hover: var(--brand-light-hover, var(--color-brand-700));
+  --cl-light-brand-ink: var(--brand-light-ink, var(--color-brand-700));
+  --cl-light-brand-tint: var(--brand-light-tint, var(--color-brand-50));
+  --cl-light-brand-subtle: var(--color-brand-200);
+
+  /* Indicador de foco: en light es el tono de TEXTO de la marca (AA por tenant,
+     6.6–7.2:1 contra el canvas). brand-200 acá era invisible (1.33–1.44:1). */
+  --cl-light-focus-ring: var(--cl-light-brand-ink);
 
   /* Sombras exactas §2.5 */
-  --cl-shadow-xs: 0 1px 2px rgba(23, 21, 15, 0.04);
-  --cl-shadow-sm: 0 2px 8px -2px rgba(23, 21, 15, 0.06);
-  --cl-shadow-md: 0 8px 24px -8px rgba(23, 21, 15, 0.1);
-  --cl-shadow-lg: 0 16px 48px -12px rgba(23, 21, 15, 0.14);
-  --cl-shadow-xl: 0 24px 64px -16px rgba(23, 21, 15, 0.18);
-  --cl-shadow-bezel: 0 1px 2px rgba(23, 21, 15, 0.04),
+  --cl-light-shadow-xs: 0 1px 2px rgba(23, 21, 15, 0.04);
+  --cl-light-shadow-sm: 0 2px 8px -2px rgba(23, 21, 15, 0.06);
+  --cl-light-shadow-md: 0 8px 24px -8px rgba(23, 21, 15, 0.1);
+  --cl-light-shadow-lg: 0 16px 48px -12px rgba(23, 21, 15, 0.14);
+  --cl-light-shadow-xl: 0 24px 64px -16px rgba(23, 21, 15, 0.18);
+  --cl-light-shadow-bezel: 0 1px 2px rgba(23, 21, 15, 0.04),
     0 8px 24px -8px rgba(23, 21, 15, 0.08);
-  --cl-skeleton-highlight: rgba(255, 255, 255, 0.65);
+
+  /* ───────────────────── PALETA DARK (valores, fuente única) ───────────────── */
+  /* §2.8: paleta tonal propia, NUNCA inversión. Las superficies se ACLARAN al
+     elevarse, el texto nunca es blanco puro, el fondo nunca es negro puro y las
+     sombras pasan a borde sutil + sombra hacia negro profundo. Los tonos de
+     estado se recalibran: los valores light de §2.3 no llegan a 4.5:1 en dark. */
+  --cl-dark-canvas: var(--color-neutral-900);
+  --cl-dark-surface: var(--color-neutral-800);
+  --cl-dark-surface-subtle: var(--color-neutral-950);
+  --cl-dark-surface-raised: #2b2820;
+  /* reemplaza `dark:hover:bg-neutral-700/60` y `dark:hover:bg-neutral-800` */
+  --cl-dark-surface-hover: #322e25;
+  /* inversión REAL: en dark la barra de alerta es clara sobre página oscura */
+  --cl-dark-surface-inverse: var(--color-neutral-100);
+  --cl-dark-on-surface-inverse: var(--color-neutral-900); /* 15.6:1 */
+  --cl-dark-bezel-shell: rgba(0, 0, 0, 0.1);
+  --cl-dark-bezel-highlight: rgba(255, 255, 255, 0.04);
+  --cl-dark-foreground: var(--color-neutral-50);
+  --cl-dark-foreground-secondary: var(--color-neutral-300);
+  --cl-dark-foreground-muted: var(--color-neutral-400);
+  /* neutral-500 daba 3.41:1 sobre bg-surface y 3.13:1 sobre surface-raised
+     (diálogos). neutral-400 → 5.88:1 / 5.39:1. */
+  --cl-dark-placeholder: var(--color-neutral-400);
+  --cl-dark-border: rgba(255, 255, 255, 0.1);
+  --cl-dark-border-subtle: rgba(255, 255, 255, 0.06);
+  /* reemplaza `dark:hover:border-neutral-600`; rgba para funcionar sobre
+     cualquier superficie, igual que --cl-dark-border */
+  --cl-dark-border-strong: rgba(255, 255, 255, 0.28);
+  --cl-dark-scrim: rgba(0, 0, 0, 0.65);
+  --cl-dark-skeleton-highlight: rgba(255, 255, 255, 0.06);
+
+  --cl-dark-success: #46b184;
+  --cl-dark-success-bg: #12271d;
+  /* En dark el fill YA es AA como texto (5.91:1 sobre success-bg, 6.90:1 sobre
+     surface): el desdoble ink sólo hace falta en light. Mismo tono, un solo valor. */
+  --cl-dark-success-ink: var(--cl-dark-success);
+  --cl-dark-on-success: var(--color-neutral-950); /* 7.34:1 (blanco daría 2.66) */
+  --cl-dark-warning: #d9a044;
+  --cl-dark-warning-bg: #2a2010;
+  --cl-dark-warning-ink: var(--cl-dark-warning); /* 6.90:1 sobre warning-bg */
+  --cl-dark-on-warning: var(--color-neutral-950); /* 8.44:1 */
+  --cl-dark-danger: #e26a6a;
+  --cl-dark-danger-bg: #2e1514;
+  --cl-dark-on-danger: var(--color-neutral-950); /* 6.06:1 (blanco daría 3.23) */
+  --cl-dark-info: #6fa6e0;
+  --cl-dark-info-bg: #121f2e;
+  --cl-dark-on-info: var(--color-neutral-950); /* 7.65:1 */
+  --cl-dark-gold: #d2a24c;
+
+  /* Marca dark — el pipeline sube ~10% de L y desatura ~12% (§2.8), y valida el
+     CTA contra el canvas oscuro. Fallbacks: escalones de la escala default. */
+  --cl-dark-brand: var(--brand-dark, var(--color-brand-500));
+  --cl-dark-brand-foreground: var(--brand-dark-foreground, var(--color-white));
+  --cl-dark-brand-hover: var(--brand-dark-hover, var(--color-brand-600));
+  --cl-dark-brand-ink: var(--brand-dark-ink, var(--color-brand-300));
+  --cl-dark-brand-tint: var(--brand-dark-tint, #1d2b43);
+  --cl-dark-brand-subtle: var(--color-brand-700);
+
+  /* En dark, brand-200 (escalón casi blanco de la escala) da 12.6–13.4:1 contra
+     el canvas oscuro: exactamente lo que se quiere de un anillo de foco. */
+  --cl-dark-focus-ring: var(--color-brand-200);
+
+  --cl-dark-shadow-xs: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --cl-dark-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 2px 8px -2px rgba(0, 0, 0, 0.45);
+  --cl-dark-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 8px 24px -8px rgba(0, 0, 0, 0.55);
+  --cl-dark-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 16px 48px -12px rgba(0, 0, 0, 0.6);
+  --cl-dark-shadow-xl: 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 24px 64px -16px rgba(0, 0, 0, 0.65);
+  --cl-dark-shadow-bezel: 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 8px 24px -8px rgba(0, 0, 0, 0.5);
+
+  /* ───────── ALIAS ACTIVOS → light (los consume @theme inline) ───────── */
+  --cl-canvas: var(--cl-light-canvas);
+  --cl-surface: var(--cl-light-surface);
+  --cl-surface-subtle: var(--cl-light-surface-subtle);
+  --cl-surface-raised: var(--cl-light-surface-raised);
+  --cl-surface-hover: var(--cl-light-surface-hover);
+  --cl-surface-inverse: var(--cl-light-surface-inverse);
+  --cl-on-surface-inverse: var(--cl-light-on-surface-inverse);
+  --cl-bezel-shell: var(--cl-light-bezel-shell);
+  --cl-bezel-highlight: var(--cl-light-bezel-highlight);
+  --cl-foreground: var(--cl-light-foreground);
+  --cl-foreground-secondary: var(--cl-light-foreground-secondary);
+  --cl-foreground-muted: var(--cl-light-foreground-muted);
+  --cl-placeholder: var(--cl-light-placeholder);
+  --cl-border: var(--cl-light-border);
+  --cl-border-subtle: var(--cl-light-border-subtle);
+  --cl-border-strong: var(--cl-light-border-strong);
+  --cl-scrim: var(--cl-light-scrim);
+  --cl-skeleton-highlight: var(--cl-light-skeleton-highlight);
+  --cl-focus-ring: var(--cl-light-focus-ring);
+  --cl-success: var(--cl-light-success);
+  --cl-success-bg: var(--cl-light-success-bg);
+  --cl-success-ink: var(--cl-light-success-ink);
+  --cl-on-success: var(--cl-light-on-success);
+  --cl-warning: var(--cl-light-warning);
+  --cl-warning-bg: var(--cl-light-warning-bg);
+  --cl-warning-ink: var(--cl-light-warning-ink);
+  --cl-on-warning: var(--cl-light-on-warning);
+  --cl-danger: var(--cl-light-danger);
+  --cl-danger-bg: var(--cl-light-danger-bg);
+  --cl-on-danger: var(--cl-light-on-danger);
+  --cl-info: var(--cl-light-info);
+  --cl-info-bg: var(--cl-light-info-bg);
+  --cl-on-info: var(--cl-light-on-info);
+  --cl-gold: var(--cl-light-gold);
+  --cl-brand: var(--cl-light-brand);
+  --cl-brand-foreground: var(--cl-light-brand-foreground);
+  --cl-brand-hover: var(--cl-light-brand-hover);
+  --cl-brand-ink: var(--cl-light-brand-ink);
+  --cl-brand-tint: var(--cl-light-brand-tint);
+  --cl-brand-subtle: var(--cl-light-brand-subtle);
+  --cl-shadow-xs: var(--cl-light-shadow-xs);
+  --cl-shadow-sm: var(--cl-light-shadow-sm);
+  --cl-shadow-md: var(--cl-light-shadow-md);
+  --cl-shadow-lg: var(--cl-light-shadow-lg);
+  --cl-shadow-xl: var(--cl-light-shadow-xl);
+  --cl-shadow-bezel: var(--cl-light-shadow-bezel);
+  --cl-theme-dark: 0;
+  color-scheme: light;
+
+  /*
+   * --color-brand / --color-brand-foreground se redefinen acá, SIN capa, para
+   * que ganen sobre el `@layer theme` de Tailwind. Tienen que seguir siendo
+   * custom properties reales (no `@theme inline`) porque hay call sites con
+   * `text-[var(--color-brand)]` y `ring-[var(--color-brand-200)]`.
+   * El brand pipeline ya NO las emite: un inline style las congelaría en light.
+   */
+  --color-brand: var(--cl-brand);
+  --color-brand-foreground: var(--cl-brand-foreground);
 
   /* Duraciones (§2.7) — usar con duration-(--duration-*) o en CSS propio */
   --duration-instant: 100ms;
@@ -204,95 +493,116 @@
   --icon-lg: 24px;
   --icon-xl: 32px;
   --touch-target-min: 44px;
-
-  color-scheme: light;
 }
 
-/* Dark mode (§2.8): paleta tonal propia. Superficies se ACLARAN al elevarse,
-   texto nunca blanco puro, sombras → borde sutil + sombra hacia negro profundo.
-   Los tonos de estado se recalibran para contraste AA sobre fondo oscuro
-   (los valores light de §2.3 no alcanzan 4.5:1 en dark — validado aparte). */
+/*
+ * ALIAS → dark. Dos copias por una limitación de CSS: una condición @media no
+ * puede formar parte de un selector, así que `.dark` y el fallback del SO no
+ * pueden compartir el bloque. Son PURA indirección (cero valores): si agregás
+ * un token acá, agregalo en las dos listas — el test de paridad las compara.
+ */
 .dark {
-  --cl-canvas: var(--color-neutral-900);
-  --cl-surface: var(--color-neutral-800);
-  --cl-surface-subtle: var(--color-neutral-950);
-  --cl-surface-raised: #2b2820;
-  --cl-bezel-shell: rgba(0, 0, 0, 0.1);
-  --cl-bezel-highlight: rgba(255, 255, 255, 0.04);
-  --cl-foreground: var(--color-neutral-50);
-  --cl-foreground-secondary: var(--color-neutral-300);
-  --cl-foreground-muted: var(--color-neutral-400);
-  --cl-placeholder: var(--color-neutral-500);
-  --cl-border: rgba(255, 255, 255, 0.1);
-  --cl-border-subtle: rgba(255, 255, 255, 0.06);
-  --cl-scrim: rgba(0, 0, 0, 0.65);
-
-  --cl-success: #46b184;
-  --cl-success-bg: #12271d;
-  --cl-warning: #d9a044;
-  --cl-warning-bg: #2a2010;
-  --cl-danger: #e26a6a;
-  --cl-danger-bg: #2e1514;
-  --cl-info: #6fa6e0;
-  --cl-info-bg: #121f2e;
-  --cl-gold: #d2a24c;
-
-  --cl-shadow-xs: 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --cl-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06),
-    0 2px 8px -2px rgba(0, 0, 0, 0.45);
-  --cl-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.07),
-    0 8px 24px -8px rgba(0, 0, 0, 0.55);
-  --cl-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 16px 48px -12px rgba(0, 0, 0, 0.6);
-  --cl-shadow-xl: 0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 24px 64px -16px rgba(0, 0, 0, 0.65);
-  --cl-shadow-bezel: 0 0 0 1px rgba(255, 255, 255, 0.06),
-    0 8px 24px -8px rgba(0, 0, 0, 0.5);
-  --cl-skeleton-highlight: rgba(255, 255, 255, 0.06);
-
+  --cl-canvas: var(--cl-dark-canvas);
+  --cl-surface: var(--cl-dark-surface);
+  --cl-surface-subtle: var(--cl-dark-surface-subtle);
+  --cl-surface-raised: var(--cl-dark-surface-raised);
+  --cl-surface-hover: var(--cl-dark-surface-hover);
+  --cl-surface-inverse: var(--cl-dark-surface-inverse);
+  --cl-on-surface-inverse: var(--cl-dark-on-surface-inverse);
+  --cl-bezel-shell: var(--cl-dark-bezel-shell);
+  --cl-bezel-highlight: var(--cl-dark-bezel-highlight);
+  --cl-foreground: var(--cl-dark-foreground);
+  --cl-foreground-secondary: var(--cl-dark-foreground-secondary);
+  --cl-foreground-muted: var(--cl-dark-foreground-muted);
+  --cl-placeholder: var(--cl-dark-placeholder);
+  --cl-border: var(--cl-dark-border);
+  --cl-border-subtle: var(--cl-dark-border-subtle);
+  --cl-border-strong: var(--cl-dark-border-strong);
+  --cl-scrim: var(--cl-dark-scrim);
+  --cl-skeleton-highlight: var(--cl-dark-skeleton-highlight);
+  --cl-focus-ring: var(--cl-dark-focus-ring);
+  --cl-success: var(--cl-dark-success);
+  --cl-success-bg: var(--cl-dark-success-bg);
+  --cl-success-ink: var(--cl-dark-success-ink);
+  --cl-on-success: var(--cl-dark-on-success);
+  --cl-warning: var(--cl-dark-warning);
+  --cl-warning-bg: var(--cl-dark-warning-bg);
+  --cl-warning-ink: var(--cl-dark-warning-ink);
+  --cl-on-warning: var(--cl-dark-on-warning);
+  --cl-danger: var(--cl-dark-danger);
+  --cl-danger-bg: var(--cl-dark-danger-bg);
+  --cl-on-danger: var(--cl-dark-on-danger);
+  --cl-info: var(--cl-dark-info);
+  --cl-info-bg: var(--cl-dark-info-bg);
+  --cl-on-info: var(--cl-dark-on-info);
+  --cl-gold: var(--cl-dark-gold);
+  --cl-brand: var(--cl-dark-brand);
+  --cl-brand-foreground: var(--cl-dark-brand-foreground);
+  --cl-brand-hover: var(--cl-dark-brand-hover);
+  --cl-brand-ink: var(--cl-dark-brand-ink);
+  --cl-brand-tint: var(--cl-dark-brand-tint);
+  --cl-brand-subtle: var(--cl-dark-brand-subtle);
+  --cl-shadow-xs: var(--cl-dark-shadow-xs);
+  --cl-shadow-sm: var(--cl-dark-shadow-sm);
+  --cl-shadow-md: var(--cl-dark-shadow-md);
+  --cl-shadow-lg: var(--cl-dark-shadow-lg);
+  --cl-shadow-xl: var(--cl-dark-shadow-xl);
+  --cl-shadow-bezel: var(--cl-dark-shadow-bezel);
+  --cl-theme-dark: 1;
   color-scheme: dark;
 }
 
-/* Sin toggle explícito, el sistema decide (mismos valores que .dark) */
+/* Sin clase explícita (no-JS, o antes de que corra el script), manda el SO.
+   COPIA EXACTA del bloque .dark de arriba — verificado por test. */
 @media (prefers-color-scheme: dark) {
   :root:not(.light):not(.dark) {
-    --cl-canvas: var(--color-neutral-900);
-    --cl-surface: var(--color-neutral-800);
-    --cl-surface-subtle: var(--color-neutral-950);
-    --cl-surface-raised: #2b2820;
-    --cl-bezel-shell: rgba(0, 0, 0, 0.1);
-    --cl-bezel-highlight: rgba(255, 255, 255, 0.04);
-    --cl-foreground: var(--color-neutral-50);
-    --cl-foreground-secondary: var(--color-neutral-300);
-    --cl-foreground-muted: var(--color-neutral-400);
-    --cl-placeholder: var(--color-neutral-500);
-    --cl-border: rgba(255, 255, 255, 0.1);
-    --cl-border-subtle: rgba(255, 255, 255, 0.06);
-    --cl-scrim: rgba(0, 0, 0, 0.65);
-
-    --cl-success: #46b184;
-    --cl-success-bg: #12271d;
-    --cl-warning: #d9a044;
-    --cl-warning-bg: #2a2010;
-    --cl-danger: #e26a6a;
-    --cl-danger-bg: #2e1514;
-    --cl-info: #6fa6e0;
-    --cl-info-bg: #121f2e;
-    --cl-gold: #d2a24c;
-
-    --cl-shadow-xs: 0 0 0 1px rgba(255, 255, 255, 0.06);
-    --cl-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06),
-      0 2px 8px -2px rgba(0, 0, 0, 0.45);
-    --cl-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.07),
-      0 8px 24px -8px rgba(0, 0, 0, 0.55);
-    --cl-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08),
-      0 16px 48px -12px rgba(0, 0, 0, 0.6);
-    --cl-shadow-xl: 0 0 0 1px rgba(255, 255, 255, 0.08),
-      0 24px 64px -16px rgba(0, 0, 0, 0.65);
-    --cl-shadow-bezel: 0 0 0 1px rgba(255, 255, 255, 0.06),
-      0 8px 24px -8px rgba(0, 0, 0, 0.5);
-    --cl-skeleton-highlight: rgba(255, 255, 255, 0.06);
-
+    --cl-canvas: var(--cl-dark-canvas);
+    --cl-surface: var(--cl-dark-surface);
+    --cl-surface-subtle: var(--cl-dark-surface-subtle);
+    --cl-surface-raised: var(--cl-dark-surface-raised);
+    --cl-surface-hover: var(--cl-dark-surface-hover);
+    --cl-surface-inverse: var(--cl-dark-surface-inverse);
+    --cl-on-surface-inverse: var(--cl-dark-on-surface-inverse);
+    --cl-bezel-shell: var(--cl-dark-bezel-shell);
+    --cl-bezel-highlight: var(--cl-dark-bezel-highlight);
+    --cl-foreground: var(--cl-dark-foreground);
+    --cl-foreground-secondary: var(--cl-dark-foreground-secondary);
+    --cl-foreground-muted: var(--cl-dark-foreground-muted);
+    --cl-placeholder: var(--cl-dark-placeholder);
+    --cl-border: var(--cl-dark-border);
+    --cl-border-subtle: var(--cl-dark-border-subtle);
+    --cl-border-strong: var(--cl-dark-border-strong);
+    --cl-scrim: var(--cl-dark-scrim);
+    --cl-skeleton-highlight: var(--cl-dark-skeleton-highlight);
+    --cl-focus-ring: var(--cl-dark-focus-ring);
+    --cl-success: var(--cl-dark-success);
+    --cl-success-bg: var(--cl-dark-success-bg);
+    --cl-success-ink: var(--cl-dark-success-ink);
+    --cl-on-success: var(--cl-dark-on-success);
+    --cl-warning: var(--cl-dark-warning);
+    --cl-warning-bg: var(--cl-dark-warning-bg);
+    --cl-warning-ink: var(--cl-dark-warning-ink);
+    --cl-on-warning: var(--cl-dark-on-warning);
+    --cl-danger: var(--cl-dark-danger);
+    --cl-danger-bg: var(--cl-dark-danger-bg);
+    --cl-on-danger: var(--cl-dark-on-danger);
+    --cl-info: var(--cl-dark-info);
+    --cl-info-bg: var(--cl-dark-info-bg);
+    --cl-on-info: var(--cl-dark-on-info);
+    --cl-gold: var(--cl-dark-gold);
+    --cl-brand: var(--cl-dark-brand);
+    --cl-brand-foreground: var(--cl-dark-brand-foreground);
+    --cl-brand-hover: var(--cl-dark-brand-hover);
+    --cl-brand-ink: var(--cl-dark-brand-ink);
+    --cl-brand-tint: var(--cl-dark-brand-tint);
+    --cl-brand-subtle: var(--cl-dark-brand-subtle);
+    --cl-shadow-xs: var(--cl-dark-shadow-xs);
+    --cl-shadow-sm: var(--cl-dark-shadow-sm);
+    --cl-shadow-md: var(--cl-dark-shadow-md);
+    --cl-shadow-lg: var(--cl-dark-shadow-lg);
+    --cl-shadow-xl: var(--cl-dark-shadow-xl);
+    --cl-shadow-bezel: var(--cl-dark-shadow-bezel);
+    --cl-theme-dark: 1;
     color-scheme: dark;
   }
 }

@@ -70,7 +70,7 @@ function SignalRow({
     <li className="flex items-start gap-3.5">
       <span
         aria-hidden="true"
-        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-700"
+        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
       >
         <IconComponent size={22} />
       </span>
@@ -90,7 +90,7 @@ export default function TrustScorePage() {
       <header className="flex flex-col items-center gap-3 pt-2 text-center">
         <span
           aria-hidden="true"
-          className="flex size-16 items-center justify-center rounded-full bg-brand-50 text-brand"
+          className="flex size-16 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
         >
           <ChartBar size={34} weight="fill" />
         </span>

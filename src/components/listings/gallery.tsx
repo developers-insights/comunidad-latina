@@ -18,6 +18,10 @@ export interface ListingGalleryProps {
 /**
  * Galería 16:9 con swipe horizontal (scroll-snap nativo — el gesto estándar,
  * nunca redefinido) y contador "3/8" (§4.d).
+ *
+ * Controles y contador flotan sobre la foto: van con los tokens de media
+ * (constantes en ambos temas). Una foto no se aclara porque el usuario prendió
+ * el tema light — bg-scrim se reserva para backdrops de overlay.
  */
 export function ListingGallery({ photos, title, className }: ListingGalleryProps) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -90,8 +94,8 @@ export function ListingGallery({ photos, title, className }: ListingGalleryProps
             disabled={current <= 1}
             className={cn(
               "absolute left-2 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full",
-              "bg-scrim text-white backdrop-blur-sm transition-opacity duration-(--duration-fast)",
-              "hover:bg-scrim/90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+              "bg-media-scrim text-on-media backdrop-blur-sm transition-opacity duration-(--duration-fast)",
+              "hover:bg-media-scrim/90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
               "disabled:pointer-events-none disabled:opacity-0",
             )}
           >
@@ -104,8 +108,8 @@ export function ListingGallery({ photos, title, className }: ListingGalleryProps
             disabled={current >= total}
             className={cn(
               "absolute right-2 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full",
-              "bg-scrim text-white backdrop-blur-sm transition-opacity duration-(--duration-fast)",
-              "hover:bg-scrim/90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+              "bg-media-scrim text-on-media backdrop-blur-sm transition-opacity duration-(--duration-fast)",
+              "hover:bg-media-scrim/90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
               "disabled:pointer-events-none disabled:opacity-0",
             )}
           >
@@ -113,7 +117,7 @@ export function ListingGallery({ photos, title, className }: ListingGalleryProps
           </button>
           <span
             aria-live="polite"
-            className="numeric absolute bottom-3 right-3 rounded-full bg-scrim px-2.5 py-1 text-xs font-semibold text-white"
+            className="numeric absolute bottom-3 right-3 rounded-full bg-media-scrim px-2.5 py-1 text-xs font-semibold text-on-media"
           >
             {COPY.detail.photoCounter(current, total)}
           </span>

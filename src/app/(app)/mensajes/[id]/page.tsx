@@ -176,7 +176,7 @@ export default async function HiloPage({
 
       {/* Pie según estado: solo accepted escribe (§9.2) */}
       {isAccepted && (
-        <div className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 -mx-1 bg-neutral-50/95 px-1 pb-2 pt-1 backdrop-blur-sm dark:bg-neutral-900/95">
+        <div className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 -mx-1 bg-canvas/95 px-1 pb-2 pt-1 backdrop-blur-sm">
           <Composer conversationId={conversation.id} />
         </div>
       )}

@@ -122,7 +122,7 @@ export default async function GuiaDetallePage({ params }: Props) {
       {sources.length > 0 && (
         <BezelCard variant="featured" className="mt-8" coreClassName="p-5">
           <h2 className="flex items-center gap-2 font-display text-base font-semibold">
-            <SealCheck size={18} weight="fill" className="text-brand-700 dark:text-brand-300" aria-hidden="true" />
+            <SealCheck size={18} weight="fill" className="text-brand-ink" aria-hidden="true" />
             {COPY.guideDetail.sourcesTitle}
           </h2>
           <ul className="mt-3 space-y-2">
@@ -132,7 +132,7 @@ export default async function GuiaDetallePage({ params }: Props) {
                   href={source.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group inline-flex items-start gap-1.5 text-sm font-medium text-brand-700 underline decoration-brand-200 underline-offset-2 hover:decoration-brand-700 dark:text-brand-300 dark:decoration-brand-700"
+                  className="group inline-flex items-start gap-1.5 text-sm font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 hover:decoration-brand-ink"
                 >
                   <span>{source.label}</span>
                   <ArrowSquareOut size={14} className="mt-0.5 shrink-0" aria-hidden="true" />

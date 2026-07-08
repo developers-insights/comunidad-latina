@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -22,6 +21,7 @@ import {
   toGuideCardData,
 } from "@/components/marketing/data";
 import { GuideCard } from "@/components/marketing/guide-card";
+import { HeroBackdrop } from "@/components/marketing/hero-backdrop";
 import { ListingMiniCard } from "@/components/marketing/listing-mini-card";
 import { JsonLd } from "@/components/marketing/json-ld";
 import { Reveal } from "@/components/marketing/reveal";
@@ -100,51 +100,28 @@ export default async function MarketingHome() {
       />
 
       {/* (a) Hero */}
-      <section className="relative isolate overflow-hidden bg-neutral-900">
-        <div className="absolute inset-0 -z-10">
-          <Image
-            src="/images/hero-community.png"
-            alt=""
-            fill
-            priority
-            sizes="100vw"
-            className="object-cover"
-          />
-          {/* Overlay vertical: legibilidad del texto sobre la foto (§2.4). */}
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 bg-gradient-to-t from-neutral-950/92 via-neutral-950/62 to-neutral-950/30"
-          />
-          {/* Refuerzo lateral desde la izquierda: la columna de texto queda
-              siempre sobre zona oscura, sin ensuciar la foto a la derecha. */}
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 bg-gradient-to-r from-neutral-950/55 via-neutral-950/10 to-transparent"
-          />
-          {/* Glow sutil con la marca del tenant: profundidad premium, muy tenue. */}
-          <div
-            aria-hidden="true"
-            className="absolute -left-40 top-1/2 -z-0 hidden size-[36rem] -translate-y-1/2 rounded-full opacity-[0.16] blur-3xl sm:block"
-            style={{ background: "radial-gradient(closest-side, var(--color-brand-500), transparent)" }}
-          />
-        </div>
+      <section className="relative isolate overflow-hidden bg-media-backdrop">
+        <HeroBackdrop />
 
-        <div className="mx-auto flex w-full max-w-5xl flex-col items-start px-4 pb-24 pt-28 sm:pb-32 sm:pt-40">
+        {/* El pb-80 del móvil no es aire: abre la franja donde vive la familia de
+            la foto vertical, debajo de la barra de confianza (ver HeroBackdrop).
+            En ≥sm manda la foto apaisada y alcanza con el pb-32 de siempre. */}
+        <div className="mx-auto flex w-full max-w-5xl flex-col items-start px-4 pb-80 pt-28 sm:pb-32 sm:pt-40">
           <Reveal>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-sm font-medium text-white shadow-sm backdrop-blur-md">
+            <span className="inline-flex items-center gap-2 rounded-full border border-on-media/25 bg-on-media/10 px-4 py-1.5 text-sm font-medium text-on-media shadow-sm backdrop-blur-md">
               <ShieldCheck size={16} weight="fill" aria-hidden="true" />
               {COPY.hero.badge}
             </span>
           </Reveal>
 
           <Reveal delay={0.08}>
-            <h1 className="mt-7 max-w-3xl font-display text-[2rem] font-bold leading-[1.08] tracking-tight text-white [text-shadow:0_2px_24px_rgba(0,0,0,0.35)] sm:text-4xl lg:text-[3.25rem] lg:leading-[1.05]">
+            <h1 className="mt-7 max-w-3xl font-display text-[2rem] font-bold leading-[1.08] tracking-tight text-on-media [text-shadow:0_2px_24px_rgba(0,0,0,0.35)] sm:text-4xl lg:text-[3.25rem] lg:leading-[1.05]">
               {COPY.hero.h1(gentilicio)}
             </h1>
           </Reveal>
 
           <Reveal delay={0.16}>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-neutral-100/90">
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-on-media/90">
               {COPY.hero.subhead}
             </p>
           </Reveal>
@@ -157,7 +134,7 @@ export default async function MarketingHome() {
               href="/propiedades"
               className={cn(
                 buttonVariants({ variant: "outline", size: "lg" }),
-                "border-white/40 text-white hover:bg-white/10",
+                "border-on-media/40 text-on-media hover:bg-on-media/10",
               )}
             >
               {COPY.hero.ctaSecondary}
@@ -166,10 +143,10 @@ export default async function MarketingHome() {
 
           {/* Trust bar: señales de confianza premium, sobrias, sin números inventados. */}
           <Reveal delay={0.32} className="mt-10 w-full">
-            <ul className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-white/15 pt-6 text-sm text-neutral-100/85">
+            <ul className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-on-media/15 pt-6 text-sm text-on-media/85">
               {COPY.hero.trustSignals.map((signal) => (
                 <li key={signal} className="inline-flex items-center gap-2">
-                  <SealCheck size={16} weight="fill" className="shrink-0 text-white/70" aria-hidden="true" />
+                  <SealCheck size={16} weight="fill" className="shrink-0 text-on-media/70" aria-hidden="true" />
                   {signal}
                 </li>
               ))}
@@ -201,14 +178,14 @@ export default async function MarketingHome() {
                   )}
                 >
                   <BezelCard className="h-full" coreClassName="flex h-full flex-col gap-3 p-6">
-                    <span className="flex size-11 items-center justify-center rounded-md bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                    <span className="flex size-11 items-center justify-center rounded-md bg-brand-tint text-brand-ink">
                       <Icon size={24} weight="light" aria-hidden="true" />
                     </span>
                     <h3 className="font-display text-lg font-semibold">{pillar.title}</h3>
                     <p className="text-sm leading-relaxed text-foreground-secondary">
                       {pillar.body}
                     </p>
-                    <span className="mt-auto inline-flex items-center gap-1 pt-2 text-sm font-medium text-brand-700 transition-transform duration-(--duration-fast) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0 dark:text-brand-300">
+                    <span className="mt-auto inline-flex items-center gap-1 pt-2 text-sm font-medium text-brand-ink transition-transform duration-(--duration-fast) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0">
                       {pillar.cta}
                       <ArrowRight size={16} aria-hidden="true" />
                     </span>
@@ -282,7 +259,7 @@ export default async function MarketingHome() {
             </div>
             <Link
               href="/guias"
-              className="group inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-700 dark:text-brand-300"
+              className="group inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-ink"
             >
               {COPY.guides.allLink}
               <ArrowRight
@@ -318,7 +295,7 @@ export default async function MarketingHome() {
               </div>
               <Link
                 href="/propiedades"
-                className="group inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-700 dark:text-brand-300"
+                className="group inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-ink"
               >
                 {COPY.listings.allLink}
                 <ArrowRight
@@ -345,7 +322,7 @@ export default async function MarketingHome() {
         <Reveal>
           <BezelCard variant="featured" coreClassName="flex flex-col items-start gap-4 p-8 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-4">
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-brand-tint text-brand-ink">
                 <Storefront size={26} weight="light" aria-hidden="true" />
               </span>
               <div>

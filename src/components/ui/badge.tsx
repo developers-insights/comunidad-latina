@@ -9,9 +9,12 @@ const badgeVariants = cva(
     variants: {
       variant: {
         neutral: "bg-surface-subtle text-foreground-secondary",
-        brand: "bg-brand-50 text-brand-700",
-        success: "bg-success-bg text-success",
-        warning: "bg-warning-bg text-warning",
+        brand: "bg-brand-tint text-brand-ink",
+        // Es TEXTO de 12px sobre el `-bg` de su propio estado: ahí el fill de
+        // §2.3 no llega a AA (success 4.43:1, warning 3.28:1) y va el `-ink`.
+        // danger (4.53:1) e info (4.76:1) sí pasan y usan el fill.
+        success: "bg-success-bg text-success-ink",
+        warning: "bg-warning-bg text-warning-ink",
         danger: "bg-danger-bg text-danger",
         info: "bg-info-bg text-info",
       },

@@ -1,10 +1,10 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
 import { getTenant } from "@/lib/tenant/resolve";
-import { brandThemeToStyle } from "@/lib/tenant/brand-pipeline";
 import { Badge } from "@/components/ui";
 import { AdminNav } from "@/components/admin/admin-nav";
+import { ThemeToggle } from "@/components/theme";
 import { requireStaff } from "./guard";
 
 /**
@@ -41,14 +41,11 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     .eq("status", "pending");
 
   return (
-    <div
-      style={brandThemeToStyle(tenant.brandHex) as CSSProperties}
-      className="flex min-h-dvh flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
-    >
-      <header className="sticky top-0 z-40 border-b border-neutral-200/70 bg-white/85 backdrop-blur-md dark:border-neutral-800 dark:bg-neutral-900/85">
+    <div className="flex min-h-dvh flex-col">
+      <header className="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between gap-3 px-4">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="truncate text-base font-bold tracking-tight text-[var(--color-brand)]">
+            <span className="truncate text-base font-bold tracking-tight text-brand-ink">
               {tenant.name}
             </span>
             <span className="hidden text-sm text-foreground-muted sm:inline" aria-hidden="true">
@@ -59,13 +56,16 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             </h1>
             <Badge variant="brand">{COPY.roleLabel[role]}</Badge>
           </div>
-          <Link
-            href="/feed"
-            className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-foreground-secondary transition-colors duration-(--duration-fast) hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
-          >
-            <ArrowLeft size={16} aria-hidden="true" />
-            {COPY.backToApp}
-          </Link>
+          <div className="flex shrink-0 items-center gap-1">
+            <Link
+              href="/feed"
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-foreground-secondary transition-colors duration-(--duration-fast) hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+            >
+              <ArrowLeft size={16} aria-hidden="true" />
+              {COPY.backToApp}
+            </Link>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 

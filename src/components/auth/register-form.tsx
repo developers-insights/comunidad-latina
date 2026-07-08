@@ -122,7 +122,7 @@ export function RegisterForm({
           {COPY.hasAccount}{" "}
           <Link
             href={loginHref}
-            className="font-semibold text-brand underline-offset-4 hover:underline"
+            className="font-semibold text-brand-ink underline-offset-4 hover:underline"
           >
             {COPY.goLogin}
           </Link>

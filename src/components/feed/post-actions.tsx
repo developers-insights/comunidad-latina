@@ -27,7 +27,7 @@ const actionClass = cn(
   "flex min-h-11 min-w-11 select-none items-center gap-1.5 rounded-md px-2 text-sm font-medium text-foreground-secondary",
   "transition-[transform,color,background-color] duration-(--duration-fast) ease-(--ease-spring)",
   "hover:bg-surface-subtle active:scale-[0.94]",
-  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
 );
 
 /**

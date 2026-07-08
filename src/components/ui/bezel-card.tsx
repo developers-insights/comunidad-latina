@@ -13,7 +13,7 @@ const bezelShellVariants = cva("rounded-xl p-1.5 shadow-bezel", {
     variant: {
       default: "bg-bezel-shell",
       /** Destacada: tinte suave del color de marca del tenant. */
-      featured: "bg-brand-50",
+      featured: "bg-brand-tint",
       warning: "bg-warning-bg",
       danger: "bg-danger-bg",
       success: "bg-success-bg",

@@ -114,7 +114,7 @@ export function ListingMiniCard({
 
           {listing.verification && (
             <div className="mt-auto rounded-sm bg-success-bg px-2.5 py-2 text-xs leading-snug">
-              <p className="flex items-start gap-1.5 font-medium text-success">
+              <p className="flex items-start gap-1.5 font-medium text-success-ink">
                 <SealCheck size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden="true" />
                 <span>
                   Licencia activa según {listing.verification.registry} al{" "}

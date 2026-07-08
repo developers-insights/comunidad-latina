@@ -119,7 +119,7 @@ export function TrustScoreSheet({
 
       <Link
         href={learnMoreHref}
-        className="mt-6 mb-2 inline-block text-sm font-semibold text-brand underline-offset-4 hover:underline"
+        className="mt-6 mb-2 inline-block text-sm font-semibold text-brand-ink underline-offset-4 hover:underline"
       >
         Leer cómo funciona el Trust Score
       </Link>

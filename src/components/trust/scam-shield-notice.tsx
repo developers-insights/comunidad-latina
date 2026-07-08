@@ -61,7 +61,7 @@ export function ScamShieldNotice({
         </p>
         <a
           href={learnHref}
-          className="mt-2 inline-flex items-center gap-1 font-semibold text-warning underline-offset-4 hover:underline"
+          className="mt-2 inline-flex items-center gap-1 font-semibold text-warning-ink underline-offset-4 hover:underline"
         >
           Aprender a identificar estafas
           <ArrowRight size={14} aria-hidden="true" />

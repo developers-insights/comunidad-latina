@@ -54,13 +54,9 @@ export function GuideCard({
       ) : (
         <div
           aria-hidden="true"
-          className="flex aspect-[16/9] w-full items-center justify-center bg-gradient-to-br from-brand-50 to-surface-subtle dark:from-brand-900/40 dark:to-surface-subtle"
+          className="flex aspect-[16/9] w-full items-center justify-center bg-gradient-to-br from-brand-tint to-surface-subtle"
         >
-          <BookOpenText
-            size={40}
-            weight="light"
-            className="text-brand-700 dark:text-brand-300"
-          />
+          <BookOpenText size={40} weight="light" className="text-brand-ink" />
         </div>
       )}
 
@@ -92,7 +88,7 @@ export function GuideCard({
           </span>
           <span
             aria-hidden="true"
-            className="inline-flex items-center gap-1 font-medium text-brand-700 transition-transform duration-(--duration-fast) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0 dark:text-brand-300"
+            className="inline-flex items-center gap-1 font-medium text-brand-ink transition-transform duration-(--duration-fast) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0"
           >
             Leer
             <ArrowRight size={16} />

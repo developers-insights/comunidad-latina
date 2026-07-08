@@ -21,9 +21,24 @@ type BrandMarkProps = {
 /**
  * BRAND MARK — emblema de marca vectorial premium (escudo + monograma "CL").
  *
- * SVG inline, nítido a cualquier resolución y retintable: el silueta del escudo
- * usa `currentColor`, así que hereda el color del contexto (útil para variantes
- * monocromas). Por defecto renderiza el gradiente de marca completo.
+ * SVG inline, nítido a cualquier resolución. La silueta base usa `currentColor`
+ * y encima va, opaco, el gradiente de marca del tenant.
+ *
+ * Multi-tenant: el relleno y el bisel salen de la escala de marca que inyecta el
+ * brand pipeline (`--color-brand-400/600/700`), NO de hexes fijos — un tenant
+ * terracota renderizaba un emblema azul. Los escalones se eligieron por ΔE2000
+ * contra el arte original (600↔#2C6CE0 = 2.66, 700↔#154CB2 = 3.40,
+ * 400↔#86ADEF = 3.81): el tenant default se ve igual que siempre.
+ *
+ * Sale de la ESCALA y no de `--color-brand` a propósito: la escalera de lightness
+ * del pipeline es fija (600 → L 0.55, 700 → L 0.47), así que el escudo conserva
+ * su profundidad y su luminancia para cualquier marca — sólo cambia el matiz — y
+ * el monograma mantiene su contraste (medido: 5.0:1 en el peor tenant, hasta con
+ * amarillo neón) donde con `--color-brand` crudo quedaría ilegible.
+ *
+ * Los blancos que quedan (gloss, shine, monograma) NO son colores de UI sino
+ * LUZ sobre el emblema: constantes en los dos temas a propósito. La escala de
+ * marca también es única para los dos temas — un logo no se invierte (§2.8).
  *
  * Micro-interacción: un "shine" — barrido de luz diagonal — cruza el emblema al
  * hover. Es puro adorno (clip-path + transform sobre un gradiente), acotado al
@@ -74,8 +89,8 @@ export function BrandMark({
       >
         <defs>
           <linearGradient id={fillId} x1="64" y1="8" x2="64" y2="120" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#2C6CE0" />
-            <stop offset="1" stopColor="#154CB2" />
+            <stop offset="0" stopColor="var(--color-brand-600, #2C6CE0)" />
+            <stop offset="1" stopColor="var(--color-brand-700, #154CB2)" />
           </linearGradient>
           <linearGradient id={glossId} x1="64" y1="8" x2="64" y2="72" gradientUnits="userSpaceOnUse">
             <stop offset="0" stopColor="#FFFFFF" stopOpacity="0.22" />
@@ -93,7 +108,8 @@ export function BrandMark({
           </clipPath>
         </defs>
 
-        {/* Silueta retintable (currentColor) + relleno de marca + gloss superior */}
+        {/* Silueta base en currentColor (queda debajo del relleno opaco: sólo se ve
+            si el gradiente no resolviera) + relleno de marca + gloss superior */}
         <g clipPath={`url(#${clipId})`}>
           <path
             fill="currentColor"
@@ -122,16 +138,21 @@ export function BrandMark({
           )}
         </g>
 
-        {/* Borde interior sutil */}
+        {/* Borde interior sutil — bisel de marca (brand-400), no un azul fijo */}
         <path
           fill="none"
-          stroke="#86ADEF"
+          stroke="var(--color-brand-400, #86ADEF)"
           strokeOpacity="0.45"
           strokeWidth="1.5"
           d="M64 15 27 28.5V64c0 24.2 15.9 41.9 37 49.9 21.1-8 37-25.7 37-49.9V28.5L64 15Z"
         />
 
-        {/* Monograma CL: C (arco abierto) + L anidada */}
+        {/* Monograma CL: C (arco abierto) + L anidada.
+            Tinta clara CONSTANTE (no `--color-brand-foreground`, que voltea con el
+            tema): el escudo de abajo no voltea, así que un monograma theme-aware
+            se daría vuelta sobre un fondo que no cambia. La escalera de lightness
+            fija del pipeline garantiza que el contraste sea el mismo para todos
+            los tenants, y un logotipo está exento de 1.4.3 igual. */}
         <path
           fill="none"
           stroke="#FCFCFB"

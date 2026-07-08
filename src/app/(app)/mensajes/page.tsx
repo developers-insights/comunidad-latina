@@ -122,12 +122,12 @@ export default async function MensajesPage() {
                 key={conversation.id}
                 className={cn(
                   "rounded-lg border bg-surface shadow-xs",
-                  isPendingReceived ? "border-brand-200" : "border-border-subtle",
+                  isPendingReceived ? "border-brand-subtle" : "border-border-subtle",
                 )}
               >
                 <Link
                   href={`/mensajes/${conversation.id}`}
-                  className="flex items-start gap-3 rounded-lg p-4 transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+                  className="flex items-start gap-3 rounded-lg p-4 transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
                 >
                   <Avatar src={other?.avatar_url} name={otherName} size="md" />
                   <div className="min-w-0 flex-1">
@@ -141,7 +141,7 @@ export default async function MensajesPage() {
                     </div>
 
                     {isPendingReceived ? (
-                      <p className="mt-0.5 line-clamp-2 text-sm font-medium text-brand-700">
+                      <p className="mt-0.5 line-clamp-2 text-sm font-medium text-brand-ink">
                         {COPY.inbox.wantsToContact(conversation.listing?.title ?? null)}
                       </p>
                     ) : last ? (

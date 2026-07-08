@@ -8,9 +8,11 @@ const chipVariants = cva(
       variant: {
         neutral:
           "border border-border-subtle bg-surface-subtle text-foreground-secondary",
-        brand: "border border-brand-200 bg-brand-50 text-brand-700",
-        success: "border border-success/20 bg-success-bg text-success",
-        warning: "border border-warning/20 bg-warning-bg text-warning",
+        brand: "border border-brand-subtle bg-brand-tint text-brand-ink",
+        // El borde usa el FILL del estado (decoración); la etiqueta usa el `-ink`,
+        // que es el único tono AA como texto sobre el `-bg` del mismo estado.
+        success: "border border-success/20 bg-success-bg text-success-ink",
+        warning: "border border-warning/20 bg-warning-bg text-warning-ink",
         danger: "border border-danger/20 bg-danger-bg text-danger",
         info: "border border-info/20 bg-info-bg text-info",
       },

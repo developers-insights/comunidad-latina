@@ -21,7 +21,7 @@ export function BackLink({
       className={cn(
         "inline-flex min-h-11 items-center gap-1 rounded-md pr-2 text-sm font-medium text-foreground-secondary",
         "transition-colors duration-(--duration-fast) hover:text-foreground",
-        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
         className,
       )}
     >

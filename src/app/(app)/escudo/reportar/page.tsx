@@ -129,7 +129,7 @@ export default async function ReportarPage() {
           action={
             <Link
               href="/entrar"
-              className="inline-flex h-10 items-center gap-1.5 rounded-md px-3 text-sm font-semibold text-info focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-md px-3 text-sm font-semibold text-info focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
             >
               <SignIn size={16} aria-hidden="true" />
               {COPY.loginCta}

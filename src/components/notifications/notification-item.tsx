@@ -43,10 +43,10 @@ export function NotificationItem({ notification }: { notification: NotificationI
         aria-busy={pending || undefined}
         className={cn(
           "flex w-full min-h-11 items-start gap-3 rounded-lg border px-4 py-3.5 text-left transition-colors",
-          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand-200)]",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
           notification.read
             ? "border-border-subtle bg-surface hover:bg-surface-subtle"
-            : "border-brand-200 bg-surface shadow-xs hover:bg-surface-subtle",
+            : "border-brand-subtle bg-surface shadow-xs hover:bg-surface-subtle",
         )}
       >
         <span
