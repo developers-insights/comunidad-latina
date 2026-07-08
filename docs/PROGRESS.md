@@ -1,7 +1,39 @@
 # PROGRESS — Comunidad Latina
 
-**Última actualización:** 2026-07-08 (guard de divergencia de tenant).
-**Estado:** ✅ **R0 + R1 + R2 + R3 CONSTRUIDOS + REVISIÓN INTEGRAL + POLISH PREMIUM + EMBLEMAS 3D + GUARD DE TENANT.** Producto completo listo para los gates humanos. 47 rutas.
+**Última actualización:** 2026-07-08 (merge de 5 agentes + push + deploy).
+**Estado:** ✅ **R0 + R1 + R2 + R3 + REVISIÓN INTEGRAL + POLISH + EMBLEMAS 3D + GUARD DE TENANT + DESIGN TOKENS.** Producto completo listo para los gates humanos. 53 rutas.
+
+## Merge integral + push + deploy (✅ 2026-07-08)
+
+`main` = `cd7b2dd`, pusheado a `INSIGHTSAPPS/comunidad-latina` (privado) y desplegado a
+https://comunidad-latina-taupe.vercel.app. Gates: `tsc` 0 · `lint` 0 errores · **272 tests** · `build` verde (53 rutas).
+
+Se unieron dos líneas de trabajo paralelas:
+
+- **`agents/design-tokens-y-theme` (`e9efcf1`)** — 95 archivos, +2672/−448. Cinco agentes trabajaron sobre el
+  working tree de `main` **sin commitear**, así que llegó todo entreverado: no hay atribución por agente ni forma
+  de separarlo retroactivamente. Tokens semánticos nuevos (`bg-media-scrim`, `text-on-media`, `focus-ring`,
+  `bg-brand-hover`) en ~60 componentes, `src/components/theme/` con tests, hero mobile con art direction
+  (`<picture>` + `getImageProps`), y `vitest.config.ts`.
+- **`claude/wizardly-albattani-90d934` (`a5df7e5`)** — guard de divergencia de tenant (ver más abajo).
+
+**Único conflicto real:** `vitest.config.ts` (add/add). Resuelto como unión — el alias de `server-only` y el
+`exclude` de `.claude/worktrees/**` son ambos necesarios.
+
+**Bug de a11y cerrado en el merge:** `tenant-mismatch-banner.tsx` era el último componente con
+`ring-[var(--color-brand-200)]`. Ese token es un tono casi blanco por construcción (lightness 0.885 en el brand
+pipeline, para cualquier tenant) → **1.38:1 contra el canvas claro: el anillo de foco no existía en light mode**
+(§2.8, "nunca un borde que desaparece en un tema"). Verificado en prod: ahora resuelve a `#9c3104` vía
+`--color-focus-ring`, que voltea con el tema.
+
+**`npm run lint` desde la raíz daba 3365 errores** — todos de `.claude/worktrees/<rama>/.next/` (bundles
+minificados de otra rama), ninguno de código. `.next/**` a secas solo matchea en la raíz. Arreglado en
+`eslint.config.mjs` con `**/.claude/worktrees/**` + `**/.next/**`. Mismo motivo que el `exclude` de vitest.
+
+**🐛 Bug abierto (preexistente, NO del merge):** `/admin/moderacion` tira **React #418** (mismatch de hidratación,
+`args[]=text`) en prod. La página funciona: React re-renderiza y Aprobar/Rechazar andan. Sospechoso:
+`new Intl.DateTimeFormat("es", …)` en `components/admin/moderation-item.tsx:56` y `scam-report-item.tsx:42`,
+que formatea distinto en el server (UTC) que en el browser.
 
 ## Deploy de demo en producción (⚠️ 2026-07-08)
 
