@@ -13,13 +13,14 @@
       "surface": "Hero de la landing principal (dominicanos.com)"
     },
     {
-      "file": "hero-community-mobile.webp",
+      "file": "hero-community-mobile-v2.webp",
       "format": "webp",
       "aspect_ratio": "768:1401 (0.548)",
       "approx_dimensions": "1200x2189",
       "description": "Recomposición vertical de hero-community.png: misma familia, mismo atardecer, cámara atrás y arriba. El cielo ocupa los dos tercios superiores y la familia camina en el tercio inferior. Generada con la original como referencia; la vereda del primer plano se extendió 25px con sharp (espejo + desenfoque progresivo) para que las caras aterricen debajo del texto del hero.",
       "surface": "Hero de la landing principal en <640px (art direction vía getImageProps + <picture>, ver components/marketing/hero-backdrop.tsx)",
-      "art_direction_note": "El recorte de object-cover es solo horizontal, así que la vertical mapea 1:1: la fila r del master cae en r/1401 del alto del hero. No recortar ni reencuadrar sin recalcular hero-backdrop.tsx."
+      "art_direction_note": "El recorte de object-cover es solo horizontal, así que la vertical mapea 1:1: la fila r del master cae en r/1401 del alto del hero. No recortar ni reencuadrar sin recalcular hero-backdrop.tsx.",
+      "filename_note": "El sufijo -v2 es un cache-bust deliberado: la URL de next/image (/_next/image?url=...) no cambia al reemplazar bytes bajo el mismo nombre, y los navegadores que cachearon una versión previa la seguían sirviendo. Nombre nuevo → URL nueva → fetch fresco. Al reencuadrar de nuevo, subir el número y actualizar hero-backdrop.tsx. Ver memoria verificar-cambios-de-imagenes."
     },
     {
       "file": "hero-vivienda.png",

@@ -80,7 +80,11 @@ export function HeroBackdrop() {
   // <img> ya trae su propio srcSet y su src.
   const { props: mobileProps } = getImageProps({
     ...common,
-    src: "/images/hero-community-mobile.webp",
+    // El sufijo -v2 es un cache-bust: la URL de next/image no cambia cuando
+    // cambian los bytes bajo el mismo nombre, así que un navegador que cacheó
+    // una versión anterior la sigue sirviendo. Nombre nuevo → URL nueva → fetch
+    // fresco garantizado. Al reencuadrar de nuevo, subir el número.
+    src: "/images/hero-community-mobile-v2.webp",
   });
 
   return (
