@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 const COPY = {
   menuLabel: "Más acciones",
-  reportTitle: "Reportar como estafa",
+  reportTitle: "Reportar un problema",
   reportDescription:
     "Contanos qué pasó. Tu reporte es anónimo para esta persona y lo revisa nuestro equipo.",
   reasonLegend: "¿Qué pasó?",

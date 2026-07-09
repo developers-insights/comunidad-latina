@@ -2,7 +2,6 @@ export const nav = {
   feed: "Inicio",
   properties: "Propiedades",
   community: "Comunidad",
-  shield: "Escudo",
   messages: "Mensajes",
   profile: "Perfil",
   notifications: "Notificaciones",

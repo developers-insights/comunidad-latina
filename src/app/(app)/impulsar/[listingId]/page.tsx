@@ -30,7 +30,7 @@ const COPY = {
   comoFunciona:
     "El impulso es publicidad: tu aviso sube al principio de los resultados de tu zona con la etiqueta \"Destacado\", para que la gente siempre sepa que es un espacio pago. Sin trucos.",
   notaHonesta:
-    "Impulsar no cambia tu Trust Score, no altera los resultados del verificador del Escudo Anti-Estafa y no garantiza conducta: solo mejora la visibilidad de tu aviso mientras dura. Es un pago único, sin renovación automática.",
+    "Impulsar no cambia tu Trust Score, no altera los resultados del verificador del centro de seguridad y no garantiza conducta: solo mejora la visibilidad de tu aviso mientras dura. Es un pago único, sin renovación automática.",
   exito:
     "¡Listo! Recibimos tu pago. Tu aviso queda destacado en unos minutos — te avisamos con una notificación.",
   cancelado: "No se hizo ningún cargo. Tus opciones de impulso te esperan acá.",

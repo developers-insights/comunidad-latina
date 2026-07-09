@@ -125,7 +125,7 @@ function reasonFor(need: NeedId, userAreaLabel: string | null, inZone: boolean):
     case "tramites":
       return `Porque estás resolviendo trámites`;
     case "estafas":
-      return `Porque querés cuidarte de estafas`;
+      return `Porque te importa tu seguridad`;
   }
 }
 

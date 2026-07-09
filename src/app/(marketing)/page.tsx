@@ -31,22 +31,22 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.co
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getTenant();
   const gentilicio = gentilicioDe(tenant.slug);
-  const description = `El lugar donde ${gentilicio} que llegan encuentran a su gente y resuelven su vida — vivienda sin estafas, guías de trámites en tu idioma y verificación contra registros oficiales.`;
+  const description = `El lugar donde ${gentilicio} que llegan encuentran a su gente y resuelven su vida — vivienda revisada, guías de trámites en tu idioma y verificación contra registros oficiales.`;
 
   return {
-    title: `${tenant.name} — Tu comunidad, sin estafas`,
+    title: `${tenant.name} — Tu comunidad de confianza`,
     description,
     keywords: [
       `comunidad ${tenant.slug}`,
-      "vivienda sin estafas",
+      "vivienda verificada",
       "apartamentos queens",
       "guías para inmigrantes",
       "ITIN sin SSN",
       "licencia de conducir NY",
-      "escudo anti-estafa",
+      "verificación comunitaria",
     ],
     openGraph: {
-      title: `${tenant.name} — Tu comunidad, sin estafas`,
+      title: `${tenant.name} — Tu comunidad de confianza`,
       description,
       type: "website",
       locale: "es_US",
@@ -54,7 +54,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     twitter: {
       card: "summary_large_image",
-      title: `${tenant.name} — Tu comunidad, sin estafas`,
+      title: `${tenant.name} — Tu comunidad de confianza`,
       description,
     },
   };

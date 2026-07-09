@@ -1,11 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  Flag,
-  IdentificationCard,
-  Scales,
-  ShieldCheck,
-} from "@phosphor-icons/react/dist/ssr";
+import { Flag, Scales, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard } from "@/components/ui";
 import { ScamShieldNotice } from "@/components/trust";
 import { BackLink } from "@/components/escudo/back-link";
@@ -17,20 +12,19 @@ import { BackLink } from "@/components/escudo/back-link";
  */
 
 const COPY = {
-  back: "Escudo",
+  back: "Centro de seguridad",
   title: "Aprendé a protegerte",
-  lead: "Las estafas de alquiler se repiten: son casi siempre las mismas 5 jugadas. Si las conocés, las ves venir de lejos.",
+  lead: "Alquilar con tranquilidad es más fácil cuando conocés las señales de alerta: casi siempre son las mismas 5. Si las conocés, las ves venir de lejos.",
   noticeIntro:
     "Este aviso amarillo te va a aparecer en la app cada vez que estés por hacer algo delicado. Cuando lo veas, frená un segundo y releelo:",
-  signalsTitle: "Las 5 señales de una estafa de alquiler",
+  signalsTitle: "Las 5 señales de alerta al alquilar",
   notaryTitle: "Ojo: en Estados Unidos, un “notario” NO es un abogado",
   notaryBody:
     "En muchos países un notario es un profesional del derecho. En EE. UU. no: un notary public solo certifica firmas — no puede darte consejo legal ni llevar tu caso de inmigración. Hay gente que se aprovecha de esa confusión para cobrar miles de dólares por trámites que no puede hacer.",
   notaryAction:
-    "Si alguien se presenta como notario y te ofrece resolver temas legales o de inmigración, verificá su matrícula y pedí siempre un abogado.",
+    "Si alguien se presenta como notario y te ofrece resolver temas legales o de inmigración, pedí siempre un abogado. Y si algo no te cierra, consultá las fuentes oficiales antes de pagar o firmar.",
   ctaTitle: "¿Viste alguna de estas señales?",
-  ctaVerificar: "Verificar un profesional",
-  ctaReportar: "Reportar una estafa",
+  ctaReportar: "Reportar un problema",
 } as const;
 
 type Signal = {
@@ -60,7 +54,7 @@ const SIGNALS: Signal[] = [
       "Un 2 bedrooms en Jackson Heights por $1,100 con fotos de revista, cuando todo lo similar ronda los $2,400.",
     actions: [
       "Compará con otros avisos de la misma zona: si es demasiado bueno para ser verdad, casi siempre no es verdad.",
-      "Buscá las fotos en internet — las estafas suelen usar imágenes robadas de otros avisos.",
+      "Buscá las fotos en internet — los avisos falsos suelen usar imágenes robadas de otros avisos.",
     ],
   },
   {
@@ -77,7 +71,7 @@ const SIGNALS: Signal[] = [
   {
     title: "Te apuran para decidir ya",
     looksLike:
-      "“Hay cinco familias interesadas”, “si no pagás hoy lo pierdo”, mensajes a toda hora presionando. La urgencia es la herramienta favorita del estafador.",
+      "“Hay cinco familias interesadas”, “si no pagás hoy lo pierdo”, mensajes a toda hora presionando. La urgencia es la táctica más común para apurarte a decidir.",
     example:
       "“Tengo a otra persona con el efectivo en la mano. Decime en una hora o se lo doy a ella.”",
     actions: [
@@ -199,18 +193,9 @@ export default function AprenderPage() {
         <h2 className="font-display text-base font-semibold text-foreground">
           {COPY.ctaTitle}
         </h2>
-        {/* Los dos <Link> se ven botón pero no pasan por buttonVariants, así que
-            no heredan su `cl-print-hide`: el hook del @media print va a mano. El
-            primero es `bg-brand text-brand-foreground` y sin su fondo —que el
-            navegador no imprime— el label salía blanco sobre papel blanco. */}
+        {/* El <Link> se ve botón pero no pasa por buttonVariants, así que no
+            hereda su `cl-print-hide`: el hook del @media print va a mano. */}
         <div className="flex w-full flex-col gap-2">
-          <Link
-            href="/escudo/verificar"
-            className="cl-print-hide inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-brand-foreground shadow-xs transition-colors duration-(--duration-fast) hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-          >
-            <IdentificationCard size={18} aria-hidden="true" />
-            {COPY.ctaVerificar}
-          </Link>
           <Link
             href="/escudo/reportar"
             className="cl-print-hide inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-5 text-sm font-semibold text-foreground transition-colors duration-(--duration-fast) hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"

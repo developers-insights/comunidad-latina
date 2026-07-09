@@ -5,7 +5,6 @@ import {
   CaretRight,
   Compass,
   Flag,
-  IdentificationCard,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { BezelCard, Emblem } from "@/components/ui";
@@ -17,26 +16,21 @@ import { BezelCard, Emblem } from "@/components/ui";
  */
 
 const COPY = {
-  title: "Escudo Anti-Estafa",
-  lead: "Herramientas concretas para que nadie se aproveche de vos ni de tu familia.",
-  what: "Consultamos registros oficiales (con fecha de consulta) y sumamos los reportes de tu propia comunidad. Sin magia, sin promesas vacías: te mostramos lo que dice el registro, literal.",
+  title: "Centro de seguridad",
+  lead: "Herramientas concretas para cuidarte a vos y a tu familia.",
+  what: "Te damos herramientas para verificar, reportar y aprender a cuidarte — con datos de fuentes oficiales cuando los tenemos.",
   whatNot:
     "Ninguna verificación garantiza cómo se va a comportar una persona. Por eso la regla es una sola: nunca envíes dinero por adelantado.",
   sections: {
-    verificar: {
-      title: "Verificar un profesional",
-      description:
-        "Notarios y abogados: consultá si la matrícula que te dieron figura activa en el registro oficial de NY.",
-    },
     reportar: {
-      title: "Reportar una estafa",
+      title: "Reportar un problema",
       description:
-        "¿Un aviso, perfil o mensaje te dio mala espina o ya te quisieron estafar? Contanos — protegés a los que vienen detrás.",
+        "¿Un aviso, perfil o mensaje te dio mala espina? Contanos — cuidás a los que vienen detrás.",
     },
     aprender: {
       title: "Aprender a protegerte",
       description:
-        "Las 5 señales de estafa de alquiler más comunes en Nueva York, con ejemplos reales y qué hacer en cada caso.",
+        "Las 5 señales de alerta más comunes al alquilar en Nueva York, con ejemplos reales y qué hacer en cada caso.",
     },
     asistente: {
       title: "Preguntale al Asistente",
@@ -113,13 +107,7 @@ export default function EscudoPage() {
       </div>
 
       {/* 4 secciones */}
-      <nav aria-label="Herramientas del Escudo" className="flex flex-col gap-3">
-        <SectionCard
-          href="/escudo/verificar"
-          icon={IdentificationCard}
-          title={COPY.sections.verificar.title}
-          description={COPY.sections.verificar.description}
-        />
+      <nav aria-label="Herramientas de seguridad" className="flex flex-col gap-3">
         <SectionCard
           href="/escudo/reportar"
           icon={Flag}

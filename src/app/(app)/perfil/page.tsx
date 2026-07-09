@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { MapPin } from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
+import { CaretRight, MapPin, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/server";
 import { Avatar, BezelCard } from "@/components/ui";
 import { Button } from "@/components/ui";
@@ -22,6 +23,9 @@ const COPY = {
   trustHint:
     "Crece con tu tiempo en la comunidad, tus verificaciones y el aval de tus vecinos.",
   editHeading: "Editar tu perfil",
+  helpHeading: "Ayuda y seguridad",
+  securityTitle: "Centro de seguridad",
+  securityDesc: "Verificaciones, reportes y guías para cuidar a tu familia.",
   sessionHeading: "Tu cuenta",
   signOut: "Cerrar sesión",
   deleteHint:
@@ -100,6 +104,39 @@ export default async function PerfilPage() {
           }}
         />
       </BezelCard>
+
+      {/* Ayuda y seguridad — hogar del Escudo, ahora fuera del nav principal */}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-semibold text-foreground">
+          {COPY.helpHeading}
+        </h2>
+        <Link
+          href="/escudo"
+          className="group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+        >
+          <BezelCard coreClassName="flex items-center gap-4 p-5">
+            <span
+              aria-hidden="true"
+              className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand-ink"
+            >
+              <ShieldCheck size={26} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-display text-base font-semibold text-foreground">
+                {COPY.securityTitle}
+              </span>
+              <span className="mt-0.5 block text-sm text-foreground-secondary">
+                {COPY.securityDesc}
+              </span>
+            </span>
+            <CaretRight
+              size={18}
+              aria-hidden="true"
+              className="shrink-0 text-foreground-muted transition-transform duration-(--duration-fast) ease-(--ease-out-premium) group-hover:translate-x-0.5"
+            />
+          </BezelCard>
+        </Link>
+      </section>
 
       {/* Cuenta: cerrar sesión + eliminar (alto riesgo, al final) */}
       <section className="flex flex-col gap-3 border-t border-border-subtle pt-6">

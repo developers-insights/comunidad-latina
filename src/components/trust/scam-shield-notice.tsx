@@ -16,7 +16,7 @@ const COPY: Record<ScamShieldVariant, { lead: string; body: string }> = {
   },
   job: {
     lead: "Antes de aceptar un trabajo:",
-    body: "ningún empleo serio te pide dinero por adelantado. Si te piden pagar para empezar, es una estafa.",
+    body: "ningún empleo serio te pide dinero por adelantado. Si te piden pagar para empezar, desconfiá.",
   },
   services: {
     lead: "Antes de contratar un servicio:",
@@ -63,7 +63,7 @@ export function ScamShieldNotice({
           href={learnHref}
           className="mt-2 inline-flex items-center gap-1 font-semibold text-warning-ink underline-offset-4 hover:underline"
         >
-          Aprender a identificar estafas
+          Aprendé a cuidarte
           <ArrowRight size={14} aria-hidden="true" />
         </a>
       </div>

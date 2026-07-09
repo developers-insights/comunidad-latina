@@ -10,7 +10,7 @@ import { VerificadorForm } from "@/components/escudo/verificador-form";
  */
 
 const COPY = {
-  back: "Escudo",
+  back: "Centro de seguridad",
   title: "Verificar un profesional",
   lead: "Antes de pagarle a un notario o abogado, consultá si su matrícula figura activa en el registro oficial de Nueva York.",
   howAnchor: "¿Cómo verificamos?",

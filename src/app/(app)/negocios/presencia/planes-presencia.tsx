@@ -24,7 +24,7 @@ const COPY = {
   recomendado: "El más elegido",
   elegir: (nombre: string) => `Elegir ${nombre}`,
   notaHonesta:
-    "Pagar no cambia tu Trust Score, no altera los resultados del verificador del Escudo Anti-Estafa y no garantiza conducta: solo mejora la visibilidad de tu negocio en el directorio. Cancelás cuando quieras.",
+    "Pagar no cambia tu Trust Score, no altera los resultados del verificador del centro de seguridad y no garantiza conducta: solo mejora la visibilidad de tu negocio en el directorio. Cancelás cuando quieras.",
   errorGenerico:
     "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo en un momento.",
   proximamenteFeature: "los pagos",

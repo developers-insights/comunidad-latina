@@ -21,7 +21,7 @@ const COPY = {
   cta: "Volver al inicio",
   links: [
     { href: "/propiedades", label: "Buscar vivienda", icon: Buildings },
-    { href: "/escudo", label: "Escudo Anti-Estafa", icon: ShieldCheck },
+    { href: "/escudo", label: "Centro de seguridad", icon: ShieldCheck },
     { href: "/guias", label: "Guías para recién llegados", icon: BookOpen },
   ],
 } as const;

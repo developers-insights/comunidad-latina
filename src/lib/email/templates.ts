@@ -155,14 +155,14 @@ export function welcomeEmail(params: {
     </h1>
     <p style="margin:0 0 8px;font-family:${T.fontStack};font-size:15px;line-height:23px;color:${T.inkSoft};">
       Ya sos parte de ${escapeHtml(params.tenantName)}: un lugar hecho para encontrar
-      vivienda sin estafas, conectar con tu gente y moverte con confianza.
+      vivienda verificada, conectar con tu gente y moverte con confianza.
     </p>
     <p style="margin:0 0 20px;font-family:${T.fontStack};font-size:15px;line-height:23px;color:${T.inkSoft};">
       Por acá podés empezar:
     </p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-      ${linkRow(`${site}/propiedades`, "Buscá vivienda verificada", "Avisos con Trust Score y protección anti-estafa.")}
-      ${linkRow(`${site}/escudo`, "Escudo Anti-Estafa", "Verificá a quien te ofrece algo antes de mover un peso.")}
+      ${linkRow(`${site}/propiedades`, "Buscá vivienda verificada", "Avisos con Trust Score y verificación de la comunidad.")}
+      ${linkRow(`${site}/escudo`, "Centro de seguridad", "Verificá a quien te ofrece algo antes de mover un peso.")}
       ${linkRow(`${site}/feed`, "Pasá por el feed", "Lo que está pasando en tu comunidad, hoy.")}
     </table>
     ${ctaButton(`${site}/feed`, "Entrar a la comunidad", params.brandHex)}`;
@@ -170,7 +170,7 @@ export function welcomeEmail(params: {
     subject: `Bienvenido a ${params.tenantName} — tu comunidad te espera`,
     html: baseLayout(
       { tenantName: params.tenantName, brandHex: params.brandHex },
-      "Ya sos parte. Vivienda verificada, Escudo Anti-Estafa y tu gente, en un solo lugar.",
+      "Ya sos parte. Vivienda verificada, Centro de seguridad y tu gente, en un solo lugar.",
       content,
     ),
   };

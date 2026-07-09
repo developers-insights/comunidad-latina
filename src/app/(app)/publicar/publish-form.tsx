@@ -40,7 +40,7 @@ const DIR_COPY = {
     credentialsLabel: "Credenciales",
     credentialsPlaceholder: "Ej.: Matrícula NY #12345, CPA",
     credentialsHelp:
-      "Separalas con comas. Si sos abogado o notario, después podés verificar tu matrícula en el Escudo.",
+      "Separalas con comas. Si sos abogado o notario, después podés verificar tu matrícula en el centro de seguridad.",
   },
   event: {
     dateLabel: "Fecha y hora del evento",

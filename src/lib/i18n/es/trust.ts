@@ -4,7 +4,7 @@ export const trust = {
   tapForDetail: "Tocá para ver el detalle",
   newAccount: "Cuenta nueva",
   verifiedIdentity: "Identidad verificada",
-  reportScam: "Reportar como estafa",
+  reportScam: "Reportar",
   // Copy legal fijo (§11 del plan): descriptor literal + disclaimer, SIEMPRE juntos.
   verifierDisclaimer:
     "Esto NO garantiza conducta — nunca envíes dinero por adelantado.",

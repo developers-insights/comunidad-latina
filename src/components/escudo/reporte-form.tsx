@@ -71,7 +71,7 @@ const COPY = {
   successTitle: "Gracias por cuidar a tu comunidad",
   successBody:
     "Nuestro equipo lo revisa. Si detectamos riesgo para otras personas, actuamos rápido — y tu nombre nunca se comparte.",
-  successBack: "Volver al Escudo",
+  successBack: "Volver al centro de seguridad",
 } as const;
 
 type TargetKind = "listing" | "profile" | "message";

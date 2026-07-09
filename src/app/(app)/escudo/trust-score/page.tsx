@@ -52,7 +52,7 @@ const COPY = {
   whereTitle: "Dónde lo ves",
   whereBody:
     "Al lado del nombre de la persona en avisos, perfiles y mensajes. Tocá el número y te mostramos el desglose completo: qué señales tiene y cuáles todavía no.",
-  cta: "Ir al Escudo Anti-Estafa",
+  cta: "Ir al centro de seguridad",
 } as const;
 
 export const metadata: Metadata = { title: COPY.title };

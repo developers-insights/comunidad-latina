@@ -28,7 +28,7 @@ export function ReportScamButton({
     <button
       type="button"
       onClick={onReport}
-      aria-label="Reportar como estafa"
+      aria-label="Reportar"
       className={cn(
         "select-none font-medium text-danger transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.98]",
         variant === "menu-item"
@@ -38,7 +38,7 @@ export function ReportScamButton({
       )}
     >
       <Flag size={18} aria-hidden="true" className="shrink-0" />
-      Reportar como estafa
+      Reportar
     </button>
   );
 }

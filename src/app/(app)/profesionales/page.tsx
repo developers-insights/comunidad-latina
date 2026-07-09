@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowRight, CaretDown, Plus, SealCheck } from "@phosphor-icons/react/dist/ssr";
-import { BezelCard, EmptyState, Skeleton, buttonVariants } from "@/components/ui";
+import { CaretDown, Plus } from "@phosphor-icons/react/dist/ssr";
+import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
 import {
   buildTrustSignals,
   decodeCursor,
@@ -203,22 +203,6 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
         </Link>
       </header>
 
-      {/* Banner de verificación → el Escudo hace el resto */}
-      <BezelCard variant="featured" className="mb-4" coreClassName="flex items-center gap-3 p-4">
-        <SealCheck size={28} weight="fill" aria-hidden="true" className="shrink-0 text-brand" />
-        <div className="min-w-0 flex-1">
-          <p className="font-display text-sm font-bold text-foreground">{C.verifyBannerLead}</p>
-          <p className="mt-0.5 text-xs text-foreground-secondary">{C.verifyBannerBody}</p>
-        </div>
-        <Link
-          href="/escudo/verificar"
-          className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "shrink-0")}
-        >
-          {C.verifyBannerCta}
-          <ArrowRight size={14} aria-hidden="true" />
-        </Link>
-      </BezelCard>
-
       <CategoryChips className="mb-5" />
 
       {cards.length === 0 ? (
@@ -257,7 +241,7 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
 }
 
 // ---------------------------------------------------------------------------
-// Fallback: silueta del header + banner + chips + cards (shimmer, §5.2)
+// Fallback: silueta del header + chips + cards (shimmer, §5.2)
 // ---------------------------------------------------------------------------
 
 function PageSkeleton() {
@@ -272,7 +256,6 @@ function PageSkeleton() {
         </div>
         <Skeleton className="h-10 w-24 rounded-md" />
       </header>
-      <Skeleton className="mb-4 h-20 w-full rounded-xl" />
       <div className="mb-5 flex gap-2">
         <Skeleton className="h-11 w-20 rounded-full" />
         <Skeleton className="h-11 w-24 rounded-full" />

@@ -19,9 +19,9 @@ import {
  */
 
 const COPY = {
-  back: "Escudo",
-  title: "Reportar una estafa",
-  lead: "Si algo te dio mala espina o ya te quisieron estafar, contanos. Cada reporte protege a los que vienen detrás.",
+  back: "Centro de seguridad",
+  title: "Reportar un problema",
+  lead: "Si algo te dio mala espina, contanos. Cada reporte cuida a los que vienen detrás.",
   loginNotice:
     "Para reportar necesitás una cuenta — así el equipo puede hacer seguimiento y tu reporte tiene peso.",
   loginCta: "Entrar",

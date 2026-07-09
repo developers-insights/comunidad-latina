@@ -51,7 +51,7 @@ export const COPY = {
     errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
   },
   report: {
-    sheetTitle: "Reportar como estafa",
+    sheetTitle: "Reportar un problema",
     intro:
       "Contanos qué pasó. Tu reporte es confidencial y ayuda a proteger a toda la comunidad.",
     reasonLabel: "¿Qué pasó?",

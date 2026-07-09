@@ -61,7 +61,7 @@ export function trustSignalsFrom(
       achieved: false,
     });
   } else {
-    list.push({ label: "Sin reportes de estafa confirmados", achieved: true });
+    list.push({ label: "Sin reportes confirmados", achieved: true });
   }
 
   return list;

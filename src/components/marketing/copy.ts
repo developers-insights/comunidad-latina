@@ -17,11 +17,11 @@ export function gentilicioDe(slug: string): string {
 
 export const COPY = {
   hero: {
-    badge: "Comunidad con verificación anti-estafa",
+    badge: "Datos verificados, comunidad de confianza",
     h1: (gentilicio: string) =>
-      `El lugar donde ${gentilicio} que llegan encuentran a su gente y resuelven su vida — sin caer en estafas.`,
+      `El lugar donde ${gentilicio} que llegan encuentran a su gente y resuelven su vida, con datos verificados.`,
     subhead:
-      "Vivienda revisada, guías paso a paso para tus trámites y un escudo que revisa registros oficiales antes de que entregues un peso. Estamos empezando por lo más urgente: que consigas dónde vivir sin que te roben el depósito.",
+      "Vivienda revisada, guías paso a paso para tus trámites y verificación contra registros oficiales antes de que entregues un peso. Estamos empezando por lo más urgente: que consigas dónde vivir con tranquilidad.",
     ctaPrimary: "Sumate a tu comunidad",
     ctaSecondary: "Explorar sin cuenta",
     /** Señales de confianza del hero — hechos verificables, sin métricas infladas. */
@@ -38,17 +38,17 @@ export const COPY = {
     items: [
       {
         key: "vivienda",
-        title: "Vivienda sin estafas",
+        title: "Vivienda revisada",
         body: "Habitaciones y apartamentos publicados con datos claros: precio, zona y quién publica. Sin dirección exacta hasta que haya contacto real.",
         href: "/propiedades",
         cta: "Ver propiedades",
       },
       {
         key: "escudo",
-        title: "Escudo Anti-Estafa",
-        body: "Consultamos registros públicos y te mostramos exactamente qué dicen y a qué fecha. Si algo huele mal, lo reportás con un toque.",
+        title: "Centro de seguridad",
+        body: "Consultamos registros públicos y te mostramos exactamente qué dicen y a qué fecha. Si algo no te cierra, lo reportás con un toque.",
         href: "/escudo",
-        cta: "Conocer el escudo",
+        cta: "Conocer el centro de seguridad",
       },
       {
         key: "guias",
@@ -111,7 +111,7 @@ export const COPY = {
     explore: [
       { label: "Propiedades", href: "/propiedades" },
       { label: "Guías", href: "/guias" },
-      { label: "Escudo Anti-Estafa", href: "/escudo" },
+      { label: "Centro de seguridad", href: "/escudo" },
     ],
     communityTitle: "Comunidad",
     community: [
