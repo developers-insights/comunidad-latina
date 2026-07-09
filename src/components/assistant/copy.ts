@@ -24,7 +24,7 @@ export const ASSISTANT_COPY = {
   suggestions: [
     "¿Cómo saco mi ITIN?",
     "¿Dónde encuentro vivienda sin crédito?",
-    "¿Cómo me protejo de estafas de alquiler?",
+    "¿Cómo alquilo con seguridad?",
     "¿Qué hago si me para ICE?",
   ],
 

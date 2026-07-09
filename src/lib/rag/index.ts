@@ -163,6 +163,17 @@ type MatchChunksRpc = (
   args: MatchChunksArgs,
 ) => PromiseLike<{ data: MatchChunkRpcRow[] | null; error: { message: string } | null }>;
 
+type MatchChunksFtsArgs = {
+  p_query: string;
+  p_tenant_id: string;
+  p_match_count?: number;
+};
+
+type MatchChunksFtsRpc = (
+  fn: "match_chunks_fts",
+  args: MatchChunksFtsArgs,
+) => PromiseLike<{ data: MatchChunkRpcRow[] | null; error: { message: string } | null }>;
+
 type AssistantQueryInsertRow = {
   tenant_id: string;
   profile_id: string | null;
@@ -270,6 +281,65 @@ export async function searchChunks(
   } catch (error) {
     console.error(
       "[rag] searchChunks falló, se degrada a skipped:",
+      error instanceof Error ? error.message : "error desconocido",
+    );
+    return { chunks: [], skipped: true };
+  }
+}
+
+/* ----------------------------- searchChunksFts --------------------------- */
+
+/**
+ * Recuperación de contexto para el Asistente por FULL-TEXT SEARCH (español),
+ * SIN embeddings — el camino que usa el asistente Anthropic para depender de
+ * una sola credencial (ANTHROPIC_API_KEY) y no de OpenAI.
+ *
+ * Gemela de `searchChunks`: mismo contrato (`{ chunks, skipped }`), mismo admin
+ * client (la RPC `match_chunks_fts` de 0019 es security definer y solo-service_
+ * role, con el mismo re-chequeo de published en vivo). La diferencia: puntúa por
+ * ts_rank en vez de similitud coseno. `similarity` viene normalizada a 0-1.
+ *
+ * Nunca lanza: cualquier falla → `{ chunks: [], skipped: true }`. A diferencia
+ * de la versión con embeddings, `skipped` acá es raro (solo error de DB): sin
+ * OpenAI no hay razón para degradar, así que "no hubo match" se expresa como
+ * `{ chunks: [], skipped: false }` → el asistente responde "todavía no tengo
+ * información verificada", nunca inventa.
+ */
+export async function searchChunksFts(
+  tenantId: string,
+  query: string,
+  options: Pick<SearchChunksOptions, "matchCount"> = {},
+): Promise<SearchChunksResult> {
+  const input = query.trim().slice(0, MAX_QUERY_CHARS);
+  if (input.length === 0) return { chunks: [], skipped: false };
+
+  try {
+    const supabase = createAdminClient();
+    // Cast estructural: match_chunks_fts aún no está en database.types.ts.
+    const rpc = supabase.rpc.bind(supabase) as unknown as MatchChunksFtsRpc;
+    const { data, error } = await rpc("match_chunks_fts", {
+      p_query: input,
+      p_tenant_id: tenantId,
+      p_match_count: options.matchCount ?? DEFAULT_MATCH_COUNT,
+    });
+
+    if (error) {
+      console.error("[rag] match_chunks_fts falló, se degrada a skipped:", error.message);
+      return { chunks: [], skipped: true };
+    }
+
+    const chunks: MatchedChunk[] = (data ?? []).map((row) => ({
+      content: row.content,
+      metadata: (row.metadata ?? {}) as MatchedChunk["metadata"],
+      sourceKind: row.source_kind as RagSourceKind,
+      sourceId: row.source_id,
+      similarity: row.similarity,
+    }));
+
+    return { chunks, skipped: false };
+  } catch (error) {
+    console.error(
+      "[rag] searchChunksFts falló, se degrada a skipped:",
       error instanceof Error ? error.message : "error desconocido",
     );
     return { chunks: [], skipped: true };

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isOpenAIConfigured } from "@/lib/config/services";
+import { isAnthropicConfigured } from "@/lib/config/services";
 import { moderateText } from "@/lib/moderation";
-import { logQuery, searchChunks, type MatchedChunk } from "@/lib/rag";
+import { logQuery, searchChunksFts, type MatchedChunk } from "@/lib/rag";
 import { HOUR_MS, clientIpFromHeaders, limit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -45,7 +45,7 @@ import { buildSourceInfo } from "./_lib/sources";
  * Anti-PII §5.4: la pregunta jamás se persiste ni se loguea en claro — a
  * assistant_queries va solo su sha256 (lo hashea logQuery de @/lib/rag).
  *
- * Rate limit (endpoint anónimo con costo OpenAI real por request):
+ * Rate limit (endpoint anónimo con costo de IA real por request):
  *   · Logueado: 10/hora (count en assistant_queries).
  *   · Anónimo — CAPA DURA server-side (fiscal R3): por IP + breaker global
  *     con el limiter de lib/rate-limit, ANTES de cualquier llamada paga
@@ -58,19 +58,29 @@ import { buildSourceInfo } from "./_lib/sources";
  *   instancia igual.
  *
  * Respuesta: stream NDJSON (ver components/assistant/protocol.ts).
- * Degradación §5.6: sin OPENAI_API_KEY → 503 y la UI muestra
+ * Degradación §5.6: sin ANTHROPIC_API_KEY → 503 y la UI muestra
  * <ProximamentePremium>; nunca un error técnico crudo.
+ *
+ * IA: responde con Claude (Anthropic). La recuperación de contexto usa
+ * full-text search en Postgres (searchChunksFts → match_chunks_fts, 0019), sin
+ * embeddings: el asistente depende de UNA sola credencial, ANTHROPIC_API_KEY.
  */
 
 export const runtime = "nodejs";
 /** Streaming del LLM: dar aire en Vercel (el default cortaría el stream). */
 export const maxDuration = 60;
 
+/**
+ * Modelo de respuesta. Default Claude Sonnet (buen balance calidad/costo para
+ * respuestas cortas y cuidadas). Override con ANTHROPIC_MODEL sin tocar código.
+ */
+const ASSISTANT_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
+
 const bodySchema = z.object({
   question: z.string().trim().min(3).max(500),
 });
 
-/** Chunks máximos que entran al prompt (la RPC ya filtra por similitud). */
+/** Chunks máximos que entran al prompt (la búsqueda ya ordena por relevancia). */
 const MAX_CHUNKS = 5;
 /** Límite para usuarios logueados: 10 preguntas por hora. */
 const USER_HOURLY_LIMIT = 10;
@@ -79,7 +89,7 @@ const USER_HOURLY_LIMIT = 10;
  * varios vecinos legítimos pueden compartir IP detrás de un NAT).
  */
 const ANON_IP_HOURLY_LIMIT = 20;
-/** Breaker global anónimo: tope de gasto OpenAI ante abuso distribuido. */
+/** Breaker global anónimo: tope de gasto de IA ante abuso distribuido. */
 const ANON_GLOBAL_HOURLY_LIMIT = 300;
 
 /* ------------------------------ Copy fija ------------------------------- */
@@ -100,7 +110,7 @@ const ACTION_PROFESIONALES: AssistantAction = {
 const ACTION_GUIAS: AssistantAction = { label: "Leer las guías completas", href: "/guias" };
 const ACTION_FEED: AssistantAction = { label: "Preguntar en la comunidad", href: "/feed" };
 const ACTION_ESCUDO: AssistantAction = {
-  label: "Abrir el Escudo Anti-Estafa",
+  label: "Abrir el centro de seguridad",
   href: "/escudo",
 };
 
@@ -246,9 +256,9 @@ ${input.context}`;
 /* -------------------------------- POST ---------------------------------- */
 
 export async function POST(request: Request) {
-  // Degradación elegante §5.6: sin OpenAI no hay asistente — 503 y la UI
-  // muestra <ProximamentePremium>, jamás un stack trace.
-  if (!isOpenAIConfigured) {
+  // Degradación elegante §5.6: sin la key de Anthropic no hay asistente — 503 y
+  // la UI muestra <ProximamentePremium> ("muy pronto"), jamás un stack trace.
+  if (!isAnthropicConfigured) {
     return NextResponse.json({ error: "ai_unavailable" }, { status: 503 });
   }
 
@@ -333,13 +343,13 @@ export async function POST(request: Request) {
     ]);
   }
 
-  // 5. Retrieval acotado al tenant (capa 2) — RLS del caller, RPC definer.
-  const { chunks: allChunks, skipped } = await searchChunks(tenant.id, question, {
+  // 5. Retrieval acotado al tenant (capa 2) — full-text search, RPC definer.
+  const { chunks: allChunks, skipped } = await searchChunksFts(tenant.id, question, {
     matchCount: MAX_CHUNKS,
   });
 
   if (skipped) {
-    // Falla técnica transitoria del RAG/embeddings: error cálido, NO se
+    // Falla técnica transitoria del RAG (error de DB): error cálido, NO se
     // cobra la pregunta (sin Set-Cookie) y el client no descuenta (evento error).
     return ndjsonResponse(null, async (send) => {
       send({ t: "start", queryId: null });
@@ -407,24 +417,28 @@ export async function POST(request: Request) {
   return ndjsonResponse(setCookie, async (send) => {
     send({ t: "start", queryId });
 
-    const openai = new OpenAI();
-    const completion = await openai.chat.completions.create(
+    // Claude (Anthropic): system prompt aparte (contrato de la API), la
+    // pregunta como único mensaje de usuario. Streaming token a token → el
+    // cliente ve la respuesta aparecer, mismo protocolo NDJSON.
+    const anthropic = new Anthropic();
+    const completion = anthropic.messages.stream(
       {
-        model: "gpt-4o-mini",
-        stream: true,
+        model: ASSISTANT_MODEL,
+        max_tokens: 500,
         temperature: 0.2,
-        max_completion_tokens: 500,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: question },
-        ],
+        system: systemPrompt,
+        messages: [{ role: "user", content: question }],
       },
       { signal: request.signal },
     );
 
-    for await (const part of completion) {
-      const delta = part.choices[0]?.delta?.content;
-      if (delta) send({ t: "delta", text: delta });
+    for await (const event of completion) {
+      if (
+        event.type === "content_block_delta" &&
+        event.delta.type === "text_delta"
+      ) {
+        send({ t: "delta", text: event.delta.text });
+      }
     }
 
     send({ t: "sources", sources });

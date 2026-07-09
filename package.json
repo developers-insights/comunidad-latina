@@ -15,6 +15,7 @@
     "rag:embed": "node scripts/embed-content.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@phosphor-icons/react": "^2.1.10",
     "@sentry/nextjs": "^10.63.0",
     "@stripe/stripe-js": "^9.9.0",

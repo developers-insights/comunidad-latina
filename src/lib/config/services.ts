@@ -24,6 +24,14 @@ export const isSentryConfigured = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN);
 
 export const isOpenAIConfigured = Boolean(process.env.OPENAI_API_KEY);
 
+/**
+ * Asistente Comunitario: responde con Claude (Anthropic). Es la ÚNICA
+ * credencial que el asistente necesita — la recuperación de contexto usa
+ * full-text search en Postgres (match_chunks_fts, 0019), sin OpenAI. Sin esta
+ * key la UI muestra <ProximamentePremium> ("muy pronto"), nunca un error crudo.
+ */
+export const isAnthropicConfigured = Boolean(process.env.ANTHROPIC_API_KEY);
+
 export const isVercelConfigured = Boolean(
   process.env.VERCEL_API_TOKEN && process.env.VERCEL_PROJECT_ID,
 );
