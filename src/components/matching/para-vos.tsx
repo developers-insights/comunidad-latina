@@ -125,7 +125,7 @@ function MatchCard({ item, locale }: { item: MatchItem; locale: string }) {
             const src = listingPhotoUrl(item.photoPath);
             return isOptimizableSrc(src) ? (
               <div className="relative h-24 w-full overflow-hidden rounded-md bg-surface-subtle">
-                <Image src={src} alt="" fill sizes="248px" className="object-cover" />
+                <Image src={src} alt="" fill sizes="248px" quality={62} className="object-cover" />
               </div>
             ) : (
               // eslint-disable-next-line @next/next/no-img-element -- URL externa de seed/API: host fuera del allowlist de next/image

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "motion/react";
+import { m } from "motion/react";
 import { GlobeHemisphereWest, ShieldCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 
@@ -90,7 +90,7 @@ export function AdminNav({
                 </span>
               )}
               {active && (
-                <motion.span
+                <m.span
                   layoutId="admin-nav-underline"
                   aria-hidden="true"
                   className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand"

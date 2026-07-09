@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import { CaretDown, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { VerificationCard } from "@/components/trust";
 import { COPY } from "./copy";
@@ -69,7 +69,7 @@ export function VerificationBand({ verification, className }: VerificationBandPr
 
       <AnimatePresence initial={false}>
         {expanded && (
-          <motion.div
+          <m.div
             id={detailId}
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
             animate={reduceMotion ? { opacity: 1 } : { opacity: 1, height: "auto" }}
@@ -84,7 +84,7 @@ export function VerificationBand({ verification, className }: VerificationBandPr
               date={verification.dateLabel}
               className="mt-3"
             />
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

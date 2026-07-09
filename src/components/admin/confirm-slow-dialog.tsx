@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion } from "motion/react";
+import { m } from "motion/react";
 import { Button, Dialog } from "@/components/ui";
 
 /**
@@ -60,7 +60,7 @@ export function ConfirmSlowDialog({
           aria-hidden="true"
           className="h-1 w-full overflow-hidden rounded-full bg-surface-subtle"
         >
-          <motion.div
+          <m.div
             className="h-full rounded-full bg-brand"
             initial={{ width: "0%" }}
             animate={{ width: open ? "100%" : "0%" }}

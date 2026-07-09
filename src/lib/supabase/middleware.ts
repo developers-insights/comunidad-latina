@@ -34,9 +34,17 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     },
   });
 
-  // NO remover: getUser() valida el JWT contra Supabase y refresca el token
-  // expirado. Sin esta llamada la sesión muere en silencio.
-  await supabase.auth.getUser();
+  // NO remover: valida el JWT y refresca el token cuando está por expirar. Sin
+  // esta llamada la sesión muere en silencio.
+  //
+  // getClaims() en vez de getUser(): con signing keys asimétricas (ECC/RSA) la
+  // verificación de la firma es LOCAL (WebCrypto en el Edge, sin round-trip al
+  // Auth server) → elimina el hop de red del TTFB de TODO request. El refresh se
+  // preserva: getClaims() llama getSession() por dentro, que refresca cuando el
+  // token está por expirar y persiste las cookies vía el mismo setAll de arriba.
+  // Si el proyecto usa secreto simétrico (HS*) o no hay WebCrypto, getClaims()
+  // cae solo a getUser() → mismo comportamiento que antes, sin romper la sesión.
+  await supabase.auth.getClaims();
 
   return supabaseResponse;
 }

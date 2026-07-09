@@ -41,7 +41,7 @@ export default async function PerfilPage() {
 
   const [{ data: profile }, { data: trust }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-    supabase.from("trust_scores").select("*").eq("profile_id", user.id).maybeSingle(),
+    supabase.from("trust_scores").select("score, level, signals").eq("profile_id", user.id).maybeSingle(),
   ]);
 
   // Cuenta sin perfil (edge raro) → que complete el onboarding.

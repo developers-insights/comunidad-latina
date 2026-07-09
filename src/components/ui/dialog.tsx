@@ -2,7 +2,7 @@
 
 import { useId, useRef } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 import {
   useBodyScrollLock,
@@ -53,7 +53,7 @@ export function Dialog({
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <motion.div
+          <m.div
             className="absolute inset-0 bg-scrim"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -62,7 +62,7 @@ export function Dialog({
             onClick={onClose}
             aria-hidden="true"
           />
-          <motion.div
+          <m.div
             ref={panelRef}
             role={highRisk ? "alertdialog" : "dialog"}
             aria-modal="true"
@@ -106,7 +106,7 @@ export function Dialog({
                 {footer}
               </div>
             )}
-          </motion.div>
+          </m.div>
         </div>
       )}
     </AnimatePresence>,

@@ -45,6 +45,7 @@ export function ListingCard({ listing }: { listing: ListingCardModel }) {
               alt=""
               fill
               sizes="(max-width: 512px) 100vw, 512px"
+              quality={62}
               className="object-cover"
             />
           ) : (

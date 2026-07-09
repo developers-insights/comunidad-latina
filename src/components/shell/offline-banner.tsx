@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { WifiSlash } from "@phosphor-icons/react";
+import { WifiSlash } from "@phosphor-icons/react/dist/ssr";
 import { t } from "@/lib/i18n";
 
 function subscribe(callback: () => void) {

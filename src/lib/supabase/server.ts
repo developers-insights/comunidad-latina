@@ -51,3 +51,27 @@ export const getCurrentUser = cache(async () => {
   } = await supabase.auth.getUser();
   return user;
 });
+
+/**
+ * Identidad del request verificada LOCALMENTE (WebCrypto) vía getClaims() — sin
+ * round-trip al Auth server cuando el proyecto usa signing keys asimétricas.
+ * Devuelve los claims del JWT (sub, role, email…) o null si no hay sesión.
+ * cache()-eado: una sola verificación por request.
+ *
+ * SEGURIDAD: solo valida firma + expiración localmente. NO detecta revocación
+ * server-side hasta que el token expira (~1h). Usar para gating de LECTURA
+ * respaldado por RLS (¿estás logueado? ¿cuál es tu user id?). Para autorización
+ * SENSIBLE (admin, dinero, mutaciones) seguir usando getCurrentUser()/getUser().
+ */
+export const getCurrentClaims = cache(async () => {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  return data?.claims ?? null;
+});
+
+/** user id del request (claims.sub), verificado local. null si no hay sesión. */
+export const getAuthUserId = cache(async (): Promise<string | null> => {
+  const claims = await getCurrentClaims();
+  const sub = claims?.sub;
+  return typeof sub === "string" ? sub : null;
+});

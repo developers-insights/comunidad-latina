@@ -1,6 +1,8 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient } from "@supabase/ssr";
+import type { Database } from "@/lib/types/database.types";
 
 /** Forma canónica del tenant que consume toda la app. */
 export type Tenant = {
@@ -155,13 +157,61 @@ function mapTenantRow(row: Record<string, unknown>, fallback: Tenant): Tenant {
   };
 }
 
+/** Fallback derivado del slug (dev / degradación elegante), extraído para reusar. */
+function fallbackForSlug(slug: string): Tenant {
+  return (
+    DEFAULT_TENANTS[slug] ?? {
+      ...DEFAULT_TENANTS[DEFAULT_TENANT_SLUG],
+      slug,
+      name: slug,
+    }
+  );
+}
+
+/**
+ * Fila del tenant CACHEADA entre requests por slug (unstable_cache).
+ *
+ * getTenant() se llama en el root layout + generateViewport de CADA request →
+ * antes esto era un SELECT a `tenants` por request en el camino crítico del
+ * shell. La fila (nombre, brandHex, módulos, locale) cambia rarísimo, así que se
+ * cachea 300s con tag "tenants".
+ *
+ * Cliente anon SIN cookies: headers()/cookies() NO se permiten dentro de una
+ * cache scope (unstable_cache.md), y la fila del tenant es pública (no
+ * user-bound). La cache key incluye el slug → JAMÁS se sirve la marca de un
+ * tenant a otro (multi-tenant-safe). THROW en miss/error ⇒ el fallback NO se
+ * cachea: si la DB se cae un instante, el próximo request reintenta y cachea la
+ * fila real. Invalidación on-demand: revalidateTag("tenants") en el admin al
+ * editar marca/dominio/módulos.
+ */
+const fetchTenantRow = unstable_cache(
+  async (slug: string): Promise<Tenant> => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !anonKey) throw new Error("supabase-not-configured");
+    const supabase = createServerClient<Database>(url, anonKey, {
+      cookies: { getAll: () => [], setAll: () => {} },
+    });
+    const { data, error } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (error || !data) throw error ?? new Error("tenant-not-found");
+    return mapTenantRow(data as Record<string, unknown>, fallbackForSlug(slug));
+  },
+  ["tenant-by-slug"],
+  { revalidate: 300, tags: ["tenants"] },
+);
+
 /**
  * Tenant del request actual, para Server Components / actions.
  *
- * Lee el header x-tenant-slug (inyectado por el middleware), busca la fila real
- * en la DB y cachea por request con React cache(). NUNCA lanza al usuario:
- * ante cualquier falla (DB caída, seed pendiente, header ausente) devuelve el
- * fallback de DEFAULT_TENANTS — degradación elegante, siempre hay un tenant usable.
+ * Lee el header x-tenant-slug (inyectado por el middleware) y resuelve la fila
+ * real vía fetchTenantRow (cacheada entre requests). React cache() dedupe dentro
+ * del mismo request. NUNCA lanza al usuario: ante cualquier falla (DB caída,
+ * seed pendiente, header ausente) devuelve el fallback de DEFAULT_TENANTS —
+ * degradación elegante, siempre hay un tenant usable.
  */
 export const getTenant = cache(async (): Promise<Tenant> => {
   let slug = DEFAULT_TENANT_SLUG;
@@ -172,27 +222,11 @@ export const getTenant = cache(async (): Promise<Tenant> => {
     // Fuera de un request (build estático, etc.) → default.
   }
 
-  const fallback = DEFAULT_TENANTS[slug] ?? {
-    ...DEFAULT_TENANTS[DEFAULT_TENANT_SLUG],
-    slug,
-    name: slug,
-  };
-
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("tenants")
-      .select("*")
-      .eq("slug", slug)
-      .maybeSingle();
-
-    if (!error && data) {
-      return mapTenantRow(data as Record<string, unknown>, fallback);
-    }
+    return await fetchTenantRow(slug);
   } catch {
-    // DB no disponible o aún sin sembrar — seguimos con el fallback.
+    // DB no disponible / sin sembrar / slug inexistente → degradación elegante.
+    // `isFallback === true`: branding sí, comparación contra el JWT no.
+    return fallbackForSlug(slug);
   }
-
-  // `fallback.isFallback === true`: branding sí, comparación contra el JWT no.
-  return fallback;
 });

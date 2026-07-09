@@ -65,6 +65,7 @@ export function ListingMiniCard({
                 alt=""
                 fill
                 sizes="(max-width: 640px) 80vw, 320px"
+                quality={62}
                 className="object-cover"
               />
             </div>

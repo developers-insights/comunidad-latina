@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BellSimple } from "@phosphor-icons/react/dist/ssr";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/utils";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import {
@@ -84,10 +84,10 @@ function groupByRecency(rows: NotificationRow[], now: Date): Group[] {
  */
 export default async function NotificacionesPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/entrar");
+  // Gating de LECTURA (RLS hace el resto): user id verificado localmente, sin
+  // round-trip al Auth server. Las queries de abajo se filtran por RLS.
+  const userId = await getAuthUserId();
+  if (!userId) redirect("/entrar");
 
   // Broadcasts: la policy de SELECT ya limita a vigentes (starts/ends) y
   // targeteados a mi tenant — acá solo se filtran los que ya vi (receipt).

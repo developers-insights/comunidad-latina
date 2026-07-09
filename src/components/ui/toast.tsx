@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, m } from "motion/react";
 import {
   CheckCircle,
   Info,
@@ -94,7 +94,7 @@ function ToastCard({
   }, [item.id, item.duration, paused, onDismiss]);
 
   return (
-    <motion.div
+    <m.div
       layout
       role={item.variant === "danger" ? "alert" : "status"}
       onMouseEnter={() => setPaused(true)}
@@ -132,7 +132,7 @@ function ToastCard({
       >
         <X size={16} aria-hidden="true" />
       </button>
-    </motion.div>
+    </m.div>
   );
 }
 
