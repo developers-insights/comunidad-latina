@@ -159,6 +159,15 @@ const nextConfig: NextConfig = {
     ];
   },
   images: {
+    // AVIF primero (~20% menos bytes que webp, doc image.md §formats), webp de
+    // fallback. El default de Next 16 es SOLO ['image/webp'] → sin esta línea
+    // AVIF nunca se emite. Afecta a TODO lo que pasa por /_next/image: fotos de
+    // listings/avatars (Supabase Storage), covers de guías y el hero.
+    formats: ["image/avif", "image/webp"],
+    // Next 16 exige un allowlist de qualities para permitir cualquier valor
+    // distinto del default (75). 62 se usa en fotos UGC de tarjetas chicas
+    // (≤512px), donde es visualmente indistinguible pero pesa bastante menos.
+    qualities: [62, 75],
     remotePatterns: [
       {
         protocol: "https",
@@ -166,6 +175,16 @@ const nextConfig: NextConfig = {
         pathname: "/storage/v1/object/public/**",
       },
       ...(envPattern ? [envPattern] : []),
+    ],
+  },
+  // Reescribe `import { X } from '@phosphor-icons/react[...]'` a imports directos
+  // por-ícono: garantiza tree-shaking uniforme (aunque webpack ya lo hace con
+  // sideEffects:false) y acelera dev/HMR. Aditivo: no toca turbopack:{} ni el
+  // pipeline Serwist/Sentry. Ref: docs/.../optimizePackageImports.md
+  experimental: {
+    optimizePackageImports: [
+      "@phosphor-icons/react",
+      "@phosphor-icons/react/dist/ssr",
     ],
   },
 };

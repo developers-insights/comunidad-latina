@@ -21,11 +21,14 @@ declare const self: SerwistGlobalConfig & {
   __SW_MANIFEST: (PrecacheEntry | string)[] | undefined;
 } & typeof globalThis;
 
-/** Fotos servidas por Supabase Storage (bucket público): inmutables por path. */
+/** Fotos servidas por Supabase Storage (bucket PÚBLICO): inmutables por path.
+ *  Acotado a /object/public/: los objetos firmados (/object/sign/, con ?token=
+ *  rotativo) y autenticados nunca dan cache-hit y no deben servirse stale desde
+ *  caché tras revocar acceso → caen al defaultCache (NetworkFirst cross-origin). */
 const supabaseStorageCache: RuntimeCaching = {
   matcher: ({ url }) =>
     url.hostname.endsWith(".supabase.co") &&
-    url.pathname.startsWith("/storage/v1/object/"),
+    url.pathname.startsWith("/storage/v1/object/public/"),
   handler: new CacheFirst({
     cacheName: "supabase-storage",
     plugins: [

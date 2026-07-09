@@ -21,7 +21,6 @@ import {
   type GuideCardModel,
 } from "@/components/feed";
 import { ParaVos, ParaVosSkeleton } from "@/components/matching";
-import { AssistantEntryCard } from "@/components/assistant";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -98,13 +97,6 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
           {userArea ? COPY.header.subtitleNearArea(userArea) : COPY.header.subtitleDefault}
         </p>
       </header>
-
-      {/* Acceso discreto al Asistente Comunitario (módulo ASISTENTE) */}
-      {isFirstPage && (
-        <div className="mb-3">
-          <AssistantEntryCard />
-        </div>
-      )}
 
       <FeedTabs active={tab} />
 

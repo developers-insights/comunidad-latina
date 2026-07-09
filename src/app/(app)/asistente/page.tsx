@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
 import { Info } from "@phosphor-icons/react/dist/ssr";
 import { AssistantChat } from "@/components/assistant";
 import { ASSISTANT_COPY as COPY } from "@/components/assistant/copy";
@@ -24,7 +25,15 @@ import {
 
 export const metadata: Metadata = { title: "Asistente" };
 
+// Feature oculta por ahora (pedido 2026-07-09): sin entry points en el feed
+// ni en /escudo, y la ruta directa también 404 hasta reactivarla. Tipada como
+// `boolean` (no el literal `false`) para que TS no marque el resto de la
+// función como código muerto y rompa el narrowing de abajo.
+const ASSISTANT_ENABLED: boolean = false;
+
 export default async function AsistentePage() {
+  if (!ASSISTANT_ENABLED) notFound();
+
   const [tenant, supabase, cookieStore] = await Promise.all([
     getTenant(),
     createClient(),

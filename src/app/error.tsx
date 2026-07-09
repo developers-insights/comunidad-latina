@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { CloudSlash } from "@phosphor-icons/react";
+import { CloudSlash } from "@phosphor-icons/react/dist/ssr";
 import { ThemeToggle } from "@/components/theme";
 import { Button, EmptyState, buttonVariants } from "@/components/ui";
 

@@ -217,6 +217,27 @@
   initial-value: 0;
 }
 
+/* ── Transición de página (PageTransition, 100% CSS — antes usaba `motion`) ──
+ * El `key={pathname}` re-monta el nodo en cada navegación y re-dispara este
+ * @keyframes. Solo aplica con prefers-reduced-motion: no-preference (a11y). */
+@keyframes cl-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cl-page-transition {
+    animation: cl-page-in var(--duration-base, 250ms)
+      var(--ease-out-premium, cubic-bezier(0.32, 0.72, 0, 1)) both;
+    will-change: opacity, transform;
+  }
+}
+
 /* ── Semánticos runtime (Capa 2) → utilities de Tailwind ── */
 @theme inline {
   --color-canvas: var(--cl-canvas);

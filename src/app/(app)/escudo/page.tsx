@@ -3,7 +3,6 @@ import Link from "next/link";
 import {
   BookOpenText,
   CaretRight,
-  Compass,
   Flag,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
@@ -31,11 +30,6 @@ const COPY = {
       title: "Aprender a protegerte",
       description:
         "Las 5 señales de alerta más comunes al alquilar en Nueva York, con ejemplos reales y qué hacer en cada caso.",
-    },
-    asistente: {
-      title: "Preguntale al Asistente",
-      description:
-        "¿Dudas sobre un alquiler, un trámite o un aviso raro? Preguntá y te respondo desde las guías y fuentes verificadas de tu comunidad.",
     },
   },
 } as const;
@@ -119,12 +113,6 @@ export default function EscudoPage() {
           icon={BookOpenText}
           title={COPY.sections.aprender.title}
           description={COPY.sections.aprender.description}
-        />
-        <SectionCard
-          href="/asistente"
-          icon={Compass}
-          title={COPY.sections.asistente.title}
-          description={COPY.sections.asistente.description}
         />
       </nav>
     </div>
