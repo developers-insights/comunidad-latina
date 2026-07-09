@@ -49,10 +49,13 @@ export function ContactCta({
         router.push("/mensajes");
         return;
       }
+      // El tono lo decide la action: "info" para aclaraciones amables (aviso
+      // propio, sin cuenta, sesión vencida) → variante neutra; "error" para
+      // fallas reales → warning. Nunca "danger": ningún caso acá amerita alarma.
       toast({
-        title: COPY.detail.contactErrorTitle,
-        description: result.error ?? COPY.detail.contactErrorBody,
-        variant: "warning",
+        title: result.title,
+        description: result.error,
+        variant: result.tone === "info" ? "info" : "warning",
       });
     });
   }

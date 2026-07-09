@@ -8,7 +8,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenant } from "@/lib/tenant/resolve";
 import { sendEmailInBackground } from "@/lib/email";
 import { welcomeEmail } from "@/lib/email/templates";
-import { COUNTRY_CODES } from "@/components/auth/countries";
 import type { ActionResult } from "@/components/auth/action-result";
 
 const COPY = {
@@ -152,12 +151,12 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
 }
 
 // ---------------------------------------------------------------------------
-// Onboarding: país + zona van a profiles; needs a profiles_private (solo-dueño).
-// Corre con el cliente server (cookies del usuario) → RLS aplica.
+// Onboarding: la zona va a profiles; needs a profiles_private (solo-dueño).
+// El país de origen ya no se pregunta — se hereda del país de la comunidad
+// (tenants.country_focus). Corre con el cliente server (cookies del usuario) → RLS aplica.
 // ---------------------------------------------------------------------------
 
 const onboardingSchema = z.object({
-  country: z.enum(COUNTRY_CODES as [string, ...string[]]),
   needs: z
     .array(z.enum(["vivienda", "trabajo", "gente", "estafas", "tramites"]))
     .min(1, COPY.needsMin)
@@ -174,7 +173,7 @@ export async function completeOnboardingAction(
   if (!parsed.success) {
     return { ok: false, fieldErrors: firstIssuePerField(parsed.error.issues) };
   }
-  const { country, needs, area } = parsed.data;
+  const { needs, area } = parsed.data;
 
   const supabase = await createClient();
   const {
@@ -185,9 +184,32 @@ export async function completeOnboardingAction(
     return { ok: false, formError: COPY.noSession };
   }
 
+  // country_origin ya no se pregunta: se hereda del país de la comunidad
+  // (tenants.country_focus). Resolvemos el tenant del perfil y su país foco.
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("tenant_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  let countryOrigin: string | null = null;
+  if (prof?.tenant_id) {
+    const { data: t } = await supabase
+      .from("tenants")
+      .select("country_focus")
+      .eq("id", prof.tenant_id)
+      .maybeSingle();
+    countryOrigin = t?.country_focus ?? null;
+  }
+
+  // Solo tocamos country_origin cuando lo pudimos derivar — nunca lo pisamos con null.
+  const profileUpdate: { area_label: string; country_origin?: string } = {
+    area_label: area,
+  };
+  if (countryOrigin) profileUpdate.country_origin = countryOrigin;
+
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .update({ country_origin: country, area_label: area })
+    .update(profileUpdate)
     .eq("id", user.id)
     .select("tenant_id")
     .single();

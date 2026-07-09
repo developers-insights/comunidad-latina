@@ -139,6 +139,17 @@ const nextConfig: NextConfig = {
   // config"). En dev Serwist está disabled, así que Turbopack puede ignorar
   // ese webpack() tranquilamente.
   turbopack: {},
+  // Entrada del demo directo al login (feedback de revisión: la landing es un
+  // "para después"; lo primero que interesa es la app tras el registro). 307
+  // temporal a propósito — reversible sin cache agresivo: borrar este bloque
+  // devuelve la landing en `/`. La landing sigue viva en el repo, solo deja de
+  // ser la puerta de entrada. Los subpaths de (marketing) —/guias, etc.— no se
+  // tocan.
+  async redirects() {
+    return [
+      { source: "/", destination: "/entrar", permanent: false },
+    ];
+  },
   async headers() {
     return [
       {

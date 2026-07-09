@@ -187,7 +187,12 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
   const isOwner = Boolean(user && listing.created_by === user.id);
 
   return (
-    <div className="pb-24">
+    // pb-40: el CTA "Contactar" es `fixed` sobre el bottom-nav (3.5rem) y se
+    // eleva con env(safe-area-inset-bottom) en equipos con notch/home indicator.
+    // Su footprint real (gradiente pt-6 + botón lg + hint) ronda las 7rem, así
+    // que con el pb-28 del <main> queda holgura suficiente para que ni la card
+    // de Ubicación ni el ScamShieldNotice queden tapados. Ver §4.d (CTA sticky).
+    <div className="pb-40">
       <DetailTopBar title={listing.title} listingId={listing.id} />
 
       {listing.status !== "published" && isOwner && (

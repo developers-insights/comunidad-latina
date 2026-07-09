@@ -8,6 +8,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { sendEmailInBackground } from "@/lib/email";
 import { getRecipientEmail } from "@/lib/email/recipients";
 import { leadReceivedEmail } from "@/lib/email/templates";
+import { COPY } from "@/components/listings/copy";
 
 /**
  * Server actions del módulo VIVIENDA (lado detalle).
@@ -17,16 +18,85 @@ import { leadReceivedEmail } from "@/lib/email/templates";
 
 const listingIdSchema = z.uuid();
 
+/**
+ * `tone` le dice al cliente qué variante de toast usar sin que tenga que
+ * interpretar el mensaje: "info" para aclaraciones amables (aviso propio, sin
+ * cuenta) y "error" para fallas reales. Nunca "danger" — ningún caso acá amerita
+ * un toast alarmante.
+ */
 export type RequestContactResult =
   | { ok: true; conversationId: string }
-  | { ok: false; error: string; needsAuth?: boolean };
+  | {
+      ok: false;
+      title: string;
+      error: string;
+      tone: "info" | "error";
+      needsAuth?: boolean;
+    };
+
+/**
+ * El RPC request_contact lanza excepciones con prefijo de código
+ * (`CANNOT_CONTACT_SELF: …`, `LISTING_NOT_AVAILABLE: …`). Extraemos SOLO el
+ * token de código y lo mapeamos a copy propio — nunca hacemos string-match del
+ * mensaje en español (frágil) ni exponemos el texto crudo del RPC.
+ */
+function contactErrorFromRpc(message: string | undefined): RequestContactResult {
+  const code = message?.match(/^\s*([A-Z_]+)\s*:/)?.[1] ?? "";
+  switch (code) {
+    case "CANNOT_CONTACT_SELF":
+      // No es un error: el usuario es el dueño del aviso. Toast informativo.
+      return {
+        ok: false,
+        tone: "info",
+        title: COPY.detail.contactOwnTitle,
+        error: COPY.detail.contactOwnBody,
+      };
+    case "LISTING_HAS_NO_ACCOUNT":
+      // Caso demo típico: el publicador no tiene cuenta, no hay a quién escribir.
+      return {
+        ok: false,
+        tone: "info",
+        title: COPY.detail.contactNoAccountTitle,
+        error: COPY.detail.contactNoAccountBody,
+      };
+    case "LISTING_NOT_AVAILABLE":
+    case "LISTING_NOT_FOUND":
+      return {
+        ok: false,
+        tone: "error",
+        title: COPY.detail.contactUnavailableTitle,
+        error: COPY.detail.contactUnavailableBody,
+      };
+    case "AUTH_REQUIRED":
+      return {
+        ok: false,
+        tone: "info",
+        needsAuth: true,
+        title: COPY.detail.contactAuthTitle,
+        error: COPY.detail.contactAuthBody,
+      };
+    default:
+      // Código desconocido: no sabemos qué pasó — lo tratamos como demo.
+      return {
+        ok: false,
+        tone: "error",
+        title: COPY.detail.contactDemoTitle,
+        error: COPY.detail.contactDemoBody,
+      };
+  }
+}
 
 export async function requestContactAction(
   rawListingId: string,
 ): Promise<RequestContactResult> {
   const parsed = listingIdSchema.safeParse(rawListingId);
   if (!parsed.success) {
-    return { ok: false, error: "Ese aviso no existe o ya no está disponible." };
+    return {
+      ok: false,
+      tone: "error",
+      title: COPY.detail.contactUnavailableTitle,
+      error: COPY.detail.contactUnavailableBody,
+    };
   }
 
   const supabase = await createClient();
@@ -37,8 +107,10 @@ export async function requestContactAction(
   if (!user) {
     return {
       ok: false,
+      tone: "info",
       needsAuth: true,
-      error: "Para contactar necesitás entrar a tu cuenta.",
+      title: COPY.detail.contactAuthTitle,
+      error: COPY.detail.contactAuthBody,
     };
   }
 
@@ -52,18 +124,10 @@ export async function requestContactAction(
       listingId: parsed.data,
       code: error.code,
     });
-    const message = error.message?.toLowerCase() ?? "";
-    if (message.includes("own") || message.includes("propio")) {
-      return { ok: false, error: "Este aviso es tuyo — no hace falta que te contactes." };
-    }
-    if (message.includes("exists") || message.includes("ya")) {
-      // Conversación ya iniciada: no es un error para el usuario.
-      return { ok: true, conversationId: "" };
-    }
-    return {
-      ok: false,
-      error: "No pudimos enviar tu solicitud — probá de nuevo en un ratito.",
-    };
+    // Mapeo robusto por CÓDIGO del RPC (prefijo antes de `:`), no por substring
+    // del mensaje. La idempotencia la resuelve el propio RPC: si ya existe una
+    // conversación, devuelve su id por el camino ok:true — no lanza excepción.
+    return contactErrorFromRpc(error.message);
   }
 
   // Aviso al dueño del listing (best-effort, §12): el insert de notifications

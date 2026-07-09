@@ -245,11 +245,6 @@ type Entrada = {
 };
 
 const INVENTARIO: Record<string, Entrada> = {
-  // El CTA "Verificar" es un <Link> con pinta de botón que no pasa por buttonVariants.
-  "src/app/(app)/escudo/aprender/page.tsx": {
-    inks: ["text-brand-foreground"],
-    cobertura: "cl-print-hide",
-  },
   "src/app/(app)/publicar/publish-form.tsx": { inks: ["text-on-media"], cobertura: "control" },
   // Hero de la landing: el respaldo es el <picture><img> de hero-backdrop, y un
   // <img> se imprime siempre (lo que el navegador omite es `background-*`). Fuera
@@ -304,7 +299,7 @@ const INVENTARIO: Record<string, Entrada> = {
     },
   },
   "src/components/onboarding/onboarding-wizard.tsx": {
-    inks: ["text-brand-foreground", "text-brand-foreground"],
+    inks: ["text-brand-foreground"],
     cobertura: "control",
   },
   "src/components/shell/offline-banner.tsx": {

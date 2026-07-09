@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -16,7 +15,6 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { completeOnboardingAction } from "@/app/(auth)/actions";
-import { COUNTRY_OPTIONS } from "@/components/auth/countries";
 import { RegisterForm } from "@/components/auth/register-form";
 import { FormError } from "@/components/auth/form-error";
 import { ZoneInput } from "@/components/onboarding/zone-input";
@@ -27,14 +25,13 @@ import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 const COPY = {
   back: "Volver al paso anterior",
   explore: "Explorar sin cuenta",
-  step1Title: "¿De dónde sos vos o tu familia?",
   step2Title: "¿Qué necesitás resolver hoy?",
   step2Subtitle: "Elegí todo lo que quieras.",
   step2Cta: "Continuar",
   step2Disabled: "Elegí al menos una opción",
   step3Title: "Guardá tu lugar en la comunidad",
   step3Subtitle:
-    "Con tu cuenta podés contactar, publicar y avisar si algo huele a estafa.",
+    "Con tu cuenta podés contactar, publicar y avisar si algo no te cierra.",
   step4Title: "¿Por qué zona estás?",
   step4Subtitle:
     "Solo el barrio — nunca te vamos a pedir tu dirección exacta.",
@@ -42,7 +39,6 @@ const COPY = {
   step4Cta: "Ver mi comunidad",
   step4Error: "Contanos tu zona para mostrarte lo que hay cerca.",
   toastTitle: "Así se ve tu comunidad en",
-  welcomeAlt: "",
 } as const;
 
 interface NeedOption {
@@ -55,11 +51,11 @@ const NEED_OPTIONS: readonly NeedOption[] = [
   { id: "vivienda", label: "Buscar dónde vivir", Icon: House },
   { id: "trabajo", label: "Buscar trabajo", Icon: Briefcase },
   { id: "gente", label: "Conocer gente de mi país", Icon: UsersThree },
-  { id: "estafas", label: "Protegerme de estafas", Icon: ShieldCheck },
+  { id: "estafas", label: "Seguridad y confianza", Icon: ShieldCheck },
   { id: "tramites", label: "Aprender trámites de acá", Icon: BookOpen },
 ];
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 4;
 
 export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
   const router = useRouter();
@@ -69,7 +65,6 @@ export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
 
   const [step, setStep] = useState(1);
   const [registered, setRegistered] = useState(isLoggedIn);
-  const [country, setCountry] = useState<string | null>(null);
   const [needs, setNeeds] = useState<NeedOption["id"][]>([]);
   const [area, setArea] = useState("");
   const [areaError, setAreaError] = useState<string | null>(null);
@@ -78,14 +73,9 @@ export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
 
   function goBack() {
     setFormError(null);
-    // El paso 3 (registro) se saltea en ambas direcciones si ya hay cuenta.
-    if (step === 4 && registered) setStep(2);
+    // El paso 2 (registro) se saltea en ambas direcciones si ya hay cuenta.
+    if (step === 3 && registered) setStep(1);
     else setStep(Math.max(1, step - 1));
-  }
-
-  function selectCountry(code: string) {
-    setCountry(code);
-    setStep(2);
   }
 
   function toggleNeed(id: NeedOption["id"]) {
@@ -98,7 +88,7 @@ export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
 
   function continueFromNeeds() {
     if (needs.length === 0) return;
-    setStep(registered ? 4 : 3);
+    setStep(registered ? 3 : 2);
   }
 
   function finish() {
@@ -111,19 +101,13 @@ export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
     setFormError(null);
 
     startTransition(async () => {
-      if (country) {
-        const result = await completeOnboardingAction({
-          country,
-          needs,
-          area: zone,
-        });
-        if (!result.ok && result.formError) {
-          // Sin sesión u otro problema: no bloqueamos el aterrizaje,
-          // pero sí avisamos si fue un error real de guardado.
-          console.warn("[onboarding] no se pudo guardar el perfil");
-        }
+      const result = await completeOnboardingAction({ needs, area: zone });
+      if (!result.ok && result.formError) {
+        // Sin sesión u otro problema: no bloqueamos el aterrizaje,
+        // pero sí avisamos si fue un error real de guardado.
+        console.warn("[onboarding] no se pudo guardar el perfil");
       }
-      // Paso 5 — recompensa: una celebración breve y elegante, después
+      // Paso 4 — recompensa: una celebración breve y elegante, después
       // aterrizamos en la comunidad ya filtrada. Con reduced-motion el destello
       // es un fade corto, así que esperamos menos antes de navegar.
       celebrate();
@@ -158,10 +142,6 @@ export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
 
       <div className="flex flex-1 flex-col gap-6">
         {step === 1 && (
-          <StepCountry selected={country} onSelect={selectCountry} />
-        )}
-
-        {step === 2 && (
           <section className="flex flex-col gap-5" aria-labelledby="ob-step2">
             <header className="flex flex-col gap-1">
               <h1
@@ -228,7 +208,7 @@ export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
           </section>
         )}
 
-        {step === 3 && (
+        {step === 2 && (
           <section className="flex flex-col gap-5" aria-labelledby="ob-step3">
             <header className="flex flex-col gap-1">
               <h1
@@ -245,14 +225,14 @@ export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
               loginNext="/bienvenida"
               onSuccess={() => {
                 setRegistered(true);
-                setStep(4);
+                setStep(3);
                 router.refresh();
               }}
             />
           </section>
         )}
 
-        {step === 4 && (
+        {step === 3 && (
           <section className="flex flex-col gap-5" aria-labelledby="ob-step4">
             <header className="flex flex-col gap-1">
               <h1
@@ -307,79 +287,5 @@ export function OnboardingWizard({ isLoggedIn }: { isLoggedIn: boolean }) {
         </Link>
       </footer>
     </div>
-  );
-}
-
-function StepCountry({
-  selected,
-  onSelect,
-}: {
-  selected: string | null;
-  onSelect: (code: string) => void;
-}) {
-  return (
-    <section className="flex flex-col gap-5" aria-labelledby="ob-step1">
-      {/* Solo en pantallas altas: en 375×667 la grilla debe verse sin scroll (§3.1) */}
-      {/* Este asset es OPACO y claro, y aun así se queda: acá sí lee como panel.
-          object-cover recorta una banda central donde el dibujo toca los cuatro
-          bordes (stdev 55.6, tono dominante 9% de la banda), así que el
-          rectángulo es la ILUSTRACIÓN, no su fondo — como una foto. Es el caso
-          contrario al de empty-state-search.png, que era 86% de un beige plano:
-          ahí el rectángulo era el fondo y en dark flotaba como un bloque claro.
-          Un panel a sangre con esquinas redondeadas puede ser claro en dark;
-          una placa de fondo plano, no. No lo recortes ni le pongas borde. */}
-      <div className="relative hidden h-32 w-full overflow-hidden rounded-lg [@media(min-height:760px)]:block">
-        <Image
-          src="/images/onboarding-welcome.png"
-          alt={COPY.welcomeAlt}
-          fill
-          priority
-          sizes="(max-width: 640px) 100vw, 384px"
-          className="object-cover"
-        />
-      </div>
-      <h1
-        id="ob-step1"
-        className="font-display text-2xl font-bold text-foreground"
-      >
-        {COPY.step1Title}
-      </h1>
-      <div className="grid grid-cols-3 gap-2.5" role="group" aria-labelledby="ob-step1">
-        {COUNTRY_OPTIONS.map((option) => {
-          const isSelected = selected === option.code;
-          return (
-            <button
-              key={option.code}
-              type="button"
-              onClick={() => onSelect(option.code)}
-              aria-pressed={isSelected}
-              className={cn(
-                "flex min-h-[100px] flex-col items-center justify-center gap-1.5 rounded-lg border px-2 py-4",
-                "transition-[border-color,background-color,transform] duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.97]",
-                isSelected
-                  ? "border-brand bg-brand-tint"
-                  : "border-border bg-surface hover:border-border-strong",
-              )}
-            >
-              {/* Código país estilizado — nunca emoji de bandera como único indicador */}
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "flex size-11 items-center justify-center rounded-full font-display text-base font-bold",
-                  isSelected
-                    ? "bg-brand text-brand-foreground"
-                    : "bg-surface-subtle text-foreground-secondary",
-                )}
-              >
-                {option.short}
-              </span>
-              <span className="text-center text-xs font-medium leading-tight text-foreground">
-                {option.name}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
   );
 }

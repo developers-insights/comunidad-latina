@@ -43,7 +43,7 @@ export function TrustScoreBadge({
       className={cn(
         "group select-none transition-transform duration-(--duration-instant) ease-(--ease-spring) active:scale-[0.97]",
         isCard
-          ? "flex w-full items-center justify-between gap-3 rounded-lg border border-border-subtle bg-surface px-4 py-3 shadow-xs"
+          ? "flex w-full items-center justify-between gap-3 overflow-hidden rounded-lg border border-border-subtle bg-surface px-4 py-3 shadow-xs"
           : "touch-hitbox inline-flex items-center gap-1.5 rounded-sm",
         className,
       )}
@@ -51,7 +51,9 @@ export function TrustScoreBadge({
       <span
         className={cn(
           "flex items-center",
-          isCard ? "gap-2.5" : "gap-1.5",
+          // card: min-w-0 deja que el cluster encoja dentro del justify-between
+          // en celulares angostos (si no, la card desborda la página).
+          isCard ? "min-w-0 gap-2.5" : "gap-1.5",
         )}
       >
         {/* card: emblema 3D del nivel (hay superficie para leerlo como objeto).
@@ -85,15 +87,24 @@ export function TrustScoreBadge({
           className={cn(
             "font-medium",
             config.textClass,
-            isCard ? "text-sm" : "text-xs",
+            // card: es el único que puede encoger (min-w-0 + truncate) — así el
+            // emblema, la barra y el número quedan intactos y legibles.
+            isCard ? "min-w-0 truncate text-sm" : "text-xs",
           )}
         >
           · {config.label}
         </span>
       </span>
       {isCard && (
+        // El aria-label del botón ya dice la acción completa, así que acortar el
+        // texto visible es seguro. En celulares angostos mostramos solo la flecha
+        // para no empujar el número ni el nivel fuera de la card; el texto entero
+        // aparece desde sm, donde entra sobrado.
         <span className="shrink-0 text-xs text-foreground-muted">
-          Tocá para ver el detalle →
+          <span aria-hidden="true" className="sm:hidden">
+            →
+          </span>
+          <span className="hidden sm:inline">Tocá para ver el detalle →</span>
         </span>
       )}
     </button>

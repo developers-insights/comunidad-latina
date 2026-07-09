@@ -323,7 +323,7 @@ async function main() {
       price_period: 'month',
       area_label: 'Corona, Queens',
       geo_zone: 'dr5rz',
-      attrs: { rooms: 1, bathroom: 'compartido', furnished: true, utilities_included: true, credit_check: false, deposit_months: 1 },
+      attrs: { bedrooms: 1, bathroom: 'compartido', furnished: true, utilities_included: true, credit_check: false, deposit_months: 1 },
       publisher_name: 'Familia Núñez (opt-in comunitario)',
       publisher_kind: 'particular',
       created_by: null,
@@ -339,7 +339,7 @@ async function main() {
       price_period: 'month',
       area_label: 'Jackson Heights, Queens',
       geo_zone: 'dr5rz',
-      attrs: { rooms: 1, bathroom: 'privado', furnished: false, itin_ok: true, credit_check: false, deposit_months: 1 },
+      attrs: { bedrooms: 1, bathroom: 'privado', furnished: false, itin_ok: true, credit_check: false, deposit_months: 1 },
       publisher_name: 'Roosevelt Ave Realty (opt-in)',
       publisher_kind: 'inmobiliaria',
       created_by: null,
@@ -355,7 +355,7 @@ async function main() {
       price_period: 'month',
       area_label: 'Elmhurst, Queens',
       geo_zone: 'dr5rz',
-      attrs: { rooms: 2, bathroom: 'privado', heat_included: true, lease_months: 12, credit_check: false },
+      attrs: { bedrooms: 2, bathroom: 'privado', heat_included: true, lease_months: 12, credit_check: false },
       publisher_name: 'Sr. Familia Then (opt-in comunitario)',
       publisher_kind: 'particular',
       created_by: null,
@@ -371,7 +371,7 @@ async function main() {
       price_period: 'month',
       area_label: 'Flushing, Queens',
       geo_zone: 'dr72n',
-      attrs: { rooms: 0, bathroom: 'privado', furnished: true, utilities_included: true, credit_check: false, deposit_months: 1 },
+      attrs: { bedrooms: 0, bathroom: 'privado', furnished: true, utilities_included: true, credit_check: false, deposit_months: 1 },
       publisher_name: 'Familia Gómez (opt-in comunitario)',
       publisher_kind: 'particular',
       created_by: null,
@@ -387,7 +387,7 @@ async function main() {
       price_period: 'month',
       area_label: 'Woodside, Queens',
       geo_zone: 'dr5rz',
-      attrs: { rooms: 1, bathroom: 'compartido', furnished: true, women_only: true, credit_check: false, deposit_months: 1 },
+      attrs: { bedrooms: 1, bathroom: 'compartido', furnished: true, women_only: true, credit_check: false, deposit_months: 1 },
       publisher_name: 'Sra. Altagracia (opt-in comunitario)',
       publisher_kind: 'particular',
       created_by: null,
@@ -403,7 +403,7 @@ async function main() {
       price_period: 'month',
       area_label: 'Astoria, Queens',
       geo_zone: 'dr5rx',
-      attrs: { rooms: 1, bathroom: 'privado', pets: 'gatos', employer_letter_ok: true, credit_check: false },
+      attrs: { bedrooms: 1, bathroom: 'privado', pets: 'gatos', employer_letter_ok: true, credit_check: false },
       publisher_name: null,
       publisher_kind: null,
       created_by: mariaId, // demo del flujo con cuenta: request_contact() funciona
@@ -418,7 +418,7 @@ async function main() {
     await upsertListing(dominicanosId, item);
   }
 
-  // 4. Negocios + evento -----------------------------------------------------
+  // 4. Negocios + eventos ----------------------------------------------------
   const otherListings = [
     {
       seed_key: 'biz-elmalecon-corona',
@@ -465,9 +465,230 @@ async function main() {
       publisher_kind: 'organizacion',
       created_by: null,
     },
+    {
+      seed_key: 'event-clinica-itin-taxes',
+      kind: 'event',
+      title: 'Jornada gratuita de ITIN y taxes — traé tus papeles',
+      description:
+        'Voluntarios y contadores de la comunidad ayudan gratis a solicitar el ITIN y a preparar taxes básicos. Traé identificación, pasaporte y los documentos de ingresos. Cupos por orden de llegada.',
+      price_amount: null,
+      price_period: null,
+      area_label: 'Corona, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { starts_at: '2026-07-26T10:00:00-04:00', ends_at: '2026-07-26T14:00:00-04:00', free: true, venue_area: 'Corona, Queens' },
+      publisher_name: 'Coalición de Contadores Latinos de Queens (opt-in)',
+      publisher_kind: 'organizacion',
+      created_by: null,
+    },
+    {
+      seed_key: 'event-taller-derechos-ice',
+      kind: 'event',
+      title: 'Taller: Conocé tus derechos ante ICE (Know Your Rights)',
+      description:
+        'Charla práctica con una organización de derechos civiles: qué hacer si tocan tu puerta, cómo armar un plan familiar y para qué sirve la tarjeta roja. Entrada libre, en español, para toda la familia. Se reparten tarjetas de derechos.',
+      price_amount: null,
+      price_period: null,
+      area_label: 'Jackson Heights, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { starts_at: '2026-08-02T18:00:00-04:00', ends_at: '2026-08-02T20:00:00-04:00', free: true, venue_area: 'Jackson Heights, Queens' },
+      publisher_name: 'Centro Comunitario Dominicano de Jackson Heights (opt-in)',
+      publisher_kind: 'organizacion',
+      created_by: null,
+    },
+    {
+      seed_key: 'event-torneo-domino-corona',
+      kind: 'event',
+      title: 'Torneo de dominó dominicano — Corona Plaza',
+      description:
+        'El clásico que no puede faltar: torneo por parejas, música y comida típica. Inscripción por pareja el mismo día (cuota simbólica). Premios para los primeros lugares. Ambiente familiar y sano.',
+      price_amount: null,
+      price_period: null,
+      area_label: 'Corona, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { starts_at: '2026-08-23T13:00:00-04:00', ends_at: '2026-08-23T19:00:00-04:00', free: false, venue_area: 'Corona, Queens' },
+      publisher_name: 'Club de Dominó Quisqueya (opt-in)',
+      publisher_kind: 'organizacion',
+      created_by: null,
+    },
+    {
+      seed_key: 'event-feria-emprendedores',
+      kind: 'event',
+      title: 'Feria de emprendedores latinos — comida, moda y servicios',
+      description:
+        'Espacio para conocer negocios de la comunidad: comida casera, ropa, belleza, envíos y servicios. Entrada libre para el público. Si tenés un emprendimiento, es un buen lugar para darte a conocer.',
+      price_amount: null,
+      price_period: null,
+      area_label: 'Elmhurst, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { starts_at: '2026-09-13T11:00:00-04:00', ends_at: '2026-09-13T17:00:00-04:00', free: true, venue_area: 'Elmhurst, Queens' },
+      publisher_name: 'Asociación de Comerciantes Dominicanos de Queens (opt-in)',
+      publisher_kind: 'organizacion',
+      created_by: null,
+    },
+    {
+      seed_key: 'event-open-house-ingles-ged',
+      kind: 'event',
+      title: 'Puertas abiertas: clases de inglés y GED gratis',
+      description:
+        'Conocé el programa gratuito de inglés y preparación de GED de la biblioteca: horarios, niveles y cómo inscribirte. Ideal para quienes trabajan y quieren empezar de a poco. Traé una identificación para anotarte el mismo día.',
+      price_amount: null,
+      price_period: null,
+      area_label: 'Flushing, Queens',
+      geo_zone: 'dr72n',
+      attrs: { starts_at: '2026-09-27T17:30:00-04:00', ends_at: '2026-09-27T19:00:00-04:00', free: true, venue_area: 'Flushing, Queens' },
+      publisher_name: 'Programa de Alfabetización de la Biblioteca de Queens (opt-in)',
+      publisher_kind: 'organizacion',
+      created_by: null,
+    },
+    {
+      seed_key: 'biz-salon-quisqueya-jh',
+      kind: 'business',
+      title: 'Salón Quisqueya — peluquería y barbería dominicana',
+      description:
+        'Blower, tratamientos, tinte, uñas y barbería. El secreto del blower dominicano de toda la vida, ahora en Jackson Heights. Se atiende con y sin cita. Precios claros publicados en el local.',
+      price_amount: null,
+      price_period: null,
+      area_label: 'Jackson Heights, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { category: 'belleza', hours: 'Mar-Dom 9:00-19:00' },
+      publisher_name: 'Salón Quisqueya (opt-in)',
+      publisher_kind: 'negocio',
+      created_by: null,
+    },
+    {
+      seed_key: 'biz-colmado-laplacita-corona',
+      kind: 'business',
+      title: 'Colmado La Placita — víveres y productos dominicanos',
+      description:
+        'Todo lo de la tierra: plátano, yuca, salami, queso de freír, café y habichuelas. Recargas de teléfono y pago de algunos servicios. La bodega del barrio con sabor de casa.',
+      price_amount: null,
+      price_period: null,
+      area_label: 'Corona, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { category: 'mercado', hours: 'Lun-Dom 7:00-23:00' },
+      publisher_name: 'Colmado La Placita (opt-in)',
+      publisher_kind: 'negocio',
+      created_by: null,
+    },
+    {
+      seed_key: 'biz-taller-batista-woodside',
+      kind: 'business',
+      title: 'Taller Hermanos Batista — mecánica general y frenos',
+      description:
+        'Cambio de aceite, frenos, diagnóstico por computadora e inspección estatal. Presupuesto antes de tocar el carro y explicación en español de lo que hay que arreglar. Turnos por la mañana.',
+      price_amount: null,
+      price_period: null,
+      area_label: 'Woodside, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { category: 'mecanica', hours: 'Lun-Sab 8:00-18:00' },
+      publisher_name: 'Taller Hermanos Batista (opt-in)',
+      publisher_kind: 'negocio',
+      created_by: null,
+    },
+    {
+      seed_key: 'biz-remesas-elcibao-jamaica',
+      kind: 'business',
+      title: 'Envíos y Remesas El Cibao — dinero y encomiendas a RD',
+      description:
+        'Envío de remesas a toda República Dominicana y encomiendas puerta a puerta. También fotocopias y ayuda para llenar formularios. Atención en español, precios a la vista.',
+      price_amount: null,
+      price_period: null,
+      area_label: 'Jamaica, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { category: 'servicios', hours: 'Lun-Sab 9:00-20:00', destinations: ['Santo Domingo', 'Santiago', 'La Vega'] },
+      publisher_name: 'Envíos y Remesas El Cibao (opt-in)',
+      publisher_kind: 'negocio',
+      created_by: null,
+    },
   ];
 
   for (const item of otherListings) {
+    await upsertListing(dominicanosId, item);
+  }
+
+  // 4b. Profesionales -------------------------------------------------------
+  const professionalListings = [
+    {
+      seed_key: 'prof-abogada-inmigracion-jh',
+      kind: 'professional',
+      title: 'Abogada de inmigración — consulta orientativa en español',
+      description:
+        'Asesoría en asilo, permisos de trabajo, TPS, renovación de DACA y peticiones familiares. La primera charla es para entender tu caso y tus opciones reales, sin promesas de resultado. Todo en español, con turnos por la tarde.',
+      area_label: 'Jackson Heights, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { category: 'abogado', credentials: ['Abogada admitida en el Estado de NY', 'Derecho migratorio'] },
+      publisher_name: 'Estudio Jurídico Reynoso (opt-in comunitario)',
+      publisher_kind: 'profesional',
+      created_by: null,
+    },
+    {
+      seed_key: 'prof-contador-itin-corona',
+      kind: 'professional',
+      title: 'Contador — impuestos, ITIN y taxes para trabajadores',
+      description:
+        'Preparación de taxes personales y de pequeños negocios, solicitud y renovación de ITIN, y planes de pago con el IRS. Te digo el precio antes de empezar y explico todo en español. Turnos de fin de semana en temporada.',
+      area_label: 'Corona, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { category: 'contador', credentials: ['Preparador de impuestos registrado (PTIN)', 'Agente tramitador de ITIN'] },
+      publisher_name: 'Servicios Contables Guzmán (opt-in comunitario)',
+      publisher_kind: 'profesional',
+      created_by: null,
+    },
+    {
+      seed_key: 'prof-notario-publico-woodside',
+      kind: 'professional',
+      title: 'Notario Público (Notary Public) — juramentos y firmas',
+      description:
+        'Certifico firmas y tomo juramentos como Notary Public del Estado de NY. Importante: en Estados Unidos un Notary Public NO es abogado y NO da asesoría legal ni de inmigración. Si necesitás un trámite legal, te oriento a dónde acudir. Servicio a domicilio en la zona.',
+      area_label: 'Woodside, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { category: 'notario', credentials: ['Notary Public — Estado de NY', 'No brinda asesoría legal'] },
+      publisher_name: 'Altagracia Fermín, Notary Public (opt-in comunitario)',
+      publisher_kind: 'profesional',
+      created_by: null,
+    },
+    {
+      seed_key: 'prof-salud-promotora-elmhurst',
+      kind: 'professional',
+      title: 'Promotora de salud comunitaria — orientación y turnos',
+      description:
+        'Te ayudo a inscribirte en planes de salud pública, conseguir chequeos de bajo costo y entender las cartas del hospital. Acompaño a citas médicas como intérprete de salud. Trabajo con clínicas comunitarias del área de Elmhurst.',
+      area_label: 'Elmhurst, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { category: 'salud', credentials: ['Community Health Worker', 'Intérprete de salud español-inglés'] },
+      publisher_name: 'Red de Promotoras de Salud de Queens (opt-in comunitario)',
+      publisher_kind: 'profesional',
+      created_by: null,
+    },
+    {
+      seed_key: 'prof-educacion-ingles-ged-flushing',
+      kind: 'professional',
+      title: 'Clases de inglés y preparación para GED y ciudadanía',
+      description:
+        'Grupos chicos y clases particulares: inglés desde cero, preparación para el GED y para la entrevista de ciudadanía (civics en español e inglés). Materiales incluidos. Horarios de mañana y de noche para los que trabajan.',
+      area_label: 'Flushing, Queens',
+      geo_zone: 'dr72n',
+      attrs: { category: 'educacion', credentials: ['Docente de ESL', 'Preparación GED y civics'] },
+      publisher_name: 'Profe Mercedes — Clases Comunitarias (opt-in comunitario)',
+      publisher_kind: 'profesional',
+      created_by: null,
+    },
+    {
+      seed_key: 'prof-traductor-interprete-jamaica',
+      kind: 'professional',
+      title: 'Traductor e intérprete español-inglés — documentos y citas',
+      description:
+        'Traducción de documentos (actas, títulos, cartas) y acompañamiento como intérprete en citas médicas, escuelas y oficinas. Traducciones con certificación para trámites. Respuesta rápida por mensaje dentro de la app.',
+      area_label: 'Jamaica, Queens',
+      geo_zone: 'dr5rz',
+      attrs: { category: 'otro', credentials: ['Traducción certificada', 'Intérprete español-inglés'] },
+      publisher_name: 'Ovalles Traducciones (opt-in comunitario)',
+      publisher_kind: 'profesional',
+      created_by: null,
+    },
+  ];
+
+  for (const item of professionalListings) {
     await upsertListing(dominicanosId, item);
   }
 

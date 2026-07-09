@@ -74,11 +74,17 @@ export function ListingFilters({ zones, className }: ListingFiltersProps) {
         />
       </form>
 
-      <div className="grid grid-cols-3 gap-2">
+      {/* Mobile-first: precio + habitaciones (labels cortos) comparten una fila
+          de 2 columnas; la zona (labels largos, p. ej. "Flushing Meadows Corona
+          Park, Queens") va a todo el ancho abajo para no truncar. En sm+ vuelven
+          las 3 columnas. min-w-0 deja que cada grid item se encoja y el <select>
+          recorte su texto en vez de desbordar el ancho. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Select
           aria-label={COPY.list.filterPriceLabel}
           value={precio}
           onChange={(event) => apply({ precio: event.target.value })}
+          className="min-w-0"
         >
           <option value="">{COPY.list.filterPriceAny}</option>
           {PRICE_OPTIONS.map((value) => (
@@ -92,6 +98,7 @@ export function ListingFilters({ zones, className }: ListingFiltersProps) {
           aria-label={COPY.list.filterBedroomsLabel}
           value={hab}
           onChange={(event) => apply({ hab: event.target.value })}
+          className="min-w-0"
         >
           <option value="">{COPY.list.filterBedroomsAny}</option>
           <option value="1">1+ hab</option>
@@ -103,6 +110,7 @@ export function ListingFilters({ zones, className }: ListingFiltersProps) {
           aria-label={COPY.list.filterZoneLabel}
           value={zona}
           onChange={(event) => apply({ zona: event.target.value })}
+          className="col-span-2 min-w-0 sm:col-span-1"
         >
           <option value="">{COPY.list.filterZoneAny}</option>
           {zones.map((label) => (

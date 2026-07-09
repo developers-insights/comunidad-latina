@@ -56,9 +56,24 @@ export const COPY = {
     contactHint: "Tu contacto queda protegido dentro de la app",
     contactSuccessTitle: "¡Listo! Le avisamos al anunciante",
     contactSuccessBody: "Cuando acepte tu contacto, van a poder hablar por acá.",
-    contactErrorTitle: "No pudimos enviar tu solicitud",
-    contactErrorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo en un ratito.",
-    contactOwnListing: "Este aviso es tuyo — no hace falta que te contactes.",
+    // Resultados no-felices del contacto protegido. La server action mapea cada
+    // código del RPC request_contact (AUTH_REQUIRED, CANNOT_CONTACT_SELF, …) a
+    // uno de estos textos y define el tono (info | error) del toast. Los casos
+    // "info" NO son errores: son aclaraciones amables, no van en rojo.
+    contactOwnTitle: "Este aviso es tuyo",
+    contactOwnBody: "No necesitás contactarte — ya sos quien lo publica.",
+    contactNoAccountTitle: "El chat todavía no está disponible",
+    contactNoAccountBody:
+      "Quien publicó este aviso todavía no tiene cuenta en la comunidad, así que el chat no está disponible.",
+    contactUnavailableTitle: "Este aviso ya no está disponible",
+    contactUnavailableBody:
+      "Puede que se haya pausado o dado de baja. Probá con otro aviso de la comunidad.",
+    contactAuthTitle: "Entrá para poder contactar",
+    contactAuthBody: "Para contactar necesitás entrar a tu cuenta.",
+    // Fallback: si algo no previsto falla, dejamos claro que es una demo.
+    contactDemoTitle: "Esto es una demo",
+    contactDemoBody:
+      "El contacto real se habilita con tu comunidad activa. Probá de nuevo más tarde.",
     seedSheetTitle: "Este aviso vino de una fuente externa",
     seedSheetBody: (name: string) =>
       `Lo publicó ${name} fuera de la app, con su permiso. El contacto se hace por los datos que esa fuente publicó — no podemos protegerlo desde acá.`,
@@ -70,7 +85,7 @@ export const COPY = {
     moreActions: "Más opciones",
   },
   report: {
-    sheetTitle: "Reportar como estafa",
+    sheetTitle: "Reportar un problema",
     intro:
       "Contanos qué pasó con este aviso. Tu reporte es confidencial y ayuda a proteger a toda la comunidad.",
     reasonLabel: "¿Qué pasó?",
