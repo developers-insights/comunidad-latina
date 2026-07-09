@@ -77,6 +77,28 @@ const DOMAIN_TENANTS: Record<string, string> = {
   "www.comunidadlatina.com": "comunidadlatina",
 };
 
+/**
+ * Comunidades ACTIVAS para el usuario final (2026-07-09).
+ *
+ * Por ahora hay UNA sola comunidad pública/navegable: `dominicanos`
+ * ("Dominicanos en USA"). `comunidadlatina` es la MARCA y el panel de
+ * administración — NO es una comunidad, y el cliente jamás debe verla como si
+ * lo fuera. Este set "clampea" la resolución del tenant del request: cualquier
+ * candidato que no esté acá cae a la comunidad por defecto. Así ni un
+ * `?t=comunidadlatina`, ni una cookie `cl-tenant` vieja, ni el dominio de la
+ * marca meten al usuario en una comunidad que no debe ver.
+ *
+ * NO afecta al panel de admin: /admin usa el `tenant_id` del JWT, no este
+ * (src/app/admin/guard.ts). Para reactivar multi-comunidad, sumá el slug acá
+ * (y su dominio en DOMAIN_TENANTS + INDEXABLE_HOSTS de robots.ts).
+ */
+export const ACTIVE_COMMUNITY_SLUGS = new Set<string>([DEFAULT_TENANT_SLUG]);
+
+/** ¿Es un slug de comunidad pública/activa hoy? (single-community por ahora). */
+export function isActiveCommunitySlug(slug: string | null | undefined): boolean {
+  return typeof slug === "string" && ACTIVE_COMMUNITY_SLUGS.has(slug);
+}
+
 function sanitizeSlug(value: string | null | undefined): string | null {
   if (!value) return null;
   const candidate = value.trim().toLowerCase();
@@ -97,9 +119,13 @@ export function resolveTenantSlug(
 ): string {
   const hostname = (host ?? "").split(":")[0].toLowerCase();
   const fromDomain = DOMAIN_TENANTS[hostname];
-  if (fromDomain) return fromDomain;
+  const candidate =
+    fromDomain ?? sanitizeSlug(searchParamT) ?? sanitizeSlug(cookieT) ?? DEFAULT_TENANT_SLUG;
 
-  return sanitizeSlug(searchParamT) ?? sanitizeSlug(cookieT) ?? DEFAULT_TENANT_SLUG;
+  // Single-community por ahora: cualquier comunidad que no esté activa (p. ej.
+  // `comunidadlatina`, la marca) cae a la comunidad por defecto. El usuario
+  // final nunca aterriza en una comunidad que no debe ver (ver ACTIVE_COMMUNITY_SLUGS).
+  return ACTIVE_COMMUNITY_SLUGS.has(candidate) ? candidate : DEFAULT_TENANT_SLUG;
 }
 
 function asString(value: unknown): string | null {

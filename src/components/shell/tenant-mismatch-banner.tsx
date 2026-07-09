@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Banner } from "@/components/ui";
 import { getTenantMismatch } from "@/lib/tenant/guard";
+import { isActiveCommunitySlug } from "@/lib/tenant/resolve";
 import { tenantMismatchBanner } from "@/lib/tenant/match";
 
 /**
@@ -21,6 +22,12 @@ import { tenantMismatchBanner } from "@/lib/tenant/match";
 export async function TenantMismatchBanner() {
   const mismatch = await getTenantMismatch();
   if (!mismatch) return null;
+
+  // Single-community (por ahora): si la comunidad "de origen" del usuario no es
+  // una comunidad activa/navegable (p. ej. `comunidadlatina`, la marca), no
+  // mostramos el aviso ni la nombramos ni ofrecemos "volver" a ella — no es una
+  // comunidad para el usuario, y el cruce entre comunidades no debe existir aún.
+  if (!isActiveCommunitySlug(mismatch.home?.slug)) return null;
 
   const copy = tenantMismatchBanner(mismatch.current.name, mismatch.home?.name ?? null);
 
