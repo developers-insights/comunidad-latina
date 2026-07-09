@@ -31,7 +31,6 @@ import { cn } from "@/lib/utils";
 
 const COPY = {
   titulo: "Para vos",
-  subtitulo: "Elegido según lo que nos contaste — nada al azar.",
   verificado: "Verificación vigente",
   invitacionTitulo: "Contanos qué estás buscando",
   invitacionTexto:
@@ -85,14 +84,11 @@ export async function ParaVos({ userId }: { userId: string }) {
 
   return (
     <section aria-label={COPY.titulo}>
-      <div className="flex items-baseline gap-2">
-        <h2 className="font-display text-lg font-bold tracking-tight text-foreground">
-          {COPY.titulo}
-        </h2>
-        <p className="truncate text-xs text-foreground-muted">{COPY.subtitulo}</p>
-      </div>
+      {/* Sin encabezado visible (pedido 2026-07-09): el carrusel habla solo, sin
+          el título "Para vos" ni la bajada. El aria-label conserva "Para vos"
+          para lectores de pantalla. */}
       <ul
-        className="-mx-4 mt-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label={COPY.titulo}
       >
         {result.items.map((item) => (
