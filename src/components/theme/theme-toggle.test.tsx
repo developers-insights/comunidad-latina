@@ -1,20 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { THEME_STORAGE_KEY } from "./constants";
 
 /**
  * Lo que se protege acá es el defecto [10]: `aria-pressed={isDark}` afirmaba una
- * elección del usuario que con `theme='system'` nunca existió, y `setTheme('system')`
- * no tenía un solo call site — una vez que tocabas el toggle quedabas clavado en
- * preferencia explícita para siempre.
+ * elección del usuario que con `theme='system'` nunca existió. El nombre-como-acción
+ * y la descripción (SO vs. usuario) son el reemplazo honesto.
  *
- * Y su daño colateral: el botón "Seguir al sistema" se DESMONTA con el click que
- * lo activa. La primera versión de este archivo anclaba `expect(systemButton())
- * .toBeNull()` sin mirar nunca `document.activeElement`, así que pasaba con el
- * foco tirado en el <body> (WCAG 2.4.3) y con la descripción —lo único que
- * anuncia el tercer estado— actualizándose sobre un botón que ya no tenía el
- * foco. Los tests de "el foco y el anuncio" existen para que eso no vuelva.
+ * El toggle es un claro↔oscuro simple: la primera elección deja de seguir al SO y
+ * persiste; NO hay UI para volver a `system` (el viejo botón "Seguir al sistema"
+ * se quitó). El ancla de regresión de abajo fija que ese botón no reaparezca.
  *
  * El store es un módulo con estado singleton: cada test lo importa de cero a
  * través del componente (`vi.resetModules()` + import dinámico).
@@ -47,31 +43,14 @@ function stubMatchMedia(dark: boolean): void {
   })) as unknown as typeof window.matchMedia;
 }
 
-/** El SO cambia de tema en vivo (atardecer, modo automático de Android). */
-async function flipSystem(dark: boolean): Promise<void> {
-  systemDark = dark;
-  await act(async () => {
-    for (const listener of mediaListeners) listener({ matches: dark } as MediaQueryListEvent);
-  });
-}
-
-/** SecurityError: en estos navegadores lanza TODO acceso, no sólo la escritura. */
-function blockStorage(): void {
-  const boom = () => {
-    throw new DOMException("The operation is insecure.", "SecurityError");
-  };
-  vi.spyOn(Storage.prototype, "getItem").mockImplementation(boom);
-  vi.spyOn(Storage.prototype, "setItem").mockImplementation(boom);
-  vi.spyOn(Storage.prototype, "removeItem").mockImplementation(boom);
-}
-
 async function renderToggle(className?: string) {
   const { ThemeToggle } = await import("./theme-toggle");
   return render(<ThemeToggle className={className} />);
 }
 
-/** Los dos nombres del toggle empiezan con "Cambiar"; el otro botón, no. */
+/** Los dos nombres del toggle empiezan con "Cambiar". */
 const toggleButton = () => screen.getByRole("button", { name: /^Cambiar/ });
+/** El botón quitado. Debe seguir sin existir en cualquier estado. */
 const systemButton = () => screen.queryByRole("button", { name: "Seguir al sistema" });
 const themeClass = () => document.documentElement.className;
 
@@ -82,13 +61,6 @@ function description(element: HTMLElement): string | null {
   // accname §4.3.2: sin `aria-describedby`, un `title` que no se usó para el
   // nombre pasa a ser la DESCRIPCIÓN. Con `aria-label` presente, siempre.
   return element.getAttribute("title");
-}
-
-/** Clic de navegador de verdad: el botón recibe el foco antes de activarse. */
-function clickWithFocus(button: HTMLElement): void {
-  button.focus();
-  expect(document.activeElement).toBe(button);
-  fireEvent.click(button);
 }
 
 beforeEach(() => {
@@ -111,11 +83,9 @@ describe("ThemeToggle: el nombre y el estado dicen la verdad", () => {
 
     const html = renderToString(<ThemeToggle />);
 
-    // Ni estado, ni promesa de destino, ni una salida a `system` que el server
-    // no puede saber si hace falta.
+    // Ni estado, ni promesa de destino.
     expect(html).not.toContain("aria-pressed");
     expect(html).not.toContain("aria-describedby");
-    expect(html).not.toContain("Seguir al sistema");
     expect(html).toContain('aria-label="Cambiar el tema"');
     // Y ningún `title`: sin `aria-describedby` que lo suprima, un title igual al
     // `aria-label` se convierte en la descripción y el lector lo dice dos veces.
@@ -131,8 +101,6 @@ describe("ThemeToggle: el nombre y el estado dicen la verdad", () => {
     expect(button.hasAttribute("aria-pressed")).toBe(false);
     expect(button.getAttribute("aria-label")).toBe("Cambiar a tema claro");
     expect(description(button)).toBe("Ahora seguís el tema oscuro del sistema.");
-    // No hay nada que devolver: ya seguís al sistema.
-    expect(systemButton()).toBeNull();
   });
 
   it("con theme='system' y SO claro: la descripción sigue al SO", async () => {
@@ -171,140 +139,26 @@ describe("ThemeToggle: el nombre y el estado dicen la verdad", () => {
   });
 });
 
-describe("ThemeToggle: la vuelta a 'system'", () => {
-  it("el botón aparece sólo cuando hay una preferencia que soltar", async () => {
+describe("ThemeToggle: no hay vuelta a 'system' desde la UI", () => {
+  it("no monta el botón 'Seguir al sistema' en ningún estado", async () => {
     stubMatchMedia(true);
     await renderToggle();
-    expect(systemButton()).toBeNull();
-
-    fireEvent.click(toggleButton());
-    expect(systemButton()).not.toBeNull();
-  });
-
-  it("va ANTES del sol/luna en el DOM: el control primario no se corre del dedo", async () => {
-    stubMatchMedia(true);
-    await renderToggle();
-    fireEvent.click(toggleButton());
-
-    const [first, second] = screen.getAllByRole("button");
-    expect(first.getAttribute("aria-label")).toBe("Seguir al sistema");
-    expect(second.getAttribute("aria-label")).toBe("Cambiar a tema oscuro");
-  });
-
-  it("borra la preferencia, vuelve a seguir al SO y el botón se va solo", async () => {
-    stubMatchMedia(true);
-    await renderToggle();
+    expect(systemButton()).toBeNull(); // theme='system'
 
     fireEvent.click(toggleButton()); // → claro explícito
-    expect(themeClass()).toBe("light");
-
-    clickWithFocus(systemButton()!);
-
-    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
-    expect(themeClass()).toBe("dark"); // el SO manda de nuevo
     expect(systemButton()).toBeNull();
-    expect(description(toggleButton())).toBe("Ahora seguís el tema oscuro del sistema.");
-  });
-
-  it("después de volver, el SO sigue mandando EN VIVO", async () => {
-    stubMatchMedia(true);
-    await renderToggle();
-    fireEvent.click(toggleButton());
-    clickWithFocus(systemButton()!);
-
-    await flipSystem(false); // atardecer al revés
-
-    expect(themeClass()).toBe("light");
-    expect(description(toggleButton())).toBe("Ahora seguís el tema claro del sistema.");
-    expect(systemButton()).toBeNull();
-  });
-
-  it("con localStorage bloqueado la salida sigue existiendo (memoryTheme)", async () => {
-    stubMatchMedia(true);
-    blockStorage();
-    await renderToggle();
-
-    fireEvent.click(toggleButton()); // no persiste, pero el tema cambia
-    expect(themeClass()).toBe("light");
-    expect(systemButton()).not.toBeNull();
-
-    clickWithFocus(systemButton()!); // memoryTheme = 'system'
-    expect(themeClass()).toBe("dark");
-    expect(systemButton()).toBeNull();
-    expect(document.activeElement).toBe(toggleButton()); // ni con el storage roto
-
-    await flipSystem(false); // y el listener del SO sigue vivo
-    expect(themeClass()).toBe("light");
-  });
-});
-
-describe("ThemeToggle: el foco y el anuncio al volver a 'system'", () => {
-  it("el botón se desmonta con el click que lo activa y le entrega el foco al sol/luna", async () => {
-    stubMatchMedia(true);
-    await renderToggle();
-    fireEvent.click(toggleButton()); // → claro explícito
-
-    const system = systemButton()!;
-    clickWithFocus(system);
-
-    // El foco NO se cae al <body>: el siguiente Tab sigue desde el sol/luna y no
-    // reinicia desde el principio de la página (WCAG 2.4.3, Focus Order).
-    expect(document.body.contains(system)).toBe(false);
-    expect(document.activeElement).not.toBe(document.body);
-    expect(document.activeElement).toBe(toggleButton());
-  });
-
-  it("cuando el `focus` dispara, la descripción YA anuncia el estado nuevo", async () => {
-    // El caso MÁS común: el SO está en claro y la preferencia explícita también.
-    // Ni el tema, ni la clase de <html>, ni el nombre del control cambian. El
-    // único testigo del cambio es la descripción del control que recibe el foco.
-    stubMatchMedia(false);
-    await renderToggle();
 
     fireEvent.click(toggleButton()); // → oscuro explícito
-    fireEvent.click(toggleButton()); // → claro explícito (idéntico al del SO)
-    expect(themeClass()).toBe("light");
-
-    const toggle = toggleButton();
-    // Lo que un lector de pantalla tiene disponible EN EL INSTANTE del `focus`.
-    // Si el commit de React llegara después (sin `flushSync`), acá se leería
-    // todavía "Elegiste el tema claro." y el tercer estado sería inaudible.
-    let heardOnFocus: string | null = null;
-    toggle.addEventListener("focus", () => {
-      heardOnFocus = description(toggle);
-    });
-
-    clickWithFocus(systemButton()!);
-
-    expect(themeClass()).toBe("light"); // nada cambió en pantalla…
-    expect(toggle.getAttribute("aria-label")).toBe("Cambiar a tema oscuro"); // …ni el nombre
-    expect(document.activeElement).toBe(toggle);
-    expect(heardOnFocus).toBe("Ahora seguís el tema claro del sistema.");
+    expect(systemButton()).toBeNull();
   });
 
-  it("'Seguir al sistema' no repite su nombre como descripción", async () => {
+  it("hay un solo botón: el sol/luna", async () => {
     stubMatchMedia(true);
     await renderToggle();
-    fireEvent.click(toggleButton()); // → claro explícito
+    expect(screen.getAllByRole("button")).toHaveLength(1);
 
-    const system = systemButton()!;
-    // Con `aria-label` puesto, un `title` idéntico sería la descripción accesible:
-    // "Seguir al sistema, botón, Seguir al sistema". El `aria-describedby` lo tapa
-    // y aprovecha para decir qué preferencia se está soltando.
-    expect(system.hasAttribute("aria-describedby")).toBe(true);
-    expect(description(system)).toBe("Elegiste el tema claro.");
-    expect(description(system)).not.toBe(system.getAttribute("aria-label"));
-  });
-
-  it("no hay live region: el anuncio viaja en el cambio de foco", async () => {
-    stubMatchMedia(true);
-    const { container } = await renderToggle();
-    fireEvent.click(toggleButton());
-    clickWithFocus(systemButton()!);
-
-    // `role="status"` acá duplicaría el anuncio del foco y, montándose al hidratar,
-    // hablaría en cada carga. 4.1.3 no aplica: el cambio de estado SÍ recibe foco.
-    expect(container.querySelector('[role="status"], [aria-live]')).toBeNull();
+    fireEvent.click(toggleButton()); // elegir tema no agrega controles
+    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 });
 
@@ -316,18 +170,15 @@ describe("ThemeToggle: contrato con los call sites", () => {
     const wrapper = container.firstElementChild as HTMLElement;
     expect(wrapper.className).toContain("absolute");
     expect(wrapper.className).toContain("right-2");
-    // Sigue siendo una fila: el par de botones no se apila ni se encoge.
+    // Sigue siendo una fila alineada.
     expect(wrapper.className).toContain("flex");
     expect(wrapper.className).toContain("shrink-0");
   });
 
-  it("los dos botones son 44×44 (§3.2)", async () => {
+  it("el botón es 44×44 (§3.2)", async () => {
     stubMatchMedia(true);
     await renderToggle();
-    fireEvent.click(toggleButton());
 
-    for (const button of screen.getAllByRole("button")) {
-      expect(button.className).toContain("size-11");
-    }
+    expect(toggleButton().className).toContain("size-11");
   });
 });
