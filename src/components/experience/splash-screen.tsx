@@ -31,14 +31,6 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 const SESSION_FLAG = "cl-splashed";
 const VISIBLE_MS = 1100;
 
-/** Inicial visible del tenant para el monograma (mayúscula, a prueba de vacío). */
-function monogram(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "•";
-  // Primer code point real (soporta acentos/emoji sin romper).
-  return [...trimmed][0]!.toUpperCase();
-}
-
 export function SplashScreen({
   brandHex,
   name,
@@ -101,8 +93,6 @@ export function SplashScreen({
     return () => window.removeEventListener("keydown", onKey);
   }, [visible, dismiss]);
 
-  const initial = monogram(name);
-
   return (
     <AnimatePresence>
       {visible && (
@@ -143,42 +133,20 @@ export function SplashScreen({
               transition={{ duration: 1, ease: [0.34, 1.56, 0.64, 1] }}
             />
             <motion.div
-              className="relative flex items-center justify-center rounded-[28px] shadow-lg"
-              style={{
-                width: 84,
-                height: 84,
-                background: `var(--color-brand, ${brandHex})`,
-              }}
+              className="relative flex items-center justify-center overflow-hidden rounded-[28px] bg-surface shadow-lg"
+              style={{ width: 84, height: 84 }}
               initial={{ opacity: 0, scale: 0.7, y: 6 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               transition={{ duration: 0.55, ease: [0.34, 1.56, 0.64, 1] }}
             >
-              <span
-                className="font-display font-bold leading-none text-brand-foreground"
-                style={{ fontSize: 40 }}
-              >
-                {initial}
-              </span>
-              {/* Shimmer de marca que barre el escudo una vez.
-                  El blanco NO es un color de UI: es un reflejo especular sobre el
-                  fill de marca (misma familia que el gloss del <BrandMark />). Una
-                  luz no se oscurece porque el usuario prendió el tema dark, así que
-                  es constante a propósito y no le corresponde token semántico. */}
-              <motion.span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 overflow-hidden rounded-[28px]"
-              >
-                <motion.span
-                  className="absolute inset-y-0 w-1/2 -skew-x-12"
-                  style={{
-                    background:
-                      "linear-gradient(100deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%)",
-                  }}
-                  initial={{ x: "-160%" }}
-                  animate={{ x: "260%" }}
-                  transition={{ duration: 0.9, delay: 0.25, ease: [0.32, 0.72, 0, 1] }}
-                />
-              </motion.span>
+              {/* eslint-disable-next-line @next/next/no-img-element -- overlay efímero de sesión; no vale el runtime de next/image */}
+              <img
+                src="/brand/logo-mark.png"
+                alt=""
+                width={62}
+                height={62}
+                style={{ width: 62, height: 62, objectFit: "contain" }}
+              />
             </motion.div>
           </div>
 

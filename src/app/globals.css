@@ -598,6 +598,12 @@
   --duration-slow: 400ms;
   --duration-page: 500ms;
 
+  /* Marca tricolor del logo (azul · amarillo · rojo) — acentos fijos, NO dependen
+     del tenant y NO son colores semánticos: identidad de "Comunidad Latina". */
+  --brand-blue: #1f5da6;
+  --brand-yellow: #d9a22b;
+  --brand-red: #cf2532;
+
   /* Iconografía (§2.6) y targets táctiles (§3.2) */
   --icon-sm: 16px;
   --icon-md: 20px;

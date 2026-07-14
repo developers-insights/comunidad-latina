@@ -40,8 +40,11 @@ async function getUnreadCount(): Promise<number> {
  */
 export async function Header({ tenant, className }: { tenant: Tenant; className?: string }) {
   const unread = await getUnreadCount();
+  // Single-community: si el tenant no trae logo propio, cae al logo de la
+  // plataforma (las tres figuras azul·amarillo·rojo).
+  const logoSrc = tenant.logoUrl ?? "/brand/logo-mark.png";
   const headerClass = [
-    "sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md",
+    "sticky top-0 z-40 bg-surface/85 backdrop-blur-md",
     className,
   ]
     .filter(Boolean)
@@ -57,24 +60,22 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
           className="flex min-h-11 min-w-0 items-center gap-2 rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           aria-label={tenant.name}
         >
-          {tenant.logoUrl ? (
-            isOptimizableSrc(tenant.logoUrl) ? (
-              <Image
-                src={tenant.logoUrl}
-                alt=""
-                width={28}
-                height={28}
-                className="h-7 w-7 shrink-0 rounded-full object-cover"
-              />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element -- logo en un dominio ajeno al allowlist de next/image (tenant custom)
-              <img
-                src={tenant.logoUrl}
-                alt=""
-                className="h-7 w-7 shrink-0 rounded-full object-cover"
-              />
-            )
-          ) : null}
+          {isOptimizableSrc(logoSrc) ? (
+            <Image
+              src={logoSrc}
+              alt=""
+              width={32}
+              height={32}
+              className="h-8 w-8 shrink-0 object-contain"
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element -- logo en un dominio ajeno al allowlist de next/image (tenant custom)
+            <img
+              src={logoSrc}
+              alt=""
+              className="h-8 w-8 shrink-0 object-contain"
+            />
+          )}
           <span className="truncate text-base font-bold tracking-tight text-brand-ink">
             {tenant.name}
           </span>
@@ -84,6 +85,16 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
         <ThemeToggle />
         <NotificationBell initialUnread={unread} />
       </div>
+      {/* Firma tricolor de la marca: azul · amarillo · rojo (del logo). Reemplaza
+          el hairline inferior del header y aparece en toda pantalla autenticada. */}
+      <div
+        aria-hidden="true"
+        className="h-[3px] w-full"
+        style={{
+          background:
+            "linear-gradient(90deg, var(--brand-blue) 0 33.34%, var(--brand-yellow) 33.34% 66.67%, var(--brand-red) 66.67% 100%)",
+        }}
+      />
     </header>
   );
 }
