@@ -1,34 +1,31 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DotsThree } from "@phosphor-icons/react/dist/ssr";
-import { BottomSheet, Button, Textarea, useToast } from "@/components/ui";
-import { ReportScamButton } from "@/components/trust";
-import { REPORT_REASONS, type ReportReasonValue } from "@/components/escudo/report-reasons";
+import { BottomSheet, useToast } from "@/components/ui";
+import { ReportScamButton, ReportSheet } from "@/components/trust";
 import { cn } from "@/lib/utils";
-import { reportPostAction } from "@/app/(app)/feed/actions";
 import { COPY } from "./copy";
 
 export interface PostMenuProps {
   postId: string;
+  /** null si la cuenta del autor ya no existe — no hay a quién reportar. */
+  authorId: string | null;
   /** null si el viewer es anónimo — reportar pide cuenta. */
   viewerId: string | null;
 }
 
 /**
- * Menú ⋯ del detalle de post. "Reportar como estafa" es SIEMPRE la primera
- * opción (§3.3) y abre el flujo de razones canónicas del Escudo — el reporte
- * viaja por la RPC report_scam contra el perfil del autor.
+ * Menú ⋯ del detalle de post. "Reportar" es SIEMPRE la primera opción (§3.3)
+ * y abre el ReportSheet unificado (2 taps) — el reporte viaja contra el
+ * PERFIL del autor (no contra el post en sí), vía la RPC report_scam.
  */
-export function PostMenu({ postId, viewerId }: PostMenuProps) {
+export function PostMenu({ postId, authorId, viewerId }: PostMenuProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reason, setReason] = useState<ReportReasonValue | null>(null);
-  const [details, setDetails] = useState("");
-  const [isPending, startTransition] = useTransition();
 
   function openReport() {
     setMenuOpen(false);
@@ -37,43 +34,9 @@ export function PostMenu({ postId, viewerId }: PostMenuProps) {
       router.push(`/entrar?next=${encodeURIComponent(`/feed/${postId}`)}`);
       return;
     }
+    // Autor eliminado: no hay perfil contra el cual reportar (caso borde).
+    if (!authorId) return;
     setReportOpen(true);
-  }
-
-  function submitReport() {
-    if (!reason || isPending) return;
-    if (reason === "Otro" && details.trim().length === 0) {
-      toast({ title: COPY.report.detailsRequired, variant: "warning" });
-      return;
-    }
-
-    startTransition(async () => {
-      const result = await reportPostAction({
-        postId,
-        reason,
-        details: details.trim() || undefined,
-      });
-      if (result.ok) {
-        setReportOpen(false);
-        setReason(null);
-        setDetails("");
-        toast({
-          title: COPY.report.successTitle,
-          description: COPY.report.successBody,
-          variant: "success",
-        });
-        return;
-      }
-      if (result.code === "unauthenticated") {
-        router.push(`/entrar?next=${encodeURIComponent(`/feed/${postId}`)}`);
-        return;
-      }
-      toast({
-        title: COPY.report.errorTitle,
-        description: COPY.report.errorBody,
-        variant: "danger",
-      });
-    });
   }
 
   return (
@@ -104,83 +67,15 @@ export function PostMenu({ postId, viewerId }: PostMenuProps) {
         </div>
       </BottomSheet>
 
-      {/* Razones canónicas del Escudo */}
-      <BottomSheet
-        open={reportOpen}
-        onClose={() => setReportOpen(false)}
-        title={COPY.report.sheetTitle}
-      >
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            submitReport();
-          }}
-          className="flex flex-col gap-4 pb-4"
-        >
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-sm font-medium text-foreground-secondary">
-              {COPY.report.reasonLegend}
-            </legend>
-            {REPORT_REASONS.map((option) => {
-              const selected = reason === option.value;
-              return (
-                <label
-                  key={option.key}
-                  // `border-brand-subtle` acá es DECORACIÓN (1.59:1 light / 2.07:1 dark
-                  // contra bg-surface): tiñe de marca la opción elegida, pero no es lo
-                  // que comunica la selección. Eso lo hace el radio nativo de abajo, que
-                  // el sistema operativo dibuja con su propio contraste. Por eso se queda
-                  // `-subtle` y no `-strong`: no es la única señal, y no tiene que gritar.
-                  className={cn(
-                    "flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-4 py-2.5 text-sm",
-                    "transition-colors duration-(--duration-fast)",
-                    selected
-                      ? "border-brand-subtle bg-brand-tint font-medium text-brand-ink"
-                      : "border-border bg-surface text-foreground hover:bg-surface-subtle",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="report-reason"
-                    value={option.value}
-                    checked={selected}
-                    onChange={() => setReason(option.value)}
-                    className="size-4 accent-[var(--color-brand)]"
-                  />
-                  {option.value}
-                </label>
-              );
-            })}
-          </fieldset>
-
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="report-details"
-              className="text-sm font-medium text-foreground-secondary"
-            >
-              {COPY.report.detailsLabel}
-            </label>
-            <Textarea
-              id="report-details"
-              rows={3}
-              maxLength={500}
-              value={details}
-              placeholder={COPY.report.detailsPlaceholder}
-              onChange={(event) => setDetails(event.target.value)}
-            />
-          </div>
-
-          <Button
-            type="submit"
-            variant="danger"
-            className="w-full"
-            disabled={!reason}
-            loading={isPending}
-          >
-            {COPY.report.submit}
-          </Button>
-        </form>
-      </BottomSheet>
+      {authorId && (
+        <ReportSheet
+          open={reportOpen}
+          onClose={() => setReportOpen(false)}
+          targetKind="profile"
+          targetId={authorId}
+          contextLabel={`Publicación /feed/${postId}`}
+        />
+      )}
     </>
   );
 }

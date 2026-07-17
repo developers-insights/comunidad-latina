@@ -28,6 +28,7 @@ import {
   LISTING_COLUMNS,
   POST_COLUMNS,
   fetchAuthorViews,
+  fetchBlockedIds,
   fetchListingExtras,
   fetchViewerLikes,
   toFeedListingModel,
@@ -127,6 +128,7 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
             tab={tab}
             tenantId={tenant.id}
             locale={tenant.locale}
+            viewerId={user?.id ?? null}
             cursor={cursor}
           />
         )}
@@ -153,6 +155,7 @@ async function ParaTiFeed({
   isFirstPage: boolean;
 }) {
   const supabase = await createClient();
+  const blockedIds = await fetchBlockedIds(supabase, viewerId);
 
   let postsQuery = supabase
     .from("posts")
@@ -163,6 +166,15 @@ async function ParaTiFeed({
     .order("id", { ascending: false })
     .limit(PAGE_SIZE + 1);
 
+  // Nunca mostrar en "Para ti" contenido de gente que el viewer bloqueó (§ contrato
+  // bloqueo). El or() preserva los posts de autor anónimo (cuenta borrada →
+  // author_id null): un NOT IN pelado los filtraría por la semántica de NULL.
+  if (blockedIds.size > 0) {
+    postsQuery = postsQuery.or(
+      `author_id.is.null,author_id.not.in.(${[...blockedIds].join(",")})`,
+    );
+  }
+
   let listingsQuery = supabase
     .from("listings")
     .select(LISTING_COLUMNS)
@@ -171,6 +183,14 @@ async function ParaTiFeed({
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(PAGE_SIZE + 1);
+
+  // Los avisos de una persona bloqueada tampoco aparecen (misma promesa que
+  // los posts; created_by null = seed legal, se preserva).
+  if (blockedIds.size > 0) {
+    listingsQuery = listingsQuery.or(
+      `created_by.is.null,created_by.not.in.(${[...blockedIds].join(",")})`,
+    );
+  }
 
   if (cursor) {
     const keysetFilter = `created_at.lt."${cursor.createdAt}",and(created_at.eq."${cursor.createdAt}",id.lt."${cursor.id}")`;
@@ -370,15 +390,18 @@ async function ListingsFeed({
   tab,
   tenantId,
   locale,
+  viewerId,
   cursor,
 }: {
   tab: FeedTabId;
   tenantId: string;
   locale: string;
+  viewerId: string | null;
   cursor: { createdAt: string; id: string } | null;
 }) {
   const supabase = await createClient();
   const kind = TAB_KIND[tab] ?? "property";
+  const blockedIds = await fetchBlockedIds(supabase, viewerId);
 
   let query = supabase
     .from("listings")
@@ -389,6 +412,14 @@ async function ListingsFeed({
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(PAGE_SIZE + 1);
+
+  // Avisos de personas bloqueadas fuera de todos los tabs (created_by null =
+  // seed legal, se preserva).
+  if (blockedIds.size > 0) {
+    query = query.or(
+      `created_by.is.null,created_by.not.in.(${[...blockedIds].join(",")})`,
+    );
+  }
 
   if (cursor) {
     query = query.or(

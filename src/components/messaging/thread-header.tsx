@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ArrowLeft, DotsThree } from "@phosphor-icons/react/dist/ssr";
+import { ArrowLeft, DotsThree, Prohibit } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
-import { Avatar, BottomSheet, Button, Textarea } from "@/components/ui";
+import { Avatar, BottomSheet, Button, Dialog, Textarea } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import {
   ReportScamButton,
@@ -14,7 +15,26 @@ import {
   type TrustSignal,
 } from "@/components/trust";
 import { reportScamAction } from "@/app/(app)/mensajes/actions";
+import { blockUserAction } from "@/app/(app)/perfil/actions";
 import { COPY } from "./copy";
+
+/**
+ * Copy local del bloqueo global (§ contrato "Bloquear a una persona"). No
+ * vive en ./copy.ts porque es exclusiva de este componente — misma
+ * convención que delete-account.tsx: COPY por componente.
+ */
+const BLOCK_COPY = {
+  menuItem: "Bloquear a esta persona",
+  dialogTitle: (name: string) => `¿Bloquear a ${name}?`,
+  dialogDescription:
+    "No te va a poder escribir nunca más y esta conversación se cierra. Tampoco vas a ver sus publicaciones en tu feed. Podés desbloquearla cuando quieras desde tu perfil.",
+  confirm: "Sí, bloquear",
+  cancel: "Cancelar",
+  successTitle: (name: string) => `Bloqueaste a ${name}`,
+  successBody: "No te va a poder escribir ni contactarte de nuevo.",
+  errorTitle: "No se pudo bloquear",
+  errorBody: "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo.",
+} as const;
 
 export interface ThreadHeaderProps {
   otherProfile: {
@@ -40,14 +60,38 @@ export interface ThreadHeaderProps {
  */
 export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps) {
   const { toast } = useToast();
+  const router = useRouter();
   const [trustOpen, setTrustOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
   const [details, setDetails] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const firstName = otherProfile.displayName.split(/\s+/)[0] ?? otherProfile.displayName;
+
+  function submitBlock() {
+    if (!otherProfile.id || isPending) return;
+    startTransition(async () => {
+      const result = await blockUserAction({ profileId: otherProfile.id });
+      if (result.ok) {
+        setBlockOpen(false);
+        toast({
+          title: BLOCK_COPY.successTitle(firstName),
+          description: BLOCK_COPY.successBody,
+          variant: "success",
+        });
+        router.refresh();
+      } else {
+        toast({
+          title: BLOCK_COPY.errorTitle,
+          description: BLOCK_COPY.errorBody,
+          variant: "danger",
+        });
+      }
+    });
+  }
 
   function submitReport() {
     if (!reason || isPending) return;
@@ -152,8 +196,44 @@ export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps
               setReportOpen(true);
             }}
           />
+          {otherProfile.id && (
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                setBlockOpen(true);
+              }}
+              className="flex min-h-11 w-full items-center gap-2.5 px-4 py-3 text-left text-sm font-medium text-foreground transition-colors duration-(--duration-fast) hover:bg-surface-subtle"
+            >
+              <Prohibit size={18} aria-hidden="true" className="shrink-0" />
+              {BLOCK_COPY.menuItem}
+            </button>
+          )}
         </div>
       </BottomSheet>
+
+      {/* Bloquear a esta persona — alto riesgo: cierra la conversación (§ contrato) */}
+      <Dialog
+        open={blockOpen}
+        onClose={() => !isPending && setBlockOpen(false)}
+        title={BLOCK_COPY.dialogTitle(firstName)}
+        description={BLOCK_COPY.dialogDescription}
+        highRisk
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setBlockOpen(false)}
+              disabled={isPending}
+            >
+              {BLOCK_COPY.cancel}
+            </Button>
+            <Button variant="danger" loading={isPending} onClick={submitBlock}>
+              {BLOCK_COPY.confirm}
+            </Button>
+          </>
+        }
+      />
 
       {/* Flujo de reporte: motivo + detalles opcionales */}
       <BottomSheet

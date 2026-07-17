@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, DotsThree, ShareNetwork } from "@phosphor-icons/react/dist/ssr";
-import { BottomSheet, Button, Textarea, useToast } from "@/components/ui";
-import { ReportScamButton } from "@/components/trust";
-import { reportScamAction } from "@/app/(app)/mensajes/actions";
+import { BottomSheet, useToast } from "@/components/ui";
+import { ReportScamButton, ReportSheet } from "@/components/trust";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 
@@ -18,17 +17,15 @@ const iconButtonClass = cn(
 
 /**
  * Barra superior del detalle (§4.d): volver + guardar + compartir + menú "⋯"
- * con "Reportar como estafa" SIEMPRE como primera opción (§3.3 — la
- * consistencia posicional es en sí misma una señal de seguridad).
+ * con "Reportar" SIEMPRE como primera opción (§3.3 — la consistencia
+ * posicional es en sí misma una señal de seguridad). El reporte usa el
+ * ReportSheet unificado (2 taps) contra el propio aviso.
  */
 export function DetailTopBar({ title, listingId }: { title: string; listingId: string }) {
   const router = useRouter();
   const { toast } = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reason, setReason] = useState<string | null>(null);
-  const [details, setDetails] = useState("");
-  const [isPending, startTransition] = useTransition();
 
   async function handleShare() {
     const url = window.location.href;
@@ -46,37 +43,6 @@ export function DetailTopBar({ title, listingId }: { title: string; listingId: s
     } catch {
       // El usuario canceló el share nativo — no es un error.
     }
-  }
-
-  function submitReport() {
-    if (!reason || isPending) return;
-    startTransition(async () => {
-      const result = await reportScamAction({
-        targetKind: "listing",
-        targetId: listingId,
-        reason,
-        ...(details.trim() ? { details: details.trim() } : {}),
-      });
-      if (result.ok) {
-        setReportOpen(false);
-        setReason(null);
-        setDetails("");
-        toast({
-          title: COPY.report.successTitle,
-          description: COPY.report.successBody,
-          variant: "success",
-        });
-      } else {
-        toast({
-          title: COPY.report.errorTitle,
-          description:
-            result.code === "unauthenticated"
-              ? COPY.report.needLogin
-              : COPY.report.errorBody,
-          variant: "danger",
-        });
-      }
-    });
   }
 
   return (
@@ -111,7 +77,7 @@ export function DetailTopBar({ title, listingId }: { title: string; listingId: s
         </button>
       </div>
 
-      {/* Menú "⋯" — Reportar estafa SIEMPRE primera opción (§3.3) */}
+      {/* Menú "⋯" — Reportar SIEMPRE primera opción (§3.3) */}
       <BottomSheet
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
@@ -128,76 +94,13 @@ export function DetailTopBar({ title, listingId }: { title: string; listingId: s
         </div>
       </BottomSheet>
 
-      {/* Flujo de reporte: motivo (radios nativos) + detalles opcionales */}
-      <BottomSheet
+      <ReportSheet
         open={reportOpen}
         onClose={() => setReportOpen(false)}
-        title={COPY.report.sheetTitle}
-      >
-        <p className="text-sm text-foreground-secondary">{COPY.report.intro}</p>
-
-        <fieldset className="mt-4">
-          <legend className="text-sm font-semibold text-foreground">
-            {COPY.report.reasonLabel}
-          </legend>
-          <div className="mt-2.5 flex flex-col gap-2">
-            {COPY.report.reasons.map((option) => {
-              const selected = reason === option.value;
-              return (
-                <label
-                  key={option.value}
-                  className={cn(
-                    "flex min-h-11 w-full cursor-pointer select-none items-center gap-3 rounded-md border px-4 py-2.5 text-left text-sm font-medium",
-                    "transition-[background-color,border-color] duration-(--duration-fast)",
-                    "focus-within:ring-[3px] focus-within:ring-focus-ring",
-                    selected
-                      ? "border-brand bg-brand-tint text-brand-ink"
-                      : "border-border bg-surface text-foreground hover:bg-surface-subtle",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="listing-report-reason"
-                    value={option.value}
-                    checked={selected}
-                    onChange={() => setReason(option.value)}
-                    className="size-4 accent-[var(--color-brand)]"
-                  />
-                  {option.label}
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
-
-        <div className="mt-4">
-          <label
-            htmlFor="listing-report-details"
-            className="text-sm font-semibold text-foreground"
-          >
-            {COPY.report.detailsLabel}
-          </label>
-          <Textarea
-            id="listing-report-details"
-            rows={3}
-            maxLength={1000}
-            value={details}
-            placeholder={COPY.report.detailsPlaceholder}
-            onChange={(event) => setDetails(event.target.value)}
-            className="mt-2"
-          />
-        </div>
-
-        <Button
-          variant="danger"
-          className="mb-2 mt-5 w-full"
-          disabled={!reason}
-          loading={isPending}
-          onClick={submitReport}
-        >
-          {COPY.report.submit}
-        </Button>
-      </BottomSheet>
+        targetKind="listing"
+        targetId={listingId}
+        contextLabel={title}
+      />
     </div>
   );
 }

@@ -101,6 +101,23 @@ export function authorViewOf(
   return (authorId && authors.get(authorId)) || FALLBACK_AUTHOR;
 }
 
+/**
+ * Ids de perfiles bloqueados por el viewer (bloqueo global, 0020_user_blocks.sql).
+ * RLS de user_blocks ya limita a blocker_id = auth.uid(); el .eq es redundante
+ * pero explícito, en línea con el resto del módulo. Set vacío si no hay sesión.
+ */
+export async function fetchBlockedIds(
+  supabase: Supabase,
+  viewerId: string | null,
+): Promise<Set<string>> {
+  if (!viewerId) return new Set();
+  const { data } = await supabase
+    .from("user_blocks")
+    .select("blocked_id")
+    .eq("blocker_id", viewerId);
+  return new Set((data ?? []).map((row) => row.blocked_id));
+}
+
 /** Ids de posts likeados por el viewer, para pintar el estado inicial del like. */
 export async function fetchViewerLikes(
   supabase: Supabase,

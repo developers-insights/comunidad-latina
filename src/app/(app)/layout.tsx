@@ -1,18 +1,47 @@
 import type { ReactNode } from "react";
 import { getTenant } from "@/lib/tenant/resolve";
+import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/shell/header";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { OfflineBanner } from "@/components/shell/offline-banner";
 import { TenantMismatchBanner } from "@/components/shell/tenant-mismatch-banner";
+import { AccountGate } from "@/components/shell/account-gate";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 
 /**
  * Shell de la app autenticada: Header + contenido mobile-first centrado + BottomNav.
  * Las CSS variables de marca ya viven en <html> (root layout) y el fondo/texto
  * en <body> — acá solo queda la estructura.
+ *
+ * Gate de sanciones (0021): una cuenta suspendida vigente o dada de baja ve la
+ * pantalla de AccountGate en lugar de la app. Espeja app.account_active() de la
+ * DB (que ya bloquea toda escritura por trigger): suspended con vencimiento
+ * futuro o sin vencimiento → bloquea; suspensión vencida → pasa (la DB también
+ * la trata como activa).
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const tenant = await getTenant();
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const { data: sanction } = await supabase
+      .from("profiles")
+      .select("account_status, suspended_until")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (sanction?.account_status === "banned") {
+      return <AccountGate kind="banned" />;
+    }
+    if (
+      sanction?.account_status === "suspended" &&
+      (!sanction.suspended_until || new Date(sanction.suspended_until) > new Date())
+    ) {
+      return <AccountGate kind="suspended" suspendedUntil={sanction.suspended_until} />;
+    }
+  }
 
   return (
     <div className="flex min-h-dvh flex-col">

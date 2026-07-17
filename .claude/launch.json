@@ -10,8 +10,8 @@
     {
       "name": "comunidad-latina-prod",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start", "--", "-p", "3100"],
-      "port": 3100
+      "runtimeArgs": ["run", "start", "--", "-p", "3711"],
+      "port": 3711
     }
   ]
 }

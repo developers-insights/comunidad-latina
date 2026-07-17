@@ -16,6 +16,7 @@ import {
   POST_COLUMNS,
   authorViewOf,
   fetchAuthorViews,
+  fetchBlockedIds,
   fetchViewerLikes,
   toPostCardModel,
   type PostRow,
@@ -84,7 +85,12 @@ export default async function PostDetailPage({
     .order("id", { ascending: true })
     .limit(COMMENTS_LIMIT);
 
-  const comments = commentRows ?? [];
+  // Filtro barato en memoria (§ contrato bloqueo): sin comentarios de gente
+  // que el viewer bloqueó. Un solo select liviano, reutilizado del módulo FEED.
+  const blockedIds = await fetchBlockedIds(supabase, viewerId);
+  const comments = (commentRows ?? []).filter(
+    (comment) => !comment.author_id || !blockedIds.has(comment.author_id),
+  );
 
   // Batch: autores del post + comentarios, y estado de like del viewer.
   const authorIds = [
@@ -129,7 +135,7 @@ export default async function PostDetailPage({
         tenantId={tenant.id}
         viewerId={viewerId}
         isDetail
-        menu={<PostMenu postId={post.id} viewerId={viewerId} />}
+        menu={<PostMenu postId={post.id} authorId={post.author_id} viewerId={viewerId} />}
       />
 
       <section aria-label={COPY.comments.title} className="mt-6">

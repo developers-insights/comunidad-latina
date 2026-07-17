@@ -9,6 +9,11 @@ export {
   type ReportScamButtonProps,
 } from "./report-scam-button";
 export {
+  ReportSheet,
+  type ReportSheetProps,
+  type ReportTargetKind,
+} from "./report-sheet";
+export {
   ScamShieldNotice,
   type ScamShieldNoticeProps,
   type ScamShieldVariant,

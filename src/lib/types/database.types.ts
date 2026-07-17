@@ -19,6 +19,61 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_sanctions: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          kind: string
+          profile_id: string
+          reason: string
+          tenant_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          kind: string
+          profile_id: string
+          reason: string
+          tenant_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          kind?: string
+          profile_id?: string
+          reason?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_sanctions_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_sanctions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_sanctions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
@@ -883,6 +938,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          account_status: string
           area_label: string | null
           avatar_url: string | null
           bio: string | null
@@ -894,10 +950,12 @@ export type Database = {
           identity_verified_at: string | null
           locale: string
           role: string
+          suspended_until: string | null
           tenant_id: string
           updated_at: string
         }
         Insert: {
+          account_status?: string
           area_label?: string | null
           avatar_url?: string | null
           bio?: string | null
@@ -909,10 +967,12 @@ export type Database = {
           identity_verified_at?: string | null
           locale?: string
           role?: string
+          suspended_until?: string | null
           tenant_id: string
           updated_at?: string
         }
         Update: {
+          account_status?: string
           area_label?: string | null
           avatar_url?: string | null
           bio?: string | null
@@ -924,6 +984,7 @@ export type Database = {
           identity_verified_at?: string | null
           locale?: string
           role?: string
+          suspended_until?: string | null
           tenant_id?: string
           updated_at?: string
         }
@@ -1200,6 +1261,49 @@ export type Database = {
           },
         ]
       }
+      user_blocks: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+          tenant_id: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+          tenant_id: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_blocks_blocked_id_fkey"
+            columns: ["blocked_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_blocks_blocker_id_fkey"
+            columns: ["blocker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_blocks_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       verification_checks: {
         Row: {
           checked_at: string
@@ -1262,6 +1366,19 @@ export type Database = {
         Args: { p_conversation_id: string }
         Returns: Json
       }
+      admin_ban_user: {
+        Args: { p_profile_id: string; p_reason: string }
+        Returns: undefined
+      }
+      admin_reactivate_user: {
+        Args: { p_profile_id: string }
+        Returns: undefined
+      }
+      admin_suspend_user: {
+        Args: { p_days: number; p_profile_id: string; p_reason: string }
+        Returns: undefined
+      }
+      block_user: { Args: { p_profile_id: string }; Returns: undefined }
       get_tenant_by_domain: { Args: { p_domain: string }; Returns: Json }
       report_scam: {
         Args: {
@@ -1273,6 +1390,7 @@ export type Database = {
         Returns: string
       }
       request_contact: { Args: { p_listing_id: string }; Returns: string }
+      unblock_user: { Args: { p_profile_id: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never

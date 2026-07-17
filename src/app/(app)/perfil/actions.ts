@@ -157,3 +157,67 @@ export async function reportProfileAction(
 
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// Bloquear/desbloquear a otra persona — RPCs block_user/unblock_user
+// (SECURITY DEFINER, 0020_user_blocks.sql). El bloqueo es global: corta el
+// contacto en ambas direcciones y cierra los hilos existentes entre ambos.
+// ---------------------------------------------------------------------------
+
+const blockProfileSchema = z.object({
+  profileId: z.uuid(),
+});
+
+export type BlockActionResult =
+  | { ok: true }
+  | { ok: false; code: "unauthenticated" | "invalid" | "error" };
+
+export async function blockUserAction(
+  input: { profileId: string },
+): Promise<BlockActionResult> {
+  const parsed = blockProfileSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, code: "invalid" };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, code: "unauthenticated" };
+
+  const { error } = await supabase.rpc("block_user", {
+    p_profile_id: parsed.data.profileId,
+  });
+  if (error) {
+    console.error("[perfil] block_user falló", { code: error.code });
+    return { ok: false, code: "error" };
+  }
+
+  revalidatePath("/mensajes");
+  revalidatePath("/perfil/bloqueados");
+  return { ok: true };
+}
+
+export async function unblockUserAction(
+  input: { profileId: string },
+): Promise<BlockActionResult> {
+  const parsed = blockProfileSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, code: "invalid" };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, code: "unauthenticated" };
+
+  const { error } = await supabase.rpc("unblock_user", {
+    p_profile_id: parsed.data.profileId,
+  });
+  if (error) {
+    console.error("[perfil] unblock_user falló", { code: error.code });
+    return { ok: false, code: "error" };
+  }
+
+  revalidatePath("/mensajes");
+  revalidatePath("/perfil/bloqueados");
+  return { ok: true };
+}

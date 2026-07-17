@@ -2,8 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "motion/react";
-import { GlobeHemisphereWest, ShieldCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { m } from "motion/react";
+import {
+  GlobeHemisphereWest,
+  ShieldCheck,
+  Storefront,
+  UsersThree,
+} from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,6 +38,12 @@ const ITEMS: NavItem[] = [
     href: "/admin/moderacion",
     label: "Moderación",
     icon: <ShieldCheck size={18} aria-hidden="true" />,
+    minRank: 1,
+  },
+  {
+    href: "/admin/miembros",
+    label: "Miembros",
+    icon: <UsersThree size={18} aria-hidden="true" />,
     minRank: 1,
   },
   {
@@ -90,7 +101,7 @@ export function AdminNav({
                 </span>
               )}
               {active && (
-                <motion.span
+                <m.span
                   layoutId="admin-nav-underline"
                   aria-hidden="true"
                   className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand"
