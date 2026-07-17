@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
 
 /**
  * SPLASH DE ENTRADA PREMIUM (§ polish premium — módulo SPLASH + TRANSICIONES).
@@ -96,7 +96,7 @@ export function SplashScreen({
   return (
     <AnimatePresence>
       {visible && (
-        <motion.div
+        <m.div
           aria-hidden="true"
           // Presentacional puro: no participa del árbol de accesibilidad ni
           // recibe foco. pointer-events se cortan al empezar a salir.
@@ -118,7 +118,7 @@ export function SplashScreen({
         >
           {/* Monograma con halo de marca que respira */}
           <div className="relative flex items-center justify-center">
-            <motion.span
+            <m.span
               aria-hidden="true"
               className="absolute rounded-full"
               style={{
@@ -132,7 +132,7 @@ export function SplashScreen({
               animate={{ opacity: [0, 1, 0.7], scale: [0.6, 1.15, 1] }}
               transition={{ duration: 1, ease: [0.34, 1.56, 0.64, 1] }}
             />
-            <motion.div
+            <m.div
               className="relative flex items-center justify-center overflow-hidden rounded-[28px] bg-surface shadow-lg"
               style={{ width: 84, height: 84 }}
               initial={{ opacity: 0, scale: 0.7, y: 6 }}
@@ -147,34 +147,34 @@ export function SplashScreen({
                 height={62}
                 style={{ width: 62, height: 62, objectFit: "contain" }}
               />
-            </motion.div>
+            </m.div>
           </div>
 
           {/* Nombre del tenant revelándose */}
-          <motion.p
+          <m.p
             className="font-display text-lg font-semibold tracking-tight text-foreground"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.18, ease: [0.32, 0.72, 0, 1] }}
           >
             {name}
-          </motion.p>
+          </m.p>
 
           {/* Barra de progreso fina que se llena mientras dura el splash */}
-          <motion.span
+          <m.span
             aria-hidden="true"
             className="absolute bottom-16 h-[3px] overflow-hidden rounded-full bg-border-subtle"
             style={{ width: 96 }}
           >
-            <motion.span
+            <m.span
               className="block h-full rounded-full"
               style={{ background: `var(--color-brand, ${brandHex})` }}
               initial={{ width: "0%" }}
               animate={{ width: "100%" }}
               transition={{ duration: VISIBLE_MS / 1000, ease: "linear" }}
             />
-          </motion.span>
-        </motion.div>
+          </m.span>
+        </m.div>
       )}
     </AnimatePresence>
   );

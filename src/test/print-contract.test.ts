@@ -260,10 +260,6 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-on-success"],
     cobertura: "cl-print-fill",
   },
-  "src/components/experience/splash-screen.tsx": {
-    inks: ["text-brand-foreground"],
-    cobertura: "cl-print-hide",
-  },
   "src/components/feed/comment-composer.tsx": {
     inks: ["text-brand-foreground"],
     cobertura: "control",

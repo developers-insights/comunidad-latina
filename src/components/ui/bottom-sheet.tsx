@@ -2,7 +2,7 @@
 
 import { useId, useRef } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 import {
   useBodyScrollLock,
@@ -47,7 +47,7 @@ export function BottomSheet({
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-50">
-          <motion.div
+          <m.div
             className="absolute inset-0 bg-scrim"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -56,7 +56,7 @@ export function BottomSheet({
             onClick={onClose}
             aria-hidden="true"
           />
-          <motion.div
+          <m.div
             ref={panelRef}
             role="dialog"
             aria-modal="true"
@@ -101,7 +101,7 @@ export function BottomSheet({
               </h2>
             )}
             <div className="overflow-y-auto px-6 pb-2 pt-4">{children}</div>
-          </motion.div>
+          </m.div>
         </div>
       )}
     </AnimatePresence>,

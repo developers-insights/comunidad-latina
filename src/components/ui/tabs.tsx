@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { motion } from "motion/react";
+import { m } from "motion/react";
 import { cn } from "@/lib/utils";
 
 interface TabsContextValue {
@@ -143,7 +143,7 @@ export function TabsTrigger({
       {children}
       {selected && (
         // underline con color de marca, se desliza entre tabs
-        <motion.span
+        <m.span
           layoutId={`${idBase}-underline`}
           aria-hidden="true"
           className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand"
