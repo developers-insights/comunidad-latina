@@ -1,0 +1,1997 @@
+{
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\.claude\\launch.json": {
+    "mtime": 1783386724.2020369,
+    "ast_hash": "07978d3610b007bcf6db9bcee5c87345",
+    "semantic_hash": "07978d3610b007bcf6db9bcee5c87345"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\emblems\\generate.mjs": {
+    "mtime": 1783477635.3734725,
+    "ast_hash": "b906f489aed7516cdfea441090b5f689",
+    "semantic_hash": "b906f489aed7516cdfea441090b5f689"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\emblems\\process.mjs": {
+    "mtime": 1783477979.9840975,
+    "ast_hash": "3f3d1d5cb06dd91f9f380c4e65cc3c58",
+    "semantic_hash": "3f3d1d5cb06dd91f9f380c4e65cc3c58"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\emblems\\prompts.mjs": {
+    "mtime": 1783478704.2506626,
+    "ast_hash": "6dfdeab1f1181c95f4042d6df8ad50ec",
+    "semantic_hash": "6dfdeab1f1181c95f4042d6df8ad50ec"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\eslint.config.mjs": {
+    "mtime": 1783498119.6546597,
+    "ast_hash": "4c6f059e00ae27ce9518a2decd366ea2",
+    "semantic_hash": "4c6f059e00ae27ce9518a2decd366ea2"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\next.config.ts": {
+    "mtime": 1783391404.7291849,
+    "ast_hash": "c40de100645d677b09f08bc022ef2e00",
+    "semantic_hash": "c40de100645d677b09f08bc022ef2e00"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\package.json": {
+    "mtime": 1783391747.273502,
+    "ast_hash": "6c62522dd4709141a0a7e750312c6b0b",
+    "semantic_hash": "6c62522dd4709141a0a7e750312c6b0b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\postcss.config.mjs": {
+    "mtime": 1783289653.5337665,
+    "ast_hash": "239f3ebf717465dc636818a1a619398d",
+    "semantic_hash": "239f3ebf717465dc636818a1a619398d"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\brand\\MANIFEST.json": {
+    "mtime": 1783478529.1481588,
+    "ast_hash": "2cc6b1919a9d85685fce361693d1ea03",
+    "semantic_hash": "2cc6b1919a9d85685fce361693d1ea03"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\images\\MANIFEST.json": {
+    "mtime": 1783519108.2842164,
+    "ast_hash": "980b415eab12145becfc7291b708a231",
+    "semantic_hash": "980b415eab12145becfc7291b708a231"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\sw.js": {
+    "mtime": 1783522878.0089343,
+    "ast_hash": "508c4730b286d37015c83c549883b46e",
+    "semantic_hash": "508c4730b286d37015c83c549883b46e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\scripts\\apply-migrations.mjs": {
+    "mtime": 1783381121.9169421,
+    "ast_hash": "fffd4859766af8bfc7756058452e0f1d",
+    "semantic_hash": "fffd4859766af8bfc7756058452e0f1d"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\scripts\\diagnose-rag.mjs": {
+    "mtime": 1783398745.18976,
+    "ast_hash": "a3b55b345569441bc236fe5ba4a5996c",
+    "semantic_hash": "a3b55b345569441bc236fe5ba4a5996c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\scripts\\embed-content.mjs": {
+    "mtime": 1783392820.076481,
+    "ast_hash": "e4e06884c2fd7599c05bb8eb4ed0c007",
+    "semantic_hash": "e4e06884c2fd7599c05bb8eb4ed0c007"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\scripts\\generate-icons.mjs": {
+    "mtime": 1783381947.593272,
+    "ast_hash": "bdf8624124bc89222a0b8f3f938f8035",
+    "semantic_hash": "bdf8624124bc89222a0b8f3f938f8035"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\scripts\\rls-enumerator.mjs": {
+    "mtime": 1783380102.8405685,
+    "ast_hash": "3b66f093350a508532813ad9d395dc81",
+    "semantic_hash": "3b66f093350a508532813ad9d395dc81"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\scripts\\seed.mjs": {
+    "mtime": 1783497693.7946694,
+    "ast_hash": "299bdb5421dd5d4c9230aefe56f83b53",
+    "semantic_hash": "299bdb5421dd5d4c9230aefe56f83b53"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\sentry.edge.config.ts": {
+    "mtime": 1783391353.9572945,
+    "ast_hash": "478e3b7a7e9312b6d6bbf91ca736bf45",
+    "semantic_hash": "478e3b7a7e9312b6d6bbf91ca736bf45"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\sentry.scrub.ts": {
+    "mtime": 1783394657.2489436,
+    "ast_hash": "1250cd45314d69dc6dcfd216ac8ef9ad",
+    "semantic_hash": "1250cd45314d69dc6dcfd216ac8ef9ad"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\sentry.server.config.ts": {
+    "mtime": 1783391351.266523,
+    "ast_hash": "3a68b22ddda66df52026bd7fe82ac8f5",
+    "semantic_hash": "3a68b22ddda66df52026bd7fe82ac8f5"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\asistente\\page.tsx": {
+    "mtime": 1783392086.2069013,
+    "ast_hash": "ee83f7126a00ef436324b5b660379654",
+    "semantic_hash": "ee83f7126a00ef436324b5b660379654"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\comunidad\\page.tsx": {
+    "mtime": 1783396200.9810903,
+    "ast_hash": "10de5be58f38245c70e2fa75cf978ec0",
+    "semantic_hash": "10de5be58f38245c70e2fa75cf978ec0"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\escudo\\aprender\\page.tsx": {
+    "mtime": 1783519108.2842164,
+    "ast_hash": "084257ba1a5db1a8ec13d302de1e4988",
+    "semantic_hash": "084257ba1a5db1a8ec13d302de1e4988"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\escudo\\page.tsx": {
+    "mtime": 1783497693.4148743,
+    "ast_hash": "e829d944f3ddee20642141538c26758b",
+    "semantic_hash": "e829d944f3ddee20642141538c26758b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\escudo\\reportar\\actions.ts": {
+    "mtime": 1783391379.318772,
+    "ast_hash": "dd3a2452904a7568830adeba2d9570ed",
+    "semantic_hash": "dd3a2452904a7568830adeba2d9570ed"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\escudo\\reportar\\page.tsx": {
+    "mtime": 1783497693.4158716,
+    "ast_hash": "cb86708c6a59300ae1fb373597c61ff6",
+    "semantic_hash": "cb86708c6a59300ae1fb373597c61ff6"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\escudo\\trust-score\\page.tsx": {
+    "mtime": 1783497693.41687,
+    "ast_hash": "e63823cc1ee023aed2e2ac64b4af70f1",
+    "semantic_hash": "e63823cc1ee023aed2e2ac64b4af70f1"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\escudo\\verificar\\actions.ts": {
+    "mtime": 1783497693.795668,
+    "ast_hash": "1ac98d4c3e0434ae187584001c19b801",
+    "semantic_hash": "1ac98d4c3e0434ae187584001c19b801"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\escudo\\verificar\\page.tsx": {
+    "mtime": 1783497693.4178672,
+    "ast_hash": "a023f9816a21549d2c97b8ca584f7311",
+    "semantic_hash": "a023f9816a21549d2c97b8ca584f7311"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\eventos\\[id]\\page.tsx": {
+    "mtime": 1783497693.4178672,
+    "ast_hash": "be7d2130b532d5bfb83c06bc07de92dd",
+    "semantic_hash": "be7d2130b532d5bfb83c06bc07de92dd"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\eventos\\actions.ts": {
+    "mtime": 1783497693.7966712,
+    "ast_hash": "1f29ce608b5185224f7394ae4dbfa62a",
+    "semantic_hash": "1f29ce608b5185224f7394ae4dbfa62a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\eventos\\page.tsx": {
+    "mtime": 1783386570.2098432,
+    "ast_hash": "45e41f9a62d1cd3afe03980c8a19fd2a",
+    "semantic_hash": "45e41f9a62d1cd3afe03980c8a19fd2a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\feed\\[id]\\loading.tsx": {
+    "mtime": 1783385133.722053,
+    "ast_hash": "a082630082222e6c3d6d5a9f70645652",
+    "semantic_hash": "a082630082222e6c3d6d5a9f70645652"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\feed\\[id]\\page.tsx": {
+    "mtime": 1783385126.223565,
+    "ast_hash": "3ea098c83bf7e4f51fd7e3fc4531e2ea",
+    "semantic_hash": "3ea098c83bf7e4f51fd7e3fc4531e2ea"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\feed\\actions.ts": {
+    "mtime": 1783497693.7976613,
+    "ast_hash": "4ae4f2f3e82cf348a1cc48947ee28342",
+    "semantic_hash": "4ae4f2f3e82cf348a1cc48947ee28342"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\feed\\loading.tsx": {
+    "mtime": 1783385096.8812332,
+    "ast_hash": "0c62301f05bcc507a1f7185bd57da156",
+    "semantic_hash": "0c62301f05bcc507a1f7185bd57da156"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\feed\\page.tsx": {
+    "mtime": 1783392120.9518328,
+    "ast_hash": "152e3b13f57d1894e5d72f0cba247a4b",
+    "semantic_hash": "152e3b13f57d1894e5d72f0cba247a4b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\feed\\queries.ts": {
+    "mtime": 1783385033.6237018,
+    "ast_hash": "b94e18bbe900289e6708e3a3c817df79",
+    "semantic_hash": "b94e18bbe900289e6708e3a3c817df79"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\impulsar\\[listingId]\\actions.ts": {
+    "mtime": 1783497693.7986586,
+    "ast_hash": "ea91e362b16d1c42723d335ca9401657",
+    "semantic_hash": "ea91e362b16d1c42723d335ca9401657"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\impulsar\\[listingId]\\opciones-boost.tsx": {
+    "mtime": 1783391753.5860617,
+    "ast_hash": "3d82f58c4c539c242ac393cdd881a990",
+    "semantic_hash": "3d82f58c4c539c242ac393cdd881a990"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\impulsar\\[listingId]\\page.tsx": {
+    "mtime": 1783391786.5858102,
+    "ast_hash": "eedaf12db15f22f71e5ceb1d15f35384",
+    "semantic_hash": "eedaf12db15f22f71e5ceb1d15f35384"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\layout.tsx": {
+    "mtime": 1783497693.7986586,
+    "ast_hash": "9bf4dee18d9eb0e82728ea7ec354ed10",
+    "semantic_hash": "9bf4dee18d9eb0e82728ea7ec354ed10"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\mensajes\\[id]\\loading.tsx": {
+    "mtime": 1783382218.9151373,
+    "ast_hash": "ecae1189fad96e5e7e036c2b8c85ecfe",
+    "semantic_hash": "ecae1189fad96e5e7e036c2b8c85ecfe"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\mensajes\\[id]\\page.tsx": {
+    "mtime": 1783497693.4198606,
+    "ast_hash": "f609a271e9204066f93ca4795ad919ea",
+    "semantic_hash": "f609a271e9204066f93ca4795ad919ea"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\mensajes\\actions.ts": {
+    "mtime": 1783391318.993946,
+    "ast_hash": "6bed057c5e8001a977c8e7c0a521ebfd",
+    "semantic_hash": "6bed057c5e8001a977c8e7c0a521ebfd"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\mensajes\\loading.tsx": {
+    "mtime": 1783382214.882671,
+    "ast_hash": "24293043e981ef4c7829cd3e2f0f6d3b",
+    "semantic_hash": "24293043e981ef4c7829cd3e2f0f6d3b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\mensajes\\page.tsx": {
+    "mtime": 1783519108.2842164,
+    "ast_hash": "c81784118f686bd41c2c1d19f39211c8",
+    "semantic_hash": "c81784118f686bd41c2c1d19f39211c8"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\negocios\\business-trust-badge.tsx": {
+    "mtime": 1783382000.5359254,
+    "ast_hash": "89901fc664d83a70be588ae4d23d587b",
+    "semantic_hash": "89901fc664d83a70be588ae4d23d587b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\negocios\\copiloto\\actions.ts": {
+    "mtime": 1783394500.488023,
+    "ast_hash": "e6047223f61f6663d847fdfa4c672981",
+    "semantic_hash": "e6047223f61f6663d847fdfa4c672981"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\negocios\\copiloto\\copiloto-form.tsx": {
+    "mtime": 1783497693.420858,
+    "ast_hash": "eff9b8c99ba801c91f0839faa5ba4c77",
+    "semantic_hash": "eff9b8c99ba801c91f0839faa5ba4c77"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\negocios\\copiloto\\page.tsx": {
+    "mtime": 1783497693.4218557,
+    "ast_hash": "d53f16c5a77b1e3e4a2c37e2053faff3",
+    "semantic_hash": "d53f16c5a77b1e3e4a2c37e2053faff3"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\negocios\\page.tsx": {
+    "mtime": 1783497693.4218557,
+    "ast_hash": "2f2d632e503a5ab6b5bf613b1947f987",
+    "semantic_hash": "2f2d632e503a5ab6b5bf613b1947f987"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\negocios\\presencia\\actions.ts": {
+    "mtime": 1783497693.8006542,
+    "ast_hash": "894598e08a4eeb75861ea0423b58a06c",
+    "semantic_hash": "894598e08a4eeb75861ea0423b58a06c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\negocios\\presencia\\page.tsx": {
+    "mtime": 1783382059.8713338,
+    "ast_hash": "a75bf999e9ee7f5485cb18ac5abbec4e",
+    "semantic_hash": "a75bf999e9ee7f5485cb18ac5abbec4e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\negocios\\presencia\\planes-presencia.tsx": {
+    "mtime": 1783382122.6100469,
+    "ast_hash": "99df3fa08467883ac680bcd76a86677f",
+    "semantic_hash": "99df3fa08467883ac680bcd76a86677f"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\notificaciones\\actions.ts": {
+    "mtime": 1783384334.1500578,
+    "ast_hash": "869e5a461877600d12bb21a3e3da213b",
+    "semantic_hash": "869e5a461877600d12bb21a3e3da213b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\notificaciones\\loading.tsx": {
+    "mtime": 1783384450.328328,
+    "ast_hash": "a042481f400abe30ce51bce350362a69",
+    "semantic_hash": "a042481f400abe30ce51bce350362a69"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\notificaciones\\page.tsx": {
+    "mtime": 1783384440.2068963,
+    "ast_hash": "9728f1df9763afecaa83e58140370666",
+    "semantic_hash": "9728f1df9763afecaa83e58140370666"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\perfil\\[id]\\loading.tsx": {
+    "mtime": 1783382391.1054146,
+    "ast_hash": "ac9383353c06400009186fb23c25551e",
+    "semantic_hash": "ac9383353c06400009186fb23c25551e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\perfil\\[id]\\page.tsx": {
+    "mtime": 1783383675.629637,
+    "ast_hash": "2c476731acd43fe7041088e5921badc6",
+    "semantic_hash": "2c476731acd43fe7041088e5921badc6"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\perfil\\actions.ts": {
+    "mtime": 1783382285.610255,
+    "ast_hash": "0523a0d66fe594720ab5608576ebcc70",
+    "semantic_hash": "0523a0d66fe594720ab5608576ebcc70"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\perfil\\loading.tsx": {
+    "mtime": 1783382364.0102992,
+    "ast_hash": "89ee0d544140e2765ed08a2f4b3ba95d",
+    "semantic_hash": "89ee0d544140e2765ed08a2f4b3ba95d"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\perfil\\page.tsx": {
+    "mtime": 1783382360.7820067,
+    "ast_hash": "55a72d2eb42a50b69d2f17d726fa2fa9",
+    "semantic_hash": "55a72d2eb42a50b69d2f17d726fa2fa9"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\perfil\\verificar\\actions.ts": {
+    "mtime": 1783394473.2573197,
+    "ast_hash": "21942293315f581682d95b6babc276c5",
+    "semantic_hash": "21942293315f581682d95b6babc276c5"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\perfil\\verificar\\identity-session.ts": {
+    "mtime": 1783391587.3808825,
+    "ast_hash": "b29817a01bf0005c6a5b0bcbbbe16933",
+    "semantic_hash": "b29817a01bf0005c6a5b0bcbbbe16933"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\perfil\\verificar\\page.tsx": {
+    "mtime": 1783497693.4228528,
+    "ast_hash": "ee4a96205e357ae0efbf27f7d686f482",
+    "semantic_hash": "ee4a96205e357ae0efbf27f7d686f482"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\perfil\\verificar\\resultado\\identity-celebration.tsx": {
+    "mtime": 1783398070.4458432,
+    "ast_hash": "fe935e7db7f9f063260420f04ea76ba1",
+    "semantic_hash": "fe935e7db7f9f063260420f04ea76ba1"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\perfil\\verificar\\resultado\\page.tsx": {
+    "mtime": 1783398081.2879674,
+    "ast_hash": "43ca5a0800f15faa0a77b5dc049158f9",
+    "semantic_hash": "43ca5a0800f15faa0a77b5dc049158f9"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\perfil\\verificar\\verificar-cta.tsx": {
+    "mtime": 1783391626.0568223,
+    "ast_hash": "658f763c8823cfe20f3229b52c62b049",
+    "semantic_hash": "658f763c8823cfe20f3229b52c62b049"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\profesionales\\[id]\\page.tsx": {
+    "mtime": 1783384530.9208045,
+    "ast_hash": "560c25cc0e41e37d75aba46988fb0826",
+    "semantic_hash": "560c25cc0e41e37d75aba46988fb0826"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\profesionales\\page.tsx": {
+    "mtime": 1783396071.0292418,
+    "ast_hash": "c6e34acfe55f9e799abe040f9fa13a20",
+    "semantic_hash": "c6e34acfe55f9e799abe040f9fa13a20"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\propiedades\\[id]\\page.tsx": {
+    "mtime": 1783396683.845791,
+    "ast_hash": "405dca0196668e8ee0117d72efcdfb5b",
+    "semantic_hash": "405dca0196668e8ee0117d72efcdfb5b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\propiedades\\actions.ts": {
+    "mtime": 1783391292.892217,
+    "ast_hash": "5cfc4fb7036c6ec08e92f3e3b52dd2de",
+    "semantic_hash": "5cfc4fb7036c6ec08e92f3e3b52dd2de"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\propiedades\\page.tsx": {
+    "mtime": 1783396691.8269846,
+    "ast_hash": "9e0a0615523edb9dcd7cd7d1b8a54184",
+    "semantic_hash": "9e0a0615523edb9dcd7cd7d1b8a54184"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\publicar\\actions.ts": {
+    "mtime": 1783497693.8006542,
+    "ast_hash": "a1b7a46800615e450b0917639e505c35",
+    "semantic_hash": "a1b7a46800615e450b0917639e505c35"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\publicar\\page.tsx": {
+    "mtime": 1783382566.4448183,
+    "ast_hash": "14046a47d7febceb2564f5ea9256a049",
+    "semantic_hash": "14046a47d7febceb2564f5ea9256a049"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\publicar\\publish-form.tsx": {
+    "mtime": 1783497693.4228528,
+    "ast_hash": "33d404985b107fa689c9516b4bbdf37a",
+    "semantic_hash": "33d404985b107fa689c9516b4bbdf37a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(app)\\template.tsx": {
+    "mtime": 1783397253.711856,
+    "ast_hash": "3bf9e3345542ff303279774e4efc9731",
+    "semantic_hash": "3bf9e3345542ff303279774e4efc9731"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(auth)\\actions.ts": {
+    "mtime": 1783394539.1930246,
+    "ast_hash": "c7a6fb56eda2445c4a7dedc18331bc4e",
+    "semantic_hash": "c7a6fb56eda2445c4a7dedc18331bc4e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(auth)\\bienvenida\\page.tsx": {
+    "mtime": 1783382239.8217583,
+    "ast_hash": "dbf8aee7fd31a36e4023bee761c13ddb",
+    "semantic_hash": "dbf8aee7fd31a36e4023bee761c13ddb"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(auth)\\callback\\route.ts": {
+    "mtime": 1783382074.3007636,
+    "ast_hash": "f9a270e3c4dfcb9ffe775077892310d4",
+    "semantic_hash": "f9a270e3c4dfcb9ffe775077892310d4"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(auth)\\entrar\\page.tsx": {
+    "mtime": 1783382144.7599049,
+    "ast_hash": "e4d1805587c167c4ad7ec0cb2b8d5cac",
+    "semantic_hash": "e4d1805587c167c4ad7ec0cb2b8d5cac"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(auth)\\layout.tsx": {
+    "mtime": 1783497693.4238503,
+    "ast_hash": "b25b80a39b08f3fcdc8298fa12dc1c53",
+    "semantic_hash": "b25b80a39b08f3fcdc8298fa12dc1c53"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(auth)\\registro\\page.tsx": {
+    "mtime": 1783382168.492339,
+    "ast_hash": "c71694c2a3fa08b11abc6ac11087643d",
+    "semantic_hash": "c71694c2a3fa08b11abc6ac11087643d"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(auth)\\registro\\registro-client.tsx": {
+    "mtime": 1783383839.4082203,
+    "ast_hash": "4b91b33ac9d81c8f87b382954ee5f93b",
+    "semantic_hash": "4b91b33ac9d81c8f87b382954ee5f93b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(marketing)\\guias\\[slug]\\page.tsx": {
+    "mtime": 1783497693.4248471,
+    "ast_hash": "45334bac9c889e2f6b90ab8c5318c6d0",
+    "semantic_hash": "45334bac9c889e2f6b90ab8c5318c6d0"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(marketing)\\guias\\page.tsx": {
+    "mtime": 1783382238.8188024,
+    "ast_hash": "cc2d55c02677af6085746b58b0a1679e",
+    "semantic_hash": "cc2d55c02677af6085746b58b0a1679e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(marketing)\\layout.tsx": {
+    "mtime": 1783497693.4248471,
+    "ast_hash": "14f95c8187a4e560305f31498f4e9053",
+    "semantic_hash": "14f95c8187a4e560305f31498f4e9053"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(marketing)\\page.tsx": {
+    "mtime": 1783497693.4258447,
+    "ast_hash": "abe014b9fcac22b8efcedd608a085b43",
+    "semantic_hash": "abe014b9fcac22b8efcedd608a085b43"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\(marketing)\\template.tsx": {
+    "mtime": 1783397259.1524978,
+    "ast_hash": "6a33a68b68190cade026eb22703a5093",
+    "semantic_hash": "6a33a68b68190cade026eb22703a5093"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\admin\\dominio\\actions.ts": {
+    "mtime": 1783384684.8656068,
+    "ast_hash": "05f83ac36a4ca3ea6969dcdee372126c",
+    "semantic_hash": "05f83ac36a4ca3ea6969dcdee372126c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\admin\\dominio\\page.tsx": {
+    "mtime": 1783497693.4258447,
+    "ast_hash": "5bbaf9629b2a66ded8d6f4cb7c625710",
+    "semantic_hash": "5bbaf9629b2a66ded8d6f4cb7c625710"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\admin\\global\\actions.ts": {
+    "mtime": 1783384818.193992,
+    "ast_hash": "4277f65e9e7a069c10b9fad09b0733a1",
+    "semantic_hash": "4277f65e9e7a069c10b9fad09b0733a1"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\admin\\global\\page.tsx": {
+    "mtime": 1783384912.90906,
+    "ast_hash": "30fef655a89c7ff650ab8887d545965a",
+    "semantic_hash": "30fef655a89c7ff650ab8887d545965a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\admin\\guard.ts": {
+    "mtime": 1783384483.5243297,
+    "ast_hash": "536c6fb107ce868fd4b77a7a8769e85a",
+    "semantic_hash": "536c6fb107ce868fd4b77a7a8769e85a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\admin\\layout.tsx": {
+    "mtime": 1783497693.4268417,
+    "ast_hash": "e923eda9636a2b2c28a239960b132d15",
+    "semantic_hash": "e923eda9636a2b2c28a239960b132d15"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\admin\\moderacion\\actions.ts": {
+    "mtime": 1783384599.4588907,
+    "ast_hash": "86a0b49251bec0a997b649655fd033fa",
+    "semantic_hash": "86a0b49251bec0a997b649655fd033fa"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\admin\\moderacion\\page.tsx": {
+    "mtime": 1783386479.3969252,
+    "ast_hash": "76562f9923ff1813f03616fa04ac2102",
+    "semantic_hash": "76562f9923ff1813f03616fa04ac2102"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\admin\\page.tsx": {
+    "mtime": 1783384569.846405,
+    "ast_hash": "06ae5b906d59dbe2cd5880996b511833",
+    "semantic_hash": "06ae5b906d59dbe2cd5880996b511833"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\api\\assistant\\_lib\\anon-limit.ts": {
+    "mtime": 1783394301.69587,
+    "ast_hash": "c5ead7c1641f82167bb5804362cbddb5",
+    "semantic_hash": "c5ead7c1641f82167bb5804362cbddb5"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\api\\assistant\\_lib\\guardrails.ts": {
+    "mtime": 1783394241.918065,
+    "ast_hash": "d81175b35162bc8a07f30d0523ed5a66",
+    "semantic_hash": "d81175b35162bc8a07f30d0523ed5a66"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\api\\assistant\\_lib\\sources.ts": {
+    "mtime": 1783392308.055217,
+    "ast_hash": "ffdad19ac4e6ddac837d3ff84961bebc",
+    "semantic_hash": "ffdad19ac4e6ddac837d3ff84961bebc"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\api\\assistant\\feedback\\route.ts": {
+    "mtime": 1783392817.078665,
+    "ast_hash": "17ab31c5d974a489aab0579e633cdcff",
+    "semantic_hash": "17ab31c5d974a489aab0579e633cdcff"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\api\\assistant\\route.ts": {
+    "mtime": 1783394290.628815,
+    "ast_hash": "f916d743b120a1d0056df65243517dec",
+    "semantic_hash": "f916d743b120a1d0056df65243517dec"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\api\\webhooks\\stripe\\route.ts": {
+    "mtime": 1783394401.8958845,
+    "ast_hash": "36ac5242bb9375fbb0e1f32c13a0bd2c",
+    "semantic_hash": "36ac5242bb9375fbb0e1f32c13a0bd2c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\error.tsx": {
+    "mtime": 1783519108.2842164,
+    "ast_hash": "b69e1811baed6886d120505c3c794a57",
+    "semantic_hash": "b69e1811baed6886d120505c3c794a57"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\global-error.tsx": {
+    "mtime": 1783519108.2842164,
+    "ast_hash": "3f1a9a97337f01024cab0406f2513842",
+    "semantic_hash": "3f1a9a97337f01024cab0406f2513842"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\layout.tsx": {
+    "mtime": 1783497693.428837,
+    "ast_hash": "46668caa1887a2dcf5c7edcf9dfea16c",
+    "semantic_hash": "46668caa1887a2dcf5c7edcf9dfea16c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\loading.tsx": {
+    "mtime": 1783397301.2407362,
+    "ast_hash": "ed8af034996e56f51dbd658d83e4c72f",
+    "semantic_hash": "ed8af034996e56f51dbd658d83e4c72f"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\manifest.ts": {
+    "mtime": 1783497693.428837,
+    "ast_hash": "0ecd6ed95cc4a655e4b97e439a7dedff",
+    "semantic_hash": "0ecd6ed95cc4a655e4b97e439a7dedff"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\not-found.tsx": {
+    "mtime": 1783519108.2842164,
+    "ast_hash": "78e15b8e5baa0a88ef2f4f6dee4f7024",
+    "semantic_hash": "78e15b8e5baa0a88ef2f4f6dee4f7024"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\robots.ts": {
+    "mtime": 1783497693.8016512,
+    "ast_hash": "113ce410c4e0d1f0a3e614125a9e5d58",
+    "semantic_hash": "113ce410c4e0d1f0a3e614125a9e5d58"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\sitemap.ts": {
+    "mtime": 1783391253.0203385,
+    "ast_hash": "915030aa1b892226e71650dd6a181833",
+    "semantic_hash": "915030aa1b892226e71650dd6a181833"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\sw.ts": {
+    "mtime": 1783381988.8552957,
+    "ast_hash": "a0bbae086e745739d66369e21f2ce1fd",
+    "semantic_hash": "a0bbae086e745739d66369e21f2ce1fd"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\~offline\\page.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "0192676722ba5cd7cc5922448a6aa4ea",
+    "semantic_hash": "0192676722ba5cd7cc5922448a6aa4ea"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\admin\\admin-nav.tsx": {
+    "mtime": 1783497693.4298346,
+    "ast_hash": "ef42a471c4f88af24e9024167f2c6b89",
+    "semantic_hash": "ef42a471c4f88af24e9024167f2c6b89"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\admin\\broadcast-form.tsx": {
+    "mtime": 1783385032.5416229,
+    "ast_hash": "89741aedcf05402c5f6b0a43d85f2317",
+    "semantic_hash": "89741aedcf05402c5f6b0a43d85f2317"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\admin\\confirm-slow-dialog.tsx": {
+    "mtime": 1783385027.1273942,
+    "ast_hash": "9369be578993d67816c35327b7ad0de5",
+    "semantic_hash": "9369be578993d67816c35327b7ad0de5"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\admin\\create-tenant-form.tsx": {
+    "mtime": 1783497693.4298346,
+    "ast_hash": "b821020941f5cf9ea22321a1e6a2f6f8",
+    "semantic_hash": "b821020941f5cf9ea22321a1e6a2f6f8"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\admin\\listing-review-item.tsx": {
+    "mtime": 1783497693.4308314,
+    "ast_hash": "a82d71cbceca58fcf5af178ca8036c0c",
+    "semantic_hash": "a82d71cbceca58fcf5af178ca8036c0c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\admin\\moderation-item.tsx": {
+    "mtime": 1783384622.1772075,
+    "ast_hash": "6f6ca1ddccf7edcb9a50559c229598d8",
+    "semantic_hash": "6f6ca1ddccf7edcb9a50559c229598d8"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\admin\\module-toggles.tsx": {
+    "mtime": 1783384727.1697412,
+    "ast_hash": "748774b11196e35f70922ebed893cebc",
+    "semantic_hash": "748774b11196e35f70922ebed893cebc"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\admin\\pending-button.tsx": {
+    "mtime": 1783384506.5100455,
+    "ast_hash": "d7b4cbca1daf0d5b54fcebcc63ff6fbc",
+    "semantic_hash": "d7b4cbca1daf0d5b54fcebcc63ff6fbc"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\admin\\scam-report-item.tsx": {
+    "mtime": 1783384718.737481,
+    "ast_hash": "7c358415690069374e8900a2b2470992",
+    "semantic_hash": "7c358415690069374e8900a2b2470992"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\admin\\score-bar.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "a09a48487f7cff15056e8045a1e63b87",
+    "semantic_hash": "a09a48487f7cff15056e8045a1e63b87"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\assistant\\assistant-chat.tsx": {
+    "mtime": 1783497693.4318292,
+    "ast_hash": "c180d036481ecbe91dc040bd96fcacd3",
+    "semantic_hash": "c180d036481ecbe91dc040bd96fcacd3"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\assistant\\assistant-message.tsx": {
+    "mtime": 1783497693.4318292,
+    "ast_hash": "de853e5c3aaff7675641bf6916f167e9",
+    "semantic_hash": "de853e5c3aaff7675641bf6916f167e9"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\assistant\\copy.ts": {
+    "mtime": 1783391716.7845085,
+    "ast_hash": "3afd8b76fce9fb0c7e7c1f797fec7be2",
+    "semantic_hash": "3afd8b76fce9fb0c7e7c1f797fec7be2"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\assistant\\entry-card.tsx": {
+    "mtime": 1783497693.4328265,
+    "ast_hash": "2039a2658eefaa60dacfd88658e7a009",
+    "semantic_hash": "2039a2658eefaa60dacfd88658e7a009"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\assistant\\index.ts": {
+    "mtime": 1783392066.8707547,
+    "ast_hash": "da3b9f1eb29248856ee23b5404f89a4b",
+    "semantic_hash": "da3b9f1eb29248856ee23b5404f89a4b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\assistant\\protocol.ts": {
+    "mtime": 1783392276.855585,
+    "ast_hash": "8b3b7f7690b1b265f8c6824751d4aa02",
+    "semantic_hash": "8b3b7f7690b1b265f8c6824751d4aa02"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\action-result.ts": {
+    "mtime": 1783382034.0772154,
+    "ast_hash": "000b4c7bd11c43eeb3335466e71bf067",
+    "semantic_hash": "000b4c7bd11c43eeb3335466e71bf067"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\countries.ts": {
+    "mtime": 1783382029.9954076,
+    "ast_hash": "f9cf8a9db142fd4cf51afa6fcefac436",
+    "semantic_hash": "f9cf8a9db142fd4cf51afa6fcefac436"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\delete-account.tsx": {
+    "mtime": 1783382311.039127,
+    "ast_hash": "d1125a228681c1f3bdb59f2ae140be47",
+    "semantic_hash": "d1125a228681c1f3bdb59f2ae140be47"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\edit-profile-form.tsx": {
+    "mtime": 1783382302.373738,
+    "ast_hash": "44949df46ac53067bf0b1aec4f7719cd",
+    "semantic_hash": "44949df46ac53067bf0b1aec4f7719cd"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\form-error.tsx": {
+    "mtime": 1783382132.1139627,
+    "ast_hash": "72653720add5c4e6cc6f1c607d63e96c",
+    "semantic_hash": "72653720add5c4e6cc6f1c607d63e96c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\identity-badge.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "22e96ed2f8e574bddc85fe4daa227188",
+    "semantic_hash": "22e96ed2f8e574bddc85fe4daa227188"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\login-form.tsx": {
+    "mtime": 1783497693.433824,
+    "ast_hash": "37e727a7d029b62ace7a03154683db69",
+    "semantic_hash": "37e727a7d029b62ace7a03154683db69"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\message-cta.tsx": {
+    "mtime": 1783383660.3952103,
+    "ast_hash": "bf3d0fd144a0d76cac5d38de5b3b05a9",
+    "semantic_hash": "bf3d0fd144a0d76cac5d38de5b3b05a9"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\next-param.ts": {
+    "mtime": 1783382032.2444932,
+    "ast_hash": "d1f330b0fd62aeb92419c2ec6104cd1c",
+    "semantic_hash": "d1f330b0fd62aeb92419c2ec6104cd1c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\profile-actions-menu.tsx": {
+    "mtime": 1783382340.3079708,
+    "ast_hash": "8e349fee7ff57ad7befc830b95af7ecc",
+    "semantic_hash": "8e349fee7ff57ad7befc830b95af7ecc"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\register-form.tsx": {
+    "mtime": 1783497693.434821,
+    "ast_hash": "67a0e248a9738348b6bc768bc2c5c177",
+    "semantic_hash": "67a0e248a9738348b6bc768bc2c5c177"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\trust-block.tsx": {
+    "mtime": 1783382261.6858428,
+    "ast_hash": "d95ad40e40df4592508e68564bed3116",
+    "semantic_hash": "d95ad40e40df4592508e68564bed3116"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\auth\\trust-signals.ts": {
+    "mtime": 1783382258.1033554,
+    "ast_hash": "e2360c1d6b36d3e307b44b531b50b543",
+    "semantic_hash": "e2360c1d6b36d3e307b44b531b50b543"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\directory\\category-chips.tsx": {
+    "mtime": 1783497693.434821,
+    "ast_hash": "9d23ebf54c65d0b10759b1575fefb586",
+    "semantic_hash": "9d23ebf54c65d0b10759b1575fefb586"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\directory\\copy.ts": {
+    "mtime": 1783384585.1421354,
+    "ast_hash": "c8225d7149baed53f4e512618ff7d287",
+    "semantic_hash": "c8225d7149baed53f4e512618ff7d287"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\directory\\directory-contact-cta.tsx": {
+    "mtime": 1783384454.6395903,
+    "ast_hash": "a97d628db1a9e0f58b6387bd6258d85d",
+    "semantic_hash": "a97d628db1a9e0f58b6387bd6258d85d"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\directory\\event-actions.tsx": {
+    "mtime": 1783384432.5244055,
+    "ast_hash": "c579202d01fd755c58bbd492bfb93765",
+    "semantic_hash": "c579202d01fd755c58bbd492bfb93765"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\directory\\event-card.tsx": {
+    "mtime": 1783497693.4358184,
+    "ast_hash": "c243b6177134f9ea0e2102e1d53607fa",
+    "semantic_hash": "c243b6177134f9ea0e2102e1d53607fa"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\directory\\helpers.ts": {
+    "mtime": 1783384357.9638922,
+    "ast_hash": "5d34a7ed92033be0a801f176620f9452",
+    "semantic_hash": "5d34a7ed92033be0a801f176620f9452"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\directory\\index.ts": {
+    "mtime": 1783386583.4097064,
+    "ast_hash": "6bafef4f2c35a36bd81a813e56137d09",
+    "semantic_hash": "6bafef4f2c35a36bd81a813e56137d09"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\directory\\professional-card.tsx": {
+    "mtime": 1783384375.2564,
+    "ast_hash": "06df2d0964e4d040ce102311ca873021",
+    "semantic_hash": "06df2d0964e4d040ce102311ca873021"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\escudo\\back-link.tsx": {
+    "mtime": 1783497693.4358184,
+    "ast_hash": "8efc3166057a04b8b422070ba7b14d59",
+    "semantic_hash": "8efc3166057a04b8b422070ba7b14d59"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\escudo\\report-reasons.ts": {
+    "mtime": 1783382145.9293435,
+    "ast_hash": "0198874050520befc2b13ee3fc76c655",
+    "semantic_hash": "0198874050520befc2b13ee3fc76c655"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\escudo\\reporte-form.tsx": {
+    "mtime": 1783497693.4368157,
+    "ast_hash": "cf4803a9d4c32096b55726a509435d2a",
+    "semantic_hash": "cf4803a9d4c32096b55726a509435d2a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\escudo\\verificador-form.tsx": {
+    "mtime": 1783382083.5646372,
+    "ast_hash": "198058eb0ca1e969a52a74c6724bb81a",
+    "semantic_hash": "198058eb0ca1e969a52a74c6724bb81a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\experience\\brand-mark.tsx": {
+    "mtime": 1783497693.4368157,
+    "ast_hash": "9426a95a62cf0dd9ea0a73e5a419cb75",
+    "semantic_hash": "9426a95a62cf0dd9ea0a73e5a419cb75"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\experience\\page-transition.tsx": {
+    "mtime": 1783397248.0319762,
+    "ast_hash": "1a5eae37188302ee9b635be2c98e7ba2",
+    "semantic_hash": "1a5eae37188302ee9b635be2c98e7ba2"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\experience\\splash-screen.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "6c1edf56fdf092407dbbfa75e447833e",
+    "semantic_hash": "6c1edf56fdf092407dbbfa75e447833e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\comment-composer.tsx": {
+    "mtime": 1783497693.8036475,
+    "ast_hash": "b2928bfbcfac2de3e5f133dd52dbcae5",
+    "semantic_hash": "b2928bfbcfac2de3e5f133dd52dbcae5"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\copy.ts": {
+    "mtime": 1783386487.9000328,
+    "ast_hash": "dbeb620e808db8304ffcfbcaa5fc906f",
+    "semantic_hash": "dbeb620e808db8304ffcfbcaa5fc906f"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\feed-listing-card.tsx": {
+    "mtime": 1783385310.3328874,
+    "ast_hash": "daa8b711a3b4e63994ef97f9f4c7d9e9",
+    "semantic_hash": "daa8b711a3b4e63994ef97f9f4c7d9e9"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\feed-tabs.tsx": {
+    "mtime": 1783497693.4388096,
+    "ast_hash": "6510a3326901bffaf621b14c1b1320ee",
+    "semantic_hash": "6510a3326901bffaf621b14c1b1320ee"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\guide-card.tsx": {
+    "mtime": 1783384781.4929757,
+    "ast_hash": "29e5d91541c1bbffd662c0125b832022",
+    "semantic_hash": "29e5d91541c1bbffd662c0125b832022"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\helpers.ts": {
+    "mtime": 1783384695.8296156,
+    "ast_hash": "3ef9198966839f01ab16aa0cb7334276",
+    "semantic_hash": "3ef9198966839f01ab16aa0cb7334276"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\index.ts": {
+    "mtime": 1783384920.4549632,
+    "ast_hash": "10aff38255a55afd70d8668af684e241",
+    "semantic_hash": "10aff38255a55afd70d8668af684e241"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\post-actions.tsx": {
+    "mtime": 1783497693.4398084,
+    "ast_hash": "855c97a8e0cca92d01ca403d0eda7ddd",
+    "semantic_hash": "855c97a8e0cca92d01ca403d0eda7ddd"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\post-card.tsx": {
+    "mtime": 1783497693.4398084,
+    "ast_hash": "f746f424fdf6bb4346294df193ef03b3",
+    "semantic_hash": "f746f424fdf6bb4346294df193ef03b3"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\post-composer.tsx": {
+    "mtime": 1783497693.8036475,
+    "ast_hash": "5f66cc8d0479774eb59c6c37883f84d4",
+    "semantic_hash": "5f66cc8d0479774eb59c6c37883f84d4"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\post-menu.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "7dd2dbde4ee77ef67104b472f101b060",
+    "semantic_hash": "7dd2dbde4ee77ef67104b472f101b060"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\feed\\skeletons.tsx": {
+    "mtime": 1783384912.90906,
+    "ast_hash": "41309895a1f7412591f37e5b0afe1de1",
+    "semantic_hash": "41309895a1f7412591f37e5b0afe1de1"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\listings\\contact-cta.tsx": {
+    "mtime": 1783383684.0629642,
+    "ast_hash": "e222a429a5186faa3b82a8b6cdeb0590",
+    "semantic_hash": "e222a429a5186faa3b82a8b6cdeb0590"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\listings\\copy.ts": {
+    "mtime": 1783396432.508564,
+    "ast_hash": "29e8a90e43a1356370ff5a3c722d869f",
+    "semantic_hash": "29e8a90e43a1356370ff5a3c722d869f"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\listings\\detail-top-bar.tsx": {
+    "mtime": 1783497693.4418025,
+    "ast_hash": "c7cd1994e347368e0ad39a3446d5fe36",
+    "semantic_hash": "c7cd1994e347368e0ad39a3446d5fe36"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\listings\\gallery.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "09f56934149576a5af1c5da9763779d5",
+    "semantic_hash": "09f56934149576a5af1c5da9763779d5"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\listings\\helpers.ts": {
+    "mtime": 1783396600.933255,
+    "ast_hash": "2f6fc8ddef3b92459524eb388ec7d5a6",
+    "semantic_hash": "2f6fc8ddef3b92459524eb388ec7d5a6"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\listings\\index.ts": {
+    "mtime": 1783396720.5365295,
+    "ast_hash": "79a05b18cb5b74a2455cbe356b6138bd",
+    "semantic_hash": "79a05b18cb5b74a2455cbe356b6138bd"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\listings\\listing-card.tsx": {
+    "mtime": 1783383809.1504128,
+    "ast_hash": "feff9ed8e791cccc3ba956596115ca3e",
+    "semantic_hash": "feff9ed8e791cccc3ba956596115ca3e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\listings\\listing-filters.tsx": {
+    "mtime": 1783382244.254751,
+    "ast_hash": "49607a4be0bea38c3bee7796afd49cbc",
+    "semantic_hash": "49607a4be0bea38c3bee7796afd49cbc"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\listings\\listing-skeletons.tsx": {
+    "mtime": 1783382284.8447504,
+    "ast_hash": "b46f0c54e8c99802b3fe068bf92a86ec",
+    "semantic_hash": "b46f0c54e8c99802b3fe068bf92a86ec"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\listings\\publisher-trust.tsx": {
+    "mtime": 1783382190.0383277,
+    "ast_hash": "f2315cd810b1b31b11e4da69451b12a5",
+    "semantic_hash": "f2315cd810b1b31b11e4da69451b12a5"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\listings\\verification-band.tsx": {
+    "mtime": 1783497693.4427996,
+    "ast_hash": "0fe8d4d800a55c37d30e353cca00f5b0",
+    "semantic_hash": "0fe8d4d800a55c37d30e353cca00f5b0"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\marketing\\copy.ts": {
+    "mtime": 1783397259.1524978,
+    "ast_hash": "b4c7dd949f5618ca51121890ef72922e",
+    "semantic_hash": "b4c7dd949f5618ca51121890ef72922e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\marketing\\data.ts": {
+    "mtime": 1783382178.3246427,
+    "ast_hash": "0a99f2c167e0c0ff8cd72a8e6266eb4c",
+    "semantic_hash": "0a99f2c167e0c0ff8cd72a8e6266eb4c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\marketing\\guide-card.tsx": {
+    "mtime": 1783497693.4427996,
+    "ast_hash": "52cf9234c8949b35a0167d5375646b1c",
+    "semantic_hash": "52cf9234c8949b35a0167d5375646b1c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\marketing\\guides-explorer.tsx": {
+    "mtime": 1783382336.708055,
+    "ast_hash": "b0923619dbc131d57ea7eb1a8f5621db",
+    "semantic_hash": "b0923619dbc131d57ea7eb1a8f5621db"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\marketing\\hero-backdrop.tsx": {
+    "mtime": 1783497693.4427996,
+    "ast_hash": "da7e20e1dfa714fd89aaffc4c214fd38",
+    "semantic_hash": "da7e20e1dfa714fd89aaffc4c214fd38"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\marketing\\json-ld.tsx": {
+    "mtime": 1783382041.4430273,
+    "ast_hash": "6b1ca5112a0deb1a7844bd4cec4b78b4",
+    "semantic_hash": "6b1ca5112a0deb1a7844bd4cec4b78b4"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\marketing\\language-toggle.tsx": {
+    "mtime": 1783497693.443797,
+    "ast_hash": "c2131976ee56ec3dac3df0372fc737ed",
+    "semantic_hash": "c2131976ee56ec3dac3df0372fc737ed"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\marketing\\listing-mini-card.tsx": {
+    "mtime": 1783497693.443797,
+    "ast_hash": "b07a8ec50b771a35e9385ba5a74cb56d",
+    "semantic_hash": "b07a8ec50b771a35e9385ba5a74cb56d"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\marketing\\markdown.tsx": {
+    "mtime": 1783497693.4447942,
+    "ast_hash": "92900bd1073efc7c9b4282b086e736a9",
+    "semantic_hash": "92900bd1073efc7c9b4282b086e736a9"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\marketing\\reveal.tsx": {
+    "mtime": 1783397935.7826009,
+    "ast_hash": "3df122238e6ddabeae23cfc0b4e0f710",
+    "semantic_hash": "3df122238e6ddabeae23cfc0b4e0f710"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\marketing\\save-offline-button.tsx": {
+    "mtime": 1783382391.4725218,
+    "ast_hash": "95603d07d10c2b70e405072572a9c85a",
+    "semantic_hash": "95603d07d10c2b70e405072572a9c85a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\matching\\index.ts": {
+    "mtime": 1783391398.6037695,
+    "ast_hash": "b301b8cf50944dfae1590ecb414a71ea",
+    "semantic_hash": "b301b8cf50944dfae1590ecb414a71ea"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\matching\\para-vos.tsx": {
+    "mtime": 1783497693.4447942,
+    "ast_hash": "eb59be858e7708274b6bc961d1fe71b3",
+    "semantic_hash": "eb59be858e7708274b6bc961d1fe71b3"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\messaging\\accept-banner.tsx": {
+    "mtime": 1783497693.4457917,
+    "ast_hash": "adecaa26cac37454e427eaa5d4162328",
+    "semantic_hash": "adecaa26cac37454e427eaa5d4162328"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\messaging\\composer.tsx": {
+    "mtime": 1783497693.4457917,
+    "ast_hash": "04d0b5f5f9232f942d23f6e29b212d0a",
+    "semantic_hash": "04d0b5f5f9232f942d23f6e29b212d0a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\messaging\\conversation-actions.tsx": {
+    "mtime": 1783382010.8996837,
+    "ast_hash": "5652f81573080921f2afa52c92e3d74d",
+    "semantic_hash": "5652f81573080921f2afa52c92e3d74d"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\messaging\\copy.ts": {
+    "mtime": 1783381949.310615,
+    "ast_hash": "44ed611443d8680f7d711d07e0dfc496",
+    "semantic_hash": "44ed611443d8680f7d711d07e0dfc496"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\messaging\\index.ts": {
+    "mtime": 1783396612.7632859,
+    "ast_hash": "0050cadc0fcc1a50d4b87f6acdef7d6b",
+    "semantic_hash": "0050cadc0fcc1a50d4b87f6acdef7d6b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\messaging\\message-bubble.tsx": {
+    "mtime": 1783497693.446789,
+    "ast_hash": "7bbd194b595e20d854c8eb8d0f1ecba9",
+    "semantic_hash": "7bbd194b595e20d854c8eb8d0f1ecba9"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\messaging\\scroll-anchor.tsx": {
+    "mtime": 1783382021.9135082,
+    "ast_hash": "e2c152bd8073c272031ca0f22ec8b416",
+    "semantic_hash": "e2c152bd8073c272031ca0f22ec8b416"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\messaging\\thread-header.tsx": {
+    "mtime": 1783497693.446789,
+    "ast_hash": "00766b0c5f54c1cda47bd039e01cba90",
+    "semantic_hash": "00766b0c5f54c1cda47bd039e01cba90"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\messaging\\thread-refresh.tsx": {
+    "mtime": 1783382018.69816,
+    "ast_hash": "2dd29c17d4750576388b4f7b17d923c0",
+    "semantic_hash": "2dd29c17d4750576388b4f7b17d923c0"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\messaging\\trust.ts": {
+    "mtime": 1783396608.364781,
+    "ast_hash": "1a836bec143cd8cff2753452d03bf276",
+    "semantic_hash": "1a836bec143cd8cff2753452d03bf276"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\motion\\animated-number.tsx": {
+    "mtime": 1783398452.1143603,
+    "ast_hash": "940d26f9261dd87d5877188ccf426948",
+    "semantic_hash": "940d26f9261dd87d5877188ccf426948"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\motion\\celebration.tsx": {
+    "mtime": 1783397554.520332,
+    "ast_hash": "753729a7cc4b228aae254bf1d58ca8cf",
+    "semantic_hash": "753729a7cc4b228aae254bf1d58ca8cf"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\motion\\index.ts": {
+    "mtime": 1783397376.1718986,
+    "ast_hash": "914e12c26b5084bc5f9e8bd79513fe74",
+    "semantic_hash": "914e12c26b5084bc5f9e8bd79513fe74"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\motion\\like-burst.tsx": {
+    "mtime": 1783497693.4477866,
+    "ast_hash": "89e74e9c5d95b1a005c2266a8d729f0e",
+    "semantic_hash": "89e74e9c5d95b1a005c2266a8d729f0e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\motion\\reveal.tsx": {
+    "mtime": 1783397543.0136378,
+    "ast_hash": "9c23c8236b383e00d625f2dcc4d9b736",
+    "semantic_hash": "9c23c8236b383e00d625f2dcc4d9b736"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\motion\\shimmer.tsx": {
+    "mtime": 1783397369.252829,
+    "ast_hash": "e6e643cd8392ab4a154dfb76d54301b2",
+    "semantic_hash": "e6e643cd8392ab4a154dfb76d54301b2"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\motion\\tap-scale.tsx": {
+    "mtime": 1783397477.6092207,
+    "ast_hash": "55985cee98196abb60ec6ca86c71f650",
+    "semantic_hash": "55985cee98196abb60ec6ca86c71f650"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\notifications\\broadcast-card.tsx": {
+    "mtime": 1783497693.4477866,
+    "ast_hash": "1f82c0375973d6e9bda1405a0c91dc03",
+    "semantic_hash": "1f82c0375973d6e9bda1405a0c91dc03"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\notifications\\index.ts": {
+    "mtime": 1783384416.280547,
+    "ast_hash": "9df682c531041a0fa7b2d294004f81bb",
+    "semantic_hash": "9df682c531041a0fa7b2d294004f81bb"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\notifications\\notification-bell.tsx": {
+    "mtime": 1783497693.4487836,
+    "ast_hash": "17d1b571e3df16636836ddf0e2e1f54c",
+    "semantic_hash": "17d1b571e3df16636836ddf0e2e1f54c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\notifications\\notification-item.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "eacf9afa3a0e62c35a49e56dfe33165a",
+    "semantic_hash": "eacf9afa3a0e62c35a49e56dfe33165a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\onboarding\\onboarding-wizard.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "17478458412466fc5fcfae39aaf1cd8d",
+    "semantic_hash": "17478458412466fc5fcfae39aaf1cd8d"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\onboarding\\zone-input.tsx": {
+    "mtime": 1783382191.0128937,
+    "ast_hash": "cba7c0d19af95862cea999d58f30f62f",
+    "semantic_hash": "cba7c0d19af95862cea999d58f30f62f"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\pwa\\index.ts": {
+    "mtime": 1783382087.531214,
+    "ast_hash": "c06baa94443e1f24da03b48272324f68",
+    "semantic_hash": "c06baa94443e1f24da03b48272324f68"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\pwa\\install-prompt.tsx": {
+    "mtime": 1783382275.5136647,
+    "ast_hash": "94bf4ce185e6da94b3542687ff1466a1",
+    "semantic_hash": "94bf4ce185e6da94b3542687ff1466a1"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\pwa\\retry-button.tsx": {
+    "mtime": 1783382038.6607275,
+    "ast_hash": "ca72d3931dc1bdece74c499c763bf946",
+    "semantic_hash": "ca72d3931dc1bdece74c499c763bf946"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\shell\\bottom-nav.tsx": {
+    "mtime": 1783497693.450779,
+    "ast_hash": "a2789d986c380547339dc8f6e7aba52e",
+    "semantic_hash": "a2789d986c380547339dc8f6e7aba52e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\shell\\header-actions.tsx": {
+    "mtime": 1783497693.450779,
+    "ast_hash": "e5a3c990c1db784f4aed631dd2454ee8",
+    "semantic_hash": "e5a3c990c1db784f4aed631dd2454ee8"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\shell\\header.tsx": {
+    "mtime": 1783497693.4517763,
+    "ast_hash": "f49f4515efc28244918002a6d606a4a3",
+    "semantic_hash": "f49f4515efc28244918002a6d606a4a3"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\shell\\offline-banner.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "2fa6d7b7fe2163f91b135989b41a0f48",
+    "semantic_hash": "2fa6d7b7fe2163f91b135989b41a0f48"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\shell\\tenant-mismatch-banner.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "dfa9bfcdf5d202514fa7a13e09abe4c1",
+    "semantic_hash": "dfa9bfcdf5d202514fa7a13e09abe4c1"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\theme\\constants.ts": {
+    "mtime": 1783497693.4537706,
+    "ast_hash": "7fca190e7c9350ef3dee69de458d4adc",
+    "semantic_hash": "7fca190e7c9350ef3dee69de458d4adc"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\theme\\index.ts": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "b17177a29e0e92b0fd70622deff56e73",
+    "semantic_hash": "b17177a29e0e92b0fd70622deff56e73"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\theme\\theme-color-sync.tsx": {
+    "mtime": 1783497693.4547684,
+    "ast_hash": "f9b2f786329fe42058cb639db693cf25",
+    "semantic_hash": "f9b2f786329fe42058cb639db693cf25"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\theme\\theme-script-source.ts": {
+    "mtime": 1783497693.4547684,
+    "ast_hash": "ee4b763d1ed45d0b95787eece4178380",
+    "semantic_hash": "ee4b763d1ed45d0b95787eece4178380"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\theme\\theme-script.tsx": {
+    "mtime": 1783497693.4547684,
+    "ast_hash": "3f700684e8868fa32aae79780b42b484",
+    "semantic_hash": "3f700684e8868fa32aae79780b42b484"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\theme\\theme-store.test.ts": {
+    "mtime": 1783497693.4557648,
+    "ast_hash": "7923b86c00e3b25e707e7de7f16d5515",
+    "semantic_hash": "7923b86c00e3b25e707e7de7f16d5515"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\theme\\theme-store.ts": {
+    "mtime": 1783497693.4557648,
+    "ast_hash": "dfb57d9bd0a2ded432dcbbbf348778b5",
+    "semantic_hash": "dfb57d9bd0a2ded432dcbbbf348778b5"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\theme\\theme-toggle.test.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "e13aa04e8c0a237519c0e93739171dd5",
+    "semantic_hash": "e13aa04e8c0a237519c0e93739171dd5"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\theme\\theme-toggle.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "c19a1a360a0084d8933425f7a9d89704",
+    "semantic_hash": "c19a1a360a0084d8933425f7a9d89704"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\theme\\use-theme.ts": {
+    "mtime": 1783497693.456764,
+    "ast_hash": "8568206f3f3681f14b0e2693df04e3c3",
+    "semantic_hash": "8568206f3f3681f14b0e2693df04e3c3"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\trust\\index.ts": {
+    "mtime": 1783477330.587337,
+    "ast_hash": "1c0217a3db8a51e896cea9887a2ff713",
+    "semantic_hash": "1c0217a3db8a51e896cea9887a2ff713"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\trust\\levels.ts": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "401be4cd845a046e64ed1c0eb1bb56aa",
+    "semantic_hash": "401be4cd845a046e64ed1c0eb1bb56aa"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\trust\\report-scam-button.tsx": {
+    "mtime": 1783378988.345757,
+    "ast_hash": "0ba7d2028d04edf1071f1b3cfa7b062e",
+    "semantic_hash": "0ba7d2028d04edf1071f1b3cfa7b062e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\trust\\scam-shield-notice.tsx": {
+    "mtime": 1783497693.45776,
+    "ast_hash": "03f968a0c2abf6781df9836962de33d4",
+    "semantic_hash": "03f968a0c2abf6781df9836962de33d4"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\trust\\trust-level-mark.tsx": {
+    "mtime": 1783477130.4551203,
+    "ast_hash": "04fe051a925aa4ce0d5da2d8ab30c146",
+    "semantic_hash": "04fe051a925aa4ce0d5da2d8ab30c146"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\trust\\trust-score-badge.tsx": {
+    "mtime": 1783477146.097798,
+    "ast_hash": "885f5b21db518632a29ea13637cc309b",
+    "semantic_hash": "885f5b21db518632a29ea13637cc309b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\trust\\trust-score-sheet.tsx": {
+    "mtime": 1783497693.45776,
+    "ast_hash": "c7fb9321a50457692daf2622f71d438a",
+    "semantic_hash": "c7fb9321a50457692daf2622f71d438a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\trust\\verification-card.tsx": {
+    "mtime": 1783477274.6584175,
+    "ast_hash": "d079f6e21b0a3f83ae535d94c96f158b",
+    "semantic_hash": "d079f6e21b0a3f83ae535d94c96f158b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\avatar.tsx": {
+    "mtime": 1783497693.4587574,
+    "ast_hash": "c299325836d4ff7a47643aab654246ab",
+    "semantic_hash": "c299325836d4ff7a47643aab654246ab"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\badge.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "a09458d7e2f11c7579cc58d97d70ab71",
+    "semantic_hash": "a09458d7e2f11c7579cc58d97d70ab71"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\banner.tsx": {
+    "mtime": 1783378904.59682,
+    "ast_hash": "c2e237b11bfc0f8732414fb2dffbc5bf",
+    "semantic_hash": "c2e237b11bfc0f8732414fb2dffbc5bf"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\bezel-card.tsx": {
+    "mtime": 1783497693.4597545,
+    "ast_hash": "a7d57024ea3e3a5892992c133a724c46",
+    "semantic_hash": "a7d57024ea3e3a5892992c133a724c46"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\bottom-sheet.tsx": {
+    "mtime": 1783378837.0335057,
+    "ast_hash": "4236e32789af8b8241a2514e30cf1932",
+    "semantic_hash": "4236e32789af8b8241a2514e30cf1932"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\button.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "590a5838085fa7a84f4f4182e50cfd81",
+    "semantic_hash": "590a5838085fa7a84f4f4182e50cfd81"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\chip.tsx": {
+    "mtime": 1783497693.4607522,
+    "ast_hash": "e239c21f9d8e6fd6bdea85fe4bc2a83a",
+    "semantic_hash": "e239c21f9d8e6fd6bdea85fe4bc2a83a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\dialog.tsx": {
+    "mtime": 1783378848.3286324,
+    "ast_hash": "e165aa847aaf2f03ab0be9b1ce20c902",
+    "semantic_hash": "e165aa847aaf2f03ab0be9b1ce20c902"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\emblem.tsx": {
+    "mtime": 1783477089.3971527,
+    "ast_hash": "e024236f8a06f92f3c56ca512a74a398",
+    "semantic_hash": "e024236f8a06f92f3c56ca512a74a398"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\empty-state.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "c8299b04cfc44ac0188cf18885f097e7",
+    "semantic_hash": "c8299b04cfc44ac0188cf18885f097e7"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\field.tsx": {
+    "mtime": 1783378719.537192,
+    "ast_hash": "a72b623961c7419f833b01a50f02fbe6",
+    "semantic_hash": "a72b623961c7419f833b01a50f02fbe6"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\index.ts": {
+    "mtime": 1783477316.458226,
+    "ast_hash": "d5701ab62d60e0c79e5e2e161a9d8516",
+    "semantic_hash": "d5701ab62d60e0c79e5e2e161a9d8516"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\input.tsx": {
+    "mtime": 1783497693.4607522,
+    "ast_hash": "b167f11fad748a2d688cbf71fbb216d2",
+    "semantic_hash": "b167f11fad748a2d688cbf71fbb216d2"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\label.tsx": {
+    "mtime": 1783378701.307137,
+    "ast_hash": "8f4322f4dadae20d6d0c2a45354ea1e8",
+    "semantic_hash": "8f4322f4dadae20d6d0c2a45354ea1e8"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\progress.tsx": {
+    "mtime": 1783378911.9032855,
+    "ast_hash": "9698cecc030517b0966df4b852c812b3",
+    "semantic_hash": "9698cecc030517b0966df4b852c812b3"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\proximamente-premium.tsx": {
+    "mtime": 1783497693.461749,
+    "ast_hash": "19bd35e2439f20068c42a583728c5364",
+    "semantic_hash": "19bd35e2439f20068c42a583728c5364"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\select.tsx": {
+    "mtime": 1783378711.1550174,
+    "ast_hash": "d2541073cb1c8b18e23eb303ec1317a4",
+    "semantic_hash": "d2541073cb1c8b18e23eb303ec1317a4"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\skeleton.tsx": {
+    "mtime": 1783378761.5102086,
+    "ast_hash": "6204b7aed8f9bfc89cbd4b3e7ac07bd9",
+    "semantic_hash": "6204b7aed8f9bfc89cbd4b3e7ac07bd9"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\spinner.tsx": {
+    "mtime": 1783378684.195449,
+    "ast_hash": "325a957d987678df3fa648ac8694a67b",
+    "semantic_hash": "325a957d987678df3fa648ac8694a67b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\tabs.tsx": {
+    "mtime": 1783378886.226313,
+    "ast_hash": "d66f089c00c7efac2b5f0368bca153c9",
+    "semantic_hash": "d66f089c00c7efac2b5f0368bca153c9"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\textarea.tsx": {
+    "mtime": 1783378707.8726096,
+    "ast_hash": "781d320d6441186d366fefea4e5fcd79",
+    "semantic_hash": "781d320d6441186d366fefea4e5fcd79"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\toast.motion.test.tsx": {
+    "mtime": 1783497693.461749,
+    "ast_hash": "d89bcd8c283c26f7d2ef0010441e983e",
+    "semantic_hash": "d89bcd8c283c26f7d2ef0010441e983e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\toast.test.tsx": {
+    "mtime": 1783497693.461749,
+    "ast_hash": "074ab7bd73789ad33487d0054f06f59c",
+    "semantic_hash": "074ab7bd73789ad33487d0054f06f59c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\ui\\toast.tsx": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "f060ea5f041b38a483537fe192f55e28",
+    "semantic_hash": "f060ea5f041b38a483537fe192f55e28"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\hooks\\use-celebration.ts": {
+    "mtime": 1783397265.1996262,
+    "ast_hash": "2d2afc977ce3fe86294d5d535e2e0dd8",
+    "semantic_hash": "2d2afc977ce3fe86294d5d535e2e0dd8"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\hooks\\use-prefers-reduced-motion.ts": {
+    "mtime": 1783397180.8580272,
+    "ast_hash": "2904be5b4bff4b52bb8f4d4900fdeb88",
+    "semantic_hash": "2904be5b4bff4b52bb8f4d4900fdeb88"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\instrumentation-client.ts": {
+    "mtime": 1783391364.432445,
+    "ast_hash": "369851d84494f43ceda7552a6f274a8d",
+    "semantic_hash": "369851d84494f43ceda7552a6f274a8d"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\instrumentation.ts": {
+    "mtime": 1783391360.0331433,
+    "ast_hash": "7afebdfe5d797d5e9d09ee06b2c658a0",
+    "semantic_hash": "7afebdfe5d797d5e9d09ee06b2c658a0"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\config\\services.ts": {
+    "mtime": 1783378532.084677,
+    "ast_hash": "0194c0cb97c9eb02f21bd07a4de6d30e",
+    "semantic_hash": "0194c0cb97c9eb02f21bd07a4de6d30e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\design\\use-overlay.ts": {
+    "mtime": 1783382910.2827241,
+    "ast_hash": "40999e4bd3593032bbbabe07288e4bf4",
+    "semantic_hash": "40999e4bd3593032bbbabe07288e4bf4"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\email\\index.ts": {
+    "mtime": 1783391190.1854267,
+    "ast_hash": "29d74d595e7b5e71672285c9602a1868",
+    "semantic_hash": "29d74d595e7b5e71672285c9602a1868"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\email\\recipients.ts": {
+    "mtime": 1783391254.3406794,
+    "ast_hash": "2e50f877974e06801ae839b0f2216ae3",
+    "semantic_hash": "2e50f877974e06801ae839b0f2216ae3"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\email\\templates.ts": {
+    "mtime": 1783391240.356351,
+    "ast_hash": "5855f8f7ecedf174c8a23345cbefe869",
+    "semantic_hash": "5855f8f7ecedf174c8a23345cbefe869"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\i18n\\es\\auth.ts": {
+    "mtime": 1783378637.0068939,
+    "ast_hash": "6651e69a7a509ef85278b8983ba933ec",
+    "semantic_hash": "6651e69a7a509ef85278b8983ba933ec"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\i18n\\es\\common.ts": {
+    "mtime": 1783378632.2912927,
+    "ast_hash": "a6dd6a8a0b5122b2c2e7f00464489bd8",
+    "semantic_hash": "a6dd6a8a0b5122b2c2e7f00464489bd8"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\i18n\\es\\errors.ts": {
+    "mtime": 1783378645.4879506,
+    "ast_hash": "deb12f5072cfe2d29d82c06351c99c65",
+    "semantic_hash": "deb12f5072cfe2d29d82c06351c99c65"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\i18n\\es\\listings.ts": {
+    "mtime": 1783378639.457834,
+    "ast_hash": "322fa06cdd0c40964c2e1d6a06b59e76",
+    "semantic_hash": "322fa06cdd0c40964c2e1d6a06b59e76"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\i18n\\es\\nav.ts": {
+    "mtime": 1783396212.062211,
+    "ast_hash": "a72460c59f65277f8d9227ff441d1c1a",
+    "semantic_hash": "a72460c59f65277f8d9227ff441d1c1a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\i18n\\es\\trust.ts": {
+    "mtime": 1783378642.1888256,
+    "ast_hash": "2d50f9fa017d3188a93020dc7b093ba7",
+    "semantic_hash": "2d50f9fa017d3188a93020dc7b093ba7"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\i18n\\index.ts": {
+    "mtime": 1783378653.002963,
+    "ast_hash": "c1143b6ba639be8bb4c7e66bcdd8a8e0",
+    "semantic_hash": "c1143b6ba639be8bb4c7e66bcdd8a8e0"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\matching\\index.ts": {
+    "mtime": 1783396038.4332013,
+    "ast_hash": "c2900cf73e873ca6eefdfa09c7815f3c",
+    "semantic_hash": "c2900cf73e873ca6eefdfa09c7815f3c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\moderation\\index.ts": {
+    "mtime": 1783382136.7057605,
+    "ast_hash": "822903b65f68ad3ae7d3f533b5a7e9ef",
+    "semantic_hash": "822903b65f68ad3ae7d3f533b5a7e9ef"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\notifications\\notify.ts": {
+    "mtime": 1783384319.3067837,
+    "ast_hash": "2a33e04e804baaa2e9c5142a3683284e",
+    "semantic_hash": "2a33e04e804baaa2e9c5142a3683284e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\rag\\index.ts": {
+    "mtime": 1783398809.6169791,
+    "ast_hash": "8a9c1797c48be6d882295e3dbe60e86f",
+    "semantic_hash": "8a9c1797c48be6d882295e3dbe60e86f"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\rate-limit\\index.ts": {
+    "mtime": 1783394188.9321785,
+    "ast_hash": "94f74568058ba28f11c17c31f210f74f",
+    "semantic_hash": "94f74568058ba28f11c17c31f210f74f"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\stripe\\index.ts": {
+    "mtime": 1783391525.4249587,
+    "ast_hash": "3d5b15071acf293ad050799ac66a1b72",
+    "semantic_hash": "3d5b15071acf293ad050799ac66a1b72"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\supabase\\admin.ts": {
+    "mtime": 1783378554.4559422,
+    "ast_hash": "616b7ffcf303ce279baa0806de347beb",
+    "semantic_hash": "616b7ffcf303ce279baa0806de347beb"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\supabase\\client.ts": {
+    "mtime": 1783378544.108494,
+    "ast_hash": "91ff7d6d7d130f45291bc6341448afd2",
+    "semantic_hash": "91ff7d6d7d130f45291bc6341448afd2"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\supabase\\middleware.ts": {
+    "mtime": 1783378561.952032,
+    "ast_hash": "6bc339cab8aaf77698b8b027f7d4f5e3",
+    "semantic_hash": "6bc339cab8aaf77698b8b027f7d4f5e3"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\supabase\\server.ts": {
+    "mtime": 1783396801.9497323,
+    "ast_hash": "3104c8266d51c61b9a56ada58c73e76c",
+    "semantic_hash": "3104c8266d51c61b9a56ada58c73e76c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\tenant\\brand-pipeline.test.ts": {
+    "mtime": 1783497693.4627466,
+    "ast_hash": "a6da9d45d84aed4ebd447027e37b4739",
+    "semantic_hash": "a6da9d45d84aed4ebd447027e37b4739"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\tenant\\brand-pipeline.ts": {
+    "mtime": 1783497693.4637444,
+    "ast_hash": "73ec7bb8380bb9ef807e0f0a6a362658",
+    "semantic_hash": "73ec7bb8380bb9ef807e0f0a6a362658"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\tenant\\guard.test.ts": {
+    "mtime": 1783497693.80564,
+    "ast_hash": "8ccc53889fe7e64596cf43315cd7a4dd",
+    "semantic_hash": "8ccc53889fe7e64596cf43315cd7a4dd"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\tenant\\guard.ts": {
+    "mtime": 1783497693.80564,
+    "ast_hash": "0eb37d9a3ea4b08fc8b4b9e0661efd39",
+    "semantic_hash": "0eb37d9a3ea4b08fc8b4b9e0661efd39"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\tenant\\match.test.ts": {
+    "mtime": 1783497693.806638,
+    "ast_hash": "057325ee1d96cb167f1ecfb656be5764",
+    "semantic_hash": "057325ee1d96cb167f1ecfb656be5764"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\tenant\\match.ts": {
+    "mtime": 1783497693.806638,
+    "ast_hash": "1a0a6b4f1fa50caee3d3c743b5216a16",
+    "semantic_hash": "1a0a6b4f1fa50caee3d3c743b5216a16"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\tenant\\resolve.ts": {
+    "mtime": 1783497693.8076375,
+    "ast_hash": "da9abe5c6af51fe09d106f1b8d0f62b6",
+    "semantic_hash": "da9abe5c6af51fe09d106f1b8d0f62b6"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\trust\\levels.ts": {
+    "mtime": 1783396742.9813418,
+    "ast_hash": "846359ab34c9f8d1af3dccf4cb4879ad",
+    "semantic_hash": "846359ab34c9f8d1af3dccf4cb4879ad"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\trust\\signals.ts": {
+    "mtime": 1783396579.9753299,
+    "ast_hash": "5f2270be54f8b5405dd0a6f8e356d6ef",
+    "semantic_hash": "5f2270be54f8b5405dd0a6f8e356d6ef"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\types\\database.types.ts": {
+    "mtime": 1783391505.6488595,
+    "ast_hash": "974042c4141ea2c914b4b9c9cf4c944e",
+    "semantic_hash": "974042c4141ea2c914b4b9c9cf4c944e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\lib\\utils.ts": {
+    "mtime": 1783378521.1662197,
+    "ast_hash": "ba4905baf8b8cba1c5e8be45faa76e71",
+    "semantic_hash": "ba4905baf8b8cba1c5e8be45faa76e71"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\middleware.ts": {
+    "mtime": 1783378677.2799745,
+    "ast_hash": "67b32b917de7ee0f0a133390bb8a6198",
+    "semantic_hash": "67b32b917de7ee0f0a133390bb8a6198"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\test\\print-contract.test.ts": {
+    "mtime": 1783519108.2998369,
+    "ast_hash": "229bd93f5e4d6308a92723190df29eec",
+    "semantic_hash": "229bd93f5e4d6308a92723190df29eec"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\test\\server-only.stub.ts": {
+    "mtime": 1783497693.8086343,
+    "ast_hash": "6a416c67f5fd0e612aa14743eae24928",
+    "semantic_hash": "6a416c67f5fd0e612aa14743eae24928"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\test\\theme-contrast.test.ts": {
+    "mtime": 1783519108.3154573,
+    "ast_hash": "a517f5f1f29a994fd287859fedd2c857",
+    "semantic_hash": "a517f5f1f29a994fd287859fedd2c857"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\test\\theme-invariants.test.ts": {
+    "mtime": 1783519108.3177333,
+    "ast_hash": "1e4c55755c89c90a1d3077172db9e89e",
+    "semantic_hash": "1e4c55755c89c90a1d3077172db9e89e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\manual\\harden-storage-listing.sql": {
+    "mtime": 1783471360.2247994,
+    "ast_hash": "0bd80d1cb953dbac35425921bd84d375",
+    "semantic_hash": "0bd80d1cb953dbac35425921bd84d375"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0001_foundations.sql": {
+    "mtime": 1783378675.247501,
+    "ast_hash": "bd02119c54568cb1c336f9daae77e13e",
+    "semantic_hash": "bd02119c54568cb1c336f9daae77e13e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0002_tenants.sql": {
+    "mtime": 1783378696.7097387,
+    "ast_hash": "290ead2ff2dbd8b3cb2c6c80fa28f5ed",
+    "semantic_hash": "290ead2ff2dbd8b3cb2c6c80fa28f5ed"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0003_profiles_trust.sql": {
+    "mtime": 1783379984.1202455,
+    "ast_hash": "852dfa4c1480948da9e5e976b78125b1",
+    "semantic_hash": "852dfa4c1480948da9e5e976b78125b1"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0004_listings.sql": {
+    "mtime": 1783378771.2935703,
+    "ast_hash": "87dcc84061ddcc54ee3912d2e2ea8884",
+    "semantic_hash": "87dcc84061ddcc54ee3912d2e2ea8884"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0005_escudo.sql": {
+    "mtime": 1783380907.9565616,
+    "ast_hash": "42866650d5e6f51dbd801bb80658be31",
+    "semantic_hash": "42866650d5e6f51dbd801bb80658be31"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0006_messaging.sql": {
+    "mtime": 1783380888.8782065,
+    "ast_hash": "985893000d35e6a3ebb9fd33d93949e2",
+    "semantic_hash": "985893000d35e6a3ebb9fd33d93949e2"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0007_social.sql": {
+    "mtime": 1783378901.6507115,
+    "ast_hash": "3c2ec6053930354a31f8ddcd27cc0a3b",
+    "semantic_hash": "3c2ec6053930354a31f8ddcd27cc0a3b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0008_monetization.sql": {
+    "mtime": 1783380032.4914167,
+    "ast_hash": "e1700b22587cfeb5e44a2b5b1549b54c",
+    "semantic_hash": "e1700b22587cfeb5e44a2b5b1549b54c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0009_moderation.sql": {
+    "mtime": 1783380037.1902068,
+    "ast_hash": "f815ad6d08cc516b1f28e7c9e7a417e4",
+    "semantic_hash": "f815ad6d08cc516b1f28e7c9e7a417e4"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0010_admin_broadcast.sql": {
+    "mtime": 1783380067.2661297,
+    "ast_hash": "db82d8773a54984a4a2697fbcb2a4368",
+    "semantic_hash": "db82d8773a54984a4a2697fbcb2a4368"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0011_notifications_audit.sql": {
+    "mtime": 1783379001.447734,
+    "ast_hash": "8812cacf1734af952a2654da82288c44",
+    "semantic_hash": "8812cacf1734af952a2654da82288c44"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0012_storage.sql": {
+    "mtime": 1783379995.9338095,
+    "ast_hash": "cc6646901a695b8a94a716ff7c9215cd",
+    "semantic_hash": "cc6646901a695b8a94a716ff7c9215cd"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0013_cron_ttl.sql": {
+    "mtime": 1783380901.841596,
+    "ast_hash": "85f52e785254edc5d3f60eec9d49f752",
+    "semantic_hash": "85f52e785254edc5d3f60eec9d49f752"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0014_rpcs.sql": {
+    "mtime": 1783379079.5115752,
+    "ast_hash": "f653086a40f5f52d094a14cc8e5945b1",
+    "semantic_hash": "f653086a40f5f52d094a14cc8e5945b1"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0015_account_deletion_fk.sql": {
+    "mtime": 1783380942.0815878,
+    "ast_hash": "9dc48d1348c713f2d45600e99554f8ee",
+    "semantic_hash": "9dc48d1348c713f2d45600e99554f8ee"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0016_boosts.sql": {
+    "mtime": 1783391404.775531,
+    "ast_hash": "d65b444a87c94c1eb8ea420ade87a57b",
+    "semantic_hash": "d65b444a87c94c1eb8ea420ade87a57b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0017_rag_assistant.sql": {
+    "mtime": 1783394971.0057783,
+    "ast_hash": "8d65207ebfd7678216a026a5d06bbdf4",
+    "semantic_hash": "8d65207ebfd7678216a026a5d06bbdf4"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\supabase\\migrations\\0018_harden_r3.sql": {
+    "mtime": 1783394845.9536202,
+    "ast_hash": "9e6baf3afc168ce81c75d7e0c16e4acd",
+    "semantic_hash": "9e6baf3afc168ce81c75d7e0c16e4acd"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\tsconfig.json": {
+    "mtime": 1783377402.1463459,
+    "ast_hash": "ee17fd1c97c735e9f3564e3f5251f125",
+    "semantic_hash": "ee17fd1c97c735e9f3564e3f5251f125"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\vitest.config.ts": {
+    "mtime": 1783497707.6199844,
+    "ast_hash": "7972cf2dce607cd957961ee4bf4db598",
+    "semantic_hash": "7972cf2dce607cd957961ee4bf4db598"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\AGENTS.md": {
+    "mtime": 1783377428.907651,
+    "ast_hash": "9e09241799026ac05be315a2f0b50055",
+    "semantic_hash": "9e09241799026ac05be315a2f0b50055"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\CLAUDE.md": {
+    "mtime": 1783377428.907651,
+    "ast_hash": "5c27369b226fcf2be8a6cfe52224e767",
+    "semantic_hash": "5c27369b226fcf2be8a6cfe52224e767"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\CONTEXTO_PROYECTO.md": {
+    "mtime": 1783533296.9334438,
+    "ast_hash": "268c7d25dda782f4196862b7433c3de8",
+    "semantic_hash": "268c7d25dda782f4196862b7433c3de8"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\README.md": {
+    "mtime": 1783391478.8104079,
+    "ast_hash": "017a6780235d202ae8f80c623dbf6a34",
+    "semantic_hash": "017a6780235d202ae8f80c623dbf6a34"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\ARQUITECTURA.md": {
+    "mtime": 1783378016.3710618,
+    "ast_hash": "b23e987d1b3426b2b2bfb364480f4a9e",
+    "semantic_hash": "b23e987d1b3426b2b2bfb364480f4a9e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\HANDOFF.md": {
+    "mtime": 1783399033.2360666,
+    "ast_hash": "f282118644b4b81a42548f9f7e650846",
+    "semantic_hash": "f282118644b4b81a42548f9f7e650846"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\MESHY-MCP-SETUP.md": {
+    "mtime": 1783478536.9026706,
+    "ast_hash": "43634e130cc205dd1876d9462418f203",
+    "semantic_hash": "43634e130cc205dd1876d9462418f203"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\PLAN_MAESTRO.md": {
+    "mtime": 1783372593.160238,
+    "ast_hash": "f2b7d7dc51a2a405ccd02700b547bff2",
+    "semantic_hash": "f2b7d7dc51a2a405ccd02700b547bff2"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\PROGRESS.md": {
+    "mtime": 1783519452.62597,
+    "ast_hash": "295c0a67eef71a7351489f3e2e229a2a",
+    "semantic_hash": "295c0a67eef71a7351489f3e2e229a2a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\SETUP-ENV.md": {
+    "mtime": 1783370395.9586241,
+    "ast_hash": "1e82763a833bc7b46f129ce43e4a02fc",
+    "semantic_hash": "1e82763a833bc7b46f129ce43e4a02fc"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\01-arquitectura-multitenant-datos.md": {
+    "mtime": 1783361397.5746324,
+    "ast_hash": "501c3d6a9485da2a0184820fc1b9bea4",
+    "semantic_hash": "501c3d6a9485da2a0184820fc1b9bea4"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\02-app-whitelabel-multidominio.md": {
+    "mtime": 1783361362.4510207,
+    "ast_hash": "bf3d9c3e8ff7c04d6ee8d25b8418b4bb",
+    "semantic_hash": "bf3d9c3e8ff7c04d6ee8d25b8418b4bb"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\03-benchmark-sngine-competidores.md": {
+    "mtime": 1783361226.9511156,
+    "ast_hash": "97aa313d0dbcf993ccc6c37991b9b618",
+    "semantic_hash": "97aa313d0dbcf993ccc6c37991b9b618"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\04-monetizacion-stripe-connect.md": {
+    "mtime": 1783361483.765829,
+    "ast_hash": "70e65a3b27eee447a07371f12386f7c7",
+    "semantic_hash": "70e65a3b27eee447a07371f12386f7c7"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\05-ia-moderacion-media.md": {
+    "mtime": 1783361540.3308702,
+    "ast_hash": "366cfee7c216cb78f3b0454b54b5db60",
+    "semantic_hash": "366cfee7c216cb78f3b0454b54b5db60"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\06-modulos-sociales-core.md": {
+    "mtime": 1783361395.8890092,
+    "ast_hash": "5ea70c6609f580d6068efddbabe6823e",
+    "semantic_hash": "5ea70c6609f580d6068efddbabe6823e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\07-infra-devops-admin.md": {
+    "mtime": 1783361231.190946,
+    "ast_hash": "702e90a2898dfbffcbda85766a2af666",
+    "semantic_hash": "702e90a2898dfbffcbda85766a2af666"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\13-diseno-ux-premium.md": {
+    "mtime": 1783367795.157,
+    "ast_hash": "39d6102c2497be485d95382c8d27ce1f",
+    "semantic_hash": "39d6102c2497be485d95382c8d27ce1f"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\VEREDICTO-V3-segundo-pase.md": {
+    "mtime": 1783371015.9443045,
+    "ast_hash": "8fce5bc5e7809b63dc1a5ece5f6537ef",
+    "semantic_hash": "8fce5bc5e7809b63dc1a5ece5f6537ef"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\VEREDICTO-abogado-del-diablo.md": {
+    "mtime": 1783367484.9967194,
+    "ast_hash": "8f49216894aac32f7f0a9de588ab83a2",
+    "semantic_hash": "8f49216894aac32f7f0a9de588ab83a2"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\power-up\\08-growth-retencion-engagement.md": {
+    "mtime": 1783362388.1274984,
+    "ast_hash": "1a3881a71b9d1e9c00c7766e5de7a734",
+    "semantic_hash": "1a3881a71b9d1e9c00c7766e5de7a734"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\power-up\\09-diferenciacion-ia-producto.md": {
+    "mtime": 1783371789.8675687,
+    "ast_hash": "1ae9ba2cc8a24873973c81b4ba9ba3d4",
+    "semantic_hash": "1ae9ba2cc8a24873973c81b4ba9ba3d4"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\power-up\\10-unit-economics-pricing.md": {
+    "mtime": 1783362785.8454523,
+    "ast_hash": "6f71d2e7d814bd326fff2875bf36ac3a",
+    "semantic_hash": "6f71d2e7d814bd326fff2875bf36ac3a"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\power-up\\11-legal-compliance-riesgo.md": {
+    "mtime": 1783362565.3765855,
+    "ast_hash": "835461164b0a61081872e2e467de5151",
+    "semantic_hash": "835461164b0a61081872e2e467de5151"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\investigacion\\power-up\\12-go-to-market-lanzamiento.md": {
+    "mtime": 1783362431.2684639,
+    "ast_hash": "d172960cf27f94263c9c42bd74d4ee46",
+    "semantic_hash": "d172960cf27f94263c9c42bd74d4ee46"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\versiones\\PLAN_MAESTRO_v1.md": {
+    "mtime": 1783363286.971263,
+    "ast_hash": "b3f59a23d8a8efc2563ac717078ba824",
+    "semantic_hash": "b3f59a23d8a8efc2563ac717078ba824"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\versiones\\PLAN_MAESTRO_v2.md": {
+    "mtime": 1783366672.6437416,
+    "ast_hash": "81ef1bb1bd41e9f28fab8a2e4ba0401b",
+    "semantic_hash": "81ef1bb1bd41e9f28fab8a2e4ba0401b"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\docs\\versiones\\PLAN_MAESTRO_v3.md": {
+    "mtime": 1783368855.9516304,
+    "ast_hash": "6160d54726f393e026005340b3e66bf2",
+    "semantic_hash": "6160d54726f393e026005340b3e66bf2"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\components\\motion\\README.md": {
+    "mtime": 1783397405.552829,
+    "ast_hash": "80d019c671a2f51463cb694ba27a4435",
+    "semantic_hash": "80d019c671a2f51463cb694ba27a4435"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\brand-raster\\brand-emblem-3d.png": {
+    "mtime": 1783478316.505,
+    "ast_hash": "5fece7197964b1ec5d0ce9df7d5f8e8e",
+    "semantic_hash": "5fece7197964b1ec5d0ce9df7d5f8e8e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\brand-raster\\brand-emblem.png": {
+    "mtime": 1783397199.5657566,
+    "ast_hash": "e9f73754fd29ee86c73271dce705a7f8",
+    "semantic_hash": "e9f73754fd29ee86c73271dce705a7f8"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\brand-raster\\escudo-3d.png": {
+    "mtime": 1783397234.507082,
+    "ast_hash": "c3084e62601b85db5eb202113de56ff2",
+    "semantic_hash": "c3084e62601b85db5eb202113de56ff2"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\brand-raster\\texture-mesh.png": {
+    "mtime": 1783397216.878237,
+    "ast_hash": "5ce8cd083dd06e995ec541fa08054544",
+    "semantic_hash": "5ce8cd083dd06e995ec541fa08054544"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\emblems\\alpha\\escudo-alerta.png": {
+    "mtime": 1783478334.538906,
+    "ast_hash": "3ae78d4f73c427d3d320873ebc079c18",
+    "semantic_hash": "3ae78d4f73c427d3d320873ebc079c18"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\emblems\\alpha\\escudo-guard.png": {
+    "mtime": 1783478334.551906,
+    "ast_hash": "221a9b39012bea1814a2c3bb4dd3364d",
+    "semantic_hash": "221a9b39012bea1814a2c3bb4dd3364d"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\emblems\\alpha\\sello-alerta.png": {
+    "mtime": 1783478334.5678566,
+    "ast_hash": "3973b083bd88315dc1e98570ec428047",
+    "semantic_hash": "3973b083bd88315dc1e98570ec428047"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\emblems\\alpha\\sello-verificado.png": {
+    "mtime": 1783478334.5817897,
+    "ast_hash": "f1707381f247fae463c237d14f6a7236",
+    "semantic_hash": "f1707381f247fae463c237d14f6a7236"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\emblems\\alpha\\trust-1-nuevo.png": {
+    "mtime": 1783478334.5964856,
+    "ast_hash": "96cca08ac77742dbe569d2ea55832111",
+    "semantic_hash": "96cca08ac77742dbe569d2ea55832111"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\emblems\\alpha\\trust-2-verificado.png": {
+    "mtime": 1783478334.6094828,
+    "ast_hash": "b5872993a921c18d921d104c6e39bf25",
+    "semantic_hash": "b5872993a921c18d921d104c6e39bf25"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\emblems\\alpha\\trust-4-premium.png": {
+    "mtime": 1783478334.6154575,
+    "ast_hash": "7ae98b62a48515bc8ca9e9a1e48734b0",
+    "semantic_hash": "7ae98b62a48515bc8ca9e9a1e48734b0"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\assets-source\\emblems\\alpha\\trust-5-diamante.png": {
+    "mtime": 1783478334.6234138,
+    "ast_hash": "6b5a558a5ff6d42be57a9f4a29e42527",
+    "semantic_hash": "6b5a558a5ff6d42be57a9f4a29e42527"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\brand\\brand-mark.svg": {
+    "mtime": 1783397256.2519217,
+    "ast_hash": "d7318f765f9472b9bf720d8c63779aec",
+    "semantic_hash": "d7318f765f9472b9bf720d8c63779aec"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\brand\\emblems\\escudo-alerta.webp": {
+    "mtime": 1783477994.778,
+    "ast_hash": "1368aca3e8901f253ab168f488355f16",
+    "semantic_hash": "1368aca3e8901f253ab168f488355f16"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\brand\\emblems\\escudo-check.webp": {
+    "mtime": 1783477994.0,
+    "ast_hash": "d823010c7a03ae66fef28edab179a2bc",
+    "semantic_hash": "d823010c7a03ae66fef28edab179a2bc"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\brand\\emblems\\nivel-diamante.webp": {
+    "mtime": 1783478000.022,
+    "ast_hash": "62f707637a0354aa1e9e19843dca30b7",
+    "semantic_hash": "62f707637a0354aa1e9e19843dca30b7"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\brand\\emblems\\nivel-nuevo.webp": {
+    "mtime": 1783477997.419,
+    "ast_hash": "3c07e3fc5b55131ff0171f43054f2dac",
+    "semantic_hash": "3c07e3fc5b55131ff0171f43054f2dac"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\brand\\emblems\\nivel-premium.webp": {
+    "mtime": 1783477999.188,
+    "ast_hash": "0743bfebc51e5b8a9b65068c61c347b3",
+    "semantic_hash": "0743bfebc51e5b8a9b65068c61c347b3"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\brand\\emblems\\nivel-verificado.webp": {
+    "mtime": 1783477998.342,
+    "ast_hash": "fe47fcee587e51b3075ccf8d84d7038f",
+    "semantic_hash": "fe47fcee587e51b3075ccf8d84d7038f"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\brand\\emblems\\sello-check.webp": {
+    "mtime": 1783477995.655,
+    "ast_hash": "47dc96c17cd7159b49aebbb1b3d08e68",
+    "semantic_hash": "47dc96c17cd7159b49aebbb1b3d08e68"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\brand\\emblems\\sello-x.webp": {
+    "mtime": 1783477996.5,
+    "ast_hash": "38dbe318fb8f4384c855a0a45962ac83",
+    "semantic_hash": "38dbe318fb8f4384c855a0a45962ac83"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\brand\\favicon.svg": {
+    "mtime": 1783397262.4935927,
+    "ast_hash": "e5becbb016b15d25d8e47d331e408f2d",
+    "semantic_hash": "e5becbb016b15d25d8e47d331e408f2d"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\file.svg": {
+    "mtime": 1783289653.5337665,
+    "ast_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71",
+    "semantic_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\globe.svg": {
+    "mtime": 1783289653.5493872,
+    "ast_hash": "2aaafa6a49b6563925fe440891e32717",
+    "semantic_hash": "2aaafa6a49b6563925fe440891e32717"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\icons\\apple-touch-icon.png": {
+    "mtime": 1783381959.2630987,
+    "ast_hash": "e77b8bb833072b7a4a043573fd58f3b7",
+    "semantic_hash": "e77b8bb833072b7a4a043573fd58f3b7"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\icons\\icon-192.png": {
+    "mtime": 1783381959.2128735,
+    "ast_hash": "de8a2c3d1d520abc4a1bd722a978787c",
+    "semantic_hash": "de8a2c3d1d520abc4a1bd722a978787c"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\icons\\icon-512.png": {
+    "mtime": 1783381959.24487,
+    "ast_hash": "6c40cc11935255c906b027dd065246c1",
+    "semantic_hash": "6c40cc11935255c906b027dd065246c1"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\icons\\maskable-512.png": {
+    "mtime": 1783381959.2630987,
+    "ast_hash": "df7861adc37e135ac977762929189abc",
+    "semantic_hash": "df7861adc37e135ac977762929189abc"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\images\\empty-state-search.png": {
+    "mtime": 1783519108.2842164,
+    "ast_hash": "772ecb3375855e94e3eecd9471231eb9",
+    "semantic_hash": "772ecb3375855e94e3eecd9471231eb9"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\images\\guia-cover-itin.png": {
+    "mtime": 1783378054.633461,
+    "ast_hash": "4103d099212c20f0d35f2a60b78bcf61",
+    "semantic_hash": "4103d099212c20f0d35f2a60b78bcf61"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\images\\hero-community-mobile.webp": {
+    "mtime": 1783497693.4128802,
+    "ast_hash": "36ee65093970168b2faf97a4ddd95232",
+    "semantic_hash": "36ee65093970168b2faf97a4ddd95232"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\images\\hero-community.png": {
+    "mtime": 1783377963.2593288,
+    "ast_hash": "2d5df16a12ccc30d601da8d75c1fce13",
+    "semantic_hash": "2d5df16a12ccc30d601da8d75c1fce13"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\images\\hero-vivienda.png": {
+    "mtime": 1783377984.3029163,
+    "ast_hash": "2015f5b9e3735d0560254a3b19734488",
+    "semantic_hash": "2015f5b9e3735d0560254a3b19734488"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\images\\og-default.png": {
+    "mtime": 1783378035.0922194,
+    "ast_hash": "e2c21d70785acf81c5d0321648e8b199",
+    "semantic_hash": "e2c21d70785acf81c5d0321648e8b199"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\images\\onboarding-welcome.png": {
+    "mtime": 1783378001.4741611,
+    "ast_hash": "0701c178e870efcfbbfd35e70d5e9555",
+    "semantic_hash": "0701c178e870efcfbbfd35e70d5e9555"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\next.svg": {
+    "mtime": 1783289653.5493872,
+    "ast_hash": "8e061864f388b47f33a1c3780831193e",
+    "semantic_hash": "8e061864f388b47f33a1c3780831193e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\vercel.svg": {
+    "mtime": 1783289653.565008,
+    "ast_hash": "c0af2f507b369b085b35ef4bbe3bcf1e",
+    "semantic_hash": "c0af2f507b369b085b35ef4bbe3bcf1e"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\public\\window.svg": {
+    "mtime": 1783289653.565008,
+    "ast_hash": "a2760511c65806022ad20adf74370ff3",
+    "semantic_hash": "a2760511c65806022ad20adf74370ff3"
+  },
+  "C:\\MisProyectos\\INSIGHTS\\comunidad_latina\\src\\app\\apple-icon.png": {
+    "mtime": 1783381959.2796597,
+    "ast_hash": "e77b8bb833072b7a4a043573fd58f3b7",
+    "semantic_hash": "e77b8bb833072b7a4a043573fd58f3b7"
+  }
+}
