@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { cn, timeAgo } from "@/lib/utils";
-import { Avatar, Badge, EmptyState, buttonVariants } from "@/components/ui";
+import { Avatar, Badge, EmptyState } from "@/components/ui";
 import { ConversationActions } from "@/components/messaging/conversation-actions";
 import { COPY } from "@/components/messaging/copy";
 
@@ -94,18 +94,14 @@ export default async function MensajesPage() {
       </h1>
 
       {sorted.length === 0 ? (
+        // Sin CTA a propósito (pedido cliente 2026-07-20): la bandeja vacía
+        // informa dónde van a aparecer las conversaciones; empujar a "buscar
+        // propiedades" desde acá manda a la gente a otro módulo por un vacío
+        // que se llena solo cuando alguien escribe.
         <EmptyState
           illustration="/images/empty-state-search.png"
           title={COPY.inbox.emptyTitle}
           message={COPY.inbox.emptyMessage}
-          action={
-            <Link
-              href="/propiedades"
-              className={buttonVariants({ variant: "primary", size: "md" })}
-            >
-              {COPY.inbox.emptyAction}
-            </Link>
-          }
         />
       ) : (
         <ul className="flex flex-col gap-3">

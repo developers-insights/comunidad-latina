@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { Certificate, MapPin, Storefront, UserGear } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Banner, BezelCard, Chip } from "@/components/ui";
-import { ScamShieldNotice } from "@/components/trust";
+
 import {
   DetailTopBar,
   PublisherTrust,
@@ -178,7 +178,10 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
   const isOwner = Boolean(user && listing.created_by === user.id);
 
   return (
-    <div className="pb-24">
+    // pb-40 (no pb-24): el CTA "Contactar" es `fixed` sobre el bottom-nav y su
+    // footprint real ronda las 7rem — con pb-24 la última card quedaba TAPADA
+    // por la barra (pedido cliente 2026-07-20). Mismo valor que propiedades.
+    <div className="pb-40">
       <DetailTopBar title={listing.title} listingId={listing.id} />
 
       {listing.status !== "published" && isOwner && (
@@ -243,8 +246,9 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
         </section>
       )}
 
-      {/* Escudo Anti-Estafa — SIEMPRE presente en servicios (§4.d) */}
-      <ScamShieldNotice variant="services" className="mt-6" />
+      {/* Escudo Anti-Estafa oculto por ahora (pedido cliente 2026-07-20): la
+          feature entera está apagada, así que su card tampoco se muestra acá.
+          Al reactivar Escudo, volver a montar <ScamShieldNotice variant="services" />. */}
 
       {listing.description && (
         <section className="mt-6">

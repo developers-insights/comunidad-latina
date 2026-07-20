@@ -44,13 +44,6 @@ export const COPY = {
         cta: "Ver propiedades",
       },
       {
-        key: "escudo",
-        title: "Centro de seguridad",
-        body: "Consultamos registros públicos y te mostramos exactamente qué dicen y a qué fecha. Si algo no te cierra, lo reportás con un toque.",
-        href: "/escudo",
-        cta: "Conocer el centro de seguridad",
-      },
-      {
         key: "guias",
         title: "Guías para tu llegada",
         body: "ITIN, licencia de conducir, tus derechos: paso a paso en tu idioma, con las fuentes oficiales citadas y a la vista.",
@@ -111,7 +104,6 @@ export const COPY = {
     explore: [
       { label: "Propiedades", href: "/propiedades" },
       { label: "Guías", href: "/guias" },
-      { label: "Centro de seguridad", href: "/escudo" },
     ],
     communityTitle: "Comunidad",
     community: [

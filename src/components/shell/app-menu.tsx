@@ -7,13 +7,11 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import {
   Bell,
-  BookOpen,
   CaretRight,
   ChatCircle,
   List,
   PencilSimpleLine,
   ShieldStar,
-  Sparkle,
   X,
 } from "@phosphor-icons/react";
 import { Avatar } from "@/components/ui";
@@ -37,8 +35,6 @@ const COPY = {
   publish: "Publicar algo",
   notifications: "Notificaciones",
   messages: "Mensajes",
-  assistant: "Asistente",
-  guides: "Guías",
   admin: "Administración",
   theme: "Tema",
   signOut: "Cerrar sesión",
@@ -184,8 +180,9 @@ function MenuPanel({ id, open, onClose, user, unread, isStaff, pathname }: MenuP
       badge: unread > 0 ? (unread > 9 ? "9+" : String(unread)) : null,
     },
     { href: "/mensajes", label: COPY.messages, icon: ChatCircle, badge: null },
-    { href: "/asistente", label: COPY.assistant, icon: Sparkle, badge: null },
-    { href: "/guias", label: COPY.guides, icon: BookOpen, badge: null },
+    // Asistente y Guías ocultos por ahora (pedido cliente 2026-07-20): el
+    // Asistente ya estaba apagado (404), y las Guías se sacan del producto
+    // para no dispersar — la app tiene que mostrar la plataforma, no un blog.
     ...(isStaff
       ? [{ href: "/admin", label: COPY.admin, icon: ShieldStar, badge: null }]
       : []),

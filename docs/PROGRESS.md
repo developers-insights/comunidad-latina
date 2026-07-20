@@ -1,5 +1,45 @@
 # PROGRESS — Comunidad Latina
 
+## Ajustes de UX pedidos por el cliente (✅ 2026-07-20)
+
+Segunda tanda del mismo día, sobre la app ya desplegada:
+
+- **Menú en un botón** — el rail de cápsulas salió del header y los 8 módulos
+  (hoy 7, ver Escudo) viven en un drawer lateral que además absorbió el toggle
+  de tema y la campana. `shell/app-menu.tsx` + `shell/modules.ts` (registro puro
+  con `isModuleActive`, testeado). Se borraron `module-rail.tsx` y
+  `notification-bell.tsx` (código muerto). El punto del botón conserva la señal
+  de no leídas. **Ojo:** los links del panel van con `prefetch={false}` — abrirlo
+  disparaba **39 peticiones RSC** (Next precargaba los 12 destinos, todos rutas
+  dinámicas con queries) y saturaba el server; ahora 0.
+- **Cards del Marketplace** — el chip de categoría envolvía en 3 líneas y tapaba
+  media foto. `categoryShortLabel` (etiquetas cortas) + chip de vidrio oscuro
+  (`bg-media-scrim` + blur, el idioma que ya usaban gig-card/creator-card) +
+  precio/título rebalanceados.
+- **Bandeja de mensajes vacía sin CTA** — empujaba a "Buscar propiedades", que
+  manda a otro módulo por un vacío que se llena solo.
+- **Barra de contacto sólida** — era un degradado `from-canvas` que dejaba ver la
+  card de abajo y se leía como un solapamiento sucio. Ahora es una barra con
+  hairline + `bg-surface/92` + blur (mismo tratamiento que el bottom nav).
+  `profesionales/[id]` pasó de `pb-24` a `pb-40`: con 24 la última card quedaba
+  TAPADA por la barra.
+- **Copy de contacto: una sola mención y concreta** — "Contactar (protegido)" +
+  "Tu contacto queda protegido dentro de la app" decía lo mismo dos veces y
+  "protegido" no dice QUÉ se protege. Quedó **"Contactar"** + "Tu teléfono no se
+  comparte".
+- **Foco del composer de comentarios** — tenía `focus:outline-none` SIN
+  reemplazo: no había ningún indicador de foco propio (hueco de accesibilidad) y
+  el navegador dibujaba el suyo, rectangular, que no empalmaba con la píldora.
+  El anillo ahora vive en el `<form>` (`focus-within`) y sigue el radio.
+- **Escudo OCULTO por completo** y **guías fuera del feed y del menú** — patrón
+  del repo (`ASSISTANT_ENABLED`): flag `boolean` + `notFound()` en las rutas +
+  sin entry points. `ScamShieldNotice` sigue existiendo pero desmontado de
+  propiedades/[id] y profesionales/[id]. **Pendiente al reactivar:** volver a
+  montar esas cards, el módulo en `shell/modules.ts` y los links que sacó el
+  barrido. El toggle "Escudo Anti-Estafa" del panel de admin se dejó A PROPÓSITO
+  (es staff-only y es por donde se reactiva).
+
+
 **Última actualización:** 2026-07-19 (Feedback del cliente → Marketplace + Creator Marketplace + reglas de alcance del feed + restyle foto-grande + rail de módulos).
 **Estado:** ✅ **R0–R3 + BLINDAJE + FEEDBACK CLIENTE 2026-07-19 implementado completo.** 60+ rutas. Gates verdes: `tsc` 0 · lint 0 errores · **831 tests** · `next build --webpack` verde · enumerador RLS verde (37 superficies).
 

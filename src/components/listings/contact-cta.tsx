@@ -60,10 +60,14 @@ export function ContactCta({
     });
   }
 
+  // Barra de acción sólida, no un degradado: el degradado dejaba ver la card
+  // de abajo a través suyo y se leía como un solapamiento sucio (pedido
+  // cliente 2026-07-20). Mismo tratamiento que el bottom nav —superficie
+  // translúcida con blur y hairline arriba— para que se lean como un sistema.
   const wrapperClass = cn(
     "fixed inset-x-0 z-30",
     "bottom-[calc(3.5rem+env(safe-area-inset-bottom))]",
-    "bg-gradient-to-t from-canvas via-canvas/95 to-transparent pb-3 pt-6",
+    "border-t border-border bg-surface/92 backdrop-blur-md pb-3 pt-3",
   );
 
   return (

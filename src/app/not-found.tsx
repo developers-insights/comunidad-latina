@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Compass, Buildings, ShieldCheck, BookOpen } from "@phosphor-icons/react/dist/ssr";
+import { Compass, Buildings, BookOpen } from "@phosphor-icons/react/dist/ssr";
 import { ThemeToggle } from "@/components/theme";
 import { EmptyState, buttonVariants } from "@/components/ui";
 
@@ -21,7 +21,6 @@ const COPY = {
   cta: "Volver al inicio",
   links: [
     { href: "/propiedades", label: "Buscar vivienda", icon: Buildings },
-    { href: "/escudo", label: "Centro de seguridad", icon: ShieldCheck },
     { href: "/guias", label: "Guías para recién llegados", icon: BookOpen },
   ],
 } as const;

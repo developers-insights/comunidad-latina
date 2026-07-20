@@ -164,7 +164,16 @@ export default async function MarketingHome() {
           <p className="mt-3 max-w-xl text-foreground-secondary">{COPY.pillars.subtitle}</p>
         </Reveal>
 
-        <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-3">
+        {/* Columnas derivadas de la CANTIDAD de pilares, no fijas en 3: al
+            ocultar Escudo (2026-07-20) quedaban 2 cards en una grilla de 3 y
+            se veía un hueco. Así el landing no se rompe cada vez que un pilar
+            entra o sale. */}
+        <div
+          className={cn(
+            "mt-10 grid grid-cols-1 gap-5",
+            COPY.pillars.items.length >= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+          )}
+        >
           {COPY.pillars.items.map((pillar, index) => {
             const Icon = PILLAR_ICONS[pillar.key];
             return (

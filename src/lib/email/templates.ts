@@ -162,7 +162,6 @@ export function welcomeEmail(params: {
     </p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       ${linkRow(`${site}/propiedades`, "Buscá vivienda verificada", "Avisos con Trust Score y verificación de la comunidad.")}
-      ${linkRow(`${site}/escudo`, "Centro de seguridad", "Verificá a quien te ofrece algo antes de mover un peso.")}
       ${linkRow(`${site}/feed`, "Pasá por el feed", "Lo que está pasando en tu comunidad, hoy.")}
     </table>
     ${ctaButton(`${site}/feed`, "Entrar a la comunidad", params.brandHex)}`;
@@ -170,7 +169,7 @@ export function welcomeEmail(params: {
     subject: `Bienvenido a ${params.tenantName} — tu comunidad te espera`,
     html: baseLayout(
       { tenantName: params.tenantName, brandHex: params.brandHex },
-      "Ya sos parte. Vivienda verificada, Centro de seguridad y tu gente, en un solo lugar.",
+      "Ya sos parte. Vivienda verificada y tu gente, en un solo lugar.",
       content,
     ),
   };

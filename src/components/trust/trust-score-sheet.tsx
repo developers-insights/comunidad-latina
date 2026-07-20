@@ -25,7 +25,7 @@ export interface TrustScoreSheetProps {
   score: number;
   level: TrustLevel;
   signals: TrustSignal[];
-  /** Destino de "Leer cómo funciona el Trust Score". */
+  /** Destino de "Leer cómo funciona el Trust Score". Sin valor, no se renderiza el link. */
   learnMoreHref?: string;
 }
 
@@ -40,7 +40,7 @@ export function TrustScoreSheet({
   score,
   level,
   signals,
-  learnMoreHref = "/escudo/trust-score",
+  learnMoreHref,
 }: TrustScoreSheetProps) {
   const config = TRUST_LEVELS[level];
   const filled = levelSegments(level);
@@ -117,12 +117,15 @@ export function TrustScoreSheet({
         ))}
       </ul>
 
-      <Link
-        href={learnMoreHref}
-        className="mt-6 mb-2 inline-block text-sm font-semibold text-brand-ink underline-offset-4 hover:underline"
-      >
-        Leer cómo funciona el Trust Score
-      </Link>
+      {/* Sin destino explícito no hay link (feature oculta 2026-07-20). */}
+      {learnMoreHref && (
+        <Link
+          href={learnMoreHref}
+          className="mt-6 mb-2 inline-block text-sm font-semibold text-brand-ink underline-offset-4 hover:underline"
+        >
+          Leer cómo funciona el Trust Score
+        </Link>
+      )}
     </BottomSheet>
   );
 }

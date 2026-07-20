@@ -3,7 +3,6 @@ import {
   Buildings,
   CalendarBlank,
   HouseSimple,
-  ShieldCheck,
   ShoppingBagOpen,
   Sparkle,
   Storefront,
@@ -93,12 +92,11 @@ export const MODULES: ModuleItem[] = [
     icon: Sparkle,
     palette: accentPalette("var(--accent-creadores)"),
   },
-  {
-    href: "/escudo",
-    label: t("nav", "moduleEscudo"),
-    icon: ShieldCheck,
-    palette: accentPalette("var(--accent-escudo)"),
-  },
+  // Escudo oculto por ahora (pedido cliente 2026-07-20): la feature entera
+  // está apagada — sin entry point acá, y la ruta directa también 404.
+  // Al reactivarla, volver a montar:
+  //   { href: "/escudo", label: t("nav", "moduleEscudo"), icon: ShieldCheck,
+  //     palette: accentPalette("var(--accent-escudo)") }
 ];
 
 /**

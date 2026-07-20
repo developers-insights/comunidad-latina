@@ -30,14 +30,14 @@ const COPY: Record<ScamShieldVariant, { lead: string; body: string }> = {
 
 export interface ScamShieldNoticeProps {
   variant: ScamShieldVariant;
-  /** Destino de "Aprender a identificar estafas". */
+  /** Destino de "Aprendé a cuidarte". Sin valor, no se renderiza el link. */
   learnHref?: string;
   className?: string;
 }
 
 export function ScamShieldNotice({
   variant,
-  learnHref = "/escudo",
+  learnHref,
   className,
 }: ScamShieldNoticeProps) {
   const copy = COPY[variant];
@@ -59,13 +59,17 @@ export function ScamShieldNotice({
         <p>
           <strong className="font-semibold">{copy.lead}</strong> {copy.body}
         </p>
-        <a
-          href={learnHref}
-          className="mt-2 inline-flex items-center gap-1 font-semibold text-warning-ink underline-offset-4 hover:underline"
-        >
-          Aprendé a cuidarte
-          <ArrowRight size={14} aria-hidden="true" />
-        </a>
+        {/* Sin destino explícito no hay link (feature oculta 2026-07-20):
+            el aviso de seguridad en sí queda, pero no apunta a ningún lado. */}
+        {learnHref && (
+          <a
+            href={learnHref}
+            className="mt-2 inline-flex items-center gap-1 font-semibold text-warning-ink underline-offset-4 hover:underline"
+          >
+            Aprendé a cuidarte
+            <ArrowRight size={14} aria-hidden="true" />
+          </a>
+        )}
       </div>
     </div>
   );

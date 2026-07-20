@@ -70,7 +70,7 @@ export const ASSISTANT_COPY = {
     tooShort: "Contame un poquito más para poder buscarte una buena respuesta.",
   },
 
-  /** Card de entrada discreta en /feed y en el hub /escudo. */
+  /** Card de entrada discreta en /feed. */
   entry: {
     title: "Preguntale al Asistente",
     description:

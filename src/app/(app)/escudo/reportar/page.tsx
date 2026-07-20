@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
@@ -28,6 +29,12 @@ const COPY = {
 } as const;
 
 export const metadata: Metadata = { title: COPY.title };
+
+// Feature oculta por pedido del cliente (2026-07-20): ver la nota en
+// app/(app)/escudo/page.tsx. Tipada como `boolean` (no el literal `false`)
+// para que TS no marque el resto de la función como código muerto y rompa
+// el narrowing de abajo.
+const ESCUDO_ENABLED: boolean = false;
 
 type ProfileRef = { id: string; display_name: string } | null;
 
@@ -108,6 +115,8 @@ async function getConversationOptions(): Promise<{
 }
 
 export default async function ReportarPage() {
+  if (!ESCUDO_ENABLED) notFound();
+
   const { authenticated, options } = await getConversationOptions();
 
   return (

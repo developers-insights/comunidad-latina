@@ -82,7 +82,15 @@ export function CommentComposer({ postId }: { postId: string }) {
         event.preventDefault();
         send();
       }}
-      className="flex items-end gap-2 rounded-2xl border border-border bg-surface-raised p-2 shadow-sm"
+      className={cn(
+        "flex items-end gap-2 rounded-2xl border border-border bg-surface-raised p-2 shadow-sm",
+        // El anillo de foco vive en el FORM, no en el textarea: así sigue la
+        // píldora en vez de dibujar un rectángulo que no empalma con la card
+        // (el textarea apaga su outline, y sin esto no quedaba NINGÚN indicador
+        // visible de foco — el navegador ponía el suyo, cuadrado).
+        "transition-shadow duration-(--duration-fast)",
+        "focus-within:ring-[3px] focus-within:ring-focus-ring",
+      )}
     >
       <label htmlFor="comment-composer-body" className="sr-only">
         {COPY.comments.placeholder}
@@ -107,7 +115,7 @@ export function CommentComposer({ postId }: { postId: string }) {
         }}
         className={cn(
           "max-h-36 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-foreground",
-          "placeholder:text-foreground-muted focus:outline-none",
+          "placeholder:text-foreground-muted focus:outline-none focus-visible:outline-none",
           "disabled:opacity-60",
         )}
       />

@@ -22,7 +22,6 @@ import {
 import {
   checkQuestionGuardrail,
   hasSensitiveChunk,
-  isScamTopic,
   isSensitiveTopic,
 } from "./_lib/guardrails";
 import { buildSourceInfo } from "./_lib/sources";
@@ -109,10 +108,6 @@ const ACTION_PROFESIONALES: AssistantAction = {
 };
 const ACTION_GUIAS: AssistantAction = { label: "Leer las guías completas", href: "/guias" };
 const ACTION_FEED: AssistantAction = { label: "Preguntar en la comunidad", href: "/feed" };
-const ACTION_ESCUDO: AssistantAction = {
-  label: "Abrir el centro de seguridad",
-  href: "/escudo",
-};
 
 /* ------------------------------ Helpers --------------------------------- */
 
@@ -314,7 +309,6 @@ export async function POST(request: Request) {
   }
 
   let sensitive = isSensitiveTopic(question);
-  const scam = isScamTopic(question);
 
   // 4. Guardrail de ENTRADA — capa 1, sin tocar el LLM.
   //    4a. Moderación (omni-moderation; `skipped` ≠ flagged → se sigue).
@@ -375,7 +369,6 @@ export async function POST(request: Request) {
       sourcesUsed: [],
     });
     const actions: AssistantAction[] = [ACTION_GUIAS, ACTION_FEED];
-    if (scam) actions.unshift(ACTION_ESCUDO);
     if (sensitive) actions.unshift(ACTION_PROFESIONALES);
     return fixedResponse(setCookie, queryId, RESPUESTA_SIN_FUENTES, actions.slice(0, 3));
   }
@@ -412,7 +405,6 @@ export async function POST(request: Request) {
 
   const actions: AssistantAction[] = [];
   if (sensitive) actions.push(ACTION_PROFESIONALES);
-  if (scam) actions.push(ACTION_ESCUDO);
 
   return ndjsonResponse(setCookie, async (send) => {
     send({ t: "start", queryId });

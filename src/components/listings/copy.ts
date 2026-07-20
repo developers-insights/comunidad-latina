@@ -52,8 +52,11 @@ export const COPY = {
     locationTitle: "Ubicación aproximada",
     locationPrivacy:
       "La dirección exacta se comparte cuando el anunciante acepta tu contacto.",
-    contactCta: "Contactar (protegido)",
-    contactHint: "Tu contacto queda protegido dentro de la app",
+    // Una sola mención de la protección, y concreta (pedido cliente
+    // 2026-07-20): decirlo en el botón Y debajo sonaba a insistencia, y
+    // "protegido" no dice QUÉ se protege. El dato que importa es el teléfono.
+    contactCta: "Contactar",
+    contactHint: "Tu teléfono no se comparte",
     contactSuccessTitle: "¡Listo! Le avisamos al anunciante",
     contactSuccessBody: "Cuando acepte tu contacto, van a poder hablar por acá.",
     // Resultados no-felices del contacto protegido. La server action mapea cada

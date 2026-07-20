@@ -11,8 +11,9 @@ import { cn } from "@/lib/utils";
 import { requestContactAction } from "@/app/(app)/propiedades/actions";
 
 const COPY = {
-  cta: "Contactar (protegido)",
-  hint: "Tu contacto queda protegido dentro de la app",
+  // Ver nota en listings/copy.ts: una sola mención, y concreta.
+  cta: "Contactar",
+  hint: "Tu teléfono no se comparte",
   successTitle: "¡Listo! Le avisamos",
   successBody: "Cuando acepte tu contacto, van a poder hablar por acá.",
   errorTitle: "No pudimos enviar tu solicitud",
@@ -74,10 +75,12 @@ export function DirectoryContactCta({
   return (
     <>
       <div
+        // Barra sólida como el bottom nav (ver nota en listings/contact-cta):
+        // el degradado dejaba ver la card de abajo y parecía un solapamiento.
         className={cn(
           "fixed inset-x-0 z-30",
           "bottom-[calc(3.5rem+env(safe-area-inset-bottom))]",
-          "bg-gradient-to-t from-canvas via-canvas/95 to-transparent pb-3 pt-6",
+          "border-t border-border bg-surface/92 backdrop-blur-md pb-3 pt-3",
         )}
       >
         <div className="mx-auto w-full max-w-lg px-4">

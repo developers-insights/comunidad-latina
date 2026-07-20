@@ -47,6 +47,13 @@ export const metadata = { title: "Feed" };
 
 const PAGE_SIZE = 8;
 
+// Guía destacada del feed: oculta por ahora (pedido cliente 2026-07-20). La
+// app tiene que mostrar la plataforma; intercalar una guía manda a la gente a
+// leer a otro lado justo cuando está entrando al contenido de la comunidad.
+// Tipada como `boolean` (no el literal `false`) para no romper el narrowing de
+// abajo — mismo patrón que ASSISTANT_ENABLED en /asistente.
+const GUIDES_IN_FEED_ENABLED: boolean = false;
+
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 function firstValue(value: string | string[] | undefined): string {
@@ -243,7 +250,7 @@ async function ParaTiFeed({
   const [postsResult, listingsResult, guideResult] = await Promise.all([
     postsQuery,
     listingsQuery,
-    isFirstPage
+    isFirstPage && GUIDES_IN_FEED_ENABLED
       ? supabase
           .from("guides")
           .select("slug, title, summary, reading_minutes")

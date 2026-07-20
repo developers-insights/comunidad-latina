@@ -8,8 +8,7 @@ export const COPY = {
     title: "Mensajes",
     emptyTitle: "Tus conversaciones van a aparecer acá",
     emptyMessage:
-      "Cuando alguien te escriba por un aviso, o vos pidas contacto, la conversación vive acá adentro — protegida.",
-    emptyAction: "Buscar propiedades",
+      "Cuando alguien te escriba por un aviso, o vos pidas contacto, la conversación se abre acá.",
     wantsToContact: (listingTitle: string | null) =>
       listingTitle
         ? `Quiere contactarte por “${listingTitle}”`

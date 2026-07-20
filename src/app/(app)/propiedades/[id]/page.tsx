@@ -10,7 +10,7 @@ import {
   Storefront,
 } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui";
-import { ScamShieldNotice } from "@/components/trust";
+
 import {
   COPY,
   ContactCta,
@@ -189,9 +189,9 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
   return (
     // pb-40: el CTA "Contactar" es `fixed` sobre el bottom-nav (3.5rem) y se
     // eleva con env(safe-area-inset-bottom) en equipos con notch/home indicator.
-    // Su footprint real (gradiente pt-6 + botón lg + hint) ronda las 7rem, así
-    // que con el pb-28 del <main> queda holgura suficiente para que ni la card
-    // de Ubicación ni el ScamShieldNotice queden tapados. Ver §4.d (CTA sticky).
+    // Su footprint real (barra sólida + botón lg + hint) ronda las 7rem, así que
+    // con el pb-28 del <main> queda holgura para que la última card no quede
+    // tapada. Ver §4.d (CTA sticky).
     <div className="pb-40">
       <DetailTopBar title={listing.title} listingId={listing.id} />
 
@@ -246,8 +246,9 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
         </section>
       )}
 
-      {/* Escudo Anti-Estafa — SIEMPRE presente en listings de renta (§4.d) */}
-      <ScamShieldNotice variant="rental" className="mt-6" />
+      {/* Escudo Anti-Estafa oculto por ahora (pedido cliente 2026-07-20): la
+          feature entera está apagada, así que su card tampoco se muestra acá.
+          Al reactivar Escudo, volver a montar <ScamShieldNotice variant="rental" />. */}
 
       {listing.description && (
         <section className="mt-6">

@@ -24,9 +24,14 @@ describe("isModuleActive", () => {
 });
 
 describe("MODULES", () => {
-  it("son los 8 módulos de la plataforma, sin href repetido", () => {
-    expect(MODULES).toHaveLength(8);
-    expect(new Set(MODULES.map((m) => m.href)).size).toBe(8);
+  // 7, no 8: Escudo está oculto por pedido del cliente (2026-07-20).
+  it("son los módulos visibles de la plataforma, sin href repetido", () => {
+    expect(MODULES).toHaveLength(7);
+    expect(new Set(MODULES.map((m) => m.href)).size).toBe(7);
+  });
+
+  it("Escudo NO figura mientras la feature esté oculta", () => {
+    expect(MODULES.some((m) => m.href.startsWith("/escudo"))).toBe(false);
   });
 
   it("cada módulo trae etiqueta e ícono — nunca un ítem solo-ícono", () => {

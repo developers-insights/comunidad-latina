@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Flag, Scales, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard } from "@/components/ui";
 import { ScamShieldNotice } from "@/components/trust";
@@ -94,6 +95,12 @@ const SIGNALS: Signal[] = [
 
 export const metadata: Metadata = { title: COPY.title };
 
+// Feature oculta por pedido del cliente (2026-07-20): ver la nota en
+// app/(app)/escudo/page.tsx. Tipada como `boolean` (no el literal `false`)
+// para que TS no marque el resto de la función como código muerto y rompa
+// el narrowing de abajo.
+const ESCUDO_ENABLED: boolean = false;
+
 function SignalCard({ signal, index }: { signal: Signal; index: number }) {
   return (
     <BezelCard coreClassName="flex flex-col gap-3 p-5">
@@ -127,6 +134,8 @@ function SignalCard({ signal, index }: { signal: Signal; index: number }) {
 }
 
 export default function AprenderPage() {
+  if (!ESCUDO_ENABLED) notFound();
+
   return (
     <div className="flex flex-col gap-6">
       <BackLink href="/escudo" label={COPY.back} />

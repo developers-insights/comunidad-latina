@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import {
   BookOpenText,
   CaretRight,
@@ -35,6 +36,13 @@ const COPY = {
 } as const;
 
 export const metadata: Metadata = { title: COPY.title };
+
+// Feature oculta por pedido del cliente (2026-07-20): el Escudo no debe
+// figurar en ningún lado de la app — sin entry points y con 404 directo en
+// esta ruta y sus 4 sub-rutas hasta reactivarla. Tipada como `boolean` (no
+// el literal `false`) para que TS no marque el resto de la función como
+// código muerto y rompa el narrowing de abajo.
+const ESCUDO_ENABLED: boolean = false;
 
 function SectionCard({
   href,
@@ -78,6 +86,8 @@ function SectionCard({
 }
 
 export default function EscudoPage() {
+  if (!ESCUDO_ENABLED) notFound();
+
   return (
     <div className="flex flex-col gap-6">
       {/* Hero compacto */}
