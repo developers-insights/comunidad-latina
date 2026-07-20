@@ -65,7 +65,7 @@ export function ProductGallery({ photos, title, className }: ProductGalleryProps
         {total > 1 && (
           <span
             aria-live="polite"
-            className="cl-print-fill numeric absolute bottom-3 right-3 rounded-full bg-media-scrim px-2.5 py-1 text-xs font-semibold text-on-media"
+            className="cl-print-fill numeric absolute bottom-3 right-3 rounded-full bg-media-scrim px-2.5 py-1 text-xs font-semibold text-on-media backdrop-blur-sm"
           >
             {COPY.detail.photoCounter(active + 1, total)}
           </span>

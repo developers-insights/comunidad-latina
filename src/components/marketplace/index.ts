@@ -3,6 +3,7 @@ export {
   PRODUCT_CATEGORIES,
   PRODUCT_CONDITIONS,
   categoryLabel,
+  categoryShortLabel,
   conditionLabel,
   followerCountLabel,
   formatProductPrice,

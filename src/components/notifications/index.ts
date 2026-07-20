@@ -1,4 +1,3 @@
-export { NotificationBell } from "./notification-bell";
 export { BroadcastCard, type BroadcastCardData } from "./broadcast-card";
 export {
   NotificationItem,

@@ -42,3 +42,8 @@ next-env.d.ts
 
 # Artefactos del MCP de Playwright (e2e local)
 .playwright-mcp/
+
+# Capturas de verificación local (no son artefactos del proyecto)
+*.png
+!public/**/*.png
+!assets-source/**/*.png

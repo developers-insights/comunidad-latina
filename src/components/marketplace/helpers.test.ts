@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   categoryLabel,
+  categoryShortLabel,
   conditionLabel,
   followerCountLabel,
   formatProductPrice,
@@ -66,6 +67,27 @@ describe("isProductCategory / categoryLabel", () => {
 
   it("devuelve null sin categoría", () => {
     expect(categoryLabel(null)).toBeNull();
+  });
+});
+
+describe("categoryShortLabel", () => {
+  it("traduce cada categoría del set curado a su etiqueta corta — cabe en el chip de la card (~170px)", () => {
+    expect(categoryShortLabel("ropa_accesorios")).toBe("Ropa");
+    expect(categoryShortLabel("comida_bebidas")).toBe("Comida");
+    expect(categoryShortLabel("hogar")).toBe("Hogar");
+    expect(categoryShortLabel("belleza_cuidado")).toBe("Belleza");
+    expect(categoryShortLabel("electronica")).toBe("Electrónica");
+    expect(categoryShortLabel("ninos_bebes")).toBe("Niños");
+    expect(categoryShortLabel("artesanias")).toBe("Artesanías");
+    expect(categoryShortLabel("otro")).toBe("Otro");
+  });
+
+  it("capitaliza un value fuera del set curado en vez de mostrarlo crudo (mismo fallback que categoryLabel)", () => {
+    expect(categoryShortLabel("mascotas")).toBe("Mascotas");
+  });
+
+  it("devuelve null sin categoría", () => {
+    expect(categoryShortLabel(null)).toBeNull();
   });
 });
 

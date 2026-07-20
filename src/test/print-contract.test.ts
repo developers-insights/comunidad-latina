@@ -338,17 +338,17 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-brand-foreground"],
     cobertura: "control",
   },
-  // OJO: el contador de no leídas NO vive en un <button>, vive en un <Link>. Lo
-  // esconde el <header> sticky del shell, que es hermano de <main> (no descendiente),
-  // así que `header:not(main header)` lo alcanza. Este test lo pilló: la primera
-  // versión del inventario decía "control" y explotó.
-  "src/components/notifications/notification-bell.tsx": {
-    inks: ["text-brand-foreground"],
-    cobertura: "header",
-    prueba: {
-      archivo: "src/components/shell/header.tsx",
-      contiene: ["<header", "<NotificationBell"],
-    },
+  // Menú de la app (2026-07-20): el CTA "Publicar" y el contador de no leídas
+  // viven en un panel montado por PORTAL en <body> — fuera de <main> y fuera
+  // del <header>, así que ni `header:not(main header)` ni la regla de <button>
+  // lo alcanzan. Cobertura explícita: el panel lleva `cl-print-hide` (es chrome:
+  // en papel no significa nada). Reemplaza a la campana del header, borrada
+  // junto con el rail de módulos.
+  // Dos usos, y el inventario cuenta ocurrencias a propósito: el CTA "Publicar
+  // algo" y el contador de no leídas de la fila de Notificaciones.
+  "src/components/shell/app-menu.tsx": {
+    inks: ["text-brand-foreground", "text-brand-foreground"],
+    cobertura: "cl-print-hide",
   },
   "src/components/onboarding/onboarding-wizard.tsx": {
     inks: ["text-brand-foreground"],

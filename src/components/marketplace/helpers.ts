@@ -13,14 +13,14 @@ import { formatListingPrice } from "@/components/listings";
 // ---------------------------------------------------------------------------
 
 export const PRODUCT_CATEGORIES = [
-  { value: "ropa_accesorios", label: "Ropa y accesorios" },
-  { value: "comida_bebidas", label: "Comida y bebidas" },
-  { value: "hogar", label: "Hogar" },
-  { value: "belleza_cuidado", label: "Belleza y cuidado personal" },
-  { value: "electronica", label: "Electrónica" },
-  { value: "ninos_bebes", label: "Niños y bebés" },
-  { value: "artesanias", label: "Artesanías" },
-  { value: "otro", label: "Otro" },
+  { value: "ropa_accesorios", label: "Ropa y accesorios", shortLabel: "Ropa" },
+  { value: "comida_bebidas", label: "Comida y bebidas", shortLabel: "Comida" },
+  { value: "hogar", label: "Hogar", shortLabel: "Hogar" },
+  { value: "belleza_cuidado", label: "Belleza y cuidado personal", shortLabel: "Belleza" },
+  { value: "electronica", label: "Electrónica", shortLabel: "Electrónica" },
+  { value: "ninos_bebes", label: "Niños y bebés", shortLabel: "Niños" },
+  { value: "artesanias", label: "Artesanías", shortLabel: "Artesanías" },
+  { value: "otro", label: "Otro", shortLabel: "Otro" },
 ] as const;
 
 export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number]["value"];
@@ -34,6 +34,20 @@ export function categoryLabel(value: string | null): string | null {
   if (!value) return null;
   const known = PRODUCT_CATEGORIES.find((option) => option.value === value);
   return known ? known.label : value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/**
+ * Versión corta de `categoryLabel` — pensada para el chip flotante de
+ * ProductCard, que en la grilla 2-col vive en ~170px y no tiene lugar para
+ * "Belleza y cuidado personal" en una sola línea. Mismo patrón y mismo
+ * fallback que `categoryLabel` (capitaliza el value crudo si no matchea el
+ * set curado); ese fallback puede seguir siendo largo, por eso la card igual
+ * lleva `truncate` como red de seguridad.
+ */
+export function categoryShortLabel(value: string | null): string | null {
+  if (!value) return null;
+  const known = PRODUCT_CATEGORIES.find((option) => option.value === value);
+  return known ? known.shortLabel : value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 // ---------------------------------------------------------------------------
