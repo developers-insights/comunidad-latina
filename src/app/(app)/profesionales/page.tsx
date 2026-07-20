@@ -6,6 +6,7 @@ import {
   buildTrustSignals,
   decodeCursor,
   encodeCursor,
+  firstPhotoUrl,
   toTrustLevel,
   type PublisherView,
   type VerificationView,
@@ -14,6 +15,7 @@ import {
   CategoryChips,
   COPY,
   ProfessionalCard,
+  ProfessionalListSkeleton,
   isProfessionalCategory,
   parseProfessionalAttrs,
   type ProfessionalCardModel,
@@ -73,7 +75,7 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
   // -------------------------------------------------------------------------
   let query = supabase
     .from("listings")
-    .select("id, title, area_label, attrs, created_by, publisher_name, created_at")
+    .select("id, title, area_label, attrs, photos, created_by, publisher_name, created_at")
     .eq("tenant_id", tenant.id)
     .eq("kind", "professional")
     .eq("status", "published")
@@ -170,11 +172,14 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
       publisher = { type: "external", name: row.publisher_name };
     }
 
+    const attrs = parseProfessionalAttrs(row.attrs);
     return {
       id: row.id,
       title: row.title,
-      category: parseProfessionalAttrs(row.attrs).category,
+      category: attrs.category,
+      credentials: attrs.credentials,
       areaLabel: row.area_label,
+      photoUrl: firstPhotoUrl(row.photos),
       verification: verificationByListing.get(row.id) ?? null,
       publisher,
     };
@@ -262,11 +267,7 @@ function PageSkeleton() {
         <Skeleton className="h-11 w-24 rounded-full" />
         <Skeleton className="h-11 w-20 rounded-full" />
       </div>
-      <div className="flex flex-col gap-4">
-        {Array.from({ length: 3 }).map((_, index) => (
-          <Skeleton key={index} className="h-44 w-full rounded-xl" />
-        ))}
-      </div>
+      <ProfessionalListSkeleton />
     </div>
   );
 }

@@ -143,6 +143,17 @@ export async function POST(request: Request) {
           break;
         }
 
+        // Campaña de post (feedback cliente 2026-07-19): checkout one-time con
+        // metadata.post_promotion_id — misma disciplina que el boost, la activa
+        // SOLO este webhook al confirmarse el pago.
+        const postPromotionId = metadataString(session.metadata, "post_promotion_id");
+        if (postPromotionId) {
+          if (session.payment_status === "paid") {
+            await activatePostPromotion(admin, postPromotionId, session);
+          }
+          break;
+        }
+
         const businessAccountId = metadataString(
           session.metadata,
           "business_account_id",
@@ -180,6 +191,8 @@ export async function POST(request: Request) {
         const session = event.data.object as Stripe.Checkout.Session;
         const boostId = metadataString(session.metadata, "boost_id");
         if (boostId) await activateBoost(admin, boostId, session);
+        const postPromotionId = metadataString(session.metadata, "post_promotion_id");
+        if (postPromotionId) await activatePostPromotion(admin, postPromotionId, session);
         break;
       }
 
@@ -349,6 +362,87 @@ async function activateBoost(
     subject_kind: "boost",
     subject_id: boost.id,
     meta: { listing_id: boost.listing_id, duration_days: boost.duration_days },
+  });
+}
+
+/**
+ * Activa una campaña de post pagada (feedback cliente 2026-07-19): status
+ * active + ventana [now, now + días]. Misma disciplina de correlación que
+ * activateBoost (fiscal R3): antes de activar exige que (a) la campaña siga
+ * `pending_payment`, (b) la session del evento sea EXACTAMENTE la vinculada al
+ * crearla, y (c) el monto cobrado coincida. Discrepancia → log de alerta + NO
+ * activar (sin throw: reintentar no lo arregla; queda en payment_events para
+ * reconciliar a mano). Idempotente: si ya está activa (retry), no hace nada.
+ */
+async function activatePostPromotion(
+  admin: AdminClient,
+  promotionId: string,
+  session: Stripe.Checkout.Session,
+): Promise<void> {
+  const { data: promo, error: selectError } = await admin
+    .from("post_promotions")
+    .select(
+      "id, tenant_id, post_id, buyer_id, duration_days, status, amount_cents, stripe_checkout_session_id",
+    )
+    .eq("id", promotionId)
+    .maybeSingle();
+  if (selectError) throw new Error(`select post_promotions: ${selectError.code}`);
+  if (!promo) {
+    console.warn(`[pagos:webhook] post_promotion ${promotionId} no existe — se ignora.`);
+    return;
+  }
+  if (promo.status === "active") return; // retry: ya activada
+  if (promo.status !== "pending_payment") {
+    console.error(
+      `[pagos:webhook] ALERTA post_promotion ${promotionId}: pago confirmado (${session.id}) pero está "${promo.status}" (¿cancelada/expirada?) — NO se activa. Revisar refund en el Dashboard.`,
+    );
+    return;
+  }
+  if (
+    !promo.stripe_checkout_session_id ||
+    promo.stripe_checkout_session_id !== session.id
+  ) {
+    console.error(
+      `[pagos:webhook] ALERTA post_promotion ${promotionId}: la session ${session.id} no coincide con la vinculada (${promo.stripe_checkout_session_id ?? "ninguna"}) — NO se activa.`,
+    );
+    return;
+  }
+  if (session.amount_total !== promo.amount_cents) {
+    console.error(
+      `[pagos:webhook] ALERTA post_promotion ${promotionId}: amount_total ${session.amount_total ?? "null"} ≠ esperado ${promo.amount_cents} — NO se activa.`,
+    );
+    return;
+  }
+
+  const startsAt = new Date();
+  const endsAt = new Date(startsAt.getTime() + promo.duration_days * 86_400_000);
+
+  const { error: updateError } = await admin
+    .from("post_promotions")
+    .update({
+      status: "active",
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
+    })
+    .eq("id", promo.id);
+  if (updateError) throw new Error(`update post_promotions: ${updateError.code}`);
+
+  // Notificación + auditoría: best-effort, jamás rompen la activación.
+  await createNotification(admin, {
+    tenantId: promo.tenant_id,
+    profileId: promo.buyer_id,
+    kind: "post_promotion",
+    title: "¡Tu campaña ya está activa!",
+    body: `Tu publicación llega a toda la comunidad hasta el ${formatDate(endsAt, { style: "long" })}.`,
+    href: `/feed/${promo.post_id}`,
+  });
+  await admin.from("audit_log").insert({
+    tenant_id: promo.tenant_id,
+    actor_id: promo.buyer_id,
+    action: "post_promotion_activated",
+    subject_kind: "post_promotion",
+    subject_id: promo.id,
+    meta: { post_id: promo.post_id, duration_days: promo.duration_days },
   });
 }
 

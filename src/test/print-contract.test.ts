@@ -245,6 +245,12 @@ type Entrada = {
 };
 
 const INVENTARIO: Record<string, Entrada> = {
+  // Botón "Quitar foto" del form de publicar producto — mismo patrón que
+  // /publicar/publish-form.tsx (abajo): es un <button>, el @media print ya lo esconde.
+  "src/app/(app)/marketplace/publicar/publish-form.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "control",
+  },
   "src/app/(app)/publicar/publish-form.tsx": { inks: ["text-on-media"], cobertura: "control" },
   // Hero de la landing: el respaldo es el <picture><img> de hero-backdrop, y un
   // <img> se imprime siempre (lo que el navegador omite es `background-*`). Fuera
@@ -253,6 +259,38 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: Array<string>(6).fill("text-on-media"),
     cobertura: "sobre <img>",
     prueba: { archivo: "src/components/marketing/hero-backdrop.tsx", contiene: ["<img"] },
+  },
+  // Creator Marketplace: chips de categoría/urgente/disponibilidad flotando
+  // sobre la foto del aviso o del portfolio (overlay de CardMedia) + el ícono
+  // del fallback violeta — mismo motivo que product-card.tsx: se imprimen con su
+  // velo (bg-media-scrim + cl-print-fill).
+  "src/app/(app)/creadores/[id]/page.tsx": {
+    inks: Array<string>(5).fill("text-on-media"),
+    cobertura: "cl-print-fill",
+  },
+  // Chips del filtro de categoría del feed de trabajos: son CHROME (filtro), el
+  // hook los esconde en papel — el activo es text-brand-foreground sobre bg-brand.
+  "src/app/(app)/creadores/page.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
+  "src/components/creators/gig-card.tsx": {
+    inks: ["text-on-media", "text-on-media", "text-on-media"],
+    cobertura: "cl-print-fill",
+  },
+  "src/components/creators/creator-card.tsx": {
+    inks: ["text-on-media", "text-on-media"],
+    cobertura: "cl-print-fill",
+  },
+  // Botón "Quitar foto" del portfolio / de las fotos del aviso — es un <button>,
+  // el @media print ya lo esconde (mismo patrón que los publish-form de arriba).
+  "src/components/creators/creator-profile-form.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "control",
+  },
+  "src/components/creators/gig-publish-form.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "control",
   },
   "src/components/admin/admin-nav.tsx": { inks: ["text-brand-foreground"], cobertura: "nav" },
   // Único portador que no es control: escudo verde sobre el avatar.
@@ -277,6 +315,24 @@ const INVENTARIO: Record<string, Entrada> = {
   "src/components/marketing/language-toggle.tsx": {
     inks: ["text-brand-foreground"],
     cobertura: "control",
+  },
+  // Ícono decorativo del banner "para dueños" de /marketplace — mismo hook que
+  // IdentityBadge: escudo/megáfono claro sobre un relleno de acento sólido.
+  "src/components/marketplace/owner-banner.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-fill",
+  },
+  // Chip de categoría flotando sobre la foto de la card de producto (overlay
+  // de CardMedia) — mismo motivo que el chip de arriba.
+  "src/components/marketplace/product-card.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-fill",
+  },
+  // Contador "2/4" de la galería del detalle de producto — mismo patrón que
+  // listings/gallery.tsx: se imprime con su velo (bg-media-scrim + cl-print-fill).
+  "src/components/marketplace/product-gallery.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-fill",
   },
   "src/components/messaging/composer.tsx": {
     inks: ["text-brand-foreground"],
@@ -305,6 +361,13 @@ const INVENTARIO: Record<string, Entrada> = {
   "src/components/ui/button.tsx": {
     inks: ["text-brand-foreground", "text-on-danger"],
     cobertura: "buttonVariants",
+  },
+  // Primitivo CardMedia: la franja overlayBottom (bg-media-scrim + text-on-media)
+  // se dibuja sobre el <img>/Image, que sí se imprime (el navegador omite el
+  // background del velo, no la foto). Mismo criterio que el hero de la landing.
+  "src/components/ui/card-media.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "sobre <img>",
   },
 };
 

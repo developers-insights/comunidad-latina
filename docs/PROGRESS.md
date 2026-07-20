@@ -1,7 +1,85 @@
 # PROGRESS — Comunidad Latina
 
-**Última actualización:** 2026-07-17 (Blindaje · Semana 2 + fix de LazyMotion strict).
-**Estado:** ✅ **R0–R3 + POLISH + BLINDAJE SEMANA 2 (bloqueo global · sanciones de cuenta · reporte 2 taps).** Producto completo listo para los gates humanos. 55 rutas.
+**Última actualización:** 2026-07-19 (Feedback del cliente → Marketplace + Creator Marketplace + reglas de alcance del feed + restyle foto-grande + rail de módulos).
+**Estado:** ✅ **R0–R3 + BLINDAJE + FEEDBACK CLIENTE 2026-07-19 implementado completo.** 60+ rutas. Gates verdes: `tsc` 0 · lint 0 errores · **831 tests** · `next build --webpack` verde · enumerador RLS verde (37 superficies).
+
+## Feedback del cliente (WhatsApp 19/7) — implementado completo (✅ 2026-07-19)
+
+Orquestado con 5 agentes en paralelo (ownership de archivos estricto) + curador de imágenes.
+Migraciones **0023–0025 aplicadas a la base real**. Todo el pedido de Geovanny quedó funcionando:
+
+- **Estética "Propiedades" en todos los módulos** — eventos/negocios/profesionales con foto hero
+  16:9 (`CardMedia` nuevo en `ui/`), acentos de color por módulo (`--accent-*` en globals, fijos
+  como la marca tricolor; texto siempre con tokens `-ink`). Negocios NO tiene ruta de detalle por
+  diseño (BottomSheet); su follow vive en la tienda del Marketplace.
+- **Marketplace** (`/marketplace`) — productos = `listings kind='product'` con
+  `attrs.store_listing_id` → negocio dueño. Grid 2-col, categorías canónicas
+  (`PRODUCT_CATEGORIES` en `components/marketplace/helpers.ts` — el seed DEBE usar esas claves),
+  tienda (`/marketplace/tienda/[id]`) con FollowButton, publicar con moderación real.
+- **Creator Marketplace** (`/creadores`) — avisos = `kind='creator_gig'` (presupuesto en
+  `price_amount`); `creator_profiles` (reputación por triggers, JAMÁS escribible por el cliente),
+  `gig_applications`, `gig_contracts` (código `CL-YYYY-NNNN` por secuencia, fee 20% en columnas
+  GENERADAS por la DB, escrituras SOLO service_role vía actions con guard optimista de transición
+  — máquina de estados pura en `components/creators/contract-machine.ts`, la misma tabla autoriza
+  server y pinta botones), `gig_reviews` (solo partes de contrato `released`, inmutables, refresh
+  de rating por trigger). **Pagos en modo demo etiquetado** (`payment_mode='demo'`): Stripe
+  Connect es fase siguiente; columnas `stripe_*` listas.
+- **Reglas del feed** — `posts.entity_listing_id` (publicar como tu negocio/evento; ownership por
+  policy). Orgánico de entidad → SOLO seguidores (`follows`, 0023) · promocionado
+  (`post_promotions`, espejo de boosts, chip **"Publicidad"**) → todos · personales → todos.
+  **Es regla de DISTRIBUCIÓN en la query (`feed/queries.ts`), NO frontera RLS** (el post published
+  sigue público en su detalle y en la página de la entidad — documentado en el archivo).
+  Campañas: `/impulsar-post/[postId]` (paquetes 7/14/30, audiencia all/zonas persistida; sin
+  Stripe → activación demo etiquetada; con Stripe → checkout + webhook ya discriminado).
+- **Foto obligatoria en posts** — 3 capas: trigger DB `MEDIA_REQUIRED` (INSERT de `kind='post'`,
+  service_role exento), server action, y composer con CTA deshabilitado + hint. `kind='question'`
+  exento. **Decisión de producto: publicación instantánea + moderación a posteriori** (sin Vision
+  el post nace `published` y se encola `TIER_HUMAN`; la red de seguridad ya existía: reporte 2
+  taps + bloqueos + sanciones). Con Vision configurado vuelve el screening síncrono.
+  Subida migrada al bucket **`post-media`** (0025, path `{tenant}/{user}/…`) con cliente del
+  usuario — **eliminado el desvío admin de `listing-photos`** documentado en feed/actions.
+- **Rail de módulos** — cápsulas de color scrolleables bajo el header (sticky compartido con el
+  header a propósito: dos sticky hermanos no apilan bien), 8 módulos con acento propio; bottom
+  nav sigue en 4 tabs. Toggles de admin sincronizados en los 3 espejos (`MODULE_KEYS` en
+  admin/dominio/actions, `DEFAULT_MODULES` en tenant/resolve, `MODULES` en module-toggles) +
+  `tenants.modules` del tenant real con `marketplace`/`creadores` en true.
+- **Grafo social** — `follows` (0023): polimórfico listing|profile, respeta `pair_blocked` (0020)
+  y sanciones (0021); `FollowButton` compartido (`components/social/`) + action
+  (`app/(app)/social/actions.ts`). Cleanup de huérfanos por trigger.
+
+**Seed demo (`scripts/seed-demo-content.mjs` + `seed-images.json`)** — la demo dejó de ser 100%
+texto: 44 fotos Pexels VERIFICADAS (curador con WebFetch, solo 200), 23 listings viejos
+fotografiados, 6 personas nuevas (María recreada — la habían borrado en pruebas de baja — +
+Altagracia/panadería, Ramón/barbería, Yesenia y Luis creadores, Marisol), 2 tiendas con 8
+productos (claves de categoría canónicas), 2 avisos de creadores, 3 aplicaciones, contrato
+**CL-2026-0001 liberado** ($450 → $360 + $90 con transiciones REALES para ejercitar triggers:
+Yesenia quedó ★5.0 · 1 trabajo) + CL-2026-0002 en curso, reviews mutuas, follows para las cuentas
+demo (geovanny/carlos/manuelnavarro/María; `reycamila04` ajena, NO se toca) y el post de la
+barbería con campaña activa (María no la sigue → lo ve SOLO por "Publicidad": la regla completa
+en una pantalla). Listings nuevos backdateados a propósito (la 1ª página del feed es gente, no
+catálogo). Password nueva en `SEED_DEMO_PASSWORD` (.env.local, fuera del repo).
+
+**Verificación:** gates arriba + e2e Playwright contra `next start` real (build de prod, puerto
+3377) con login real: feed con las 3 visibilidades + chip Publicidad, eventos/marketplace/
+creadores/buscar con foto grande, contrato CL-2026-0001 con stepper/desglose/reseñas. Capturas
+en la raíz del repo (`demo-*.png`, sin commitear). OJO: los `<img loading="lazy">` no cargan en
+screenshots fullPage sin scrollear antes (helper en la sesión). La caché de webpack se corrompió
+con el churn paralelo (`TypeError … reading 'length'` sin stack): `rm -rf .next` lo cura —
+turbopack compilaba, era solo la caché.
+
+**Pendientes que dejó esta tanda:**
+1. `get_advisors` (Supabase MCP) → "You do not have permission" sobre `ktmbtpuhqqofdkisqseq`:
+   el conector claude.ai no alcanza este proyecto. Correrlos desde el dashboard o re-autorizar.
+2. Tipos de `database.types.ts` de 0023–0025 escritos A MANO (MCP sin permiso, CLI pide Docker) —
+   una regeneración futura los pisa sin drama (nota en el header del archivo).
+3. Stripe real para contratos de creadores y campañas de posts (schema listo, modo demo activo).
+4. Fotos de posts/portfolios viven en URLs de Pexels (demo) — para producción real, migrar a
+   Storage propio.
+5. Preexistentes: React #418 en `/admin/moderacion` (Intl.DateTimeFormat server vs browser) y
+   `finalizeListing` de `/publicar` no encola moderación (el flujo nuevo de productos SÍ lo hace
+   — patrón a copiar). El fix del redirect `/publicar` → `/entrar` (`?redirect=` vs `?next=`)
+   corre en tarea aparte.
+6. **Deploy en Vercel sigue BLOQUEADO a nivel team** (ver Pendientes #0 de la sección Blindaje).
 
 ## Blindaje · Semana 2 — bloqueo, sanciones y reporte simple (✅ 2026-07-17)
 

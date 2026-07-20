@@ -195,3 +195,73 @@ export const BOOST_IDS: readonly BoostId[] = ["7d", "14d", "30d"];
 export function boostMontoCentavos(boost: BoostPackage): number {
   return boost.precioUsd * 100;
 }
+
+// ---------------------------------------------------------------------------
+// Promoción de post (feedback cliente 2026-07-19) — pago ONE-TIME
+// ---------------------------------------------------------------------------
+// Espeja el Boost geolocalizado (mismos montos y duraciones), pero el sujeto
+// es un POST del feed, no un listing. Regla de alcance: lo orgánico de una
+// entidad llega SOLO a sus seguidores; una promoción activa lo lleva al feed
+// de TODA la comunidad, marcado "Publicidad" (FTC §255, igual que "Destacado").
+// Sin Stripe configurado, la campaña corre en MODO DEMO (services.ts).
+
+export type PostPromoId = "7d" | "14d" | "30d";
+
+export interface PostPromoPackage {
+  id: PostPromoId;
+  /** Días que dura la campaña. */
+  dias: number;
+  /** USD, cobro único. */
+  precioUsd: number;
+  nombre: string;
+  /** Qué obtiene, en criollo y HONESTO (es publicidad, se marca como tal). */
+  descripcion: string;
+  /** Paquete recomendado (⭐ destacado en la UI). */
+  recomendado: boolean;
+}
+
+/**
+ * [EJEMPLO] (PLAN §18): precios de ejemplo de la campaña de post, espejo de
+ * BOOST_PACKAGES (mismos montos: la decisión de pricing real es humana previa
+ * al go-live). El Checkout usa `price_data` inline con estos montos.
+ *
+ * Principios §7 (no negociables, iguales al boost):
+ * - Una campaña activa lleva el post al feed de todos según `audience`
+ *   (toda la comunidad, o zonas = `area_label` aproximado §5.4).
+ * - Se marca SIEMPRE como "Publicidad" (FTC §255: paid placement se divulga).
+ * - Pagar visibilidad JAMÁS altera Trust Score ni verificación.
+ */
+export const POST_PROMO_PACKAGES: Record<PostPromoId, PostPromoPackage> = {
+  "7d": {
+    id: "7d",
+    dias: 7,
+    precioUsd: 10,
+    nombre: "7 días",
+    descripcion: "Tu publicación llega a toda la comunidad durante una semana.",
+    recomendado: false,
+  },
+  "14d": {
+    id: "14d",
+    dias: 14,
+    precioUsd: 25,
+    nombre: "14 días",
+    descripcion: "Dos semanas al alcance de todos — el equilibrio que más eligen.",
+    recomendado: true,
+  },
+  "30d": {
+    id: "30d",
+    dias: 30,
+    precioUsd: 45,
+    nombre: "30 días",
+    descripcion: "Un mes entero llegando a toda tu comunidad.",
+    recomendado: false,
+  },
+};
+
+/** Orden canónico de render en /impulsar-post. */
+export const POST_PROMO_IDS: readonly PostPromoId[] = ["7d", "14d", "30d"];
+
+/** Monto a cobrar en centavos para el Checkout one-time de la campaña. */
+export function postPromoMontoCentavos(promo: PostPromoPackage): number {
+  return promo.precioUsd * 100;
+}

@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { CalendarBlank, MapPin } from "@phosphor-icons/react/dist/ssr";
-import { Badge, BezelCard } from "@/components/ui";
+import { ArrowRight, CalendarBlank, MapPin } from "@phosphor-icons/react/dist/ssr";
+import { Badge, BezelCard, buttonVariants } from "@/components/ui";
 import { PublisherTrust } from "@/components/listings";
 import type { TrustLevel, TrustSignal } from "@/components/trust";
 import { cn } from "@/lib/utils";
+import { ACCENT_ICON_CLASS } from "./accent";
 import { COPY } from "./copy";
 import type { EventDateParts } from "./helpers";
+import { DirectoryMedia } from "./module-media";
 
 /** Trust Score del organizador con cuenta, resuelto en batch server-side. */
 export interface EventPublisherTrust {
@@ -23,6 +25,8 @@ export interface EventCardModel {
   /** null → fecha a confirmar (nunca inventamos una). */
   date: EventDateParts | null;
   free: boolean;
+  /** Primera foto ya resuelta (firstPhotoUrl) o null — DirectoryMedia cae al fallback del módulo. */
+  photoUrl: string | null;
   /** Organizador miembro → SIEMPRE con su TrustScoreBadge (regla: autor con señal). */
   publisherTrust: EventPublisherTrust | null;
   /** Organizador externo (publisher_name, sin cuenta) — fuente atribuida, sin trust. */
@@ -30,93 +34,84 @@ export interface EventCardModel {
 }
 
 /**
- * Card editorial de evento (§4.b): la fecha manda — bloque día/mes a la
- * izquierda, título y zona a la derecha. Toda la card es un destino
- * (anti-scroll §1.1.⑤): un tap → detalle. El link va como overlay (stretched
- * link) para que el TrustScoreBadge del organizador —que abre su desglose—
- * pueda vivir adentro sin anidar interactivos (button dentro de anchor).
+ * Card de evento (§ feedback cliente 2026-07-19: misma estética que
+ * Propiedades — foto 16:9 grande, contenido debajo, 1 solo CTA). La fecha
+ * manda pero ahora vive como cápsula sobre la foto en vez de bloque lateral;
+ * la línea completa (día/hora) se conserva en el contenido para no perder
+ * información. Acento --accent-eventos (rojo), solo decorativo.
  */
 export function EventCard({ event }: { event: EventCardModel }) {
   return (
-    <div className="group relative">
-      <BezelCard coreClassName="flex items-stretch gap-4 p-4">
-        <article aria-label={event.title} className="contents">
-          <div
-            aria-hidden="true"
-            className={cn(
-              "flex w-16 shrink-0 flex-col items-center justify-center rounded-lg py-2",
-              event.date && !event.date.isPast
-                ? "bg-brand-tint text-brand-ink"
-                : "bg-surface-subtle text-foreground-secondary",
-            )}
-          >
-            {event.date ? (
-              <>
-                <span className="numeric font-display text-2xl font-bold leading-none">
-                  {event.date.day}
-                </span>
-                <span className="mt-1 text-xs font-semibold tracking-wide">
-                  {event.date.month}
-                </span>
-              </>
-            ) : (
-              <CalendarBlank size={26} />
-            )}
-          </div>
+    <BezelCard coreClassName="overflow-hidden p-0">
+      <article aria-label={event.title}>
+        <DirectoryMedia
+          src={event.photoUrl}
+          accent="eventos"
+          icon={CalendarBlank}
+          overlayTopLeft={
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs font-bold text-foreground backdrop-blur-sm">
+              <CalendarBlank size={14} weight="bold" aria-hidden="true" className={ACCENT_ICON_CLASS.eventos} />
+              {event.date ? `${event.date.day} ${event.date.month}` : COPY.events.dateToConfirm}
+            </span>
+          }
+        />
 
-          <div className="min-w-0 flex-1 py-0.5">
-            <p className="text-xs font-semibold text-foreground-secondary">
-              {event.date ? (
-                <>
-                  {event.date.full}
-                  {event.date.time && <span className="numeric"> · {event.date.time}</span>}
-                </>
-              ) : (
-                COPY.events.dateToConfirm
-              )}
-            </p>
-            <h3 className="mt-1 font-display text-base font-bold leading-snug text-foreground group-hover:text-brand-ink">
-              {event.title}
-            </h3>
-            {event.venueArea && (
-              <p className="mt-1.5 flex items-center gap-1.5 text-sm text-foreground-secondary">
-                <MapPin size={15} aria-hidden="true" className="shrink-0" />
-                {event.venueArea}
-              </p>
-            )}
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2.5 p-4">
+          {(event.free || event.date?.isPast) && (
+            <div className="flex flex-wrap items-center gap-2">
               {event.free && <Badge variant="success">{COPY.events.freeChip}</Badge>}
               {event.date?.isPast && <Badge variant="neutral">{COPY.events.pastLabel}</Badge>}
-              {event.publisherTrust ? (
-                <span className="relative z-10 flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-xs text-foreground-muted">
-                    {event.publisherTrust.displayName}
-                  </span>
-                  <PublisherTrust
-                    displayName={event.publisherTrust.displayName}
-                    firstName={event.publisherTrust.firstName}
-                    score={event.publisherTrust.score}
-                    level={event.publisherTrust.level}
-                    signals={event.publisherTrust.signals}
-                    size="inline"
-                  />
-                </span>
-              ) : event.publisherName ? (
-                <span className="truncate text-xs text-foreground-muted">
-                  {event.publisherName}
-                </span>
-              ) : null}
             </div>
-          </div>
-        </article>
-      </BezelCard>
+          )}
 
-      {/* Overlay: un tap en cualquier parte de la card → detalle (§1.1.⑤). */}
-      <Link
-        href={`/eventos/${event.id}`}
-        aria-label={event.title}
-        className="absolute inset-0 rounded-[var(--radius-xl)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-      />
-    </div>
+          <h3 className="font-display text-lg font-bold leading-snug text-foreground">
+            {event.title}
+          </h3>
+
+          <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
+            <CalendarBlank size={16} aria-hidden="true" className="shrink-0" />
+            {event.date ? (
+              <>
+                {event.date.full}
+                {event.date.time && <span className="numeric"> · {event.date.time}</span>}
+              </>
+            ) : (
+              COPY.events.dateToConfirm
+            )}
+          </p>
+
+          {event.venueArea && (
+            <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
+              <MapPin size={16} aria-hidden="true" className="shrink-0" />
+              {event.venueArea}
+            </p>
+          )}
+
+          {event.publisherTrust ? (
+            <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
+              <span className="truncate">{event.publisherTrust.displayName}</span>
+              <PublisherTrust
+                displayName={event.publisherTrust.displayName}
+                firstName={event.publisherTrust.firstName}
+                score={event.publisherTrust.score}
+                level={event.publisherTrust.level}
+                signals={event.publisherTrust.signals}
+                size="inline"
+              />
+            </div>
+          ) : event.publisherName ? (
+            <p className="truncate text-sm text-foreground-muted">{event.publisherName}</p>
+          ) : null}
+
+          <Link
+            href={`/eventos/${event.id}`}
+            className={cn(buttonVariants({ variant: "secondary", size: "md" }), "mt-1 w-full")}
+          >
+            {COPY.events.viewEvent}
+            <ArrowRight size={16} aria-hidden="true" />
+          </Link>
+        </div>
+      </article>
+    </BezelCard>
   );
 }

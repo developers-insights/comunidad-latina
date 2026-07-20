@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { getTenant } from "@/lib/tenant/resolve";
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/shell/header";
+import { ModuleRail } from "@/components/shell/module-rail";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { OfflineBanner } from "@/components/shell/offline-banner";
 import { TenantMismatchBanner } from "@/components/shell/tenant-mismatch-banner";
@@ -52,7 +53,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         Saltar al contenido
       </a>
       <OfflineBanner />
-      <Header tenant={tenant} />
+      {/* Header + rail de módulos pegados como una sola pieza sticky (ver
+          comentario en shell/header.tsx sobre por qué el sticky vive acá). */}
+      <div className="sticky top-0 z-40">
+        <Header tenant={tenant} />
+        <ModuleRail />
+      </div>
       <TenantMismatchBanner />
       <main
         id="contenido"

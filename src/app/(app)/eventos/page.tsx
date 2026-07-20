@@ -5,11 +5,12 @@ import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
 import {
   COPY,
   EventCard,
+  EventListSkeleton,
   eventDateParts,
   parseEventAttrs,
   type EventCardModel,
 } from "@/components/directory";
-import { buildTrustSignals, firstNameOf, toTrustLevel } from "@/components/listings";
+import { buildTrustSignals, firstNameOf, firstPhotoUrl, toTrustLevel } from "@/components/listings";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,7 @@ async function EventosContent() {
   // van al final. El volumen de eventos activos es chico — sin cursor.
   const { data: rows, error } = await supabase
     .from("listings")
-    .select("id, title, area_label, attrs, publisher_name, created_by, created_at")
+    .select("id, title, area_label, attrs, photos, publisher_name, created_by, created_at")
     .eq("tenant_id", tenant.id)
     .eq("kind", "event")
     .eq("status", "published")
@@ -92,6 +93,7 @@ async function EventosContent() {
       venueArea: attrs.venueArea ?? row.area_label,
       date: attrs.startsAt ? eventDateParts(attrs.startsAt, tenant.locale) : null,
       free: attrs.free,
+      photoUrl: firstPhotoUrl(row.photos),
       publisherTrust:
         row.created_by && memberName
           ? {
@@ -182,11 +184,7 @@ function PageSkeleton() {
         </div>
         <Skeleton className="h-10 w-24 rounded-md" />
       </header>
-      <div className="flex flex-col gap-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-32 w-full rounded-xl" />
-        ))}
-      </div>
+      <EventListSkeleton />
     </div>
   );
 }

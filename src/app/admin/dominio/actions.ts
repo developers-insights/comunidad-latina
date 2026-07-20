@@ -162,7 +162,9 @@ export type ModuleKey =
   | "profesionales"
   | "eventos"
   | "mensajes"
-  | "escudo";
+  | "escudo"
+  | "marketplace"
+  | "creadores";
 
 const MODULE_KEYS = [
   "feed",
@@ -172,6 +174,8 @@ const MODULE_KEYS = [
   "eventos",
   "mensajes",
   "escudo",
+  "marketplace",
+  "creadores",
 ] as const;
 
 export async function updateTenantModules(

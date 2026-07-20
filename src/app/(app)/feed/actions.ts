@@ -5,7 +5,6 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
-import type { Json } from "@/lib/types/database.types";
 import { isVisionConfigured } from "@/lib/config/services";
 import {
   TIER_HUMAN,
@@ -21,25 +20,28 @@ import {
  *
  * Reglas que gobiernan este archivo:
  * - Todo INSERT/UPDATE de contenido va con el cliente server del usuario
- *   (anon + cookies): RLS es la frontera real.
+ *   (anon + cookies): RLS es la frontera real. La foto del post ahora sube al
+ *   bucket post-media (0025) con el cliente del USUARIO (path {tenant}/{user}/…),
+ *   así que ya no hay desvío por admin client para storage.
  * - Todo texto pasa por moderateText ANTES de decidir el status (§8).
- * - El admin client aparece SOLO para actos de moderación server-side
- *   (encolar en moderation_queue, subir la foto del post al bucket) y cada
- *   uso privilegiado queda registrado en audit_log (§6 del contrato).
+ * - El admin client aparece SOLO para encolar en moderation_queue (RLS
+ *   insert=false para usuarios) — uso permitido §6.
  *
- * DESVÍOS DOCUMENTADOS (gana el contrato de la DB):
- * 1. Comentario flagged: la policy comments_insert solo permite nacer
- *    'published' — no existe 'pending_review' para el JWT del autor. Se sigue
- *    el precedente de MENSAJES: el comentario NO se inserta, el intento se
- *    encola (tier 3, body en reasons) y el usuario recibe un aviso cálido
- *    para reformular.
- * 2. Foto de post: la policy de storage de listing-photos exige que el
- *    segundo segmento del path sea un LISTING propio — un post no tiene
- *    listing. La subida va vía admin client (acto server-side controlado:
- *    sesión verificada, tipo/tamaño validados, path canónico
- *    {tenant_id}/{user_id}/post-{uuid}.{ext}) y se registra en audit_log.
- * 3. §5.6 sigue intacto: post con foto y sin Vision configurado queda
- *    'pending_review' (salvo MODERATION_DEV_AUTO_APPROVE fuera de prod).
+ * FLUJO DE MODERACIÓN (feedback cliente 2026-07-19):
+ * - Publicación INSTANTÁNEA de posts con foto: sin Vision configurado el post
+ *   NACE 'published' y se encola para revisión asíncrona (tier humano). El
+ *   pending_review con foto mataba el feed visual; la red de seguridad son
+ *   reporte en 2 taps, bloqueos, sanciones y el panel /admin/moderacion.
+ * - Si Vision SÍ está configurado, se mantiene el screening síncrono actual (la
+ *   foto no fuerza revisión acá). El TEXTO sí gobierna pending_review: flagged
+ *   o tier humano NO se publica hasta que un humano lo resuelva.
+ *
+ * DESVÍO DOCUMENTADO (gana el contrato de la DB):
+ * - Comentario flagged: la policy comments_insert solo permite nacer
+ *   'published' — no existe 'pending_review' para el JWT del autor. Se sigue
+ *   el precedente de MENSAJES: el comentario NO se inserta, el intento se
+ *   encola (tier 3, body en reasons) y el usuario recibe un aviso cálido
+ *   para reformular.
  */
 
 const GENERIC_INVALID = "invalid" as const;
@@ -54,6 +56,8 @@ const postSchema = z.object({
     .transform((value) => value.trim())
     .pipe(z.string().min(2).max(2000)),
   kind: z.enum(["post", "question"]),
+  /** Publicar COMO esta entidad (listing propio published) — RLS lo valida. */
+  entityId: z.uuid().optional(),
 });
 
 const PHOTO_TYPES: Record<string, string> = {
@@ -64,37 +68,17 @@ const PHOTO_TYPES: Record<string, string> = {
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
 export type CreatePostResult =
-  | { ok: true; status: "published" | "pending_review" }
+  | {
+      ok: true;
+      status: "published" | "pending_review";
+      /** Id del post creado — el composer arma el link a /impulsar-post. */
+      postId: string;
+      /** true si se publicó COMO una entidad (ofrecer promoción). */
+      entity: boolean;
+    }
   | { ok: false; code: "invalid" | "unauthenticated" | "photo" | "error" }
   /** El JWT y el header apuntan a comunidades distintas — copy ya resuelto. */
   | { ok: false; code: "tenant-mismatch"; message: string };
-
-/** Registra en audit_log (via admin) un acto privilegiado — best effort. */
-async function auditAdminAction(input: {
-  tenantId: string;
-  actorId: string;
-  action: string;
-  subjectKind: string;
-  subjectId: string | null;
-  meta?: Record<string, unknown>;
-}): Promise<void> {
-  try {
-    const admin = createAdminClient();
-    const { error } = await admin.from("audit_log").insert({
-      tenant_id: input.tenantId,
-      actor_id: input.actorId,
-      action: input.action,
-      subject_kind: input.subjectKind,
-      subject_id: input.subjectId,
-      meta: (input.meta ?? {}) as Json,
-    });
-    if (error) {
-      console.warn("[feed] audit_log no disponible", { code: error.code });
-    }
-  } catch {
-    // Admin no configurado: la acción principal no se bloquea por el log.
-  }
-}
 
 function devAutoApprove(): boolean {
   const isProduction =
@@ -106,9 +90,10 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   const parsed = postSchema.safeParse({
     body: formData.get("body"),
     kind: formData.get("kind"),
+    entityId: formData.get("entityId") || undefined,
   });
   if (!parsed.success) return { ok: false, code: GENERIC_INVALID };
-  const { body, kind } = parsed.data;
+  const { body, kind, entityId } = parsed.data;
 
   const photoEntry = formData.get("photo");
   const photo = photoEntry instanceof File && photoEntry.size > 0 ? photoEntry : null;
@@ -116,11 +101,18 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     return { ok: false, code: "photo" };
   }
 
-  // Guard ANTES de moderar y ANTES de subir la foto. La subida va con el admin
-  // client (bypassea la RLS de storage, desvío #2): sin este chequeo, la foto
-  // de un usuario cuyo JWT es de otro tenant aterrizaba en el prefijo
-  // {tenant_id} EQUIVOCADO del bucket y recién después la RLS rechazaba el
-  // insert de `posts` — archivo huérfano, sin fila, sin audit_log.
+  // Foto OBLIGATORIA en posts (feedback cliente 2026-07-19), no en preguntas.
+  // Defensa en profundidad: la UX del composer ya lo evita y el trigger
+  // MEDIA_REQUIRED (0023) es la última línea; acá fallamos antes de tocar
+  // storage/DB para no dejar basura ni una foto huérfana.
+  if (kind === "post" && !photo) {
+    return { ok: false, code: "photo" };
+  }
+
+  // Guard ANTES de moderar y ANTES de subir la foto. Sin este chequeo, la foto
+  // de un usuario cuyo JWT es de otro tenant intentaría escribir en el prefijo
+  // {tenant_id} equivocado del bucket (la policy post_media_insert la rechaza,
+  // pero mejor no gastar el intento) y recién después fallaría el insert.
   const guard = await requireTenantMatch();
   if (!guard.ok) {
     if (guard.reason === "unauthenticated") return { ok: false, code: "unauthenticated" };
@@ -135,39 +127,38 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   const moderation = await moderateText(body);
   const tier = moderation.flagged ? TIER_HUMAN : moderationTier(moderation.score);
 
-  // ---- Foto: sin Vision, una imagen JAMÁS se publica sola (§5.6) ----------
+  // ---- Foto: publicación instantánea + revisión asíncrona -----------------
+  // Sin Vision, la foto YA NO fuerza pending_review (mataba el feed visual): el
+  // post nace published y la imagen entra a la cola humana para revisarse
+  // después. Con Vision configurado se mantiene el screening síncrono actual
+  // (la foto no encola acá). El TEXTO sigue gobernando pending_review.
   const autoApprove = devAutoApprove();
-  const photoNeedsReview = Boolean(photo) && !isVisionConfigured && !autoApprove;
+  const photoNeedsAsyncReview = Boolean(photo) && !isVisionConfigured && !autoApprove;
 
   const status: "published" | "pending_review" =
-    moderation.flagged || tier === TIER_HUMAN || photoNeedsReview
-      ? "pending_review"
-      : "published";
+    moderation.flagged || tier === TIER_HUMAN ? "pending_review" : "published";
 
-  // ---- Subida de foto (admin, desvío documentado #2) -----------------------
+  // ---- Subida de foto: bucket post-media con el CLIENTE DEL USUARIO (0025).
+  // La policy post_media_insert exige path {tenant_id}/{user_id}/… — ya no hace
+  // falta el admin client (terminó el desvío histórico a listing-photos).
   let mediaPaths: string[] = [];
   if (photo) {
     const extension = PHOTO_TYPES[photo.type];
     const path = `${tenant.id}/${user.id}/post-${crypto.randomUUID()}.${extension}`;
-    try {
-      const admin = createAdminClient();
-      const { error: uploadError } = await admin.storage
-        .from("listing-photos")
-        .upload(path, photo, { contentType: photo.type, upsert: false });
-      if (uploadError) {
-        console.warn("[feed] subida de foto de post falló", {
-          message: uploadError.message,
-        });
-        return { ok: false, code: "photo" };
-      }
-      mediaPaths = [path];
-    } catch {
-      // Admin no configurado — degradación elegante: pedimos publicar sin foto.
+    const { error: uploadError } = await supabase.storage
+      .from("post-media")
+      .upload(path, photo, { contentType: photo.type, upsert: false });
+    if (uploadError) {
+      console.warn("[feed] subida de foto de post falló", {
+        message: uploadError.message,
+      });
       return { ok: false, code: "photo" };
     }
+    mediaPaths = [path];
   }
 
-  // ---- Insert con el JWT del usuario: la RLS valida tenant/autor/status ----
+  // ---- Insert con el JWT del usuario: la RLS valida tenant/autor/status y,
+  // si viene entity_listing_id, que el listing sea propio y published (0023).
   const { data: created, error: insertError } = await supabase
     .from("posts")
     .insert({
@@ -177,6 +168,7 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
       kind,
       media: mediaPaths,
       status,
+      entity_listing_id: entityId ?? null,
     })
     .select("id")
     .single();
@@ -186,33 +178,26 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     return { ok: false, code: "error" };
   }
 
-  if (mediaPaths.length > 0) {
-    await auditAdminAction({
-      tenantId: tenant.id,
-      actorId: user.id,
-      action: "feed.post_photo_uploaded_via_admin",
-      subjectKind: "post",
-      subjectId: created.id,
-      meta: { path: mediaPaths[0], reason: "storage_policy_listing_scoped" },
-    });
-  }
-
   // ---- Cola de moderación (admin, uso permitido §6) ------------------------
   const shouldEnqueue =
-    moderation.flagged || moderation.skipped || tier > TIER_AUTO || photoNeedsReview;
+    moderation.flagged || moderation.skipped || tier > TIER_AUTO || photoNeedsAsyncReview;
   if (shouldEnqueue) {
     try {
       const reasons = [
         ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
-        ...(photoNeedsReview ? ["photo_pending_review"] : []),
+        ...(photoNeedsAsyncReview ? ["photo_async_review"] : []),
       ];
+      // pending_review → cola humana; publicado con foto sin Vision → cola
+      // humana igual (la imagen necesita ojos), pero el post ya está visible.
+      const enqueueTier =
+        status === "pending_review" || photoNeedsAsyncReview ? TIER_HUMAN : TIER_REVIEW;
       const outcome = await enqueueModeration(createAdminClient(), {
         tenantId: tenant.id,
         subjectKind: "post",
         subjectId: created.id,
         aiScore: moderation.skipped ? null : moderation.score,
         reasons,
-        tier: status === "pending_review" ? TIER_HUMAN : TIER_REVIEW,
+        tier: enqueueTier,
       });
       if (!outcome.ok) {
         console.warn("[feed] no se pudo encolar moderación del post", {
@@ -225,7 +210,7 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   }
 
   revalidatePath("/feed");
-  return { ok: true, status };
+  return { ok: true, status, postId: created.id, entity: Boolean(entityId) };
 }
 
 // ---------------------------------------------------------------------------

@@ -5,14 +5,23 @@ export { FeedTabs } from "./feed-tabs";
 export { GuideCard } from "./guide-card";
 export {
   FEED_TABS,
+  ENTITY_KIND_META,
+  canPromotePost,
+  entityAccentVar,
+  entityHref,
+  entityKindLabel,
+  feedPostVisibilityFilter,
   parseTab,
   postKindOf,
+  postMediaUrl,
   type AuthorView,
+  type ComposerEntity,
   type FeedItem,
   type FeedListingModel,
   type FeedTabId,
   type GuideCardModel,
   type PostCardModel,
+  type PostEntityView,
 } from "./helpers";
 export { PostActions, type PostActionsProps } from "./post-actions";
 export { PostCard, type PostCardProps } from "./post-card";

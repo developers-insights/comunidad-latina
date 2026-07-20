@@ -1,0 +1,74 @@
+{
+  "panaderia": [
+    "https://images.pexels.com/photos/7966375/pexels-photo-7966375.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/2245295/pexels-photo-2245295.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/3341067/pexels-photo-3341067.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/35661532/pexels-photo-35661532.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "restaurante": [
+    "https://images.pexels.com/photos/8165323/pexels-photo-8165323.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/4262012/pexels-photo-4262012.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/31071253/pexels-photo-31071253.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "salon_belleza": [
+    "https://images.pexels.com/photos/5484948/pexels-photo-5484948.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/3997386/pexels-photo-3997386.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/13068361/pexels-photo-13068361.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/15707345/pexels-photo-15707345.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "barberia": [
+    "https://images.pexels.com/photos/12304508/pexels-photo-12304508.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/1836983/pexels-photo-1836983.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/5282408/pexels-photo-5282408.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "evento_concierto": [
+    "https://images.pexels.com/photos/1105666/pexels-photo-1105666.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/36257830/pexels-photo-36257830.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/13230616/pexels-photo-13230616.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "evento_festival": [
+    "https://images.pexels.com/photos/11621184/pexels-photo-11621184.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/30693450/pexels-photo-30693450.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/32072177/pexels-photo-32072177.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "profesional_oficina": [
+    "https://images.pexels.com/photos/4427610/pexels-photo-4427610.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/27086758/pexels-photo-27086758.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "profesional_oficio": [
+    "https://images.pexels.com/photos/3855771/pexels-photo-3855771.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/9242911/pexels-photo-9242911.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "producto_comida": [
+    "https://images.pexels.com/photos/30095179/pexels-photo-30095179.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/2171643/pexels-photo-2171643.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "producto_ropa": [
+    "https://images.pexels.com/photos/10084285/pexels-photo-10084285.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/19599223/pexels-photo-19599223.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "producto_belleza": [
+    "https://images.pexels.com/photos/3148938/pexels-photo-3148938.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/17545641/pexels-photo-17545641.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "creador_contenido": [
+    "https://images.pexels.com/photos/13929770/pexels-photo-13929770.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/25913051/pexels-photo-25913051.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/9040539/pexels-photo-9040539.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "gente_feed": [
+    "https://images.pexels.com/photos/6210502/pexels-photo-6210502.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/866027/pexels-photo-866027.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/8287652/pexels-photo-8287652.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/8054811/pexels-photo-8054811.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/29613982/pexels-photo-29613982.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/6140369/pexels-photo-6140369.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/7968355/pexels-photo-7968355.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/4259140/pexels-photo-4259140.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ],
+  "vivienda_extra": [
+    "https://images.pexels.com/photos/7060814/pexels-photo-7060814.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/6492402/pexels-photo-6492402.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    "https://images.pexels.com/photos/6585628/pexels-photo-6585628.jpeg?auto=compress&cs=tinysrgb&w=1200"
+  ]
+}

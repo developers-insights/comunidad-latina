@@ -10,6 +10,8 @@ import {
   MapPin,
   ShieldCheck,
   ShieldWarning,
+  ShoppingBagOpen,
+  Sparkle,
   Storefront,
   UserGear,
 } from "@phosphor-icons/react/dist/ssr";
@@ -27,12 +29,16 @@ const KIND_ICON: Record<string, Icon> = {
   professional: UserGear,
   event: CalendarBlank,
   job: Briefcase,
+  product: ShoppingBagOpen,
+  creator_gig: Sparkle,
 };
 
 /** Kinds con página real de detalle → el CTA saca del feed (§4.b). */
 const DETAIL_ROUTE: Record<string, (id: string) => string> = {
   event: (id) => `/eventos/${id}`,
   professional: (id) => `/profesionales/${id}`,
+  product: (id) => `/marketplace/${id}`,
+  creator_gig: (id) => `/creadores/${id}`,
 };
 
 /**

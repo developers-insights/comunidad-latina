@@ -2,6 +2,7 @@ export { Avatar, type AvatarProps } from "./avatar";
 export { Badge, type BadgeProps } from "./badge";
 export { Banner, type BannerProps } from "./banner";
 export { BezelCard, type BezelCardProps } from "./bezel-card";
+export { CardMedia, type CardMediaProps } from "./card-media";
 export { BottomSheet, type BottomSheetProps } from "./bottom-sheet";
 export { Button, buttonVariants, type ButtonProps } from "./button";
 export { Chip, type ChipProps } from "./chip";

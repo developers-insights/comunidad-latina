@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
+import { ArrowLeft, Megaphone } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Banner, EmptyState, buttonVariants } from "@/components/ui";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import {
@@ -8,15 +8,17 @@ import {
   CommentComposer,
   PostCard,
   PostMenu,
+  type PostEntityView,
 } from "@/components/feed";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { timeAgo } from "@/lib/utils";
+import { formatDate, timeAgo } from "@/lib/utils";
 import {
   POST_COLUMNS,
   authorViewOf,
   fetchAuthorViews,
   fetchBlockedIds,
+  fetchEntityViews,
   fetchViewerLikes,
   toPostCardModel,
   type PostRow,
@@ -99,12 +101,36 @@ export default async function PostDetailPage({
   ].filter((value): value is string => Boolean(value));
 
   const now = new Date();
-  const [authors, likedIds] = await Promise.all([
+  const [authors, likedIds, entityById, promoResult] = await Promise.all([
     fetchAuthorViews(supabase, authorIds),
     fetchViewerLikes(supabase, viewerId, [post.id]),
+    post.entity_listing_id
+      ? fetchEntityViews(supabase, [post.entity_listing_id])
+      : Promise.resolve(new Map<string, PostEntityView>()),
+    // Campaña activa del post: público sabe que es "Publicidad"; solo el autor
+    // ve hasta cuándo (badge más abajo).
+    supabase
+      .from("post_promotions")
+      .select("ends_at")
+      .eq("post_id", post.id)
+      .eq("status", "active")
+      .gt("ends_at", now.toISOString())
+      .order("ends_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
-  const postModel = toPostCardModel(post, authors, likedIds, now);
+  const entity = post.entity_listing_id
+    ? (entityById.get(post.entity_listing_id) ?? null)
+    : null;
+  const promoEndsAt = promoResult.data?.ends_at ?? null;
+  const isPromoted = Boolean(promoEndsAt);
+  const isAuthor = Boolean(viewerId && post.author_id === viewerId);
+
+  const postModel = toPostCardModel(post, authors, likedIds, now, {
+    entity,
+    isPromoted,
+  });
   const isPublished = post.status === "published";
 
   return (
@@ -127,6 +153,19 @@ export default async function PostDetailPage({
       {post.status === "removed" && (
         <Banner variant="info" className="mb-4 rounded-lg">
           {COPY.post.removedBanner}
+        </Banner>
+      )}
+
+      {/* Estado de campaña — solo el autor ve hasta cuándo (feedback 2026-07-19). */}
+      {isAuthor && promoEndsAt && (
+        <Banner
+          variant="info"
+          className="mb-4 rounded-lg"
+          icon={<Megaphone size={20} weight="fill" className="text-brand" />}
+        >
+          {COPY.post.campaignActiveBadge(
+            formatDate(promoEndsAt, { locale: tenant.locale, style: "long" }),
+          )}
         </Banner>
       )}
 

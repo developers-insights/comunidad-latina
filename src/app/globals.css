@@ -604,6 +604,19 @@
   --brand-yellow: #d9a22b;
   --brand-red: #cf2532;
 
+  /* Acentos por módulo (feedback cliente 2026-07-19: "tiene que tener color la
+     app"). DECORATIVOS: cápsulas de módulo, anillos, gradientes de cabecera —
+     el texto encima usa siempre tokens -ink / on-media (WCAG intacto). Fijos
+     como la marca tricolor: no voltean con el tema ni con el tenant. */
+  --accent-feed: var(--brand-blue);
+  --accent-vivienda: var(--brand-blue);
+  --accent-eventos: var(--brand-red);
+  --accent-negocios: var(--brand-yellow);
+  --accent-profesionales: #0f766e; /* teal oficio/servicio */
+  --accent-marketplace: #15803d;   /* verde mercado */
+  --accent-creadores: #7c3aed;     /* violeta creativo (guiño al prototipo) */
+  --accent-escudo: #0369a1;        /* azul protección */
+
   /* Iconografía (§2.6) y targets táctiles (§3.2) */
   --icon-sm: 16px;
   --icon-md: 20px;

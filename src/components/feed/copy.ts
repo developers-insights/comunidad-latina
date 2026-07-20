@@ -23,9 +23,12 @@ export const COPY = {
     questionToggle: "Pregunta",
     questionHint: "Marcala como pregunta para que los vecinos te respondan.",
     addPhoto: "Agregar foto",
+    changePhoto: "Cambiar foto",
     removePhoto: "Quitar foto",
     photoTooBig: "Esa foto es muy pesada — probá con una de menos de 5 MB.",
     photoWrongType: "Solo podemos subir fotos (JPG, PNG o WebP).",
+    // Foto obligatoria en posts (no en preguntas): feed visual, no periódico.
+    photoRequiredHint: "Tu post necesita una foto — así el feed se mantiene lindo de mirar.",
     publish: "Publicar",
     publishing: "Publicando…",
     successTitle: "¡Publicado!",
@@ -34,10 +37,20 @@ export const COPY = {
     reviewBody:
       "El equipo la va a mirar en breve. Apenas esté aprobada, la va a ver toda la comunidad.",
     photoErrorTitle: "No pudimos subir la foto",
-    photoErrorBody: "Probá de nuevo en un ratito, o publicá sin foto por ahora.",
+    photoErrorBody: "Probá de nuevo en un ratito con otra foto.",
     errorTitle: "No se pudo publicar",
     errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
     tooShort: "Contanos un poquito más — al menos un par de palabras.",
+    // "Publicar como": Yo (personal) o una de mis entidades (listing propio).
+    publishAsLabel: "Publicar como",
+    publishAsYou: "Yo",
+    publishAsHint: "Elegí si publicás vos o una de tus páginas.",
+    entityFollowersNote:
+      "Lo van a ver tus seguidores. Para llegar a todos, promocionalo después de publicar.",
+    entitySuccessTitle: "¡Publicado!",
+    entitySuccessBody: "Ya lo ven tus seguidores. ¿Querés que llegue a toda la comunidad?",
+    promoteCta: "Promocionar",
+    promoteDismiss: "Ahora no",
   },
 
   inviteCard: {
@@ -49,6 +62,12 @@ export const COPY = {
 
   post: {
     questionChip: "Pregunta",
+    // FTC honesto: la campaña paga se divulga (igual que "Destacado" de boosts).
+    adChip: "Publicidad",
+    /** "· por {nombre}" bajo el nombre de la entidad. */
+    byAuthor: (name: string) => `por ${name}`,
+    /** Badge que solo ve el autor en el detalle de un post promocionado. */
+    campaignActiveBadge: (date: string) => `Campaña activa hasta el ${date}`,
     communityMember: "Alguien de la comunidad",
     like: "Me gusta",
     unlike: "Quitar me gusta",
@@ -99,6 +118,8 @@ export const COPY = {
       professional: "Profesional",
       event: "Evento",
       job: "Empleo",
+      product: "Producto",
+      creator_gig: "Trabajo para creadores",
     } as Record<string, string>,
     // §11: nunca "Verificado" a secas — la afirmación es sobre la licencia,
     // igual que en el directorio y la VerificationBand del detalle.

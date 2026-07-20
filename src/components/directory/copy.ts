@@ -50,6 +50,7 @@ export const COPY = {
     pastLabel: "Ya pasó",
     pastSectionTitle: "Ya pasaron",
     freeChip: "Entrada libre",
+    viewEvent: "Ver evento",
     detail: {
       dateTitle: "Cuándo",
       venueTitle: "Dónde (zona aproximada)",
@@ -71,6 +72,13 @@ export const COPY = {
       shareCta: "Compartir",
       shareCopiedTitle: "Link copiado",
       shareCopiedBody: "Compartilo con quien quieras.",
+      newsTitle: "Novedades",
     },
+  },
+  /** Grafo social (0023) — compartido por los detalles de evento y profesional. */
+  follow: {
+    explain: "Seguí para ver sus novedades en tu feed",
+    firstFollower: "Sé la primera persona en seguir",
+    followerCount: (n: number) => `${n} ${n === 1 ? "persona sigue" : "personas siguen"} esto`,
   },
 } as const;

@@ -35,18 +35,23 @@ async function getUnreadCount(): Promise<number> {
  * masiva permitida), selector de ubicación (placeholder, lo cablea SOCIAL),
  * toggle de tema y campana de notificaciones real (módulo NOTIFICACIONES).
  *
- * Barra sticky = superficie elevada: `bg-surface/85` (no canvas) + hairline
- * `border-border`, que voltean solos con el tema.
+ * Superficie elevada: `bg-surface/85` (no canvas) + hairline `border-border`,
+ * que voltean solos con el tema.
+ *
+ * El `sticky top-0 z-40` vive en el wrapper de `(app)/layout.tsx`, NO acá:
+ * ese wrapper envuelve Header + ModuleRail juntos para que los dos queden
+ * pegados como una sola pieza al hacer scroll — dos elementos sticky
+ * independientes con el mismo `top:0` "compiten" por la misma posición
+ * (el segundo no queda pegado inmediatamente debajo del primero sin además
+ * calcularle un `top` igual a la altura exacta del primero). Un solo
+ * contenedor sticky evita ese cálculo frágil.
  */
 export async function Header({ tenant, className }: { tenant: Tenant; className?: string }) {
   const unread = await getUnreadCount();
   // Single-community: si el tenant no trae logo propio, cae al logo de la
   // plataforma (las tres figuras azul·amarillo·rojo).
   const logoSrc = tenant.logoUrl ?? "/brand/logo-mark.png";
-  const headerClass = [
-    "sticky top-0 z-40 bg-surface/85 backdrop-blur-md",
-    className,
-  ]
+  const headerClass = ["bg-surface/85 backdrop-blur-md", className]
     .filter(Boolean)
     .join(" ");
 

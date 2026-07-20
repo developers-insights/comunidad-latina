@@ -1,3 +1,5 @@
+import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CalendarBlank, MapPin, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Badge, Banner, BezelCard } from "@/components/ui";
@@ -6,12 +8,21 @@ import {
   PublisherTrust,
   buildTrustSignals,
   firstNameOf,
+  isOptimizableSrc,
+  listingPhotoUrl,
   toTrustLevel,
 } from "@/components/listings";
-import { COPY, EventActions, eventDateParts, parseEventAttrs } from "@/components/directory";
+import {
+  COPY,
+  DirectoryDetailHero,
+  EventActions,
+  FollowRow,
+  eventDateParts,
+  parseEventAttrs,
+} from "@/components/directory";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 
 const C = COPY.events;
 
@@ -36,7 +47,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   const { data: listing } = await supabase
     .from("listings")
     .select(
-      "id, tenant_id, kind, title, description, attrs, area_label, status, created_by, publisher_name, created_at",
+      "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, created_at",
     )
     .eq("id", id)
     .eq("kind", "event")
@@ -50,9 +61,17 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   } = await supabase.auth.getUser();
 
   // ---------------------------------------------------------------------
-  // Interés: contador + ¿esta persona ya se anotó? (reactions like/listing)
+  // Interés (reactions like/listing) + seguidores (0023, solo si hay dueño
+  // con cuenta — una entidad sin cuenta no publica novedades) + Novedades
+  // (posts.entity_listing_id) — todo independiente, en paralelo.
   // ---------------------------------------------------------------------
-  const [{ count: interestedCount }, myReactionResult] = await Promise.all([
+  const [
+    { count: interestedCount },
+    myReactionResult,
+    { count: followerCount },
+    myFollowResult,
+    postsResult,
+  ] = await Promise.all([
     supabase
       .from("reactions")
       .select("id", { count: "exact", head: true })
@@ -71,7 +90,45 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           .eq("kind", "like")
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    listing.created_by
+      ? supabase
+          .from("follows")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenant.id)
+          .eq("target_kind", "listing")
+          .eq("target_id", listing.id)
+      : Promise.resolve({ count: 0 }),
+    listing.created_by && user
+      ? supabase
+          .from("follows")
+          .select("id")
+          .eq("tenant_id", tenant.id)
+          .eq("target_kind", "listing")
+          .eq("target_id", listing.id)
+          .eq("follower_id", user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("posts")
+      .select("id, body, media, created_at")
+      .eq("tenant_id", tenant.id)
+      .eq("entity_listing_id", listing.id)
+      .eq("status", "published")
+      .order("created_at", { ascending: false })
+      .limit(3),
   ]);
+
+  // Mini-cards de Novedades: primera foto de media (si hay) + body truncado
+  // (line-clamp visual — el texto completo queda en el DOM) + link al post.
+  const news = (postsResult.data ?? []).map((post) => {
+    const firstMedia = post.media.find((path) => path && path.trim().length > 0);
+    return {
+      id: post.id,
+      body: post.body,
+      photoUrl: firstMedia ? listingPhotoUrl(firstMedia) : null,
+      timeAgoLabel: timeAgo(post.created_at),
+    };
+  });
 
   // ---------------------------------------------------------------------
   // Publicador (organiza): perfil + trust score, o fuente externa
@@ -144,6 +201,14 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
         </Banner>
       )}
 
+      <DirectoryDetailHero
+        photos={(listing.photos ?? []).map(listingPhotoUrl)}
+        title={listing.title}
+        accent="eventos"
+        icon={CalendarBlank}
+        className="mb-4"
+      />
+
       {/* Cabecera editorial: la fecha manda */}
       <BezelCard variant={date && !date.isPast ? "featured" : "default"} coreClassName="p-4">
         <div className="flex items-start gap-4">
@@ -178,6 +243,17 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           </div>
         </div>
       </BezelCard>
+
+      {/* Seguir este evento (0023) — solo si tiene dueño con cuenta: una
+          entidad sin cuenta no publica novedades para seguir. */}
+      {listing.created_by && (
+        <FollowRow
+          targetId={listing.id}
+          followerCount={followerCount ?? 0}
+          isFollowing={Boolean(myFollowResult.data)}
+          className="mt-4"
+        />
+      )}
 
       <section className="mt-6">
         <h2 className="mb-2 text-sm font-semibold text-foreground-secondary">
@@ -227,6 +303,48 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
             {C.detail.publishedBy}
           </h2>
           {publisherCard}
+        </section>
+      )}
+
+      {/* Novedades (0023): posts publicados COMO este evento — hasta 3, sin empty state. */}
+      {news.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-2 text-sm font-semibold text-foreground-secondary">
+            {C.detail.newsTitle}
+          </h2>
+          <div className="flex flex-col gap-3">
+            {news.map((post) => (
+              <Link
+                key={post.id}
+                href={`/feed/${post.id}`}
+                className={cn(
+                  "flex gap-3 rounded-lg border border-border-subtle bg-surface p-3",
+                  "transition-colors duration-(--duration-fast) hover:bg-surface-subtle",
+                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+                )}
+              >
+                {post.photoUrl && (
+                  <div className="relative size-16 shrink-0 overflow-hidden rounded-md bg-surface-subtle">
+                    {isOptimizableSrc(post.photoUrl) ? (
+                      <Image src={post.photoUrl} alt="" fill sizes="64px" className="object-cover" />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element -- URL externa de seed/API: host fuera del allowlist de next/image
+                      <img
+                        src={post.photoUrl}
+                        alt=""
+                        loading="lazy"
+                        className="absolute inset-0 size-full object-cover"
+                      />
+                    )}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 text-sm text-foreground">{post.body}</p>
+                  <p className="mt-1 text-xs text-foreground-muted">{post.timeAgoLabel}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
         </section>
       )}
 

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Certificate, MapPin, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { Certificate, MapPin, Storefront, UserGear } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Banner, BezelCard, Chip } from "@/components/ui";
 import { ScamShieldNotice } from "@/components/trust";
 import {
@@ -8,12 +8,15 @@ import {
   VerificationBand,
   buildTrustSignals,
   firstNameOf,
+  listingPhotoUrl,
   toTrustLevel,
   type VerificationView,
 } from "@/components/listings";
 import {
   COPY,
   DirectoryContactCta,
+  DirectoryDetailHero,
+  FollowRow,
   categoryLabel,
   parseProfessionalAttrs,
 } from "@/components/directory";
@@ -44,7 +47,7 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
   const { data: listing } = await supabase
     .from("listings")
     .select(
-      "id, tenant_id, kind, title, description, attrs, area_label, status, created_by, publisher_name, created_at",
+      "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, created_at",
     )
     .eq("id", id)
     .eq("kind", "professional")
@@ -59,17 +62,38 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
 
   // ---------------------------------------------------------------------
   // Verificación vinculada (regla estricta: SOLO found_active → banda;
-  // sin check → ausencia, jamás un negativo)
+  // sin check → ausencia, jamás un negativo) + seguidores (0023, solo si
+  // hay dueño con cuenta) — independientes, en paralelo.
   // ---------------------------------------------------------------------
-  const { data: checks } = await supabase
-    .from("verification_checks")
-    .select("registry, registry_url, license_number, checked_at")
-    .eq("tenant_id", tenant.id)
-    .eq("subject_kind", "listing")
-    .eq("subject_id", listing.id)
-    .eq("result", "found_active")
-    .order("checked_at", { ascending: false })
-    .limit(1);
+  const [{ data: checks }, { count: followerCount }, myFollowResult] = await Promise.all([
+    supabase
+      .from("verification_checks")
+      .select("registry, registry_url, license_number, checked_at")
+      .eq("tenant_id", tenant.id)
+      .eq("subject_kind", "listing")
+      .eq("subject_id", listing.id)
+      .eq("result", "found_active")
+      .order("checked_at", { ascending: false })
+      .limit(1),
+    listing.created_by
+      ? supabase
+          .from("follows")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenant.id)
+          .eq("target_kind", "listing")
+          .eq("target_id", listing.id)
+      : Promise.resolve({ count: 0 }),
+    listing.created_by && user
+      ? supabase
+          .from("follows")
+          .select("id")
+          .eq("tenant_id", tenant.id)
+          .eq("target_kind", "listing")
+          .eq("target_id", listing.id)
+          .eq("follower_id", user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   const check = checks?.[0];
   const verification: VerificationView | null = check
@@ -163,6 +187,14 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
         </Banner>
       )}
 
+      <DirectoryDetailHero
+        photos={(listing.photos ?? []).map(listingPhotoUrl)}
+        title={listing.title}
+        accent="profesionales"
+        icon={UserGear}
+        className="mb-4"
+      />
+
       {/* Banda de confianza — SIEMPRE arriba del contenido (§4.d) */}
       {verification && <VerificationBand verification={verification} className="mb-4" />}
 
@@ -174,6 +206,17 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
         <Chip>{categoryLabel(attrs.category)}</Chip>
         {listing.area_label && <Chip icon={<MapPin />}>{listing.area_label}</Chip>}
       </div>
+
+      {/* Seguir este profesional (0023) — solo si tiene cuenta: una entidad
+          sin cuenta no publica novedades para seguir. */}
+      {listing.created_by && (
+        <FollowRow
+          targetId={listing.id}
+          followerCount={followerCount ?? 0}
+          isFollowing={Boolean(myFollowResult.data)}
+          className="mt-4"
+        />
+      )}
 
       {/* Credenciales declaradas (attrs) — el "specs" de este vertical */}
       {attrs.credentials.length > 0 && (

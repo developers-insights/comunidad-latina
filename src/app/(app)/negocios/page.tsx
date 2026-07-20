@@ -1,12 +1,15 @@
+import { Suspense } from "react";
 import Link from "next/link";
-import { MagicWand, MapPin, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { BezelCard, Chip, EmptyState, buttonVariants } from "@/components/ui";
+import { MagicWand, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { firstPhotoUrl } from "@/components/listings";
+import { BezelCard, EmptyState, Skeleton, buttonVariants } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { toTrustProps } from "@/lib/trust/signals";
 import type { Json, Tables } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
-import { BusinessTrustBadge, type OwnerTrust } from "./business-trust-badge";
+import { BusinessCard, BusinessListSkeleton, type BusinessCardModel } from "./business-card";
+import type { OwnerTrust } from "./business-trust-badge";
 
 export const metadata = { title: "Negocios" };
 
@@ -18,7 +21,6 @@ const COPY = {
   bannerTexto:
     "Aunque no tengas un aviso activo, tu negocio queda presente en el directorio de tu comunidad.",
   bannerCta: "Conocer Presencia Verificada",
-  publicadoPor: "Publicado por",
   vacioTitulo: "Todavía no hay negocios publicados",
   vacioMensaje:
     "Los comercios de la comunidad van a aparecer acá. Si tenés un negocio, este es tu lugar.",
@@ -61,7 +63,19 @@ function buildOwnerTrust(
   return { name: ownerName, ...props };
 }
 
-export default async function NegociosPage() {
+export default function NegociosPage() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <NegociosContent />
+    </Suspense>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Contenido (streamed): datos reales con RLS del usuario
+// ---------------------------------------------------------------------------
+
+async function NegociosContent() {
   const tenant = await getTenant();
   const supabase = await createClient();
   const {
@@ -71,7 +85,7 @@ export default async function NegociosPage() {
   const { data: negocios } = await supabase
     .from("listings")
     .select(
-      "id, title, description, area_label, attrs, publisher_name, created_by, published_at, created_at",
+      "id, title, description, area_label, attrs, photos, publisher_name, created_by, published_at, created_at",
     )
     .eq("tenant_id", tenant.id)
     .eq("kind", "business")
@@ -180,9 +194,8 @@ export default async function NegociosPage() {
           }
         />
       ) : (
-        <ul className="mt-6 flex flex-col gap-4">
+        <div className="mt-6 flex flex-col gap-4">
           {rows.map((negocio) => {
-            const categoria = categoriaLabel(negocio.attrs);
             const ownerName = negocio.created_by
               ? (nameByOwner.get(negocio.created_by) ?? negocio.publisher_name ?? "")
               : "";
@@ -194,50 +207,38 @@ export default async function NegociosPage() {
                 )
               : null;
 
-            return (
-              <li key={negocio.id}>
-                <BezelCard coreClassName="flex flex-col gap-3 p-5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {categoria && (
-                      <Chip
-                        size="sm"
-                        variant="brand"
-                        icon={<Storefront aria-hidden="true" />}
-                      >
-                        {categoria}
-                      </Chip>
-                    )}
-                    {negocio.area_label && (
-                      <Chip size="sm" icon={<MapPin aria-hidden="true" />}>
-                        {negocio.area_label}
-                      </Chip>
-                    )}
-                  </div>
-                  <div>
-                    <h2 className="font-display text-lg font-semibold leading-snug text-foreground">
-                      {negocio.title}
-                    </h2>
-                    {negocio.description && (
-                      <p className="mt-1 line-clamp-2 text-sm text-foreground-secondary">
-                        {negocio.description}
-                      </p>
-                    )}
-                  </div>
-                  {ownerTrust ? (
-                    <BusinessTrustBadge trust={ownerTrust} />
-                  ) : (
-                    negocio.publisher_name && (
-                      <p className="text-xs text-foreground-muted">
-                        {COPY.publicadoPor} {negocio.publisher_name}
-                      </p>
-                    )
-                  )}
-                </BezelCard>
-              </li>
-            );
+            const business: BusinessCardModel = {
+              id: negocio.id,
+              title: negocio.title,
+              description: negocio.description,
+              categoryLabel: categoriaLabel(negocio.attrs),
+              areaLabel: negocio.area_label,
+              photoUrl: firstPhotoUrl(negocio.photos),
+              ownerTrust,
+              publisherName: negocio.publisher_name,
+            };
+
+            return <BusinessCard key={negocio.id} business={business} />;
           })}
-        </ul>
+        </div>
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fallback: silueta del header + banners + cards (shimmer, §5.2)
+// ---------------------------------------------------------------------------
+
+function PageSkeleton() {
+  return (
+    <div aria-busy="true">
+      <Skeleton className="h-8 w-64" />
+      <Skeleton className="mt-2 h-4 w-72" />
+      <Skeleton className="mt-5 h-32 w-full rounded-xl" />
+      <div className="mt-6">
+        <BusinessListSkeleton />
+      </div>
+    </div>
   );
 }

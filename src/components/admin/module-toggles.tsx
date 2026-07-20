@@ -21,6 +21,8 @@ const MODULES: { key: string; label: string; hint: string }[] = [
   { key: "eventos", label: "Eventos", hint: "Agenda de la comunidad" },
   { key: "mensajes", label: "Mensajes", hint: "Contacto protegido entre miembros" },
   { key: "escudo", label: "Escudo Anti-Estafa", hint: "Verificador y reportes de la comunidad" },
+  { key: "marketplace", label: "Marketplace", hint: "Productos de las tiendas de la comunidad" },
+  { key: "creadores", label: "Creadores", hint: "Trabajos, contratos y portfolios de creadores" },
 ];
 
 const COPY = {

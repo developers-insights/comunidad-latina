@@ -12,9 +12,23 @@ const TAB_LABELS: Record<FeedTabId, string> = {
 };
 
 /**
- * Tabs de los 5 feeds (§4.b): scroll horizontal, tab activo con underline
- * del color de marca del tenant. El estado vive en la URL (?tab=) — server
- * component puro, cero JS en el cliente.
+ * Acento por módulo (globals.css) para el underline del tab activo: cada
+ * vertical con su color, en vez de un único `bg-brand`. El underline es
+ * decorativo, así que el acento va en el fondo del subrayado; el TEXTO queda en
+ * foreground para no arriesgar contraste (p. ej. el amarillo de Negocios).
+ */
+const TAB_ACCENT: Record<FeedTabId, string> = {
+  "para-ti": "var(--accent-feed)",
+  propiedades: "var(--accent-vivienda)",
+  negocios: "var(--accent-negocios)",
+  profesionales: "var(--accent-profesionales)",
+  eventos: "var(--accent-eventos)",
+};
+
+/**
+ * Tabs de los 5 feeds (§4.b): scroll horizontal, tab activo con underline del
+ * acento de su módulo. El estado vive en la URL (?tab=) — server component
+ * puro, cero JS en el cliente.
  */
 export function FeedTabs({ active }: { active: FeedTabId }) {
   return (
@@ -40,7 +54,8 @@ export function FeedTabs({ active }: { active: FeedTabId }) {
                 {isActive && (
                   <span
                     aria-hidden="true"
-                    className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-brand"
+                    className="absolute inset-x-3 bottom-0 h-0.5 rounded-full"
+                    style={{ backgroundColor: TAB_ACCENT[tab.id] }}
                   />
                 )}
               </Link>

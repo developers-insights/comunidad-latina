@@ -35,6 +35,8 @@ const DEFAULT_MODULES: Record<string, boolean> = {
   eventos: true,
   mensajes: true,
   escudo: true,
+  marketplace: true,
+  creadores: true,
 };
 
 /**

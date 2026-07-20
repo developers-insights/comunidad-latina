@@ -15,7 +15,9 @@ import {
   GuideCard,
   PostCard,
   PostComposer,
+  feedPostVisibilityFilter,
   parseTab,
+  type ComposerEntity,
   type FeedItem,
   type FeedTabId,
   type GuideCardModel,
@@ -27,8 +29,11 @@ import { cn } from "@/lib/utils";
 import {
   LISTING_COLUMNS,
   POST_COLUMNS,
+  fetchActivePromotedPostIds,
   fetchAuthorViews,
   fetchBlockedIds,
+  fetchEntityViews,
+  fetchFollowedListingIds,
   fetchListingExtras,
   fetchViewerLikes,
   toFeedListingModel,
@@ -74,15 +79,32 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
   let viewerName = "";
   let viewerAvatarUrl: string | null = null;
   let userArea: string | null = null;
+  // Entidades propias publicadas → selector "Publicar como" del composer.
+  let myEntities: ComposerEntity[] = [];
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("display_name, avatar_url, area_label")
-      .eq("id", user.id)
-      .maybeSingle();
+    const [{ data: profile }, { data: entityRows }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("display_name, avatar_url, area_label")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("listings")
+        .select("id, title, kind")
+        .eq("tenant_id", tenant.id)
+        .eq("created_by", user.id)
+        .eq("status", "published")
+        .order("created_at", { ascending: false })
+        .limit(50),
+    ]);
     viewerName = profile?.display_name ?? "";
     viewerAvatarUrl = profile?.avatar_url ?? null;
     userArea = profile?.area_label ?? null;
+    myEntities = (entityRows ?? []).map((row) => ({
+      id: row.id,
+      title: row.title,
+      kind: row.kind,
+    }));
   }
 
   const cursor = decodeCursor(cursorRaw || undefined);
@@ -105,7 +127,11 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
         {tab === "para-ti" ? (
           <>
             {user ? (
-              <PostComposer viewerName={viewerName} viewerAvatarUrl={viewerAvatarUrl} />
+              <PostComposer
+                viewerName={viewerName}
+                viewerAvatarUrl={viewerAvatarUrl}
+                entities={myEntities}
+              />
             ) : (
               <ComposerInvite />
             )}
@@ -155,7 +181,14 @@ async function ParaTiFeed({
   isFirstPage: boolean;
 }) {
   const supabase = await createClient();
-  const blockedIds = await fetchBlockedIds(supabase, viewerId);
+  // Contexto del viewer para el alcance del feed (feedback cliente 2026-07-19):
+  // bloqueados (fuera), entidades que sigue (sus posts orgánicos entran) y set
+  // de posts con campaña activa (entran para todos, con chip "Publicidad").
+  const [blockedIds, followedListingIds, promotedPostIds] = await Promise.all([
+    fetchBlockedIds(supabase, viewerId),
+    fetchFollowedListingIds(supabase, viewerId),
+    fetchActivePromotedPostIds(supabase, tenantId),
+  ]);
 
   let postsQuery = supabase
     .from("posts")
@@ -166,9 +199,18 @@ async function ParaTiFeed({
     .order("id", { ascending: false })
     .limit(PAGE_SIZE + 1);
 
+  // Alcance "para vos": personal (entity null) + entidades que sigo + posts
+  // promocionados (a todos). PostgREST AND-ea cada `.or()` de nivel superior, así
+  // que este grupo convive con el de bloqueados y el keyset.
+  postsQuery = postsQuery.or(
+    feedPostVisibilityFilter(followedListingIds, [...promotedPostIds]),
+  );
+
   // Nunca mostrar en "Para ti" contenido de gente que el viewer bloqueó (§ contrato
-  // bloqueo). El or() preserva los posts de autor anónimo (cuenta borrada →
-  // author_id null): un NOT IN pelado los filtraría por la semántica de NULL.
+  // bloqueo). Aplica también a los posts de entidad: author_id es SIEMPRE la
+  // persona detrás de la entidad, así que el mismo filtro los cubre. El or()
+  // preserva los posts de autor anónimo (cuenta borrada → author_id null): un
+  // NOT IN pelado los filtraría por la semántica de NULL.
   if (blockedIds.size > 0) {
     postsQuery = postsQuery.or(
       `author_id.is.null,author_id.not.in.(${[...blockedIds].join(",")})`,
@@ -258,7 +300,11 @@ async function ParaTiFeed({
     .map((entry) => entry.row as ListingRow);
 
   const now = new Date();
-  const [authors, likedIds, listingExtras] = await Promise.all([
+  const entityListingIds = visiblePosts
+    .map((entry) => (entry.row as PostRow).entity_listing_id)
+    .filter((id): id is string => Boolean(id));
+
+  const [authors, likedIds, listingExtras, entityById] = await Promise.all([
     fetchAuthorViews(
       supabase,
       visiblePosts
@@ -271,15 +317,22 @@ async function ParaTiFeed({
       visiblePosts.map((entry) => entry.id),
     ),
     fetchListingExtras(supabase, tenantId, visibleListings, locale),
+    fetchEntityViews(supabase, entityListingIds),
   ]);
 
   const items: FeedItem[] = pageEntries.map((entry) => {
     if (entry.type === "post") {
+      const postRow = entry.row as PostRow;
       return {
         type: "post",
         createdAt: entry.createdAt,
         id: entry.id,
-        post: toPostCardModel(entry.row as PostRow, authors, likedIds, now),
+        post: toPostCardModel(postRow, authors, likedIds, now, {
+          entity: postRow.entity_listing_id
+            ? (entityById.get(postRow.entity_listing_id) ?? null)
+            : null,
+          isPromoted: promotedPostIds.has(postRow.id),
+        }),
       };
     }
     const row = entry.row as ListingRow;

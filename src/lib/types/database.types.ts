@@ -1,5 +1,9 @@
 // GENERADO desde Supabase (proyecto ktmbtpuhqqofdkisqseq) — NO editar a mano.
 // Regenerar: MCP generate_typescript_types o `npx supabase gen types typescript`.
+// EXCEPCIÓN 2026-07-19: los bloques de 0023–0025 (follows, post_promotions,
+// creator_profiles, gig_*, posts.entity_listing_id) se escribieron a mano con
+// el formato generado — el MCP no tiene permiso sobre este proyecto y el CLI
+// requiere Docker. Una regeneración futura los reemplaza sin drama.
 export type Json =
   | string
   | number
@@ -468,6 +472,350 @@ export type Database = {
           },
         ]
       }
+      creator_profiles: {
+        Row: {
+          available: boolean
+          bio: string | null
+          completed_jobs: number
+          created_at: string
+          headline: string
+          portfolio_photos: string[]
+          profile_id: string
+          rate_hint: string | null
+          rating_avg: number | null
+          rating_count: number
+          skills: string[]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          available?: boolean
+          bio?: string | null
+          completed_jobs?: number
+          created_at?: string
+          headline: string
+          portfolio_photos?: string[]
+          profile_id: string
+          rate_hint?: string | null
+          rating_avg?: number | null
+          rating_count?: number
+          skills?: string[]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          available?: boolean
+          bio?: string | null
+          completed_jobs?: number
+          created_at?: string
+          headline?: string
+          portfolio_photos?: string[]
+          profile_id?: string
+          rate_hint?: string | null
+          rating_avg?: number | null
+          rating_count?: number
+          skills?: string[]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creator_profiles_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creator_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      follows: {
+        Row: {
+          created_at: string
+          follower_id: string
+          id: string
+          target_id: string
+          target_kind: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          follower_id: string
+          id?: string
+          target_id: string
+          target_kind: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          follower_id?: string
+          id?: string
+          target_id?: string
+          target_kind?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "follows_follower_id_fkey"
+            columns: ["follower_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "follows_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gig_applications: {
+        Row: {
+          created_at: string
+          creator_id: string
+          gig_id: string
+          id: string
+          message: string
+          proposed_amount_cents: number | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          creator_id: string
+          gig_id: string
+          id?: string
+          message: string
+          proposed_amount_cents?: number | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          creator_id?: string
+          gig_id?: string
+          id?: string
+          message?: string
+          proposed_amount_cents?: number | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gig_applications_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gig_applications_gig_id_fkey"
+            columns: ["gig_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gig_applications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gig_contracts: {
+        Row: {
+          amount_cents: number
+          application_id: string | null
+          canceled_at: string | null
+          client_id: string
+          code: string
+          created_at: string
+          creator_id: string
+          creator_net_cents: number | null
+          currency: string
+          delivered_at: string | null
+          delivery_days: number
+          fee_pct: number
+          funded_at: string | null
+          gig_id: string | null
+          id: string
+          payment_mode: string
+          platform_fee_cents: number | null
+          released_at: string | null
+          scope: string
+          status: string
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
+          stripe_transfer_id: string | null
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          application_id?: string | null
+          canceled_at?: string | null
+          client_id: string
+          code?: string
+          created_at?: string
+          creator_id: string
+          currency?: string
+          delivered_at?: string | null
+          delivery_days: number
+          fee_pct?: number
+          funded_at?: string | null
+          gig_id?: string | null
+          id?: string
+          payment_mode?: string
+          released_at?: string | null
+          scope: string
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_transfer_id?: string | null
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          application_id?: string | null
+          canceled_at?: string | null
+          client_id?: string
+          code?: string
+          created_at?: string
+          creator_id?: string
+          currency?: string
+          delivered_at?: string | null
+          delivery_days?: number
+          fee_pct?: number
+          funded_at?: string | null
+          gig_id?: string | null
+          id?: string
+          payment_mode?: string
+          released_at?: string | null
+          scope?: string
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_transfer_id?: string | null
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gig_contracts_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "gig_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gig_contracts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gig_contracts_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gig_contracts_gig_id_fkey"
+            columns: ["gig_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gig_contracts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gig_reviews: {
+        Row: {
+          body: string | null
+          contract_id: string
+          created_at: string
+          id: string
+          ratee_id: string
+          rating: number
+          reviewer_id: string
+          tenant_id: string
+        }
+        Insert: {
+          body?: string | null
+          contract_id: string
+          created_at?: string
+          id?: string
+          ratee_id: string
+          rating: number
+          reviewer_id: string
+          tenant_id: string
+        }
+        Update: {
+          body?: string | null
+          contract_id?: string
+          created_at?: string
+          id?: string
+          ratee_id?: string
+          rating?: number
+          reviewer_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gig_reviews_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "gig_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gig_reviews_ratee_id_fkey"
+            columns: ["ratee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gig_reviews_reviewer_id_fkey"
+            columns: ["reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gig_reviews_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guides: {
         Row: {
           body_md: string
@@ -885,6 +1233,7 @@ export type Database = {
           body: string
           comment_count: number
           created_at: string
+          entity_listing_id: string | null
           id: string
           kind: string
           like_count: number
@@ -898,6 +1247,7 @@ export type Database = {
           body: string
           comment_count?: number
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           kind?: string
           like_count?: number
@@ -911,6 +1261,7 @@ export type Database = {
           body?: string
           comment_count?: number
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           kind?: string
           like_count?: number
@@ -921,6 +1272,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "posts_entity_listing_id_fkey"
+            columns: ["entity_listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "posts_author_id_fkey"
             columns: ["author_id"]
             isOneToOne: false
@@ -929,6 +1287,82 @@ export type Database = {
           },
           {
             foreignKeyName: "posts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_promotions: {
+        Row: {
+          amount_cents: number
+          audience: Json
+          buyer_id: string
+          created_at: string
+          currency: string
+          duration_days: number
+          ends_at: string | null
+          id: string
+          package: string
+          post_id: string
+          starts_at: string | null
+          status: string
+          stripe_checkout_session_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          audience?: Json
+          buyer_id: string
+          created_at?: string
+          currency?: string
+          duration_days: number
+          ends_at?: string | null
+          id?: string
+          package: string
+          post_id: string
+          starts_at?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          audience?: Json
+          buyer_id?: string
+          created_at?: string
+          currency?: string
+          duration_days?: number
+          ends_at?: string | null
+          id?: string
+          package?: string
+          post_id?: string
+          starts_at?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_promotions_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_promotions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_promotions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

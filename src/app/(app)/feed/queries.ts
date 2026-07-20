@@ -7,7 +7,6 @@ import {
   firstNameOf,
   firstPhotoUrl,
   formatListingPrice,
-  listingPhotoUrl,
   toTrustLevel,
   type ListingCardModel,
   type PublisherView,
@@ -16,15 +15,24 @@ import {
 import {
   COPY,
   postKindOf,
+  postMediaUrl,
   type AuthorView,
   type FeedListingModel,
   type PostCardModel,
+  type PostEntityView,
 } from "@/components/feed";
 import { formatDate, timeAgo } from "@/lib/utils";
 
 /**
  * Lecturas compartidas del módulo FEED (server-only). Siempre con el cliente
  * server del usuario — RLS aplica en cada query.
+ *
+ * VISIBILIDAD DEL FEED (feedback cliente 2026-07-19): "solo seguidores" es una
+ * regla de DISTRIBUCIÓN (capa app/query), NO una frontera de seguridad RLS. Un
+ * post published de una entidad sigue siendo PÚBLICO en su detalle /feed/[id] y
+ * en la página de la entidad — la query del feed solo decide a quién se lo
+ * MUESTRA proactivamente (seguidores + promociones). El aislamiento real lo dan
+ * las policies; acá modelamos alcance, no permisos.
  */
 
 type Supabase = SupabaseClient<Database>;
@@ -39,10 +47,11 @@ export interface PostRow {
   comment_count: number;
   created_at: string;
   author_id: string | null;
+  entity_listing_id: string | null;
 }
 
 export const POST_COLUMNS =
-  "id, body, kind, media, status, like_count, comment_count, created_at, author_id";
+  "id, body, kind, media, status, like_count, comment_count, created_at, author_id, entity_listing_id";
 
 const FALLBACK_AUTHOR: AuthorView = {
   profileId: null,
@@ -132,6 +141,71 @@ export async function fetchViewerLikes(
     .eq("profile_id", viewerId)
     .in("subject_id", postIds);
   return new Set((data ?? []).map((row) => row.subject_id));
+}
+
+// ---------------------------------------------------------------------------
+// Alcance del feed "para vos" (0023 — feedback cliente 2026-07-19)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ids de las ENTIDADES (listings) que el viewer sigue. Query chica y primera:
+ * con estos ids se arma el `.or()` de visibilidad del feed (patrón exacto del
+ * filtro de bloqueados). Vacío si no hay sesión.
+ */
+export async function fetchFollowedListingIds(
+  supabase: Supabase,
+  viewerId: string | null,
+): Promise<string[]> {
+  if (!viewerId) return [];
+  const { data } = await supabase
+    .from("follows")
+    .select("target_id")
+    .eq("follower_id", viewerId)
+    .eq("target_kind", "listing");
+  return (data ?? []).map((row) => row.target_id);
+}
+
+/**
+ * Ids de posts con una promoción ACTIVA vigente en el tenant. Una campaña paga
+ * lleva el post al feed de TODOS (según audience) — acá resolvemos el set para
+ * (a) inyectarlo en la visibilidad y (b) marcar el chip "Publicidad".
+ *
+ * `audience` (scope all | zones) se guarda para segmentación geográfica futura;
+ * hoy toda campaña activa alcanza a la comunidad entera (single-community).
+ */
+export async function fetchActivePromotedPostIds(
+  supabase: Supabase,
+  tenantId: string,
+): Promise<Set<string>> {
+  const { data } = await supabase
+    .from("post_promotions")
+    .select("post_id")
+    .eq("tenant_id", tenantId)
+    .eq("status", "active")
+    .gt("ends_at", new Date().toISOString());
+  return new Set((data ?? []).map((row) => row.post_id));
+}
+
+/**
+ * Resuelve en batch el título + vertical de las entidades de una lista de
+ * posts de entidad. RLS de `listings`: los published son legibles; para el
+ * dueño incluso si dejaran de estarlo, así que el autor siempre ve su cabecera.
+ */
+export async function fetchEntityViews(
+  supabase: Supabase,
+  listingIds: string[],
+): Promise<Map<string, PostEntityView>> {
+  const ids = [...new Set(listingIds.filter(Boolean))];
+  const byId = new Map<string, PostEntityView>();
+  if (ids.length === 0) return byId;
+  const { data } = await supabase
+    .from("listings")
+    .select("id, title, kind")
+    .in("id", ids);
+  for (const row of data ?? []) {
+    byId.set(row.id, { id: row.id, title: row.title, kind: row.kind });
+  }
+  return byId;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,18 +348,22 @@ export function toPostCardModel(
   authors: Map<string, AuthorView>,
   likedIds: Set<string>,
   now: Date,
+  extras?: { entity?: PostEntityView | null; isPromoted?: boolean },
 ): PostCardModel {
   const firstMedia = row.media.find((path) => path && path.trim().length > 0);
   return {
     id: row.id,
     kind: postKindOf(row.kind),
     body: row.body,
-    photoUrl: firstMedia ? listingPhotoUrl(firstMedia) : null,
+    // Bucket post-media (0025): el composer ya sube ahí con el cliente del user.
+    photoUrl: firstMedia ? postMediaUrl(firstMedia) : null,
     likeCount: row.like_count,
     commentCount: row.comment_count,
     createdAt: row.created_at,
     timeAgoLabel: timeAgo(row.created_at, now),
     author: authorViewOf(authors, row.author_id),
     likedByViewer: likedIds.has(row.id),
+    entity: extras?.entity ?? null,
+    isPromoted: extras?.isPromoted ?? false,
   };
 }
