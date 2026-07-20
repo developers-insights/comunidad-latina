@@ -23,7 +23,7 @@ export default async function PublicarPage() {
         message={COPY.publish.needLoginMessage}
         action={
           <Link
-            href={`/entrar?redirect=${encodeURIComponent("/publicar")}`}
+            href={`/entrar?next=${encodeURIComponent("/publicar")}`}
             className={buttonVariants({ variant: "primary", size: "md" })}
           >
             {COPY.publish.needLoginCta}
