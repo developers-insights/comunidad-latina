@@ -66,10 +66,65 @@ export default async function FeedPage({ searchParams }: { searchParams: SearchP
   const cursorRaw = firstValue(sp.cursor);
 
   return (
-    <Suspense key={`${tab}|${cursorRaw}`} fallback={<PageSkeleton tab={tab} />}>
-      <FeedContent tab={tab} cursorRaw={cursorRaw} />
-    </Suspense>
+    <>
+      {/* Encabezado y tabs VIVEN FUERA del Suspense keyeado a propósito: ese
+          límite se remonta en cada cambio de tab, y con los tabs adentro la
+          barrita del subrayado se destruía y volvía a nacer en la posición
+          nueva — no se deslizaba, y el componente perdía de dónde venía (que
+          es lo que gradúa el rebote). Acá persisten entre navegaciones. */}
+      <Suspense fallback={<FeedHeader area={null} />}>
+        <FeedHeaderWithArea />
+      </Suspense>
+
+      <FeedTabs active={tab} />
+
+      <Suspense key={`${tab}|${cursorRaw}`} fallback={<ContentSkeleton tab={tab} />}>
+        <FeedContent tab={tab} cursorRaw={cursorRaw} />
+      </Suspense>
+    </>
   );
+}
+
+/** Encabezado del feed. Igual para los 5 tabs → nunca se remonta al cambiarlos. */
+function FeedHeader({ area }: { area: string | null }) {
+  return (
+    <header className="mb-3">
+      <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
+        {COPY.header.title}
+      </h1>
+      <p className="mt-0.5 text-sm text-foreground-secondary">
+        {area ? COPY.header.subtitleNearArea(area) : COPY.header.subtitleDefault}
+      </p>
+    </header>
+  );
+}
+
+/**
+ * Solo la zona del usuario para personalizar el subtítulo. Query mínima y
+ * aparte del contenido: el encabezado no tiene por qué esperar al feed, y así
+ * puede quedar fuera del límite que se remonta por tab.
+ */
+async function FeedHeaderWithArea() {
+  // El try/catch envuelve SOLO el fetch: construir JSX adentro haría que un
+  // error de render se tragara acá en vez de subir al error boundary.
+  let area: string | null = null;
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("area_label")
+        .eq("id", user.id)
+        .maybeSingle();
+      area = profile?.area_label ?? null;
+    }
+  } catch {
+    area = null; // sin zona: el subtítulo cae al genérico, nunca un error.
+  }
+  return <FeedHeader area={area} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +140,6 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
   // Zona + identidad del usuario para el header y el composer.
   let viewerName = "";
   let viewerAvatarUrl: string | null = null;
-  let userArea: string | null = null;
   // Entidades propias publicadas → selector "Publicar como" del composer.
   let myEntities: ComposerEntity[] = [];
   if (user) {
@@ -106,7 +160,6 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
     ]);
     viewerName = profile?.display_name ?? "";
     viewerAvatarUrl = profile?.avatar_url ?? null;
-    userArea = profile?.area_label ?? null;
     myEntities = (entityRows ?? []).map((row) => ({
       id: row.id,
       title: row.title,
@@ -119,17 +172,6 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
 
   return (
     <>
-      <header className="mb-3">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-          {COPY.header.title}
-        </h1>
-        <p className="mt-0.5 text-sm text-foreground-secondary">
-          {userArea ? COPY.header.subtitleNearArea(userArea) : COPY.header.subtitleDefault}
-        </p>
-      </header>
-
-      <FeedTabs active={tab} />
-
       <div className="mt-4 flex flex-col gap-4">
         {tab === "para-ti" ? (
           <>
@@ -574,21 +616,11 @@ function ComposerInvite() {
 // Fallback de Suspense: header + tabs + shimmer (§5.2)
 // ---------------------------------------------------------------------------
 
-function PageSkeleton({ tab }: { tab: FeedTabId }) {
+/** Solo el contenido: el encabezado y los tabs ya están montados y persisten. */
+function ContentSkeleton({ tab }: { tab: FeedTabId }) {
   return (
-    <div aria-busy="true">
-      <header className="mb-3">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-          {COPY.header.title}
-        </h1>
-        <p className="mt-0.5 text-sm text-foreground-secondary">
-          {COPY.header.subtitleDefault}
-        </p>
-      </header>
-      <FeedTabs active={tab} />
-      <div className="mt-4">
-        <FeedSkeleton withComposer={tab === "para-ti"} />
-      </div>
+    <div aria-busy="true" className="mt-4">
+      <FeedSkeleton withComposer={tab === "para-ti"} />
     </div>
   );
 }
