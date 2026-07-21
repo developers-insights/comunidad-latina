@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { EnvelopeSimple, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr";
+import { EnvelopeSimple, Eye, EyeSlash, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/client";
 import { safeNextPath } from "@/components/auth/next-param";
 import { FormError } from "@/components/auth/form-error";
@@ -25,6 +25,8 @@ const COPY = {
   email: "Tu email",
   emailPlaceholder: "nombre@ejemplo.com",
   password: "Tu contraseña",
+  showPassword: "Mostrar contraseña",
+  hidePassword: "Ocultar contraseña",
   submitPassword: "Entrar",
   submitMagic: "Mandame el enlace",
   magicHelp:
@@ -58,6 +60,7 @@ export function LoginForm({
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [pending, setPending] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
   const [error, setError] = useState<string | null>(
@@ -160,16 +163,32 @@ export function LoginForm({
               label={COPY.password}
               error={passwordError ?? undefined}
             >
-              <Input
-                id="login-password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                aria-invalid={passwordError ? true : undefined}
-                aria-describedby={passwordError ? "login-password-error" : undefined}
-              />
+              <div className="relative">
+                <Input
+                  id="login-password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-11"
+                  aria-invalid={passwordError ? true : undefined}
+                  aria-describedby={passwordError ? "login-password-error" : undefined}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? COPY.hidePassword : COPY.showPassword}
+                  aria-pressed={showPassword}
+                  className="absolute right-1.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-foreground-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+                >
+                  {showPassword ? (
+                    <EyeSlash size={18} aria-hidden="true" />
+                  ) : (
+                    <Eye size={18} aria-hidden="true" />
+                  )}
+                </button>
+              </div>
             </Field>
             <Button type="submit" size="lg" loading={pending} className="mt-2 w-full">
               {COPY.submitPassword}
