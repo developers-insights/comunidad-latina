@@ -135,6 +135,11 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
   const [draftId, setDraftId] = useState<string | null>(null);
 
   const isProperty = kind === "property";
+  // La frecuencia (por mes/semana/día) es lenguaje de alquileres y sueldos.
+  // Para negocio/profesional/evento se oculta y el precio queda como único —
+  // el cliente eligió "Negocio" y le apareció "Por mes" como si fuera una
+  // propiedad (feedback 2026-07-21).
+  const hasPriceFrequency = isProperty || kind === "job";
 
   function validateStep(current: number): string | null {
     if (current === 0 && !kind) return C.errors.kindRequired;
@@ -239,7 +244,11 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
           title: title.trim(),
           description: description.trim(),
           priceAmount: price ? Number(price) : null,
-          pricePeriod: price ? (period as "month" | "week" | "day" | "one_time") : null,
+          pricePeriod: price
+            ? hasPriceFrequency
+              ? (period as "month" | "week" | "day" | "one_time")
+              : "one_time"
+            : null,
           bedrooms: isProperty && bedrooms ? Number(bedrooms) : null,
           bathrooms: isProperty && bathrooms ? Number(bathrooms) : null,
           sqft: isProperty && sqft ? Number(sqft) : null,
@@ -412,7 +421,7 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
       {step === 2 && (
         <div className="flex flex-col gap-4">
           <h2 className="font-display text-xl font-bold text-foreground">{C.steps.price.title}</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className={cn("grid gap-3", hasPriceFrequency ? "grid-cols-2" : "grid-cols-1")}>
             <Field htmlFor="pub-price" label={C.steps.price.priceLabel} optional={!isProperty}>
               <Input
                 id="pub-price"
@@ -425,18 +434,20 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
                 className="numeric"
               />
             </Field>
-            <Field htmlFor="pub-period" label={C.steps.price.periodLabel}>
-              <Select
-                id="pub-period"
-                value={period}
-                onChange={(event) => setPeriod(event.target.value)}
-              >
-                <option value="month">Por mes</option>
-                <option value="week">Por semana</option>
-                <option value="day">Por día</option>
-                <option value="one_time">Precio único</option>
-              </Select>
-            </Field>
+            {hasPriceFrequency && (
+              <Field htmlFor="pub-period" label={C.steps.price.periodLabel}>
+                <Select
+                  id="pub-period"
+                  value={period}
+                  onChange={(event) => setPeriod(event.target.value)}
+                >
+                  <option value="month">Por mes</option>
+                  <option value="week">Por semana</option>
+                  <option value="day">Por día</option>
+                  <option value="one_time">Precio único</option>
+                </Select>
+              </Field>
+            )}
           </div>
 
           {isProperty && (
