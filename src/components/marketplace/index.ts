@@ -10,12 +10,14 @@ export {
   isProductCategory,
   isProductCondition,
   parseProductAttrs,
+  sanitizeSearchQuery,
   type ProductAttrs,
   type ProductCategory,
   type ProductCondition,
 } from "./helpers";
 export { CategoryChips } from "./category-chips";
 export { MarketplaceOwnerBanner } from "./owner-banner";
+export { MarketplaceSearchBar } from "./marketplace-search-bar";
 export { ProductCard, type ProductCardModel } from "./product-card";
 export { ProductGallery, type ProductGalleryProps } from "./product-gallery";
 export { ProductCardSkeleton, ProductGridSkeleton } from "./product-skeletons";

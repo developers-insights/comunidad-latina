@@ -1,6 +1,7 @@
 export const nav = {
   feed: "Inicio",
   properties: "Propiedades",
+  videos: "Videos",
   community: "Comunidad",
   messages: "Mensajes",
   profile: "Perfil",

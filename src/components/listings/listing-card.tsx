@@ -1,13 +1,11 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, MapPin, ShieldCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { Badge, BezelCard, buttonVariants } from "@/components/ui";
+import { Badge, BezelCard, CardMedia } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 import {
   FALLBACK_PHOTO,
   firstNameOf,
-  isOptimizableSrc,
   type PublisherView,
   type VerificationView,
 } from "./helpers";
@@ -24,64 +22,88 @@ export interface ListingCardModel {
   publisher: PublisherView;
 }
 
+/** Vivienda → acento azul del módulo (para el CTA en píldora). */
+const ACCENT = "var(--accent-vivienda)";
+
 /**
- * Card de listing (§4.b/§4.d): foto 16:9 + precio destacado + banda de
- * verificación (por ausencia si no hay) + Trust Score del publicador +
- * 1 solo CTA. Estructura de card claramente distinta a un post social.
+ * CTA en píldora con el acento del módulo (feedback cliente 2026-07-21: el botón
+ * deja de ser gris). El acento va en el borde/tinte y en la flecha; el texto
+ * queda en `text-foreground` para no arriesgar contraste (criterio AA de
+ * EntityKindChip). Server-safe: sólo un Link.
+ */
+function AccentLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      style={{
+        borderColor: `color-mix(in oklab, ${ACCENT} 45%, transparent)`,
+        backgroundColor: `color-mix(in oklab, ${ACCENT} 12%, transparent)`,
+      }}
+      className={cn(
+        "mt-1 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full border px-4 text-sm font-semibold text-foreground",
+        "transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.98]",
+        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+      )}
+    >
+      {children}
+      <ArrowRight size={16} aria-hidden="true" style={{ color: ACCENT }} />
+    </Link>
+  );
+}
+
+/**
+ * Card de listing de VIVIENDA (§4.b/§4.d). Rediseño 2026-07-21: la foto es
+ * protagonista y el título/precio/zona van SOBRE su borde inferior (overlayBottom
+ * de CardMedia, legible por el scrim); la banda de verificación queda arriba.
+ * Debajo, sólo el publicador con su Trust Score y un CTA en píldora con acento.
+ * Estructura claramente distinta a un post social.
+ *
+ * Se usa también en /propiedades y en matching: el contrato (ListingCardModel)
+ * no cambia.
  */
 export function ListingCard({ listing }: { listing: ListingCardModel }) {
-  const photo = listing.photoUrl ?? FALLBACK_PHOTO;
-
   return (
     <BezelCard
       variant={listing.verification ? "success" : "default"}
       coreClassName="overflow-hidden p-0"
     >
       <article aria-label={listing.title}>
-        <div className="relative aspect-video w-full bg-surface-subtle">
-          {isOptimizableSrc(photo) ? (
-            <Image
-              src={photo}
-              alt=""
-              fill
-              sizes="(max-width: 512px) 100vw, 512px"
-              quality={62}
-              className="object-cover"
-            />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element -- URL externa de seed/API: host fuera del allowlist de next/image
-            <img
-              src={photo}
-              alt=""
-              loading="lazy"
-              className="absolute inset-0 size-full object-cover"
-            />
-          )}
-        </div>
+        <CardMedia
+          src={listing.photoUrl}
+          fallbackSrc={FALLBACK_PHOTO}
+          aspect="video"
+          quality={62}
+          overlayTopLeft={
+            listing.verification ? (
+              <Badge variant="success">
+                <ShieldCheck size={13} weight="fill" aria-hidden="true" />
+                {COPY.list.verifiedChip(listing.verification.dateLabel)}
+              </Badge>
+            ) : undefined
+          }
+          overlayBottom={
+            <div>
+              <h3 className="font-display text-base font-bold leading-snug text-on-media line-clamp-2">
+                {listing.title}
+              </h3>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                {listing.priceLabel && (
+                  <span className="numeric text-lg font-bold text-on-media">
+                    {listing.priceLabel}
+                  </span>
+                )}
+                {listing.areaLabel && (
+                  <span className="flex items-center gap-1 text-sm text-on-media/85">
+                    <MapPin size={14} aria-hidden="true" className="shrink-0" />
+                    {listing.areaLabel}
+                  </span>
+                )}
+              </div>
+            </div>
+          }
+        />
 
         <div className="flex flex-col gap-2.5 p-4">
-          {listing.verification && (
-            <Badge variant="success" className="self-start">
-              <ShieldCheck size={13} weight="fill" aria-hidden="true" />
-              {COPY.list.verifiedChip(listing.verification.dateLabel)}
-            </Badge>
-          )}
-
-          <h3 className="font-display text-lg font-bold leading-snug text-foreground">
-            {listing.title}
-          </h3>
-
-          {listing.priceLabel && (
-            <p className="numeric text-2xl font-bold text-brand">{listing.priceLabel}</p>
-          )}
-
-          {listing.areaLabel && (
-            <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
-              <MapPin size={16} aria-hidden="true" className="shrink-0" />
-              {listing.areaLabel}
-            </p>
-          )}
-
           {listing.publisher?.type === "member" ? (
             <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
               <span className="truncate">{listing.publisher.displayName}</span>
@@ -101,13 +123,7 @@ export function ListingCard({ listing }: { listing: ListingCardModel }) {
             </p>
           ) : null}
 
-          <Link
-            href={`/propiedades/${listing.id}`}
-            className={cn(buttonVariants({ variant: "secondary", size: "md" }), "mt-1 w-full")}
-          >
-            {COPY.list.viewDetails}
-            <ArrowRight size={16} aria-hidden="true" />
-          </Link>
+          <AccentLink href={`/propiedades/${listing.id}`}>{COPY.list.viewDetails}</AccentLink>
         </div>
       </article>
     </BezelCard>

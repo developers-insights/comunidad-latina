@@ -14,12 +14,14 @@ import {
 } from "@/components/listings";
 import {
   COPY,
+  mediaKindOf,
   postKindOf,
   postMediaUrl,
   type AuthorView,
   type FeedListingModel,
   type PostCardModel,
   type PostEntityView,
+  type PostMediaView,
 } from "@/components/feed";
 import { formatDate, timeAgo } from "@/lib/utils";
 
@@ -350,13 +352,19 @@ export function toPostCardModel(
   now: Date,
   extras?: { entity?: PostEntityView | null; isPromoted?: boolean },
 ): PostCardModel {
-  const firstMedia = row.media.find((path) => path && path.trim().length > 0);
+  // Bucket post-media (0025): fotos y videos conviven en el array `media`;
+  // el kind se infiere por extensión (mediaKindOf). photoUrl queda como la
+  // primera FOTO para los consumidores viejos que renderizan <img>.
+  const media: PostMediaView[] = row.media
+    .filter((path) => path && path.trim().length > 0)
+    .map((path) => ({ kind: mediaKindOf(path), url: postMediaUrl(path) }));
+  const firstPhoto = media.find((item) => item.kind === "image");
   return {
     id: row.id,
     kind: postKindOf(row.kind),
     body: row.body,
-    // Bucket post-media (0025): el composer ya sube ahí con el cliente del user.
-    photoUrl: firstMedia ? postMediaUrl(firstMedia) : null,
+    photoUrl: firstPhoto?.url ?? null,
+    media,
     likeCount: row.like_count,
     commentCount: row.comment_count,
     createdAt: row.created_at,

@@ -1,0 +1,57 @@
+/*
+ * Corazón grande del doble-tap sobre la foto (estilo Instagram). Pop con resorte
+ * y desvanecido; ~800ms. Decorativo: el estado real del me gusta lo comunica el
+ * botón con aria-pressed, así que este corazón no anuncia nada (aria-hidden).
+ *
+ * Usa los motion tokens de globals.css — no inventa curvas.
+ */
+.heartPop {
+  animation: cl-heart-pop 800ms var(--ease-spring) forwards;
+}
+
+@keyframes cl-heart-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  30% {
+    transform: scale(0.92);
+  }
+  45% {
+    transform: scale(1);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/*
+ * Variante para prefers-reduced-motion: sin escala/resorte, solo un fundido
+ * breve para que el doble-tap tenga ALGÚN eco visual sobre la foto.
+ */
+.heartFade {
+  animation: cl-heart-fade 700ms var(--ease-out-premium) forwards;
+}
+
+@keyframes cl-heart-fade {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}

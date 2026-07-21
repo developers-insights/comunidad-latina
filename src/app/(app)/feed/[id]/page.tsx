@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Megaphone } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, Banner, EmptyState, buttonVariants } from "@/components/ui";
-import { PublisherTrust, firstNameOf } from "@/components/listings";
+import { Banner, EmptyState, buttonVariants } from "@/components/ui";
 import {
   COPY,
   CommentComposer,
@@ -10,6 +9,9 @@ import {
   PostMenu,
   type PostEntityView,
 } from "@/components/feed";
+// Import por path directo (el barrel del feed es de otro agente): el item del
+// comentario es fuente única compartida con la hoja del feed.
+import { CommentItem } from "@/components/feed/comment-item";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { formatDate, timeAgo } from "@/lib/utils";
@@ -193,37 +195,14 @@ export default async function PostDetailPage({
           />
         ) : (
           <ul className="mt-4 flex flex-col gap-4">
-            {comments.map((comment) => {
-              const author = authorViewOf(authors, comment.author_id);
-              return (
-                <li key={comment.id} className="flex items-start gap-2.5">
-                  <Avatar size="sm" name={author.displayName} src={author.avatarUrl} />
-                  <div className="min-w-0 flex-1 rounded-lg bg-surface-subtle px-3.5 py-2.5">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span className="truncate text-sm font-semibold text-foreground">
-                        {author.displayName}
-                      </span>
-                      {author.profileId && (
-                        <PublisherTrust
-                          displayName={author.displayName}
-                          firstName={firstNameOf(author.displayName)}
-                          score={author.score}
-                          level={author.level}
-                          signals={author.signals}
-                          size="inline"
-                        />
-                      )}
-                      <span className="text-xs text-foreground-muted">
-                        · {timeAgo(comment.created_at, now)}
-                      </span>
-                    </div>
-                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                      {comment.body}
-                    </p>
-                  </div>
-                </li>
-              );
-            })}
+            {comments.map((comment) => (
+              <CommentItem
+                key={comment.id}
+                author={authorViewOf(authors, comment.author_id)}
+                body={comment.body}
+                timeAgoLabel={timeAgo(comment.created_at, now)}
+              />
+            ))}
           </ul>
         )}
 

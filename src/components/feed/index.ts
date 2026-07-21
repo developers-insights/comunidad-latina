@@ -1,5 +1,16 @@
 export { COPY } from "./copy";
 export { CommentComposer } from "./comment-composer";
+export {
+  CommentsSheetProvider,
+  useCommentsSheet,
+  type OpenCommentsArgs,
+} from "./comments-sheet";
+export {
+  MediaViewerProvider,
+  useMediaViewer,
+  type OpenMediaViewerArgs,
+  type ViewerMediaItem,
+} from "./media-viewer";
 export { FeedListingCard } from "./feed-listing-card";
 export { FeedTabs } from "./feed-tabs";
 export { GuideCard } from "./guide-card";
@@ -11,6 +22,7 @@ export {
   entityHref,
   entityKindLabel,
   feedPostVisibilityFilter,
+  mediaKindOf,
   parseTab,
   postKindOf,
   postMediaUrl,
@@ -21,6 +33,8 @@ export {
   type GuideCardModel,
   type PostCardModel,
   type PostEntityView,
+  type PostMediaKind,
+  type PostMediaView,
 } from "./helpers";
 export { PostActions, type PostActionsProps } from "./post-actions";
 export { PostCard, type PostCardProps } from "./post-card";

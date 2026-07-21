@@ -232,9 +232,14 @@
 }
 @media (prefers-reduced-motion: no-preference) {
   .cl-page-transition {
+    /* `backwards` (no `both`) y SIN will-change: el estado final del keyframe
+     * es el natural del elemento, así que forwards-fill solo dejaba un
+     * `transform` residual — y `will-change: transform` promociona la capa
+     * PARA SIEMPRE. Ambos convertían este wrapper en containing block de
+     * cualquier descendiente `position: fixed` (los reels de /videos medían
+     * 358×0 dentro de la columna en vez de cubrir el viewport). */
     animation: cl-page-in var(--duration-base, 250ms)
-      var(--ease-out-premium, cubic-bezier(0.32, 0.72, 0, 1)) both;
-    will-change: opacity, transform;
+      var(--ease-out-premium, cubic-bezier(0.32, 0.72, 0, 1)) backwards;
   }
 }
 

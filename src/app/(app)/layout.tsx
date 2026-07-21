@@ -3,6 +3,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/shell/header";
 import { BottomNav } from "@/components/shell/bottom-nav";
+import { CommentsSheetProvider, MediaViewerProvider } from "@/components/feed";
 import { OfflineBanner } from "@/components/shell/offline-banner";
 import { TenantMismatchBanner } from "@/components/shell/tenant-mismatch-banner";
 import { AccountGate } from "@/components/shell/account-gate";
@@ -44,6 +45,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
+    // Overlays sociales (visor de medios + sheet de comentarios) a nivel shell:
+    // cualquier card de cualquier página los abre sin remontar nada.
+    <MediaViewerProvider>
+    <CommentsSheetProvider>
     <div className="flex min-h-dvh flex-col">
       <a
         href="#contenido"
@@ -68,5 +73,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <BottomNav />
       <InstallPrompt />
     </div>
+    </CommentsSheetProvider>
+    </MediaViewerProvider>
   );
 }

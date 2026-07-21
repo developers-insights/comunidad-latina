@@ -3,16 +3,18 @@ import {
   Briefcase,
   CalendarBlank,
   House,
-  Megaphone,
   Question,
   Storefront,
   UserGear,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
-import { Avatar, CardMedia, Chip } from "@/components/ui";
+import { Avatar, Chip } from "@/components/ui";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
+import { AdChip } from "./card-ad-chip";
+import { CardLikeProvider } from "./card-like-context";
+import { CardPostMedia } from "./card-post-media";
 import { PostActions } from "./post-actions";
 import { entityAccentVar, entityHref, entityKindLabel } from "./helpers";
 import type { PostCardModel, PostEntityView } from "./helpers";
@@ -25,6 +27,8 @@ export interface PostCardProps {
   isDetail?: boolean;
   /** Slot para el menú ⋯ (solo en el detalle). */
   menu?: React.ReactNode;
+  /** Contexto del feed de videos para el tap sobre un video (§5). Default "para-ti". */
+  videoScope?: string;
   className?: string;
 }
 
@@ -54,16 +58,6 @@ function EntityKindChip({ kind }: { kind: string }) {
       icon={<KindIcon weight="fill" style={{ color: accent }} aria-hidden="true" />}
     >
       {entityKindLabel(kind)}
-    </Chip>
-  );
-}
-
-/** Chip honesto de campaña paga — mismo lenguaje que "Destacado" de boosts. */
-function AdChip() {
-  return (
-    <Chip variant="brand" size="sm" className="shrink-0">
-      <Megaphone size={14} weight="fill" aria-hidden="true" />
-      {COPY.post.adChip}
     </Chip>
   );
 }
@@ -103,15 +97,20 @@ function EntityHeader({
 }
 
 /**
- * Card de post social (§4.b) — estructuralmente distinta de un listing:
- * avatar + autor con Trust Score SIEMPRE inline + body + acciones sociales.
- * Sin Double-Bezel a propósito: el bezel queda reservado a las tarjetas de
- * confianza (listings verificados) para que el ojo distinga por estructura.
+ * Card de post social (§4.b) — estructuralmente distinta de un listing: avatar +
+ * autor con Trust Score inline + cuerpo + FOTO/VIDEO protagonista + acciones.
  *
- * Cuando el post es de una ENTIDAD (feedback cliente 2026-07-19), la entidad se
- * muestra como autor (nombre + chip del vertical con su acento + "· por
- * {persona}") y linkea a su página. Cuando está PROMOCIONADO, se marca honesto
- * con el chip "Publicidad" sobre la foto (o en la cabecera si no hubiera foto).
+ * Rediseño 2026-07-21 ("diseñá pensando en una red social, no en un directorio"):
+ * la foto pasa a 4:5 y ocupa el ancho COMPLETO de la card (full-bleed) — sólo la
+ * cabecera y las acciones conservan su margen. Doble-tap para me gusta y un toque
+ * abre el visor; el estado de me gusta se comparte entre la foto y el botón vía
+ * CardLikeProvider (por eso envuelve foto + acciones). La cabecera y el cuerpo
+ * son server (pasan como children del provider y no se hidratan).
+ *
+ * Cuando el post es de una ENTIDAD, la entidad se muestra como autor y linkea a
+ * su página. Si está PROMOCIONADO, se marca honesto con el chip "Publicidad"
+ * (sobre la foto, o en la cabecera si no hubiera media) y, con entidad, suma el
+ * CTA de campaña sobre el borde inferior de la foto (BoostCta).
  */
 export function PostCard({
   post,
@@ -119,9 +118,12 @@ export function PostCard({
   viewerId,
   isDetail = false,
   menu,
+  videoScope = "para-ti",
   className,
 }: PostCardProps) {
-  const body = (
+  const hasMedia = post.media.length > 0 || Boolean(post.photoUrl);
+
+  const bodyText = (
     <p
       className={cn(
         "whitespace-pre-wrap text-base leading-normal text-foreground",
@@ -131,6 +133,19 @@ export function PostCard({
       {post.body}
     </p>
   );
+  const body = post.body
+    ? isDetail
+      ? bodyText
+      : (
+          <Link
+            href={`/feed/${post.id}`}
+            aria-label={COPY.post.openPost}
+            className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+          >
+            {bodyText}
+          </Link>
+        )
+    : null;
 
   const entity = post.entity;
   // La entidad es el autor visual → avatar con las iniciales de la entidad.
@@ -145,85 +160,90 @@ export function PostCard({
           : `Publicación de ${post.author.displayName}`
       }
       className={cn(
-        "rounded-lg border border-border-subtle bg-surface p-4 shadow-xs",
+        "overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-xs",
         className,
       )}
     >
-      <header className="flex items-start gap-2.5">
-        <Avatar size="sm" name={avatarName} src={avatarSrc} />
-        {entity ? (
-          <EntityHeader entity={entity} authorName={post.author.displayName} />
-        ) : (
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <span className="truncate text-sm font-semibold text-foreground">
-                {post.author.displayName}
-              </span>
-              {post.author.profileId && (
-                <PublisherTrust
-                  displayName={post.author.displayName}
-                  firstName={firstNameOf(post.author.displayName)}
-                  score={post.author.score}
-                  level={post.author.level}
-                  signals={post.author.signals}
-                  size="inline"
-                />
-              )}
-            </div>
-            <p className="text-xs text-foreground-muted">{post.timeAgoLabel}</p>
-          </div>
-        )}
-        {/* Sin foto (posts viejos de texto / preguntas): el chip va en la cabecera. */}
-        {post.isPromoted && !post.photoUrl && <AdChip />}
-        {post.kind === "question" && (
-          <Chip size="sm" variant="info" icon={<Question aria-hidden="true" />}>
-            {COPY.post.questionChip}
-          </Chip>
-        )}
-        {menu}
-      </header>
-
-      {/* timeAgo del post de entidad: bajo la cabecera para no competir con "por…" */}
-      {entity && (
-        <p className="mt-1 text-xs text-foreground-muted">{post.timeAgoLabel}</p>
-      )}
-
-      <div className="mt-3 flex flex-col gap-3">
-        {isDetail ? (
-          body
-        ) : (
-          <Link
-            href={`/feed/${post.id}`}
-            aria-label={COPY.post.openPost}
-            className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-          >
-            {body}
-          </Link>
-        )}
-
-        {post.photoUrl && (
-          <div className="overflow-hidden rounded-md">
-            <CardMedia
-              src={post.photoUrl}
-              fallbackSrc={post.photoUrl}
-              aspect="video"
-              quality={62}
-              overlayTopRight={post.isPromoted ? <AdChip /> : undefined}
-            />
-          </div>
-        )}
-      </div>
-
-      <PostActions
-        className="mt-2 border-t border-border-subtle pt-1.5"
+      <CardLikeProvider
         postId={post.id}
         tenantId={tenantId}
         viewerId={viewerId}
-        likeCount={post.likeCount}
-        likedByViewer={post.likedByViewer}
-        commentCount={post.commentCount}
-        isDetail={isDetail}
-      />
+        initialLiked={post.likedByViewer}
+        initialCount={post.likeCount}
+      >
+        {/* Cabecera + cuerpo con margen; la foto de abajo va full-bleed. */}
+        <div className="flex flex-col gap-2.5 px-4 pb-2.5 pt-3.5">
+          <header className="flex items-start gap-2.5">
+            <Avatar size="sm" name={avatarName} src={avatarSrc} />
+            {entity ? (
+              <EntityHeader entity={entity} authorName={post.author.displayName} />
+            ) : (
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="truncate text-sm font-semibold text-foreground">
+                    {post.author.displayName}
+                  </span>
+                  {post.author.profileId && (
+                    <PublisherTrust
+                      displayName={post.author.displayName}
+                      firstName={firstNameOf(post.author.displayName)}
+                      score={post.author.score}
+                      level={post.author.level}
+                      signals={post.author.signals}
+                      size="inline"
+                    />
+                  )}
+                </div>
+                <p className="text-xs text-foreground-muted">{post.timeAgoLabel}</p>
+              </div>
+            )}
+            {/* Sin media (posts viejos de texto / preguntas): el chip va en la cabecera. */}
+            {post.isPromoted && !hasMedia && <AdChip />}
+            {post.kind === "question" && (
+              <Chip size="sm" variant="info" icon={<Question aria-hidden="true" />}>
+                {COPY.post.questionChip}
+              </Chip>
+            )}
+            {menu}
+          </header>
+
+          {/* timeAgo del post de entidad: bajo la cabecera para no competir con "por…" */}
+          {entity && (
+            <p className="text-xs text-foreground-muted">{post.timeAgoLabel}</p>
+          )}
+
+          {body}
+        </div>
+
+        {hasMedia && (
+          <CardPostMedia
+            postId={post.id}
+            authorName={avatarName}
+            media={post.media}
+            photoUrl={post.photoUrl}
+            isPromoted={post.isPromoted}
+            entity={post.entity}
+            videoScope={videoScope}
+          />
+        )}
+
+        <div
+          className={cn(
+            "px-2 pb-1 pt-1",
+            !hasMedia && "border-t border-border-subtle",
+          )}
+        >
+          <PostActions
+            postId={post.id}
+            tenantId={tenantId}
+            viewerId={viewerId}
+            likeCount={post.likeCount}
+            likedByViewer={post.likedByViewer}
+            commentCount={post.commentCount}
+            isDetail={isDetail}
+          />
+        </div>
+      </CardLikeProvider>
     </article>
   );
 }

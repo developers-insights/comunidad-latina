@@ -300,7 +300,55 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-brand-foreground"],
     cobertura: "control",
   },
-  "src/components/feed/post-composer.tsx": { inks: ["text-on-media"], cobertura: "control" },
+  // Composer con multi-foto + video (2026-07-21): el chip de duración del video
+  // y el botón "Quitar" viven sobre la preview <img>/<video> del medio elegido —
+  // el respaldo impreso es la preview misma (patrón CardMedia).
+  "src/components/feed/post-composer.tsx": {
+    inks: ["text-on-media", "text-on-media"],
+    cobertura: "sobre <img>",
+  },
+  // Rediseño red social (2026-07-21) — la foto 4:5 es la protagonista:
+  // contador "N fotos" sobre su velo (bg-media-scrim + cl-print-fill); el
+  // corazón del doble-tap es transitorio (solo vive durante la animación).
+  "src/components/feed/card-post-media.tsx": {
+    inks: ["text-on-media", "text-on-media"],
+    cobertura: "cl-print-fill",
+  },
+  // Toggle de sonido del video del feed — vive dentro de un <button>.
+  "src/components/feed/card-video.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "control",
+  },
+  // Título/precio/zona sobre la franja inferior de la foto (overlayBottom de
+  // CardMedia): el respaldo impreso es el <img> de CardMedia, como el hero.
+  "src/components/feed/feed-listing-card.tsx": {
+    inks: ["text-on-media", "text-on-media", "text-on-media"],
+    cobertura: "sobre <img>",
+    prueba: { archivo: "src/components/ui/card-media.tsx", contiene: ["<img"] },
+  },
+  "src/components/listings/listing-card.tsx": {
+    inks: ["text-on-media", "text-on-media", "text-on-media"],
+    cobertura: "sobre <img>",
+    prueba: { archivo: "src/components/ui/card-media.tsx", contiene: ["<img"] },
+  },
+  // Visor de medios fullscreen: overlay modal sobre TODA la página — en papel
+  // no significa nada, el panel entero lleva cl-print-hide.
+  "src/components/feed/media-viewer.tsx": {
+    inks: Array<string>(5).fill("text-on-media"),
+    cobertura: "cl-print-hide",
+  },
+  // Reels /videos: superficie de video fullscreen (fixed, bg-media-shade) — el
+  // contenedor raíz entero lleva cl-print-hide; imprimir reels no existe.
+  "src/app/(app)/videos/video-reels.tsx": {
+    inks: Array<string>(10).fill("text-on-media"),
+    cobertura: "cl-print-hide",
+  },
+  // Glifo Play sobre el thumbnail de video del grid del perfil — se imprime
+  // con su velo (bg-media-scrim + cl-print-fill), como el contador de gallery.
+  "src/app/(app)/perfil/posts-grid.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-fill",
+  },
   // Dos flechas <button> + el contador "3 / 7", que se imprime con su velo.
   "src/components/listings/gallery.tsx": {
     inks: ["text-on-media", "text-on-media", "text-on-media"],

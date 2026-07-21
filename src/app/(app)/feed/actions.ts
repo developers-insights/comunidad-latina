@@ -66,6 +66,54 @@ const PHOTO_TYPES: Record<string, string> = {
   "image/webp": "webp",
 };
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const MAX_PHOTOS = 4;
+const MAX_VIDEOS = 1;
+
+/**
+ * Path de video en post-media que este server ACEPTA en posts.media:
+ * exactamente {tenant}/{user}/{archivo}.(mp4|webm), sin traversal posible.
+ * El prefijo se valida contra el tenant del guard y el user del JWT — el
+ * cliente no puede colar un path ajeno (y la policy 0025 ya lo habría
+ * rechazado al subir; esto es defensa en profundidad al PERSISTIR).
+ */
+const VIDEO_FILENAME_RE = /^[A-Za-z0-9._-]+\.(mp4|webm)$/i;
+
+function isOwnVideoPath(path: string, tenantId: string, userId: string): boolean {
+  const segments = path.split("/");
+  if (segments.length !== 3) return false;
+  const [tenantSegment, userSegment, filename] = segments;
+  return (
+    tenantSegment === tenantId &&
+    userSegment === userId &&
+    VIDEO_FILENAME_RE.test(filename) &&
+    !filename.includes("..")
+  );
+}
+
+/** Orden de los medios tal como los eligió el usuario ("photo" | "video"). */
+const mediaOrderSchema = z.array(z.enum(["photo", "video"])).max(MAX_PHOTOS + MAX_VIDEOS);
+
+/**
+ * Reconstruye posts.media respetando el orden de selección del usuario.
+ * Si el orden no cuadra con lo recibido (cliente viejo o payload raro), cae
+ * al orden natural: fotos primero, video al final. Nunca pierde un medio.
+ */
+function buildMediaInOrder(
+  order: Array<"photo" | "video">,
+  photoPaths: string[],
+  videoPaths: string[],
+): string[] {
+  const photoCount = order.filter((kind) => kind === "photo").length;
+  const videoCount = order.filter((kind) => kind === "video").length;
+  if (photoCount !== photoPaths.length || videoCount !== videoPaths.length) {
+    return [...photoPaths, ...videoPaths];
+  }
+  const photos = [...photoPaths];
+  const videos = [...videoPaths];
+  return order
+    .map((kind) => (kind === "photo" ? photos.shift() : videos.shift()))
+    .filter((path): path is string => Boolean(path));
+}
 
 export type CreatePostResult =
   | {
@@ -86,6 +134,34 @@ function devAutoApprove(): boolean {
   return process.env.MODERATION_DEV_AUTO_APPROVE === "true" && !isProduction;
 }
 
+// ---------------------------------------------------------------------------
+// Subida directa de video (sprint reels 2026-07-21)
+// ---------------------------------------------------------------------------
+
+export type PrepareMediaUploadResult =
+  | { ok: true; tenantId: string; userId: string }
+  | { ok: false; code: "unauthenticated" | "error" }
+  | { ok: false; code: "tenant-mismatch"; message: string };
+
+/**
+ * El video se sube DIRECTO del navegador al bucket post-media (evita el límite
+ * de body de las server actions), pero el prefijo {tenant}/{user} del path
+ * sale de ACÁ — del guard y del JWT — nunca del cliente. La policy
+ * post_media_insert (0025) re-valida ambos segmentos al subir; esto además
+ * corta ANTES el caso tenant-mismatch, sin gastar el intento de storage.
+ */
+export async function prepareMediaUploadAction(): Promise<PrepareMediaUploadResult> {
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") return { ok: false, code: "unauthenticated" };
+    if (guard.reason === "tenant-mismatch") {
+      return { ok: false, code: "tenant-mismatch", message: guard.message };
+    }
+    return { ok: false, code: "error" };
+  }
+  return { ok: true, tenantId: guard.tenant.id, userId: guard.user.id };
+}
+
 export async function createPostAction(formData: FormData): Promise<CreatePostResult> {
   const parsed = postSchema.safeParse({
     body: formData.get("body"),
@@ -95,17 +171,52 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   if (!parsed.success) return { ok: false, code: GENERIC_INVALID };
   const { body, kind, entityId } = parsed.data;
 
-  const photoEntry = formData.get("photo");
-  const photo = photoEntry instanceof File && photoEntry.size > 0 ? photoEntry : null;
-  if (photo && (!PHOTO_TYPES[photo.type] || photo.size > MAX_PHOTO_BYTES)) {
+  // Fotos: hasta 4 por publicación (sprint reels 2026-07-21). Se acepta el
+  // campo legado `photo` (singular) por si un cliente viejo sigue en vuelo.
+  const photoEntries = [...formData.getAll("photos"), formData.get("photo")];
+  const photos = photoEntries.filter(
+    (entry): entry is File => entry instanceof File && entry.size > 0,
+  );
+  if (photos.length > MAX_PHOTOS) return { ok: false, code: "photo" };
+  for (const photo of photos) {
+    if (!PHOTO_TYPES[photo.type] || photo.size > MAX_PHOTO_BYTES) {
+      return { ok: false, code: "photo" };
+    }
+  }
+
+  // Video: el navegador ya lo subió DIRECTO a post-media (la policy 0025 validó
+  // el prefijo {tenant}/{user} con el JWT); acá llega solo el path. La
+  // pertenencia real se re-valida tras el guard, cuando conocemos tenant/user.
+  let videoPaths: string[] = [];
+  try {
+    const raw = formData.get("videoPaths");
+    if (typeof raw === "string" && raw.length > 0) {
+      const parsedPaths = z.array(z.string().min(3).max(300)).max(MAX_VIDEOS).parse(
+        JSON.parse(raw),
+      );
+      videoPaths = parsedPaths;
+    }
+  } catch {
     return { ok: false, code: "photo" };
   }
 
-  // Foto OBLIGATORIA en posts (feedback cliente 2026-07-19), no en preguntas.
+  // Orden de selección del usuario (foto/video intercalados). Opcional.
+  let mediaOrder: Array<"photo" | "video"> = [];
+  try {
+    const raw = formData.get("mediaOrder");
+    if (typeof raw === "string" && raw.length > 0) {
+      mediaOrder = mediaOrderSchema.parse(JSON.parse(raw));
+    }
+  } catch {
+    mediaOrder = []; // orden inválido → fallback fotos-primero, nunca se pierde un medio
+  }
+
+  // ALGÚN medio obligatorio en posts (feedback cliente 2026-07-19: feed
+  // visual; desde el sprint reels el video también cuenta), no en preguntas.
   // Defensa en profundidad: la UX del composer ya lo evita y el trigger
   // MEDIA_REQUIRED (0023) es la última línea; acá fallamos antes de tocar
   // storage/DB para no dejar basura ni una foto huérfana.
-  if (kind === "post" && !photo) {
+  if (kind === "post" && photos.length === 0 && videoPaths.length === 0) {
     return { ok: false, code: "photo" };
   }
 
@@ -123,26 +234,36 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   }
   const { tenant, supabase, user } = guard;
 
+  // Pertenencia del video: el path DEBE ser del prefijo {tenant}/{user} del
+  // que firma el request. Un path ajeno no se persiste jamás (la policy 0025
+  // ya lo habría rechazado al subir; esto es la misma regla al guardar).
+  if (videoPaths.some((path) => !isOwnVideoPath(path, tenant.id, user.id))) {
+    return { ok: false, code: "photo" };
+  }
+
   // ---- Moderación de texto ANTES de publicar (§8) -------------------------
   const moderation = await moderateText(body);
   const tier = moderation.flagged ? TIER_HUMAN : moderationTier(moderation.score);
 
-  // ---- Foto: publicación instantánea + revisión asíncrona -----------------
-  // Sin Vision, la foto YA NO fuerza pending_review (mataba el feed visual): el
-  // post nace published y la imagen entra a la cola humana para revisarse
-  // después. Con Vision configurado se mantiene el screening síncrono actual
-  // (la foto no encola acá). El TEXTO sigue gobernando pending_review.
+  // ---- Media: publicación instantánea + revisión asíncrona ----------------
+  // Sin Vision, la foto/el video YA NO fuerzan pending_review (mataba el feed
+  // visual): el post nace published y la imagen entra a la cola humana para
+  // revisarse después. Con Vision configurado se mantiene el screening
+  // síncrono actual. El TEXTO sigue gobernando pending_review.
   const autoApprove = devAutoApprove();
-  const photoNeedsAsyncReview = Boolean(photo) && !isVisionConfigured && !autoApprove;
+  const hasMedia = photos.length > 0 || videoPaths.length > 0;
+  const mediaNeedsAsyncReview = hasMedia && !isVisionConfigured && !autoApprove;
 
   const status: "published" | "pending_review" =
     moderation.flagged || tier === TIER_HUMAN ? "pending_review" : "published";
 
-  // ---- Subida de foto: bucket post-media con el CLIENTE DEL USUARIO (0025).
+  // ---- Subida de fotos: bucket post-media con el CLIENTE DEL USUARIO (0025).
   // La policy post_media_insert exige path {tenant_id}/{user_id}/… — ya no hace
   // falta el admin client (terminó el desvío histórico a listing-photos).
-  let mediaPaths: string[] = [];
-  if (photo) {
+  // Secuencial a propósito: son ≤4 archivos chicos y así el primer fallo corta
+  // sin dejar una ráfaga de huérfanos.
+  const photoPaths: string[] = [];
+  for (const photo of photos) {
     const extension = PHOTO_TYPES[photo.type];
     const path = `${tenant.id}/${user.id}/post-${crypto.randomUUID()}.${extension}`;
     const { error: uploadError } = await supabase.storage
@@ -154,8 +275,11 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
       });
       return { ok: false, code: "photo" };
     }
-    mediaPaths = [path];
+    photoPaths.push(path);
   }
+
+  // posts.media en el ORDEN en que el usuario eligió los medios.
+  const mediaPaths: string[] = buildMediaInOrder(mediaOrder, photoPaths, videoPaths);
 
   // ---- Insert con el JWT del usuario: la RLS valida tenant/autor/status y,
   // si viene entity_listing_id, que el listing sea propio y published (0023).
@@ -180,17 +304,20 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
 
   // ---- Cola de moderación (admin, uso permitido §6) ------------------------
   const shouldEnqueue =
-    moderation.flagged || moderation.skipped || tier > TIER_AUTO || photoNeedsAsyncReview;
+    moderation.flagged || moderation.skipped || tier > TIER_AUTO || mediaNeedsAsyncReview;
   if (shouldEnqueue) {
     try {
       const reasons = [
         ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
-        ...(photoNeedsAsyncReview ? ["photo_async_review"] : []),
+        // Clave histórica "photo_async_review" (el panel ya la conoce); el
+        // video suma la suya propia para que el equipo sepa qué mirar.
+        ...(mediaNeedsAsyncReview && photos.length > 0 ? ["photo_async_review"] : []),
+        ...(mediaNeedsAsyncReview && videoPaths.length > 0 ? ["video_async_review"] : []),
       ];
-      // pending_review → cola humana; publicado con foto sin Vision → cola
-      // humana igual (la imagen necesita ojos), pero el post ya está visible.
+      // pending_review → cola humana; publicado con media sin Vision → cola
+      // humana igual (la imagen/el video necesita ojos), pero ya está visible.
       const enqueueTier =
-        status === "pending_review" || photoNeedsAsyncReview ? TIER_HUMAN : TIER_REVIEW;
+        status === "pending_review" || mediaNeedsAsyncReview ? TIER_HUMAN : TIER_REVIEW;
       const outcome = await enqueueModeration(createAdminClient(), {
         tenantId: tenant.id,
         subjectKind: "post",

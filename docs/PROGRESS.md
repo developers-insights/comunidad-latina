@@ -1,5 +1,73 @@
 # PROGRESS — Comunidad Latina
 
+## Feed red social v2 — auditoría UI/UX del cliente (✅ 2026-07-21)
+
+Sprint P1+P2 del documento "Auditoría UI/UX – Mejoras Prioritarias del News
+Feed" (Geovanny, llamada 21/7), implementado por 6 agentes en paralelo con
+fronteras de archivos + contratos (stubs de `MediaViewerProvider` y
+`CommentsSheetProvider` montados en el layout ANTES de lanzar la flota):
+
+- **Cards foto-protagonista** — `PostCard` con media 4:5 full-bleed
+  (`card-post-media.tsx`), doble-tap = like con corazón central (motor
+  optimista compartido `card-like-context.tsx`: el doble-tap y el botón mueven
+  el MISMO contador), single-tap abre el visor, botones de acción 22px con
+  animación. Listings con título/precio/zona en `overlayBottom` sobre la foto y
+  "Ver detalles" como píldora con el acento del módulo (16:9 a propósito: el
+  4:5 es de posts; las fotos de propiedades son apaisadas).
+- **Video end-to-end (sin migración)** — `posts.media` ya era `text[]` y el
+  bucket post-media no restringe mime: el kind se infiere por extensión
+  (`mediaKindOf`). Composer: hasta 4 fotos + 1 video ≤60MB con subida DIRECTA
+  navegador→bucket (XHR con progreso; el prefijo `{tenant}/{user}` lo entrega
+  `prepareMediaUploadAction` y la action re-valida pertenencia al persistir).
+  Autoplay muted en el feed (IntersectionObserver ≥60% + ~2s, pedido del
+  cliente) con toggle de sonido.
+- **Visor fullscreen + Reels `/videos`** — swipe horizontal con snap nativo,
+  cierre por gesto atrás (pushState), sonido ON al abrir (hubo gesto; fallback
+  a mudo si el navegador lo rechaza). `/videos`: scroll vertical un-video-por-
+  pantalla, scope por módulo (`?scope=` filtra por kind del listing asociado)
+  respetando la MISMA visibilidad del feed, `?start=` posiciona. Ítem "Videos"
+  en el bottom nav. **GOTCHA descubierto:** `.cl-page-transition` tenía
+  `will-change: transform` + fill `both` → containing block PERMANENTE que
+  rompía cualquier `position: fixed` dentro de una página (los reels medían
+  358×0). Fix doble: CSS pasa a `backwards` sin will-change + los reels
+  portalean a `<body>` (mismo patrón que MediaViewer).
+- **Comentarios tipo Instagram** — `CommentsSheetProvider` sobre `BottomSheet`
+  (extendido aditivo: `size="tall"`, `keyboardAware` con visualViewport),
+  fetch client-side espejo de la lógica del detalle, composer inline optimista
+  ("Enviando…" → "recién"), el detalle `/feed/[id]` conserva su hilo SSR para
+  deep links. `CommentItem` compartido entre sheet y detalle.
+- **Perfil red social + Trust Score card** — header con avatar grande, país ·
+  ciudad, contadores honestos (Publicaciones + Siguiendo; "Seguidores" omitido:
+  ningún perfil general tiene follow hoy — agregar luego es un head-count),
+  `TrustScoreCard` (NN/100 grande, barra animada por nivel, señales como
+  chips, "¿Cómo funciona?" → sheet existente) y grid 3-col de publicaciones
+  (thumbnail de video via `preload="metadata"` + glifo Play).
+- **Fluidez** — scroll infinito real en todos los tabs (`load-more.ts` server
+  action + `feed-list.tsx` acumulador con sentinel; "Cargar más" queda como
+  fallback accesible; `?cursor=` legacy sigue SSR), pull-to-refresh
+  conservador, skeletons con la silueta nueva 4:5, saludo rotativo del
+  composer por franja horaria.
+- **Marketplace** — barra de búsqueda (FTS `websearch` español sobre
+  `listings.search`, mismo índice que propiedades) arriba de las categorías.
+  El "bug de campos de vivienda" que el cliente vio NO estaba en Marketplace:
+  era `/publicar` mostrando SIEMPRE la frecuencia (por mes/semana) — ahora
+  solo vivienda y empleo la ven; negocio/profesional/evento publican precio
+  único.
+- **Seed de videos demo** — `scripts/seed-videos.mjs` (ffmpeg, 6 clips 9:16)
+  ya ejecutado contra la DB: posts de María/Luis/Carlos + 2 de entidad
+  (Panadería La Altagracia, Festival Sabor Quisqueya) para demostrar scopes.
+- **Verificación** — typecheck ✅ · lint 0 errores ✅ · **930/930 tests** ✅
+  (inventario de tintas `on-*` actualizado con coberturas de impresión) ·
+  build de producción ✅ · Playwright sobre `npm start`: feed, autoplay,
+  sheet de comentarios (comentario real publicado), reels, perfil y búsqueda
+  del marketplace — 0 errores de consola.
+- **Pendientes (P3 + llamada)** — algoritmo/recomendaciones, restructura del
+  menú inferior (§13 era "ejemplo"; falta decisión de IA), íconos de colores
+  (esperando ejemplos del cliente), guardar/bookmarks (necesita tabla),
+  Marketplace Comunidad vs Tiendas verificadas con Stripe, mensaje directo en
+  tiendas + reviews comprador↔vendedor, historias (pospuesto por el cliente
+  hasta firmar contrato), menú de tipos de publicación del composer.
+
 ## Ajustes de UX pedidos por el cliente (✅ 2026-07-20)
 
 Segunda tanda del mismo día, sobre la app ya desplegada:

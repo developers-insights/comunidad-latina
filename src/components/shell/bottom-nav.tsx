@@ -6,6 +6,7 @@ import {
   Buildings,
   ChatCircle,
   HouseSimple,
+  Play,
   UserCircle,
   type Icon,
 } from "@phosphor-icons/react";
@@ -17,6 +18,9 @@ type NavItem = { href: string; label: string; icon: Icon };
 const ITEMS: NavItem[] = [
   { href: "/feed", label: t("nav", "feed"), icon: HouseSimple },
   { href: "/propiedades", label: t("nav", "properties"), icon: Buildings },
+  // Videos al CENTRO a propósito (patrón Instagram/TikTok): el contenido que
+  // más retiene, a un pulgar de distancia (sprint reels 2026-07-21).
+  { href: "/videos", label: t("nav", "videos"), icon: Play },
   { href: "/mensajes", label: t("nav", "messages"), icon: ChatCircle },
   { href: "/perfil", label: t("nav", "profile"), icon: UserCircle },
 ];

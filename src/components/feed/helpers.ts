@@ -27,6 +27,29 @@ export function postMediaUrl(path: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Media de posts: fotos Y videos en el mismo array posts.media (0025)
+// ---------------------------------------------------------------------------
+
+export type PostMediaKind = "image" | "video";
+
+/** Un elemento del carrusel de un post, con su URL pública ya resuelta. */
+export interface PostMediaView {
+  kind: PostMediaKind;
+  url: string;
+}
+
+const VIDEO_EXT_RE = /\.(mp4|webm|mov|m4v)(\?.*)?$/i;
+
+/**
+ * El bucket post-media guarda fotos y videos en el mismo array `posts.media`
+ * sin columna de tipo: el kind se infiere por extensión del path. Suficiente
+ * porque el composer controla las extensiones que sube.
+ */
+export function mediaKindOf(path: string): PostMediaKind {
+  return VIDEO_EXT_RE.test(path) ? "video" : "image";
+}
+
+// ---------------------------------------------------------------------------
 // Tabs (los 5 feeds del wireframe §4.b) — el estado vive en ?tab= (URL)
 // ---------------------------------------------------------------------------
 
@@ -74,8 +97,10 @@ export interface PostCardModel {
   id: string;
   kind: "post" | "question";
   body: string;
-  /** URL pública de la primera foto (ya resuelta) o null. */
+  /** URL pública de la primera FOTO (ya resuelta) o null — retrocompat. */
   photoUrl: string | null;
+  /** Todos los medios del post (fotos y videos) en orden de publicación. */
+  media: PostMediaView[];
   likeCount: number;
   commentCount: number;
   createdAt: string;

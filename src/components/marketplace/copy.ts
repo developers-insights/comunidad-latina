@@ -10,6 +10,10 @@ export const COPY = {
     publishCta: "Publicar producto",
     categoryFilterLabel: "Filtrar por categoría",
     categoryAll: "Todas",
+    searchLabel: "Buscar productos en el marketplace",
+    searchPlaceholder: "Buscá un producto…",
+    searchSubmitLabel: "Buscar",
+    searchClearLabel: "Borrar búsqueda",
     loadMore: "Ver más productos",
     emptyTitle: "Todavía no hay productos",
     emptyMessage:
@@ -17,6 +21,8 @@ export const COPY = {
     emptyFilteredTitle: "Nada por acá con esa categoría",
     emptyFilteredMessage:
       "Probá con otra categoría o mirá todos los productos disponibles.",
+    emptySearchTitle: (q: string) => `No encontramos nada con "${q}"`,
+    emptySearchMessage: "Probá con otra palabra o mirá las categorías de arriba.",
     emptyPublishCta: "Publicar mi primer producto",
     viewProduct: "Ver producto",
     storeLinkLabel: (name: string) => `Tienda ${name}`,

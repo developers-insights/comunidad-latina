@@ -3,6 +3,7 @@ import {
   Buildings,
   CalendarBlank,
   HouseSimple,
+  Play,
   ShoppingBagOpen,
   Sparkle,
   Storefront,
@@ -54,6 +55,14 @@ export const MODULES: ModuleItem[] = [
     href: "/feed",
     label: t("nav", "feed"),
     icon: HouseSimple,
+    palette: accentPalette("var(--accent-feed)"),
+  },
+  // Videos (reels, sprint 2026-07-21): comparte el acento del feed a propósito
+  // — es la misma capa social de la plataforma, en formato video.
+  {
+    href: "/videos",
+    label: t("nav", "videos"),
+    icon: Play,
     palette: accentPalette("var(--accent-feed)"),
   },
   {

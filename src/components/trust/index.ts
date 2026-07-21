@@ -27,6 +27,10 @@ export {
   type TrustScoreBadgeProps,
 } from "./trust-score-badge";
 export {
+  TrustScoreCard,
+  type TrustScoreCardProps,
+} from "./trust-score-card";
+export {
   TrustScoreSheet,
   type TrustScoreSheetProps,
   type TrustSignal,

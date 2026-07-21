@@ -118,3 +118,18 @@ export function followerCountLabel(count: number): string {
   if (count === 1) return "1 seguidor";
   return `${count.toLocaleString("es-US")} seguidores`;
 }
+
+// ---------------------------------------------------------------------------
+// Búsqueda — normaliza el ?q= de /marketplace antes de usarlo en textSearch()
+// (mismo cap de longitud que /propiedades, ver propiedades/page.tsx) y antes
+// de mostrarlo en el estado vacío ("No encontramos nada con «…»"). El cliente
+// llama a esto al enviar el formulario Y la página lo vuelve a aplicar del
+// lado del servidor — nunca confiamos en que el querystring llegue ya limpio
+// (alguien puede pegar una URL a mano).
+// ---------------------------------------------------------------------------
+
+const MAX_SEARCH_QUERY_LENGTH = 120;
+
+export function sanitizeSearchQuery(value: string): string {
+  return value.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
+}

@@ -20,15 +20,46 @@ export const COPY = {
 
   composer: {
     placeholder: "¿Qué está pasando en tu comunidad?",
+    /**
+     * Saludo rotativo por franja horaria (pedido cliente 2026-07-21): el
+     * composer recibe con calidez según el momento del día. Se resuelve en el
+     * cliente tras montar (la hora del usuario no existe en el server) y cae
+     * al placeholder neutro mientras tanto.
+     */
+    greetingByHour: (hour: number): string => {
+      if (hour >= 5 && hour < 12) {
+        return "Buenos días, mi gente — ¿qué está pasando en tu comunidad?";
+      }
+      if (hour >= 12 && hour < 19) {
+        return "Buenas tardes — ¿qué se está moviendo hoy en el barrio?";
+      }
+      return "Buenas noches — contale a tu comunidad cómo te fue hoy.";
+    },
     addPhoto: "Agregar foto",
+    addPhotos: "Agregar fotos",
     changePhoto: "Cambiar foto",
     removePhoto: "Quitar foto",
     photoTooBig: "Esa foto es muy pesada — probá con una de menos de 5 MB.",
     photoWrongType: "Solo podemos subir fotos (JPG, PNG o WebP).",
-    // Foto obligatoria (feed visual, no periódico): si aprietan Publicar sin
-    // foto, este aviso cálido los lleva al recuadro en vez de un botón muerto.
+    /** Hasta 4 fotos por publicación (sprint reels 2026-07-21). */
+    photoLimit: "Podés subir hasta 4 fotos por publicación.",
+    // Algún medio sigue siendo obligatorio (feed visual, no periódico): si
+    // aprietan Publicar sin foto NI video, este aviso cálido los lleva al
+    // recuadro en vez de un botón muerto.
     photoMissingTitle: "Te falta la foto",
     photoMissingBody: "Sumá una imagen y ya podés publicar tu post.",
+    mediaMissingTitle: "Te falta la foto o el video",
+    mediaMissingBody: "Sumá al menos una foto o un video y ya podés publicar.",
+    // Video (sprint reels): 1 por publicación, MP4/WebM, hasta 60 MB.
+    addVideo: "Agregar video",
+    removeVideo: "Quitar video",
+    videoChip: "Video",
+    videoTooBig: "Ese video es muy pesado — probá con uno de menos de 60 MB.",
+    videoWrongType: "Solo podemos subir videos MP4 o WebM.",
+    videoLimit: "Por ahora va un video por publicación.",
+    videoUploading: (percent: number) => `Subiendo tu video… ${percent}%`,
+    videoUploadErrorTitle: "No pudimos subir el video",
+    videoUploadErrorBody: "Revisá tu conexión y probá de nuevo en un ratito.",
     publish: "Publicar",
     publishing: "Publicando…",
     successTitle: "¡Publicado!",
@@ -71,6 +102,24 @@ export const COPY = {
     removedBanner:
       "Esta publicación fue retirada por el equipo de moderación de tu comunidad.",
     menuLabel: "Más opciones",
+    // Foto a pantalla completa: el visor se abre al tocar la foto UNA vez (el
+    // doble toque es "me gusta", como en Instagram).
+    openPhoto: "Ver la foto en grande",
+    // Video en el feed: arranca solo y en silencio; el sonido se activa a mano.
+    playVideo: "Ver el video",
+    muteVideo: "Silenciar el video",
+    unmuteVideo: "Activar el sonido",
+    // CTA de una campaña paga (SOLO posts promocionados) sobre la foto. El chip
+    // "Publicidad" va aparte y SIEMPRE visible: eso es la divulgación honesta;
+    // esto es el llamado a la acción, con el texto de lo que la campaña ofrece.
+    boostCta: {
+      property: "Ver propiedad",
+      event: "Comprar entradas",
+      business: "Ver negocio",
+      professional: "Agendar cita",
+      job: "Postularme",
+    } as Record<string, string>,
+    boostCtaFallback: "Ver más",
   },
 
   report: {
@@ -99,6 +148,14 @@ export const COPY = {
     errorTitle: "No se pudo comentar",
     errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
     signInPrompt: "Entrá a tu cuenta para responder",
+    // Estado de la HOJA de comentarios (feed): el hilo se trae en el cliente al
+    // abrir, así que aparecen carga/vacío/error que el SSR del detalle no tiene.
+    loadErrorTitle: "No pudimos cargar los comentarios",
+    loadErrorBody: "Puede ser la conexión. Volvé a intentar en un momento.",
+    retry: "Reintentar",
+    // Comentario optimista: se ve al instante mientras viaja al servidor (que no
+    // se corte la emoción — feedback del cliente). Ocupa el lugar del "hace un rato".
+    sending: "Enviando…",
   },
 
   listing: {
@@ -139,6 +196,16 @@ export const COPY = {
     emptyListingsMessage:
       "Apenas alguien de tu comunidad publique en esta sección, lo vas a ver acá.",
     emptyListingsCta: "Publicar un aviso",
+    // Scroll infinito (módulo FLUIDEZ): el "Ver más" de arriba sigue como
+    // fallback accesible; estos cubren los estados nuevos del acumulado.
+    loadingMore: "Cargando más publicaciones…",
+    loadMoreErrorTitle: "No pudimos cargar más publicaciones",
+    loadMoreErrorBody: "Puede ser un ratito de conexión floja — no es tu culpa.",
+    retry: "Reintentar",
+    // Pull-to-refresh (solo táctil, arriba del todo del feed).
+    pullToRefreshHint: "Deslizá hacia abajo para actualizar",
+    pullToRefreshRelease: "Soltá para actualizar",
+    refreshing: "Actualizando tu feed…",
   },
 
   detail: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,59 @@ export interface BottomSheetProps {
   ariaLabel?: string;
   children: React.ReactNode;
   className?: string;
+  /**
+   * Alto del panel. "auto" (default) crece con el contenido hasta 85dvh — el
+   * comportamiento histórico que usan trust/report/apply sheets. "tall" fija un
+   * alto casi-fullscreen (88dvh) para hojas con lista larga + footer fijo (la
+   * hoja de comentarios): así el composer queda anclado abajo y la lista scrollea.
+   */
+  size?: "auto" | "tall";
+  /**
+   * Clases del contenedor de contenido (donde van los children). Por default
+   * `overflow-y-auto px-6 pb-2 pt-4`. Se mergea con tailwind-merge, así que un
+   * consumidor puede tomar el control del layout interno (p.ej. flex column con
+   * su propio scroll + footer) pasando `overflow-hidden p-0 flex flex-col …`.
+   */
+  bodyClassName?: string;
+  /**
+   * Levanta el panel por encima del teclado virtual (visualViewport). Solo lo
+   * necesitan las hojas con input al fondo (comentarios); default false para no
+   * tocar el resto de las hojas.
+   */
+  keyboardAware?: boolean;
+}
+
+/**
+ * Alto del teclado virtual en px (0 si está cerrado). Mide cuánto del layout
+ * viewport tapa el teclado vía `visualViewport`: es la única señal fiable en
+ * móvil, donde el teclado NO cambia `innerHeight` pero SÍ encoge el visual
+ * viewport. SSR-safe: corre solo en efecto y devuelve 0 hasta medir.
+ */
+function useKeyboardInset(active: boolean): number {
+  const [inset, setInset] = useState(0);
+  useEffect(() => {
+    // Las mediciones se difieren a un frame: setState síncrono dentro del
+    // efecto encadena renders (react-hooks/set-state-in-effect).
+    if (!active) {
+      const raf = requestAnimationFrame(() => setInset(0));
+      return () => cancelAnimationFrame(raf);
+    }
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const overlap = window.innerHeight - (vv.height + vv.offsetTop);
+      setInset(Math.max(0, Math.round(overlap)));
+    };
+    const raf = requestAnimationFrame(update);
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      cancelAnimationFrame(raf);
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [active]);
+  return inset;
 }
 
 /**
@@ -32,6 +85,9 @@ export function BottomSheet({
   ariaLabel,
   children,
   className,
+  size = "auto",
+  bodyClassName,
+  keyboardAware = false,
 }: BottomSheetProps) {
   const mounted = useMounted();
   const reduceMotion = useReducedMotion();
@@ -40,8 +96,14 @@ export function BottomSheet({
 
   useFocusTrap(panelRef, open, onClose);
   useBodyScrollLock(open);
+  const keyboardInset = useKeyboardInset(open && keyboardAware);
 
   if (!mounted) return null;
+
+  // "tall" fija el alto (footer anclado + lista scrolleable); "auto" conserva el
+  // max-h histórico. Con el teclado abierto, un tope inline recorta el panel al
+  // espacio visible para que nunca se meta debajo del teclado.
+  const heightClass = size === "tall" ? "h-[88dvh]" : "max-h-[85dvh]";
 
   return createPortal(
     <AnimatePresence>
@@ -64,11 +126,22 @@ export function BottomSheet({
             aria-label={title ? undefined : ariaLabel}
             tabIndex={-1}
             className={cn(
-              "absolute inset-x-0 bottom-0 mx-auto flex max-h-[85dvh] w-full max-w-lg flex-col",
+              "absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-lg flex-col",
+              heightClass,
               "rounded-t-2xl bg-surface-raised shadow-xl",
               "pb-[max(env(safe-area-inset-bottom),1rem)]",
               className,
             )}
+            // Con teclado: sube el panel por encima y recorta su alto al espacio
+            // libre. `transform` (drag/slide) lo maneja motion aparte — no chocan.
+            style={
+              keyboardInset > 0
+                ? {
+                    bottom: keyboardInset,
+                    maxHeight: `calc(100dvh - ${keyboardInset}px - 0.5rem)`,
+                  }
+                : undefined
+            }
             initial={reduceMotion ? { opacity: 0 } : { y: "100%" }}
             animate={reduceMotion ? { opacity: 1 } : { y: 0 }}
             exit={
@@ -100,7 +173,9 @@ export function BottomSheet({
                 {title}
               </h2>
             )}
-            <div className="overflow-y-auto px-6 pb-2 pt-4">{children}</div>
+            <div className={cn("overflow-y-auto px-6 pb-2 pt-4", bodyClassName)}>
+              {children}
+            </div>
           </m.div>
         </div>
       )}

@@ -24,10 +24,17 @@ describe("isModuleActive", () => {
 });
 
 describe("MODULES", () => {
-  // 7, no 8: Escudo está oculto por pedido del cliente (2026-07-20).
+  // 8 = 7 visibles + Videos (reels, sprint 2026-07-21). Escudo sigue oculto
+  // por pedido del cliente (2026-07-20).
   it("son los módulos visibles de la plataforma, sin href repetido", () => {
-    expect(MODULES).toHaveLength(7);
-    expect(new Set(MODULES.map((m) => m.href)).size).toBe(7);
+    expect(MODULES).toHaveLength(8);
+    expect(new Set(MODULES.map((m) => m.href)).size).toBe(8);
+  });
+
+  it("Videos figura en el menú (reels del sprint 2026-07-21)", () => {
+    const videos = MODULES.find((m) => m.href === "/videos");
+    expect(videos).toBeDefined();
+    expect(videos?.label.trim().length).toBeGreaterThan(0);
   });
 
   it("Escudo NO figura mientras la feature esté oculta", () => {

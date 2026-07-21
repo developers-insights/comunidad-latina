@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PaperPlaneRight } from "@phosphor-icons/react/dist/ssr";
 import { Spinner, useToast } from "@/components/ui";
@@ -12,41 +12,99 @@ import { COPY } from "./copy";
 const MAX_LENGTH = 1000;
 
 /**
- * Composer de comentario del detalle de post — misma moderación que el post:
- * el server action pasa el texto por moderateText antes de publicar.
+ * Ciclo de vida del envío en modo OPTIMISTA (hoja de comentarios del feed): el
+ * composer avisa al contenedor para que pinte el comentario al instante y luego
+ * lo reconcilie con el resultado de moderación. Sin esto, el composer se comporta
+ * como en el detalle: publica y hace `router.refresh()`.
  */
-export function CommentComposer({ postId }: { postId: string }) {
+export interface CommentOptimisticHandlers {
+  /** Se disparó el envío: pintá el comentario ya (con estado "enviando"). */
+  onStart: (draft: { tempId: string; body: string }) => void;
+  /** El servidor lo aceptó (published): confirmá el optimista. */
+  onPublished: (tempId: string) => void;
+  /** Rechazo/errores (flagged, tenant, error): sacá el optimista de la lista. */
+  onRejected: (tempId: string) => void;
+}
+
+export interface CommentComposerProps {
+  postId: string;
+  /** Deshabilita el input (p.ej. mientras la hoja carga el hilo o su auth). */
+  disabled?: boolean;
+  /**
+   * Modo optimista. Si viene, el composer NO navega (no saca al usuario del
+   * feed — el pedido literal del cliente): reporta el ciclo de vida y deja que
+   * el contenedor maneje la lista. Ausente → comportamiento del detalle SSR.
+   */
+  optimistic?: CommentOptimisticHandlers;
+}
+
+/**
+ * Composer de comentario — misma moderación que el post (el server action pasa
+ * el texto por moderateText antes de publicar). Dos modos: el del detalle SSR
+ * (`router.refresh()`) y el optimista de la hoja del feed (ver `optimistic`).
+ */
+export function CommentComposer({ postId, disabled = false, optimistic }: CommentComposerProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [value, setValue] = useState("");
   const [isPending, startTransition] = useTransition();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // id único por instancia: en el feed pueden coexistir esta hoja global y el
+  // composer del detalle — un id fijo rompería la asociación label/textarea.
+  const fieldId = useId();
 
   function autosize(element: HTMLTextAreaElement) {
     element.style.height = "auto";
     element.style.height = `${Math.min(element.scrollHeight, 140)}px`;
   }
 
+  function resetField(focus: boolean) {
+    setValue("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      if (focus) textareaRef.current.focus();
+    }
+  }
+
+  function haptic() {
+    try {
+      navigator.vibrate?.(10);
+    } catch {
+      // sin soporte háptico
+    }
+  }
+
   function send() {
     const body = value.trim();
-    if (!body || isPending) return;
+    if (!body || isPending || disabled) return;
+
+    // Optimista: limpiamos el campo YA y avisamos para pintar el comentario en
+    // el acto. Si el servidor lo rechaza, devolvemos el texto para reintentar.
+    const tempId = optimistic ? crypto.randomUUID() : "";
+    if (optimistic) {
+      optimistic.onStart({ tempId, body });
+      resetField(false);
+    }
 
     startTransition(async () => {
       const result = await createCommentAction({ postId, body });
       if (result.ok) {
-        setValue("");
-        if (textareaRef.current) {
-          textareaRef.current.style.height = "auto";
-          textareaRef.current.focus();
+        if (optimistic) {
+          optimistic.onPublished(tempId);
+        } else {
+          resetField(true);
+          router.refresh();
         }
-        try {
-          navigator.vibrate?.(10);
-        } catch {
-          // sin soporte háptico
-        }
-        router.refresh();
+        haptic();
         return;
       }
+
+      // Falla: en modo optimista revertimos el pintado y recuperamos el texto.
+      if (optimistic) {
+        optimistic.onRejected(tempId);
+        setValue(body);
+      }
+
       if (result.code === "unauthenticated") {
         router.push(`/entrar?next=${encodeURIComponent(`/feed/${postId}`)}`);
         return;
@@ -92,17 +150,17 @@ export function CommentComposer({ postId }: { postId: string }) {
         "focus-within:ring-[3px] focus-within:ring-focus-ring",
       )}
     >
-      <label htmlFor="comment-composer-body" className="sr-only">
+      <label htmlFor={fieldId} className="sr-only">
         {COPY.comments.placeholder}
       </label>
       <textarea
-        id="comment-composer-body"
+        id={fieldId}
         ref={textareaRef}
         rows={1}
         maxLength={MAX_LENGTH}
         value={value}
         placeholder={COPY.comments.placeholder}
-        disabled={isPending}
+        disabled={isPending || disabled}
         onChange={(event) => {
           setValue(event.target.value);
           autosize(event.target);
@@ -122,7 +180,7 @@ export function CommentComposer({ postId }: { postId: string }) {
       <button
         type="submit"
         aria-label={COPY.comments.send}
-        disabled={isPending || value.trim().length === 0}
+        disabled={isPending || disabled || value.trim().length === 0}
         className={cn(
           "flex size-11 shrink-0 select-none items-center justify-center rounded-full bg-brand text-brand-foreground shadow-xs",
           "transition-[transform,background-color,opacity] duration-(--duration-fast) ease-(--ease-spring)",

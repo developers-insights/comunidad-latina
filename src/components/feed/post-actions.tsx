@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
 import { ChatCircle, Heart, ShareNetwork } from "@phosphor-icons/react/dist/ssr";
-import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui";
 import { LikeBurst } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
+import { useCardLike, useOptimisticLike } from "./card-like-context";
+import { useCommentsSheet } from "./comments-sheet";
 
 export interface PostActionsProps {
   postId: string;
@@ -23,17 +21,28 @@ export interface PostActionsProps {
   className?: string;
 }
 
+/** Botones grandes y táctiles (§4): íconos 22px, 44px de área, feedback al toque. */
+const ICON = 22;
+
 const actionClass = cn(
-  "flex min-h-11 min-w-11 select-none items-center gap-1.5 rounded-md px-2 text-sm font-medium text-foreground-secondary",
+  "flex min-h-11 min-w-11 select-none items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-foreground-secondary",
   "transition-[transform,color,background-color] duration-(--duration-fast) ease-(--ease-spring)",
   "hover:bg-surface-subtle active:scale-[0.94]",
   "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
 );
 
 /**
- * Acciones subordinadas de un post (§4.b): like optimista (insert/delete en
- * reactions — los triggers de DB mantienen like_count), comentarios y
- * compartir. Island chiquita: el resto de la card es server component.
+ * Acciones sociales de un post (§4.b): me gusta optimista, comentarios y
+ * compartir. Island chiquita — el resto de la card es server component.
+ *
+ * El estado de me gusta se COMPARTE con el doble-tap de la foto vía
+ * useCardLike() (Instagram: tocar la foto y tocar el corazón mueven el mismo
+ * contador). Si la card se usara fuera de un CardLikeProvider, cae a un estado
+ * propio (useOptimisticLike) para no romper.
+ *
+ * El botón de comentarios YA NO navega a /feed/[id] (feedback cliente 2026-07-21:
+ * "que abran desde abajo, tipo Instagram"): abre el sheet vía useCommentsSheet().
+ * En el detalle sigue siendo informativo (los comentarios ya están en la página).
  */
 export function PostActions({
   postId,
@@ -45,57 +54,20 @@ export function PostActions({
   isDetail = false,
   className,
 }: PostActionsProps) {
-  const router = useRouter();
-  const pathname = usePathname();
   const { toast } = useToast();
-  const [liked, setLiked] = useState(likedByViewer);
-  const [count, setCount] = useState(likeCount);
-  const [, startTransition] = useTransition();
+  const commentsSheet = useCommentsSheet();
 
-  function toggleLike(nextLiked: boolean) {
-    if (!viewerId) {
-      router.push(`/entrar?next=${encodeURIComponent(pathname || "/feed")}`);
-      return;
-    }
-
-    // Optimista: la UI responde <100ms; si la DB dice que no, se revierte.
-    setLiked(nextLiked);
-    setCount((current) => Math.max(0, current + (nextLiked ? 1 : -1)));
-    try {
-      navigator.vibrate?.(10);
-    } catch {
-      // sin soporte háptico: nada que hacer
-    }
-
-    startTransition(async () => {
-      const supabase = createClient();
-      if (nextLiked) {
-        const { error } = await supabase.from("reactions").insert({
-          tenant_id: tenantId,
-          subject_kind: "post",
-          subject_id: postId,
-          profile_id: viewerId,
-          kind: "like",
-        });
-        // 23505 = ya existía la reacción (doble tap rápido): el estado ya es correcto.
-        if (error && error.code !== "23505") {
-          setLiked(false);
-          setCount((current) => Math.max(0, current - 1));
-        }
-      } else {
-        const { error } = await supabase
-          .from("reactions")
-          .delete()
-          .eq("subject_kind", "post")
-          .eq("subject_id", postId)
-          .eq("profile_id", viewerId);
-        if (error) {
-          setLiked(true);
-          setCount((current) => current + 1);
-        }
-      }
-    });
-  }
+  // Estado compartido si hay provider; si no, propio (ambos hooks se llaman
+  // siempre para respetar las reglas de hooks — el no usado es inofensivo).
+  const shared = useCardLike();
+  const own = useOptimisticLike({
+    postId,
+    tenantId,
+    viewerId,
+    initialLiked: likedByViewer,
+    initialCount: likeCount,
+  });
+  const like = shared ?? own;
 
   async function share() {
     const url = `${window.location.origin}/feed/${postId}`;
@@ -117,42 +89,46 @@ export function PostActions({
 
   const commentsContent = (
     <>
-      <ChatCircle size={18} aria-hidden="true" />
+      <ChatCircle size={ICON} aria-hidden="true" />
       <span className="numeric">{commentCount}</span>
     </>
   );
 
   return (
-    <div className={cn("flex items-center gap-1", className)}>
-      <span className={cn("flex items-center", liked && "text-danger")}>
+    <div className={cn("flex items-center gap-0.5", className)}>
+      <span className={cn("flex items-center", like.liked && "text-danger")}>
         <LikeBurst
-          active={liked}
-          onToggle={toggleLike}
-          label={liked ? COPY.post.unlike : COPY.post.like}
+          active={like.liked}
+          onToggle={like.toggle}
+          label={like.liked ? COPY.post.unlike : COPY.post.like}
           particleColor="var(--color-danger)"
-          className={cn(actionClass, "pr-1", liked && "text-danger")}
+          className={cn(actionClass, "pr-1.5", like.liked && "text-danger")}
         >
           <Heart
-            size={18}
-            weight={liked ? "fill" : "regular"}
+            size={ICON}
+            weight={like.liked ? "fill" : "regular"}
             aria-hidden="true"
           />
-          <span className="numeric">{count}</span>
+          <span className="numeric">{like.count}</span>
         </LikeBurst>
       </span>
 
       {isDetail ? (
-        <span className={cn(actionClass, "hover:bg-transparent active:scale-100")} aria-label={COPY.post.comments}>
+        <span
+          className={cn(actionClass, "hover:bg-transparent active:scale-100")}
+          aria-label={COPY.post.comments}
+        >
           {commentsContent}
         </span>
       ) : (
-        <Link
-          href={`/feed/${postId}`}
+        <button
+          type="button"
+          onClick={() => commentsSheet.open({ postId, commentCount })}
           aria-label={`${COPY.post.comments} (${commentCount})`}
           className={actionClass}
         >
           {commentsContent}
-        </Link>
+        </button>
       )}
 
       <button
@@ -161,7 +137,7 @@ export function PostActions({
         aria-label={COPY.post.share}
         className={cn(actionClass, "ml-auto")}
       >
-        <ShareNetwork size={18} aria-hidden="true" />
+        <ShareNetwork size={ICON} aria-hidden="true" />
         <span className="hidden sm:inline">{COPY.post.share}</span>
       </button>
     </div>

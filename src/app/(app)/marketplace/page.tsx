@@ -7,11 +7,13 @@ import {
   CategoryChips,
   COPY,
   MarketplaceOwnerBanner,
+  MarketplaceSearchBar,
   ProductCard,
   ProductGridSkeleton,
   formatProductPrice,
   isProductCategory,
   parseProductAttrs,
+  sanitizeSearchQuery,
   type ProductCardModel,
 } from "@/components/marketplace";
 import { createClient } from "@/lib/supabase/server";
@@ -27,6 +29,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 interface Filters {
   categoria: string;
+  q: string;
   cursor: string;
 }
 
@@ -38,6 +41,7 @@ function parseFilters(sp: Record<string, string | string[] | undefined>): Filter
   const categoriaRaw = firstValue(sp.categoria).slice(0, 40);
   return {
     categoria: isProductCategory(categoriaRaw) ? categoriaRaw : "",
+    q: sanitizeSearchQuery(firstValue(sp.q)),
     cursor: firstValue(sp.cursor),
   };
 }
@@ -79,6 +83,13 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
 
   if (filters.categoria) {
     query = query.eq("attrs->>category", filters.categoria);
+  }
+  if (filters.q) {
+    // Mismo índice FTS que /propiedades (listings.search, migración 0004):
+    // título con más peso que descripción — funciona igual para kind='product'
+    // (comentario de la 0024_marketplace_creators.sql: "un producto es un
+    // listing kind='product', reusa moderación, fotos, RLS, boosts, FTS").
+    query = query.textSearch("search", filters.q, { type: "websearch", config: "spanish" });
   }
   const cursor = decodeCursor(filters.cursor || undefined);
   if (cursor) {
@@ -150,7 +161,10 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
   const lastRow = pageRows[pageRows.length - 1];
   const nextParams = new URLSearchParams();
   if (filters.categoria) nextParams.set("categoria", filters.categoria);
+  if (filters.q) nextParams.set("q", filters.q);
   if (hasMore && lastRow) nextParams.set("cursor", encodeCursor(lastRow.created_at, lastRow.id));
+
+  const isSearching = Boolean(filters.q);
 
   return (
     <>
@@ -170,6 +184,8 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
         </Link>
       </header>
 
+      <MarketplaceSearchBar className="mb-4" />
+
       {ownsStore && <MarketplaceOwnerBanner />}
 
       <CategoryChips className={cn(ownsStore ? "mt-4" : "", "mb-5")} />
@@ -177,8 +193,20 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
       {cards.length === 0 ? (
         <EmptyState
           illustration="/images/empty-state-search.png"
-          title={filters.categoria ? C.emptyFilteredTitle : C.emptyTitle}
-          message={filters.categoria ? C.emptyFilteredMessage : C.emptyMessage}
+          title={
+            isSearching
+              ? C.emptySearchTitle(filters.q)
+              : filters.categoria
+                ? C.emptyFilteredTitle
+                : C.emptyTitle
+          }
+          message={
+            isSearching
+              ? C.emptySearchMessage
+              : filters.categoria
+                ? C.emptyFilteredMessage
+                : C.emptyMessage
+          }
           action={
             <Link
               href="/marketplace/publicar"
@@ -228,6 +256,7 @@ function PageSkeleton() {
         </div>
         <Skeleton className="h-10 w-32 rounded-md" />
       </header>
+      <Skeleton className="mb-4 h-11 w-full rounded-md" />
       <div className="mb-5 flex gap-2">
         <Skeleton className="h-11 w-16 rounded-full" />
         <Skeleton className="h-11 w-28 rounded-full" />

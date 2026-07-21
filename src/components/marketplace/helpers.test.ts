@@ -8,6 +8,8 @@ import {
   isProductCategory,
   isProductCondition,
   parseProductAttrs,
+  PRODUCT_CATEGORIES,
+  sanitizeSearchQuery,
 } from "./helpers";
 
 describe("parseProductAttrs", () => {
@@ -124,5 +126,36 @@ describe("followerCountLabel", () => {
 
   it("nunca queda en negativo por un dato raro de la DB", () => {
     expect(followerCountLabel(-3)).toBe("Sin seguidores todavía");
+  });
+});
+
+describe("sanitizeSearchQuery", () => {
+  it("recorta espacios sobrantes en los bordes", () => {
+    expect(sanitizeSearchQuery("  zapatillas  ")).toBe("zapatillas");
+  });
+
+  it("corta a 120 caracteres — mismo cap que /propiedades", () => {
+    const long = "a".repeat(200);
+    expect(sanitizeSearchQuery(long)).toHaveLength(120);
+  });
+
+  it("una búsqueda vacía o solo espacios queda vacía (no filtra)", () => {
+    expect(sanitizeSearchQuery("")).toBe("");
+    expect(sanitizeSearchQuery("   ")).toBe("");
+  });
+});
+
+describe("PRODUCT_CATEGORIES — límite del módulo (feedback cliente 21/7)", () => {
+  it("nunca incluye 'negocio' como categoría de producto — un producto no es una tienda", () => {
+    // Guarda de regresión: el reporte del cliente ("le puse negocio y me
+    // sale como para propiedad") es un bug de /publicar (kind=business),
+    // NO de este módulo — pero si algún día alguien agrega una categoría de
+    // producto literal "negocio"/"business" acá, reintroduciría la misma
+    // confusión conceptual (categoría de PRODUCTO vs. tipo de AVISO). El
+    // "negocio" es la TIENDA (attrs.store_listing_id, kind='business'),
+    // nunca una categoría dentro de PRODUCT_CATEGORIES.
+    const values = PRODUCT_CATEGORIES.map((option) => option.value);
+    expect(values).not.toContain("negocio");
+    expect(values).not.toContain("business");
   });
 });
