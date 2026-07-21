@@ -22,6 +22,8 @@ export interface CreatorCardModel {
   available: boolean;
   /** ¿Ya lo sigue quien mira? (resuelto en el server). */
   initialFollowing: boolean;
+  /** ¿La card es del propio usuario? Si sí, no se muestra "Seguir" (no podés seguirte). */
+  isSelf?: boolean;
 }
 
 const MAX_SKILLS = 4;
@@ -118,12 +120,14 @@ export function CreatorCard({ creator }: { creator: CreatorCardModel }) {
           )}
 
           <div className="mt-1 flex items-center gap-2">
-            <FollowButton
-              targetKind="profile"
-              targetId={creator.profileId}
-              initialFollowing={creator.initialFollowing}
-              size="sm"
-            />
+            {!creator.isSelf && (
+              <FollowButton
+                targetKind="profile"
+                targetId={creator.profileId}
+                initialFollowing={creator.initialFollowing}
+                size="sm"
+              />
+            )}
             <Link
               href={`/creadores/perfil/${creator.profileId}`}
               className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "flex-1")}

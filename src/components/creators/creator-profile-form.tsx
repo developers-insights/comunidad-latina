@@ -131,6 +131,26 @@ export function CreatorProfileForm({
     setSubmitting(true);
     try {
       const supabase = createClient();
+
+      // Igual que el composer del feed (que sube en el SERVIDOR tras
+      // requireTenantMatch), la subida a post-media necesita una sesión válida y
+      // el prefijo {tenant}/{user} que exige la policy post_media_insert. En el
+      // cliente eso no está garantizado: el token del browser client puede estar
+      // vencido y los props vienen del tenant del REQUEST (getTenant()), que no
+      // es necesariamente el claim del JWT que la RLS compara. getUser() revalida
+      // y refresca el token ANTES de subir, y de ahí sacamos tenant+user reales
+      // (app_metadata.tenant_id / uid) — la misma verdad que evalúa la RLS.
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError || !user) {
+        router.push("/entrar?next=/creadores/perfil");
+        return;
+      }
+      const uid = user.id;
+      const tid = String(user.app_metadata?.tenant_id ?? tenantId);
+
       const paths: string[] = [];
       for (const item of portfolio) {
         if (item.kind === "existing") {
@@ -138,7 +158,7 @@ export function CreatorProfileForm({
           continue;
         }
         const { blob, ext } = await preparePhoto(item.file);
-        const path = `${tenantId}/${userId}/portfolio-${crypto.randomUUID()}.${ext}`;
+        const path = `${tid}/${uid}/portfolio-${crypto.randomUUID()}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from("post-media")
           .upload(path, blob, {
@@ -146,6 +166,11 @@ export function CreatorProfileForm({
             upsert: false,
           });
         if (uploadError) {
+          // Sin este log el fallo real (RLS, token vencido, límite del bucket)
+          // quedaba invisible: solo se veía el copy genérico de uploadFailed.
+          console.warn("[creadores] subida de foto de perfil falló", {
+            message: uploadError.message,
+          });
           setError(COPY.profile.errors.uploadFailed);
           return;
         }

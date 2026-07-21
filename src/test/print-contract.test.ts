@@ -268,14 +268,12 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: Array<string>(5).fill("text-on-media"),
     cobertura: "cl-print-fill",
   },
-  // Chips del filtro de categoría del feed de trabajos: son CHROME (filtro), el
-  // hook los esconde en papel — el activo es text-brand-foreground sobre bg-brand.
-  "src/app/(app)/creadores/page.tsx": {
-    inks: ["text-brand-foreground"],
-    cobertura: "cl-print-hide",
-  },
+  // El feed de trabajos ya no muestra categorías (ni chips de filtro ni selector):
+  // page.tsx dejó de escribir tinta on-* — por eso ya no está en el inventario.
+  // Chip "Urgente" sobre la foto del aviso + el ícono del fallback violeta (el chip
+  // de categoría se quitó: no se muestran categorías en Creadores).
   "src/components/creators/gig-card.tsx": {
-    inks: ["text-on-media", "text-on-media", "text-on-media"],
+    inks: ["text-on-media", "text-on-media"],
     cobertura: "cl-print-fill",
   },
   "src/components/creators/creator-card.tsx": {

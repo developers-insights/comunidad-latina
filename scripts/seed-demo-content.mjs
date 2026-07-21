@@ -293,6 +293,74 @@ async function main() {
     trust: { score: 39, level: 'verificado', signals: { months_in_community: 9, transactions_ok: 1, endorsements_count: 3, reports_upheld: 0 } },
   });
 
+  // Dueños de negocio nuevos (para variedad de avisos del Creator Marketplace).
+  const rafaelId = await upsertUser({
+    email: 'rafael@demo.comunidadlatina.com',
+    displayName: 'Rafael Encarnación',
+    role: 'member',
+    tenantId,
+    countryOrigin: 'DO',
+    areaLabel: 'Jackson Heights, Queens',
+    bio: 'Dueño del Restaurante El Cibao. Comida criolla de lunes a sábado y sancocho los domingos.',
+    trust: { score: 72, level: 'confiable', signals: { months_in_community: 26, transactions_ok: 11, endorsements_count: 16, reports_upheld: 0 } },
+  });
+
+  const yanerisId = await upsertUser({
+    email: 'yaneris@demo.comunidadlatina.com',
+    displayName: 'Yaneris Rosario',
+    role: 'member',
+    tenantId,
+    countryOrigin: 'DO',
+    areaLabel: 'Corona, Queens',
+    bio: 'Dueña de Salón Belleza Divina. Uñas, peinados y el trato que toda mujer merece.',
+    trust: { score: 55, level: 'verificado', signals: { months_in_community: 19, transactions_ok: 7, endorsements_count: 11, reports_upheld: 0 } },
+  });
+
+  // Creadores nuevos (variedad para el directorio de "Creadores").
+  const rosannaId = await upsertUser({
+    email: 'rosanna@demo.comunidadlatina.com',
+    displayName: 'Rosanna Disla',
+    role: 'member',
+    tenantId,
+    countryOrigin: 'DO',
+    areaLabel: 'Elmhurst, Queens',
+    bio: 'Fotógrafa freelance. Especializada en retratos de familia y books sencillos.',
+    trust: { score: 58, level: 'verificado', signals: { months_in_community: 14, transactions_ok: 6, endorsements_count: 10, reports_upheld: 0 } },
+  });
+
+  const franklinId = await upsertUser({
+    email: 'franklin@demo.comunidadlatina.com',
+    displayName: 'Franklin Peña',
+    role: 'member',
+    tenantId,
+    countryOrigin: 'DO',
+    areaLabel: 'Jackson Heights, Queens',
+    bio: 'Diseñador gráfico freelance. Logos, menús y flyers para los negocios del barrio.',
+    trust: { score: 50, level: 'verificado', signals: { months_in_community: 10, transactions_ok: 4, endorsements_count: 7, reports_upheld: 0 } },
+  });
+
+  const katerinId = await upsertUser({
+    email: 'katerin@demo.comunidadlatina.com',
+    displayName: 'Katerin Objio',
+    role: 'member',
+    tenantId,
+    countryOrigin: 'DO',
+    areaLabel: 'Corona, Queens',
+    bio: 'Community manager. Redes sociales de negocios latinos: contenido, mensajes y reportes.',
+    trust: { score: 37, level: 'verificado', signals: { months_in_community: 6, transactions_ok: 2, endorsements_count: 5, reports_upheld: 0 } },
+  });
+
+  const jonathanId = await upsertUser({
+    email: 'jonathan@demo.comunidadlatina.com',
+    displayName: 'Jonathan Ureña',
+    role: 'member',
+    tenantId,
+    countryOrigin: 'DO',
+    areaLabel: 'East Elmhurst, Queens',
+    bio: 'Videógrafo de eventos: bodas, quinceañeras y bautizos, con cámara y drone.',
+    trust: { score: 63, level: 'verificado', signals: { months_in_community: 18, transactions_ok: 8, endorsements_count: 12, reports_upheld: 0 } },
+  });
+
   // 2. Fotos para listings seed existentes sin foto --------------------------
   const { data: bare, error: bareErr } = await supabase
     .from('listings')
@@ -415,6 +483,10 @@ async function main() {
   for (const [profileId, headline, bio, skills, rate, cat, off] of [
     [yeseniaId, 'Reels y fotos que venden — negocios latinos', 'Más de 40 campañas para restaurantes, salones y marcas del barrio. Filmo, edito y te entrego listo para publicar.', ['Reels', 'Fotografía', 'Campañas', 'Instagram'], 'Desde $150 por reel', 'creador_contenido', 0],
     [luisId, 'Video con alma de barrio', 'Videógrafo documental. Aftermovies de eventos, videos de marca y contenido vertical.', ['Video', 'Aftermovie', 'Drone', 'Edición'], 'Desde $250 por video', 'creador_contenido', 2],
+    [rosannaId, 'Fotos que se sienten como en casa', 'Retratos de familia, quinceañeras y books sencillos. Once años fotografiando al barrio — sé sacarle la sonrisa hasta al más tímido.', ['Fotografía', 'Retratos', 'Books', 'Quinceañeras', 'Edición'], 'Desde $120 por sesión', 'creador_contenido', 1],
+    [franklinId, 'Diseño que hace ver serio a tu negocio', 'Logos, menús, flyers y todo lo que necesites imprimir o postear. Vos me explicás la idea y yo te la resuelvo, rápido y sin dolores de cabeza.', ['Diseño gráfico', 'Logos', 'Menús', 'Flyers', 'Branding'], 'Desde $80 por diseño', 'creador_contenido', 3],
+    [katerinId, 'Le doy vida a tus redes todos los días', 'Manejo Instagram, Facebook y TikTok de negocios del barrio: calendario de contenido, respuestas a mensajes y reportes claros cada mes.', ['Redes sociales', 'Community Management', 'Instagram', 'TikTok', 'Contenido'], 'Desde $180/mes', 'creador_contenido', 4],
+    [jonathanId, 'Tu evento, filmado como se debe', 'Bodas, quinceañeras y bautizos. Dos cámaras, drone y edición entregada en menos de dos semanas — para revivir el día las veces que quieras.', ['Video', 'Eventos', 'Drone', 'Edición', 'Fotografía'], 'Desde $300 por evento', 'creador_contenido', 5],
   ]) {
     const { error } = await supabase.from('creator_profiles').upsert(
       {
@@ -431,7 +503,7 @@ async function main() {
     );
     if (error) die(`creator_profile ${headline}`, error);
   }
-  log('create', 'perfiles de creador: Yesenia + Luis');
+  log('create', 'perfiles de creador: Yesenia + Luis + Rosanna + Franklin + Katerin + Jonathan');
 
   const gigPanaderiaId = await upsertListing(tenantId, {
     created_at: daysAgo(3),
@@ -466,6 +538,115 @@ async function main() {
     photos: [pic('barberia', 2) ?? pic('barberia', 0)].filter(Boolean),
     attrs: { category: 'foto', deliverables: '25 fotos editadas', deadline_days: 10, urgent: true },
     created_by: ramonId,
+    source: 'user',
+  });
+
+  // 5b. Más avisos del Creator Marketplace (variedad de rubros) --------------
+  await upsertListing(tenantId, {
+    created_at: daysAgo(2),
+    published_at: daysAgo(2),
+    seed_key: 'gig-diseno-menu-panaderia',
+    kind: 'creator_gig',
+    title: 'Buscamos diseñador para el menú nuevo y flyers de temporada',
+    description:
+      'Queremos renovar el menú de la vitrina (una hoja, dos caras) y armar 3 flyers para las promos del mes — el bizcocho por encargo, el café y las fiestas que se vienen. Que se vea limpio y se lea bien de lejos.',
+    price_amount: 180,
+    price_currency: 'USD',
+    price_period: 'one_time',
+    area_label: 'Corona, Queens',
+    photos: [pic('panaderia', 3) ?? pic('panaderia', 0)].filter(Boolean),
+    attrs: { category: 'diseño', deliverables: 'Menú (2 caras) + 3 flyers', deadline_days: 12, urgent: false },
+    created_by: altagraciaId,
+    source: 'user',
+  });
+
+  await upsertListing(tenantId, {
+    created_at: daysAgo(4),
+    published_at: daysAgo(4),
+    seed_key: 'gig-social-barberia',
+    kind: 'creator_gig',
+    title: 'Community manager para el Instagram y TikTok de la barbería',
+    description:
+      'Necesitamos quien suba contenido 3 veces por semana, conteste mensajes y arme un calendario simple. Material no falta — cortes, transformaciones, el ambiente de acá — lo que falta es quien lo organice y lo publique.',
+    price_amount: 220,
+    price_currency: 'USD',
+    price_period: 'month',
+    area_label: 'Jackson Heights, Queens',
+    photos: [pic('barberia', 1) ?? pic('barberia', 0)].filter(Boolean),
+    attrs: { category: 'social', deliverables: '12 posts/mes + respuesta a mensajes', deadline_days: 30, urgent: false },
+    created_by: ramonId,
+    source: 'user',
+  });
+
+  await upsertListing(tenantId, {
+    created_at: daysAgo(1.5),
+    published_at: daysAgo(1.5),
+    seed_key: 'gig-foto-restaurante-cibao',
+    kind: 'creator_gig',
+    title: 'Fotógrafo para los platos y el ambiente del restaurante',
+    description:
+      'Vamos a imprimir el menú nuevo y necesitamos fotos que den hambre: el mangú, el sancocho de los domingos y el salón con mesas llenas. Una sesión de 3 horas en el horario de más movimiento.',
+    price_amount: 280,
+    price_currency: 'USD',
+    price_period: 'one_time',
+    area_label: 'Jackson Heights, Queens',
+    photos: [pic('restaurante', 2) ?? pic('restaurante', 0)].filter(Boolean),
+    attrs: { category: 'foto', deliverables: '20 fotos editadas', deadline_days: 15, urgent: false },
+    created_by: rafaelId,
+    source: 'user',
+  });
+
+  await upsertListing(tenantId, {
+    created_at: daysAgo(0.8),
+    published_at: daysAgo(0.8),
+    seed_key: 'gig-video-salon-divina',
+    kind: 'creator_gig',
+    title: 'Reels de antes/después para el salón',
+    description:
+      'Queremos 4 reels cortos mostrando transformaciones reales: uñas, peinados y el cambio de look completo. Si sabés capturar el momento en que la clienta se ve al espejo, este trabajo es para vos.',
+    price_amount: 200,
+    price_currency: 'USD',
+    price_period: 'one_time',
+    area_label: 'Corona, Queens',
+    photos: [pic('salon_belleza', 2) ?? pic('salon_belleza', 0)].filter(Boolean),
+    attrs: { category: 'video', deliverables: '4 reels cortos', deadline_days: 10, urgent: true },
+    created_by: yanerisId,
+    source: 'user',
+  });
+
+  await upsertListing(tenantId, {
+    created_at: daysAgo(3.5),
+    published_at: daysAgo(3.5),
+    seed_key: 'gig-campana-festival-sabor',
+    kind: 'creator_gig',
+    title: 'Campaña completa para promocionar el festival',
+    description:
+      'Faltan pocas semanas para el festival y necesitamos correr la voz: un flyer, 5 posts para redes y un video corto invitando a la gente. Que se sienta la alegría del evento desde la primera imagen.',
+    price_amount: 350,
+    price_currency: 'USD',
+    price_period: 'one_time',
+    area_label: 'Flushing Meadows, Queens',
+    photos: [pic('evento_festival', 2) ?? pic('evento_festival', 0)].filter(Boolean),
+    attrs: { category: 'campaña', deliverables: 'Flyer + 5 posts + 1 video corto', deadline_days: 8, urgent: true },
+    created_by: ramonId,
+    source: 'user',
+  });
+
+  await upsertListing(tenantId, {
+    created_at: daysAgo(5),
+    published_at: daysAgo(5),
+    seed_key: 'gig-diseno-salon-divina',
+    kind: 'creator_gig',
+    title: 'Diseño de flyer para el especial de uñas del mes',
+    description:
+      'Vamos a lanzar un combo de manicure y pedicure y necesitamos un flyer llamativo para la vitrina y otro para compartir en redes. Colores vivos, que combine con la marca del salón.',
+    price_amount: 90,
+    price_currency: 'USD',
+    price_period: 'one_time',
+    area_label: 'Corona, Queens',
+    photos: [pic('salon_belleza', 3) ?? pic('salon_belleza', 0)].filter(Boolean),
+    attrs: { category: 'diseño', deliverables: '2 versiones del flyer (vitrina + redes)', deadline_days: 7, urgent: false },
+    created_by: yanerisId,
     source: 'user',
   });
 

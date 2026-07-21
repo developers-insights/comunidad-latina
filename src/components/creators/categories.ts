@@ -32,6 +32,17 @@ export const GIG_CATEGORIES: readonly GigCategoryMeta[] = [
   { id: "otro", label: "Otro", Icon: Sparkle },
 ] as const;
 
+/**
+ * Categorías que se ofrecen como FILTRO en el feed de Trabajos: es
+ * `GIG_CATEGORIES` sin "otro". "Otro" es el cajón de sastre al publicar, no un
+ * criterio de descubrimiento (nadie filtra por "algo que no encaja"); los avisos
+ * con category="otro" siguen visibles dentro de "Todos", solo que no tienen chip
+ * propio. `GIG_CATEGORIES` se mantiene COMPLETA (las 6) para el selector de
+ * publicación y para el fallback de `gigCategoryMeta()` — no tocar esa lista.
+ */
+export const FILTERABLE_GIG_CATEGORIES: readonly GigCategoryMeta[] =
+  GIG_CATEGORIES.filter((category) => category.id !== "otro");
+
 const BY_ID = new Map<GigCategory, GigCategoryMeta>(
   GIG_CATEGORIES.map((category) => [category.id, category]),
 );

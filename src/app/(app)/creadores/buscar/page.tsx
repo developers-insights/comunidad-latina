@@ -83,6 +83,7 @@ async function DirectoryContent() {
       completedJobs: row.completed_jobs,
       available: row.available,
       initialFollowing: following.has(row.profile_id),
+      isSelf: user ? row.profile_id === user.id : false,
     };
   });
 

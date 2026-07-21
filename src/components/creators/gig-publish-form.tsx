@@ -18,7 +18,6 @@ import { Celebration, useCelebration } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { createGigDraft, finalizeGig } from "@/app/(app)/creadores/actions";
-import { GIG_CATEGORIES, type GigCategory } from "./categories";
 import { COPY } from "./copy";
 
 const MAX_PHOTOS = 6;
@@ -66,7 +65,6 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
   const [done, setDone] = useState<"published" | "pending_review" | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
 
-  const [category, setCategory] = useState<GigCategory | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [deliverables, setDeliverables] = useState("");
@@ -78,7 +76,6 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
 
   function validateStep(current: number): string | null {
     if (current === 0) {
-      if (!category) return C.errors.categoryRequired;
       if (title.trim().length < 8) return C.errors.titleShort;
       if (description.trim().length < 30) return C.errors.descriptionShort;
     }
@@ -141,7 +138,6 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
         const result = await createGigDraft({
           title: title.trim(),
           description: description.trim(),
-          category: category as GigCategory,
           budget: Number(budget),
           deliverables: deliverables.trim() || null,
           deadlineDays: deadlineDays ? Number(deadlineDays) : null,
@@ -161,10 +157,29 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
       }
 
       const supabase = createClient();
+
+      // Igual que el composer del feed (que sube en el SERVIDOR tras
+      // requireTenantMatch): la foto va con una sesión válida y con el prefijo
+      // {tenant}/{listing} que exige la policy listing_photos_insert. getUser()
+      // revalida y refresca el token del browser client ANTES de subir (si está
+      // vencido, la subida se rechazaba en silencio) y el tenant sale del JWT
+      // (app_metadata.tenant_id) — lo que la RLS realmente compara— y no del prop
+      // del request. El listing es el borrador propio recién creado, así que el
+      // EXISTS de la policy (listing del mismo tenant y created_by) da verdadero.
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError || !user) {
+        router.push("/entrar?next=/creadores/publicar");
+        return;
+      }
+      const tid = String(user.app_metadata?.tenant_id ?? tenantId);
+
       const photoPaths: string[] = [];
       for (const item of photos) {
         const { blob, ext } = await preparePhoto(item.file);
-        const path = `${tenantId}/${listingId}/${crypto.randomUUID()}.${ext}`;
+        const path = `${tid}/${listingId}/${crypto.randomUUID()}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from("listing-photos")
           .upload(path, blob, {
@@ -172,6 +187,11 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
             upsert: false,
           });
         if (uploadError) {
+          // Sin este log el fallo real (RLS, token vencido, límite del bucket)
+          // quedaba invisible: solo se veía el copy genérico de uploadFailed.
+          console.warn("[creadores] subida de foto de trabajo falló", {
+            message: uploadError.message,
+          });
           setError(C.errors.uploadFailed);
           return;
         }
@@ -232,37 +252,6 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
 
       {step === 0 && (
         <div className="flex flex-col gap-4">
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 font-display text-xl font-bold text-foreground">
-              {C.steps.what.title}
-            </legend>
-            <div className="grid grid-cols-3 gap-2">
-              {GIG_CATEGORIES.map(({ id, label, Icon }) => {
-                const selected = category === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => setCategory(id)}
-                    className={cn(
-                      "flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-lg border p-2 text-center",
-                      "transition-[border-color,background-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
-                      "active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-                      selected
-                        ? "border-brand bg-brand-tint text-brand-ink"
-                        : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
-                    )}
-                  >
-                    <Icon size={24} weight={selected ? "fill" : "regular"} aria-hidden="true" />
-                    <span className="text-xs font-semibold leading-tight">{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
-
           <Field htmlFor="gig-title" label={C.steps.what.titleLabel} help={C.steps.what.titleHelp}>
             <Input
               id="gig-title"

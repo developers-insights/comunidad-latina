@@ -6,6 +6,14 @@ import { isVisionConfigured } from "@/lib/config/services";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import {
+  TIER_AUTO,
+  TIER_HUMAN,
+  TIER_REVIEW,
+  enqueueModeration,
+  moderateText,
+  moderationTier,
+} from "@/lib/moderation";
+import {
   findTransition,
   roleOf,
   type ContractAction,
@@ -37,16 +45,20 @@ const GENERIC_ERROR = COPY.apply.errors.generic;
 // Aviso (gig) — publicar un trabajo (listing kind='creator_gig')
 // ===========================================================================
 //
-// La RLS de listings (0004) NO deja que un usuario cree un aviso 'published':
-// nace 'draft' y se finaliza a 'pending_review' (moderación). Mismo flujo que
-// /publicar. El seed inserta gigs 'published' por service_role.
+// La RLS de listings (0004) NO deja que un usuario cree/actualice un aviso a
+// 'published': nace 'draft' (createGigDraft) y finalizeGig decide el status
+// ESPEJANDO EL FEED (feedback cliente 2026-07-19): con texto limpio el aviso
+// NACE 'published' vía admin client (aparece al toque en Trabajos) y —sin
+// Vision— la foto entra a la cola humana (/admin/moderacion) para revisión a
+// posteriori; texto marcado / tier humano queda 'pending_review'. El seed
+// publica por service_role.
 
 const GIG_CATEGORIES = ["video", "foto", "campaña", "social", "diseño", "otro"] as const;
 
 const gigDraftSchema = z.object({
   title: z.string().trim().min(8).max(120),
   description: z.string().trim().min(30).max(4000),
-  category: z.enum(GIG_CATEGORIES),
+  category: z.enum(GIG_CATEGORIES).nullish(),
   budget: z.number().positive().max(1_000_000),
   deliverables: z.string().trim().max(500).nullish(),
   deadlineDays: z.number().int().min(1).max(365).nullish(),
@@ -80,7 +92,8 @@ export async function createGigDraft(rawInput: GigDraftInput): Promise<CreateGig
     return { ok: false, error: COPY.publish.errors.generic };
   }
 
-  const attrs: Record<string, string | number | boolean> = { category: input.category };
+  const attrs: Record<string, string | number | boolean> = {};
+  if (input.category) attrs.category = input.category;
   if (input.deliverables) attrs.deliverables = input.deliverables;
   if (input.deadlineDays !== null && input.deadlineDays !== undefined) {
     attrs.deadline_days = input.deadlineDays;
@@ -122,6 +135,14 @@ export type FinalizeGigResult =
   | { ok: true; status: "published" | "pending_review" }
   | { ok: false; error: string; needsAuth?: boolean };
 
+// Auto-aprobación SOLO fuera de producción — helper idéntico al del FEED
+// (feed/actions.ts) y del Marketplace (marketplace/publicar/actions.ts).
+function devAutoApprove(): boolean {
+  const isProduction =
+    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+  return process.env.MODERATION_DEV_AUTO_APPROVE === "true" && !isProduction;
+}
+
 export async function finalizeGig(rawInput: {
   listingId: string;
   photoPaths: string[];
@@ -150,6 +171,12 @@ export async function finalizeGig(rawInput: {
     return { ok: false, error: COPY.publish.errors.generic };
   }
 
+  // UPDATE con el cliente del USUARIO: escribe las fotos y pasa a
+  // 'pending_review'. La RLS de listings (0004) NUNCA deja que el dueño escriba
+  // status='published' (anti bait-and-switch post-verificación) — el salto a
+  // published lo hace el admin client más abajo, igual que el seed y que
+  // finalizeProduct del Marketplace. El mismo round-trip confirma ownership
+  // (.eq) y trae título/descripción para moderar el texto.
   const { data: updated, error: updateError } = await supabase
     .from("listings")
     .update({ photos: photoPaths, status: "pending_review" })
@@ -157,7 +184,7 @@ export async function finalizeGig(rawInput: {
     .eq("tenant_id", tenant.id)
     .eq("created_by", user.id)
     .eq("kind", "creator_gig")
-    .select("id")
+    .select("id, title, description")
     .maybeSingle();
 
   if (updateError || !updated) {
@@ -165,33 +192,84 @@ export async function finalizeGig(rawInput: {
     return { ok: false, error: COPY.publish.errors.generic };
   }
 
-  // Auto-aprobación SOLO fuera de producción (§5.6: imagen sin moderar nunca se
-  // publica en prod). Espeja finalizeListing de /publicar.
-  const isProduction =
-    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
-  const devAutoApprove = process.env.MODERATION_DEV_AUTO_APPROVE === "true" && !isProduction;
+  // ---- Moderación de texto ANTES de decidir el status (§8) — mismo patrón que
+  // createPostAction (feed/actions.ts) y finalizeProduct (marketplace).
+  const moderation = await moderateText(`${updated.title}\n${updated.description ?? ""}`);
+  const tier = moderation.flagged ? TIER_HUMAN : moderationTier(moderation.score);
+
+  // ---- Foto: publicación instantánea + revisión asíncrona (feedback cliente
+  // 2026-07-19, espejo del FEED). Sin Vision la foto YA NO fuerza pending_review
+  // (mataba Trabajos: el aviso se "publicaba" y nunca aparecía): el aviso NACE
+  // published y la imagen entra a la cola humana para revisarse después. Con
+  // Vision configurado se mantiene el screening síncrono actual (la foto no
+  // encola acá). El TEXTO sigue gobernando pending_review.
+  const autoApprove = devAutoApprove();
   const hasPhotos = photoPaths.length > 0;
+  const photoNeedsAsyncReview = hasPhotos && !isVisionConfigured && !autoApprove;
 
-  if (!devAutoApprove || (hasPhotos && !isVisionConfigured && !devAutoApprove)) {
-    return { ok: true, status: "pending_review" };
-  }
+  // Espejo EXACTO de createPostAction: la foto NO fuerza pending_review; solo el
+  // texto marcado o de tier humano retiene el aviso sin publicar.
+  let status: "published" | "pending_review" =
+    moderation.flagged || tier === TIER_HUMAN ? "pending_review" : "published";
 
-  try {
-    const admin = createAdminClient();
-    const { error: publishError } = await admin
-      .from("listings")
-      .update({ status: "published", published_at: new Date().toISOString() })
-      .eq("id", listingId)
-      .eq("tenant_id", tenant.id)
-      .eq("created_by", user.id);
-    if (publishError) {
-      return { ok: true, status: "pending_review" };
+  // ---- Nacer published: exclusivo del admin client (la RLS del dueño prohíbe
+  // 'published'). Ownership ya verificado en el UPDATE de arriba.
+  if (status === "published") {
+    try {
+      const admin = createAdminClient();
+      const { error: publishError } = await admin
+        .from("listings")
+        .update({ status: "published", published_at: new Date().toISOString() })
+        .eq("id", listingId)
+        .eq("tenant_id", tenant.id)
+        .eq("created_by", user.id);
+      if (publishError) {
+        // No se pudo publicar → queda en revisión (nunca rompemos el flujo).
+        console.warn("[creadores] no se pudo publicar el aviso, queda en revisión", {
+          listingId,
+          code: publishError.code,
+        });
+        status = "pending_review";
+      }
+    } catch {
+      // Admin no configurado → el aviso queda en revisión.
+      status = "pending_review";
     }
-  } catch {
-    return { ok: true, status: "pending_review" };
   }
 
-  return { ok: true, status: "published" };
+  // ---- Cola de moderación (admin, uso permitido §6) — espejo de
+  // createPostAction. El aviso ya está visible en Trabajos; igual entra a la
+  // cola para que un humano vea la imagen (sin Vision) o el texto marcado. Se
+  // resuelve desde /admin/moderacion, que ya soporta subject_kind='listing'.
+  const shouldEnqueue =
+    moderation.flagged || moderation.skipped || tier > TIER_AUTO || photoNeedsAsyncReview;
+  if (shouldEnqueue) {
+    try {
+      const reasons = [
+        ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
+        ...(photoNeedsAsyncReview ? ["photo_async_review"] : []),
+      ];
+      // pending_review → cola humana; publicado con foto sin Vision → cola
+      // humana igual (la imagen necesita ojos), pero el aviso ya está visible.
+      const enqueueTier =
+        status === "pending_review" || photoNeedsAsyncReview ? TIER_HUMAN : TIER_REVIEW;
+      const outcome = await enqueueModeration(createAdminClient(), {
+        tenantId: tenant.id,
+        subjectKind: "listing",
+        subjectId: listingId,
+        aiScore: moderation.skipped ? null : moderation.score,
+        reasons,
+        tier: enqueueTier,
+      });
+      if (!outcome.ok) {
+        console.warn("[creadores] no se pudo encolar moderación del aviso", { listingId });
+      }
+    } catch {
+      console.warn("[creadores] admin client no disponible para encolar moderación");
+    }
+  }
+
+  return { ok: true, status };
 }
 
 // ===========================================================================

@@ -1,8 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Plus } from "@phosphor-icons/react/dist/ssr";
-import { buttonVariants } from "@/components/ui";
-import { EmptyState } from "@/components/ui";
+import { buttonVariants, EmptyState } from "@/components/ui";
 import {
   buildTrustSignals,
   firstPhotoUrl,
@@ -13,14 +12,11 @@ import {
 import {
   COPY,
   CreatorsNav,
-  GIG_CATEGORIES,
-  GigCard,
   GigListSkeleton,
-  gigCategoryMeta,
-  isGigCategory,
   parseGigAttrs,
   type GigCardModel,
 } from "@/components/creators";
+import { GigCard } from "@/components/creators/gig-card";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -29,26 +25,20 @@ export const metadata = { title: "Creadores" };
 
 const PAGE_SIZE = 20;
 
-type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-function firstValue(value: string | string[] | undefined): string {
-  return (Array.isArray(value) ? value[0] : value) ?? "";
-}
-
-export default async function CreadoresPage({ searchParams }: { searchParams: SearchParams }) {
-  const sp = await searchParams;
-  const cat = firstValue(sp.cat);
+export default async function CreadoresPage() {
   return (
-    <Suspense key={cat} fallback={<PageSkeleton />}>
-      <FeedContent cat={isGigCategory(cat) ? cat : ""} />
+    <Suspense fallback={<PageSkeleton />}>
+      <FeedContent />
     </Suspense>
   );
 }
 
-async function FeedContent({ cat }: { cat: string }) {
+async function FeedContent() {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
 
-  let query = supabase
+  // Todos los avisos publicados, juntos (sin filtro por categoría): se muestran
+  // todos los trabajos que buscan creadores.
+  const { data: rows, error } = await supabase
     .from("listings")
     .select(
       "id, title, price_amount, price_currency, price_period, area_label, photos, attrs, created_by, publisher_name, created_at",
@@ -60,9 +50,6 @@ async function FeedContent({ cat }: { cat: string }) {
     .order("id", { ascending: false })
     .limit(PAGE_SIZE);
 
-  if (cat) query = query.eq("attrs->>category", cat);
-
-  const { data: rows, error } = await query;
   if (error) console.warn("[creadores] query de gigs falló", { code: error.code });
 
   const gigRows = rows ?? [];
@@ -136,31 +123,16 @@ async function FeedContent({ cat }: { cat: string }) {
 
       <CreatorsNav active="gigs" />
 
-      {/* Filtro por categoría — chips scrollables */}
-      <div className="mb-5 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-        <CategoryChip href="/creadores" label="Todos" active={!cat} />
-        {GIG_CATEGORIES.map((category) => {
-          const Icon = category.Icon;
-          return (
-            <CategoryChip
-              key={category.id}
-              href={`/creadores?cat=${encodeURIComponent(category.id)}`}
-              label={category.label}
-              icon={<Icon size={14} weight="fill" aria-hidden="true" />}
-              active={cat === category.id}
-            />
-          );
-        })}
-      </div>
-
       {gigs.length === 0 ? (
         <EmptyState
-          icon={cat ? gigCategoryMetaIcon(cat) : undefined}
-          illustration={cat ? undefined : "/images/empty-state-search.png"}
+          illustration="/images/empty-state-search.png"
           title={COPY.feed.emptyTitle}
           message={COPY.feed.emptyMessage}
           action={
-            <Link href="/creadores/publicar" className={buttonVariants({ variant: "primary", size: "md" })}>
+            <Link
+              href="/creadores/publicar"
+              className={buttonVariants({ variant: "primary", size: "md" })}
+            >
               <Plus size={18} aria-hidden="true" />
               {COPY.feed.emptyCta}
             </Link>
@@ -174,42 +146,6 @@ async function FeedContent({ cat }: { cat: string }) {
         </div>
       )}
     </>
-  );
-}
-
-function gigCategoryMetaIcon(cat: string) {
-  const Icon = gigCategoryMeta(cat).Icon;
-  return <Icon />;
-}
-
-function CategoryChip({
-  href,
-  label,
-  icon,
-  active,
-}: {
-  href: string;
-  label: string;
-  icon?: React.ReactNode;
-  active: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-current={active ? "true" : undefined}
-      className={cn(
-        // Filtro = chrome, no contenido: se esconde al imprimir (el activo usa
-        // text-brand-foreground sobre bg-brand, que en papel no imprime su fondo).
-        "cl-print-hide inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold",
-        "transition-colors duration-(--duration-fast)",
-        active
-          ? "bg-brand text-brand-foreground"
-          : "border border-border bg-surface text-foreground-secondary hover:border-border-strong",
-      )}
-    >
-      {icon}
-      {label}
-    </Link>
   );
 }
 

@@ -110,7 +110,9 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
             </p>
           )}
         </div>
-        <FollowButton targetKind="profile" targetId={id} initialFollowing={Boolean(existingFollow)} size="sm" />
+        {user?.id !== id && (
+          <FollowButton targetKind="profile" targetId={id} initialFollowing={Boolean(existingFollow)} size="sm" />
+        )}
       </section>
 
       {/* Reputación — el "score de crédito": estrellas + trabajos + Trust Score */}

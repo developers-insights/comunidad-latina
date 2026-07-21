@@ -32,13 +32,6 @@ export function GigCard({ gig }: { gig: GigCardModel }) {
   const category = gigCategoryMeta(gig.category);
   const CategoryIcon = category.Icon;
 
-  const categoryChip = (
-    <span className="inline-flex items-center gap-1 rounded-full cl-print-fill bg-media-scrim px-2.5 py-1 text-xs font-semibold text-on-media backdrop-blur-sm">
-      <CategoryIcon size={13} weight="fill" aria-hidden="true" />
-      {category.label}
-    </span>
-  );
-
   const urgentChip = gig.urgent ? (
     <span className="inline-flex items-center gap-1 rounded-full cl-print-fill bg-media-scrim px-2.5 py-1 text-xs font-bold text-on-media backdrop-blur-sm">
       <Lightning size={13} weight="fill" aria-hidden="true" />
@@ -54,7 +47,6 @@ export function GigCard({ gig }: { gig: GigCardModel }) {
             src={gig.photoUrl}
             fallbackSrc={gig.photoUrl}
             aspect="video"
-            overlayTopLeft={categoryChip}
             overlayTopRight={urgentChip}
           />
         ) : (
@@ -67,7 +59,6 @@ export function GigCard({ gig }: { gig: GigCardModel }) {
             }}
           >
             <CategoryIcon size={64} weight="fill" aria-hidden="true" className="text-on-media/85" />
-            <div className="absolute left-2.5 top-2.5 flex flex-wrap gap-1.5">{categoryChip}</div>
             {urgentChip && (
               <div className="absolute right-2.5 top-2.5 flex flex-wrap justify-end gap-1.5">
                 {urgentChip}
