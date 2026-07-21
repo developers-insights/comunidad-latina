@@ -18,10 +18,10 @@ import { Celebration, useCelebration } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { createGigDraft, finalizeGig } from "@/app/(app)/creadores/actions";
+import { PHOTO_MAX_COUNT, selectPhotos } from "./helpers";
 import { COPY } from "./copy";
 
-const MAX_PHOTOS = 6;
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+const MAX_PHOTOS = PHOTO_MAX_COUNT;
 const TOTAL_STEPS = 4;
 
 interface PhotoItem {
@@ -101,21 +101,16 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
 
   function addPhotos(fileList: FileList | null) {
     if (!fileList) return;
-    setPhotos((current) => {
-      const next = [...current];
-      for (const file of Array.from(fileList)) {
-        if (next.length >= MAX_PHOTOS) {
-          toast({ variant: "warning", title: C.steps.photos.tooMany });
-          break;
-        }
-        if (file.size > MAX_PHOTO_BYTES) {
-          toast({ variant: "warning", title: C.steps.photos.tooBig });
-          continue;
-        }
-        next.push({ file, previewUrl: URL.createObjectURL(file) });
-      }
-      return next;
-    });
+    // Materializamos los archivos AHORA (síncrono): el input se limpia más abajo
+    // (value = "") y su FileList es vivo — leerlo dentro del updater diferido de
+    // setPhotos daría 0 archivos, y la foto "no se marcaba". Ver selectPhotos().
+    const { accepted, tooMany, tooBig } = selectPhotos(Array.from(fileList), photos.length);
+    if (accepted.length) {
+      const items = accepted.map((file) => ({ file, previewUrl: URL.createObjectURL(file) }));
+      setPhotos((current) => [...current, ...items]);
+    }
+    if (tooMany) toast({ variant: "warning", title: C.steps.photos.tooMany });
+    if (tooBig) toast({ variant: "warning", title: C.steps.photos.tooBig });
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 

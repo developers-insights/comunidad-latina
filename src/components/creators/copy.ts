@@ -138,7 +138,7 @@ export const COPY = {
         add: "Agregar",
         remove: "Quitar foto",
         tooMany: "Podés subir hasta 6 fotos.",
-        tooBig: "Esa foto pesa demasiado (máximo 8 MB).",
+        tooBig: "Esa foto pesa demasiado (máximo 40 MB).",
       },
     },
     nav: { back: "Atrás", next: "Siguiente", submit: "Publicar trabajo", submitting: "Publicando…" },

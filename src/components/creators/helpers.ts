@@ -22,6 +22,55 @@ export function firstPortfolioUrl(photos: string[] | null | undefined): string |
 }
 
 // ---------------------------------------------------------------------------
+// Selección de fotos (composers de perfil de creador y de publicar trabajo)
+// ---------------------------------------------------------------------------
+
+export const PHOTO_MAX_COUNT = 6;
+// Límite GENEROSO a propósito: la foto se recomprime en el cliente a webp
+// ≤1600px antes de subir (preparePhoto), así que el peso del archivo crudo NO
+// es lo que termina en Storage. 8 MB rechazaba fotos normales de celular (que
+// hoy pesan 8–20 MB) y el usuario veía "no se marca ninguna".
+export const PHOTO_MAX_BYTES = 40 * 1024 * 1024;
+
+export interface PhotoSelection {
+  accepted: File[];
+  tooMany: boolean;
+  tooBig: boolean;
+}
+
+/**
+ * Decide, de forma pura, qué archivos entran (tope de cantidad + peso máximo).
+ *
+ * IMPORTANTE: el caller DEBE pasar un array ya materializado — típicamente
+ * `Array.from(input.files)` — y hacerlo de forma SÍNCRONA, nunca el `FileList`
+ * vivo del input. Al elegir una foto, el input se limpia (`value = ""`) enseguida,
+ * y un `FileList` vivo leído más tarde (p. ej. dentro de un updater diferido de
+ * React) ya vendría vacío: ese era el bug de "elijo foto y no se marca ninguna".
+ */
+export function selectPhotos(
+  files: File[],
+  currentCount: number,
+  maxCount = PHOTO_MAX_COUNT,
+  maxBytes = PHOTO_MAX_BYTES,
+): PhotoSelection {
+  const accepted: File[] = [];
+  let tooMany = false;
+  let tooBig = false;
+  for (const file of files) {
+    if (currentCount + accepted.length >= maxCount) {
+      tooMany = true;
+      break;
+    }
+    if (file.size > maxBytes) {
+      tooBig = true;
+      continue;
+    }
+    accepted.push(file);
+  }
+  return { accepted, tooMany, tooBig };
+}
+
+// ---------------------------------------------------------------------------
 // Reputación del creador (score de crédito): estrellas + trabajos
 // ---------------------------------------------------------------------------
 

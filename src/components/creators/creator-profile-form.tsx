@@ -8,11 +8,10 @@ import { BezelCard, Button, Field, Input, Textarea, buttonVariants, useToast } f
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { upsertCreatorProfile } from "@/app/(app)/creadores/actions";
-import { creatorPhotoUrl } from "./helpers";
+import { creatorPhotoUrl, PHOTO_MAX_COUNT, selectPhotos } from "./helpers";
 import { COPY } from "./copy";
 
-const MAX_PHOTOS = 6;
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+const MAX_PHOTOS = PHOTO_MAX_COUNT;
 const MAX_SKILLS = 12;
 
 export interface CreatorProfileInitial {
@@ -96,21 +95,20 @@ export function CreatorProfileForm({
 
   function addPhotos(fileList: FileList | null) {
     if (!fileList) return;
-    setPortfolio((current) => {
-      const next = [...current];
-      for (const file of Array.from(fileList)) {
-        if (next.length >= MAX_PHOTOS) {
-          toast({ variant: "warning", title: "Podés subir hasta 6 fotos." });
-          break;
-        }
-        if (file.size > MAX_PHOTO_BYTES) {
-          toast({ variant: "warning", title: "Esa foto pesa demasiado (máximo 8 MB)." });
-          continue;
-        }
-        next.push({ kind: "new", file, previewUrl: URL.createObjectURL(file) });
-      }
-      return next;
-    });
+    // Materializamos los archivos AHORA (síncrono): el input se limpia más abajo
+    // (value = "") y su FileList es vivo — leerlo dentro del updater diferido de
+    // setPortfolio daría 0 archivos, y la foto "no se marcaba". Ver selectPhotos().
+    const { accepted, tooMany, tooBig } = selectPhotos(Array.from(fileList), portfolio.length);
+    if (accepted.length) {
+      const items = accepted.map((file) => ({
+        kind: "new" as const,
+        file,
+        previewUrl: URL.createObjectURL(file),
+      }));
+      setPortfolio((current) => [...current, ...items]);
+    }
+    if (tooMany) toast({ variant: "warning", title: "Podés subir hasta 6 fotos." });
+    if (tooBig) toast({ variant: "warning", title: "Esa foto pesa demasiado (máximo 40 MB)." });
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
