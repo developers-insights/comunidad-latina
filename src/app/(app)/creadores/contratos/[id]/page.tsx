@@ -24,10 +24,13 @@ function statusHint(role: ContractRole, status: ContractStatus): string {
   const H = COPY.statusHint;
   if (status === "canceled") return H.canceled;
   if (status === "disputed") return H.disputed;
+  if (status === "rejected") return H.rejected;
   const isClient = role === "client";
   switch (status) {
     case "proposed":
       return isClient ? H.proposedClient : H.proposedCreator;
+    case "accepted":
+      return isClient ? H.acceptedClient : H.acceptedCreator;
     case "funded":
       return isClient ? H.fundedClient : H.fundedCreator;
     case "delivered":
@@ -50,7 +53,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   const { data: contract } = await supabase
     .from("gig_contracts")
     .select(
-      "id, tenant_id, code, gig_id, client_id, creator_id, title, scope, delivery_days, amount_cents, currency, fee_pct, platform_fee_cents, creator_net_cents, status, payment_mode, funded_at, delivered_at, released_at, canceled_at, created_at",
+      "id, tenant_id, code, gig_id, client_id, creator_id, title, scope, delivery_days, amount_cents, currency, fee_pct, platform_fee_cents, creator_net_cents, status, payment_mode, accepted_at, funded_at, delivered_at, released_at, canceled_at, rejected_at, created_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -81,10 +84,12 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   const timeline = (
     [
       { label: COPY.contract.timeline.created, at: contract.created_at },
+      contract.accepted_at ? { label: COPY.contract.timeline.accepted, at: contract.accepted_at } : null,
       contract.funded_at ? { label: COPY.contract.timeline.funded, at: contract.funded_at } : null,
       contract.delivered_at ? { label: COPY.contract.timeline.delivered, at: contract.delivered_at } : null,
       contract.released_at ? { label: COPY.contract.timeline.released, at: contract.released_at } : null,
       contract.canceled_at ? { label: COPY.contract.timeline.canceled, at: contract.canceled_at } : null,
+      contract.rejected_at ? { label: COPY.contract.timeline.rejected, at: contract.rejected_at } : null,
     ] as (TimelineEntry | null)[]
   ).filter((entry): entry is TimelineEntry => entry !== null);
 

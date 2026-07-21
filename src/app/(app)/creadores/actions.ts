@@ -590,7 +590,7 @@ export async function proposeContract(
 
 const transitionSchema = z.object({
   contractId: z.uuid(),
-  action: z.enum(["fund", "deliver", "release", "cancel", "dispute"]),
+  action: z.enum(["accept", "reject", "fund", "deliver", "release", "cancel", "dispute"]),
 });
 
 export type TransitionResult =
@@ -640,6 +640,8 @@ export async function transitionContract(
   const admin = createAdminClient();
   const update: {
     status: string;
+    accepted_at?: string;
+    rejected_at?: string;
     funded_at?: string;
     delivered_at?: string;
     released_at?: string;

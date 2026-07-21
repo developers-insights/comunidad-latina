@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, LockKey, PaperPlaneTilt, Warning, X } from "@phosphor-icons/react/dist/ssr";
+import {
+  CheckCircle,
+  Handshake,
+  LockKey,
+  PaperPlaneTilt,
+  Warning,
+  X,
+} from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, Button, useToast, type ButtonProps } from "@/components/ui";
 import { Celebration, useCelebration } from "@/components/motion";
 import { transitionContract } from "@/app/(app)/creadores/actions";
@@ -15,6 +22,8 @@ import {
 import { COPY } from "./copy";
 
 const ACTION_ICON: Record<ContractAction, typeof LockKey> = {
+  accept: Handshake,
+  reject: X,
   fund: LockKey,
   deliver: PaperPlaneTilt,
   release: CheckCircle,
@@ -23,6 +32,8 @@ const ACTION_ICON: Record<ContractAction, typeof LockKey> = {
 };
 
 const ACTION_VARIANT: Record<ContractAction, ButtonProps["variant"]> = {
+  accept: "primary",
+  reject: "ghost",
   fund: "primary",
   deliver: "primary",
   release: "primary",
@@ -48,7 +59,9 @@ export function ContractActions({
   const router = useRouter();
   const { toast } = useToast();
   const { celebrating, celebrate } = useCelebration();
-  const [confirm, setConfirm] = useState<Exclude<ContractAction, "deliver"> | null>(null);
+  const [confirm, setConfirm] = useState<Exclude<ContractAction, "deliver" | "accept"> | null>(
+    null,
+  );
   const [running, setRunning] = useState<ContractAction | null>(null);
 
   const actions = allowedActions(role, status);
@@ -75,8 +88,9 @@ export function ContractActions({
   }
 
   function onClick(action: ContractAction) {
-    // "deliver" es positivo y de bajo riesgo → directo. El resto confirma.
-    if (action === "deliver") {
+    // Las acciones positivas ("aceptar", "entregar") son de bajo riesgo y van
+    // directo. El resto —incluido "rechazar", que es terminal— pide confirmar.
+    if (action === "deliver" || action === "accept") {
       void run(action);
     } else {
       setConfirm(action);
@@ -122,7 +136,11 @@ export function ContractActions({
             </p>
             <div className="flex flex-col gap-2">
               <Button
-                variant={confirm === "cancel" || confirm === "dispute" ? "danger" : "primary"}
+                variant={
+                  confirm === "cancel" || confirm === "dispute" || confirm === "reject"
+                    ? "danger"
+                    : "primary"
+                }
                 size="lg"
                 className="w-full"
                 loading={running === confirm}

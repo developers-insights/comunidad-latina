@@ -637,6 +637,7 @@ export type Database = {
       }
       gig_contracts: {
         Row: {
+          accepted_at: string | null
           amount_cents: number
           application_id: string | null
           canceled_at: string | null
@@ -654,6 +655,7 @@ export type Database = {
           id: string
           payment_mode: string
           platform_fee_cents: number | null
+          rejected_at: string | null
           released_at: string | null
           scope: string
           status: string
@@ -665,6 +667,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          accepted_at?: string | null
           amount_cents: number
           application_id?: string | null
           canceled_at?: string | null
@@ -680,6 +683,7 @@ export type Database = {
           gig_id?: string | null
           id?: string
           payment_mode?: string
+          rejected_at?: string | null
           released_at?: string | null
           scope: string
           status?: string
@@ -691,6 +695,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          accepted_at?: string | null
           amount_cents?: number
           application_id?: string | null
           canceled_at?: string | null
@@ -706,6 +711,7 @@ export type Database = {
           gig_id?: string | null
           id?: string
           payment_mode?: string
+          rejected_at?: string | null
           released_at?: string | null
           scope?: string
           status?: string

@@ -1,14 +1,19 @@
 /**
- * Máquina de estados del contrato del Creator Marketplace (feedback cliente
- * 2026-07-19). Módulo PURO y sin dependencias de servidor ni de copy: se usa
- * idéntico en el server (para autorizar una transición antes de escribir con el
- * cliente admin) y en el cliente (para decidir qué botones mostrar). La verdad
- * de "quién puede disparar qué" vive acá y SOLO acá.
+ * Máquina de estados del contrato del Creator Marketplace. Módulo PURO y sin
+ * dependencias de servidor ni de copy: se usa idéntico en el server (para
+ * autorizar una transición antes de escribir con el cliente admin) y en el
+ * cliente (para decidir qué botones mostrar). La verdad de "quién puede
+ * disparar qué" vive acá y SOLO acá.
+ *
+ * El negocio PROPONE un contrato y el creador tiene que ACEPTARLO antes de que
+ * se mueva nada: nadie deposita en garantía hasta que el creador aceptó.
  *
  * Ciclo feliz de la garantía (escrow):
- *   proposed → funded → delivered → released
+ *   proposed → accepted → funded → delivered → released
  * y sus ramas de salida:
- *   proposed/funded → canceled   ·   delivered → disputed
+ *   proposed → rejected              (el creador rechaza la propuesta)
+ *   proposed/accepted/funded → canceled
+ *   delivered → disputed
  *
  * NADIE que sea "parte" del contrato puede sacarlo de `disputed`: eso lo
  * resuelve el staff por fuera de esta UI (la disputa se muestra, no se opera).
@@ -16,20 +21,31 @@
 
 export type ContractStatus =
   | "proposed"
+  | "accepted"
   | "funded"
   | "delivered"
   | "released"
   | "canceled"
-  | "disputed";
+  | "disputed"
+  | "rejected";
 
 /** Quién mira/opera el contrato, respecto de sus dos partes. */
 export type ContractRole = "client" | "creator" | "other";
 
 /** Acciones que puede disparar una parte (el staff no pasa por acá). */
-export type ContractAction = "fund" | "deliver" | "release" | "cancel" | "dispute";
+export type ContractAction =
+  | "accept"
+  | "reject"
+  | "fund"
+  | "deliver"
+  | "release"
+  | "cancel"
+  | "dispute";
 
 /** Columna de timestamp que la DB sella en esta transición (la escribe el server). */
 export type ContractStamp =
+  | "accepted_at"
+  | "rejected_at"
   | "funded_at"
   | "delivered_at"
   | "released_at"
@@ -50,26 +66,38 @@ export interface TransitionRule {
  * (rol, estado, acción) que no matchee acá está PROHIBIDO. Ordenada por el
  * ciclo feliz para que `allowedActions` devuelva los botones en orden natural.
  *
- * - fund:    solo el CLIENTE, desde proposed → funded (deposita en garantía).
+ * - accept:  solo el CREADOR, desde proposed → accepted (acepta la propuesta).
+ * - fund:    solo el CLIENTE, desde accepted → funded (deposita en garantía).
+ *            Ya NO se puede depositar desde 'proposed': primero hay que aceptar.
  * - deliver: solo el CREADOR, desde funded → delivered (entrega el trabajo).
  * - release: solo el CLIENTE, desde delivered → released (aprueba y libera).
- * - cancel:  proposed → canceled lo puede cualquiera de las dos partes;
- *            funded → canceled SOLO el cliente y SOLO antes de "delivered"
- *            (reembolso demo). Después de entregado ya no se cancela: se disputa.
+ * - reject:  solo el CREADOR, desde proposed → rejected (única salida del
+ *            creador en 'proposed'; reemplaza su vieja cancelación de propuesta).
+ * - cancel:  proposed → canceled SOLO el cliente (retira su propia propuesta);
+ *            accepted → canceled cualquiera de las dos partes (se echan atrás
+ *            antes de depositar); funded → canceled SOLO el cliente y SOLO antes
+ *            de "delivered" (reembolso demo). Entregado ya no se cancela: se disputa.
  * - dispute: solo el CLIENTE, desde delivered → disputed (algo salió mal).
  */
 export const TRANSITIONS: readonly TransitionRule[] = [
-  { action: "fund", from: "proposed", to: "funded", role: "client", stamp: "funded_at" },
+  // Ciclo feliz: proposed → accepted → funded → delivered → released
+  { action: "accept", from: "proposed", to: "accepted", role: "creator", stamp: "accepted_at" },
+  { action: "fund", from: "accepted", to: "funded", role: "client", stamp: "funded_at" },
   { action: "deliver", from: "funded", to: "delivered", role: "creator", stamp: "delivered_at" },
   { action: "release", from: "delivered", to: "released", role: "client", stamp: "released_at" },
+  // Rechazo del creador: única salida de 'proposed' para el creador (terminal).
+  { action: "reject", from: "proposed", to: "rejected", role: "creator", stamp: "rejected_at" },
+  // Cancelaciones antes de la entrega.
   { action: "cancel", from: "proposed", to: "canceled", role: "client", stamp: "canceled_at" },
-  { action: "cancel", from: "proposed", to: "canceled", role: "creator", stamp: "canceled_at" },
+  { action: "cancel", from: "accepted", to: "canceled", role: "client", stamp: "canceled_at" },
+  { action: "cancel", from: "accepted", to: "canceled", role: "creator", stamp: "canceled_at" },
   { action: "cancel", from: "funded", to: "canceled", role: "client", stamp: "canceled_at" },
+  // Disputa tras la entrega.
   { action: "dispute", from: "delivered", to: "disputed", role: "client", stamp: null },
 ] as const;
 
 /** Estados que ya no avanzan por acción de ninguna parte. */
-const TERMINAL: ReadonlySet<ContractStatus> = new Set(["released", "canceled"]);
+const TERMINAL: ReadonlySet<ContractStatus> = new Set(["released", "canceled", "rejected"]);
 
 export function isTerminalStatus(status: ContractStatus): boolean {
   return TERMINAL.has(status);
@@ -112,34 +140,38 @@ export function allowedActions(role: ContractRole, status: ContractStatus): Tran
 // Stepper visual — el ciclo feliz como cápsulas de progreso
 // ---------------------------------------------------------------------------
 
-/** Los 4 hitos del ciclo feliz, en orden. canceled/disputed se pintan aparte. */
+/** Los 5 hitos del ciclo feliz, en orden. canceled/disputed/rejected aparte. */
 export const CONTRACT_STEPS: readonly ContractStatus[] = [
   "proposed",
+  "accepted",
   "funded",
   "delivered",
   "released",
 ] as const;
 
 /**
- * Índice del hito actual dentro de CONTRACT_STEPS (0–3). Para los estados de
+ * Índice del hito actual dentro de CONTRACT_STEPS (0–4). Para los estados de
  * salida devuelve el hito donde el contrato se "salió del carril":
- *  - canceled: -1 si venía de proposed no llegó a garantía; el detalle lo
- *    resuelve con las fechas. Para el stepper alcanza con marcarlo terminal.
- *  - disputed: 2 (ocurre sobre "delivered").
+ *  - disputed: 3 (ocurre sobre "delivered").
+ *  - canceled/rejected: -1 (salieron del carril; el detalle lo cuentan las
+ *    fechas). Para el stepper alcanza con marcarlos terminales.
  */
 export function contractStepIndex(status: ContractStatus): number {
   switch (status) {
     case "proposed":
       return 0;
-    case "funded":
+    case "accepted":
       return 1;
+    case "funded":
+      return 2;
     case "delivered":
-      return 2;
-    case "released":
       return 3;
+    case "released":
+      return 4;
     case "disputed":
-      return 2;
+      return 3;
     case "canceled":
+    case "rejected":
       return -1;
   }
 }

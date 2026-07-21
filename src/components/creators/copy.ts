@@ -263,10 +263,12 @@ export const COPY = {
     // Timeline de fechas
     timeline: {
       created: "Contrato creado",
+      accepted: "Propuesta aceptada",
       funded: "Pago depositado en garantía",
       delivered: "Trabajo entregado",
       released: "Pago liberado al creador",
       canceled: "Contrato cancelado",
+      rejected: "Propuesta rechazada",
     },
     errors: {
       amountRequired: "Poné el monto acordado.",
@@ -281,17 +283,21 @@ export const COPY = {
   // Estados del contrato — etiqueta corta para stepper/badges
   status: {
     proposed: "Propuesto",
+    accepted: "Aceptado",
     funded: "En garantía",
     delivered: "Entregado",
     released: "Liberado",
     canceled: "Cancelado",
     disputed: "En disputa",
+    rejected: "Rechazado",
   } satisfies Record<ContractStatus, string>,
 
   // Frase de estado por rol (qué ve cada parte / qué sigue)
   statusHint: {
-    proposedClient: "Revisá el contrato y depositá el pago en garantía para que el creador arranque.",
-    proposedCreator: "El negocio te propuso un contrato. Si estás de acuerdo, esperá a que deposite el pago en garantía.",
+    proposedClient: "Le propusiste el contrato al creador. Cuando lo acepte, vas a poder depositar el pago en garantía.",
+    proposedCreator: "Te propusieron un trabajo. Revisá los detalles y aceptá o rechazá la propuesta.",
+    acceptedClient: "El creador aceptó la propuesta. Depositá el pago en garantía para que arranque.",
+    acceptedCreator: "Aceptaste la propuesta. Ahora falta que el negocio deposite el pago en garantía; te avisamos cuando lo haga.",
     fundedClient: "El pago está en garantía. El creador ya puede empezar; te avisamos cuando entregue.",
     fundedCreator: "El pago está en garantía: podés empezar. Cuando termines, marcá el trabajo como entregado.",
     deliveredClient: "El creador entregó. Revisá el trabajo y, si está todo bien, aprobá y liberá el pago.",
@@ -300,11 +306,14 @@ export const COPY = {
     releasedCreator: "El negocio liberó tu pago. ¡Felicitaciones! Dejale una reseña.",
     canceled: "Este contrato se canceló. En modo demostración no se movió ningún dinero.",
     disputed: "Este contrato está en disputa. El equipo de tu comunidad lo va a revisar y resolver.",
+    rejected: "La propuesta fue rechazada, así que el contrato no siguió adelante. En modo demostración no se movió ningún dinero.",
   },
 
   // -------------------------------------------------------------------------
   // Botones de transición (por acción)
   action: {
+    accept: "Aceptar",
+    reject: "Rechazar",
     fund: "Depositar en garantía",
     deliver: "Entregar trabajo",
     release: "Aprobar y liberar pago",
@@ -312,14 +321,19 @@ export const COPY = {
     dispute: "Reportar un problema",
   } satisfies Record<ContractAction, string>,
 
+  // Acciones que piden confirmación (las positivas —aceptar, entregar— van
+  // directo). El rechazo es terminal, así que se confirma como la cancelación.
   actionConfirm: {
+    reject: "Vas a rechazar esta propuesta. El contrato se cierra y no se puede reabrir.",
     fund: "Vas a depositar el monto acordado en garantía (modo demostración). El creador podrá empezar.",
     release: "Vas a liberar el pago al creador. Confirmá solo si el trabajo entregado está bien.",
     cancel: "Vas a cancelar este contrato. En modo demostración no se mueve dinero.",
     dispute: "Vamos a marcar el contrato en disputa para que el equipo lo revise. Contanos qué pasó por Mensajes.",
-  } satisfies Record<Exclude<ContractAction, "deliver">, string>,
+  } satisfies Record<Exclude<ContractAction, "deliver" | "accept">, string>,
 
   actionDone: {
+    accept: "¡Aceptaste la propuesta! Ahora el negocio deposita el pago en garantía.",
+    reject: "Rechazaste la propuesta.",
     fund: "Listo, el pago quedó en garantía.",
     deliver: "¡Entregado! El negocio ya puede revisarlo.",
     release: "¡Pago liberado! Gracias por usar el pago en garantía.",

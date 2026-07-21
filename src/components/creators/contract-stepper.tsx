@@ -6,11 +6,13 @@ import { COPY } from "./copy";
 
 const STATUS_VARIANT: Record<ContractStatus, NonNullable<BadgeProps["variant"]>> = {
   proposed: "neutral",
+  accepted: "info",
   funded: "info",
   delivered: "brand",
   released: "success",
   canceled: "neutral",
   disputed: "warning",
+  rejected: "danger",
 };
 
 /** Cápsula de estado (código de color fijo del contrato). Solo lectura. */
@@ -29,21 +31,26 @@ export function ContractStatusBadge({
 }
 
 /**
- * Stepper visual del ciclo de garantía: propuesto → en garantía → entregado →
- * liberado, con el hito actual resaltado en el violeta del módulo (decorativo).
- * Las salidas (cancelado / en disputa) se muestran como estado terminal aparte.
+ * Stepper visual del ciclo de garantía: propuesto → aceptado → en garantía →
+ * entregado → liberado, con el hito actual resaltado en el violeta del módulo
+ * (decorativo). Las salidas (cancelado / rechazado / en disputa) se muestran
+ * como estado terminal aparte.
  */
 export function ContractStepper({ status }: { status: ContractStatus }) {
   const idx = contractStepIndex(status);
   const canceled = status === "canceled";
+  const rejected = status === "rejected";
   const disputed = status === "disputed";
+  // canceled y rejected salen del carril (idx = -1): sin hito actual ni tramo
+  // alcanzado.
+  const offRail = canceled || rejected;
 
   return (
     <div>
       <ol className="flex items-stretch gap-1.5" aria-label="Progreso del contrato">
         {CONTRACT_STEPS.map((step, i) => {
-          const reached = !canceled && idx >= 0 && i <= idx;
-          const current = !canceled && !disputed && i === idx;
+          const reached = !offRail && idx >= 0 && i <= idx;
+          const current = !offRail && !disputed && i === idx;
           return (
             <li key={step} className="flex flex-1 flex-col items-center gap-1.5 text-center">
               <span
@@ -74,6 +81,12 @@ export function ContractStepper({ status }: { status: ContractStatus }) {
         <p className="mt-3 flex items-center justify-center gap-1.5 text-sm font-medium text-foreground-secondary">
           <Prohibit size={16} aria-hidden="true" />
           {COPY.status.canceled}
+        </p>
+      )}
+      {rejected && (
+        <p className="mt-3 flex items-center justify-center gap-1.5 text-sm font-medium text-danger-ink">
+          <Prohibit size={16} aria-hidden="true" />
+          {COPY.status.rejected}
         </p>
       )}
       {disputed && (
