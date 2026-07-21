@@ -207,6 +207,7 @@ export function PostCard({
               src={post.photoUrl}
               fallbackSrc={post.photoUrl}
               aspect="video"
+              quality={62}
               overlayTopRight={post.isPromoted ? <AdChip /> : undefined}
             />
           </div>

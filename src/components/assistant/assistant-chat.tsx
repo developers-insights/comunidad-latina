@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Compass, PaperPlaneRight } from "@phosphor-icons/react";
+import { Compass, PaperPlaneRight } from "@phosphor-icons/react/dist/ssr";
 import {
   BezelCard,
   Button,

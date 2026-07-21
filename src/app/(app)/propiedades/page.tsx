@@ -71,11 +71,15 @@ export default async function PropiedadesPage({
 // ---------------------------------------------------------------------------
 
 async function PropiedadesContent({ filters }: { filters: Filters }) {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // createClient() NO hace red (solo lee cookies): lo creamos primero y así
+  // solapamos el round-trip a DB de getTenant() con el de Auth (getUser()).
+  const supabase = await createClient();
+  const [
+    tenant,
+    {
+      data: { user },
+    },
+  ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
 
   // Área del usuario para el header de sección (si tiene perfil con zona).
   let userArea: string | null = null;

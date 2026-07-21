@@ -11,6 +11,8 @@ export interface CardMediaProps {
   /** 16:9 default (la estética de Propiedades que pidió el cliente). */
   aspect?: "video" | "square" | "portrait";
   sizes?: string;
+  /** Allowlist en next.config.ts: [62, 75]. 62 en tarjetas chicas (§perf). */
+  quality?: number;
   className?: string;
   /** Chips flotantes sobre la foto (ej. "Publicidad", precio, categoría). */
   overlayTopLeft?: React.ReactNode;
@@ -41,6 +43,7 @@ export function CardMedia({
   alt = "",
   aspect = "video",
   sizes = "(max-width: 512px) 100vw, 512px",
+  quality,
   className,
   overlayTopLeft,
   overlayTopRight,
@@ -54,7 +57,14 @@ export function CardMedia({
   return (
     <div className={cn("relative w-full bg-surface-subtle", ASPECT[aspect], className)}>
       {optimizable ? (
-        <Image src={photo} alt={alt} fill sizes={sizes} className="object-cover" />
+        <Image
+          src={photo}
+          alt={alt}
+          fill
+          sizes={sizes}
+          quality={quality}
+          className="object-cover"
+        />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element -- URL externa de seed/API: host fuera del allowlist de next/image
         <img

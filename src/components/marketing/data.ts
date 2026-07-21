@@ -1,8 +1,10 @@
 import "server-only";
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
+import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import type { Tables } from "@/lib/types/database.types";
+import type { Database, Tables } from "@/lib/types/database.types";
 import { GUIDE_COVERS } from "./copy";
 import type { GuideCardData } from "./guide-card";
 import type { ListingMiniData } from "./listing-mini-card";
@@ -48,42 +50,85 @@ export function toGuideCardData(row: GuideRow): GuideCardData {
   };
 }
 
-/** Guías published del tenant actual + globales (tenant_id null), recientes primero. */
-export const fetchPublishedGuides = cache(async (limit?: number): Promise<GuideRow[]> => {
-  try {
-    const tenant = await getTenant();
-    const supabase = await createClient();
+/**
+ * Cliente anon SIN cookies para las lecturas CACHEADAS de guías (patrón
+ * fetchTenantRow): headers()/cookies() no se permiten dentro de un scope de
+ * unstable_cache, y las guías published son PÚBLICAS por RLS (0007_social:
+ * `status = 'published'` es legible por anon). Devuelve null si falta config.
+ */
+function anonGuidesClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) return null;
+  return createServerClient<Database>(url, anonKey, {
+    cookies: { getAll: () => [], setAll: () => {} },
+  });
+}
+
+/**
+ * Guías published CACHEADAS entre requests por (tenantId, limit). Las guías
+ * published cambian rarísimo → 600s con tag "guides". La cache key incluye el
+ * tenantId (globales tenant_id null + las del tenant) → JAMÁS se sirve el
+ * catálogo de un tenant a otro. Invalidación on-demand:
+ * revalidateTag("guides", "max") cuando exista una mutación de guías.
+ */
+const fetchPublishedGuidesCached = unstable_cache(
+  async (tenantId: string, limit: number | null): Promise<GuideRow[]> => {
+    const supabase = anonGuidesClient();
+    if (!supabase) return [];
     let query = supabase
       .from("guides")
       .select(GUIDE_COLUMNS)
       .eq("status", "published")
-      .or(`tenant_id.is.null,tenant_id.eq.${tenant.id}`)
+      .or(`tenant_id.is.null,tenant_id.eq.${tenantId}`)
       .order("published_at", { ascending: false, nullsFirst: false });
     if (limit) query = query.limit(limit);
 
     const { data, error } = await query;
     if (error) return [];
     return data ?? [];
+  },
+  ["published-guides"],
+  { revalidate: 600, tags: ["guides"] },
+);
+
+/** Guías published del tenant actual + globales (tenant_id null), recientes primero. */
+export const fetchPublishedGuides = cache(async (limit?: number): Promise<GuideRow[]> => {
+  try {
+    // getTenant() (cacheado) se resuelve AFUERA del scope de cache: lee headers,
+    // que unstable_cache no permite adentro. El tenantId entra como argumento.
+    const tenant = await getTenant();
+    return await fetchPublishedGuidesCached(tenant.id, limit ?? null);
   } catch {
     return [];
   }
 });
 
-/** Una guía published por slug (global o del tenant), o null. */
-export const fetchGuideBySlug = cache(async (slug: string): Promise<GuideRow | null> => {
-  try {
-    const tenant = await getTenant();
-    const supabase = await createClient();
+/** Una guía published por slug (global o del tenant) CACHEADA por (tenantId, slug). */
+const fetchGuideBySlugCached = unstable_cache(
+  async (tenantId: string, slug: string): Promise<GuideRow | null> => {
+    const supabase = anonGuidesClient();
+    if (!supabase) return null;
     const { data, error } = await supabase
       .from("guides")
       .select(GUIDE_COLUMNS)
       .eq("status", "published")
       .eq("slug", slug)
-      .or(`tenant_id.is.null,tenant_id.eq.${tenant.id}`)
+      .or(`tenant_id.is.null,tenant_id.eq.${tenantId}`)
       .limit(1)
       .maybeSingle();
     if (error) return null;
     return data;
+  },
+  ["guide-by-slug"],
+  { revalidate: 600, tags: ["guides"] },
+);
+
+/** Una guía published por slug (global o del tenant), o null. */
+export const fetchGuideBySlug = cache(async (slug: string): Promise<GuideRow | null> => {
+  try {
+    const tenant = await getTenant();
+    return await fetchGuideBySlugCached(tenant.id, slug);
   } catch {
     return null;
   }

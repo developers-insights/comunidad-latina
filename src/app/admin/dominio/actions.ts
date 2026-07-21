@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStaffContext, logAdminAction } from "../guard";
@@ -214,5 +214,10 @@ export async function updateTenantModules(
 
   revalidatePath("/admin/dominio");
   revalidatePath("/", "layout");
+  // La fila del tenant está cacheada (unstable_cache tag "tenants" en
+  // lib/tenant/resolve). Sin esta invalidación, un cambio de módulos tardaría
+  // hasta 300s en verse en la app. Next 16: revalidateTag exige 2º arg (profile);
+  // "max" = stale-while-revalidate (recomendado). Ref: docs/.../revalidateTag.md
+  revalidateTag("tenants", "max");
   return { status: "success" };
 }

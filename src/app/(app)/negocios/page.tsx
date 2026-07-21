@@ -1,14 +1,14 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { MagicWand, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { firstPhotoUrl } from "@/components/listings";
-import { BezelCard, EmptyState, Skeleton, buttonVariants } from "@/components/ui";
+import { firstPhotoUrl, ListingListSkeleton } from "@/components/listings";
+import { BezelCard, EmptyState, buttonVariants } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { toTrustProps } from "@/lib/trust/signals";
 import type { Json, Tables } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
-import { BusinessCard, BusinessListSkeleton, type BusinessCardModel } from "./business-card";
+import { BusinessCard, type BusinessCardModel } from "./business-card";
 import type { OwnerTrust } from "./business-trust-badge";
 
 export const metadata = { title: "Negocios" };
@@ -48,13 +48,16 @@ function categoriaLabel(attrs: Json): string | null {
   return CATEGORIA_LABELS[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
+/** Solo estas columnas de `trust_scores` alimentan el badge (over-fetch §perf). */
+type OwnerTrustRow = Pick<Tables<"trust_scores">, "score" | "level" | "signals">;
+
 /**
  * Trust Score del dueño → props del badge. Usa la fuente única
  * (@/lib/trust/signals): las mismas señales que ve el usuario en vivienda,
  * mensajes y profesionales. `identity_verified` viene del perfil del dueño.
  */
 function buildOwnerTrust(
-  score: Tables<"trust_scores"> | undefined,
+  score: OwnerTrustRow | undefined,
   ownerName: string,
   identityVerified: boolean,
 ): OwnerTrust | null {
@@ -64,8 +67,10 @@ function buildOwnerTrust(
 }
 
 export default function NegociosPage() {
+  // Streaming (§5.2): el shell + banners se pintan ya; el listado (que depende de
+  // la DB) llega por Suspense sin bloquear el resto de la página.
   return (
-    <Suspense fallback={<PageSkeleton />}>
+    <Suspense fallback={<NegociosSkeleton />}>
       <NegociosContent />
     </Suspense>
   );
@@ -76,11 +81,15 @@ export default function NegociosPage() {
 // ---------------------------------------------------------------------------
 
 async function NegociosContent() {
-  const tenant = await getTenant();
+  // createClient() NO hace red (solo lee cookies): lo creamos primero y así
+  // solapamos el round-trip a DB de getTenant() con el de Auth (getUser()).
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [
+    tenant,
+    {
+      data: { user },
+    },
+  ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
 
   const { data: negocios } = await supabase
     .from("listings")
@@ -100,12 +109,15 @@ async function NegociosContent() {
   const ownerIds = Array.from(
     new Set(rows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
   );
-  const trustByOwner = new Map<string, Tables<"trust_scores">>();
+  const trustByOwner = new Map<string, OwnerTrustRow>();
   const nameByOwner = new Map<string, string>();
   const verifiedByOwner = new Map<string, boolean>();
   if (ownerIds.length > 0) {
     const [{ data: scores }, { data: owners }] = await Promise.all([
-      supabase.from("trust_scores").select("*").in("profile_id", ownerIds),
+      supabase
+        .from("trust_scores")
+        .select("profile_id, score, level, signals")
+        .in("profile_id", ownerIds),
       supabase.from("profiles").select("id, display_name, identity_verified").in("id", ownerIds),
     ]);
     for (const score of scores ?? []) trustByOwner.set(score.profile_id, score);
@@ -227,17 +239,21 @@ async function NegociosContent() {
 }
 
 // ---------------------------------------------------------------------------
-// Fallback: silueta del header + banners + cards (shimmer, §5.2)
+// Fallback: título + subtítulo estáticos + siluetas del banner y el listado.
+// Se reutiliza tal cual en negocios/loading.tsx para que el shell no parpadee
+// al navegar (Server Component, cero JS).
 // ---------------------------------------------------------------------------
 
-function PageSkeleton() {
+export function NegociosSkeleton() {
   return (
     <div aria-busy="true">
-      <Skeleton className="h-8 w-64" />
-      <Skeleton className="mt-2 h-4 w-72" />
-      <Skeleton className="mt-5 h-32 w-full rounded-xl" />
+      <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
+        {COPY.titulo}
+      </h1>
+      <p className="mt-1 text-sm text-foreground-secondary">{COPY.subtitulo}</p>
+      <div className="mt-5 h-32 rounded-xl bg-surface-2 animate-pulse" />
       <div className="mt-6">
-        <BusinessListSkeleton />
+        <ListingListSkeleton />
       </div>
     </div>
   );
