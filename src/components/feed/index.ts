@@ -15,7 +15,6 @@ export {
   postKindOf,
   postMediaUrl,
   type AuthorView,
-  type ComposerEntity,
   type FeedItem,
   type FeedListingModel,
   type FeedTabId,

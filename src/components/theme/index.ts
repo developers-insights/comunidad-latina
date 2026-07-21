@@ -17,7 +17,7 @@
  */
 
 export { ThemeScript } from "./theme-script";
-export { ThemeToggle } from "./theme-toggle";
+export { ThemeToggle, ThemeIcon, useThemeToggleLabel } from "./theme-toggle";
 export { ThemeColorSync } from "./theme-color-sync";
 export { useTheme, type UseThemeResult } from "./use-theme";
 export {

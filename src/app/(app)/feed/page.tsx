@@ -17,7 +17,6 @@ import {
   PostComposer,
   feedPostVisibilityFilter,
   parseTab,
-  type ComposerEntity,
   type FeedItem,
   type FeedTabId,
   type GuideCardModel,
@@ -137,34 +136,17 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Zona + identidad del usuario para el header y el composer.
+  // Identidad del usuario para el composer (publica siempre como sí mismo).
   let viewerName = "";
   let viewerAvatarUrl: string | null = null;
-  // Entidades propias publicadas → selector "Publicar como" del composer.
-  let myEntities: ComposerEntity[] = [];
   if (user) {
-    const [{ data: profile }, { data: entityRows }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("display_name, avatar_url, area_label")
-        .eq("id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("listings")
-        .select("id, title, kind")
-        .eq("tenant_id", tenant.id)
-        .eq("created_by", user.id)
-        .eq("status", "published")
-        .order("created_at", { ascending: false })
-        .limit(50),
-    ]);
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name, avatar_url")
+      .eq("id", user.id)
+      .maybeSingle();
     viewerName = profile?.display_name ?? "";
     viewerAvatarUrl = profile?.avatar_url ?? null;
-    myEntities = (entityRows ?? []).map((row) => ({
-      id: row.id,
-      title: row.title,
-      kind: row.kind,
-    }));
   }
 
   const cursor = decodeCursor(cursorRaw || undefined);
@@ -179,7 +161,6 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
               <PostComposer
                 viewerName={viewerName}
                 viewerAvatarUrl={viewerAvatarUrl}
-                entities={myEntities}
               />
             ) : (
               <ComposerInvite />

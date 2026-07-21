@@ -70,14 +70,6 @@ export interface PostEntityView {
   kind: string;
 }
 
-/** Entidad publicable elegible en el selector "Publicar como" del composer. */
-export interface ComposerEntity {
-  id: string;
-  title: string;
-  /** Vertical del listing (para el ícono/etiqueta). */
-  kind: string;
-}
-
 export interface PostCardModel {
   id: string;
   kind: "post" | "question";

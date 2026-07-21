@@ -19,6 +19,6 @@ export const nav = {
   moduleNegocios: "Negocios",
   moduleProfesionales: "Profesionales",
   moduleMarketplace: "Marketplace",
-  moduleCreadores: "Creadores",
+  moduleCreadores: "Influencers",
   moduleEscudo: "Escudo",
 } as const;

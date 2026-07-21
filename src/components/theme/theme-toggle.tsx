@@ -89,25 +89,7 @@ const RAYS: ReadonlyArray<readonly [number, number, number, number]> = [
  * `className` va al contenedor: los call sites sólo le pasan posicionamiento.
  */
 export function ThemeToggle({ className }: { className?: string }) {
-  const { theme, resolvedTheme, toggle } = useTheme();
-  const rawId = useId();
-  // useId mete caracteres que no son válidos en un id de SVG referenciado por url().
-  const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, "");
-  const maskId = `cl-moon-${safeId}`;
-  const stateId = `cl-theme-state-${safeId}`;
-
-  // `null` = todavía no montó: el server no puede saber el tema del usuario.
-  const mounted = resolvedTheme !== null;
-  const isDark = resolvedTheme === "dark";
-  const followsSystem = theme === "system";
-
-  const action = !mounted ? COPY.toggleUnknown : isDark ? COPY.toLight : COPY.toDark;
-
-  let stateText: string | null = null;
-  if (mounted) {
-    if (followsSystem) stateText = isDark ? COPY.stateSystemDark : COPY.stateSystemLight;
-    else stateText = isDark ? COPY.stateDark : COPY.stateLight;
-  }
+  const { action, stateText, stateId, toggle } = useThemeToggleLabel();
 
   return (
     <div className={cn("flex shrink-0 items-center", className)}>
@@ -125,60 +107,7 @@ export function ThemeToggle({ className }: { className?: string }) {
         aria-describedby={stateText === null ? undefined : stateId}
         className={BUTTON_CLASS}
       >
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-          focusable="false"
-          // La transición vive sobre la variable: los hijos heredan el valor ya
-          // interpolado y sus calc() se recalculan solos, frame a frame.
-          style={{ transition: "--cl-theme-dark var(--duration-base) var(--ease-spring)" }}
-        >
-          <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
-            {/* blanco = se ve, negro = se recorta (luminancia, no theming) */}
-            <rect x="0" y="0" width="24" height="24" fill="white" />
-            <circle
-              cx="25.5"
-              cy="3"
-              r="8.5"
-              fill="black"
-              style={{
-                transform:
-                  "translate(calc(var(--cl-theme-dark) * -8.7px), calc(var(--cl-theme-dark) * 4.2px))",
-              }}
-            />
-          </mask>
-
-          <circle
-            cx="12"
-            cy="12"
-            r="5"
-            fill="currentColor"
-            mask={`url(#${maskId})`}
-            style={{
-              transformOrigin: "12px 12px",
-              transform: "scale(calc(1 + 0.22 * var(--cl-theme-dark)))",
-            }}
-          />
-
-          <g
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            style={{
-              transformOrigin: "12px 12px",
-              transform:
-                "rotate(calc(var(--cl-theme-dark) * -75deg)) scale(calc(1 - 0.45 * var(--cl-theme-dark)))",
-              opacity: "calc(1 - var(--cl-theme-dark))",
-            }}
-          >
-            {RAYS.map(([x1, y1, x2, y2]) => (
-              <line key={`${x1}-${y1}`} x1={x1} y1={y1} x2={x2} y2={y2} />
-            ))}
-          </g>
-        </svg>
+        <ThemeIcon />
       </button>
 
       {stateText === null ? null : (
@@ -187,5 +116,99 @@ export function ThemeToggle({ className }: { className?: string }) {
         </span>
       )}
     </div>
+  );
+}
+
+/**
+ * La acción (nombre honesto) + descripción de `ThemeToggle`, separadas del
+ * botón sol/luna para que otros call sites (el menú de la app) puedan montar
+ * su PROPIO `<button>` alrededor — HTML no permite anidar botones, así que el
+ * ícono no puede traer el suyo si algo más grande ya es clickeable.
+ */
+export function useThemeToggleLabel() {
+  const { theme, resolvedTheme, toggle } = useTheme();
+  const rawId = useId();
+  // useId mete caracteres que no son válidos en un id de SVG referenciado por url().
+  const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, "");
+  const stateId = `cl-theme-state-${safeId}`;
+
+  // `null` = todavía no montó: el server no puede saber el tema del usuario.
+  const mounted = resolvedTheme !== null;
+  const isDark = resolvedTheme === "dark";
+  const followsSystem = theme === "system";
+
+  const action = !mounted ? COPY.toggleUnknown : isDark ? COPY.toLight : COPY.toDark;
+
+  let stateText: string | null = null;
+  if (mounted) {
+    if (followsSystem) stateText = isDark ? COPY.stateSystemDark : COPY.stateSystemLight;
+    else stateText = isDark ? COPY.stateDark : COPY.stateLight;
+  }
+
+  return { action, stateText, stateId, toggle };
+}
+
+/** Sólo el sol↔luna morphing, sin botón propio ni nombre accesible: decorativo. */
+export function ThemeIcon({ className }: { className?: string }) {
+  const rawId = useId();
+  const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, "");
+  const maskId = `cl-moon-${safeId}`;
+
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+      // La transición vive sobre la variable: los hijos heredan el valor ya
+      // interpolado y sus calc() se recalculan solos, frame a frame.
+      style={{ transition: "--cl-theme-dark var(--duration-base) var(--ease-spring)" }}
+    >
+      <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+        {/* blanco = se ve, negro = se recorta (luminancia, no theming) */}
+        <rect x="0" y="0" width="24" height="24" fill="white" />
+        <circle
+          cx="25.5"
+          cy="3"
+          r="8.5"
+          fill="black"
+          style={{
+            transform:
+              "translate(calc(var(--cl-theme-dark) * -8.7px), calc(var(--cl-theme-dark) * 4.2px))",
+          }}
+        />
+      </mask>
+
+      <circle
+        cx="12"
+        cy="12"
+        r="5"
+        fill="currentColor"
+        mask={`url(#${maskId})`}
+        style={{
+          transformOrigin: "12px 12px",
+          transform: "scale(calc(1 + 0.22 * var(--cl-theme-dark)))",
+        }}
+      />
+
+      <g
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        style={{
+          transformOrigin: "12px 12px",
+          transform:
+            "rotate(calc(var(--cl-theme-dark) * -75deg)) scale(calc(1 - 0.45 * var(--cl-theme-dark)))",
+          opacity: "calc(1 - var(--cl-theme-dark))",
+        }}
+      >
+        {RAYS.map(([x1, y1, x2, y2]) => (
+          <line key={`${x1}-${y1}`} x1={x1} y1={y1} x2={x2} y2={y2} />
+        ))}
+      </g>
+    </svg>
   );
 }

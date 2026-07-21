@@ -15,7 +15,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { Avatar } from "@/components/ui";
-import { ThemeToggle } from "@/components/theme";
+import { ThemeIcon, useThemeToggleLabel } from "@/components/theme";
 import { createClient } from "@/lib/supabase/client";
 import { signOutAction } from "@/app/(app)/perfil/actions";
 import { useBodyScrollLock, useFocusTrap, useMounted } from "@/lib/design/use-overlay";
@@ -411,11 +411,11 @@ function MenuPanel({ id, open, onClose, user, unread, isStaff, pathname }: MenuP
               </ul>
 
               {/* Ajustes: tema + salir. Cerrar sesión al final y separado del
-                  resto — una acción de salida no se mezcla con la navegación. */}
-              <div className="mt-5 flex items-center justify-between rounded-xl border border-border-subtle bg-surface py-1.5 pl-4 pr-2">
-                <span className="text-sm text-foreground">{COPY.theme}</span>
-                <ThemeToggle />
-              </div>
+                  resto — una acción de salida no se mezcla con la navegación.
+                  Toda la fila cambia el tema (feedback cliente: no hacía falta
+                  tocar justo el sol/luna) — un solo <button>, el ícono es
+                  decorativo (ThemeIcon no trae el suyo, ver theme-toggle.tsx). */}
+              <ThemeRow />
 
               {user && (
                 <form action={signOutAction} className="mt-2">
@@ -438,6 +438,37 @@ function MenuPanel({ id, open, onClose, user, unread, isStaff, pathname }: MenuP
       )}
     </AnimatePresence>,
     document.body,
+  );
+}
+
+/** Fila "Tema" del menú: el botón es toda la fila, no sólo el ícono. */
+function ThemeRow() {
+  const { action, stateText, stateId, toggle } = useThemeToggleLabel();
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={`${COPY.theme}: ${action}`}
+        title={stateText === null ? undefined : action}
+        aria-describedby={stateText === null ? undefined : stateId}
+        className={cn(
+          "mt-5 flex min-h-12 w-full items-center justify-between rounded-xl border border-border-subtle bg-surface pl-4 pr-2",
+          "transition-colors duration-(--duration-fast) hover:bg-surface-hover",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring",
+        )}
+      >
+        <span className="text-sm text-foreground">{COPY.theme}</span>
+        <ThemeIcon className="flex size-11 shrink-0 items-center justify-center text-foreground-secondary" />
+      </button>
+
+      {stateText === null ? null : (
+        <span id={stateId} className="sr-only">
+          {stateText}
+        </span>
+      )}
+    </>
   );
 }
 

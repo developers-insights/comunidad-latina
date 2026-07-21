@@ -20,15 +20,15 @@ export const COPY = {
 
   composer: {
     placeholder: "¿Qué está pasando en tu comunidad?",
-    questionToggle: "Pregunta",
-    questionHint: "Marcala como pregunta para que los vecinos te respondan.",
     addPhoto: "Agregar foto",
     changePhoto: "Cambiar foto",
     removePhoto: "Quitar foto",
     photoTooBig: "Esa foto es muy pesada — probá con una de menos de 5 MB.",
     photoWrongType: "Solo podemos subir fotos (JPG, PNG o WebP).",
-    // Foto obligatoria en posts (no en preguntas): feed visual, no periódico.
-    photoRequiredHint: "Tu post necesita una foto — así el feed se mantiene lindo de mirar.",
+    // Foto obligatoria (feed visual, no periódico): si aprietan Publicar sin
+    // foto, este aviso cálido los lleva al recuadro en vez de un botón muerto.
+    photoMissingTitle: "Te falta la foto",
+    photoMissingBody: "Sumá una imagen y ya podés publicar tu post.",
     publish: "Publicar",
     publishing: "Publicando…",
     successTitle: "¡Publicado!",
@@ -41,16 +41,6 @@ export const COPY = {
     errorTitle: "No se pudo publicar",
     errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
     tooShort: "Contanos un poquito más — al menos un par de palabras.",
-    // "Publicar como": Yo (personal) o una de mis entidades (listing propio).
-    publishAsLabel: "Publicar como",
-    publishAsYou: "Yo",
-    publishAsHint: "Elegí si publicás vos o una de tus páginas.",
-    entityFollowersNote:
-      "Lo van a ver tus seguidores. Para llegar a todos, promocionalo después de publicar.",
-    entitySuccessTitle: "¡Publicado!",
-    entitySuccessBody: "Ya lo ven tus seguidores. ¿Querés que llegue a toda la comunidad?",
-    promoteCta: "Promocionar",
-    promoteDismiss: "Ahora no",
   },
 
   inviteCard: {
