@@ -817,6 +817,38 @@ async function main() {
     log('skip', `contrato ${contrato2.code} ya existe`);
   }
 
+  // Contrato 3: una PROPUESTA pendiente — el creador todavía tiene que aceptarla.
+  // Muestra el flujo nuevo (aceptar/rechazar): se queda en 'proposed', sin
+  // transiciones. Entrando como Rosanna aparece con botones Aceptar / Rechazar;
+  // entrando como Altagracia dice "esperando que el creador acepte".
+  let contrato3 = await findContract(altagraciaId, rosannaId, 'Sesión de fotos para la panadería');
+  if (!contrato3) {
+    const { data, error } = await supabase
+      .from('gig_contracts')
+      .insert({
+        tenant_id: tenantId,
+        gig_id: null,
+        client_id: altagraciaId,
+        creator_id: rosannaId,
+        title: 'Sesión de fotos para la panadería',
+        scope: 'Sesión de 2 horas: el pan recién salido, el bizcocho, la vitrina y el ambiente del local. 15 fotos editadas, listas para redes y para el perfil del negocio.',
+        delivery_days: 7,
+        amount_cents: 30000,
+        currency: 'usd',
+        fee_pct: 20,
+        status: 'proposed',
+        payment_mode: 'demo',
+        created_at: daysAgo(1),
+      })
+      .select('id, code')
+      .single();
+    if (error) die('creando contrato 3 (propuesta)', error);
+    contrato3 = data;
+    log('create', `contrato ${data.code} (proposed — esperando que Rosanna acepte)`);
+  } else {
+    log('skip', `contrato ${contrato3.code} ya existe (${contrato3.status})`);
+  }
+
   // 7. Follows de la demo (María es la cuenta con la que se muestra) ---------
   await upsertFollow(tenantId, mariaId, 'listing', panaderiaId);
   await upsertFollow(tenantId, mariaId, 'listing', festivalId);
