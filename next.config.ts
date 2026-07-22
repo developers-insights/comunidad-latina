@@ -91,21 +91,40 @@ const envPattern = supabaseRemotePattern();
 // ---------------------------------------------------------------------------
 
 /**
- * CSP en modo REPORT-ONLY para empezar: reporta violaciones sin romper nada.
- * ⚠️ Pasar a `Content-Security-Policy` (enforcing) recién después de validar
- * en staging que no hay violaciones legítimas (revisar console/Sentry).
+ * CSP en modo ENFORCING (`Content-Security-Policy`).
+ *
+ * Validado en vivo con Playwright sobre build de PRODUCCIÓN (`next start`),
+ * 2026-07-22, recorriendo rutas públicas y logueadas (feed, propiedades,
+ * marketplace, videos, perfil, mensajes, notificaciones, legales). Bajo
+ * report-only aparecieron exactamente dos clases de violación, ambas resueltas
+ * antes de pasar a enforcing:
+ *  - `media-src`: los <video> de Supabase Storage (reels del feed y /videos)
+ *    caían al fallback `default-src 'self'` porque media-src no estaba
+ *    declarada → se agregó (mismo host ya permitido en img-src/connect-src).
+ *  - `https://images.pexels.com` en img-src: las fotos del DEMO se sirven desde
+ *    Pexels (contenido de SEED — `scripts/seed-images.json`; no hay uso en
+ *    `src/`). El entorno desplegado HOY es el demo, que sirve esas URLs desde
+ *    la DB, así que se permite explícitamente para no romperlo bajo enforcing.
+ *    ⚠️ DEUDA: es un artefacto de demo. Cuando el contenido demo migre a
+ *    Supabase Storage (o en un tenant de producción real, donde las fotos de
+ *    usuarios van a Storage), QUITAR esta entrada — producción no necesita
+ *    Pexels.
+ * Ningún otro recurso (Stripe, OpenAI, Sentry, fuentes) violó la política.
  *
  * - script-src: 'unsafe-inline' es requisito de Next.js (scripts inline de
  *   hidratación); js.stripe.com para Stripe.js (Checkout/Identity).
  * - connect-src: Supabase (REST + Realtime wss), OpenAI (moderación/RAG),
  *   Sentry ingest, Stripe API.
- * - img-src: blob:/data: (previews de upload) + Storage de Supabase.
+ * - img-src: blob:/data: (previews de upload) + Storage de Supabase + Pexels (demo).
+ * - media-src: <video>/<audio> de Supabase Storage + blob: (preview local).
  */
-const cspReportOnly = [
+const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' https://js.stripe.com",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.supabase.co",
+  // https://images.pexels.com → SOLO por las fotos del seed demo (ver deuda arriba).
+  "img-src 'self' data: blob: https://*.supabase.co https://images.pexels.com",
+  "media-src 'self' blob: https://*.supabase.co",
   "font-src 'self' data:",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com",
   "frame-src https://js.stripe.com https://hooks.stripe.com",
@@ -130,7 +149,7 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=(), payment=(self)",
   },
-  { key: "Content-Security-Policy-Report-Only", value: cspReportOnly },
+  { key: "Content-Security-Policy", value: csp },
 ];
 
 const nextConfig: NextConfig = {
