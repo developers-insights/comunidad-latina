@@ -53,3 +53,22 @@ using (
   bucket_id = 'tenant-assets'
   and owner_id = (select auth.uid())::text
 );
+
+-- ---------------------------------------------------------------------------
+-- post-media (agregado por la AUDITORÍA 2026-07-22)
+--
+-- El bucket `post-media` es POSTERIOR al fix original de este script: lo creó
+-- la migración 0025_post_media_storage.sql, que lo dejó con el MISMO SELECT
+-- amplio `using(bucket_id = 'post-media')` para anon+authenticated. Su path es
+-- `{tenant_id}/{user_id}/{archivo}.webp` (espejo de avatars) → reabre el mismo
+-- vector de enumeración de población §5.4 que las 3 policies de arriba cierran.
+-- El `drop` reemplaza la policy amplia de 0025 (mismo nombre) por la scopeada
+-- al dueño; el acceso público por URL (/object/public) sigue intacto y queda 1
+-- sola policy de SELECT por bucket (el enumerador RLS se mantiene verde).
+drop policy if exists post_media_select on storage.objects;
+create policy post_media_select on storage.objects
+for select to authenticated
+using (
+  bucket_id = 'post-media'
+  and owner_id = (select auth.uid())::text
+);
