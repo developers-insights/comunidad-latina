@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { getTenant } from "@/lib/tenant/resolve";
 import { t } from "@/lib/i18n";
-import { Badge, buttonVariants } from "@/components/ui";
+import { buttonVariants } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme";
 import { COPY } from "@/components/marketing/copy";
 import { LanguageToggle } from "@/components/marketing/language-toggle";
@@ -114,10 +114,14 @@ export default async function MarketingLayout({ children }: { children: ReactNod
                 {COPY.footer.legalTitle}
               </h3>
               <ul className="mt-4 space-y-3">
-                {COPY.footer.legalPlaceholders.map((label) => (
-                  <li key={label} className="flex items-center gap-2">
-                    <span className="text-sm text-foreground-muted">{label}</span>
-                    <Badge>{COPY.footer.soon}</Badge>
+                {COPY.footer.legal.map((item) => (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className="text-sm text-foreground-secondary transition-colors hover:text-foreground"
+                    >
+                      {item.label}
+                    </Link>
                   </li>
                 ))}
               </ul>

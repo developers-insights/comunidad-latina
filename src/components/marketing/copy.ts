@@ -111,7 +111,11 @@ export const COPY = {
       { label: "Para negocios", href: "/negocios/presencia" },
     ],
     legalTitle: "Legal",
-    legalPlaceholders: ["Términos de uso", "Privacidad", "Normas de la comunidad"],
+    legal: [
+      { label: "Términos de uso", href: "/legal/terminos" },
+      { label: "Privacidad", href: "/legal/privacidad" },
+      { label: "Normas de la comunidad", href: "/legal/normas" },
+    ],
     soon: "Pronto",
     disclaimer:
       "Las verificaciones de esta comunidad describen lo que dice un registro público a una fecha exacta — por ejemplo: “Licencia activa según el registro al 6 de julio de 2026”. Esto NO garantiza la conducta de ninguna persona o negocio. Nunca envíes dinero por adelantado.",
