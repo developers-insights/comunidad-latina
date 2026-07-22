@@ -9,6 +9,10 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { sendEmailInBackground } from "@/lib/email";
 import { welcomeEmail } from "@/lib/email/templates";
 import type { ActionResult } from "@/components/auth/action-result";
+import { resolveOrigin } from "./recuperar/origin";
+
+/** Versión del set legal (Términos/Privacidad/Normas) vigente al registrarse. */
+const TERMS_VERSION = "v1-2026-07";
 
 const COPY = {
   emailInvalid: "Ese email no parece completo — revisalo y probá de nuevo.",
@@ -24,6 +28,10 @@ const COPY = {
   noSession: "Tu sesión se cerró — entrá de nuevo para continuar.",
   tooManyAttempts:
     "Hiciste varios intentos seguidos. Esperá un rato y probá de nuevo — tu cuenta va a estar acá.",
+  ageRequired: "Para sumarte, confirmá que tenés 18 años o más.",
+  termsRequired:
+    "Para sumarte, aceptá los Términos, la Política de Privacidad y las Normas de la Comunidad.",
+  resetLinkExpired: "El enlace venció o ya se usó. Pedí uno nuevo desde acá.",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -44,6 +52,11 @@ const registerSchema = z.object({
     .toLowerCase()
     .pipe(z.email(COPY.emailInvalid)),
   password: z.string().min(8, COPY.passwordShort).max(72, COPY.passwordLong),
+  // Consentimiento (plan cliente semana 3). Defensa en profundidad: el cliente
+  // ya deshabilita el botón hasta tildar ambos, pero el server no confía en eso.
+  // Minimización de datos: solo la atestación 18+, jamás la fecha de nacimiento.
+  ageConfirmed: z.literal(true, { error: COPY.ageRequired }),
+  termsAccepted: z.literal(true, { error: COPY.termsRequired }),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
@@ -109,11 +122,17 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
     return { ok: false, formError: COPY.genericError };
   }
 
+  // Sello de consentimiento del registro: misma marca temporal para edad y
+  // términos (se atestan juntos). No guardamos fecha de nacimiento, solo esto.
+  const consentedAt = new Date().toISOString();
   const { error: profileError } = await admin.from("profiles").insert({
     id: created.user.id,
     tenant_id: tenant.id,
     display_name: displayName,
     role: "member",
+    age_confirmed_at: consentedAt,
+    terms_accepted_at: consentedAt,
+    terms_version: TERMS_VERSION,
   });
 
   if (profileError) {
@@ -234,6 +253,89 @@ export async function completeOnboardingAction(
     console.error("[auth] onboarding: upsert de profiles_private falló", {
       code: privateError.code,
     });
+    return { ok: false, formError: COPY.genericError };
+  }
+
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Recuperación de contraseña (Supabase Auth, SMTP propio de Supabase — no
+// depende de Resend). Dos pasos:
+//   1) requestPasswordResetAction: manda el correo con el enlace de reset.
+//   2) updatePasswordAction: con la sesión de recuperación ya activa (tras el
+//      /callback), fija la contraseña nueva.
+// ---------------------------------------------------------------------------
+
+const resetRequestSchema = z.object({
+  email: z.string().trim().toLowerCase().pipe(z.email(COPY.emailInvalid)),
+});
+
+export type ResetRequestInput = z.infer<typeof resetRequestSchema>;
+
+export async function requestPasswordResetAction(
+  input: ResetRequestInput,
+): Promise<ActionResult> {
+  const parsed = resetRequestSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: firstIssuePerField(parsed.error.issues) };
+  }
+  const { email } = parsed.data;
+
+  // Rate limit por IP (misma política que el registro). La IP vive SOLO como key
+  // en memoria del limiter y expira con la ventana — nunca se persiste (§11).
+  const headerStore = await headers();
+  const ip = clientIpFromHeaders(headerStore);
+  if (!limit(`recuperar:${ip}`, 5, HOUR_MS).ok) {
+    return { ok: false, formError: COPY.tooManyAttempts };
+  }
+
+  const origin = resolveOrigin(headerStore);
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    // El callback canjea el code por sesión y manda a fijar la contraseña nueva.
+    redirectTo: `${origin}/callback?next=/recuperar/actualizar`,
+  });
+
+  if (error) {
+    // Anti-enumeración: pase lo que pase (email inexistente, límite de Supabase,
+    // etc.) devolvemos el MISMO éxito genérico. El detalle queda solo en el log.
+    console.error("[auth] recuperar: resetPasswordForEmail falló", {
+      code: error.code,
+    });
+  }
+
+  return { ok: true };
+}
+
+const updatePasswordSchema = z.object({
+  password: z.string().min(8, COPY.passwordShort).max(72, COPY.passwordLong),
+});
+
+export type UpdatePasswordInput = z.infer<typeof updatePasswordSchema>;
+
+export async function updatePasswordAction(
+  input: UpdatePasswordInput,
+): Promise<ActionResult> {
+  const parsed = updatePasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: firstIssuePerField(parsed.error.issues) };
+  }
+  const { password } = parsed.data;
+
+  // Necesitamos la sesión de recuperación (la dejó el /callback). getUser()
+  // valida el JWT contra el Auth server — si venció o ya se usó, no hay user.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, formError: COPY.resetLinkExpired };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) {
+    console.error("[auth] recuperar: updateUser falló", { code: error.code });
     return { ok: false, formError: COPY.genericError };
   }
 

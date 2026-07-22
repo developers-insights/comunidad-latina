@@ -1379,6 +1379,7 @@ export type Database = {
       profiles: {
         Row: {
           account_status: string
+          age_confirmed_at: string | null
           area_label: string | null
           avatar_url: string | null
           bio: string | null
@@ -1392,10 +1393,13 @@ export type Database = {
           role: string
           suspended_until: string | null
           tenant_id: string
+          terms_accepted_at: string | null
+          terms_version: string | null
           updated_at: string
         }
         Insert: {
           account_status?: string
+          age_confirmed_at?: string | null
           area_label?: string | null
           avatar_url?: string | null
           bio?: string | null
@@ -1409,10 +1413,13 @@ export type Database = {
           role?: string
           suspended_until?: string | null
           tenant_id: string
+          terms_accepted_at?: string | null
+          terms_version?: string | null
           updated_at?: string
         }
         Update: {
           account_status?: string
+          age_confirmed_at?: string | null
           area_label?: string | null
           avatar_url?: string | null
           bio?: string | null
@@ -1426,6 +1433,8 @@ export type Database = {
           role?: string
           suspended_until?: string | null
           tenant_id?: string
+          terms_accepted_at?: string | null
+          terms_version?: string | null
           updated_at?: string
         }
         Relationships: [

@@ -28,6 +28,7 @@ const COPY = {
   showPassword: "Mostrar contraseña",
   hidePassword: "Ocultar contraseña",
   submitPassword: "Entrar",
+  forgotPassword: "¿Te olvidaste la contraseña?",
   submitMagic: "Mandame el enlace",
   magicHelp:
     "Te mandamos un enlace a tu correo — lo tocás y entrás, sin contraseña.",
@@ -190,6 +191,14 @@ export function LoginForm({
                 </button>
               </div>
             </Field>
+            <div className="-mt-1 flex justify-end">
+              <Link
+                href="/recuperar"
+                className="rounded-sm text-sm font-medium text-brand-ink underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+              >
+                {COPY.forgotPassword}
+              </Link>
+            </div>
             <Button type="submit" size="lg" loading={pending} className="mt-2 w-full">
               {COPY.submitPassword}
             </Button>
