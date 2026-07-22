@@ -322,13 +322,6 @@ const HEX_PERMITIDO = new Map<string, string>([
       "inline, con los mismos valores que los --cl-*.",
   ],
   [
-    "src/components/experience/brand-mark.tsx",
-    "Stops de gradiente de un SVG. Los blancos (#FFFFFF del gloss/shine, #FCFCFB del " +
-      "monograma) son LUZ sobre el emblema, no cromo de UI: constantes en los dos temas " +
-      "a propósito, porque un logo no se invierte (§2.8). Los hexes de marca son sólo " +
-      "el fallback de var(--color-brand-N) por si el pipeline no resolviera.",
-  ],
-  [
     "src/components/admin/create-tenant-form.tsx",
     "#1A5EDB es el valor inicial de un <input type=color>: un DATO (la marca que el " +
       "admin va a elegir), no un color de UI. Nunca pinta cromo de la app.",
