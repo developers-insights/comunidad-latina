@@ -81,16 +81,41 @@ export function CreatorProfileForm({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  function addSkill(raw: string) {
-    const value = raw.trim().replace(/,$/, "").trim();
-    if (!value) return;
-    setSkills((current) => {
-      if (current.length >= MAX_SKILLS || current.some((s) => s.toLowerCase() === value.toLowerCase())) {
-        return current;
-      }
-      return [...current, value.slice(0, 40)];
-    });
+  // Acepta una o varias habilidades a la vez: divide por comas o saltos de
+  // línea (así pegar "Reels, Fotografía, Edición" crea tres chips, tal como
+  // promete la ayuda). Ignora vacíos y repetidas, y avisa si se llega al tope.
+  function addSkills(raw: string) {
     setSkillDraft("");
+    const parts = raw
+      .split(/[,\n]+/)
+      .map((s) => s.trim().slice(0, 40))
+      .filter(Boolean);
+    if (parts.length === 0) return;
+
+    const next = [...skills];
+    let skippedForLimit = 0;
+    for (const value of parts) {
+      if (next.length >= MAX_SKILLS) {
+        skippedForLimit += 1;
+        continue;
+      }
+      if (next.some((s) => s.toLowerCase() === value.toLowerCase())) continue;
+      next.push(value);
+    }
+    if (next.length !== skills.length) setSkills(next);
+    if (skippedForLimit > 0) {
+      toast({ variant: "warning", title: `Podés agregar hasta ${MAX_SKILLS} habilidades.` });
+    }
+  }
+
+  // Al pegar una lista separada por comas, la dividimos nosotros en vez de
+  // dejar todo el texto en un solo chip.
+  function handleSkillPaste(event: React.ClipboardEvent<HTMLInputElement>) {
+    const text = event.clipboardData.getData("text");
+    if (/[,\n]/.test(text)) {
+      event.preventDefault();
+      addSkills(`${skillDraft}${text}`);
+    }
   }
 
   function addPhotos(fileList: FileList | null) {
@@ -266,22 +291,39 @@ export function CreatorProfileForm({
               ))}
             </ul>
           )}
-          <Input
-            id="cp-skills"
-            value={skillDraft}
-            maxLength={40}
-            placeholder={COPY.profile.form.skillsPlaceholder}
-            onChange={(event) => setSkillDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === ",") {
-                event.preventDefault();
-                addSkill(skillDraft);
-              } else if (event.key === "Backspace" && skillDraft === "") {
-                setSkills((current) => current.slice(0, -1));
-              }
-            }}
-            onBlur={() => addSkill(skillDraft)}
-          />
+          {skills.length < MAX_SKILLS ? (
+            <Input
+              id="cp-skills"
+              value={skillDraft}
+              maxLength={40}
+              placeholder={COPY.profile.form.skillsPlaceholder}
+              onChange={(event) => setSkillDraft(event.target.value)}
+              onPaste={handleSkillPaste}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === ",") {
+                  event.preventDefault();
+                  addSkills(skillDraft);
+                } else if (event.key === "Backspace" && skillDraft === "") {
+                  setSkills((current) => current.slice(0, -1));
+                }
+              }}
+              onBlur={() => addSkills(skillDraft)}
+            />
+          ) : (
+            <p className="text-sm text-foreground-muted">
+              Llegaste al máximo de {MAX_SKILLS} habilidades. Quitá una para agregar otra.
+            </p>
+          )}
+          {skills.length > 0 && (
+            <span
+              className={cn(
+                "self-end text-xs tabular-nums",
+                skills.length >= MAX_SKILLS ? "font-semibold text-brand-ink" : "text-foreground-muted",
+              )}
+            >
+              {skills.length}/{MAX_SKILLS}
+            </span>
+          )}
         </div>
       </Field>
 

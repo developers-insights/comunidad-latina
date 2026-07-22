@@ -202,7 +202,7 @@ export const COPY = {
       bioHelp: "Opcional, pero suma mucho.",
       skillsLabel: "Habilidades",
       skillsPlaceholder: "Ej.: Reels, Fotografía, Edición",
-      skillsHelp: "Separá con comas. Hasta 12.",
+      skillsHelp: "Escribí una y presioná Enter, o pegá varias separadas por comas.",
       rateHintLabel: "Precio orientativo",
       rateHintPlaceholder: "Ej.: Desde $150 por reel",
       rateHintHelp: "Opcional. Una referencia; el precio real se pacta en cada contrato.",
