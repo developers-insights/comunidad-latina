@@ -76,7 +76,7 @@ export default async function TerminosPage() {
       <LegalSection id="que-es-esto" title="Qué es esta plataforma">
         <p className={legalProse.p}>
           {tenant.name} es una comunidad pensada para inmigrantes latinos en Estados Unidos:
-          vivienda revisada, guías para tus trámites, negocios locales y gente que ya pasó por lo
+          avisos de vivienda, guías para tus trámites, negocios locales y gente que ya pasó por lo
           mismo que vos y puede darte una mano. Al usar la plataforma, aceptás estos Términos.
         </p>
         <p className={legalProse.p}>
@@ -160,7 +160,7 @@ export default async function TerminosPage() {
 
       <LegalSection id="moderacion" title="Moderación, reportes y sanciones">
         <p className={legalProse.p}>
-          Moderamos contenido y cuentas para mantener la plataforma segura. Podés reportar
+          Moderamos contenido y cuentas para cuidar la convivencia. Podés reportar
           cualquier perfil, aviso o mensaje en un par de toques, y es anónimo para la otra
           persona.
         </p>
