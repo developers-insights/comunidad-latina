@@ -34,13 +34,25 @@ contenido de esa semana (legal + consentimiento) está atrasado.
 ## 🔴 Gates humanos — nada de esto lo puede resolver un agente
 
 1. **Pentest + firma de ingeniero senior** sobre migraciones y el webhook de Stripe. Bloqueante no negociable antes de cualquier dato real (ya documentado en `PLAN_MAESTRO.md`, nunca ejecutado).
-2. **Confirmar y consolidar el team/dominio real de Vercel.** Hay evidencia de al menos 4 teams distintos habiendo tocado el proyecto (`manuels-projects-66819a23` → `manuelinsights` → `insights-apps` → `insights3`, dominio `comunidad-latina-sigma.vercel.app`). El repo `developers-insights/comunidad-latina` está **confirmado público hoy** (`gh repo view`, 2026-07-22) y trackea `main` correctamente. Pero **ningún archivo del repo confirma cuál dominio/team es el auto-deploy real vigente** — eso solo vivía en memoria de sesión hasta hoy. Acción: Manuel entra al dashboard de Vercel, confirma cuál proyecto recibe el push de `developers-insights/comunidad-latina`, y esa verdad se escribe acá (reemplazando esta misma sección) en la próxima sesión.
-3. Aplicar en el Dashboard de Supabase (SQL Editor, porque `storage.objects` lo posee `supabase_storage_admin` y ni el rol `postgres` ni el MCP pueden tocarlo): el script `supabase/manual/harden-storage-listing.sql` **ampliado** para cubrir el bucket `post-media` (hallazgo nuevo de esta auditoría — el mismo bug de "listado público enumera user_ids" que el script ya resolvía para `avatars`/`listing-photos`/`tenant-assets` reapareció en `post-media`, creado después por la migración `0025`).
+2. **Consolidar el dominio "bonito" de Vercel.** Verificado por `curl` el 2026-07-22: **`comunidad-latina-sigma.vercel.app` sirve el build ACTUAL** (tiene `/marketplace` = 200; es el auto-deploy de `main`). `comunidad-latina.vercel.app` sirve una build VIEJA (sin Marketplace, otro team) y `-taupe` es LEGACY congelado. El repo `developers-insights/comunidad-latina` está **público** (`gh repo view`) y trackea `main`. Falta: liberar el dominio `comunidad-latina.vercel.app` del team viejo y adjuntarlo al proyecto que auto-deploya (o decidir un dominio propio, `comunidadlatina.com`/`dominicanos.com`, que el código ya asume como canónico). **Nota:** las rutas nuevas de esta sesión (legal, recuperar) dan 404 en sigma porque se commiteó pero NO se pusheó — aparecerán al primer `git push`.
+3. Aplicar en el Dashboard de Supabase (SQL Editor, porque `storage.objects` lo posee `supabase_storage_admin` y ni el rol `postgres` ni el MCP pueden tocarlo): el script `supabase/manual/harden-storage-listing.sql` — **ya está ampliado y listo** (esta sesión le agregó la 4ª policy para `post-media`; confirmado por advisors que el WARN de listado sigue activo hasta aplicarlo). Solo falta pegarlo y correrlo en el Dashboard. Cierra el mismo bug de "listado público enumera user_ids" que ya cubría `avatars`/`listing-photos`/`tenant-assets`.
 4. Activar **Leaked Password Protection** (Supabase Dashboard → Auth → Providers → Password, 1 toggle).
 5. Conseguir credenciales reales cuando corresponda por plan: Resend + Google Vision (semana 4), Stripe test→real + Sentry (semana 6, exigido por el propio plan maestro antes de producción).
 6. Decidir alcance: si "Tiendas verificadas con Stripe" (pagos peer-to-peer con Stripe **Connect**) entra en este ciclo — hoy no existe ni una línea de código de Connect, es una feature de pagos nueva de punta a punta, no un ajuste.
 
-## Workstreams para agentes — paralelizables, ninguno espera al pentest para *empezar*
+## ✅ EJECUTADO 2026-07-22 — todos los workstreams de agente completados
+
+**Los 4 workstreams de abajo (A/B/C/D) ya se ejecutaron, commitearon y
+verificaron** (ver la sección "Semana 3-4 + hardening" en `docs/PROGRESS.md`
+para el detalle commit por commit). Gates verdes: tsc 0 · lint 0 · 947 tests ·
+build prod · RLS 37. Revisión adversarial multi-dimensión al cierre: 0 findings
+confirmados. La lista original se conserva abajo como registro de lo hecho.
+
+**Solo queda lo MANUAL (sección de gates humanos, arriba):** push+deploy ·
+aplicar `harden-storage-listing.sql` en el Dashboard · toggle leaked-password ·
+pentest + firma senior · credenciales reales · revisión legal de las 3 páginas.
+
+## Workstreams para agentes (registro de lo ejecutado) — ninguno esperó al pentest para *empezar*
 
 **A. Legal y consentimiento (semana 3, el más atrasado — prioridad 1)**
 - Páginas Términos de Uso, Política de Privacidad, Normas de la Comunidad (contenido + rutas `(marketing)`).

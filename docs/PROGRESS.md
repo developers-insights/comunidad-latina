@@ -1,17 +1,60 @@
 # PROGRESS — Comunidad Latina
 
-## Diagnóstico pre-producción (2026-07-22)
+## Semana 3-4 del plan + hardening — ejecución autónoma (✅ 2026-07-22)
 
-Auditoría de 5 agentes en paralelo (arquitectura/features, plan del cliente vs.
-código, seguridad, deploy/infra, deuda técnica) + verificación en vivo contra
-Supabase real y la prod desplegada. **Ver `docs/HANDOFF.md` para el diagnóstico
-completo y el plan de ejecución** — acá solo el resumen de una línea: repo
-`developers-insights/comunidad-latina` confirmado **público** hoy (`gh repo
-view`); estamos por calendario en semana 3 del plan de 12 semanas del cliente
-y esa semana (Términos/Privacidad/Normas + edad mínima + recuperación de
-contraseña) está atrasada; el gate crítico (pentest + firma senior, semana 5)
-sigue sin ejecutar; nuevo hallazgo de seguridad: el bucket `post-media` quedó
-sin el hardening de listado público que sí tienen los buckets viejos.
+Diagnóstico (5 agentes en paralelo) + ejecución de todo lo automatizable, con
+revisión adversarial multi-dimensión al cierre (Workflow: correctness,
+seguridad, a11y, copy legal, convenciones → **0 findings confirmados**; los 4
+que se levantaron fueron refutados por verificadores adversariales). **Ver
+`docs/HANDOFF.md`** para el plan completo y los gates humanos.
+
+**Construido y commiteado (9 commits, `e391035`→`88394cc`):**
+- **Legal (`ee1c5c5`)**: 3 páginas públicas `/legal/{terminos,privacidad,normas}`
+  redactadas sobre las prácticas REALES de datos (minimización, TTL 90d,
+  verificación = indicador no garantía), footer con links reales (antes "Muy
+  pronto"). **BORRADOR — requiere revisión de abogado + placeholders `[correo
+  de contacto legal — completar]`.**
+- **Consentimiento de registro (`60fe8fc`)**: casillas obligatorias 18+ y
+  aceptación de Términos/Privacidad/Normas, revalidadas server-side
+  (`z.literal`), persistidas en `profiles` (mig **0027 aplicada a la base**:
+  `age_confirmed_at`/`terms_accepted_at`/`terms_version` — sin fecha de
+  nacimiento, minimización).
+- **Recuperación de contraseña (`60fe8fc`)**: flujo completo `/recuperar` →
+  email de Supabase Auth (SMTP propio, no depende de Resend) → `/callback` →
+  `/recuperar/actualizar`. Rate-limit + mensaje genérico anti-enumeración.
+- **CSP enforcing (`d4f9282`)**: report-only → **`Content-Security-Policy`**,
+  validado en vivo con Playwright sobre build de prod. Se agregó `media-src`
+  (los videos de Storage se bloqueaban en enforcing) y allowlist de
+  `images.pexels.com` (DEUDA de demo — quitar al migrar seed a Storage).
+- **Fix React #418 (`c835ad3`)**: `/admin/moderacion` — fecha determinista
+  (locale `es-US` + `timeZone America/New_York`) server=cliente.
+- **Tests webhook Stripe (`4e3d858`)**: 10 casos (firma, idempotencia,
+  correlación de monto/session). Antes: 0 cobertura sobre el flujo de dinero.
+- **Hardening `post-media` (`4e3d858`)**: 4ª policy en
+  `supabase/manual/harden-storage-listing.sql` (cierra enumeración de user_ids;
+  el bucket 0025 quedó fuera del fix original). **Aplicación MANUAL en Dashboard.**
+- **Limpieza (`33cbef9`)**: BrandMark (código muerto) eliminado, `.env.example`
+  trackeado (verificado sin secretos), `npm audit fix` (fast-uri 3.1.4).
+
+**Verificado en vivo (no solo lectura de código):**
+- Guard de escalada: un member (`maria@demo`) es **rechazado** por
+  `admin_ban_user`/`admin_suspend_user`/`admin_reactivate_user` (FORBIDDEN);
+  `block_user` (acción de member) sí le está permitida. El guard por rol-JWT
+  funciona.
+- Advisors de Supabase post-DDL: sin hallazgos nuevos (los WARN son los ya
+  conocidos: listado de buckets — que el SQL manual resuelve —, funciones
+  SECURITY DEFINER por diseño, leaked-password toggle).
+- Deploy: **`comunidad-latina-sigma.vercel.app` = build actual** (auto-deploy de
+  main); `comunidad-latina.vercel.app` = build vieja (otro team, sin Marketplace).
+  Las rutas nuevas dan 404 en sigma **porque se commiteó pero NO se pusheó**
+  (push/deploy = decisión de Manuel).
+
+**Gates:** tsc 0 · lint 0 errores · **947 tests** (eran 930) · `next build
+--webpack` verde · enumerador RLS verde (37 superficies).
+
+**Falta (manual, ver HANDOFF):** push+deploy · aplicar `harden-storage-listing.sql`
+en Dashboard · toggle leaked-password · pentest + firma senior · credenciales
+reales (Stripe/Resend/Vision/Sentry) · revisión legal de las 3 páginas.
 
 ## Feed red social v2 — auditoría UI/UX del cliente (✅ 2026-07-21)
 
