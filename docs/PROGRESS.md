@@ -1,5 +1,18 @@
 # PROGRESS — Comunidad Latina
 
+## Diagnóstico pre-producción (2026-07-22)
+
+Auditoría de 5 agentes en paralelo (arquitectura/features, plan del cliente vs.
+código, seguridad, deploy/infra, deuda técnica) + verificación en vivo contra
+Supabase real y la prod desplegada. **Ver `docs/HANDOFF.md` para el diagnóstico
+completo y el plan de ejecución** — acá solo el resumen de una línea: repo
+`developers-insights/comunidad-latina` confirmado **público** hoy (`gh repo
+view`); estamos por calendario en semana 3 del plan de 12 semanas del cliente
+y esa semana (Términos/Privacidad/Normas + edad mínima + recuperación de
+contraseña) está atrasada; el gate crítico (pentest + firma senior, semana 5)
+sigue sin ejecutar; nuevo hallazgo de seguridad: el bucket `post-media` quedó
+sin el hardening de listado público que sí tienen los buckets viejos.
+
 ## Feed red social v2 — auditoría UI/UX del cliente (✅ 2026-07-21)
 
 Sprint P1+P2 del documento "Auditoría UI/UX – Mejoras Prioritarias del News
@@ -408,15 +421,16 @@ Gates: `tsc` 0 · `build` verde · 12 tests · `lint` 0 errores · smoke-test vi
 - 9 listings de Queens, 3 guías con fuentes oficiales, 5 posts + comentarios + reacciones, 1 verification_check.
 
 ## Pendientes (en orden)
-0. **🔴 DEPLOY BLOQUEADO EN VERCEL (team `manuelinsights`).** Desde `796ec57` todo push termina en
-   *"Deployment was blocked"* (el último deploy exitoso fue `5e42330`). NO es el gate de git-author (autor =
-   INSIGHTSAPPS en todos) — es un bloqueo del lado del team (pausa/billing/límite o desconexión de la cuenta
-   GitHub en Vercel). Se resuelve SOLO desde el dashboard: abrir
-   https://vercel.com/manuelinsights/comunidad-latina/2Nn8zzgUdYKFx6jqSAprhVY29dWX (deploy bloqueado de
-   `1ae2b44`), leer el motivo del bloqueo, destrabar y hacer **Redeploy** del último commit. La CLI local solo
-   accede al team `insights-apps` y `VERCEL_API_TOKEN` en `.env.local` está vacío, así que no hay vía
-   programática desde esta máquina. Las migraciones 0020–0022 ya están aplicadas y son inofensivas para el
-   prod viejo.
+0. **🟡 DEPLOY — resuelto el bloqueo de git-author, falta consolidar el dominio/team canónico.** El bloqueo
+   original (team `manuelinsights`, plan Hobby + repo privado) se resolvió haciendo público el repo
+   `developers-insights/comunidad-latina` (commit `50c76ea`, **confirmado público hoy** con `gh repo view`,
+   2026-07-22) y fijando el remote por defecto (`d970b94`). Pero ningún archivo del repo documenta todavía CUÁL
+   proyecto/team de Vercel es el que recibe el auto-deploy real — eso solo vivía en memoria de sesión. Acción
+   pendiente de Manuel: confirmar en el dashboard de Vercel cuál team/dominio es el vigente (candidatos vistos
+   en distintas sesiones: `insights3`/`comunidad-latina-sigma.vercel.app`, `insights-apps`, `manuelinsights`) y
+   escribir la respuesta acá. Mientras tanto `comunidad-latina.vercel.app` (otro team) sirve una build vieja sin
+   Marketplace/Creadores, y `comunidad-latina-taupe.vercel.app` es LEGACY congelado — no usar ninguno de los dos
+   para demos. Detalle completo en `docs/HANDOFF.md`.
 1. **🔴 GATES HUMANOS antes del primer dato real (§5.2/§14.4 — NO construibles por agentes):** pentest humano adversarial + **firma de ingeniero senior** sobre migraciones y webhook Stripe. Sin esto NO se expone a usuarios reales.
 2. **Credenciales faltantes** (degradan con elegancia hoy): Stripe (test) → activa pagos reales del flujo ya construido · Resend → emails · Google Vision → moderación de imagen (hoy: pending_review) · Sentry → observabilidad (exigida antes de producción) · Vercel → deploy + dominios.
 3. **Hardening menor (requiere Dashboard — `storage.objects` lo posee `supabase_storage_admin`, ni el MCP ni el rol `postgres` pueden tocarlo):** (a) **listado de buckets** — SQL listo en [`supabase/manual/harden-storage-listing.sql`](../supabase/manual/harden-storage-listing.sql), pegar en Dashboard → SQL Editor (scopea el SELECT/list al dueño; cierra la enumeración de user_ids vía `avatars`; el acceso público por URL no se ve afectado; hoy buckets vacíos → riesgo 0); (b) **Leaked Password Protection** (HaveIBeenPwned) en Dashboard → Auth → Providers → Password (toggle, 1 click). Ambos van en el mismo pase que el pentest/firma senior.
