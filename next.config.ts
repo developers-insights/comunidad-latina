@@ -126,7 +126,10 @@ const csp = [
   "img-src 'self' data: blob: https://*.supabase.co https://images.pexels.com",
   "media-src 'self' blob: https://*.supabase.co",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com",
+  // https://images.pexels.com también en connect-src: el service worker (Serwist)
+  // revalida las <img> con fetch() y ese fetch cae bajo connect-src, no img-src —
+  // sin esto las fotos del seed demo se bloquean bajo enforcing (deuda: ver arriba).
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://images.pexels.com https://api.openai.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com",
   "frame-src https://js.stripe.com https://hooks.stripe.com",
   "worker-src 'self' blob:",
   "base-uri 'self'",
@@ -192,6 +195,14 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "*.supabase.co",
         pathname: "/storage/v1/object/public/**",
+      },
+      // Pexels: fotos del seed demo. Evita el 400 del optimizador si algún
+      // componente rutea una URL de Pexels por next/image (deuda: quitar al
+      // migrar el contenido demo a Supabase Storage).
+      {
+        protocol: "https",
+        hostname: "images.pexels.com",
+        pathname: "/**",
       },
       ...(envPattern ? [envPattern] : []),
     ],
