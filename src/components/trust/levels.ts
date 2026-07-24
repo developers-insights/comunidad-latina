@@ -14,10 +14,10 @@ import type { EmblemName } from "@/components/ui/emblem";
  */
 export type TrustLevel =
   | "nuevo"
-  | "verificado"
+  | "activo"
   | "confiable"
-  | "premium"
-  | "diamante";
+  | "verificado"
+  | "destacado";
 
 export interface TrustLevelConfig {
   label: string;
@@ -29,7 +29,7 @@ export interface TrustLevelConfig {
    */
   emblem: EmblemName;
   /**
-   * El nivel escrito como PALABRAS ("· Premium", "Nivel: Diamante"). Es texto:
+   * El nivel escrito como PALABRAS ("· Verificado", "Nivel: Destacado"). Es texto:
    * va el tono `-ink` del rol, que globals.css valida a ≥4.5:1 (WCAG 1.4.3)
    * contra las cinco superficies de cada tema. Nunca el relleno.
    */
@@ -42,6 +42,13 @@ export interface TrustLevelConfig {
   segmentClass: string;
 }
 
+// Re-mapeo de niveles (spec §7): la taxonomía pasó a nuevo/activo/confiable/
+// verificado/destacado. La capa VISUAL preserva el LADDER ASCENDENTE por
+// posición (brote → sello azul → escudo verde → estrella dorada → cristal),
+// reusando los 8 emblemas existentes: el emblema es decorativo (alt="", el
+// nivel se dice al lado en letras), así que el nombre legacy del archivo
+// (p. ej. nivel-verificado.webp en el peldaño "Activo") no llega al usuario.
+// El orden de las claves ES el orden de segmentos de la barra (levelSegments).
 export const TRUST_LEVELS: Record<TrustLevel, TrustLevelConfig> = {
   nuevo: {
     label: "Nuevo",
@@ -50,9 +57,11 @@ export const TRUST_LEVELS: Record<TrustLevel, TrustLevelConfig> = {
     textClass: "text-foreground-muted",
     segmentClass: "bg-foreground-muted",
   },
-  verificado: {
-    label: "Verificado",
+  activo: {
+    label: "Activo",
     Icon: SealCheck,
+    // Sello azul del ladder (asset nivel-verificado.webp). `info-ink` valida a
+    // ≥4.5:1 (WCAG 1.4.3) contra las cinco superficies de cada tema.
     emblem: "nivel-verificado",
     textClass: "text-info-ink",
     segmentClass: "bg-info",
@@ -66,25 +75,27 @@ export const TRUST_LEVELS: Record<TrustLevel, TrustLevelConfig> = {
     textClass: "text-success-ink",
     segmentClass: "bg-success",
   },
-  premium: {
-    label: "Premium",
+  verificado: {
+    label: "Verificado",
     Icon: Star,
+    // Estrella dorada del ladder (asset nivel-premium.webp) para el penúltimo
+    // peldaño. El dorado de §2.3 (#b7791f) da 3.64:1 contra `bg-surface`:
+    // alcanza para el emblema y los segmentos, no para la palabra. `gold-ink` es
+    // ese mismo dorado oscurecido en OKLCH — sigue leyéndose dorado, no marrón.
     emblem: "nivel-premium",
-    // El dorado de §2.3 (#b7791f) da 3.64:1 contra `bg-surface`: alcanza para el
-    // emblema y los segmentos, no para la palabra "Premium". `gold-ink` es ese
-    // mismo dorado oscurecido en OKLCH — sigue leyéndose dorado, no marrón.
     textClass: "text-gold-ink",
     segmentClass: "bg-gold",
   },
-  diamante: {
-    label: "Diamante",
+  destacado: {
+    label: "Destacado",
     Icon: Diamond,
-    // Cristal incoloro a propósito: el tono de marca varía por tenant (azul en
-    // `dominicanos`, naranja en `comunidadlatina`) y un raster no puede variar.
+    // Cristal incoloro a propósito (asset nivel-diamante.webp): el tono de marca
+    // varía por tenant (azul en `dominicanos`, naranja en `comunidadlatina`) y un
+    // raster no puede variar.
     emblem: "nivel-diamante",
     // `text-brand` (el RELLENO de la marca) sólo se valida a ≥3:1 contra el canvas:
-    // con un tenant de hue claro la palabra "Diamante" quedaba ilegible. `brand-ink`
-    // es el único tono de marca que el pipeline valida a ≥4.5:1 para cualquier tenant.
+    // con un tenant de hue claro la palabra quedaba ilegible. `brand-ink` es el
+    // único tono de marca que el pipeline valida a ≥4.5:1 para cualquier tenant.
     textClass: "text-brand-ink",
     segmentClass: "bg-brand",
   },

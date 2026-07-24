@@ -77,10 +77,10 @@ export function concreteSignals(signals: TrustSignal[]): string[] {
 
 const VALID_LEVELS: readonly TrustLevel[] = [
   "nuevo",
-  "verificado",
+  "activo",
   "confiable",
-  "premium",
-  "diamante",
+  "verificado",
+  "destacado",
 ];
 
 /** Normaliza el `level` de la DB; si viene raro, se deriva del score (canon). */

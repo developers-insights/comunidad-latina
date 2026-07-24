@@ -30,9 +30,9 @@ export const EMBLEM_SOURCES = {
   "nivel-nuevo": "/brand/emblems/nivel-nuevo.webp",
   /** Sello azul: nivel "Verificado". */
   "nivel-verificado": "/brand/emblems/nivel-verificado.webp",
-  /** Estrella dorada: nivel "Premium". */
+  /** Estrella dorada: peldaño 4 del ladder (re-key §7: ahora el nivel "Verificado"). */
   "nivel-premium": "/brand/emblems/nivel-premium.webp",
-  /** Cristal: nivel "Diamante". */
+  /** Cristal: peldaño 5 del ladder (re-key §7: ahora el nivel "Destacado"). */
   "nivel-diamante": "/brand/emblems/nivel-diamante.webp",
 } as const;
 

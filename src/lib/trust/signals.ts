@@ -18,10 +18,10 @@ import type { TrustLevel, TrustSignal } from "@/components/trust";
 
 const TRUST_LEVEL_IDS = new Set<string>([
   "nuevo",
-  "verificado",
+  "activo",
   "confiable",
-  "premium",
-  "diamante",
+  "verificado",
+  "destacado",
 ]);
 
 /** Normaliza el `level` crudo de la DB; si viene raro degrada a "nuevo". */

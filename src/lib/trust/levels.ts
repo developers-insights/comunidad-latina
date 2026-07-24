@@ -3,7 +3,7 @@
  * (ARQUITECTURA.md §5): los umbrales son canon, nunca varían por tenant.
  */
 
-export type TrustLevelId = "nuevo" | "verificado" | "confiable" | "premium" | "diamante";
+export type TrustLevelId = "nuevo" | "activo" | "confiable" | "verificado" | "destacado";
 
 export interface TrustLevel {
   id: TrustLevelId;
@@ -16,11 +16,11 @@ export interface TrustLevel {
 }
 
 export const TRUST_LEVELS: readonly TrustLevel[] = [
-  { id: "nuevo", min: 0, max: 19, label: "Nuevo" },
-  { id: "verificado", min: 20, max: 39, label: "Verificado" },
-  { id: "confiable", min: 40, max: 69, label: "Confiable" },
-  { id: "premium", min: 70, max: 89, label: "Premium" },
-  { id: "diamante", min: 90, max: 100, label: "Diamante" },
+  { id: "nuevo", min: 0, max: 29, label: "Nuevo" },
+  { id: "activo", min: 30, max: 49, label: "Activo" },
+  { id: "confiable", min: 50, max: 69, label: "Confiable" },
+  { id: "verificado", min: 70, max: 84, label: "Verificado" },
+  { id: "destacado", min: 85, max: 100, label: "Destacado" },
 ] as const;
 
 export function clampScore(score: number): number {
