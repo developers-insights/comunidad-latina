@@ -6,15 +6,6 @@ export const VIDEOS_COPY = {
   title: "Videos",
   subtitle: "Los videos de tu comunidad",
 
-  scopes: {
-    ariaLabel: "Filtrar videos por sección",
-    "para-ti": "Para ti",
-    propiedades: "Propiedades",
-    negocios: "Negocios",
-    profesionales: "Profesionales",
-    eventos: "Eventos",
-  } as Record<string, string>,
-
   feedLabel: "Videos de la comunidad",
   videoOf: (author: string) => `Video de ${author}`,
   byAuthor: (name: string) => `por ${name}`,

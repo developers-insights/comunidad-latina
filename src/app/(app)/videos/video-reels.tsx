@@ -22,7 +22,7 @@ import { ViewerVideo } from "@/components/feed/media-viewer";
 import { useMounted } from "@/lib/design/use-overlay";
 import { cn } from "@/lib/utils";
 import { loadMoreVideosAction } from "./actions";
-import { VIDEO_SCOPES, type VideosScope } from "./helpers";
+import type { VideosScope } from "./helpers";
 import { VIDEOS_COPY } from "./copy";
 
 /**
@@ -154,8 +154,6 @@ export function VideoReels({
         </div>
       )}
 
-      <ScopeChips active={scope} />
-
       {loadingMore && (
         <p
           role="status"
@@ -166,47 +164,6 @@ export function VideoReels({
       )}
     </div>,
     document.body,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Chips de scope (mismo lenguaje que los tabs del feed, sobre el video)
-// ---------------------------------------------------------------------------
-
-function ScopeChips({ active }: { active: VideosScope }) {
-  return (
-    <nav
-      aria-label={VIDEOS_COPY.scopes.ariaLabel}
-      className="pointer-events-none absolute inset-x-0 top-16 z-20"
-    >
-      <div
-        className={cn(
-          "pointer-events-auto mx-auto flex w-full max-w-lg items-center gap-2 overflow-x-auto px-4 py-1",
-          "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        )}
-      >
-        {VIDEO_SCOPES.map((scope) => {
-          const isActive = scope.id === active;
-          return (
-            <Link
-              key={scope.id}
-              href={scope.id === "para-ti" ? "/videos" : `/videos?scope=${scope.id}`}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "inline-flex min-h-11 shrink-0 items-center rounded-full px-4 text-sm font-semibold",
-                "transition-colors duration-(--duration-fast)",
-                "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60",
-                isActive
-                  ? "bg-on-media text-media-shade"
-                  : "bg-media-scrim text-on-media hover:bg-media-shade/70",
-              )}
-            >
-              {VIDEOS_COPY.scopes[scope.id]}
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
   );
 }
 
