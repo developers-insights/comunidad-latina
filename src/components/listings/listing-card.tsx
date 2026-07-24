@@ -25,6 +25,10 @@ export interface ListingCardModel {
 /** Vivienda → acento azul del módulo (para el CTA en píldora). */
 const ACCENT = "var(--accent-vivienda)";
 
+/** Foto grande clickeable = red social: tap en la card abre el detalle (§4.d, feedback 2026-07-24). */
+const MEDIA_LINK =
+  "group block focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
+
 /**
  * CTA en píldora con el acento del módulo (feedback cliente 2026-07-21: el botón
  * deja de ser gris). El acento va en el borde/tinte y en la flecha; el texto
@@ -68,40 +72,42 @@ export function ListingCard({ listing }: { listing: ListingCardModel }) {
       coreClassName="overflow-hidden p-0"
     >
       <article aria-label={listing.title}>
-        <CardMedia
-          src={listing.photoUrl}
-          fallbackSrc={FALLBACK_PHOTO}
-          aspect="video"
-          quality={62}
-          overlayTopLeft={
-            listing.verification ? (
-              <Badge variant="success">
-                <ShieldCheck size={13} weight="fill" aria-hidden="true" />
-                {COPY.list.verifiedChip(listing.verification.dateLabel)}
-              </Badge>
-            ) : undefined
-          }
-          overlayBottom={
-            <div>
-              <h3 className="font-display text-base font-bold leading-snug text-on-media line-clamp-2">
-                {listing.title}
-              </h3>
-              <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
-                {listing.priceLabel && (
-                  <span className="numeric text-lg font-bold text-on-media">
-                    {listing.priceLabel}
-                  </span>
-                )}
-                {listing.areaLabel && (
-                  <span className="flex items-center gap-1 text-sm text-on-media/85">
-                    <MapPin size={14} aria-hidden="true" className="shrink-0" />
-                    {listing.areaLabel}
-                  </span>
-                )}
+        <Link href={`/propiedades/${listing.id}`} aria-label={listing.title} className={MEDIA_LINK}>
+          <CardMedia
+            src={listing.photoUrl}
+            fallbackSrc={FALLBACK_PHOTO}
+            aspect="video"
+            quality={62}
+            overlayTopLeft={
+              listing.verification ? (
+                <Badge variant="success">
+                  <ShieldCheck size={13} weight="fill" aria-hidden="true" />
+                  {COPY.list.verifiedChip(listing.verification.dateLabel)}
+                </Badge>
+              ) : undefined
+            }
+            overlayBottom={
+              <div>
+                <h3 className="font-display text-base font-bold leading-snug text-on-media line-clamp-2">
+                  {listing.title}
+                </h3>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                  {listing.priceLabel && (
+                    <span className="numeric text-lg font-bold text-on-media">
+                      {listing.priceLabel}
+                    </span>
+                  )}
+                  {listing.areaLabel && (
+                    <span className="flex items-center gap-1 text-sm text-on-media/85">
+                      <MapPin size={14} aria-hidden="true" className="shrink-0" />
+                      {listing.areaLabel}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          }
-        />
+            }
+          />
+        </Link>
 
         <div className="flex flex-col gap-2.5 p-4">
           {listing.publisher?.type === "member" ? (

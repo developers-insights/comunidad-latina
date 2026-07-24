@@ -70,7 +70,6 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
   const [deliverables, setDeliverables] = useState("");
   const [budget, setBudget] = useState("");
   const [deadlineDays, setDeadlineDays] = useState("");
-  const [urgent, setUrgent] = useState(false);
   const [areaLabel, setAreaLabel] = useState("");
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
 
@@ -136,7 +135,6 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
           budget: Number(budget),
           deliverables: deliverables.trim() || null,
           deadlineDays: deadlineDays ? Number(deadlineDays) : null,
-          urgent,
           areaLabel: areaLabel.trim(),
         });
         if (!result.ok) {
@@ -294,7 +292,12 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
                 className="numeric"
               />
             </Field>
-            <Field htmlFor="gig-deadline" label={C.steps.budget.deadlineLabel} optional>
+            <Field
+              htmlFor="gig-deadline"
+              label={C.steps.budget.deadlineLabel}
+              help={C.steps.budget.deadlineHelp}
+              optional
+            >
               <Input
                 id="gig-deadline"
                 type="number"
@@ -308,33 +311,6 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
               />
             </Field>
           </div>
-
-          <button
-            type="button"
-            role="switch"
-            aria-checked={urgent}
-            onClick={() => setUrgent((value) => !value)}
-            className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left"
-          >
-            <span className="min-w-0">
-              <span className="block text-sm font-medium text-foreground">{C.steps.budget.urgentLabel}</span>
-              <span className="block text-xs text-foreground-muted">{C.steps.budget.urgentHelp}</span>
-            </span>
-            <span
-              aria-hidden="true"
-              className={cn(
-                "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-                urgent ? "bg-brand" : "bg-border",
-              )}
-            >
-              <span
-                className={cn(
-                  "absolute top-0.5 size-5 rounded-full bg-surface shadow-xs transition-[left]",
-                  urgent ? "left-[22px]" : "left-0.5",
-                )}
-              />
-            </span>
-          </button>
         </div>
       )}
 

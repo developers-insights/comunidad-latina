@@ -17,7 +17,8 @@ export interface CardMediaProps {
   /** Chips flotantes sobre la foto (ej. "Publicidad", precio, categoría). */
   overlayTopLeft?: React.ReactNode;
   overlayTopRight?: React.ReactNode;
-  /** Franja inferior sobre scrim (legible por bg-media-scrim + text-on-media). */
+  /** Franja inferior de VIDRIO (título/precio/zona). Ver <MediaScrimBottom>: la
+   *  tinta clara la hereda del contenedor — no re-declarar `text-on-media`. */
   overlayBottom?: React.ReactNode;
 }
 
@@ -26,6 +27,36 @@ const ASPECT: Record<NonNullable<CardMediaProps["aspect"]>, string> = {
   square: "aspect-square",
   portrait: "aspect-[4/5]",
 };
+
+/**
+ * Franja de VIDRIO ("tipo iPhone" — feedback cliente 2026-07-24) para el
+ * título/precio/ubicación SOBRE la foto. Reemplaza al scrim plano opaco por un
+ * panel esmerilado. Dos capas:
+ *  1. Un degradado de legibilidad que sube desde el borde inferior — el vidrio
+ *     no corta en seco y da aire por encima del panel.
+ *  2. El panel esmerilado: `bg-media-scrim` (0.62 → mismo contraste AA que ya
+ *     validó el scrim plano, incluso sobre fotos claras) + `backdrop-blur` para
+ *     el frost + hairline superior + brillo interno de vidrio.
+ *
+ * `text-on-media` define la tinta clara UNA sola vez acá; los hijos HEREDAN el
+ * color (no re-declaran `text-on-media`), así el inventario de print-contract no
+ * crece por cada card que use la franja. `cl-print-fill` imprime el velo bajo la
+ * tinta clara. `pointer-events-none`: el tap atraviesa la franja y cae en el
+ * Link que envuelve la media (abrir el detalle — feedback 2026-07-24).
+ */
+export function MediaScrimBottom({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 cl-print-fill text-on-media">
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 bottom-0 h-[180%] bg-gradient-to-t from-media-shade/70 via-media-shade/20 to-transparent"
+      />
+      <div className="relative border-t border-on-media/15 bg-media-scrim px-3.5 py-3 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]">
+        {children}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Foto hero de card (§ feedback cliente 2026-07-19: "todos los módulos con la
@@ -85,11 +116,7 @@ export function CardMedia({
           {overlayTopRight}
         </div>
       )}
-      {overlayBottom && (
-        <div className="absolute inset-x-0 bottom-0 bg-media-scrim px-3.5 py-2.5 text-on-media">
-          {overlayBottom}
-        </div>
-      )}
+      {overlayBottom && <MediaScrimBottom>{overlayBottom}</MediaScrimBottom>}
     </div>
   );
 }

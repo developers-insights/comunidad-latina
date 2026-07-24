@@ -11,9 +11,11 @@ export {
   type GigCategoryMeta,
 } from "./categories";
 export {
+  URGENT_DEADLINE_DAYS,
   creatorPhotoUrl,
   firstPortfolioUrl,
   formatRating,
+  isUrgentDeadline,
   parseGigAttrs,
   type GigAttrs,
 } from "./helpers";

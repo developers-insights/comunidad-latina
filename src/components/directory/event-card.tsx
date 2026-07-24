@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { ArrowRight, CalendarBlank, MapPin } from "@phosphor-icons/react/dist/ssr";
-import { Badge, BezelCard, buttonVariants } from "@/components/ui";
+import { CalendarBlank, MapPin } from "@phosphor-icons/react/dist/ssr";
+import { AccentLink, BezelCard } from "@/components/ui";
 import { PublisherTrust } from "@/components/listings";
 import type { TrustLevel, TrustSignal } from "@/components/trust";
-import { cn } from "@/lib/utils";
-import { ACCENT_ICON_CLASS } from "./accent";
 import { COPY } from "./copy";
 import type { EventDateParts } from "./helpers";
 import { DirectoryMedia } from "./module-media";
@@ -33,60 +31,62 @@ export interface EventCardModel {
   publisherName: string | null;
 }
 
+/** Acento rojo del módulo (solo decorativo) para la píldora de acción. */
+const ACCENT = "var(--accent-eventos)";
+
+/** Foto grande clickeable = red social: tap en la card abre el detalle (§ feedback 2026-07-24). */
+const MEDIA_LINK =
+  "group block focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
+
 /**
- * Card de evento (§ feedback cliente 2026-07-19: misma estética que
- * Propiedades — foto 16:9 grande, contenido debajo, 1 solo CTA). La fecha
- * manda pero ahora vive como cápsula sobre la foto en vez de bloque lateral;
- * la línea completa (día/hora) se conserva en el contenido para no perder
- * información. Acento --accent-eventos (rojo), solo decorativo.
+ * Card de evento (§ feedback cliente 2026-07-24: se siente RED SOCIAL, no
+ * clasificado). Foto vertical 4:5 protagonista; el título, la fecha y la zona
+ * viven en una franja de VIDRIO sobre la foto (glass). Tap en la foto abre el
+ * detalle; debajo, sólo el organizador con su confianza y una píldora con el
+ * acento del módulo. Acento --accent-eventos (rojo), decorativo.
  */
 export function EventCard({ event }: { event: EventCardModel }) {
+  const dateText = event.date
+    ? `${event.date.full}${event.date.time ? ` · ${event.date.time}` : ""}`
+    : COPY.events.dateToConfirm;
+
   return (
     <BezelCard coreClassName="overflow-hidden p-0">
       <article aria-label={event.title}>
-        <DirectoryMedia
-          src={event.photoUrl}
-          accent="eventos"
-          icon={CalendarBlank}
-          overlayTopLeft={
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs font-bold text-foreground backdrop-blur-sm">
-              <CalendarBlank size={14} weight="bold" aria-hidden="true" className={ACCENT_ICON_CLASS.eventos} />
-              {event.date ? `${event.date.day} ${event.date.month}` : COPY.events.dateToConfirm}
-            </span>
-          }
-        />
+        <Link href={`/eventos/${event.id}`} aria-label={event.title} className={MEDIA_LINK}>
+          <DirectoryMedia
+            src={event.photoUrl}
+            accent="eventos"
+            icon={CalendarBlank}
+            aspect="portrait"
+            overlayTopLeft={
+              event.free || event.date?.isPast ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs font-bold text-foreground backdrop-blur-sm">
+                  {event.free ? COPY.events.freeChip : COPY.events.pastLabel}
+                </span>
+              ) : undefined
+            }
+            overlayBottom={
+              <div>
+                <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
+                  {event.title}
+                </h3>
+                <p className="mt-1 flex items-center gap-1.5 text-sm">
+                  <CalendarBlank size={14} aria-hidden="true" className="shrink-0 opacity-80" />
+                  <span className="min-w-0 truncate">{dateText}</span>
+                </p>
+                {event.venueArea && (
+                  <p className="mt-0.5 flex items-center gap-1.5 text-sm opacity-90">
+                    <MapPin size={14} aria-hidden="true" className="shrink-0" />
+                    <span className="min-w-0 truncate">{event.venueArea}</span>
+                  </p>
+                )}
+              </div>
+            }
+          />
+        </Link>
 
         <div className="flex flex-col gap-2.5 p-4">
-          {(event.free || event.date?.isPast) && (
-            <div className="flex flex-wrap items-center gap-2">
-              {event.free && <Badge variant="success">{COPY.events.freeChip}</Badge>}
-              {event.date?.isPast && <Badge variant="neutral">{COPY.events.pastLabel}</Badge>}
-            </div>
-          )}
-
-          <h3 className="font-display text-lg font-bold leading-snug text-foreground">
-            {event.title}
-          </h3>
-
-          <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
-            <CalendarBlank size={16} aria-hidden="true" className="shrink-0" />
-            {event.date ? (
-              <>
-                {event.date.full}
-                {event.date.time && <span className="numeric"> · {event.date.time}</span>}
-              </>
-            ) : (
-              COPY.events.dateToConfirm
-            )}
-          </p>
-
-          {event.venueArea && (
-            <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
-              <MapPin size={16} aria-hidden="true" className="shrink-0" />
-              {event.venueArea}
-            </p>
-          )}
-
           {event.publisherTrust ? (
             <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
               <span className="truncate">{event.publisherTrust.displayName}</span>
@@ -103,13 +103,9 @@ export function EventCard({ event }: { event: EventCardModel }) {
             <p className="truncate text-sm text-foreground-muted">{event.publisherName}</p>
           ) : null}
 
-          <Link
-            href={`/eventos/${event.id}`}
-            className={cn(buttonVariants({ variant: "secondary", size: "md" }), "mt-1 w-full")}
-          >
+          <AccentLink accent={ACCENT} href={`/eventos/${event.id}`}>
             {COPY.events.viewEvent}
-            <ArrowRight size={16} aria-hidden="true" />
-          </Link>
+          </AccentLink>
         </div>
       </article>
     </BezelCard>

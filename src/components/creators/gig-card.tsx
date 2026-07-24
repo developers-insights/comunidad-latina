@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { ArrowRight, Lightning, MapPin, Storefront, UsersThree } from "@phosphor-icons/react/dist/ssr";
-import { BezelCard, CardMedia, buttonVariants } from "@/components/ui";
+import { Lightning, MapPin, Storefront, UsersThree } from "@phosphor-icons/react/dist/ssr";
+import { AccentLink, BezelCard, CardMedia, MediaScrimBottom } from "@/components/ui";
 import { PublisherTrust } from "@/components/listings";
 import { firstNameOf, type PublisherView } from "@/components/listings";
-import { cn } from "@/lib/utils";
 import { gigCategoryMeta } from "./categories";
 import { COPY } from "./copy";
 
@@ -16,17 +15,27 @@ export interface GigCardModel {
   /** Primera foto del aviso (listing-photos) o null → fallback violeta. */
   photoUrl: string | null;
   category: string | null;
+  /** DERIVADO de la fecha de entrega (deadline_days ≤ 7). Se calcula al armar el
+   *  modelo (page.tsx), no es un toggle manual — ver isUrgentDeadline(). */
   urgent: boolean;
   /** Propuestas recibidas — se muestra solo si viene (vista del dueño). */
   applicationsCount?: number | null;
   publisher: PublisherView;
 }
 
+/** Acento violeta del módulo (solo decorativo) para la píldora de acción. */
+const ACCENT = "var(--accent-creadores)";
+
+const MEDIA_LINK =
+  "group block focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
+
 /**
- * Card grande del feed de oportunidades (estética Propiedades: foto grande,
- * feed alegre). Foto o fallback con gradiente violeta + ícono de categoría,
- * chip de categoría, presupuesto destacado, chip "Urgente" (+ marco featured),
- * zona, publicador con Trust Score y un único CTA "Ver trabajo".
+ * Card de oportunidad del feed de Creadores (§ feedback cliente 2026-07-24: se
+ * siente RED SOCIAL). Foto vertical 4:5 (o fallback violeta con el ícono de la
+ * categoría); el título, el presupuesto y la zona viven en una franja de VIDRIO
+ * sobre la foto. Chip "Urgente" (entrega ≤ 7 días) y marco featured. Tap en la
+ * foto abre el trabajo; debajo, confianza del publicador y una píldora con el
+ * acento del módulo.
  */
 export function GigCard({ gig }: { gig: GigCardModel }) {
   const category = gigCategoryMeta(gig.category);
@@ -39,53 +48,57 @@ export function GigCard({ gig }: { gig: GigCardModel }) {
     </span>
   ) : null;
 
+  const band = (
+    <div>
+      <h3 className="font-display text-base font-bold leading-snug line-clamp-2">{gig.title}</h3>
+      {gig.budgetLabel && (
+        <p className="mt-1 flex items-baseline gap-1.5">
+          <span className="text-xs font-medium opacity-80">{COPY.feed.budgetPrefix}</span>
+          <span className="numeric text-lg font-bold">{gig.budgetLabel}</span>
+        </p>
+      )}
+      {gig.areaLabel && (
+        <p className="mt-0.5 flex items-center gap-1.5 text-sm opacity-90">
+          <MapPin size={14} aria-hidden="true" className="shrink-0" />
+          <span className="min-w-0 truncate">{gig.areaLabel}</span>
+        </p>
+      )}
+    </div>
+  );
+
   return (
     <BezelCard variant={gig.urgent ? "featured" : "default"} coreClassName="overflow-hidden p-0">
       <article aria-label={gig.title}>
-        {gig.photoUrl ? (
-          <CardMedia
-            src={gig.photoUrl}
-            fallbackSrc={gig.photoUrl}
-            aspect="video"
-            overlayTopRight={urgentChip}
-          />
-        ) : (
-          // Fallback elegante: gradiente violeta del módulo + ícono de categoría.
-          <div
-            className="relative flex aspect-video w-full items-center justify-center"
-            style={{
-              background:
-                "linear-gradient(135deg, color-mix(in oklab, var(--accent-creadores) 78%, black), var(--accent-creadores))",
-            }}
-          >
-            <CategoryIcon size={64} weight="fill" aria-hidden="true" className="text-on-media/85" />
-            {urgentChip && (
-              <div className="absolute right-2.5 top-2.5 flex flex-wrap justify-end gap-1.5">
-                {urgentChip}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2.5 p-4">
-          <h3 className="font-display text-lg font-bold leading-snug text-foreground">{gig.title}</h3>
-
-          {gig.budgetLabel && (
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-xs font-medium text-foreground-secondary">
-                {COPY.feed.budgetPrefix}
-              </span>
-              <span className="numeric text-2xl font-bold text-brand">{gig.budgetLabel}</span>
+        <Link href={`/creadores/${gig.id}`} aria-label={gig.title} className={MEDIA_LINK}>
+          {gig.photoUrl ? (
+            <CardMedia
+              src={gig.photoUrl}
+              fallbackSrc={gig.photoUrl}
+              aspect="portrait"
+              overlayTopRight={urgentChip}
+              overlayBottom={band}
+            />
+          ) : (
+            // Fallback elegante: gradiente violeta del módulo + ícono de categoría.
+            <div
+              className="relative flex aspect-[4/5] w-full items-center justify-center"
+              style={{
+                background:
+                  "linear-gradient(135deg, color-mix(in oklab, var(--accent-creadores) 78%, black), var(--accent-creadores))",
+              }}
+            >
+              <CategoryIcon size={64} weight="fill" aria-hidden="true" className="text-on-media/85" />
+              {urgentChip && (
+                <div className="absolute right-2.5 top-2.5 flex flex-wrap justify-end gap-1.5">
+                  {urgentChip}
+                </div>
+              )}
+              <MediaScrimBottom>{band}</MediaScrimBottom>
             </div>
           )}
+        </Link>
 
-          {gig.areaLabel && (
-            <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
-              <MapPin size={16} aria-hidden="true" className="shrink-0" />
-              {gig.areaLabel}
-            </p>
-          )}
-
+        <div className="flex flex-col gap-2.5 p-4">
           {typeof gig.applicationsCount === "number" && (
             <p className="flex items-center gap-1.5 text-sm font-medium text-foreground-secondary">
               <UsersThree size={16} aria-hidden="true" className="shrink-0" />
@@ -112,13 +125,9 @@ export function GigCard({ gig }: { gig: GigCardModel }) {
             </p>
           ) : null}
 
-          <Link
-            href={`/creadores/${gig.id}`}
-            className={cn(buttonVariants({ variant: "secondary", size: "md" }), "mt-1 w-full")}
-          >
+          <AccentLink accent={ACCENT} href={`/creadores/${gig.id}`}>
             {COPY.feed.viewGig}
-            <ArrowRight size={16} aria-hidden="true" />
-          </Link>
+          </AccentLink>
         </div>
       </article>
     </BezelCard>

@@ -1,5 +1,5 @@
 import type { Icon } from "@phosphor-icons/react";
-import { CardMedia, type CardMediaProps } from "@/components/ui";
+import { CardMedia, MediaScrimBottom, type CardMediaProps } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ACCENT_ICON_CLASS, ACCENT_MEDIA_BG, type ModuleAccent } from "./accent";
 
@@ -39,8 +39,7 @@ export function ModuleFallbackBox({ accent, icon: IconCmp, aspect = "video", cla
   );
 }
 
-export interface DirectoryMediaProps
-  extends Omit<CardMediaProps, "fallbackSrc" | "src" | "overlayBottom"> {
+export interface DirectoryMediaProps extends Omit<CardMediaProps, "fallbackSrc" | "src"> {
   /** URL ya resuelta (listingPhotoUrl/firstPhotoUrl) o null/vacío si no hay foto. */
   src: string | null | undefined;
   accent: ModuleAccent;
@@ -64,6 +63,7 @@ export function DirectoryMedia({
   alt,
   overlayTopLeft,
   overlayTopRight,
+  overlayBottom,
 }: DirectoryMediaProps) {
   const hasPhoto = Boolean(src && src.trim().length > 0);
 
@@ -78,10 +78,14 @@ export function DirectoryMedia({
         alt={alt}
         overlayTopLeft={overlayTopLeft}
         overlayTopRight={overlayTopRight}
+        overlayBottom={overlayBottom}
       />
     );
   }
 
+  // Sin foto: gradiente + ícono del módulo. La franja de vidrio (título/meta) va
+  // por <MediaScrimBottom> — misma que sobre una foto real, para que la card no
+  // cambie de gramática cuando falta la foto de seed.
   return (
     <div
       className={cn(
@@ -105,6 +109,7 @@ export function DirectoryMedia({
           {overlayTopRight}
         </div>
       )}
+      {overlayBottom && <MediaScrimBottom>{overlayBottom}</MediaScrimBottom>}
     </div>
   );
 }

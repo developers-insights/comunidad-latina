@@ -51,11 +51,22 @@ export default async function MiPerfilCreadorPage() {
 
   return (
     <>
-      <header className="mb-6">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-          {COPY.profile.myTitle}
-        </h1>
-        <p className="mt-1 text-sm text-foreground-secondary">{COPY.profile.mySubtitle}</p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
+            {COPY.profile.myTitle}
+          </h1>
+          <p className="mt-1 text-sm text-foreground-secondary">{COPY.profile.mySubtitle}</p>
+        </div>
+        {/* Acceso directo a los contratos propios desde el perfil (pedido del cliente:
+            que cada quien vea sus contratos desde su perfil). La vista destino ya
+            filtra por la sesión y respeta RLS — no expone contratos de terceros. */}
+        <Link
+          href="/creadores/contratos"
+          className={buttonVariants({ variant: "secondary", size: "sm" })}
+        >
+          Mis contratos
+        </Link>
       </header>
       <CreatorProfileForm tenantId={tenant.id} userId={user.id} initial={initial} />
     </>

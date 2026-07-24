@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { Storefront } from "@phosphor-icons/react/dist/ssr";
-import { BezelCard, CardMedia, buttonVariants } from "@/components/ui";
+import { AccentLink, BezelCard, CardMedia } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 import { categoryLabel, categoryShortLabel } from "./helpers";
 
 /** Sin foto propia (og-default): composición abstracta de marca, neutral para cualquier rubro. */
 const FALLBACK_PHOTO = "/images/og-default.png";
+
+/** Acento verde del módulo (solo decorativo) para la píldora de acción. */
+const ACCENT = "var(--accent-marketplace)";
+
+const MEDIA_LINK =
+  "group block focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
 
 export interface ProductCardModel {
   id: string;
@@ -19,21 +25,17 @@ export interface ProductCardModel {
 }
 
 /**
- * Card de producto del Marketplace (§ feedback cliente 2026-07-19): misma
- * gramática que ListingCard (BezelCard + foto grande + precio destacado) pero
- * en grilla 2-col — foto cuadrada vía CardMedia con la categoría flotando
- * sobre la foto (overlay, vidrio oscuro) y chip de tienda que linkea a su
- * vidriera.
+ * Card de producto del Marketplace (§ feedback cliente 2026-07-24: se siente RED
+ * SOCIAL, no clasificado). Foto vertical 4:5 protagonista con el título y el
+ * precio en una franja de VIDRIO encima (glass) y la categoría flotando arriba.
+ * Tap en la foto abre el producto; debajo, el chip de la tienda (linkea a su
+ * vidriera) y una píldora con el acento del módulo.
  *
- * El chip de categoría (§ feedback cliente 2026-07-20 — cards rotas a 170px):
- * usa `categoryShortLabel` (1 sola palabra, cabe en la grilla 2-col) en vez
- * del label largo de los filtros, en una línea fija (`truncate` como red de
- * seguridad si algún día el fallback capitalizado fuera largo) y con el
- * mismo lenguaje de "vidrio oscuro" (`bg-media-scrim` + `backdrop-blur-sm` +
- * `text-on-media`) que ya usan gig-card/creator-card/product-gallery — no el
- * verde saturado de `--accent-marketplace`, que sobre una foto real pelea con
- * el producto. El `aria-label` lleva el label LARGO: quien usa lector de
- * pantalla no pierde contexto por la abreviación visual.
+ * El chip de categoría usa `categoryShortLabel` (1 palabra, cabe en la grilla
+ * 2-col) con "vidrio oscuro" (`bg-media-scrim` + `backdrop-blur-sm` +
+ * `text-on-media`) — no el verde saturado del acento, que sobre una foto real
+ * pelea con el producto. El `aria-label` lleva el label LARGO para lectores de
+ * pantalla.
  */
 export function ProductCard({ product }: { product: ProductCardModel }) {
   const categoryFull = categoryLabel(product.category);
@@ -42,35 +44,39 @@ export function ProductCard({ product }: { product: ProductCardModel }) {
   return (
     <BezelCard coreClassName="flex h-full flex-col overflow-hidden p-0">
       <article aria-label={product.title} className="flex h-full flex-col">
-        <CardMedia
-          src={product.photoUrl}
-          fallbackSrc={FALLBACK_PHOTO}
-          aspect="square"
-          overlayTopLeft={
-            categoryShort ? (
-              // cl-print-fill: text-on-media es clara por definición — sin forzar
-              // el relleno a imprimirse, el chip queda blanco sobre papel blanco.
-              <span
-                aria-label={categoryFull ?? undefined}
-                className="cl-print-fill inline-flex min-w-0 max-w-full items-center rounded-full bg-media-scrim px-2.5 py-1 text-[11px] font-semibold text-on-media backdrop-blur-sm"
-              >
-                <span aria-hidden="true" className="min-w-0 truncate">
-                  {categoryShort}
+        <Link href={`/marketplace/${product.id}`} aria-label={product.title} className={MEDIA_LINK}>
+          <CardMedia
+            src={product.photoUrl}
+            fallbackSrc={FALLBACK_PHOTO}
+            aspect="portrait"
+            overlayTopLeft={
+              categoryShort ? (
+                // cl-print-fill: text-on-media es clara por definición — sin forzar
+                // el relleno a imprimirse, el chip queda blanco sobre papel blanco.
+                <span
+                  aria-label={categoryFull ?? undefined}
+                  className="cl-print-fill inline-flex min-w-0 max-w-full items-center rounded-full bg-media-scrim px-2.5 py-1 text-[11px] font-semibold text-on-media backdrop-blur-sm"
+                >
+                  <span aria-hidden="true" className="min-w-0 truncate">
+                    {categoryShort}
+                  </span>
                 </span>
-              </span>
-            ) : undefined
-          }
-        />
+              ) : undefined
+            }
+            overlayBottom={
+              <div>
+                <h3 className="font-display text-sm font-bold leading-snug line-clamp-2">
+                  {product.title}
+                </h3>
+                {product.priceLabel && (
+                  <p className="numeric mt-0.5 text-lg font-bold">{product.priceLabel}</p>
+                )}
+              </div>
+            }
+          />
+        </Link>
 
         <div className="flex flex-1 flex-col gap-2 p-3">
-          <h3 className="line-clamp-2 min-h-11 text-[15px] font-semibold leading-snug text-foreground">
-            {product.title}
-          </h3>
-
-          {product.priceLabel && (
-            <p className="numeric text-xl font-bold text-brand">{product.priceLabel}</p>
-          )}
-
           {product.store && (
             <Link
               href={`/marketplace/tienda/${product.store.id}`}
@@ -86,12 +92,9 @@ export function ProductCard({ product }: { product: ProductCardModel }) {
             </Link>
           )}
 
-          <Link
-            href={`/marketplace/${product.id}`}
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "mt-auto w-full")}
-          >
+          <AccentLink accent={ACCENT} href={`/marketplace/${product.id}`} className="mt-auto">
             {COPY.list.viewProduct}
-          </Link>
+          </AccentLink>
         </div>
       </article>
     </BezelCard>

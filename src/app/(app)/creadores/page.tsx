@@ -13,6 +13,7 @@ import {
   COPY,
   CreatorsNav,
   GigListSkeleton,
+  isUrgentDeadline,
   parseGigAttrs,
   type GigCardModel,
 } from "@/components/creators";
@@ -98,7 +99,8 @@ async function FeedContent() {
       areaLabel: row.area_label,
       photoUrl: firstPhotoUrl(row.photos),
       category: attrs.category,
-      urgent: attrs.urgent,
+      // "Urgente" derivado de la fecha de entrega (≤ 7 días), ya no un toggle.
+      urgent: isUrgentDeadline(attrs.deadlineDays),
       publisher,
     };
   });

@@ -49,6 +49,10 @@ const LISTING_ACCENT: Record<string, string> = {
   creator_gig: "var(--accent-creadores)",
 };
 
+/** Foto grande clickeable = red social: tap en la card abre el detalle (§4.b, feedback 2026-07-24). */
+const MEDIA_LINK =
+  "group block w-full text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
+
 /**
  * CTA en píldora con el ACENTO del módulo (feedback cliente 2026-07-21: el botón
  * "Ver detalles" deja de ser gris). El acento viaja en el borde/tinte y en la
@@ -110,6 +114,49 @@ export function FeedListingCard({ listing }: { listing: FeedListingModel }) {
   const detailHref = DETAIL_ROUTE[listing.kind]?.(listing.id) ?? null;
   const accent = LISTING_ACCENT[listing.kind] ?? "var(--accent-feed)";
 
+  // La foto es clickeable: kinds con detalle propio navegan; el resto
+  // (negocios/empleos) abren el mismo BottomSheet que el CTA (§4.b).
+  const media = (
+    <CardMedia
+      src={listing.photoUrl}
+      fallbackSrc={FALLBACK_PHOTO}
+      aspect="video"
+      quality={62}
+      overlayTopLeft={
+        <>
+          <Badge variant="neutral">
+            <KindIcon size={13} aria-hidden="true" />
+            {kindLabel}
+          </Badge>
+          {listing.verifiedDateLabel && (
+            <Badge variant="success">
+              <ShieldCheck size={13} aria-hidden="true" />
+              {COPY.listing.verifiedChip(listing.verifiedDateLabel)}
+            </Badge>
+          )}
+        </>
+      }
+      overlayBottom={
+        <div>
+          <h3 className="font-display text-base font-bold leading-snug text-on-media line-clamp-2">
+            {listing.title}
+          </h3>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+            {listing.priceLabel && (
+              <span className="numeric text-lg font-bold text-on-media">{listing.priceLabel}</span>
+            )}
+            {listing.areaLabel && (
+              <span className="flex items-center gap-1 text-sm text-on-media/85">
+                <MapPin size={14} aria-hidden="true" className="shrink-0" />
+                {listing.areaLabel}
+              </span>
+            )}
+          </div>
+        </div>
+      }
+    />
+  );
+
   return (
     <>
       <div className="rounded-xl bg-bezel-shell p-1.5 shadow-bezel">
@@ -117,46 +164,20 @@ export function FeedListingCard({ listing }: { listing: FeedListingModel }) {
           aria-label={listing.title}
           className="overflow-hidden rounded-[calc(var(--radius-xl)-6px)] bg-surface shadow-[inset_0_1px_0_var(--cl-bezel-highlight)]"
         >
-          <CardMedia
-            src={listing.photoUrl}
-            fallbackSrc={FALLBACK_PHOTO}
-            aspect="video"
-            quality={62}
-            overlayTopLeft={
-              <>
-                <Badge variant="neutral">
-                  <KindIcon size={13} aria-hidden="true" />
-                  {kindLabel}
-                </Badge>
-                {listing.verifiedDateLabel && (
-                  <Badge variant="success">
-                    <ShieldCheck size={13} aria-hidden="true" />
-                    {COPY.listing.verifiedChip(listing.verifiedDateLabel)}
-                  </Badge>
-                )}
-              </>
-            }
-            overlayBottom={
-              <div>
-                <h3 className="font-display text-base font-bold leading-snug text-on-media line-clamp-2">
-                  {listing.title}
-                </h3>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
-                  {listing.priceLabel && (
-                    <span className="numeric text-lg font-bold text-on-media">
-                      {listing.priceLabel}
-                    </span>
-                  )}
-                  {listing.areaLabel && (
-                    <span className="flex items-center gap-1 text-sm text-on-media/85">
-                      <MapPin size={14} aria-hidden="true" className="shrink-0" />
-                      {listing.areaLabel}
-                    </span>
-                  )}
-                </div>
-              </div>
-            }
-          />
+          {detailHref ? (
+            <Link href={detailHref} aria-label={listing.title} className={MEDIA_LINK}>
+              {media}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              aria-label={listing.title}
+              className={MEDIA_LINK}
+            >
+              {media}
+            </button>
+          )}
 
           <div className="flex flex-col gap-2.5 p-4">
             {listing.publisherTrust ? (

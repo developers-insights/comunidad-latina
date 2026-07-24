@@ -339,8 +339,10 @@ const INVENTARIO: Record<string, Entrada> = {
   },
   // Reels /videos: superficie de video fullscreen (fixed, bg-media-shade) — el
   // contenedor raíz entero lleva cl-print-hide; imprimir reels no existe.
+  // 9 tras quitar los chips de scope del reel (commit cba8e0b): el inventario
+  // había quedado en 10 y desactualizó este guard.
   "src/app/(app)/videos/video-reels.tsx": {
-    inks: Array<string>(10).fill("text-on-media"),
+    inks: Array<string>(9).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
   // Glifo Play sobre el thumbnail de video del grid del perfil — se imprime

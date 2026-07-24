@@ -26,6 +26,7 @@ import {
   WithdrawButton,
   dollarsToCents,
   gigCategoryMeta,
+  isUrgentDeadline,
   parseGigAttrs,
   type ApplicationCreator,
 } from "@/components/creators";
@@ -58,6 +59,8 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
   if (gig.status !== "published" && !isOwner) notFound();
 
   const attrs = parseGigAttrs(gig.attrs);
+  // "Urgente" derivado de la fecha de entrega (≤ 7 días), no un toggle manual.
+  const isUrgent = isUrgentDeadline(attrs.deadlineDays);
   const category = gigCategoryMeta(attrs.category);
   const CategoryIcon = category.Icon;
   const budgetLabel = formatListingPrice(
@@ -129,7 +132,7 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
               </span>
             }
             overlayTopRight={
-              attrs.urgent ? (
+              isUrgent ? (
                 <span className="inline-flex items-center gap-1 rounded-full cl-print-fill bg-media-scrim px-2.5 py-1 text-xs font-bold text-on-media backdrop-blur-sm">
                   <Lightning size={13} weight="fill" aria-hidden="true" />
                   {COPY.feed.urgentChip}
@@ -150,7 +153,7 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
               <CategoryIcon size={13} weight="fill" aria-hidden="true" />
               {category.label}
             </span>
-            {attrs.urgent && (
+            {isUrgent && (
               <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full cl-print-fill bg-media-scrim px-2.5 py-1 text-xs font-bold text-on-media backdrop-blur-sm">
                 <Lightning size={13} weight="fill" aria-hidden="true" />
                 {COPY.feed.urgentChip}

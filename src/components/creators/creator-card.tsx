@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, Camera, CheckCircle } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, BezelCard, CardMedia, buttonVariants } from "@/components/ui";
+import { Camera, CheckCircle } from "@phosphor-icons/react/dist/ssr";
+import { AccentLink, Avatar, BezelCard, CardMedia, MediaScrimBottom } from "@/components/ui";
 import { IdentityBadge } from "@/components/auth/identity-badge";
 import { FollowButton } from "@/components/social/follow-button";
 import { cn } from "@/lib/utils";
@@ -28,10 +28,19 @@ export interface CreatorCardModel {
 
 const MAX_SKILLS = 4;
 
+/** Acento violeta del módulo (solo decorativo) para la píldora de acción. */
+const ACCENT = "var(--accent-creadores)";
+
+const MEDIA_LINK =
+  "group block focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
+
 /**
- * Card de creador para el directorio "Buscar creadores". Hero de portfolio (o
- * fallback violeta), disponibilidad, avatar + verificación, titular, estrellas,
- * trabajos completados, habilidades y botón Seguir. Estética de feed alegre.
+ * Card de creador del directorio "Buscar creadores" (§ feedback cliente
+ * 2026-07-24: se siente RED SOCIAL, tipo perfil de Instagram). Hero de portfolio
+ * vertical 4:5 (o fallback violeta); el avatar + nombre + titular viven en una
+ * franja de VIDRIO sobre la foto, con la disponibilidad flotando arriba. Tap en
+ * la foto abre el perfil; debajo, reputación, habilidades y las acciones
+ * (Seguir + una píldora con el acento del módulo).
  */
 export function CreatorCard({ creator }: { creator: CreatorCardModel }) {
   const availabilityChip = (
@@ -49,48 +58,57 @@ export function CreatorCard({ creator }: { creator: CreatorCardModel }) {
     </span>
   );
 
+  const band = (
+    <div className="flex items-center gap-2.5">
+      <Avatar
+        size="md"
+        src={creator.avatarUrl}
+        name={creator.displayName}
+        badge={creator.identityVerified ? <IdentityBadge /> : undefined}
+        className="ring-2 ring-on-media/40"
+      />
+      <div className="min-w-0">
+        <p className="truncate font-display text-base font-bold leading-tight">{creator.displayName}</p>
+        <p className="truncate text-sm opacity-90">{creator.headline}</p>
+      </div>
+    </div>
+  );
+
   const skills = creator.skills.slice(0, MAX_SKILLS);
   const extraSkills = creator.skills.length - skills.length;
 
   return (
     <BezelCard coreClassName="overflow-hidden p-0">
       <article aria-label={creator.displayName}>
-        {creator.portfolioUrl ? (
-          <CardMedia
-            src={creator.portfolioUrl}
-            fallbackSrc={creator.portfolioUrl}
-            aspect="video"
-            overlayTopRight={availabilityChip}
-          />
-        ) : (
-          <div
-            className="relative flex aspect-video w-full items-center justify-center"
-            style={{
-              background:
-                "linear-gradient(135deg, color-mix(in oklab, var(--accent-creadores) 78%, black), var(--accent-creadores))",
-            }}
-          >
-            <Camera size={56} weight="fill" aria-hidden="true" className="text-on-media/85" />
-            <div className="absolute right-2.5 top-2.5">{availabilityChip}</div>
-          </div>
-        )}
+        <Link
+          href={`/creadores/perfil/${creator.profileId}`}
+          aria-label={creator.displayName}
+          className={MEDIA_LINK}
+        >
+          {creator.portfolioUrl ? (
+            <CardMedia
+              src={creator.portfolioUrl}
+              fallbackSrc={creator.portfolioUrl}
+              aspect="portrait"
+              overlayTopRight={availabilityChip}
+              overlayBottom={band}
+            />
+          ) : (
+            <div
+              className="relative flex aspect-[4/5] w-full items-center justify-center"
+              style={{
+                background:
+                  "linear-gradient(135deg, color-mix(in oklab, var(--accent-creadores) 78%, black), var(--accent-creadores))",
+              }}
+            >
+              <Camera size={56} weight="fill" aria-hidden="true" className="text-on-media/85" />
+              <div className="absolute right-2.5 top-2.5">{availabilityChip}</div>
+              <MediaScrimBottom>{band}</MediaScrimBottom>
+            </div>
+          )}
+        </Link>
 
         <div className="flex flex-col gap-3 p-4">
-          <div className="flex items-center gap-3">
-            <Avatar
-              size="md"
-              src={creator.avatarUrl}
-              name={creator.displayName}
-              badge={creator.identityVerified ? <IdentityBadge /> : undefined}
-            />
-            <div className="min-w-0">
-              <p className="truncate font-display text-base font-bold text-foreground">
-                {creator.displayName}
-              </p>
-              <p className="truncate text-sm text-foreground-secondary">{creator.headline}</p>
-            </div>
-          </div>
-
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <RatingStars avg={creator.ratingAvg} count={creator.ratingCount} />
             {creator.completedJobs > 0 && (
@@ -128,13 +146,13 @@ export function CreatorCard({ creator }: { creator: CreatorCardModel }) {
                 size="sm"
               />
             )}
-            <Link
+            <AccentLink
+              accent={ACCENT}
               href={`/creadores/perfil/${creator.profileId}`}
-              className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "flex-1")}
+              className="mt-0 w-auto flex-1"
             >
               {COPY.directory.viewProfile}
-              <ArrowRight size={15} aria-hidden="true" />
-            </Link>
+            </AccentLink>
           </div>
         </div>
       </article>

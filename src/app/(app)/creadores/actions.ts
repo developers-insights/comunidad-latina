@@ -61,8 +61,9 @@ const gigDraftSchema = z.object({
   category: z.enum(GIG_CATEGORIES).nullish(),
   budget: z.number().positive().max(1_000_000),
   deliverables: z.string().trim().max(500).nullish(),
+  // "Urgente" ya no es un campo propio: se DERIVA de deadlineDays ≤ 7 al leer el
+  // aviso (ver isUrgentDeadline en creators/helpers.ts). No lo persistimos.
   deadlineDays: z.number().int().min(1).max(365).nullish(),
-  urgent: z.boolean().optional(),
   areaLabel: z.string().trim().min(3).max(80),
 });
 
@@ -98,7 +99,6 @@ export async function createGigDraft(rawInput: GigDraftInput): Promise<CreateGig
   if (input.deadlineDays !== null && input.deadlineDays !== undefined) {
     attrs.deadline_days = input.deadlineDays;
   }
-  if (input.urgent) attrs.urgent = true;
 
   const { data: created, error } = await supabase
     .from("listings")

@@ -123,8 +123,7 @@ export const COPY = {
         amountHelp: "Lo que estás dispuesto a pagar. El monto final se cierra en el contrato.",
         deadlineLabel: "Días para entregar",
         deadlinePlaceholder: "Ej.: 7",
-        urgentLabel: "Es urgente",
-        urgentHelp: "Marcá esto si necesitás el trabajo pronto — tu aviso se destaca.",
+        deadlineHelp: "Si es 7 días o menos, tu aviso se marca como Urgente y se destaca.",
       },
       where: {
         title: "¿Dónde?",

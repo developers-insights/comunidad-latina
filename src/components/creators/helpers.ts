@@ -90,7 +90,6 @@ export interface GigAttrs {
   category: string | null;
   deliverables: string | null;
   deadlineDays: number | null;
-  urgent: boolean;
 }
 
 function asFiniteNumber(value: unknown): number | null {
@@ -107,6 +106,23 @@ export function parseGigAttrs(attrs: Json): GigAttrs {
     category: typeof record.category === "string" ? record.category : null,
     deliverables: typeof record.deliverables === "string" ? record.deliverables : null,
     deadlineDays: asFiniteNumber(record.deadline_days),
-    urgent: record.urgent === true,
   };
+}
+
+/**
+ * "Urgente" = entrega en 7 días o menos (§ feedback cliente 2026-07-24).
+ *
+ * DECISIÓN: antes "urgente" era un toggle manual (attrs.urgent) desacoplado de
+ * la fecha de entrega — un aviso podía marcarse urgente pidiendo 60 días, o pedir
+ * 2 días sin destacarse. Ahora se DERIVA de `deadline_days ≤ 7`: el chip "Urgente"
+ * y el marco featured reflejan lo que el aviso realmente pide. Se quitó el switch
+ * del form y ya no se persiste `attrs.urgent` (ver creadores/actions.ts). Fuente
+ * única de la regla para la lista, el detalle y cualquier consumidor futuro.
+ */
+export const URGENT_DEADLINE_DAYS = 7;
+
+export function isUrgentDeadline(deadlineDays: number | null | undefined): boolean {
+  return (
+    deadlineDays !== null && deadlineDays !== undefined && deadlineDays <= URGENT_DEADLINE_DAYS
+  );
 }
