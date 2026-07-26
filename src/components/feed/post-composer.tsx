@@ -2,9 +2,27 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, PaperPlaneRight, Plus, VideoCamera, X } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, Button, useToast } from "@/components/ui";
+import Link from "next/link";
+import {
+  Briefcase,
+  Calendar,
+  CaretRight,
+  Camera,
+  House,
+  PaperPlaneRight,
+  Plus,
+  Question,
+  ShoppingBagOpen,
+  Sparkle,
+  Storefront,
+  VideoCamera,
+  Wrench,
+  X,
+} from "@phosphor-icons/react/dist/ssr";
+import type { Icon } from "@phosphor-icons/react";
+import { Avatar, BottomSheet, Button, Chip, useToast } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
+import { firstNameOf } from "@/components/listings";
 import { useMounted } from "@/lib/design/use-overlay";
 import { cn } from "@/lib/utils";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
@@ -12,6 +30,7 @@ import {
   createPostAction,
   prepareMediaUploadAction,
 } from "@/app/(app)/feed/actions";
+import { entityAccentVar } from "./helpers";
 import { COPY } from "./copy";
 
 const MAX_LENGTH = 2000;
@@ -23,6 +42,128 @@ const VIDEO_TYPES: Record<string, string> = {
   "video/mp4": "mp4",
   "video/webm": "webm",
 };
+
+// ---------------------------------------------------------------------------
+// Menú "crear publicación" (§b, feedback cliente 2026-07-24): la fila-disparador
+// abre un BottomSheet con TODOS los tipos que se pueden crear desde acá — el
+// post rápido (foto/video/pregunta, en ESTE composer) y un acceso directo a
+// cada módulo de la comunidad. El acento de cada tile es el de SU módulo
+// (entityAccentVar reutiliza el mismo mapeo que ya pinta las cards del feed).
+// ---------------------------------------------------------------------------
+
+type CreateMenuAction =
+  | { kind: "photo" }
+  | { kind: "video" }
+  | { kind: "question" }
+  | { kind: "link"; href: string };
+
+interface CreateMenuTile {
+  key: string;
+  title: string;
+  description: string;
+  accent: string;
+  Icon: Icon;
+  action: CreateMenuAction;
+}
+
+const CREATE_MENU_TILES: CreateMenuTile[] = [
+  {
+    key: "photo",
+    ...COPY.composer.createMenu.tiles.photo,
+    accent: "var(--accent-feed)",
+    Icon: Camera,
+    action: { kind: "photo" },
+  },
+  {
+    key: "video",
+    ...COPY.composer.createMenu.tiles.video,
+    accent: "var(--accent-feed)",
+    Icon: VideoCamera,
+    action: { kind: "video" },
+  },
+  {
+    key: "question",
+    ...COPY.composer.createMenu.tiles.question,
+    accent: "var(--accent-feed)",
+    Icon: Question,
+    action: { kind: "question" },
+  },
+  {
+    key: "property",
+    ...COPY.composer.createMenu.tiles.property,
+    accent: entityAccentVar("property"),
+    Icon: House,
+    action: { kind: "link", href: "/publicar?kind=property" },
+  },
+  {
+    key: "business",
+    ...COPY.composer.createMenu.tiles.business,
+    accent: entityAccentVar("business"),
+    Icon: Storefront,
+    action: { kind: "link", href: "/publicar?kind=business" },
+  },
+  {
+    key: "professional",
+    ...COPY.composer.createMenu.tiles.professional,
+    accent: entityAccentVar("professional"),
+    Icon: Briefcase,
+    action: { kind: "link", href: "/publicar?kind=professional" },
+  },
+  {
+    key: "event",
+    ...COPY.composer.createMenu.tiles.event,
+    accent: entityAccentVar("event"),
+    Icon: Calendar,
+    action: { kind: "link", href: "/publicar?kind=event" },
+  },
+  {
+    key: "job",
+    ...COPY.composer.createMenu.tiles.job,
+    accent: entityAccentVar("job"),
+    Icon: Wrench,
+    action: { kind: "link", href: "/publicar?kind=job" },
+  },
+  {
+    key: "product",
+    ...COPY.composer.createMenu.tiles.product,
+    accent: "var(--accent-marketplace)",
+    Icon: ShoppingBagOpen,
+    action: { kind: "link", href: "/marketplace/publicar" },
+  },
+  {
+    key: "creatorService",
+    ...COPY.composer.createMenu.tiles.creatorService,
+    accent: "var(--accent-creadores)",
+    Icon: Sparkle,
+    action: { kind: "link", href: "/creadores/publicar" },
+  },
+];
+
+/** Chip de ícono tintado (14% del acento) — mismo lenguaje visual que AccentLink. */
+function TileIconChip({
+  accent,
+  Icon: TileIcon,
+  size = 44,
+}: {
+  accent: string;
+  Icon: Icon;
+  size?: number;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: `color-mix(in oklab, ${accent} 14%, transparent)`,
+        color: accent,
+      }}
+      className="flex shrink-0 items-center justify-center rounded-full"
+    >
+      <TileIcon size={Math.round(size * 0.5)} weight="bold" />
+    </span>
+  );
+}
 
 /** Un medio elegido, en el ORDEN de selección (posts.media respeta ese orden). */
 interface PickedMedia {
@@ -60,19 +201,26 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
   const [mediaHint, setMediaHint] = useState(false);
   /** Progreso de subida del video (null = sin subida en curso). */
   const [uploadPct, setUploadPct] = useState<number | null>(null);
+  // Modo pregunta (menú crear-post, §b): manda kind='question' y exime del
+  // requisito de media (trigger 0023 / createPostAction ya lo contemplan).
+  const [questionMode, setQuestionMode] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Solo para el tamaño del textarea (§a): compacto en reposo, cómodo con foco.
+  const [focused, setFocused] = useState(false);
   const [isPending, startTransition] = useTransition();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const mediaBoxRef = useRef<HTMLDivElement>(null);
 
-  // Saludo por franja horaria (pedido cliente): la hora es del USUARIO, no del
-  // server — en SSR/hidratación se pinta el placeholder neutro y recién tras
-  // montar aparece el saludo (useMounted es hydration-safe, sin mismatch).
+  // Saludo VISIBLE por franja horaria + nombre de pila (§c, rediseño
+  // 2026-07-26): la hora es del USUARIO, no del server — antes de montar no
+  // se muestra nada (useMounted es hydration-safe, sin mismatch); el
+  // placeholder del textarea ya no depende de la hora (queda neutro y fijo).
   const mounted = useMounted();
-  const placeholder = mounted
-    ? COPY.composer.greetingByHour(new Date().getHours())
-    : COPY.composer.placeholder;
+  const greeting = mounted
+    ? COPY.composer.greetingByHour(new Date().getHours(), firstNameOf(viewerName || ""))
+    : null;
 
   // El realce es un empujón, no un estado fijo: se apaga solo a los segundos.
   useEffect(() => {
@@ -176,11 +324,25 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
   function resetForm() {
     setBody("");
     setMediaHint(false);
+    setQuestionMode(false);
     setMedia((current) => {
       for (const item of current) URL.revokeObjectURL(item.preview);
       return [];
     });
     if (textareaRef.current) textareaRef.current.style.height = "auto";
+  }
+
+  /** Tile del menú crear-post (§b): dispara el attach, activa "Pregunta" o navega. */
+  function handleMenuTile(tile: CreateMenuTile) {
+    setMenuOpen(false);
+    if (tile.action.kind === "photo") {
+      photoInputRef.current?.click();
+    } else if (tile.action.kind === "video") {
+      videoInputRef.current?.click();
+    } else if (tile.action.kind === "question") {
+      setQuestionMode(true);
+      textareaRef.current?.focus();
+    }
   }
 
   // El botón se habilita con solo texto: los medios se validan al enviar, así
@@ -192,7 +354,9 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
     if (trimmed.length < 2 || isPending) return;
 
     // Algún medio obligatorio (feed visual): aviso cálido + ojo al recuadro.
-    if (media.length === 0) {
+    // La PREGUNTA queda exenta (trigger MEDIA_REQUIRED 0023 / createPostAction
+    // ya lo contemplan para kind='question') — se puede publicar solo texto.
+    if (!questionMode && media.length === 0) {
       setMediaHint(true);
       toast({
         title: COPY.composer.mediaMissingTitle,
@@ -248,7 +412,7 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
       // ---- 2) Fotos + paths por la server action ---------------------------
       const formData = new FormData();
       formData.set("body", trimmed);
-      formData.set("kind", "post");
+      formData.set("kind", questionMode ? "question" : "post");
       for (const item of media) {
         if (item.kind === "photo") formData.append("photos", item.file);
       }
@@ -357,21 +521,51 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
           <textarea
             id="post-composer-body"
             ref={textareaRef}
-            rows={2}
+            rows={1}
             maxLength={MAX_LENGTH}
             value={body}
-            placeholder={placeholder}
+            placeholder={COPY.composer.placeholder}
             disabled={isPending}
+            onFocus={(event) => {
+              setFocused(true);
+              autosize(event.target);
+            }}
+            onBlur={() => setFocused(false)}
             onChange={(event) => {
               setBody(event.target.value);
               autosize(event.target);
             }}
             className={cn(
-              "max-h-50 min-h-16 w-full resize-none bg-transparent py-1.5 text-base text-foreground",
+              "max-h-50 w-full resize-none bg-transparent py-1.5 text-base text-foreground",
               "placeholder:text-foreground-muted focus:outline-none",
+              "transition-[min-height] duration-(--duration-fast) ease-(--ease-spring)",
+              // Compacto en reposo (§a); crece con foco o con texto ya escrito.
+              focused || body.length > 0 ? "min-h-16" : "min-h-11",
               "disabled:opacity-60",
             )}
           />
+          {questionMode && (
+            <div className="mt-1.5">
+              <Chip variant="brand" size="md" icon={<Question weight="bold" />}>
+                {COPY.composer.questionModeChip}
+                <button
+                  type="button"
+                  onClick={() => setQuestionMode(false)}
+                  aria-label={COPY.composer.questionModeRemove}
+                  className={cn(
+                    "ml-1 flex size-5 shrink-0 items-center justify-center rounded-full",
+                    "transition-colors duration-(--duration-fast) hover:bg-brand-ink/10",
+                    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+                  )}
+                >
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </Chip>
+            </div>
+          )}
+          {greeting && (
+            <p className="mt-1.5 text-sm text-foreground-secondary">{greeting}</p>
+          )}
         </div>
       </div>
 
@@ -393,6 +587,82 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
         id="post-composer-video"
         onChange={(event) => selectVideo(event.currentTarget)}
       />
+
+      {/* Menú "crear publicación" (§b): fila-disparador + BottomSheet con TODOS
+          los tipos (post rápido acá mismo, o un módulo entero aparte). */}
+      <button
+        type="button"
+        onClick={() => setMenuOpen(true)}
+        className={cn(
+          "mt-3 flex w-full items-center gap-2.5 rounded-md border border-dashed border-border px-3 py-2.5",
+          "text-left transition-colors duration-(--duration-fast) hover:border-brand hover:bg-surface-subtle",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+        )}
+      >
+        <span aria-hidden="true" className="flex shrink-0 items-center gap-1">
+          {[Camera, VideoCamera, Question].map((PreviewIcon, index) => (
+            <TileIconChip key={index} accent="var(--accent-feed)" Icon={PreviewIcon} size={24} />
+          ))}
+        </span>
+        <span className="flex-1 truncate text-sm font-medium text-foreground-secondary">
+          {COPY.composer.createMenu.rowLabel}
+        </span>
+        <CaretRight size={16} aria-hidden="true" className="shrink-0 text-foreground-muted" />
+      </button>
+
+      <BottomSheet
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title={COPY.composer.createMenu.sheetTitle}
+      >
+        <ul className="flex flex-col gap-0.5 pb-2">
+          {CREATE_MENU_TILES.map((tile) => {
+            const rowClass = cn(
+              "flex w-full items-center gap-3 rounded-lg p-2.5 text-left",
+              "transition-colors duration-(--duration-fast) ease-(--ease-spring)",
+              "hover:bg-surface-subtle active:scale-[0.99]",
+              "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+            );
+            const rowContent = (
+              <>
+                <TileIconChip accent={tile.accent} Icon={tile.Icon} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-foreground">
+                    {tile.title}
+                  </span>
+                  <span className="block text-xs text-foreground-secondary">
+                    {tile.description}
+                  </span>
+                </span>
+                {tile.action.kind === "link" && (
+                  <CaretRight
+                    size={16}
+                    aria-hidden="true"
+                    className="shrink-0 text-foreground-muted"
+                  />
+                )}
+              </>
+            );
+            return (
+              <li key={tile.key}>
+                {tile.action.kind === "link" ? (
+                  <Link
+                    href={tile.action.href}
+                    onClick={() => setMenuOpen(false)}
+                    className={rowClass}
+                  >
+                    {rowContent}
+                  </Link>
+                ) : (
+                  <button type="button" onClick={() => handleMenuTile(tile)} className={rowClass}>
+                    {rowContent}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </BottomSheet>
 
       <div ref={mediaBoxRef} className="mt-3">
         {media.length > 0 ? (

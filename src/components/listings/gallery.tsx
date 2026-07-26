@@ -3,6 +3,9 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { CaretLeft, CaretRight } from "@phosphor-icons/react/dist/ssr";
+// Import DIRECTO al módulo del visor (no al barril de @/components/feed): ese
+// barril reexporta feed-listing-card, que importa de @/components/listings.
+import { useMediaViewer } from "@/components/feed/media-viewer";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 import { FALLBACK_PHOTO, isOptimizableSrc } from "./helpers";
@@ -19,16 +22,33 @@ export interface ListingGalleryProps {
  * Galería 16:9 con swipe horizontal (scroll-snap nativo — el gesto estándar,
  * nunca redefinido) y contador "3/8" (§4.d).
  *
+ * Tocar una foto la abre a PANTALLA COMPLETA en el visor compartido (feedback
+ * 2026-07-26: "le das clic a la foto y se abre"), arrancando en la que tocaste
+ * y con todas las demás a un swipe. Sigue siendo un <button> real, así que el
+ * teclado también llega.
+ *
  * Controles y contador flotan sobre la foto: van con los tokens de media
  * (constantes en ambos temas). Una foto no se aclara porque el usuario prendió
  * el tema light — bg-scrim se reserva para backdrops de overlay.
  */
 export function ListingGallery({ photos, title, className }: ListingGalleryProps) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const viewer = useMediaViewer();
   const [current, setCurrent] = useState(1);
 
   const items = photos.length > 0 ? photos : [FALLBACK_PHOTO];
   const total = items.length;
+
+  function openViewer(index: number) {
+    // Sin fotos reales estamos mirando el respaldo del módulo: abrirlo a
+    // pantalla completa no aporta nada, así que el tap no hace nada.
+    if (photos.length === 0) return;
+    viewer.open({
+      items: items.map((url) => ({ kind: "image" as const, url })),
+      startIndex: index,
+      authorName: title,
+    });
+  }
 
   function handleScroll() {
     const track = trackRef.current;
@@ -60,7 +80,13 @@ export function ListingGallery({ photos, title, className }: ListingGalleryProps
         )}
       >
         {items.map((src, index) => (
-          <div key={src + index} className="relative aspect-video w-full shrink-0 snap-center">
+          <button
+            key={src + index}
+            type="button"
+            onClick={() => openViewer(index)}
+            aria-label={COPY.detail.galleryOpen(index + 1, total)}
+            className="relative aspect-video w-full shrink-0 snap-center focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring"
+          >
             {isOptimizableSrc(src) ? (
               <Image
                 src={src}
@@ -79,7 +105,7 @@ export function ListingGallery({ photos, title, className }: ListingGalleryProps
                 className="absolute inset-0 size-full object-cover"
               />
             )}
-          </div>
+          </button>
         ))}
       </div>
 

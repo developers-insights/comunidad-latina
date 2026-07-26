@@ -20,6 +20,7 @@ import {
   useFocusTrap,
   useMounted,
 } from "@/lib/design/use-overlay";
+import { recordPostViewAction } from "@/app/(app)/feed/engagement-actions";
 import type { PostMediaKind } from "./helpers";
 import { VIEWER_COPY } from "./viewer-copy";
 
@@ -38,7 +39,23 @@ import { VIEWER_COPY } from "./viewer-copy";
  *   caemos a mudo y el botón de sonido queda a un tap.
  * - Cierre por historial: al abrir se apila una entrada, así el gesto/botón
  *   "atrás" del teléfono cierra el visor en vez de sacarte de la página.
+ * - Cierre por ARRASTRE hacia abajo: el gesto que ya espera cualquiera que usó
+ *   una galería de teléfono. Convive con el swipe horizontal porque motion pone
+ *   `touch-action: pan-x` en un draggable de eje Y — el scroll-snap lateral
+ *   sigue siendo nativo y el gesto vertical llega a motion.
  */
+
+/**
+ * Ventana para distinguir un toque simple de un doble toque sobre el video.
+ * MISMO valor que card-post-media/card-video: la gramática táctil de la app es
+ * una sola. Sólo se activa si quien monta el video pide `onDoubleTap` (los
+ * reels): en el visor de fotos el play/pausa sigue siendo instantáneo.
+ */
+const DOUBLE_TAP_MS = 250;
+
+/** Arrastre mínimo (px) o velocidad (px/s) hacia abajo para cerrar el visor. */
+const DISMISS_OFFSET = 110;
+const DISMISS_VELOCITY = 600;
 
 export interface ViewerMediaItem {
   kind: PostMediaKind;
@@ -208,6 +225,20 @@ function ViewerPanel({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [index, scrollToIndex]);
 
+  // Vista de video: cuando el medio activo es un video Y sabemos de qué post
+  // viene, se registra UNA vez por post mientras el visor esté abierto (volver
+  // al mismo video pasando de foto y atrás no vuelve a contar). Fire-and-forget:
+  // nunca bloquea ni rompe la reproducción.
+  const viewedPostIds = useRef<Set<string>>(new Set());
+  const activeKind = args.items[index]?.kind;
+  const postId = args.postId;
+  useEffect(() => {
+    if (activeKind !== "video" || !postId) return;
+    if (viewedPostIds.current.has(postId)) return;
+    viewedPostIds.current.add(postId);
+    void recordPostViewAction({ postId }).catch(() => undefined);
+  }, [activeKind, postId]);
+
   return (
     <m.div
       ref={panelRef}
@@ -228,6 +259,18 @@ function ViewerPanel({
           : { opacity: 0, scale: 0.98, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }
       }
       transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+      // Arrastrar hacia abajo cierra (gesto estándar de galería). Con
+      // reduced-motion se desactiva: la X y el "atrás" siguen siendo el camino.
+      // El eje Y deja intacto el swipe horizontal entre medios (touch-action:
+      // pan-x); si el arrastre no alcanza el umbral, vuelve solo a su lugar.
+      drag={reduceMotion ? false : "y"}
+      dragConstraints={{ top: 0, bottom: 0 }}
+      dragElastic={{ top: 0.08, bottom: 0.7 }}
+      onDragEnd={(_, info) => {
+        if (info.offset.y > DISMISS_OFFSET || info.velocity.y > DISMISS_VELOCITY) {
+          onClose();
+        }
+      }}
     >
       {/* Carrusel: un slide por medio, snap nativo */}
       <div
@@ -338,6 +381,12 @@ export interface ViewerVideoProps {
   fit?: "contain" | "cover";
   /** Oculta el toggle de sonido (los reels lo ponen en su propio riel). */
   showMute?: boolean;
+  /**
+   * Doble toque sobre el video (los reels: me gusta). Al pasarlo, el toque
+   * simple de play/pausa espera la ventana de doble-tap; sin él, el play/pausa
+   * responde al instante (visor de fotos).
+   */
+  onDoubleTap?: () => void;
   /** Clases extra de la barra inferior (p.ej. despejar el bottom nav en reels). */
   controlsClassName?: string;
   className?: string;
@@ -351,11 +400,13 @@ export function ViewerVideo({
   authorLabel,
   fit = "contain",
   showMute = true,
+  onDoubleTap,
   controlsClassName,
   className,
 }: ViewerVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
+  const tapTimer = useRef<number | null>(null);
   const [paused, setPaused] = useState(!active);
   const [isLandscape, setIsLandscape] = useState(false);
 
@@ -401,6 +452,15 @@ export function ViewerVideo({
     bar.style.width = `${(video.currentTime / video.duration) * 100}%`;
   }, []);
 
+  // Un toque en vuelo cuando el slide se desmonta (scroll rápido del reel) no
+  // puede pausar un video que ya no está.
+  useEffect(
+    () => () => {
+      if (tapTimer.current !== null) clearTimeout(tapTimer.current);
+    },
+    [],
+  );
+
   function togglePlay() {
     const video = videoRef.current;
     if (!video) return;
@@ -409,6 +469,24 @@ export function ViewerVideo({
     } else {
       video.pause();
     }
+  }
+
+  function handleTap() {
+    // Sin doble-tap configurado (visor de fotos): play/pausa INMEDIATO.
+    if (!onDoubleTap) {
+      togglePlay();
+      return;
+    }
+    if (tapTimer.current !== null) {
+      clearTimeout(tapTimer.current);
+      tapTimer.current = null;
+      onDoubleTap();
+      return;
+    }
+    tapTimer.current = window.setTimeout(() => {
+      tapTimer.current = null;
+      togglePlay();
+    }, DOUBLE_TAP_MS);
   }
 
   return (
@@ -438,7 +516,7 @@ export function ViewerVideo({
       {/* Tap en el video = play/pausa (targets grandes, sin controles nativos) */}
       <button
         type="button"
-        onClick={togglePlay}
+        onClick={handleTap}
         aria-label={paused ? VIEWER_COPY.play : VIEWER_COPY.pause}
         className="absolute inset-0 z-[1] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-on-media/60"
       >

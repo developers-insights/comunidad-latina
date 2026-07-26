@@ -1,27 +1,32 @@
 import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Package, RocketLaunch, Tag } from "@phosphor-icons/react/dist/ssr";
-import { Banner, Chip, buttonVariants } from "@/components/ui";
+import { Package, RocketLaunch, Tag, User } from "@phosphor-icons/react/dist/ssr";
+import { Avatar, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui";
 import {
-  ContactCta,
   DetailTopBar,
+  PublisherTrust,
   buildTrustSignals,
   firstNameOf,
   firstPhotoUrl,
   listingPhotoUrl,
   toTrustLevel,
 } from "@/components/listings";
+import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 import {
   COPY,
+  ListingCommentsRow,
   ProductGallery,
+  SellerChip,
   StoreCard,
   categoryLabel,
   conditionLabel,
   formatProductPrice,
   parseProductAttrs,
+  type SellerView,
   type StoreCardModel,
 } from "@/components/marketplace";
+import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -40,7 +45,7 @@ const fetchProductById = cache(async (id: string) => {
   return supabase
     .from("listings")
     .select(
-      "id, tenant_id, kind, title, description, price_amount, price_currency, attrs, area_label, photos, status, created_by, publisher_name, created_at",
+      "id, tenant_id, kind, title, description, price_amount, price_currency, attrs, area_label, photos, status, created_by, publisher_name, created_at, comment_count",
     )
     .eq("id", id)
     .eq("kind", "product")
@@ -75,38 +80,57 @@ export default async function ProductoDetallePage({ params }: { params: Params }
   const photos = (product.photos ?? []).map(listingPhotoUrl);
   const isOwner = Boolean(user && product.created_by === user.id);
 
+  // Engagement del aviso (0038): el conteo viaja en el select de arriba
+  // (listings.comment_count, mantenido por trigger); "¿ya lo guardé?" es una
+  // lectura propia del visitante y degrada a false — ver engagement-queries.
+  const commentCount = Math.max(0, product.comment_count ?? 0);
+  const initialSaved = await fetchListingSaved(supabase, tenant.id, product.id, user?.id);
+
   // ---------------------------------------------------------------------
-  // Tienda dueña: nombre/zona/foto + seguidores + trust de quien la publica.
+  // Quién vende. Con tienda: nombre/zona/foto + seguidores + trust del dueño +
+  // Presencia Verificada. Sin tienda (particular, § split 2026-07-24): perfil
+  // de quien publicó, con su Trust Score — la persona ES el vendedor.
   // Todo en un solo Promise.all — independiente entre sí.
   // ---------------------------------------------------------------------
   let storeCardModel: StoreCardModel | null = null;
+  let seller: SellerView = { kind: "private", name: product.publisher_name ?? null };
+  let privateSeller: {
+    displayName: string;
+    avatarUrl: string | null;
+    trust: NonNullable<StoreCardModel["trust"]>;
+  } | null = null;
+
   if (attrs.storeListingId) {
     const storeId = attrs.storeListingId;
-    const [{ data: store }, { count: followerCount }, { data: myFollow }] = await Promise.all([
-      supabase
-        .from("listings")
-        .select("id, title, area_label, photos, created_by")
-        .eq("id", storeId)
-        .eq("tenant_id", tenant.id)
-        .eq("kind", "business")
-        .maybeSingle(),
-      supabase
-        .from("follows")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenant.id)
-        .eq("target_kind", "listing")
-        .eq("target_id", storeId),
-      user
-        ? supabase
-            .from("follows")
-            .select("id")
-            .eq("tenant_id", tenant.id)
-            .eq("follower_id", user.id)
-            .eq("target_kind", "listing")
-            .eq("target_id", storeId)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
+    const [{ data: store }, { count: followerCount }, { data: myFollow }] =
+      await Promise.all([
+        supabase
+          .from("listings")
+          // store_verified: espejo público de Presencia Verificada (0039).
+          .select("id, title, area_label, photos, created_by, store_verified")
+          .eq("id", storeId)
+          .eq("tenant_id", tenant.id)
+          .eq("kind", "business")
+          .maybeSingle(),
+        supabase
+          .from("follows")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenant.id)
+          .eq("target_kind", "listing")
+          .eq("target_id", storeId),
+        user
+          ? supabase
+              .from("follows")
+              .select("id")
+              .eq("tenant_id", tenant.id)
+              .eq("follower_id", user.id)
+              .eq("target_kind", "listing")
+              .eq("target_id", storeId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+
+    const verified = Boolean(store?.store_verified);
 
     if (store) {
       let trust: StoreCardModel["trust"] = null;
@@ -141,16 +165,50 @@ export default async function ProductoDetallePage({ params }: { params: Params }
         followerCount: followerCount ?? 0,
         initialFollowing: Boolean(myFollow),
         trust,
+        verified,
       };
     }
+
+    seller = {
+      kind: "store",
+      name: store?.title ?? null,
+      storeId,
+      verified,
+    };
+  } else if (product.created_by) {
+    const [{ data: profile }, { data: trustScore }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("display_name, avatar_url, identity_verified")
+        .eq("id", product.created_by)
+        .maybeSingle(),
+      supabase
+        .from("trust_scores")
+        .select("score, level, signals")
+        .eq("profile_id", product.created_by)
+        .maybeSingle(),
+    ]);
+    const displayName = profile?.display_name ?? COPY.detail.communityMember;
+    privateSeller = {
+      displayName,
+      avatarUrl: profile?.avatar_url ?? null,
+      trust: {
+        displayName,
+        firstName: firstNameOf(displayName),
+        score: trustScore?.score ?? 0,
+        level: toTrustLevel(trustScore?.level),
+        signals: buildTrustSignals(trustScore?.signals ?? {}, profile?.identity_verified ?? false),
+      },
+    };
+    seller = { kind: "private", name: displayName };
   }
 
   return (
-    // pb-40: mismo footprint que propiedades/[id] — el CTA "Contactar" de
-    // ContactCta es `fixed` sobre el bottom-nav, este padding evita que tape
-    // la card de la tienda ni la descripción.
-    <div className="pb-40">
-      <DetailTopBar title={product.title} listingId={product.id} />
+    // pb-24: el contacto dejó de ser una barra `fixed` (ahora el mensaje se
+    // escribe EN la página, ver InlineMessageCta), así que sólo hace falta aire
+    // sobre el bottom-nav.
+    <div className="pb-24">
+      <DetailTopBar title={product.title} listingId={product.id} initialSaved={initialSaved} />
 
       <ProductGallery photos={photos} title={product.title} />
 
@@ -165,6 +223,10 @@ export default async function ProductoDetallePage({ params }: { params: Params }
       </h1>
 
       {priceLabel && <p className="numeric mt-1 text-3xl font-bold text-brand">{priceLabel}</p>}
+
+      {/* Tienda o particular, arriba de todo: quién vende cambia cómo se lee
+          el precio (§ split tiendas/particulares). */}
+      <SellerChip seller={seller} className="mt-3" />
 
       {(attrs.category || attrs.condition) && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -198,6 +260,28 @@ export default async function ProductoDetallePage({ params }: { params: Params }
         </section>
       )}
 
+      {/* Particular: la persona ES el vendedor, con su Trust Score a la vista. */}
+      {privateSeller && (
+        <section className="mt-6">
+          <h2 className="mb-2 text-sm font-semibold text-foreground-secondary">
+            {COPY.detail.storeTitle}
+          </h2>
+          <BezelCard coreClassName="flex items-center gap-3 p-4">
+            <Avatar src={privateSeller.avatarUrl} name={privateSeller.displayName} size="lg" />
+            <div className="min-w-0">
+              <p className="truncate font-display text-base font-bold text-foreground">
+                {privateSeller.displayName}
+              </p>
+              <PublisherTrust {...privateSeller.trust} size="inline" />
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-foreground-muted">
+                <User size={13} aria-hidden="true" className="shrink-0" />
+                {COPY.detail.privateSellerNote}
+              </p>
+            </div>
+          </BezelCard>
+        </section>
+      )}
+
       {product.description && (
         <section className="mt-6">
           <h2 className="mb-2 text-sm font-semibold text-foreground-secondary">
@@ -209,14 +293,37 @@ export default async function ProductoDetallePage({ params }: { params: Params }
         </section>
       )}
 
-      {/* Flujo de contacto protegido existente (mismo componente que Propiedades
-          — genérico por listingId, ver ContactCta + request_contact RPC). */}
-      <ContactCta
-        listingId={product.id}
-        isLoggedIn={Boolean(user)}
-        isExternal={!product.created_by}
-        externalName={product.publisher_name}
-      />
+      {/* Comentarios del aviso: se abren en la hoja del feed, sin navegar. */}
+      <ListingCommentsRow listingId={product.id} commentCount={commentCount} className="mt-6" />
+
+      {/* Contacto: el mensaje se escribe ACÁ (call cliente 2026-07-24). Por
+          debajo sigue siendo request_contact — la conversación nace pendiente y
+          quien vende decide si la acepta. Sin dueño con cuenta (producto de
+          fuente externa) no hay a quién escribirle: se dice de frente. */}
+      {product.created_by ? (
+        !isOwner && (
+          <section className="mt-6">
+            <InlineMessageCta
+              listingId={product.id}
+              isLoggedIn={Boolean(user)}
+              nextPath={`/marketplace/${product.id}`}
+            />
+          </section>
+        )
+      ) : (
+        <section className="mt-6">
+          <BezelCard coreClassName="p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {COPY.detail.externalSellerTitle}
+            </p>
+            <p className="mt-1 text-sm text-foreground-secondary">
+              {COPY.detail.externalSellerBody(
+                product.publisher_name ?? COPY.detail.externalSellerFallback,
+              )}
+            </p>
+          </BezelCard>
+        </section>
+      )}
     </div>
   );
 }

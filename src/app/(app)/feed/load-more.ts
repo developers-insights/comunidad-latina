@@ -15,13 +15,14 @@ import {
 import {
   LISTING_COLUMNS,
   POST_COLUMNS,
-  fetchActivePromotedPostIds,
+  fetchActivePromotions,
   fetchAuthorViews,
   fetchBlockedIds,
   fetchEntityViews,
   fetchFollowedListingIds,
   fetchListingExtras,
   fetchViewerLikes,
+  fetchViewerSaves,
   toFeedListingModel,
   toListingCardModel,
   toPostCardModel,
@@ -128,11 +129,12 @@ async function loadParaTiPage({
 }): Promise<FeedPageResult> {
   const isFirstPage = !cursor;
 
-  const [blockedIds, followedListingIds, promotedPostIds] = await Promise.all([
+  const [blockedIds, followedListingIds, promotions] = await Promise.all([
     fetchBlockedIds(supabase, viewerId),
     fetchFollowedListingIds(supabase, viewerId),
-    fetchActivePromotedPostIds(supabase, tenantId),
+    fetchActivePromotions(supabase, tenantId),
   ]);
+  const promotedPostIds = promotions.postIds;
 
   let postsQuery = supabase
     .from("posts")
@@ -244,7 +246,7 @@ async function loadParaTiPage({
     .map((entry) => (entry.row as PostRow).entity_listing_id)
     .filter((id): id is string => Boolean(id));
 
-  const [authors, likedIds, listingExtras, entityById] = await Promise.all([
+  const [authors, likedIds, savedIds, listingExtras, entityById] = await Promise.all([
     fetchAuthorViews(
       supabase,
       visiblePosts
@@ -252,6 +254,11 @@ async function loadParaTiPage({
         .filter((id): id is string => Boolean(id)),
     ),
     fetchViewerLikes(
+      supabase,
+      viewerId,
+      visiblePosts.map((entry) => entry.id),
+    ),
+    fetchViewerSaves(
       supabase,
       viewerId,
       visiblePosts.map((entry) => entry.id),
@@ -272,6 +279,8 @@ async function loadParaTiPage({
             ? (entityById.get(postRow.entity_listing_id) ?? null)
             : null,
           isPromoted: promotedPostIds.has(postRow.id),
+          savedByViewer: savedIds.has(postRow.id),
+          ctaWhatsapp: promotions.whatsappByPostId.get(postRow.id) ?? null,
         }),
       };
     }

@@ -4,6 +4,9 @@
 // creator_profiles, gig_*, posts.entity_listing_id) se escribieron a mano con
 // el formato generado — el MCP no tiene permiso sobre este proyecto y el CLI
 // requiere Docker. Una regeneración futura los reemplaza sin drama.
+// EXCEPCIÓN 2026-07-26 (misma razón): 0038 — saves, post_views, listing_comments,
+// posts.view_count, listings.comment_count, post_promotions.cta_whatsapp.
+// EXCEPCIÓN 2026-07-26 bis: 0039 — listings.store_verified (espejo público).
 export type Json =
   | string
   | number
@@ -881,6 +884,58 @@ export type Database = {
           },
         ]
       }
+      listing_comments: {
+        Row: {
+          author_id: string | null
+          body: string
+          created_at: string
+          id: string
+          listing_id: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          listing_id: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          listing_id?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_comments_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_comments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       listing_private_details: {
         Row: {
           contact_notes: string | null
@@ -927,6 +982,7 @@ export type Database = {
         Row: {
           area_label: string | null
           attrs: Json
+          comment_count: number
           contact_protected: boolean
           created_at: string
           created_by: string | null
@@ -944,6 +1000,7 @@ export type Database = {
           search: unknown
           source: string
           status: string
+          store_verified: boolean
           tenant_id: string
           title: string
           updated_at: string
@@ -951,6 +1008,7 @@ export type Database = {
         Insert: {
           area_label?: string | null
           attrs?: Json
+          comment_count?: number
           contact_protected?: boolean
           created_at?: string
           created_by?: string | null
@@ -968,6 +1026,7 @@ export type Database = {
           search?: unknown
           source?: string
           status?: string
+          store_verified?: boolean
           tenant_id: string
           title: string
           updated_at?: string
@@ -975,6 +1034,7 @@ export type Database = {
         Update: {
           area_label?: string | null
           attrs?: Json
+          comment_count?: number
           contact_protected?: boolean
           created_at?: string
           created_by?: string | null
@@ -992,6 +1052,7 @@ export type Database = {
           search?: unknown
           source?: string
           status?: string
+          store_verified?: boolean
           tenant_id?: string
           title?: string
           updated_at?: string
@@ -1247,6 +1308,7 @@ export type Database = {
           status: string
           tenant_id: string
           updated_at: string
+          view_count: number
         }
         Insert: {
           author_id?: string | null
@@ -1261,6 +1323,7 @@ export type Database = {
           status?: string
           tenant_id: string
           updated_at?: string
+          view_count?: number
         }
         Update: {
           author_id?: string | null
@@ -1275,6 +1338,7 @@ export type Database = {
           status?: string
           tenant_id?: string
           updated_at?: string
+          view_count?: number
         }
         Relationships: [
           {
@@ -1306,6 +1370,7 @@ export type Database = {
           audience: Json
           buyer_id: string
           created_at: string
+          cta_whatsapp: string | null
           currency: string
           duration_days: number
           ends_at: string | null
@@ -1323,6 +1388,7 @@ export type Database = {
           audience?: Json
           buyer_id: string
           created_at?: string
+          cta_whatsapp?: string | null
           currency?: string
           duration_days: number
           ends_at?: string | null
@@ -1340,6 +1406,7 @@ export type Database = {
           audience?: Json
           buyer_id?: string
           created_at?: string
+          cta_whatsapp?: string | null
           currency?: string
           duration_days?: number
           ends_at?: string | null
@@ -1372,6 +1439,49 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_views: {
+        Row: {
+          post_id: string
+          tenant_id: string
+          viewed_on: string
+          viewer_id: string
+        }
+        Insert: {
+          post_id: string
+          tenant_id: string
+          viewed_on?: string
+          viewer_id: string
+        }
+        Update: {
+          post_id?: string
+          tenant_id?: string
+          viewed_on?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_views_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_views_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_views_viewer_id_fkey"
+            columns: ["viewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1524,6 +1634,48 @@ export type Database = {
           },
           {
             foreignKeyName: "reactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saves: {
+        Row: {
+          created_at: string
+          id: string
+          profile_id: string
+          subject_id: string
+          subject_kind: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          profile_id: string
+          subject_id: string
+          subject_kind: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          profile_id?: string
+          subject_id?: string
+          subject_kind?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saves_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saves_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

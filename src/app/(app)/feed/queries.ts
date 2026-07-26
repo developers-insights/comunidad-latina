@@ -7,6 +7,7 @@ import {
   firstNameOf,
   firstPhotoUrl,
   formatListingPrice,
+  listingPhotoUrl,
   toTrustLevel,
   type ListingCardModel,
   type PublisherView,
@@ -47,13 +48,29 @@ export interface PostRow {
   status: string;
   like_count: number;
   comment_count: number;
+  /** posts.view_count (0038). Anulable hasta que corra el backfill. */
+  view_count: number | null;
   created_at: string;
   author_id: string | null;
   entity_listing_id: string | null;
 }
 
-export const POST_COLUMNS =
+/** El juego de columnas que supabase-js sabe parsear HOY (sin view_count). */
+type ParsablePostColumns =
   "id, body, kind, media, status, like_count, comment_count, created_at, author_id, entity_listing_id";
+
+/**
+ * El VALOR pide view_count a PostgREST; el TIPO se queda en las columnas que
+ * database.types.ts ya conoce.
+ *
+ * view_count llega con la 0038 y los tipos se regeneran recién después: sin el
+ * `as`, el parser del select marcaría la columna como inexistente y rompería
+ * los `as PostRow` de TODOS los consumidores (feed, detalle, videos). El
+ * contrato real de la fila lo fija `PostRow`, que sí la declara.
+ * Al regenerar database.types.ts con la 0038, borrar el `as` y el alias.
+ */
+export const POST_COLUMNS =
+  "id, body, kind, media, status, like_count, comment_count, view_count, created_at, author_id, entity_listing_id" as ParsablePostColumns;
 
 const FALLBACK_AUTHOR: AuthorView = {
   profileId: null,
@@ -145,6 +162,56 @@ export async function fetchViewerLikes(
   return new Set((data ?? []).map((row) => row.subject_id));
 }
 
+/**
+ * Guardados del viewer (tabla `saves`, 0038). La tabla es POLIMÓRFICA
+ * (subject_kind post | listing), así que la lectura vive acá UNA vez y cada
+ * vertical la reusa en lugar de duplicar la query.
+ *
+ * `saves` llega con la 0038 y todavía no está en database.types.ts → cliente de
+ * schema abierto (mismo patrón que assistant_queries en el asistente). Nunca
+ * lanza: sin sesión, sin tabla todavía o con error, el viewer ve todo como "no
+ * guardado" — un guardado que no se pinta es molesto; un feed roto, no.
+ */
+async function fetchSavedSubjectIds(
+  supabase: Supabase,
+  viewerId: string | null,
+  subjectKind: "post" | "listing",
+  subjectIds: string[],
+): Promise<Set<string>> {
+  if (!viewerId || subjectIds.length === 0) return new Set();
+  const open = supabase as unknown as SupabaseClient;
+  const { data, error } = await open
+    .from("saves")
+    .select("subject_id")
+    .eq("subject_kind", subjectKind)
+    .eq("profile_id", viewerId)
+    .in("subject_id", subjectIds);
+  if (error) {
+    console.warn("[feed] query de guardados falló", { code: error.code });
+    return new Set();
+  }
+  const rows = (data ?? []) as Array<{ subject_id: string }>;
+  return new Set(rows.map((row) => row.subject_id));
+}
+
+/** Ids de posts guardados por el viewer (espejo exacto de fetchViewerLikes). */
+export function fetchViewerSaves(
+  supabase: Supabase,
+  viewerId: string | null,
+  postIds: string[],
+): Promise<Set<string>> {
+  return fetchSavedSubjectIds(supabase, viewerId, "post", postIds);
+}
+
+/** Ids de avisos guardados por el viewer (detalle de propiedad/profesional/…). */
+export function fetchViewerSavedListingIds(
+  supabase: Supabase,
+  viewerId: string | null,
+  listingIds: string[],
+): Promise<Set<string>> {
+  return fetchSavedSubjectIds(supabase, viewerId, "listing", listingIds);
+}
+
 // ---------------------------------------------------------------------------
 // Alcance del feed "para vos" (0023 — feedback cliente 2026-07-19)
 // ---------------------------------------------------------------------------
@@ -167,25 +234,72 @@ export async function fetchFollowedListingIds(
   return (data ?? []).map((row) => row.target_id);
 }
 
+export interface ActivePromotions {
+  /** Posts con campaña vigente: alimentan la visibilidad y el chip "Publicidad". */
+  postIds: Set<string>;
+  /** postId → teléfono del botón de WhatsApp que ofrece ESA campaña. */
+  whatsappByPostId: Map<string, string>;
+}
+
 /**
- * Ids de posts con una promoción ACTIVA vigente en el tenant. Una campaña paga
- * lleva el post al feed de TODOS (según audience) — acá resolvemos el set para
- * (a) inyectarlo en la visibilidad y (b) marcar el chip "Publicidad".
+ * Promociones ACTIVAS vigentes del tenant. Una campaña paga lleva el post al
+ * feed de TODOS (según audience) — acá resolvemos el set para (a) inyectarlo en
+ * la visibilidad, (b) marcar el chip "Publicidad" y (c) saber si la campaña
+ * ofrece un WhatsApp de contacto (cta_whatsapp, 0038).
  *
  * `audience` (scope all | zones) se guarda para segmentación geográfica futura;
  * hoy toda campaña activa alcanza a la comunidad entera (single-community).
+ *
+ * cta_whatsapp llega con la 0038 y todavía no está en database.types.ts →
+ * cliente de schema abierto. Si la columna aún no existe (entorno sin migrar),
+ * se reintenta con la forma vieja: perder el botón de WhatsApp es aceptable,
+ * perder los posts promocionados del feed no.
+ */
+export async function fetchActivePromotions(
+  supabase: Supabase,
+  tenantId: string,
+): Promise<ActivePromotions> {
+  const open = supabase as unknown as SupabaseClient;
+  const activeQuery = (columns: string) =>
+    open
+      .from("post_promotions")
+      .select(columns)
+      .eq("tenant_id", tenantId)
+      .eq("status", "active")
+      .gt("ends_at", new Date().toISOString());
+
+  let { data, error } = await activeQuery("post_id, cta_whatsapp");
+  if (error) {
+    console.warn("[feed] campañas activas sin cta_whatsapp", { code: error.code });
+    ({ data, error } = await activeQuery("post_id"));
+  }
+
+  // El cliente abierto no puede derivar la forma de la fila (el select es una
+  // variable): la fijamos nosotros, que es justamente lo que pedimos arriba.
+  const rows = (data ?? []) as unknown as Array<{
+    post_id: string;
+    cta_whatsapp?: string | null;
+  }>;
+  const postIds = new Set<string>();
+  const whatsappByPostId = new Map<string, string>();
+  for (const row of rows) {
+    postIds.add(row.post_id);
+    const phone = row.cta_whatsapp?.trim();
+    if (phone) whatsappByPostId.set(row.post_id, phone);
+  }
+  return { postIds, whatsappByPostId };
+}
+
+/**
+ * Solo los ids de posts promocionados. Se conserva como export propio porque es
+ * lo único que necesitan los consumidores que no pintan el CTA (videos).
  */
 export async function fetchActivePromotedPostIds(
   supabase: Supabase,
   tenantId: string,
 ): Promise<Set<string>> {
-  const { data } = await supabase
-    .from("post_promotions")
-    .select("post_id")
-    .eq("tenant_id", tenantId)
-    .eq("status", "active")
-    .gt("ends_at", new Date().toISOString());
-  return new Set((data ?? []).map((row) => row.post_id));
+  const { postIds } = await fetchActivePromotions(supabase, tenantId);
+  return postIds;
 }
 
 /**
@@ -310,6 +424,11 @@ export function toListingCardModel(
     priceLabel: formatListingPrice(row.price_amount, row.price_currency, row.price_period, locale),
     areaLabel: row.area_label,
     photoUrl: firstPhotoUrl(row.photos),
+    // Todas las fotos: el tap sobre la foto abre el visor con la galería
+    // completa también desde el feed, no solo desde /propiedades.
+    photos: (row.photos ?? [])
+      .filter((path) => path && path.trim().length > 0)
+      .map(listingPhotoUrl),
     verification: extras.verificationByListing.get(row.id) ?? null,
     publisher,
   };
@@ -350,7 +469,14 @@ export function toPostCardModel(
   authors: Map<string, AuthorView>,
   likedIds: Set<string>,
   now: Date,
-  extras?: { entity?: PostEntityView | null; isPromoted?: boolean },
+  extras?: {
+    entity?: PostEntityView | null;
+    isPromoted?: boolean;
+    /** Guardado por el viewer (fetchViewerSaves). Ausente → no guardado. */
+    savedByViewer?: boolean;
+    /** WhatsApp de la campaña activa de ESTE post, si ofrece uno. */
+    ctaWhatsapp?: string | null;
+  },
 ): PostCardModel {
   // Bucket post-media (0025): fotos y videos conviven en el array `media`;
   // el kind se infiere por extensión (mediaKindOf). photoUrl queda como la
@@ -367,11 +493,16 @@ export function toPostCardModel(
     media,
     likeCount: row.like_count,
     commentCount: row.comment_count,
+    // view_count es nueva (0038) y anulable hasta el backfill: 0 es el default
+    // honesto para un post que todavía no acumuló vistas.
+    viewCount: row.view_count ?? 0,
     createdAt: row.created_at,
     timeAgoLabel: timeAgo(row.created_at, now),
     author: authorViewOf(authors, row.author_id),
     likedByViewer: likedIds.has(row.id),
+    savedByViewer: extras?.savedByViewer ?? false,
     entity: extras?.entity ?? null,
     isPromoted: extras?.isPromoted ?? false,
+    ctaWhatsapp: extras?.ctaWhatsapp ?? null,
   };
 }

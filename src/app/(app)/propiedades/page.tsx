@@ -12,6 +12,7 @@ import {
   encodeCursor,
   firstPhotoUrl,
   formatListingPrice,
+  listingPhotoUrl,
   toTrustLevel,
   type ListingCardModel,
   type PublisherView,
@@ -285,6 +286,11 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
       ),
       areaLabel: row.area_label,
       photoUrl: firstPhotoUrl(row.photos),
+      // TODAS las fotos ya resueltas: tocar la foto de la card abre el visor a
+      // pantalla completa y se pasan de una, sin entrar al detalle.
+      photos: (row.photos ?? [])
+        .filter((path) => path && path.trim().length > 0)
+        .map(listingPhotoUrl),
       verification: verificationByListing.get(row.id) ?? null,
       publisher,
     };

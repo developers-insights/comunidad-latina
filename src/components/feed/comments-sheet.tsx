@@ -17,6 +17,7 @@ import { useReducedMotion } from "motion/react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BottomSheet, Button, Skeleton, buttonVariants } from "@/components/ui";
 import { buildTrustSignals, toTrustLevel } from "@/components/listings";
+import { fetchListingCommentsAction } from "@/app/(app)/marketplace/comments-actions";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/types/database.types";
 import { cn, timeAgo } from "@/lib/utils";
@@ -37,14 +38,29 @@ import type { AuthorView } from "./helpers";
  * del feed, sin navegación.
  *
  * La FIRMA de open() es el contrato estable con las cards: extenderla solo con
- * campos opcionales.
+ * campos opcionales o con variantes NUEVAS del sujeto.
+ *
+ * Desde el sprint de engagement la hoja es POLIMÓRFICA: el mismo panel sirve el
+ * hilo de un POST del feed o el de un AVISO del marketplace
+ * (`open({ listingId })`). Cambia de dónde salen los comentarios; el hilo, el
+ * composer optimista y el ciclo de moderación son exactamente los mismos.
  */
 
-export interface OpenCommentsArgs {
-  postId: string;
+interface OpenCommentsBase {
   /** Conteo conocido al abrir (pinta el título al instante, antes del fetch). */
   commentCount?: number;
 }
+
+export type OpenCommentsArgs = OpenCommentsBase &
+  (
+    | { postId: string; listingId?: undefined }
+    | { listingId: string; postId?: undefined }
+  );
+
+/** Sujeto del hilo, ya normalizado por el provider. */
+export type CommentsSubject =
+  | { kind: "post"; id: string }
+  | { kind: "listing"; id: string };
 
 interface CommentsSheetContextValue {
   open: (args: OpenCommentsArgs) => void;
@@ -62,7 +78,7 @@ export function useCommentsSheet(): CommentsSheetContextValue {
 }
 
 interface Session {
-  postId: string;
+  subject: CommentsSubject;
   initialCount: number;
 }
 
@@ -71,7 +87,10 @@ export function CommentsSheetProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
 
   const openSheet = useCallback((args: OpenCommentsArgs) => {
-    setSession({ postId: args.postId, initialCount: args.commentCount ?? 0 });
+    const subject: CommentsSubject = args.listingId
+      ? { kind: "listing", id: args.listingId }
+      : { kind: "post", id: args.postId ?? "" };
+    setSession({ subject, initialCount: args.commentCount ?? 0 });
     setOpen(true);
   }, []);
 
@@ -102,11 +121,11 @@ export function CommentsSheetProvider({ children }: { children: ReactNode }) {
         bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
       >
         {session && (
-          // key por post: al cambiar de publicación remonta fresco (nunca arrastra
-          // el hilo anterior), igual que el patrón del ReportSheet.
+          // key por sujeto: al cambiar de publicación (o de aviso) remonta fresco
+          // y nunca arrastra el hilo anterior — patrón del ReportSheet.
           <CommentsSheetBody
-            key={session.postId}
-            postId={session.postId}
+            key={`${session.subject.kind}:${session.subject.id}`}
+            subject={session.subject}
             initialCount={session.initialCount}
           />
         )}
@@ -196,15 +215,71 @@ async function fetchAuthorViewsClient(
 function authorViewOf(
   authors: Map<string, AuthorView>,
   authorId: string | null,
+  fallback: AuthorView = FALLBACK_AUTHOR,
 ): AuthorView {
-  return (authorId && authors.get(authorId)) || FALLBACK_AUTHOR;
+  return (authorId && authors.get(authorId)) || fallback;
+}
+
+/**
+ * Fila del hilo ya normalizada: los comentarios de un post vienen de Supabase y
+ * los de un aviso de una server action, pero de acá para abajo se tratan igual.
+ */
+interface ThreadRow {
+  id: string;
+  body: string;
+  createdAt: string;
+  authorId: string | null;
+  /** Nombre/foto que trajo la action del aviso si el perfil no resuelve. */
+  fallbackName?: string;
+  fallbackAvatarUrl?: string | null;
+}
+
+type ThreadResult = { ok: true; rows: ThreadRow[] } | { ok: false };
+
+/** Hilo de un POST: lectura directa con RLS (camino histórico, sin cambios). */
+async function loadPostThread(supabase: Supabase, postId: string): Promise<ThreadResult> {
+  const { data, error } = await supabase
+    .from("comments")
+    .select("id, body, created_at, author_id, status")
+    .eq("post_id", postId)
+    .eq("status", "published")
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(COMMENTS_LIMIT);
+  if (error) return { ok: false };
+  return {
+    ok: true,
+    rows: (data ?? []).map((row) => ({
+      id: row.id,
+      body: row.body,
+      createdAt: row.created_at,
+      authorId: row.author_id,
+    })),
+  };
+}
+
+/** Hilo de un AVISO: server action del marketplace (dueña de esa tabla). */
+async function loadListingThread(listingId: string): Promise<ThreadResult> {
+  const result = await fetchListingCommentsAction({ listingId });
+  if (!result.ok) return { ok: false };
+  return {
+    ok: true,
+    rows: result.items.map((item) => ({
+      id: item.id,
+      body: item.body,
+      createdAt: item.createdAt,
+      authorId: item.authorId,
+      fallbackName: item.authorName,
+      fallbackAvatarUrl: item.avatarUrl,
+    })),
+  };
 }
 
 function CommentsSheetBody({
-  postId,
+  subject,
   initialCount,
 }: {
-  postId: string;
+  subject: CommentsSubject;
   initialCount: number;
 }) {
   const pathname = usePathname();
@@ -228,22 +303,17 @@ function CommentsSheetBody({
     const supabase = createClient();
     const now = new Date();
 
-    const [userResult, commentsResult, blocksResult] = await Promise.all([
+    const [userResult, blocksResult, thread] = await Promise.all([
       supabase.auth.getUser(),
-      supabase
-        .from("comments")
-        .select("id, body, created_at, author_id, status")
-        .eq("post_id", postId)
-        .eq("status", "published")
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true })
-        .limit(COMMENTS_LIMIT),
       // RLS de user_blocks ya limita a blocker_id = auth.uid(): traemos SOLO los
       // bloqueos del viewer sin pasar su id (anónimo → set vacío).
       supabase.from("user_blocks").select("blocked_id"),
+      subject.kind === "post"
+        ? loadPostThread(supabase, subject.id)
+        : loadListingThread(subject.id),
     ]);
 
-    if (commentsResult.error) {
+    if (!thread.ok) {
       setStatus("error");
       return;
     }
@@ -253,12 +323,12 @@ function CommentsSheetBody({
     );
     // Mismo filtro que el detalle: fuera los comentarios de gente que el viewer
     // bloqueó (barato, en memoria).
-    const rows = (commentsResult.data ?? []).filter(
-      (row) => !row.author_id || !blocked.has(row.author_id),
+    const rows = thread.rows.filter(
+      (row) => !row.authorId || !blocked.has(row.authorId),
     );
 
     const viewerId = userResult.data.user?.id ?? null;
-    const authorIds = [...rows.map((row) => row.author_id), viewerId].filter(
+    const authorIds = [...rows.map((row) => row.authorId), viewerId].filter(
       (id): id is string => Boolean(id),
     );
     const authors = await fetchAuthorViewsClient(supabase, authorIds);
@@ -267,15 +337,28 @@ function CommentsSheetBody({
       rows.map((row) => ({
         id: row.id,
         body: row.body,
-        timeAgoLabel: timeAgo(row.created_at, now),
-        author: authorViewOf(authors, row.author_id),
+        timeAgoLabel: timeAgo(row.createdAt, now),
+        // Si el perfil no resuelve pero la action trajo nombre/foto, se usan sin
+        // profileId: mostramos a la persona, pero NO afirmamos confianza que no
+        // tenemos (sin profileId, CommentItem no pinta el badge de Trust).
+        author: authorViewOf(
+          authors,
+          row.authorId,
+          row.fallbackName
+            ? {
+                ...FALLBACK_AUTHOR,
+                displayName: row.fallbackName,
+                avatarUrl: row.fallbackAvatarUrl ?? null,
+              }
+            : FALLBACK_AUTHOR,
+        ),
       })),
     );
     setViewer(
       viewerId ? { id: viewerId, author: authorViewOf(authors, viewerId) } : null,
     );
     setStatus("ready");
-  }, [postId]);
+  }, [subject]);
 
   useEffect(() => {
     // Diferido a un frame (patrón splash-screen): la regla set-state-in-effect
@@ -417,9 +500,15 @@ function CommentsSheetBody({
           >
             {COPY.comments.signInPrompt}
           </Link>
+        ) : subject.kind === "post" ? (
+          <CommentComposer
+            postId={subject.id}
+            disabled={status !== "ready"}
+            optimistic={optimisticHandlers}
+          />
         ) : (
           <CommentComposer
-            postId={postId}
+            listingId={subject.id}
             disabled={status !== "ready"}
             optimistic={optimisticHandlers}
           />

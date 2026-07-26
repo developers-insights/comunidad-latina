@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  BookmarkSimple,
   ChatCircle,
   FilmSlate,
   Heart,
@@ -15,10 +16,15 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, Chip, buttonVariants, useToast } from "@/components/ui";
-import { LikeBurst } from "@/components/motion";
+import { LikeBurst, usePrefersReducedMotion } from "@/components/motion";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import { useCommentsSheet, type PostCardModel } from "@/components/feed";
 import { ViewerVideo } from "@/components/feed/media-viewer";
+import heartStyles from "@/components/feed/card-post-media.module.css";
+import {
+  recordPostViewAction,
+  toggleSaveAction,
+} from "@/app/(app)/feed/engagement-actions";
 import { useMounted } from "@/lib/design/use-overlay";
 import { cn } from "@/lib/utils";
 import { loadMoreVideosAction } from "./actions";
@@ -113,6 +119,17 @@ export function VideoReels({
     return () => clearTimeout(timer);
   }, [activeIndex, cursor, items.length, loadMore]);
 
+  // VISTAS: se registra una sola vez por post mientras este componente viva (el
+  // Set en ref) — subir y bajar por el mismo video no infla el contador. Es
+  // fire-and-forget: si la acción falla, el reel ni se entera.
+  const viewedIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const active = items[activeIndex];
+    if (!active || viewedIds.current.has(active.id)) return;
+    viewedIds.current.add(active.id);
+    void recordPostViewAction({ postId: active.id }).catch(() => undefined);
+  }, [activeIndex, items]);
+
   const isEmpty = items.length === 0 && !cursor && !loadingMore;
 
   // PORTAL a <body> (mismo patrón que MediaViewer): el template de página
@@ -186,11 +203,29 @@ function ReelSlide({
   muted: boolean;
   onMutedChange: (muted: boolean) => void;
 }) {
+  const reduce = usePrefersReducedMotion();
+  const like = useReelLike({ post, tenantId, viewerId });
+  const [bursts, setBursts] = useState(0);
   const videoUrl = post.media.find((item) => item.kind === "video")?.url;
   const entity = post.entity;
   const displayTitle = entity ? entity.title : post.author.displayName;
 
   if (!videoUrl) return null; // la query garantiza video; defensa barata
+
+  /**
+   * Doble toque sobre el video = me gusta, igual que en la card del feed.
+   * IDEMPOTENTE: nunca quita el me gusta (para eso está el corazón del riel).
+   * El corazón grande sólo aparece con sesión — sin sesión el toggle lleva a
+   * /entrar y sería mentir un me gusta que no se guardó.
+   */
+  function handleDoubleTap() {
+    if (!viewerId) {
+      like.toggle(true); // sin sesión el toggle no reacciona: lleva a /entrar
+      return;
+    }
+    setBursts((current) => current + 1);
+    if (!like.liked) like.toggle(true);
+  }
 
   return (
     <section
@@ -206,10 +241,29 @@ function ReelSlide({
           authorLabel={displayTitle}
           fit="cover"
           showMute={false}
+          onDoubleTap={handleDoubleTap}
           // La barra de progreso queda por ENCIMA del bottom nav (z-40 fijo).
           controlsClassName="pb-[calc(4rem+env(safe-area-inset-bottom))]"
         />
       </div>
+
+      {/* Corazón grande del doble-tap (decorativo: el estado lo dice el riel). */}
+      {bursts > 0 && (
+        <span
+          className="pointer-events-none absolute inset-0 z-10 grid place-items-center"
+          aria-hidden="true"
+        >
+          <Heart
+            key={bursts}
+            weight="fill"
+            size={110}
+            className={cn(
+              "text-on-media drop-shadow-lg",
+              reduce ? heartStyles.heartFade : heartStyles.heartPop,
+            )}
+          />
+        </span>
+      )}
 
       {/* Chip honesto de campaña paga (igual que la card del feed) */}
       {post.isPromoted && (
@@ -256,6 +310,13 @@ function ReelSlide({
                 <span className="shrink-0 text-xs text-on-media/70 drop-shadow-md">
                   {post.timeAgoLabel}
                 </span>
+                {/* Vistas: dato social, no métrica de panel — va discreto, al
+                    lado de "hace 2 h", y desaparece si todavía no hay ninguna. */}
+                {post.viewCount > 0 && (
+                  <span className="numeric shrink-0 text-xs text-on-media/70 drop-shadow-md">
+                    · {VIDEOS_COPY.viewsLabel(post.viewCount)}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -267,11 +328,11 @@ function ReelSlide({
         </div>
       </div>
 
-      {/* Riel de acciones (like optimista + comentarios + compartir + sonido) */}
+      {/* Riel de acciones (like + comentarios + guardar + compartir + sonido) */}
       <ReelActions
         post={post}
-        tenantId={tenantId}
         viewerId={viewerId}
+        like={like}
         muted={muted}
         onMutedChange={onMutedChange}
       />
@@ -290,26 +351,32 @@ const railButtonClass = cn(
   "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60 rounded-md",
 );
 
-function ReelActions({
+interface ReelLikeState {
+  liked: boolean;
+  count: number;
+  toggle: (next: boolean) => void;
+}
+
+/**
+ * Me gusta optimista del post del slide. Vive en ReelSlide (no en el riel)
+ * porque lo comparten DOS gestos: el doble toque sobre el video y el corazón
+ * del riel — con estados separados se desincronizaban, igual que pasaba en la
+ * card del feed antes de CardLikeProvider.
+ */
+function useReelLike({
   post,
   tenantId,
   viewerId,
-  muted,
-  onMutedChange,
 }: {
   post: PostCardModel;
   tenantId: string;
   viewerId: string | null;
-  muted: boolean;
-  onMutedChange: (muted: boolean) => void;
-}) {
+}): ReelLikeState {
   const router = useRouter();
-  const { toast } = useToast();
-  const commentsSheet = useCommentsSheet();
   const [liked, setLiked] = useState(post.likedByViewer);
   const [count, setCount] = useState(post.likeCount);
 
-  function toggleLike(nextLiked: boolean) {
+  function toggle(nextLiked: boolean) {
     if (!viewerId) {
       router.push(`/entrar?next=${encodeURIComponent("/videos")}`);
       return;
@@ -348,6 +415,76 @@ function ReelActions({
           setLiked(true);
           setCount((current) => current + 1);
         }
+      }
+    })();
+  }
+
+  return { liked, count, toggle };
+}
+
+function ReelActions({
+  post,
+  viewerId,
+  like,
+  muted,
+  onMutedChange,
+}: {
+  post: PostCardModel;
+  viewerId: string | null;
+  like: ReelLikeState;
+  muted: boolean;
+  onMutedChange: (muted: boolean) => void;
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const commentsSheet = useCommentsSheet();
+  const { liked, count, toggle: toggleLike } = like;
+  const [saved, setSaved] = useState(post.savedByViewer);
+  const [savePending, setSavePending] = useState(false);
+
+  /**
+   * Guardar/quitar de guardados. Optimista local: el ícono responde al toque y
+   * se revierte si el server dice que no. Sin sesión, guardar no tiene dónde
+   * guardarse → mismo camino que el me gusta, a /entrar.
+   */
+  function toggleSave() {
+    if (!viewerId) {
+      router.push(`/entrar?next=${encodeURIComponent("/videos")}`);
+      return;
+    }
+    if (savePending) return;
+    const next = !saved;
+    setSaved(next);
+    setSavePending(true);
+    try {
+      navigator.vibrate?.(10);
+    } catch {
+      // sin soporte háptico
+    }
+    void (async () => {
+      try {
+        const result = await toggleSaveAction({
+          subjectKind: "post",
+          subjectId: post.id,
+          save: next,
+        });
+        if (!result.ok) {
+          setSaved(!next);
+          toast({
+            title: VIDEOS_COPY.saveErrorTitle,
+            description: result.message ?? VIDEOS_COPY.saveErrorBody,
+            variant: "danger",
+          });
+        }
+      } catch {
+        setSaved(!next);
+        toast({
+          title: VIDEOS_COPY.saveErrorTitle,
+          description: VIDEOS_COPY.saveErrorBody,
+          variant: "danger",
+        });
+      } finally {
+        setSavePending(false);
       }
     })();
   }
@@ -395,6 +532,21 @@ function ReelActions({
       >
         <ChatCircle size={26} aria-hidden="true" />
         <span className="numeric text-xs font-medium">{post.commentCount}</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={toggleSave}
+        aria-label={saved ? VIDEOS_COPY.unsave : VIDEOS_COPY.save}
+        aria-pressed={saved}
+        // El estado se lee por el ícono RELLENO + la etiqueta, no por un color:
+        // sobre un video cualquiera un acento no garantiza contraste AA.
+        className={railButtonClass}
+      >
+        <BookmarkSimple size={26} weight={saved ? "fill" : "regular"} aria-hidden="true" />
+        <span className="text-xs font-medium">
+          {saved ? VIDEOS_COPY.saved : VIDEOS_COPY.save}
+        </span>
       </button>
 
       <button

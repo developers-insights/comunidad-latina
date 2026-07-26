@@ -18,10 +18,12 @@ import { formatDate, timeAgo } from "@/lib/utils";
 import {
   POST_COLUMNS,
   authorViewOf,
+  fetchActivePromotions,
   fetchAuthorViews,
   fetchBlockedIds,
   fetchEntityViews,
   fetchViewerLikes,
+  fetchViewerSaves,
   toPostCardModel,
   type PostRow,
 } from "../queries";
@@ -103,24 +105,30 @@ export default async function PostDetailPage({
   ].filter((value): value is string => Boolean(value));
 
   const now = new Date();
-  const [authors, likedIds, entityById, promoResult] = await Promise.all([
-    fetchAuthorViews(supabase, authorIds),
-    fetchViewerLikes(supabase, viewerId, [post.id]),
-    post.entity_listing_id
-      ? fetchEntityViews(supabase, [post.entity_listing_id])
-      : Promise.resolve(new Map<string, PostEntityView>()),
-    // Campaña activa del post: público sabe que es "Publicidad"; solo el autor
-    // ve hasta cuándo (badge más abajo).
-    supabase
-      .from("post_promotions")
-      .select("ends_at")
-      .eq("post_id", post.id)
-      .eq("status", "active")
-      .gt("ends_at", now.toISOString())
-      .order("ends_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  const [authors, likedIds, savedIds, entityById, promoResult, promotions] =
+    await Promise.all([
+      fetchAuthorViews(supabase, authorIds),
+      fetchViewerLikes(supabase, viewerId, [post.id]),
+      fetchViewerSaves(supabase, viewerId, [post.id]),
+      post.entity_listing_id
+        ? fetchEntityViews(supabase, [post.entity_listing_id])
+        : Promise.resolve(new Map<string, PostEntityView>()),
+      // Campaña activa del post: público sabe que es "Publicidad"; solo el autor
+      // ve hasta cuándo (badge más abajo). Sigue siendo la fuente de isPromoted.
+      supabase
+        .from("post_promotions")
+        .select("ends_at")
+        .eq("post_id", post.id)
+        .eq("status", "active")
+        .gt("ends_at", now.toISOString())
+        .order("ends_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      // Solo para el teléfono del CTA de WhatsApp: cta_whatsapp (0038) no está
+      // en database.types.ts y el helper ya resuelve el cast + el respaldo si la
+      // columna todavía no existe. Query chica (single-community) y en paralelo.
+      fetchActivePromotions(supabase, tenant.id),
+    ]);
 
   const entity = post.entity_listing_id
     ? (entityById.get(post.entity_listing_id) ?? null)
@@ -132,6 +140,10 @@ export default async function PostDetailPage({
   const postModel = toPostCardModel(post, authors, likedIds, now, {
     entity,
     isPromoted,
+    savedByViewer: savedIds.has(post.id),
+    ctaWhatsapp: isPromoted
+      ? (promotions.whatsappByPostId.get(post.id) ?? null)
+      : null,
   });
   const isPublished = post.status === "published";
 

@@ -13,7 +13,7 @@ import {
   moderateText,
   moderationTier,
 } from "@/lib/moderation";
-import { isProductCategory } from "@/components/marketplace/helpers";
+import { productDraftSchema, type DraftInput } from "./schema";
 
 /**
  * Server actions de /marketplace/publicar.
@@ -36,19 +36,6 @@ import { isProductCategory } from "@/components/marketplace/helpers";
  * para el JWT del usuario — "published" queda exclusivo de staff/admin client.
  */
 
-const CONDITIONS = ["nuevo", "usado"] as const;
-
-const draftSchema = z.object({
-  storeListingId: z.uuid(),
-  title: z.string().trim().min(8).max(120),
-  description: z.string().trim().min(10).max(4000),
-  priceAmount: z.number().positive().max(1_000_000),
-  category: z.string().refine(isProductCategory, "categoría inválida"),
-  condition: z.enum(CONDITIONS).nullish(),
-});
-
-export type DraftInput = z.input<typeof draftSchema>;
-
 export type CreateDraftResult =
   | { ok: true; listingId: string }
   | { ok: false; error: string; needsAuth?: boolean };
@@ -66,7 +53,7 @@ const COPY = {
 const GENERIC_ERROR = COPY.genericError;
 
 export async function createProductDraft(rawInput: DraftInput): Promise<CreateDraftResult> {
-  const parsed = draftSchema.safeParse(rawInput);
+  const parsed = productDraftSchema.safeParse(rawInput);
   if (!parsed.success) {
     return { ok: false, error: COPY.invalid };
   }
@@ -89,27 +76,32 @@ export async function createProductDraft(rawInput: DraftInput): Promise<CreateDr
     return { ok: false, error: COPY.tooManyToday };
   }
 
-  // attrs.store_listing_id es jsonb SIN foreign key: sin este chequeo,
-  // cualquier uuid ajeno pasaría como "mi tienda". Tiene que ser un negocio
-  // propio y publicado — mismo criterio que ofrece el <Select> del form.
-  const { data: store, error: storeError } = await supabase
-    .from("listings")
-    .select("id")
-    .eq("id", input.storeListingId)
-    .eq("tenant_id", tenant.id)
-    .eq("kind", "business")
-    .eq("created_by", user.id)
-    .eq("status", "published")
-    .maybeSingle();
+  // SPLIT TIENDAS/PARTICULARES: publicar sin tienda es un camino legítimo. Si
+  // NO viene storeListingId, el producto sale a nombre de la persona y attrs no
+  // lleva store_listing_id (esa ausencia ES "particular", ver parseProductAttrs).
+  //
+  // Si SÍ viene: attrs.store_listing_id es jsonb SIN foreign key — sin este
+  // chequeo cualquier uuid ajeno pasaría como "mi tienda". Tiene que ser un
+  // negocio propio y publicado, mismo criterio que ofrece el <Select> del form.
+  const attrs: Record<string, string> = { category: input.category };
 
-  if (storeError || !store) {
-    return { ok: false, error: COPY.storeInvalid };
+  if (input.storeListingId) {
+    const { data: store, error: storeError } = await supabase
+      .from("listings")
+      .select("id")
+      .eq("id", input.storeListingId)
+      .eq("tenant_id", tenant.id)
+      .eq("kind", "business")
+      .eq("created_by", user.id)
+      .eq("status", "published")
+      .maybeSingle();
+
+    if (storeError || !store) {
+      return { ok: false, error: COPY.storeInvalid };
+    }
+    attrs.store_listing_id = store.id;
   }
 
-  const attrs: Record<string, string> = {
-    store_listing_id: store.id,
-    category: input.category,
-  };
   if (input.condition) attrs.condition = input.condition;
 
   const { data: created, error } = await supabase

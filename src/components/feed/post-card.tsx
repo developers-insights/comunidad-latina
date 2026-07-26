@@ -224,6 +224,8 @@ export function PostCard({
             isPromoted={post.isPromoted}
             entity={post.entity}
             videoScope={videoScope}
+            viewCount={post.viewCount}
+            ctaWhatsapp={post.ctaWhatsapp}
           />
         )}
 
@@ -240,6 +242,7 @@ export function PostCard({
             likeCount={post.likeCount}
             likedByViewer={post.likedByViewer}
             commentCount={post.commentCount}
+            savedByViewer={post.savedByViewer}
             isDetail={isDetail}
           />
         </div>

@@ -46,6 +46,10 @@ const DIR_COPY = {
     dateLabel: "Fecha y hora del evento",
     dateError: "Decinos cuándo es el evento.",
   },
+  // Preselect por query param (menú crear-post del feed, ?kind=): link discreto
+  // para volver al selector sin perder el resto del wizard. Copy local — no
+  // toca COPY.publish (vivienda).
+  changeType: "Cambiar tipo",
 } as const;
 
 const PROFESSIONAL_CATEGORY_OPTIONS = [
@@ -63,7 +67,7 @@ function isProfessionalCategory(value: string): value is ProfessionalCategory {
   return PROFESSIONAL_CATEGORY_OPTIONS.some((option) => option.value === value);
 }
 
-type Kind = "property" | "business" | "professional" | "event" | "job";
+export type Kind = "property" | "business" | "professional" | "event" | "job";
 
 const KIND_OPTIONS: Array<{ value: Kind; label: string; Icon: typeof House }> = [
   { value: "property", label: "Vivienda", Icon: House },
@@ -105,17 +109,28 @@ async function preparePhoto(file: File): Promise<{ blob: Blob; ext: string }> {
   return { blob: file, ext: ["webp", "jpg", "jpeg", "png"].includes(ext) ? ext : "jpg" };
 }
 
-export function PublishForm({ tenantId }: { tenantId: string }) {
+export interface PublishFormProps {
+  tenantId: string;
+  /**
+   * Preselect por query param (?kind=, menú crear-post del feed — page.tsx ya
+   * lo validó). Con un kind fijado, el wizard arranca en el paso 1 (el
+   * selector del paso 0 queda salteado); "Cambiar tipo" vuelve a mostrarlo.
+   * Sin param (uso de siempre desde /publicar a mano), todo igual que antes.
+   */
+  initialKind?: Kind | null;
+}
+
+export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) {
   const { toast } = useToast();
   const { celebrating, celebrate } = useCelebration();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(initialKind ? 1 : 0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<"published" | "pending_review" | null>(null);
 
-  const [kind, setKind] = useState<Kind | null>(null);
+  const [kind, setKind] = useState<Kind | null>(initialKind);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
@@ -174,6 +189,12 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
   function goBack() {
     setError(null);
     setStep((value) => Math.max(0, value - 1));
+  }
+
+  /** "Cambiar tipo" (solo visible si arrancamos con un kind preseleccionado). */
+  function changeType() {
+    setError(null);
+    setStep(0);
   }
 
   function addPhotos(fileList: FileList | null) {
@@ -391,7 +412,26 @@ export function PublishForm({ tenantId }: { tenantId: string }) {
 
       {step === 1 && (
         <div className="flex flex-col gap-4">
-          <h2 className="font-display text-xl font-bold text-foreground">{C.steps.text.title}</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-display text-xl font-bold text-foreground">
+              {C.steps.text.title}
+            </h2>
+            {/* Solo con preselect (?kind= del menú crear-post): el paso 0 quedó
+                salteado, así que ofrecemos volver a él sin usar "Atrás". */}
+            {initialKind && (
+              <button
+                type="button"
+                onClick={changeType}
+                className={cn(
+                  "shrink-0 text-xs font-semibold text-foreground-muted underline-offset-2",
+                  "transition-colors duration-(--duration-fast) hover:text-brand-ink hover:underline",
+                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+                )}
+              >
+                {DIR_COPY.changeType}
+              </button>
+            )}
+          </div>
           <Field htmlFor="pub-title" label={C.steps.text.titleLabel} help={C.steps.text.titleHelp}>
             <Input
               id="pub-title"

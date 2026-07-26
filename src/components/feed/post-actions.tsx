@@ -1,9 +1,17 @@
 "use client";
 
-import { ChatCircle, Heart, ShareNetwork } from "@phosphor-icons/react/dist/ssr";
+import { useState, useTransition } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  BookmarkSimple,
+  ChatCircle,
+  Heart,
+  ShareNetwork,
+} from "@phosphor-icons/react/dist/ssr";
 import { useToast } from "@/components/ui";
 import { LikeBurst } from "@/components/motion";
 import { cn } from "@/lib/utils";
+import { toggleSaveAction } from "@/app/(app)/feed/engagement-actions";
 import { COPY } from "./copy";
 import { useCardLike, useOptimisticLike } from "./card-like-context";
 import { useCommentsSheet } from "./comments-sheet";
@@ -16,6 +24,11 @@ export interface PostActionsProps {
   likeCount: number;
   likedByViewer: boolean;
   commentCount: number;
+  /**
+   * Estado inicial de "Guardar" (PostCardModel.savedByViewer). Opcional para no
+   * obligar a los callers a actualizarse de golpe: ausente = no guardado.
+   */
+  savedByViewer?: boolean;
   /** true en el detalle: el botón de comentarios no navega, solo informa. */
   isDetail?: boolean;
   className?: string;
@@ -32,8 +45,8 @@ const actionClass = cn(
 );
 
 /**
- * Acciones sociales de un post (§4.b): me gusta optimista, comentarios y
- * compartir. Island chiquita — el resto de la card es server component.
+ * Acciones sociales de un post (§4.b): me gusta optimista, comentarios,
+ * compartir y guardar. Island chiquita — el resto de la card es server component.
  *
  * El estado de me gusta se COMPARTE con el doble-tap de la foto vía
  * useCardLike() (Instagram: tocar la foto y tocar el corazón mueven el mismo
@@ -43,6 +56,10 @@ const actionClass = cn(
  * El botón de comentarios YA NO navega a /feed/[id] (feedback cliente 2026-07-21:
  * "que abran desde abajo, tipo Instagram"): abre el sheet vía useCommentsSheet().
  * En el detalle sigue siendo informativo (los comentarios ya están en la página).
+ *
+ * "Guardar" tiene su propio estado optimista (la tabla `saves` no tiene contador
+ * que compartir con nadie) con la MISMA tolerancia a errores que el me gusta: se
+ * pinta al instante y se revierte si el server dice que no.
  */
 export function PostActions({
   postId,
@@ -51,9 +68,12 @@ export function PostActions({
   likeCount,
   likedByViewer,
   commentCount,
+  savedByViewer = false,
   isDetail = false,
   className,
 }: PostActionsProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const { toast } = useToast();
   const commentsSheet = useCommentsSheet();
 
@@ -68,6 +88,51 @@ export function PostActions({
     initialCount: likeCount,
   });
   const like = shared ?? own;
+
+  const [saved, setSaved] = useState(savedByViewer);
+  const [, startSaveTransition] = useTransition();
+
+  function goToLogin() {
+    router.push(`/entrar?next=${encodeURIComponent(pathname || "/feed")}`);
+  }
+
+  function toggleSave(next: boolean) {
+    if (!viewerId) {
+      goToLogin();
+      return;
+    }
+    if (next === saved) return; // ya está en ese estado: nada que hacer
+    setSaved(next);
+    try {
+      navigator.vibrate?.(10);
+    } catch {
+      // sin soporte háptico: nada que hacer
+    }
+
+    startSaveTransition(async () => {
+      const result = await toggleSaveAction({
+        subjectKind: "post",
+        subjectId: postId,
+        save: next,
+      });
+      if (result.ok) {
+        // El server manda: si el guardado ya existía (doble toque veloz), su
+        // respuesta es la verdad y el optimismo se alinea sin parpadeo.
+        setSaved(result.saved);
+        return;
+      }
+      setSaved(!next); // revertimos: la UI no puede mentir sobre lo guardado
+      if (result.code === "unauthenticated") {
+        goToLogin();
+        return;
+      }
+      toast({
+        title: COPY.post.saveErrorTitle,
+        description: COPY.post.saveErrorBody,
+        variant: "danger",
+      });
+    });
+  }
 
   async function share() {
     const url = `${window.location.origin}/feed/${postId}`;
@@ -140,6 +205,25 @@ export function PostActions({
         <ShareNetwork size={ICON} aria-hidden="true" />
         <span className="hidden sm:inline">{COPY.post.share}</span>
       </button>
+
+      {/* Guardar al final, como el marcador de Instagram. Misma micro-celebración
+          que el me gusta (LikeBurst) para que las dos reacciones se sientan de la
+          misma familia — acá con el acento de marca en vez del rojo. */}
+      <span className={cn("flex items-center", saved && "text-brand")}>
+        <LikeBurst
+          active={saved}
+          onToggle={toggleSave}
+          label={saved ? COPY.post.unsave : COPY.post.save}
+          particleColor="var(--color-brand)"
+          className={cn(actionClass, saved && "text-brand")}
+        >
+          <BookmarkSimple
+            size={ICON}
+            weight={saved ? "fill" : "regular"}
+            aria-hidden="true"
+          />
+        </LikeBurst>
+      </span>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
 import { createNotification } from "@/lib/notifications/notify";
@@ -40,6 +41,8 @@ const COPY = {
     "Este post ya tiene una campaña activa. Cuando termine, podés lanzar otra desde acá.",
   errorMuchosIntentos:
     "Empezaste varias campañas seguidas. Esperá un rato y probá de nuevo — tu post sigue publicado igual.",
+  errorWhatsapp:
+    "Revisá el WhatsApp: escribí el número completo con código de país, por ejemplo +1 305 555 0134.",
 } as const;
 
 /** Rate limit: cada intento crea una fila (+ Checkout Session con Stripe). */
@@ -53,10 +56,31 @@ const audienceSchema = z.discriminatedUnion("scope", [
   }),
 ]);
 
+/**
+ * Teléfono OPCIONAL del botón de WhatsApp de la campaña (post_promotions.
+ * cta_whatsapp, 0038). Se limpia a "+dígitos" y se acepta con 8 a 15 dígitos
+ * (el rango de E.164): así el anunciante lo escribe como quiera
+ * ("+1 (305) 555-0134") y se guarda normalizado. Vacío → null: la campaña
+ * simplemente no ofrece WhatsApp.
+ */
+const ctaWhatsappSchema = z
+  .string()
+  .max(40)
+  .optional()
+  .nullable()
+  .transform((raw) => {
+    if (!raw) return "";
+    const digitos = raw.replace(/\D/g, "");
+    return raw.trim().startsWith("+") ? `+${digitos}` : digitos;
+  })
+  .refine((valor) => valor === "" || /^\+?\d{8,15}$/.test(valor))
+  .transform((valor) => (valor === "" ? null : valor));
+
 const campanaSchema = z.object({
   postId: z.uuid(),
   paquete: z.enum(["7d", "14d", "30d"]),
   audience: audienceSchema,
+  ctaWhatsapp: ctaWhatsappSchema,
 });
 
 export type CrearCampanaResult =
@@ -73,9 +97,17 @@ export async function crearCampanaPost(
 ): Promise<CrearCampanaResult> {
   const parsed = campanaSchema.safeParse(input);
   if (!parsed.success) {
-    return { status: "error", message: COPY.errorGenerico };
+    // El único campo que el usuario puede escribir mal es el WhatsApp: si el
+    // rechazo vino de ahí se lo decimos, en vez de culpar a "nuestro lado".
+    const esTelefono = parsed.error.issues.some(
+      (issue) => issue.path[0] === "ctaWhatsapp",
+    );
+    return {
+      status: "error",
+      message: esTelefono ? COPY.errorWhatsapp : COPY.errorGenerico,
+    };
   }
-  const { postId, paquete, audience } = parsed.data;
+  const { postId, paquete, audience, ctaWhatsapp } = parsed.data;
   const tenant = await getTenant();
   const promo = POST_PROMO_PACKAGES[paquete];
 
@@ -124,12 +156,16 @@ export async function crearCampanaPost(
     }
 
     const admin = createAdminClient();
+    // cta_whatsapp llega con la 0038 y todavía no está en database.types.ts →
+    // los dos inserts de la campaña van por un cliente de schema abierto (mismo
+    // patrón que assistant_queries). El resto del archivo sigue tipado.
+    const adminOpen = admin as unknown as SupabaseClient;
 
     // 3a. MODO DEMO (Stripe sin configurar): activación directa, sin cobro.
     if (!isStripeConfigured) {
       const startsAt = new Date();
       const endsAt = new Date(startsAt.getTime() + promo.dias * 86_400_000);
-      const { data: created, error: insertError } = await admin
+      const { data: created, error: insertError } = await adminOpen
         .from("post_promotions")
         .insert({
           tenant_id: tenant.id,
@@ -140,6 +176,7 @@ export async function crearCampanaPost(
           amount_cents: postPromoMontoCentavos(promo),
           currency: "usd",
           audience: audienceJson,
+          cta_whatsapp: ctaWhatsapp,
           status: "active",
           starts_at: startsAt.toISOString(),
           ends_at: endsAt.toISOString(),
@@ -176,7 +213,7 @@ export async function crearCampanaPost(
     }
 
     // 3b. CON Stripe: fila pending_payment vía admin (RLS write=false a propósito).
-    const { data: created, error: insertError } = await admin
+    const { data: created, error: insertError } = await adminOpen
       .from("post_promotions")
       .insert({
         tenant_id: tenant.id,
@@ -187,6 +224,7 @@ export async function crearCampanaPost(
         amount_cents: postPromoMontoCentavos(promo),
         currency: "usd",
         audience: audienceJson,
+        cta_whatsapp: ctaWhatsapp,
         status: "pending_payment",
       })
       .select("id")

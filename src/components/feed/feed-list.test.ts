@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { feedItemKey, mergeFeedItems } from "./feed-list";
-import type { AuthorView, FeedItem } from "./helpers";
+import { feedItemKey, mergeFeedItems, renderFeedItem } from "./feed-list";
+import type { AuthorView, FeedItem, FeedTabId } from "./helpers";
 
 /**
- * Lógica pura del acumulado de scroll infinito (módulo FLUIDEZ). Sin imports
- * de runtime aparte de tipos, igual que helpers.test.ts / feed-tabs.test.ts:
- * se testea directo en node, sin jsdom.
+ * Lógica pura del acumulado de scroll infinito (módulo FLUIDEZ) + el cableado
+ * de props de `renderFeedItem`. Sin jsdom: crear un elemento de React no lo
+ * renderiza, así que alcanza con leer sus props — igual que helpers.test.ts /
+ * feed-tabs.test.ts, que corren directo en node.
  */
 
 const AUTHOR: AuthorView = {
@@ -34,8 +35,11 @@ function makePost(id: string, createdAt = "2026-01-01T00:00:00Z"): FeedItem {
       timeAgoLabel: "ahora",
       author: AUTHOR,
       likedByViewer: false,
+      savedByViewer: false,
+      viewCount: 0,
       entity: null,
       isPromoted: false,
+      ctaWhatsapp: null,
     },
   };
 }
@@ -132,5 +136,42 @@ describe("mergeFeedItems", () => {
     // documenta acá para que un cambio futuro no lo rompa sin querer.
     const merged = mergeFeedItems(existing, [makeListing("shared-id")]);
     expect(merged).toBe(existing);
+  });
+});
+
+describe("renderFeedItem: el tab viaja como videoScope", () => {
+  /** Props del elemento creado (no se renderiza: alcanza con inspeccionarlo). */
+  function propsOf(item: FeedItem, tab: FeedTabId): Record<string, unknown> {
+    const element = renderFeedItem(item, "tenant-1", "viewer-1", tab);
+    return (element as { props: Record<string, unknown> }).props;
+  }
+
+  it("pasa el tab activo a la PostCard (tocar un video abre el reel de ESE módulo)", () => {
+    expect(propsOf(makePost("p1"), "negocios").videoScope).toBe("negocios");
+    expect(propsOf(makePost("p2"), "eventos").videoScope).toBe("eventos");
+  });
+
+  it('en "Para ti" el scope es "para-ti" (el reel muestra todo)', () => {
+    expect(propsOf(makePost("p1"), "para-ti").videoScope).toBe("para-ti");
+  });
+
+  it("cada id de FEED_TABS es un scope válido del reel (contrato 1:1 con VIDEO_SCOPES)", () => {
+    // Si alguien agrega un tab al feed sin su scope en videos/helpers.ts, el
+    // tap sobre un video abriría un reel vacío. Este test lo fija de este lado.
+    const tabs: FeedTabId[] = [
+      "para-ti",
+      "propiedades",
+      "negocios",
+      "profesionales",
+      "eventos",
+    ];
+    for (const tab of tabs) {
+      expect(propsOf(makePost(`p-${tab}`), tab).videoScope).toBe(tab);
+    }
+  });
+
+  it("los ítems que no son post no reciben scope (no hay video que abrir)", () => {
+    expect(propsOf(makeListing("l1"), "negocios").videoScope).toBeUndefined();
+    expect(propsOf(makeGuide("primeros-pasos"), "negocios").videoScope).toBeUndefined();
   });
 });

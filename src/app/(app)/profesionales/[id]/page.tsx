@@ -20,6 +20,9 @@ import {
   categoryLabel,
   parseProfessionalAttrs,
 } from "@/components/directory";
+// Los guardados (tabla `saves`, polimórfica) los lee el módulo FEED, que es su
+// dueño: así la query vive una sola vez y no se duplica por vertical.
+import { fetchViewerSavedListingIds } from "@/app/(app)/feed/queries";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { formatDate } from "@/lib/utils";
@@ -65,7 +68,12 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
   // sin check → ausencia, jamás un negativo) + seguidores (0023, solo si
   // hay dueño con cuenta) — independientes, en paralelo.
   // ---------------------------------------------------------------------
-  const [{ data: checks }, { count: followerCount }, myFollowResult] = await Promise.all([
+  const [
+    { data: checks },
+    { count: followerCount },
+    myFollowResult,
+    savedListingIds,
+  ] = await Promise.all([
     supabase
       .from("verification_checks")
       .select("registry, registry_url, license_number, checked_at")
@@ -93,6 +101,8 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
           .eq("follower_id", user.id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    // Guardado del viewer para este aviso (sin sesión resuelve vacío al instante).
+    fetchViewerSavedListingIds(supabase, user?.id ?? null, [listing.id]),
   ]);
 
   const check = checks?.[0];
@@ -182,7 +192,11 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
     // footprint real ronda las 7rem — con pb-24 la última card quedaba TAPADA
     // por la barra (pedido cliente 2026-07-20). Mismo valor que propiedades.
     <div className="pb-40">
-      <DetailTopBar title={listing.title} listingId={listing.id} />
+      <DetailTopBar
+        title={listing.title}
+        listingId={listing.id}
+        initialSaved={savedListingIds.has(listing.id)}
+      />
 
       {listing.status !== "published" && isOwner && (
         <Banner variant="info" className="mb-3 rounded-lg">

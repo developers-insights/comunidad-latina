@@ -15,9 +15,17 @@ import {
   UserGear,
 } from "@phosphor-icons/react/dist/ssr";
 import { Badge, BottomSheet, Button, CardMedia, buttonVariants } from "@/components/ui";
-import { PublisherTrust, FALLBACK_PHOTO } from "@/components/listings";
+import {
+  PublisherTrust,
+  FALLBACK_PHOTO,
+  // Etiqueta del gesto "tocar la foto abre el visor": la define el módulo de
+  // avisos y la comparten sus dos cards (ListingCard y ésta) para decir lo
+  // mismo con las mismas palabras.
+  COPY as LISTINGS_COPY,
+} from "@/components/listings";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
+import { useMediaViewer } from "./media-viewer";
 import type { FeedListingModel } from "./helpers";
 
 import type { Icon } from "@phosphor-icons/react";
@@ -49,7 +57,7 @@ const LISTING_ACCENT: Record<string, string> = {
   creator_gig: "var(--accent-creadores)",
 };
 
-/** Foto grande clickeable = red social: tap en la card abre el detalle (§4.b, feedback 2026-07-24). */
+/** Foto grande tocable = red social (§4.b, feedback 2026-07-24 / 2026-07-26). */
 const MEDIA_LINK =
   "group block w-full text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
 
@@ -98,29 +106,41 @@ function AccentCta({
 
 /**
  * Card de listing NO-property para el feed (§4.b): misma gramática visual que la
- * ListingCard de VIVIENDA. Rediseño 2026-07-21: la foto es protagonista y el
- * título/precio/zona van SOBRE su borde inferior (overlayBottom de CardMedia,
- * legible por el scrim); el kind y la verificación quedan arriba. El único CTA
- * pasa a ser una píldora con el acento del vertical.
+ * ListingCard de VIVIENDA. Foto protagonista en 4:5 (retrato, como el resto del
+ * directorio desde 37fea5c) con el título/precio/zona en la franja de VIDRIO
+ * sobre su borde inferior; el kind y la verificación quedan arriba.
  *
- * CTA: eventos/profesionales/productos/gigs navegan a su detalle real;
- * negocios/empleos (sin página propia) abren un BottomSheet con la info completa.
+ * DOS destinos, uno por gesto (feedback 2026-07-26): tocar la FOTO abre el visor
+ * a pantalla completa; la píldora es la que lleva al detalle —
+ * eventos/profesionales/productos/gigs a su página real, negocios/empleos (sin
+ * página propia) a un BottomSheet con la info completa. Si el aviso no trajo
+ * foto, el tap cae al mismo destino que la píldora: abrir un visor del fallback
+ * genérico no le daría nada a nadie.
+ *
  * Los listings de propiedades usan SIEMPRE la ListingCard real.
  */
 export function FeedListingCard({ listing }: { listing: FeedListingModel }) {
   const [open, setOpen] = useState(false);
+  const viewer = useMediaViewer();
   const KindIcon = KIND_ICON[listing.kind] ?? Storefront;
   const kindLabel = COPY.listing.kindLabel[listing.kind] ?? listing.kind;
   const detailHref = DETAIL_ROUTE[listing.kind]?.(listing.id) ?? null;
   const accent = LISTING_ACCENT[listing.kind] ?? "var(--accent-feed)";
+  const photoUrl = listing.photoUrl;
 
-  // La foto es clickeable: kinds con detalle propio navegan; el resto
-  // (negocios/empleos) abren el mismo BottomSheet que el CTA (§4.b).
+  function openPhotos() {
+    if (!photoUrl) return;
+    viewer.open({
+      items: [{ kind: "image", url: photoUrl }],
+      authorName: listing.title,
+    });
+  }
+
   const media = (
     <CardMedia
       src={listing.photoUrl}
       fallbackSrc={FALLBACK_PHOTO}
-      aspect="video"
+      aspect="portrait"
       quality={62}
       overlayTopLeft={
         <>
@@ -138,15 +158,15 @@ export function FeedListingCard({ listing }: { listing: FeedListingModel }) {
       }
       overlayBottom={
         <div>
-          <h3 className="font-display text-base font-bold leading-snug text-on-media line-clamp-2">
+          <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
             {listing.title}
           </h3>
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
             {listing.priceLabel && (
-              <span className="numeric text-lg font-bold text-on-media">{listing.priceLabel}</span>
+              <span className="numeric text-lg font-bold">{listing.priceLabel}</span>
             )}
             {listing.areaLabel && (
-              <span className="flex items-center gap-1 text-sm text-on-media/85">
+              <span className="flex items-center gap-1 text-sm opacity-90">
                 <MapPin size={14} aria-hidden="true" className="shrink-0" />
                 {listing.areaLabel}
               </span>
@@ -164,7 +184,16 @@ export function FeedListingCard({ listing }: { listing: FeedListingModel }) {
           aria-label={listing.title}
           className="overflow-hidden rounded-[calc(var(--radius-xl)-6px)] bg-surface shadow-[inset_0_1px_0_var(--cl-bezel-highlight)]"
         >
-          {detailHref ? (
+          {photoUrl ? (
+            <button
+              type="button"
+              onClick={openPhotos}
+              aria-label={LISTINGS_COPY.list.openPhotos(listing.title)}
+              className={MEDIA_LINK}
+            >
+              {media}
+            </button>
+          ) : detailHref ? (
             <Link href={detailHref} aria-label={listing.title} className={MEDIA_LINK}>
               {media}
             </Link>

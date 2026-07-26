@@ -21,6 +21,9 @@ export const COPY = {
     verifiedChip: (date: string) => `Licencia activa al ${date}`,
     externalPublisher: (name: string) => `Publicado por ${name}`,
     communityMember: "Miembro de la comunidad",
+    // Tocar la foto abre el visor a pantalla completa; la píldora va al aviso.
+    openPhotos: (title: string) => `Ver fotos de ${title}`,
+    photoCount: (n: number) => `${n} ${n === 1 ? "foto" : "fotos"}`,
     viewDetails: "Ver detalles",
     loadMore: "Ver más propiedades",
     emptyTitle: "Todavía no hay nada por acá",
@@ -36,10 +39,19 @@ export const COPY = {
     share: "Compartir",
     shareCopiedTitle: "Link copiado",
     shareCopiedBody: "Compartilo con quien quieras.",
+    // Guardar (tabla saves, 0038): el aviso queda a mano para volver después.
+    // Dos etiquetas: el botón dice lo que HACE, no el estado en que está.
+    save: "Guardar",
+    unsave: "Quitar de guardados",
+    saveErrorTitle: "No pudimos guardarlo",
+    saveErrorBody:
+      "Puede ser un ratito de conexión floja — no es tu culpa. Probá de nuevo.",
     photoCounter: (current: number, total: number) => `${current}/${total}`,
     galleryLabel: "Fotos de la propiedad",
     galleryPrev: "Foto anterior",
     galleryNext: "Foto siguiente",
+    galleryOpen: (current: number, total: number) =>
+      `Ver foto ${current} de ${total} en pantalla completa`,
     verificationBandLead: "Verificación vigente",
     verificationBandDetail: "Ver detalle",
     verificationBandHide: "Ocultar detalle",

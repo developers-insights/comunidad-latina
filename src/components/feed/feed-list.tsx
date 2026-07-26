@@ -56,10 +56,32 @@ export function mergeFeedItems(existing: FeedItem[], incoming: FeedItem[]): Feed
   return fresh.length > 0 ? [...existing, ...fresh] : existing;
 }
 
-function renderFeedItem(item: FeedItem, tenantId: string, viewerId: string | null) {
+/**
+ * Un ítem del feed → su card. El `tab` viaja hasta PostCard como `videoScope`:
+ * los ids de FEED_TABS y de VIDEO_SCOPES son los MISMOS 1:1 (para-ti,
+ * propiedades, negocios, profesionales, eventos), así que tocar un video desde
+ * el tab "Negocios" abre el reel filtrado a negocios en vez de caer siempre al
+ * "para-ti" por default. El scoping ya existe entero del lado del server
+ * (videos/helpers.ts + videos/queries.ts) — esto es el eslabón que faltaba.
+ *
+ * Exportada para el test: fija que el scope llega y no vuelve a perderse.
+ */
+export function renderFeedItem(
+  item: FeedItem,
+  tenantId: string,
+  viewerId: string | null,
+  tab: FeedTabId,
+) {
   switch (item.type) {
     case "post":
-      return <PostCard post={item.post} tenantId={tenantId} viewerId={viewerId} />;
+      return (
+        <PostCard
+          post={item.post}
+          tenantId={tenantId}
+          viewerId={viewerId}
+          videoScope={tab}
+        />
+      );
     case "listing-property":
       return <ListingCard listing={item.listing} />;
     case "listing":
@@ -161,7 +183,7 @@ export function FeedList({ tab, tenantId, viewerId, initialItems, initialCursor 
           // como que "tarda en aparecer".
           batch.map((item) => (
             <div key={feedItemKey(item)} className={OFFSCREEN_SKIP_CLASS}>
-              {renderFeedItem(item, tenantId, viewerId)}
+              {renderFeedItem(item, tenantId, viewerId, tab)}
             </div>
           ))
         ) : (
@@ -174,7 +196,7 @@ export function FeedList({ tab, tenantId, viewerId, initialItems, initialCursor 
               delay={Math.min(i, 5) * 45}
               className={OFFSCREEN_SKIP_CLASS}
             >
-              {renderFeedItem(item, tenantId, viewerId)}
+              {renderFeedItem(item, tenantId, viewerId, tab)}
             </Reveal>
           ))
         ),

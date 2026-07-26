@@ -2,6 +2,7 @@ import { Suspense, cache } from "react";
 import { notFound } from "next/navigation";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { firstPhotoUrl } from "@/components/listings";
+import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 import {
   COPY,
   ProductCard,
@@ -30,7 +31,10 @@ const fetchStoreById = cache(async (id: string) => {
   const supabase = await createClient();
   return supabase
     .from("listings")
-    .select("id, tenant_id, kind, title, area_label, photos, status, created_by, created_at")
+    .select(
+      // store_verified: espejo público de Presencia Verificada (0039).
+      "id, tenant_id, kind, title, area_label, photos, status, created_by, created_at, store_verified",
+    )
     .eq("id", id)
     .eq("kind", "business")
     .maybeSingle();
@@ -71,38 +75,44 @@ async function TiendaContent({ storeId }: { storeId: string }) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [{ data: productRows, error }, { count: followerCount }, { data: myFollow }] =
-    await Promise.all([
-      supabase
-        .from("listings")
-        .select("id, title, price_amount, price_currency, attrs, photos, created_at")
-        .eq("tenant_id", tenant.id)
-        .eq("kind", "product")
-        .eq("status", "published")
-        .eq("attrs->>store_listing_id", storeId)
-        .order("created_at", { ascending: false })
-        .limit(PRODUCTS_LIMIT),
-      supabase
-        .from("follows")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenant.id)
-        .eq("target_kind", "listing")
-        .eq("target_id", storeId),
-      user
-        ? supabase
-            .from("follows")
-            .select("id")
-            .eq("tenant_id", tenant.id)
-            .eq("follower_id", user.id)
-            .eq("target_kind", "listing")
-            .eq("target_id", storeId)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
+  const [
+    { data: productRows, error },
+    { count: followerCount },
+    { data: myFollow },
+  ] = await Promise.all([
+    supabase
+      .from("listings")
+      .select("id, title, price_amount, price_currency, attrs, photos, created_at")
+      .eq("tenant_id", tenant.id)
+      .eq("kind", "product")
+      .eq("status", "published")
+      .eq("attrs->>store_listing_id", storeId)
+      .order("created_at", { ascending: false })
+      .limit(PRODUCTS_LIMIT),
+    supabase
+      .from("follows")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenant.id)
+      .eq("target_kind", "listing")
+      .eq("target_id", storeId),
+    user
+      ? supabase
+          .from("follows")
+          .select("id")
+          .eq("tenant_id", tenant.id)
+          .eq("follower_id", user.id)
+          .eq("target_kind", "listing")
+          .eq("target_id", storeId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   if (error) {
     console.warn("[marketplace] query de productos de tienda falló", { code: error.code });
   }
+
+  const verified = store.store_verified;
+  const isOwner = Boolean(user && store.created_by === user.id);
 
   const storeModel: StoreHeaderModel = {
     id: store.id,
@@ -111,6 +121,7 @@ async function TiendaContent({ storeId }: { storeId: string }) {
     photoUrl: firstPhotoUrl(store.photos),
     followerCount: followerCount ?? 0,
     initialFollowing: Boolean(myFollow),
+    verified,
   };
 
   const cards: ProductCardModel[] = (productRows ?? []).map((row) => ({
@@ -119,12 +130,30 @@ async function TiendaContent({ storeId }: { storeId: string }) {
     priceLabel: formatProductPrice(row.price_amount, row.price_currency, tenant.locale),
     category: parseProductAttrs(row.attrs).category,
     photoUrl: firstPhotoUrl(row.photos),
-    store: { id: store.id, name: store.title },
+    seller: { kind: "store", name: store.title, storeId: store.id, verified },
   }));
 
   return (
     <div>
       <StoreHeader store={storeModel} />
+
+      {/* Escribirle a la tienda sin salir de su vidriera. El destinatario es el
+          listing kind='business': request_contact resuelve a su dueño. Sin
+          dueño con cuenta (negocio de seed) no hay a quién escribirle. */}
+      {store.created_by && !isOwner && (
+        <section className="mt-6">
+          <h2 className="mb-2 text-sm font-semibold text-foreground-secondary">
+            {COPY.store.messageTitle}
+          </h2>
+          <InlineMessageCta
+            listingId={store.id}
+            isLoggedIn={Boolean(user)}
+            nextPath={`/marketplace/tienda/${store.id}`}
+            label={COPY.store.messageCta}
+            placeholder={COPY.store.messagePlaceholder}
+          />
+        </section>
+      )}
 
       <section className="mt-6">
         <h2 className="mb-3 font-display text-lg font-bold text-foreground">

@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { Storefront } from "@phosphor-icons/react/dist/ssr";
 import { AccentLink, BezelCard, CardMedia } from "@/components/ui";
-import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 import { categoryLabel, categoryShortLabel } from "./helpers";
+import { SellerChip, type SellerView } from "./seller-chip";
 
 /** Sin foto propia (og-default): composición abstracta de marca, neutral para cualquier rubro. */
 const FALLBACK_PHOTO = "/images/og-default.png";
@@ -21,7 +20,8 @@ export interface ProductCardModel {
   /** Valor crudo de attrs.category — la card lo traduce con categoryShortLabel() (chip) y categoryLabel() (aria-label). */
   category: string | null;
   photoUrl: string | null;
-  store: { id: string; name: string } | null;
+  /** Tienda o particular — lo resuelve la página en batch (ver marketplace/page.tsx). */
+  seller: SellerView;
 }
 
 /**
@@ -77,20 +77,8 @@ export function ProductCard({ product }: { product: ProductCardModel }) {
         </Link>
 
         <div className="flex flex-1 flex-col gap-2 p-3">
-          {product.store && (
-            <Link
-              href={`/marketplace/tienda/${product.store.id}`}
-              aria-label={COPY.list.storeLinkLabel(product.store.name)}
-              className={cn(
-                "inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border border-border-subtle bg-surface-subtle px-2.5 py-1",
-                "text-xs font-medium text-foreground-secondary",
-                "transition-colors duration-(--duration-fast) hover:border-border-strong hover:text-foreground",
-              )}
-            >
-              <Storefront size={13} aria-hidden="true" className="shrink-0" />
-              <span className="min-w-0 truncate">{product.store.name}</span>
-            </Link>
-          )}
+          {/* Quién vende: tienda (con su acento y link a la vidriera) o particular. */}
+          <SellerChip seller={product.seller} />
 
           <AccentLink accent={ACCENT} href={`/marketplace/${product.id}`} className="mt-auto">
             {COPY.list.viewProduct}

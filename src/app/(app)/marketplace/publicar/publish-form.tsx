@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { CheckCircle, ImageSquare, X } from "@phosphor-icons/react/dist/ssr";
+import { CheckCircle, ImageSquare, Storefront, X } from "@phosphor-icons/react/dist/ssr";
 import {
   BezelCard,
   Button,
@@ -32,6 +32,15 @@ export interface StoreOption {
   id: string;
   title: string;
 }
+
+/**
+ * Valor del <Select> que significa "no hay tienda detrás": se manda como
+ * `storeListingId: null` y el producto queda a nombre de la persona.
+ */
+const PRIVATE_SELLER = "";
+
+/** Alta de negocio: el wizard genérico con el tipo ya elegido (lo lee /publicar). */
+const CREATE_BUSINESS_HREF = "/publicar?kind=business";
 
 interface PhotoItem {
   file: File;
@@ -73,7 +82,9 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
   const { celebrating, celebrate } = useCelebration();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [storeId, setStoreId] = useState(stores[0]?.id ?? "");
+  // Con tiendas propias arranca en la primera (lo más probable); sin tiendas,
+  // en "particular" — que ahora es un camino de primera clase, no un fallback.
+  const [storeId, setStoreId] = useState(stores[0]?.id ?? PRIVATE_SELLER);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
@@ -117,7 +128,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
   }
 
   function validate(): string | null {
-    if (!storeId) return C.errors.storeRequired;
+    // Sin chequeo de tienda: publicar como particular es válido.
     if (title.trim().length < 8) return C.errors.titleShort;
     if (description.trim().length < 10) return C.errors.descriptionShort;
     const amount = Number(price);
@@ -153,7 +164,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
       let listingId = draftId;
       if (!listingId) {
         const result = await createProductDraft({
-          storeListingId: storeId,
+          storeListingId: storeId === PRIVATE_SELLER ? null : storeId,
           title: title.trim(),
           description: description.trim(),
           priceAmount: Number(price),
@@ -256,15 +267,42 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
   // -------------------------------------------------------------------------
   return (
     <div className="flex flex-col gap-5">
-      <Field htmlFor="mkt-store" label={C.storeFieldLabel} help={C.storeFieldHelp}>
-        <Select id="mkt-store" value={storeId} onChange={(event) => setStoreId(event.target.value)}>
-          {stores.map((store) => (
-            <option key={store.id} value={store.id}>
-              {store.title}
-            </option>
-          ))}
-        </Select>
-      </Field>
+      {/* Quién vende. Con tiendas propias es una elección; sin ninguna, es una
+          aclaración cálida + la invitación (opcional) a crear el negocio. */}
+      {stores.length > 0 ? (
+        <Field htmlFor="mkt-store" label={C.storeFieldLabel} help={C.storeFieldHelp}>
+          <Select
+            id="mkt-store"
+            value={storeId}
+            onChange={(event) => setStoreId(event.target.value)}
+          >
+            {stores.map((store) => (
+              <option key={store.id} value={store.id}>
+                {store.title}
+              </option>
+            ))}
+            <option value={PRIVATE_SELLER}>{C.sellAsPrivate}</option>
+          </Select>
+        </Field>
+      ) : (
+        <BezelCard coreClassName="flex items-start gap-3 p-4">
+          <Storefront
+            size={22}
+            aria-hidden="true"
+            className="mt-0.5 shrink-0 text-foreground-muted"
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">{C.privateOnlyTitle}</p>
+            <p className="mt-0.5 text-sm text-foreground-secondary">{C.privateOnlyBody}</p>
+            <Link
+              href={CREATE_BUSINESS_HREF}
+              className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-brand-ink underline underline-offset-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+            >
+              {C.createBusinessCta}
+            </Link>
+          </div>
+        </BezelCard>
+      )}
 
       <Field htmlFor="mkt-title" label={C.titleLabel} help={C.titleHelp}>
         <Input

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SignIn, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/marketplace";
 import { createClient } from "@/lib/supabase/server";
@@ -34,8 +34,11 @@ export default async function MarketplacePublicarPage() {
     );
   }
 
-  // Negocios propios y publicados — sin uno de estos no hay "tienda" desde la
-  // que publicar (attrs.store_listing_id necesita apuntar a un negocio real).
+  // Negocios propios y publicados. SPLIT TIENDAS/PARTICULARES (call con el
+  // cliente 2026-07-24): tener uno ya NO es requisito para publicar — la lista
+  // vacía es un caso normal, no un muro. Con tiendas, el form deja elegir desde
+  // cuál se vende (o como particular); sin tiendas, publica a nombre de la
+  // persona y ofrece crear el negocio como algo opcional.
   const { data: stores } = await supabase
     .from("listings")
     .select("id, title")
@@ -45,22 +48,6 @@ export default async function MarketplacePublicarPage() {
     .eq("status", "published")
     .order("created_at", { ascending: false });
 
-  if (!stores || stores.length === 0) {
-    return (
-      <EmptyState
-        icon={<Storefront />}
-        title={COPY.publish.needStoreTitle}
-        message={COPY.publish.needStoreMessage}
-        action={
-          <Link href="/publicar" className={buttonVariants({ variant: "primary", size: "md" })}>
-            {COPY.publish.needStoreCta}
-          </Link>
-        }
-        className="py-20"
-      />
-    );
-  }
-
   return (
     <>
       <h1 className="mb-1 font-display text-2xl font-bold tracking-tight text-foreground">
@@ -69,7 +56,7 @@ export default async function MarketplacePublicarPage() {
       <p className="mb-6 text-sm text-foreground-secondary">{COPY.publish.subtitle}</p>
       <PublishForm
         tenantId={tenant.id}
-        stores={stores.map((store) => ({ id: store.id, title: store.title }))}
+        stores={(stores ?? []).map((store) => ({ id: store.id, title: store.title }))}
       />
     </>
   );

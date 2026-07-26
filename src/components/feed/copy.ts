@@ -19,21 +19,41 @@ export const COPY = {
   },
 
   composer: {
-    placeholder: "¿Qué está pasando en tu comunidad?",
+    // Simplificado en el rediseño 2026-07-26: el saludo por franja ya no vive
+    // SOLO en el placeholder — ahora es una línea visible propia (ver
+    // `greetingByHour` abajo), así que el placeholder vuelve a ser neutro.
+    placeholder: "Contale algo a tu comunidad…",
     /**
-     * Saludo rotativo por franja horaria (pedido cliente 2026-07-21): el
-     * composer recibe con calidez según el momento del día. Se resuelve en el
-     * cliente tras montar (la hora del usuario no existe en el server) y cae
-     * al placeholder neutro mientras tanto.
+     * Saludo visible bajo el input (rediseño 2026-07-26, antes vivía solo como
+     * placeholder — pedido cliente 2026-07-21 original): CUATRO franjas —
+     * madrugada, mañana, tarde, noche —, cada una cálida y con nombre de pila
+     * cuando el perfil lo tiene (firstNameOf sobre viewerName). Se resuelve en
+     * el cliente tras montar (la hora es del USUARIO, no existe en el server)
+     * — antes de eso el composer no muestra esta línea (evita mismatch de
+     * hidratación, mismo criterio que el resto del proyecto).
      */
-    greetingByHour: (hour: number): string => {
+    greetingByHour: (hour: number, firstName?: string | null): string => {
+      const name = firstName?.trim() || "";
       if (hour >= 5 && hour < 12) {
-        return "Buenos días, mi gente — ¿qué está pasando en tu comunidad?";
+        return name
+          ? `Buenos días, ${name} ☀️ ¿Qué se cuenta hoy?`
+          : "Buenos días ☀️ ¿Qué se cuenta hoy en tu comunidad?";
       }
       if (hour >= 12 && hour < 19) {
-        return "Buenas tardes — ¿qué se está moviendo hoy en el barrio?";
+        return name
+          ? `Buenas tardes, ${name} 🌤️ ¿Qué anda pasando por el barrio?`
+          : "Buenas tardes 🌤️ ¿Qué anda pasando por el barrio?";
       }
-      return "Buenas noches — contale a tu comunidad cómo te fue hoy.";
+      if (hour >= 19) {
+        return name
+          ? `Buenas noches, ${name} 🌙 Contale a tu comunidad cómo te fue hoy.`
+          : "Buenas noches 🌙 Contale a tu comunidad cómo te fue hoy.";
+      }
+      // Madrugada (0–4): mismo saludo que la noche —en español no hay uno
+      // propio para esta franja—, pero con un guiño a quien sigue despierto.
+      return name
+        ? `Buenas noches, ${name} 🌙 Si seguís despierto, contanos qué se te cruza por la cabeza.`
+        : "Buenas noches 🌙 Si seguís despierto, contanos qué se te cruza por la cabeza.";
     },
     addPhoto: "Agregar foto",
     addPhotos: "Agregar fotos",
@@ -72,6 +92,63 @@ export const COPY = {
     errorTitle: "No se pudo publicar",
     errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
     tooShort: "Contanos un poquito más — al menos un par de palabras.",
+    // Modo pregunta (menú crear-post, rediseño 2026-07-26): chip removible que
+    // marca el kind='question' — el post visible en la card usa su PROPIO
+    // copy (COPY.post.questionChip); esta es la del composer, antes de publicar.
+    questionModeChip: "Pregunta",
+    questionModeRemove: "Salir del modo pregunta",
+    /**
+     * Menú "crear publicación" (feedback cliente 2026-07-24: "menú crear-post"
+     * pendiente). Una fila-disparador abre un BottomSheet con TODOS los tipos
+     * que se pueden crear desde la comunidad — no solo el post con foto/video,
+     * también un acceso directo a cada módulo (vivienda, negocios, etc.).
+     */
+    createMenu: {
+      rowLabel: "¿Qué querés publicar?",
+      sheetTitle: "Elegí qué publicar",
+      tiles: {
+        photo: {
+          title: "Foto",
+          description: "Compartí una o varias fotos con tu comunidad.",
+        },
+        video: {
+          title: "Video",
+          description: "Subí un video corto, hasta 60 MB.",
+        },
+        question: {
+          title: "Pregunta",
+          description: "Consultale algo a tu comunidad, sin necesidad de foto.",
+        },
+        property: {
+          title: "Propiedad",
+          description: "Publicá un alquiler o una venta.",
+        },
+        business: {
+          title: "Negocio",
+          description: "Sumá tu negocio al directorio de la comunidad.",
+        },
+        professional: {
+          title: "Profesional",
+          description: "Ofrecé tus servicios como profesional.",
+        },
+        event: {
+          title: "Evento",
+          description: "Invitá a tu comunidad a un evento.",
+        },
+        job: {
+          title: "Empleo",
+          description: "Publicá una búsqueda de personal.",
+        },
+        product: {
+          title: "Producto",
+          description: "Vendé un producto de tu negocio en el marketplace.",
+        },
+        creatorService: {
+          title: "Servicio de creador",
+          description: "Contratá a un creador de contenido para tu negocio.",
+        },
+      },
+    },
   },
 
   inviteCard: {
@@ -96,6 +173,14 @@ export const COPY = {
     share: "Compartir",
     shareCopiedTitle: "Link copiado",
     shareCopiedBody: "Pegalo donde quieras para compartir la publicación.",
+    // Guardar (tabla saves, 0038): la publicación queda a mano para después.
+    // Dos etiquetas, como en me gusta: el botón dice lo que HACE, no el estado
+    // (y el botón es solo ícono, así que no hay texto visible que contradiga la
+    // etiqueta accesible — WCAG 2.5.3).
+    save: "Guardar",
+    unsave: "Quitar de guardados",
+    saveErrorTitle: "No pudimos guardarla",
+    saveErrorBody: "Puede ser un ratito de conexión floja — no es tu culpa. Probá de nuevo.",
     openPost: "Ver publicación y comentarios",
     inReviewBanner:
       "Tu publicación está en revisión. Apenas esté aprobada, la va a ver toda la comunidad.",
@@ -120,6 +205,9 @@ export const COPY = {
       job: "Postularme",
     } as Record<string, string>,
     boostCtaFallback: "Ver más",
+    // Botón extra de la campaña cuando el anunciante dejó un WhatsApp: abre el
+    // chat directo. Convive con el CTA de la entidad, nunca lo reemplaza.
+    boostCtaWhatsapp: "WhatsApp",
   },
 
   report: {

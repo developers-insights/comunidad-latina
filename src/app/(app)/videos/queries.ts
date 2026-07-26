@@ -41,6 +41,32 @@ const SCAN_CHUNK = 40;
 const MAX_SCANS = 4;
 const DEFAULT_PAGE_SIZE = 6;
 
+// ---------------------------------------------------------------------------
+// Engagement del reel: guardados (tabla saves, 0038)
+// ---------------------------------------------------------------------------
+// Las VISTAS no necesitan query propia: `view_count` ya viaja en POST_COLUMNS y
+// toPostCardModel la mapea a `viewCount` (0 hasta que corra el backfill).
+
+/**
+ * Posts que el viewer tiene GUARDADOS, en batch — espeja a `fetchViewerLikes`
+ * del feed (mismo shape subject_kind/subject_id). Vacío sin sesión.
+ */
+export async function fetchViewerSaves(
+  supabase: Supabase,
+  viewerId: string | null,
+  postIds: string[],
+): Promise<Set<string>> {
+  if (!viewerId || postIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from("saves")
+    .select("subject_id")
+    .eq("subject_kind", "post")
+    .eq("profile_id", viewerId)
+    .in("subject_id", postIds);
+  if (error) return new Set();
+  return new Set((data ?? []).map((row) => row.subject_id));
+}
+
 export interface ReelsCursor {
   createdAt: string;
   id: string;
@@ -171,7 +197,10 @@ export async function fetchVideoReelsPage({
       console.warn("[videos] query de reels falló", { code: error.code });
       break;
     }
-    const rows = (data ?? []) as PostRow[];
+    // Doble cast: `POST_COLUMNS` está anotado como `string` (ver su comentario
+    // en feed/queries.ts), así que supabase-js no puede derivar la forma de la
+    // fila y devuelve `GenericStringError[]`. El contrato real lo fija PostRow.
+    const rows = (data ?? []) as unknown as PostRow[];
     if (rows.length === 0) {
       exhausted = true;
       break;
@@ -217,17 +246,16 @@ export async function fetchVideoReelsPage({
     .map((row) => row.entity_listing_id)
     .filter((id): id is string => Boolean(id));
 
-  const [authors, likedIds, entityById] = await Promise.all([
+  const pageIds = pageRows.map((row) => row.id);
+
+  const [authors, likedIds, entityById, savedIds] = await Promise.all([
     fetchAuthorViews(
       supabase,
       pageRows.map((row) => row.author_id).filter((id): id is string => Boolean(id)),
     ),
-    fetchViewerLikes(
-      supabase,
-      viewerId,
-      pageRows.map((row) => row.id),
-    ),
+    fetchViewerLikes(supabase, viewerId, pageIds),
     fetchEntityViews(supabase, entityListingIds),
+    fetchViewerSaves(supabase, viewerId, pageIds),
   ]);
 
   const items = pageRows.map((row) =>
@@ -236,6 +264,8 @@ export async function fetchVideoReelsPage({
         ? (entityById.get(row.entity_listing_id) ?? null)
         : null,
       isPromoted: promotedPostIds.has(row.id),
+      // El botón GUARDAR del riel arranca en su estado real (no siempre vacío).
+      savedByViewer: savedIds.has(row.id),
     }),
   );
 

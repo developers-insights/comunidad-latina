@@ -314,23 +314,19 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-on-media", "text-on-media"],
     cobertura: "cl-print-fill",
   },
-  // Toggle de sonido del video del feed — vive dentro de un <button>.
+  // Video del feed, tres portadores y ninguno llega al papel: el toggle de
+  // sonido vive dentro de un <button>; la píldora de vistas se imprime con su
+  // velo (cl-print-fill); el corazón del doble-tap es transitorio (sólo existe
+  // mientras dura la animación). El hook explícito es el de la píldora.
   "src/components/feed/card-video.tsx": {
-    inks: ["text-on-media"],
-    cobertura: "control",
-  },
-  // Título/precio/zona sobre la franja inferior de la foto (overlayBottom de
-  // CardMedia): el respaldo impreso es el <img> de CardMedia, como el hero.
-  "src/components/feed/feed-listing-card.tsx": {
     inks: ["text-on-media", "text-on-media", "text-on-media"],
-    cobertura: "sobre <img>",
-    prueba: { archivo: "src/components/ui/card-media.tsx", contiene: ["<img"] },
+    cobertura: "cl-print-fill",
   },
-  "src/components/listings/listing-card.tsx": {
-    inks: ["text-on-media", "text-on-media", "text-on-media"],
-    cobertura: "sobre <img>",
-    prueba: { archivo: "src/components/ui/card-media.tsx", contiene: ["<img"] },
-  },
+  // feed-listing-card.tsx y listings/listing-card.tsx SALIERON del inventario
+  // (2026-07-26): su título/precio/zona pasó a heredar la tinta de
+  // <MediaScrimBottom>, que la declara UNA vez en card-media.tsx (ya inventariado
+  // ahí, cobertura "sobre <img>"). Las cards dejaron de escribir `on-*` propias —
+  // que era justo el objetivo de centralizar la franja de vidrio.
   // Visor de medios fullscreen: overlay modal sobre TODA la página — en papel
   // no significa nada, el panel entero lleva cl-print-hide.
   "src/components/feed/media-viewer.tsx": {
@@ -340,9 +336,10 @@ const INVENTARIO: Record<string, Entrada> = {
   // Reels /videos: superficie de video fullscreen (fixed, bg-media-shade) — el
   // contenedor raíz entero lleva cl-print-hide; imprimir reels no existe.
   // 9 tras quitar los chips de scope del reel (commit cba8e0b): el inventario
-  // había quedado en 10 y desactualizó este guard.
+  // había quedado en 10 y desactualizó este guard. 11 desde 2026-07-26: suma el
+  // contador de vistas junto al autor y el corazón del doble-tap.
   "src/app/(app)/videos/video-reels.tsx": {
-    inks: Array<string>(9).fill("text-on-media"),
+    inks: Array<string>(11).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
   // Glifo Play sobre el thumbnail de video del grid del perfil — se imprime
@@ -383,6 +380,14 @@ const INVENTARIO: Record<string, Entrada> = {
     cobertura: "cl-print-fill",
   },
   "src/components/messaging/composer.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "control",
+  },
+  // Mensaje inline del detalle de aviso (call cliente 2026-07-24): mismo
+  // composer que el hilo de Mensajes, embebido en la publicación. Único
+  // portador = el botón redondo de enviar, un <button>. El CTA colapsado sin
+  // sesión es un <a> con buttonVariants, que ya trae su propio cl-print-hide.
+  "src/components/listings/inline-message-cta.tsx": {
     inks: ["text-brand-foreground"],
     cobertura: "control",
   },

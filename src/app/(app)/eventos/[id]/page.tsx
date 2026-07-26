@@ -12,6 +12,11 @@ import {
   listingPhotoUrl,
   toTrustLevel,
 } from "@/components/listings";
+import { InlineMessageCta } from "@/components/listings/inline-message-cta";
+// Lectura de `saves` (migración 0038) con degradación a false. Vive en el
+// paquete de marketplace porque es donde nació el guardado de avisos; es
+// genérica por listingId y no arrastra nada específico de productos.
+import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
 import {
   COPY,
   DirectoryDetailHero,
@@ -191,9 +196,12 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   const venue = attrs.venueArea ?? listing.area_label;
   const isOwner = Boolean(user && listing.created_by === user.id);
 
+  // ¿Ya lo guardé? (`saves`, 0038 — false si la migración todavía no corrió.)
+  const initialSaved = await fetchListingSaved(supabase, tenant.id, listing.id, user?.id);
+
   return (
     <div className="pb-28">
-      <DetailTopBar title={listing.title} listingId={listing.id} />
+      <DetailTopBar title={listing.title} listingId={listing.id} initialSaved={initialSaved} />
 
       {listing.status !== "published" && isOwner && (
         <Banner variant="info" className="mb-3 rounded-lg">
@@ -303,6 +311,19 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
             {C.detail.publishedBy}
           </h2>
           {publisherCard}
+
+          {/* Escribirle a quien organiza sin salir del evento (call cliente
+              2026-07-24). Sólo si el evento tiene dueño con cuenta: una fuente
+              externa no tiene bandeja de entrada. El CTA "Quiero ir" sigue
+              siendo la acción principal, abajo. */}
+          {listing.created_by && !isOwner && (
+            <InlineMessageCta
+              listingId={listing.id}
+              isLoggedIn={Boolean(user)}
+              nextPath={`/eventos/${listing.id}`}
+              className="mt-3"
+            />
+          )}
         </section>
       )}
 

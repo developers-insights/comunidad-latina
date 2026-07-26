@@ -1,12 +1,13 @@
 "use client";
 
 import { useId, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { PaperPlaneRight } from "@phosphor-icons/react/dist/ssr";
 import { Spinner, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { createCommentAction } from "@/app/(app)/feed/actions";
+import { createListingCommentAction } from "@/app/(app)/marketplace/comments-actions";
 import { COPY } from "./copy";
 
 const MAX_LENGTH = 1000;
@@ -26,8 +27,7 @@ export interface CommentOptimisticHandlers {
   onRejected: (tempId: string) => void;
 }
 
-export interface CommentComposerProps {
-  postId: string;
+interface CommentComposerBaseProps {
   /** Deshabilita el input (p.ej. mientras la hoja carga el hilo o su auth). */
   disabled?: boolean;
   /**
@@ -39,12 +39,41 @@ export interface CommentComposerProps {
 }
 
 /**
+ * El sujeto del comentario: un POST del feed o un AVISO del marketplace. Union
+ * discriminada para que sea imposible pedir los dos (o ninguno) por accidente.
+ */
+export type CommentComposerProps = CommentComposerBaseProps &
+  (
+    | { postId: string; listingId?: undefined }
+    | { listingId: string; postId?: undefined }
+  );
+
+/** Resultado normalizado de las dos server actions (post / listing). */
+type SendOutcome =
+  | { ok: true }
+  | {
+      ok: false;
+      code: "unauthenticated" | "tenant-mismatch" | "flagged" | "error";
+      message?: string;
+    };
+
+/**
  * Composer de comentario — misma moderación que el post (el server action pasa
  * el texto por moderateText antes de publicar). Dos modos: el del detalle SSR
  * (`router.refresh()`) y el optimista de la hoja del feed (ver `optimistic`).
+ *
+ * Sirve a los dos sujetos con el MISMO markup y el mismo ciclo optimista: el
+ * único cambio es a qué server action le habla.
  */
-export function CommentComposer({ postId, disabled = false, optimistic }: CommentComposerProps) {
+export function CommentComposer(props: CommentComposerProps) {
+  const { disabled = false, optimistic } = props;
+  // Sin destructuring del union: ambas variantes declaran las dos claves (una
+  // como `undefined`), así el acceso es seguro y el branch de abajo es explícito.
+  const postId = props.postId ?? null;
+  const listingId = props.listingId ?? null;
+
   const router = useRouter();
+  const pathname = usePathname();
   const { toast } = useToast();
   const [value, setValue] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -74,6 +103,26 @@ export function CommentComposer({ postId, disabled = false, optimistic }: Commen
     }
   }
 
+  /** Publica contra la action que corresponda y normaliza el resultado. */
+  async function publish(body: string): Promise<SendOutcome> {
+    if (listingId) {
+      const result = await createListingCommentAction({ listingId, body });
+      if (result.ok) return { ok: true };
+      // "moderation" es el "flagged" del marketplace (mismo aviso cálido) y
+      // "invalid" no le dice nada al usuario: cae al error genérico.
+      if (result.code === "moderation") return { ok: false, code: "flagged" };
+      if (result.code === "invalid") return { ok: false, code: "error" };
+      return { ok: false, code: result.code, message: result.message };
+    }
+    const result = await createCommentAction({ postId: postId ?? "", body });
+    if (result.ok) return { ok: true };
+    if (result.code === "invalid") return { ok: false, code: "error" };
+    if (result.code === "tenant-mismatch") {
+      return { ok: false, code: "tenant-mismatch", message: result.message };
+    }
+    return { ok: false, code: result.code };
+  }
+
   function send() {
     const body = value.trim();
     if (!body || isPending || disabled) return;
@@ -87,7 +136,7 @@ export function CommentComposer({ postId, disabled = false, optimistic }: Commen
     }
 
     startTransition(async () => {
-      const result = await createCommentAction({ postId, body });
+      const result = await publish(body);
       if (result.ok) {
         if (optimistic) {
           optimistic.onPublished(tempId);
@@ -106,7 +155,10 @@ export function CommentComposer({ postId, disabled = false, optimistic }: Commen
       }
 
       if (result.code === "unauthenticated") {
-        router.push(`/entrar?next=${encodeURIComponent(`/feed/${postId}`)}`);
+        // Volver EXACTAMENTE a donde estaba: el detalle del post cuando es un
+        // post, o la página del aviso cuando el comentario es de un listing.
+        const next = postId ? `/feed/${postId}` : pathname || "/";
+        router.push(`/entrar?next=${encodeURIComponent(next)}`);
         return;
       }
       if (result.code === "tenant-mismatch") {

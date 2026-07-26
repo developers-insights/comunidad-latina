@@ -29,6 +29,10 @@ export interface CardPostMediaProps {
   entity: PostEntityView | null;
   /** Contexto del feed de videos para el tap sobre un video. */
   videoScope: string;
+  /** Vistas acumuladas del post (píldora sobre el video). */
+  viewCount?: number;
+  /** WhatsApp de la campaña, si la entidad lo publicó (CTA de post promocionado). */
+  ctaWhatsapp?: string | null;
 }
 
 /**
@@ -52,6 +56,8 @@ export function CardPostMedia({
   isPromoted,
   entity,
   videoScope,
+  viewCount = 0,
+  ctaWhatsapp = null,
 }: CardPostMediaProps) {
   const reduce = usePrefersReducedMotion();
   const viewer = useMediaViewer();
@@ -80,21 +86,34 @@ export function CardPostMedia({
   if (items.length === 0) return null;
 
   const first = items[0];
-  const photoCount = items.filter((item) => item.kind === "image").length;
+  // El contador cuenta TODOS los medios (fotos Y videos): el visor los pasa a
+  // todos, así que "×3" sobre una galería con 2 fotos y 1 video tiene que decir
+  // 3 — antes contaba sólo fotos y prometía de menos.
+  const mediaCount = items.length;
 
   // VIDEO como primer medio: card de video. Igual mantiene el chip "Publicidad"
   // y, si es campaña, el CTA de la entidad sobre el borde inferior.
   if (first.kind === "video") {
     return (
       <div className="relative">
-        <CardVideo src={first.url} postId={postId} scope={videoScope} />
+        <CardVideo
+          src={first.url}
+          postId={postId}
+          scope={videoScope}
+          viewCount={viewCount}
+        />
         {isPromoted && (
           <div className="absolute right-2.5 top-2.5">
             <AdChip />
           </div>
         )}
         {isPromoted && entity && (
-          <BoostCta kind={entity.kind} entityId={entity.id} postId={postId} />
+          <BoostCta
+            kind={entity.kind}
+            entityId={entity.id}
+            postId={postId}
+            ctaWhatsapp={ctaWhatsapp}
+          />
         )}
       </div>
     );
@@ -146,14 +165,14 @@ export function CardPostMedia({
         className="absolute inset-0 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring"
       />
 
-      {/* Indicador de varias fotos (arriba-izq, para no chocar con "Publicidad"). */}
-      {photoCount > 1 && (
+      {/* Indicador de varios medios (arriba-izq, para no chocar con "Publicidad"). */}
+      {mediaCount > 1 && (
         <span
           className="cl-print-fill pointer-events-none absolute left-2.5 top-2.5 flex items-center gap-1 rounded-full bg-media-scrim px-2 py-0.5 text-xs font-semibold text-on-media"
           aria-hidden="true"
         >
           <Images size={13} weight="fill" />
-          {photoCount}
+          {mediaCount}
         </span>
       )}
 
@@ -182,7 +201,12 @@ export function CardPostMedia({
       )}
 
       {isPromoted && entity && (
-        <BoostCta kind={entity.kind} entityId={entity.id} postId={postId} />
+        <BoostCta
+          kind={entity.kind}
+          entityId={entity.id}
+          postId={postId}
+          ctaWhatsapp={ctaWhatsapp}
+        />
       )}
     </div>
   );

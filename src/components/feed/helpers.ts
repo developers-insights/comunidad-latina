@@ -107,10 +107,20 @@ export interface PostCardModel {
   timeAgoLabel: string;
   author: AuthorView;
   likedByViewer: boolean;
+  /** Guardado por el viewer (tabla `saves`, 0038). false para anónimos. */
+  savedByViewer: boolean;
+  /** Vistas acumuladas del post (posts.view_count, 0038). 0 si todavía ninguna. */
+  viewCount: number;
   /** Post publicado COMO una entidad (se muestra la entidad como autor). */
   entity: PostEntityView | null;
   /** Campaña activa (post_promotions): se marca honestamente "Publicidad". */
   isPromoted: boolean;
+  /**
+   * Teléfono del botón de WhatsApp que la campaña activa ofrece
+   * (post_promotions.cta_whatsapp, 0038). null cuando el anunciante no cargó
+   * ninguno o cuando el post no está promocionado.
+   */
+  ctaWhatsapp: string | null;
 }
 
 /** Listing NO-property para la card propia del feed (los property usan ListingCard). */
@@ -196,6 +206,22 @@ const ENTITY_DETAIL_ROUTE: Record<string, (id: string) => string> = {
 
 export function entityHref(kind: string, id: string): string | null {
   return ENTITY_DETAIL_ROUTE[kind]?.(id) ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp de una campaña paga (post_promotions.cta_whatsapp, 0038)
+// ---------------------------------------------------------------------------
+
+/**
+ * Link `wa.me` a partir de un teléfono escrito como sea ("+1 (305) 555-0134"):
+ * wa.me solo entiende dígitos, sin `+` ni separadores. Devuelve null si lo que
+ * quedó no es un número plausible (8 a 15 dígitos, el rango de E.164) — antes
+ * un botón ausente que uno que abre WhatsApp en un número roto.
+ */
+export function whatsappHref(raw: string | null | undefined): string | null {
+  const digits = (raw ?? "").replace(/\D/g, "");
+  if (digits.length < 8 || digits.length > 15) return null;
+  return `https://wa.me/${digits}`;
 }
 
 // ---------------------------------------------------------------------------

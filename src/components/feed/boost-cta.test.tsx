@@ -48,4 +48,38 @@ describe("BoostCta", () => {
     const link = screen.getByRole("link", { name: COPY.post.boostCtaFallback });
     expect(link.getAttribute("href")).toBe("/feed/post-9");
   });
+
+  // --- Botón de WhatsApp de la campaña (post_promotions.cta_whatsapp) -------
+
+  it("sin WhatsApp: la barra queda con un solo CTA", () => {
+    render(<BoostCta kind="property" entityId="p1" postId="post-1" />);
+    expect(screen.queryByRole("link", { name: COPY.post.boostCtaWhatsapp })).toBeNull();
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("con WhatsApp: suma el botón a wa.me SIN reemplazar el CTA de la entidad", () => {
+    render(
+      <BoostCta
+        kind="property"
+        entityId="p1"
+        postId="post-1"
+        ctaWhatsapp="+1 (305) 555-0134"
+      />,
+    );
+    // El CTA de siempre sigue estando…
+    expect(
+      screen.getByRole("link", { name: COPY.post.boostCta.property }).getAttribute("href"),
+    ).toBe("/propiedades/p1");
+
+    // …y el de WhatsApp abre el chat con SOLO los dígitos, en otra pestaña.
+    const wa = screen.getByRole("link", { name: COPY.post.boostCtaWhatsapp });
+    expect(wa.getAttribute("href")).toBe("https://wa.me/13055550134");
+    expect(wa.getAttribute("target")).toBe("_blank");
+    expect(wa.getAttribute("rel")).toContain("noopener");
+  });
+
+  it("teléfono que no sirve: ausencia, nunca un link roto", () => {
+    render(<BoostCta kind="event" entityId="e1" postId="post-1" ctaWhatsapp="123" />);
+    expect(screen.queryByRole("link", { name: COPY.post.boostCtaWhatsapp })).toBeNull();
+  });
 });

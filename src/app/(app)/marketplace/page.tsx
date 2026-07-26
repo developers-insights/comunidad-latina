@@ -73,7 +73,9 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
   // -------------------------------------------------------------------------
   let query = supabase
     .from("listings")
-    .select("id, title, price_amount, price_currency, attrs, photos, created_at")
+    .select(
+      "id, title, price_amount, price_currency, attrs, photos, created_at, created_by, publisher_name",
+    )
     .eq("tenant_id", tenant.id)
     .eq("kind", "product")
     .eq("status", "published")
@@ -107,26 +109,46 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
   const hasMore = (rows ?? []).length > PAGE_SIZE;
 
   // -------------------------------------------------------------------------
-  // Batch: nombre de cada tienda (attrs.store_listing_id) + ¿el viewer tiene
-  // un negocio publicado? (banner "para dueños", en paralelo con lo de arriba)
+  // Batch del vendedor (§ split tiendas/particulares): por un lado el nombre de
+  // cada TIENDA + si tiene Presencia Verificada (business_accounts por
+  // listing_id — la relación ya existe en el schema, 0008); por otro el nombre
+  // de quien publica cuando NO hay tienda detrás. Más el chequeo de si el
+  // viewer tiene negocio (banner "para dueños"). Todo en paralelo, una vuelta.
   // -------------------------------------------------------------------------
+  const attrsByRow = new Map(pageRows.map((row) => [row.id, parseProductAttrs(row.attrs)]));
+
   const storeIds = [
     ...new Set(
       pageRows
-        .map((row) => parseProductAttrs(row.attrs).storeListingId)
+        .map((row) => attrsByRow.get(row.id)?.storeListingId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const privateOwnerIds = [
+    ...new Set(
+      pageRows
+        .filter((row) => !attrsByRow.get(row.id)?.storeListingId)
+        .map((row) => row.created_by)
         .filter((id): id is string => Boolean(id)),
     ),
   ];
 
-  const [storesResult, ownsStoreResult] = await Promise.all([
+  const [storesResult, sellersResult, ownsStoreResult] = await Promise.all([
     storeIds.length > 0
       ? supabase
           .from("listings")
-          .select("id, title")
+          // store_verified es el espejo público de Presencia Verificada (0039):
+          // vive en el propio aviso de la tienda, visible para cualquiera.
+          .select("id, title, store_verified")
           .eq("tenant_id", tenant.id)
           .eq("kind", "business")
           .in("id", storeIds)
-      : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+      : Promise.resolve({
+          data: [] as { id: string; title: string; store_verified: boolean }[],
+        }),
+    privateOwnerIds.length > 0
+      ? supabase.from("profiles").select("id, display_name").in("id", privateOwnerIds)
+      : Promise.resolve({ data: [] as { id: string; display_name: string | null }[] }),
     user
       ? supabase
           .from("listings")
@@ -138,23 +160,40 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
       : Promise.resolve({ count: 0 }),
   ]);
 
-  const storeNameById = new Map((storesResult.data ?? []).map((s) => [s.id, s.title]));
+  const storeById = new Map(
+    (storesResult.data ?? []).map((store) => [
+      store.id,
+      { name: store.title, verified: store.store_verified },
+    ]),
+  );
+  const sellerNameById = new Map(
+    (sellersResult.data ?? []).map((profile) => [profile.id, profile.display_name]),
+  );
   const ownsStore = (ownsStoreResult.count ?? 0) > 0;
 
   const cards: ProductCardModel[] = pageRows.map((row) => {
-    const attrs = parseProductAttrs(row.attrs);
+    const attrs = attrsByRow.get(row.id) ?? parseProductAttrs(row.attrs);
+    const store = attrs.storeListingId ? storeById.get(attrs.storeListingId) : undefined;
     return {
       id: row.id,
       title: row.title,
       priceLabel: formatProductPrice(row.price_amount, row.price_currency, tenant.locale),
       category: attrs.category,
       photoUrl: firstPhotoUrl(row.photos),
-      store: attrs.storeListingId
+      seller: attrs.storeListingId
         ? {
-            id: attrs.storeListingId,
-            name: storeNameById.get(attrs.storeListingId) ?? "Tienda de la comunidad",
+            kind: "store",
+            name: store?.name ?? null,
+            storeId: attrs.storeListingId,
+            verified: store?.verified ?? false,
           }
-        : null,
+        : {
+            kind: "private",
+            name:
+              (row.created_by ? sellerNameById.get(row.created_by) : null) ??
+              row.publisher_name ??
+              null,
+          },
     };
   });
 

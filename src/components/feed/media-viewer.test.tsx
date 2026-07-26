@@ -20,7 +20,19 @@ vi.mock("motion/react", () => {
     }: Record<string, unknown> & { children?: React.ReactNode }) => {
       const domProps = Object.fromEntries(
         Object.entries(props).filter(
-          ([key]) => !["layout", "initial", "animate", "exit", "transition"].includes(key),
+          ([key]) =>
+            ![
+              "layout",
+              "initial",
+              "animate",
+              "exit",
+              "transition",
+              // Props del arrastre-para-cerrar: son de motion, no del DOM.
+              "drag",
+              "dragConstraints",
+              "dragElastic",
+              "onDragEnd",
+            ].includes(key),
         ),
       );
       return <div {...domProps}>{children}</div>;

@@ -3,6 +3,7 @@ import { CardMedia } from "@/components/ui";
 import { FollowButton } from "@/components/social/follow-button";
 import { COPY } from "./copy";
 import { followerCountLabel } from "./helpers";
+import { SellerVerifiedBadge } from "./seller-chip";
 
 /** Sin foto propia: misma composición de marca que usa la card de producto. */
 const FALLBACK_PHOTO = "/images/og-default.png";
@@ -15,6 +16,8 @@ export interface StoreHeaderModel {
   followerCount: number;
   /** Resuelto en el server — null cuando no hay sesión (FollowButton invita a entrar). */
   initialFollowing: boolean;
+  /** business_accounts.verified_presence del negocio (plan "Presencia Verificada"). */
+  verified?: boolean;
 }
 
 /**
@@ -32,6 +35,11 @@ export function StoreHeader({ store }: { store: StoreHeaderModel }) {
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           {store.name}
         </h1>
+        {store.verified && (
+          <div className="mt-2">
+            <SellerVerifiedBadge label={COPY.seller.verifiedStoreLabel} />
+          </div>
+        )}
         {store.areaLabel && (
           <p className="mt-1 flex items-center gap-1.5 text-sm text-foreground-secondary">
             <MapPin size={16} aria-hidden="true" className="shrink-0" />

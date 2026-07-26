@@ -6,6 +6,7 @@ import { PublisherTrust, type PublisherTrustProps } from "@/components/listings"
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 import { followerCountLabel } from "./helpers";
+import { SellerVerifiedBadge } from "./seller-chip";
 
 export interface StoreCardModel {
   id: string;
@@ -16,6 +17,8 @@ export interface StoreCardModel {
   initialFollowing: boolean;
   /** Trust Score del dueño de la tienda — null si el negocio no tiene cuenta. */
   trust: Omit<PublisherTrustProps, "size" | "className"> | null;
+  /** business_accounts.verified_presence (plan "Presencia Verificada"). */
+  verified?: boolean;
 }
 
 /**
@@ -29,9 +32,12 @@ export function StoreCard({ store }: { store: StoreCardModel }) {
       <div className="flex items-center gap-3">
         <Avatar src={store.photoUrl} name={store.name} size="lg" />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-base font-bold text-foreground">
-            {store.name}
-          </p>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="min-w-0 truncate font-display text-base font-bold text-foreground">
+              {store.name}
+            </p>
+            {store.verified && <SellerVerifiedBadge />}
+          </div>
           {store.areaLabel && (
             <p className="flex items-center gap-1 text-xs text-foreground-muted">
               <MapPin size={13} aria-hidden="true" className="shrink-0" />

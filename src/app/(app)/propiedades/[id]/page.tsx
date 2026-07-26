@@ -26,6 +26,9 @@ import {
   toTrustLevel,
   type VerificationView,
 } from "@/components/listings";
+// Los guardados (tabla `saves`, polimórfica) los lee el módulo FEED, que es su
+// dueño: así la query vive una sola vez y no se duplica por vertical.
+import { fetchViewerSavedListingIds } from "@/app/(app)/feed/queries";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn, formatDate } from "@/lib/utils";
@@ -93,6 +96,11 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
       .eq("result", "found_active")
       .order("checked_at", { ascending: false })
       .limit(1),
+  ]);
+
+  // Guardado del viewer para este aviso (sin sesión resuelve vacío al instante).
+  const savedListingIds = await fetchViewerSavedListingIds(supabase, user?.id ?? null, [
+    listing.id,
   ]);
 
   const check = checks?.[0];
@@ -193,7 +201,11 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
     // con el pb-28 del <main> queda holgura para que la última card no quede
     // tapada. Ver §4.d (CTA sticky).
     <div className="pb-40">
-      <DetailTopBar title={listing.title} listingId={listing.id} />
+      <DetailTopBar
+        title={listing.title}
+        listingId={listing.id}
+        initialSaved={savedListingIds.has(listing.id)}
+      />
 
       {listing.status !== "published" && isOwner && (
         <Banner variant="info" className="mb-3 rounded-lg">

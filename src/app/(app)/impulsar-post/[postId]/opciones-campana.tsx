@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Megaphone, Star, Users } from "@phosphor-icons/react/dist/ssr";
-import { Badge, BezelCard, Button, useToast } from "@/components/ui";
+import { Check, Megaphone, Star, Users, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
+import { Badge, BezelCard, Button, Field, Input, useToast } from "@/components/ui";
 import type { PostPromoId, PostPromoPackage } from "@/lib/stripe";
 import { cn, formatMoney } from "@/lib/utils";
 import { crearCampanaPost } from "./actions";
@@ -15,6 +15,15 @@ const COPY = {
   audienceAllHint: "Tu publicación aparece en el feed de todos.",
   audienceZones: "Zonas específicas",
   audienceZonesHint: "Solo en el feed de la gente de las zonas que elijas.",
+  // Botón de WhatsApp de la campaña (post_promotions.cta_whatsapp): el número
+  // se publica SOLO mientras la campaña corre, y solo si el anunciante lo carga.
+  whatsappTitle: "¿Querés que te escriban por WhatsApp?",
+  whatsappLabel: "WhatsApp para el botón de contacto",
+  whatsappPlaceholder: "+1 305 555 0134",
+  whatsappHelp:
+    "Se muestra como un botón de WhatsApp en tu publicación mientras la campaña está activa. Si lo dejás vacío, tu número no se publica.",
+  whatsappError:
+    "Revisá el número: escribilo completo con código de país, por ejemplo +1 305 555 0134.",
   zonesPick: "Elegí las zonas",
   zonesEmpty: "Todavía no hay zonas para segmentar — tu campaña llega a toda la comunidad.",
   needZone: "Elegí al menos una zona, o promocioná a toda la comunidad.",
@@ -31,6 +40,17 @@ const COPY = {
 
 type Scope = "all" | "zones";
 
+/**
+ * Normaliza el teléfono a "+dígitos" (espejo EXACTO de la regla del server en
+ * actions.ts): acá es para avisar al toque, allá es la validación que manda.
+ */
+function telefonoLimpio(raw: string): string {
+  const digitos = raw.replace(/\D/g, "");
+  return raw.trim().startsWith("+") ? `+${digitos}` : digitos;
+}
+
+const WHATSAPP_RE = /^\+?\d{8,15}$/;
+
 export function OpcionesCampana({
   postId,
   paquetes,
@@ -46,6 +66,8 @@ export function OpcionesCampana({
   const { toast } = useToast();
   const [scope, setScope] = useState<Scope>("all");
   const [selectedZones, setSelectedZones] = useState<string[]>([]);
+  const [whatsapp, setWhatsapp] = useState("");
+  const [whatsappError, setWhatsappError] = useState<string | null>(null);
   const [loadingPaquete, setLoadingPaquete] = useState<PostPromoId | null>(null);
 
   const hasZones = zones.length > 0;
@@ -71,9 +93,22 @@ export function OpcionesCampana({
       return;
     }
 
+    // WhatsApp es opcional; si escribieron algo, tiene que servir como número.
+    const ctaWhatsapp = telefonoLimpio(whatsapp);
+    if (ctaWhatsapp !== "" && !WHATSAPP_RE.test(ctaWhatsapp)) {
+      setWhatsappError(COPY.whatsappError);
+      return;
+    }
+    setWhatsappError(null);
+
     setLoadingPaquete(paquete);
     try {
-      const result = await crearCampanaPost({ postId, paquete, audience });
+      const result = await crearCampanaPost({
+        postId,
+        paquete,
+        audience,
+        ctaWhatsapp: ctaWhatsapp || null,
+      });
       if (result.status === "redirect") {
         window.location.assign(result.url);
         return; // mantiene el spinner hasta que navega
@@ -155,6 +190,39 @@ export function OpcionesCampana({
             </div>
           </div>
         )}
+      </section>
+
+      {/* Botón de WhatsApp — opcional, vive solo mientras dura la campaña */}
+      <section className="flex flex-col gap-3">
+        <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
+          <WhatsappLogo size={20} weight="fill" aria-hidden="true" className="text-brand" />
+          {COPY.whatsappTitle}
+        </h2>
+        <Field
+          htmlFor="cta-whatsapp"
+          label={COPY.whatsappLabel}
+          help={COPY.whatsappHelp}
+          error={whatsappError ?? undefined}
+          optional
+        >
+          <Input
+            id="cta-whatsapp"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            maxLength={40}
+            value={whatsapp}
+            placeholder={COPY.whatsappPlaceholder}
+            aria-invalid={whatsappError ? true : undefined}
+            aria-describedby={
+              whatsappError ? "cta-whatsapp-error" : "cta-whatsapp-help"
+            }
+            onChange={(event) => {
+              setWhatsapp(event.target.value);
+              if (whatsappError) setWhatsappError(null);
+            }}
+          />
+        </Field>
       </section>
 
       {/* Paquetes */}
