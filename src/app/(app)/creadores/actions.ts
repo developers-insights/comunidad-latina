@@ -162,6 +162,12 @@ export async function finalizeGig(rawInput: {
   }
   const { tenant, supabase, user } = guard;
 
+  // Finalize es re-invocable (reintentos legítimos de subida de fotos), pero
+  // no gratis: sin cuota propia sería el motor de la re-publicación en loop.
+  if (!limit(`gig-finalize:${user.id}`, 20, DAY_MS).ok) {
+    return { ok: false, error: COPY.publish.errors.generic };
+  }
+
   // Paths canónicos {tenant_id}/{listing_id}/archivo — bucket listing-photos.
   const pathPattern = new RegExp(
     `^${tenant.id}/${listingId}/[A-Za-z0-9._-]+\\.(webp|jpe?g|png)$`,
@@ -177,6 +183,9 @@ export async function finalizeGig(rawInput: {
   // published lo hace el admin client más abajo, igual que el seed y que
   // finalizeProduct del Marketplace. El mismo round-trip confirma ownership
   // (.eq) y trae título/descripción para moderar el texto.
+  // `.in(status, draft|pending_review)`: un aviso dado de baja por moderación
+  // ('removed') NO se re-publica llamando finalize de nuevo — eso lo decide
+  // un humano en la cola, no este flujo.
   const { data: updated, error: updateError } = await supabase
     .from("listings")
     .update({ photos: photoPaths, status: "pending_review" })
@@ -184,6 +193,7 @@ export async function finalizeGig(rawInput: {
     .eq("tenant_id", tenant.id)
     .eq("created_by", user.id)
     .eq("kind", "creator_gig")
+    .in("status", ["draft", "pending_review"])
     .select("id, title, description")
     .maybeSingle();
 
