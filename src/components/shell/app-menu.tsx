@@ -341,14 +341,28 @@ function MenuPanel({ id, open, onClose, user, unread, isStaff, pathname }: MenuP
                       >
                         <span
                           aria-hidden="true"
-                          className="flex size-9 shrink-0 items-center justify-center rounded-lg"
+                          className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg"
                           style={{ backgroundColor: item.palette.chip }}
                         >
-                          <IconComponent
-                            size={20}
-                            weight={active ? "fill" : "regular"}
-                            style={{ color: item.palette.icon }}
-                          />
+                          {item.image ? (
+                            /* Set premium 3D (Meshy): la imagen trae su propio
+                               fondo pastel del acento — full-bleed en el chip. */
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.image}
+                              alt=""
+                              width={36}
+                              height={36}
+                              loading="lazy"
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            <IconComponent
+                              size={20}
+                              weight={active ? "fill" : "regular"}
+                              style={{ color: item.palette.icon }}
+                            />
+                          )}
                         </span>
                         <span
                           className={cn(

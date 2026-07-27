@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { Camera, CheckCircle } from "@phosphor-icons/react/dist/ssr";
 import { AccentLink, Avatar, BezelCard, CardMedia, MediaScrimBottom } from "@/components/ui";
 import { IdentityBadge } from "@/components/auth/identity-badge";
 import { FollowButton } from "@/components/social/follow-button";
+import { PhotoTap } from "@/components/media/photo-tap";
 import { cn } from "@/lib/utils";
 import { RatingStars } from "./rating-stars";
 import { COPY } from "./copy";
@@ -16,6 +16,11 @@ export interface CreatorCardModel {
   skills: string[];
   /** Primera foto del portfolio (post-media) o null → hero violeta. */
   portfolioUrl: string | null;
+  /**
+   * TODO el portfolio ya resuelto a URL pública — el visor lo pasa de una.
+   * Opcional: quien todavía no lo manda cae a `portfolioUrl`.
+   */
+  portfolioPhotos?: string[];
   ratingAvg: number | null;
   ratingCount: number;
   completedJobs: number;
@@ -31,16 +36,16 @@ const MAX_SKILLS = 4;
 /** Acento violeta del módulo (solo decorativo) para la píldora de acción. */
 const ACCENT = "var(--accent-creadores)";
 
-const MEDIA_LINK =
-  "group block focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
-
 /**
  * Card de creador del directorio "Buscar creadores" (§ feedback cliente
  * 2026-07-24: se siente RED SOCIAL, tipo perfil de Instagram). Hero de portfolio
  * vertical 4:5 (o fallback violeta); el avatar + nombre + titular viven en una
- * franja de VIDRIO sobre la foto, con la disponibilidad flotando arriba. Tap en
- * la foto abre el perfil; debajo, reputación, habilidades y las acciones
- * (Seguir + una píldora con el acento del módulo).
+ * franja de VIDRIO sobre la foto, con la disponibilidad flotando arriba. Debajo,
+ * reputación, habilidades y las acciones (Seguir + una píldora con el acento).
+ *
+ * DOS destinos, uno por gesto (feedback 2026-07-26): tocar la FOTO abre el visor
+ * con el portfolio completo; la píldora "Ver perfil" es la única que navega. El
+ * fallback violeta NO es tocable: no hay portfolio que mirar.
  */
 export function CreatorCard({ creator }: { creator: CreatorCardModel }) {
   const availabilityChip = (
@@ -77,13 +82,19 @@ export function CreatorCard({ creator }: { creator: CreatorCardModel }) {
   const skills = creator.skills.slice(0, MAX_SKILLS);
   const extraSkills = creator.skills.length - skills.length;
 
+  const photos = creator.portfolioPhotos?.length
+    ? creator.portfolioPhotos
+    : creator.portfolioUrl
+      ? [creator.portfolioUrl]
+      : [];
+
   return (
     <BezelCard coreClassName="overflow-hidden p-0">
       <article aria-label={creator.displayName}>
-        <Link
-          href={`/creadores/perfil/${creator.profileId}`}
-          aria-label={creator.displayName}
-          className={MEDIA_LINK}
+        <PhotoTap
+          photos={photos}
+          label={COPY.openPhotos(creator.displayName)}
+          authorName={creator.displayName}
         >
           {creator.portfolioUrl ? (
             <CardMedia
@@ -106,7 +117,7 @@ export function CreatorCard({ creator }: { creator: CreatorCardModel }) {
               <MediaScrimBottom>{band}</MediaScrimBottom>
             </div>
           )}
-        </Link>
+        </PhotoTap>
 
         <div className="flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -149,6 +160,7 @@ export function CreatorCard({ creator }: { creator: CreatorCardModel }) {
             <AccentLink
               accent={ACCENT}
               href={`/creadores/perfil/${creator.profileId}`}
+              ariaLabel={creator.displayName}
               className="mt-0 w-auto flex-1"
             >
               {COPY.directory.viewProfile}

@@ -1,7 +1,7 @@
 import { Suspense, cache } from "react";
 import { notFound } from "next/navigation";
 import { EmptyState, Skeleton } from "@/components/ui";
-import { firstPhotoUrl } from "@/components/listings";
+import { allPhotoUrls, firstPhotoUrl } from "@/components/listings";
 import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 import {
   COPY,
@@ -130,6 +130,8 @@ async function TiendaContent({ storeId }: { storeId: string }) {
     priceLabel: formatProductPrice(row.price_amount, row.price_currency, tenant.locale),
     category: parseProductAttrs(row.attrs).category,
     photoUrl: firstPhotoUrl(row.photos),
+    // Tocar la foto abre el visor con todas, sin salir de la vidriera.
+    photos: allPhotoUrls(row.photos),
     seller: { kind: "store", name: store.title, storeId: store.id, verified },
   }));
 

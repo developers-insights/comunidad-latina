@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { MapPin, ShieldCheck, UserGear } from "@phosphor-icons/react/dist/ssr";
 import { AccentLink, Avatar, Badge, BezelCard } from "@/components/ui";
 import {
@@ -7,6 +6,7 @@ import {
   type PublisherView,
   type VerificationView,
 } from "@/components/listings";
+import { PhotoTap } from "@/components/media/photo-tap";
 import { COPY } from "./copy";
 import { categoryLabel } from "./helpers";
 import { DirectoryMedia } from "./module-media";
@@ -20,6 +20,11 @@ export interface ProfessionalCardModel {
   areaLabel: string | null;
   /** Primera foto de portfolio/local ya resuelta, o null — DirectoryMedia cae al fallback del módulo. */
   photoUrl: string | null;
+  /**
+   * TODO el portfolio ya resuelto (allPhotoUrls) — el visor lo pasa de una.
+   * Opcional: quien todavía no lo manda cae a `photoUrl`.
+   */
+  photos?: string[];
   /** SOLO presente si hay verification_check found_active vinculado (regla estricta). */
   verification: VerificationView | null;
   publisher: PublisherView;
@@ -28,29 +33,34 @@ export interface ProfessionalCardModel {
 /** Acento teal del módulo (solo decorativo) para la píldora de acción. */
 const ACCENT = "var(--accent-profesionales)";
 
-const MEDIA_LINK =
-  "group block focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
-
 /**
  * Card del directorio de profesionales (§ feedback cliente 2026-07-24: se siente
  * RED SOCIAL). Foto vertical 4:5; el avatar del profesional (si es miembro) se
  * apoya sobre la portada como una foto de perfil y el nombre/rubro/zona viven en
- * una franja de VIDRIO encima de la foto. Tap en la foto abre el perfil; debajo,
- * credenciales, confianza y una píldora con el acento teal del módulo.
+ * una franja de VIDRIO encima de la foto. Debajo, credenciales, confianza y una
+ * píldora con el acento teal del módulo.
+ *
+ * DOS destinos, uno por gesto (feedback 2026-07-26): tocar la FOTO abre el visor
+ * con el portfolio; la píldora "Ver perfil" es la única que navega.
  */
 export function ProfessionalCard({ professional }: { professional: ProfessionalCardModel }) {
   const isMember = professional.publisher?.type === "member";
   const avatarSrc = professional.publisher?.type === "member" ? professional.publisher.avatarUrl : null;
   const avatarName =
     professional.publisher?.type === "member" ? professional.publisher.displayName : professional.title;
+  const photos = professional.photos?.length
+    ? professional.photos
+    : professional.photoUrl
+      ? [professional.photoUrl]
+      : [];
 
   return (
     <BezelCard variant={professional.verification ? "success" : "default"} coreClassName="overflow-hidden p-0">
       <article aria-label={professional.title}>
-        <Link
-          href={`/profesionales/${professional.id}`}
-          aria-label={professional.title}
-          className={MEDIA_LINK}
+        <PhotoTap
+          photos={photos}
+          label={COPY.openPhotos(professional.title)}
+          authorName={professional.title}
         >
           <DirectoryMedia
             src={professional.photoUrl}
@@ -89,7 +99,7 @@ export function ProfessionalCard({ professional }: { professional: ProfessionalC
               </div>
             }
           />
-        </Link>
+        </PhotoTap>
 
         <div className="flex flex-col gap-2.5 p-4">
           {professional.credentials.length > 0 && (
@@ -116,7 +126,11 @@ export function ProfessionalCard({ professional }: { professional: ProfessionalC
             </p>
           ) : null}
 
-          <AccentLink accent={ACCENT} href={`/profesionales/${professional.id}`}>
+          <AccentLink
+            accent={ACCENT}
+            href={`/profesionales/${professional.id}`}
+            ariaLabel={professional.title}
+          >
             {COPY.professionals.viewProfile}
           </AccentLink>
         </div>

@@ -6,6 +6,7 @@ import { Avatar, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui
 import {
   DetailTopBar,
   PublisherTrust,
+  allPhotoUrls,
   buildTrustSignals,
   firstNameOf,
   firstPhotoUrl,
@@ -162,6 +163,8 @@ export default async function ProductoDetallePage({ params }: { params: Params }
         name: store.title,
         areaLabel: store.area_label,
         photoUrl: firstPhotoUrl(store.photos),
+        // Tocar la foto de la tienda la abre en el visor (feedback 2026-07-26).
+        photos: allPhotoUrls(store.photos),
         followerCount: followerCount ?? 0,
         initialFollowing: Boolean(myFollow),
         trust,

@@ -16,7 +16,8 @@ import { AdChip } from "./card-ad-chip";
 import { CardLikeProvider } from "./card-like-context";
 import { CardPostMedia } from "./card-post-media";
 import { PostActions } from "./post-actions";
-import { entityAccentVar, entityHref, entityKindLabel } from "./helpers";
+import { QuestionBanner } from "./question-banner";
+import { entityAccentVar, entityHref, entityKindLabel, postKindOf } from "./helpers";
 import type { PostCardModel, PostEntityView } from "./helpers";
 
 export interface PostCardProps {
@@ -122,6 +123,16 @@ export function PostCard({
   className,
 }: PostCardProps) {
   const hasMedia = post.media.length > 0 || Boolean(post.photoUrl);
+  const isQuestion = postKindOf(post.kind) === "question";
+  /**
+   * Una pregunta sin foto ni video quedaba como texto pelado entre cards con
+   * foto a sangre (feedback cliente 2026-07-26). Su propio cuerpo pasa a ser el
+   * BANNER: por eso, cuando el banner está, el párrafo de abajo no se renderiza
+   * —repetiría la misma frase dos veces— y el banner cuenta como media para el
+   * borde de las acciones. Una pregunta CON foto sigue el camino normal: foto
+   * protagonista + su texto arriba.
+   */
+  const showQuestionBanner = isQuestion && !hasMedia && Boolean(post.body);
 
   const bodyText = (
     <p
@@ -133,7 +144,9 @@ export function PostCard({
       {post.body}
     </p>
   );
-  const body = post.body
+  const body = showQuestionBanner
+    ? null
+    : post.body
     ? isDetail
       ? bodyText
       : (
@@ -199,7 +212,7 @@ export function PostCard({
             )}
             {/* Sin media (posts viejos de texto / preguntas): el chip va en la cabecera. */}
             {post.isPromoted && !hasMedia && <AdChip />}
-            {post.kind === "question" && (
+            {isQuestion && (
               <Chip size="sm" variant="info" icon={<Question aria-hidden="true" />}>
                 {COPY.post.questionChip}
               </Chip>
@@ -214,6 +227,14 @@ export function PostCard({
 
           {body}
         </div>
+
+        {showQuestionBanner && (
+          <QuestionBanner
+            postId={post.id}
+            question={post.body}
+            isDetail={isDetail}
+          />
+        )}
 
         {hasMedia && (
           <CardPostMedia
@@ -232,7 +253,7 @@ export function PostCard({
         <div
           className={cn(
             "px-2 pb-1 pt-1",
-            !hasMedia && "border-t border-border-subtle",
+            !hasMedia && !showQuestionBanner && "border-t border-border-subtle",
           )}
         >
           <PostActions

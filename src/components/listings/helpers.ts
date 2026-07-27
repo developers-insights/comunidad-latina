@@ -35,6 +35,16 @@ export function firstPhotoUrl(photos: string[] | null | undefined): string | nul
 }
 
 /**
+ * TODAS las fotos del aviso resueltas a URL pública, en orden y sin huecos.
+ * Es lo que las páginas de listado le pasan a la card para que tocar la foto
+ * abra el visor con la galería completa (feedback 2026-07-26) — la columna
+ * `photos` ya viene en el mismo SELECT, así que no cuesta una query extra.
+ */
+export function allPhotoUrls(photos: string[] | null | undefined): string[] {
+  return (photos ?? []).filter((p) => p && p.trim().length > 0).map(listingPhotoUrl);
+}
+
+/**
  * ¿El src puede pasar por next/image? Solo assets locales o del Storage de
  * Supabase (host en el allowlist de next.config). URLs externas de seed/API
  * quedan en <img> — next/image lanzaría en runtime con un host desconocido.

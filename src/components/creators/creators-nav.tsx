@@ -1,8 +1,12 @@
 import Link from "next/link";
-import { Briefcase, FileText, Users } from "@phosphor-icons/react/dist/ssr";
+import { Briefcase, Users } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 
+// "contracts" se mantiene en el tipo porque /creadores/contratos sigue
+// existiendo y sigue pasando active="contracts" para resaltar (ver esa
+// página) — el acceso de Contratos ya no vive en este nav, se llega desde
+// "Mis contratos" en el perfil del creador (pedido del cliente 26/7).
 export type CreatorsSection = "gigs" | "creators" | "contracts";
 
 const ITEMS: ReadonlyArray<{
@@ -13,12 +17,13 @@ const ITEMS: ReadonlyArray<{
 }> = [
   { key: "gigs", href: "/creadores", label: COPY.nav.gigs, Icon: Briefcase },
   { key: "creators", href: "/creadores/buscar", label: COPY.nav.creators, Icon: Users },
-  { key: "contracts", href: "/creadores/contratos", label: COPY.nav.contracts, Icon: FileText },
 ];
 
 /**
- * Segmented control del módulo: Trabajos · Creadores · Contratos. Server
- * component (Links reales — navegable sin JS); el activo lo dice cada página.
+ * Segmented control del módulo: Trabajos · Creadores. Server component
+ * (Links reales — navegable sin JS); el activo lo dice cada página. El
+ * acceso a Contratos se sacó de acá (feedback 26/7) — ahora se llega desde
+ * "Mis contratos" en /creadores/perfil.
  */
 export function CreatorsNav({ active }: { active: CreatorsSection }) {
   return (

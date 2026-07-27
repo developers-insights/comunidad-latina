@@ -4,6 +4,7 @@ export { DetailTopBar } from "./detail-top-bar";
 export { ListingGallery, type ListingGalleryProps } from "./gallery";
 export {
   FALLBACK_PHOTO,
+  allPhotoUrls,
   buildTrustSignals,
   decodeCursor,
   encodeCursor,

@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { CalendarBlank, MapPin } from "@phosphor-icons/react/dist/ssr";
 import { AccentLink, BezelCard } from "@/components/ui";
 import { PublisherTrust } from "@/components/listings";
+import { PhotoTap } from "@/components/media/photo-tap";
 import type { TrustLevel, TrustSignal } from "@/components/trust";
 import { COPY } from "./copy";
 import type { EventDateParts } from "./helpers";
@@ -25,6 +25,11 @@ export interface EventCardModel {
   free: boolean;
   /** Primera foto ya resuelta (firstPhotoUrl) o null — DirectoryMedia cae al fallback del módulo. */
   photoUrl: string | null;
+  /**
+   * TODAS las fotos del evento ya resueltas (allPhotoUrls) — el visor las pasa
+   * de una. Opcional: quien todavía no las manda cae a `photoUrl`.
+   */
+  photos?: string[];
   /** Organizador miembro → SIEMPRE con su TrustScoreBadge (regla: autor con señal). */
   publisherTrust: EventPublisherTrust | null;
   /** Organizador externo (publisher_name, sin cuenta) — fuente atribuida, sin trust. */
@@ -34,26 +39,28 @@ export interface EventCardModel {
 /** Acento rojo del módulo (solo decorativo) para la píldora de acción. */
 const ACCENT = "var(--accent-eventos)";
 
-/** Foto grande clickeable = red social: tap en la card abre el detalle (§ feedback 2026-07-24). */
-const MEDIA_LINK =
-  "group block focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
-
 /**
  * Card de evento (§ feedback cliente 2026-07-24: se siente RED SOCIAL, no
  * clasificado). Foto vertical 4:5 protagonista; el título, la fecha y la zona
- * viven en una franja de VIDRIO sobre la foto (glass). Tap en la foto abre el
- * detalle; debajo, sólo el organizador con su confianza y una píldora con el
- * acento del módulo. Acento --accent-eventos (rojo), decorativo.
+ * viven en una franja de VIDRIO sobre la foto (glass). Debajo, sólo el
+ * organizador con su confianza y una píldora con el acento del módulo. Acento
+ * --accent-eventos (rojo), decorativo.
+ *
+ * DOS destinos, uno por gesto (feedback 2026-07-26, regla de Vivienda extendida
+ * a todo el directorio): tocar la FOTO abre el visor con las fotos del evento;
+ * la píldora "Ver evento" es la única que navega al detalle.
  */
 export function EventCard({ event }: { event: EventCardModel }) {
   const dateText = event.date
     ? `${event.date.full}${event.date.time ? ` · ${event.date.time}` : ""}`
     : COPY.events.dateToConfirm;
 
+  const photos = event.photos?.length ? event.photos : event.photoUrl ? [event.photoUrl] : [];
+
   return (
     <BezelCard coreClassName="overflow-hidden p-0">
       <article aria-label={event.title}>
-        <Link href={`/eventos/${event.id}`} aria-label={event.title} className={MEDIA_LINK}>
+        <PhotoTap photos={photos} label={COPY.openPhotos(event.title)} authorName={event.title}>
           <DirectoryMedia
             src={event.photoUrl}
             accent="eventos"
@@ -84,7 +91,7 @@ export function EventCard({ event }: { event: EventCardModel }) {
               </div>
             }
           />
-        </Link>
+        </PhotoTap>
 
         <div className="flex flex-col gap-2.5 p-4">
           {event.publisherTrust ? (
@@ -103,7 +110,7 @@ export function EventCard({ event }: { event: EventCardModel }) {
             <p className="truncate text-sm text-foreground-muted">{event.publisherName}</p>
           ) : null}
 
-          <AccentLink accent={ACCENT} href={`/eventos/${event.id}`}>
+          <AccentLink accent={ACCENT} href={`/eventos/${event.id}`} ariaLabel={event.title}>
             {COPY.events.viewEvent}
           </AccentLink>
         </div>

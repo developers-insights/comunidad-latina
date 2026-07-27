@@ -49,11 +49,17 @@ export interface ModuleItem {
   label: string;
   icon: Icon;
   palette: ModulePalette;
+  /**
+   * Ícono premium 3D del menú (set Meshy 2026-07-27, public/icons/menu/).
+   * El Phosphor `icon` queda como fallback y para superficies chicas.
+   */
+  image?: string;
 }
 
 export const MODULES: ModuleItem[] = [
   {
     href: "/feed",
+    image: "/icons/menu/feed.webp",
     label: t("nav", "feed"),
     icon: HouseSimple,
     palette: accentPalette("var(--accent-feed)"),
@@ -62,24 +68,28 @@ export const MODULES: ModuleItem[] = [
   // — es la misma capa social de la plataforma, en formato video.
   {
     href: "/videos",
+    image: "/icons/menu/videos.webp",
     label: t("nav", "videos"),
     icon: Play,
     palette: accentPalette("var(--accent-feed)"),
   },
   {
     href: "/propiedades",
+    image: "/icons/menu/vivienda.webp",
     label: t("nav", "moduleVivienda"),
     icon: Buildings,
     palette: accentPalette("var(--accent-vivienda)"),
   },
   {
     href: "/eventos",
+    image: "/icons/menu/eventos.webp",
     label: t("nav", "moduleEventos"),
     icon: CalendarBlank,
     palette: accentPalette("var(--accent-eventos)"),
   },
   {
     href: "/negocios",
+    image: "/icons/menu/negocios.webp",
     label: t("nav", "moduleNegocios"),
     icon: Storefront,
     palette: accentPalette("var(--accent-negocios)"),
@@ -90,6 +100,7 @@ export const MODULES: ModuleItem[] = [
   // la pista visual.
   {
     href: "/profesionales",
+    image: "/icons/menu/profesionales.webp",
     label: t("nav", "moduleProfesionales"),
     icon: UserGear,
     palette: accentPalette("var(--accent-profesionales)"),
@@ -99,18 +110,21 @@ export const MODULES: ModuleItem[] = [
   // confundan de un vistazo en el menú.
   {
     href: "/empleos",
+    image: "/icons/menu/empleos.webp",
     label: t("nav", "moduleEmpleos"),
     icon: Briefcase,
     palette: accentPalette("var(--accent-empleos)"),
   },
   {
     href: "/marketplace",
+    image: "/icons/menu/marketplace.webp",
     label: t("nav", "moduleMarketplace"),
     icon: ShoppingBagOpen,
     palette: accentPalette("var(--accent-marketplace)"),
   },
   {
     href: "/creadores",
+    image: "/icons/menu/creadores.webp",
     label: t("nav", "moduleCreadores"),
     icon: Sparkle,
     palette: accentPalette("var(--accent-creadores)"),

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CaretDown, Plus } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
 import {
+  allPhotoUrls,
   buildTrustSignals,
   decodeCursor,
   encodeCursor,
@@ -180,6 +181,8 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
       credentials: attrs.credentials,
       areaLabel: row.area_label,
       photoUrl: firstPhotoUrl(row.photos),
+      // Portfolio completo: tocar la foto abre el visor, no el perfil.
+      photos: allPhotoUrls(row.photos),
       verification: verificationByListing.get(row.id) ?? null,
       publisher,
     };

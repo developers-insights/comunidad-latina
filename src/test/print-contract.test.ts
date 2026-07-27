@@ -320,6 +320,16 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-on-media", "text-on-media"],
     cobertura: "cl-print-fill",
   },
+  // Banner de las publicaciones tipo "Pregunta" (feedback cliente 2026-07-26):
+  // la pregunta se compone como tinta clara sobre un campo de marca, así que sin
+  // ese relleno impreso queda en 1.00:1 sobre el papel. UNA sola ocurrencia a
+  // propósito: la tinta se declara en la raíz del banner y todo lo de adentro
+  // (los signos ¿ ?, la píldora "ver completa", el corazón del doble toque) la
+  // hereda por currentColor. El hook va en esa misma raíz.
+  "src/components/feed/question-banner.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-fill",
+  },
   // Video del feed, tres portadores y ninguno llega al papel: el toggle de
   // sonido vive dentro de un <button>; la píldora de vistas se imprime con su
   // velo (cl-print-fill); el corazón del doble-tap es transitorio (sólo existe

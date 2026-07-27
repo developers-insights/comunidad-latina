@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { Lightning, MapPin, Storefront, UsersThree } from "@phosphor-icons/react/dist/ssr";
 import { AccentLink, BezelCard, CardMedia, MediaScrimBottom } from "@/components/ui";
 import { PublisherTrust } from "@/components/listings";
 import { firstNameOf, type PublisherView } from "@/components/listings";
+import { PhotoTap } from "@/components/media/photo-tap";
 import { gigCategoryMeta } from "./categories";
 import { COPY } from "./copy";
 
@@ -14,6 +14,11 @@ export interface GigCardModel {
   areaLabel: string | null;
   /** Primera foto del aviso (listing-photos) o null → fallback violeta. */
   photoUrl: string | null;
+  /**
+   * TODAS las fotos del aviso ya resueltas (allPhotoUrls) — el visor las pasa
+   * de una. Opcional: quien todavía no las manda cae a `photoUrl`.
+   */
+  photos?: string[];
   category: string | null;
   /** DERIVADO de la fecha de entrega (deadline_days ≤ 7). Se calcula al armar el
    *  modelo (page.tsx), no es un toggle manual — ver isUrgentDeadline(). */
@@ -26,20 +31,21 @@ export interface GigCardModel {
 /** Acento violeta del módulo (solo decorativo) para la píldora de acción. */
 const ACCENT = "var(--accent-creadores)";
 
-const MEDIA_LINK =
-  "group block focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
-
 /**
  * Card de oportunidad del feed de Creadores (§ feedback cliente 2026-07-24: se
  * siente RED SOCIAL). Foto vertical 4:5 (o fallback violeta con el ícono de la
  * categoría); el título, el presupuesto y la zona viven en una franja de VIDRIO
- * sobre la foto. Chip "Urgente" (entrega ≤ 7 días) y marco featured. Tap en la
- * foto abre el trabajo; debajo, confianza del publicador y una píldora con el
- * acento del módulo.
+ * sobre la foto. Chip "Urgente" (entrega ≤ 7 días) y marco featured. Debajo,
+ * confianza del publicador y una píldora con el acento del módulo.
+ *
+ * DOS destinos, uno por gesto (feedback 2026-07-26): tocar la FOTO abre el visor
+ * con las fotos del aviso; la píldora "Ver trabajo" es la única que navega. El
+ * fallback violeta NO es tocable: no hay foto que mirar.
  */
 export function GigCard({ gig }: { gig: GigCardModel }) {
   const category = gigCategoryMeta(gig.category);
   const CategoryIcon = category.Icon;
+  const photos = gig.photos?.length ? gig.photos : gig.photoUrl ? [gig.photoUrl] : [];
 
   const urgentChip = gig.urgent ? (
     <span className="inline-flex items-center gap-1 rounded-full cl-print-fill bg-media-scrim px-2.5 py-1 text-xs font-bold text-on-media backdrop-blur-sm">
@@ -69,7 +75,7 @@ export function GigCard({ gig }: { gig: GigCardModel }) {
   return (
     <BezelCard variant={gig.urgent ? "featured" : "default"} coreClassName="overflow-hidden p-0">
       <article aria-label={gig.title}>
-        <Link href={`/creadores/${gig.id}`} aria-label={gig.title} className={MEDIA_LINK}>
+        <PhotoTap photos={photos} label={COPY.openPhotos(gig.title)} authorName={gig.title}>
           {gig.photoUrl ? (
             <CardMedia
               src={gig.photoUrl}
@@ -96,7 +102,7 @@ export function GigCard({ gig }: { gig: GigCardModel }) {
               <MediaScrimBottom>{band}</MediaScrimBottom>
             </div>
           )}
-        </Link>
+        </PhotoTap>
 
         <div className="flex flex-col gap-2.5 p-4">
           {typeof gig.applicationsCount === "number" && (
@@ -125,7 +131,7 @@ export function GigCard({ gig }: { gig: GigCardModel }) {
             </p>
           ) : null}
 
-          <AccentLink accent={ACCENT} href={`/creadores/${gig.id}`}>
+          <AccentLink accent={ACCENT} href={`/creadores/${gig.id}`} ariaLabel={gig.title}>
             {COPY.feed.viewGig}
           </AccentLink>
         </div>

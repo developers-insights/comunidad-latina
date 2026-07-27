@@ -160,6 +160,10 @@ export const COPY = {
 
   post: {
     questionChip: "Pregunta",
+    // Banner de pregunta (feedback cliente 2026-07-26: "que siempre tenga un
+    // banner o algo"): cuando la pregunta no entra entera en el banner del feed,
+    // esta píldora avisa que hay más y que tocando se lee completa.
+    questionReadFull: "Ver la pregunta completa",
     // FTC honesto: la campaña paga se divulga (igual que "Destacado" de boosts).
     adChip: "Publicidad",
     /** "· por {nombre}" bajo el nombre de la entidad. */

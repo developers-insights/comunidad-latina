@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import {
+  allPhotoUrls,
   decodeCursor,
   encodeCursor,
   firstPhotoUrl,
@@ -54,6 +55,12 @@ export type JobCardModel = {
   employmentType: EmploymentType | null;
   areaLabel: string | null;
   photoUrl: string | null;
+  /**
+   * TODAS las fotos del aviso ya resueltas a URL pública. Tocar la foto de la
+   * card abre el visor con la galería completa; al detalle se entra por la
+   * píldora (feedback 2026-07-26). Vacío = aviso sin foto, el caso más común.
+   */
+  photos: string[];
   publisherName: string | null;
 };
 
@@ -123,6 +130,7 @@ export async function fetchJobsPage(input: {
     employmentType: parseJobAttrs(row.attrs).employmentType,
     areaLabel: row.area_label,
     photoUrl: firstPhotoUrl(row.photos),
+    photos: allPhotoUrls(row.photos),
     publisherName:
       row.publisher_name ?? (row.created_by ? (nameById.get(row.created_by) ?? null) : null),
   }));

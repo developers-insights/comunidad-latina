@@ -181,6 +181,8 @@ export const COPY = {
     filterAll: "Todos",
     /** Sin monto cargado: lo decimos de frente en vez de dejar el hueco. */
     salaryToAgree: "Pago a convenir",
+    /** Área de foto tocable: abre el visor, nunca el detalle (feedback 2026-07-26). */
+    openPhotos: (title: string) => `Ver fotos de ${title}`,
     viewJob: "Ver empleo",
     loadMore: "Ver más empleos",
     loadingLabel: "Cargando empleos…",

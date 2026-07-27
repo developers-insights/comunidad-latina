@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Plus } from "@phosphor-icons/react/dist/ssr";
 import { buttonVariants, EmptyState } from "@/components/ui";
 import {
+  allPhotoUrls,
   buildTrustSignals,
   firstPhotoUrl,
   formatListingPrice,
@@ -98,6 +99,8 @@ async function FeedContent() {
       budgetLabel: formatListingPrice(row.price_amount, row.price_currency, row.price_period, tenant.locale),
       areaLabel: row.area_label,
       photoUrl: firstPhotoUrl(row.photos),
+      // Todas las fotos ya resueltas: tocar la foto abre el visor, no el aviso.
+      photos: allPhotoUrls(row.photos),
       category: attrs.category,
       // "Urgente" derivado de la fecha de entrega (≤ 7 días), ya no un toggle.
       urgent: isUrgentDeadline(attrs.deadlineDays),

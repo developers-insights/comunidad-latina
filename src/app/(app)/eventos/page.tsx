@@ -10,7 +10,13 @@ import {
   parseEventAttrs,
   type EventCardModel,
 } from "@/components/directory";
-import { buildTrustSignals, firstNameOf, firstPhotoUrl, toTrustLevel } from "@/components/listings";
+import {
+  allPhotoUrls,
+  buildTrustSignals,
+  firstNameOf,
+  firstPhotoUrl,
+  toTrustLevel,
+} from "@/components/listings";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -94,6 +100,9 @@ async function EventosContent() {
       date: attrs.startsAt ? eventDateParts(attrs.startsAt, tenant.locale) : null,
       free: attrs.free,
       photoUrl: firstPhotoUrl(row.photos),
+      // Todas las fotos ya resueltas: tocar la foto abre el visor con la
+      // galería completa, sin entrar al detalle (feedback 2026-07-26).
+      photos: allPhotoUrls(row.photos),
       publisherTrust:
         row.created_by && memberName
           ? {

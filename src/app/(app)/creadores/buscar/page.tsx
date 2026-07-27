@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { UserCirclePlus } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
-import { firstPortfolioUrl } from "@/components/creators";
+import { creatorPhotoUrl, firstPortfolioUrl } from "@/components/creators";
 import {
   COPY,
   CreatorCard,
@@ -78,6 +78,11 @@ async function DirectoryContent() {
       headline: row.headline,
       skills: row.skills ?? [],
       portfolioUrl: firstPortfolioUrl(row.portfolio_photos),
+      // Portfolio completo: tocar la foto abre el visor con todas, sin salir
+      // del directorio (feedback 2026-07-26).
+      portfolioPhotos: (row.portfolio_photos ?? [])
+        .filter((photo) => photo && photo.trim().length > 0)
+        .map(creatorPhotoUrl),
       ratingAvg: row.rating_avg,
       ratingCount: row.rating_count,
       completedJobs: row.completed_jobs,

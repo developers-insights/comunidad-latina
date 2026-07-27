@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { MagicWand, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { firstPhotoUrl, ListingListSkeleton } from "@/components/listings";
+import { allPhotoUrls, firstPhotoUrl, ListingListSkeleton } from "@/components/listings";
 import { BezelCard, EmptyState, buttonVariants } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -226,6 +226,9 @@ async function NegociosContent() {
               categoryLabel: categoriaLabel(negocio.attrs),
               areaLabel: negocio.area_label,
               photoUrl: firstPhotoUrl(negocio.photos),
+              // Tocar la foto abre el visor con todas; "Ver negocio" sigue
+              // abriendo la hoja (feedback 2026-07-26).
+              photos: allPhotoUrls(negocio.photos),
               ownerTrust,
               publisherName: negocio.publisher_name,
             };

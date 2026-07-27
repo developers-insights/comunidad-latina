@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { CaretDown, Plus } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
-import { decodeCursor, encodeCursor, firstPhotoUrl } from "@/components/listings";
+import { allPhotoUrls, decodeCursor, encodeCursor, firstPhotoUrl } from "@/components/listings";
 import {
   CategoryChips,
   COPY,
@@ -180,6 +180,9 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
       priceLabel: formatProductPrice(row.price_amount, row.price_currency, tenant.locale),
       category: attrs.category,
       photoUrl: firstPhotoUrl(row.photos),
+      // Todas las fotos ya resueltas: tocar la foto abre el visor con la
+      // galería completa, sin entrar al detalle (feedback 2026-07-26).
+      photos: allPhotoUrls(row.photos),
       seller: attrs.storeListingId
         ? {
             kind: "store",

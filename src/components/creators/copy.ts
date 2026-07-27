@@ -10,11 +10,17 @@ const GENERIC_ERROR =
   "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo en un ratito.";
 
 export const COPY = {
+  /**
+   * Área de foto tocable de las cards (feedback 2026-07-26: tocar la foto abre
+   * el visor a pantalla completa, nunca el detalle). Compartido por la card de
+   * trabajo y la de creador — el gesto es UNO solo en toda la app.
+   */
+  openPhotos: (title: string) => `Ver fotos de ${title}`,
+
   // -------------------------------------------------------------------------
   nav: {
     gigs: "Trabajos",
     creators: "Creadores",
-    contracts: "Contratos",
   },
 
   // -------------------------------------------------------------------------

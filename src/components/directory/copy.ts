@@ -4,6 +4,12 @@
  * vive en <VerificationCard> y NO se duplica acá.
  */
 export const COPY = {
+  /**
+   * Área de foto tocable de las cards (feedback 2026-07-26: tocar la foto abre
+   * el visor, nunca el detalle). Compartido por eventos y profesionales — el
+   * gesto es UNO solo en toda la app, así que el texto también.
+   */
+  openPhotos: (title: string) => `Ver fotos de ${title}`,
   professionals: {
     title: "Profesionales",
     subtitle: "Gente que trabaja para la comunidad",

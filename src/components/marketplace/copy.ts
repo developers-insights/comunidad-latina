@@ -43,6 +43,9 @@ export const COPY = {
     emptySearchTitle: (q: string) => `No encontramos nada con "${q}"`,
     emptySearchMessage: "Probá con otra palabra o mirá las categorías de arriba.",
     emptyPublishCta: "Publicar mi primer producto",
+    // Tocar la foto abre el visor a pantalla completa; la píldora va al producto
+    // (feedback 2026-07-26 — la regla de Vivienda, en todas las cards).
+    openPhotos: (title: string) => `Ver fotos de ${title}`,
     viewProduct: "Ver producto",
     ownerBanner: {
       title: "Tu tienda llega primero a quienes ya te siguen",
@@ -83,6 +86,9 @@ export const COPY = {
     emptyProductsMessage: "Esta tienda todavía no tiene productos publicados — volvé pronto.",
     followStore: "Seguir tienda",
     followingStore: "Siguiendo",
+    // Tocar la foto de la tienda la abre en el visor; a la vidriera se entra
+    // con "Ver tienda" (feedback 2026-07-26).
+    openPhotos: (name: string) => `Ver fotos de ${name}`,
     messageTitle: "¿Querés preguntarle algo?",
     messageCta: "Escribirle a la tienda",
     messagePlaceholder: "Hola, quería consultarles por…",

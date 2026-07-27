@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowRight, MapPin, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { ACCENT_CHIP_CLASS, DirectoryMedia } from "@/components/directory";
 import { BezelCard, BottomSheet, Button, Chip, Skeleton } from "@/components/ui";
+import { PhotoTap } from "@/components/media/photo-tap";
 import { cn } from "@/lib/utils";
 import { BusinessTrustBadge, type OwnerTrust } from "./business-trust-badge";
 
@@ -11,6 +12,8 @@ const COPY = {
   viewBusiness: "Ver negocio",
   publishedBy: "Publicado por",
   close: "Cerrar",
+  /** Tocar la foto la abre en el visor; "Ver negocio" sigue abriendo la hoja. */
+  openPhotos: (title: string) => `Ver fotos de ${title}`,
 } as const;
 
 export interface BusinessCardModel {
@@ -21,6 +24,11 @@ export interface BusinessCardModel {
   areaLabel: string | null;
   /** Primera foto ya resuelta (firstPhotoUrl) o null — DirectoryMedia cae al fallback del módulo. */
   photoUrl: string | null;
+  /**
+   * TODAS las fotos del negocio ya resueltas (allPhotoUrls) — el visor las pasa
+   * de una. Opcional: sin ella cae a `photoUrl`.
+   */
+  photos?: string[];
   ownerTrust: OwnerTrust | null;
   /** Fuente externa (seed/API) sin cuenta — solo se muestra si no hay ownerTrust. */
   publisherName: string | null;
@@ -32,15 +40,30 @@ export interface BusinessCardModel {
  * tiene página de detalle propia (mismo desvío documentado que
  * <FeedListingCard>): el CTA abre un BottomSheet con la info completa en vez
  * de navegar. Acento --accent-negocios (amarillo/dorado), solo decorativo.
+ *
+ * Mismo reparto de gestos que el resto de las cards (feedback 2026-07-26):
+ * tocar la FOTO abre el visor a pantalla completa; "Ver negocio" sigue abriendo
+ * la hoja con la info. Sin foto, el gradiente del módulo no es tocable.
  */
 export function BusinessCard({ business }: { business: BusinessCardModel }) {
   const [open, setOpen] = useState(false);
+  const photos = business.photos?.length
+    ? business.photos
+    : business.photoUrl
+      ? [business.photoUrl]
+      : [];
 
   return (
     <>
       <BezelCard coreClassName="overflow-hidden p-0">
         <article aria-label={business.title}>
-          <DirectoryMedia src={business.photoUrl} accent="negocios" icon={Storefront} />
+          <PhotoTap
+            photos={photos}
+            label={COPY.openPhotos(business.title)}
+            authorName={business.title}
+          >
+            <DirectoryMedia src={business.photoUrl} accent="negocios" icon={Storefront} />
+          </PhotoTap>
 
           <div className="flex flex-col gap-2.5 p-4">
             {business.categoryLabel && (

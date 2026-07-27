@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { Briefcase, MapPin } from "@phosphor-icons/react/dist/ssr";
 import { AccentLink, BezelCard } from "@/components/ui";
 import { DirectoryMedia } from "@/components/directory";
+import { PhotoTap } from "@/components/media/photo-tap";
 import type { JobCardModel } from "@/app/(app)/empleos/queries";
 import { EMPLOYMENT_TYPE_LABEL } from "./helpers";
 import { COPY } from "./copy";
@@ -10,10 +10,6 @@ const C = COPY.list;
 
 /** Acento naranja del módulo (solo decorativo) para la píldora de acción. */
 const ACCENT = "var(--accent-empleos)";
-
-/** Foto grande clickeable = red social: tap en la card abre el detalle (§ feedback 2026-07-24). */
-const MEDIA_LINK =
-  "group block focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.99]";
 
 /**
  * Card de empleo — misma gramática que EventCard (foto 4:5 + franja de vidrio),
@@ -24,14 +20,19 @@ const MEDIA_LINK =
  * monto es lo que frena el scroll, y sin foto es lo único que compite con el
  * ícono. El título sigue siendo el encabezado real (h3) aunque el número pese
  * más — jerarquía visual y semántica no tienen por qué coincidir.
+ *
+ * DOS destinos, uno por gesto (feedback 2026-07-26): cuando el aviso SÍ trae
+ * foto, tocarla abre el visor con todas; al detalle se entra por la píldora "Ver
+ * empleo". Sin foto el gradiente no es tocable — no hay nada que mirar.
  */
 export function JobCard({ job }: { job: JobCardModel }) {
   const typeLabel = job.employmentType ? EMPLOYMENT_TYPE_LABEL[job.employmentType] : null;
+  const photos = job.photos?.length ? job.photos : job.photoUrl ? [job.photoUrl] : [];
 
   return (
     <BezelCard coreClassName="overflow-hidden p-0">
       <article aria-label={job.title}>
-        <Link href={`/empleos/${job.id}`} aria-label={job.title} className={MEDIA_LINK}>
+        <PhotoTap photos={photos} label={C.openPhotos(job.title)} authorName={job.title}>
           <DirectoryMedia
             src={job.photoUrl}
             accent="empleos"
@@ -66,14 +67,14 @@ export function JobCard({ job }: { job: JobCardModel }) {
               </div>
             }
           />
-        </Link>
+        </PhotoTap>
 
         <div className="flex flex-col gap-2.5 p-4">
           {job.publisherName && (
             <p className="truncate text-sm text-foreground-secondary">{job.publisherName}</p>
           )}
 
-          <AccentLink accent={ACCENT} href={`/empleos/${job.id}`}>
+          <AccentLink accent={ACCENT} href={`/empleos/${job.id}`} ariaLabel={job.title}>
             {C.viewJob}
           </AccentLink>
         </div>
