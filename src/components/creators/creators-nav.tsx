@@ -5,8 +5,10 @@ import { COPY } from "./copy";
 
 // "contracts" se mantiene en el tipo porque /creadores/contratos sigue
 // existiendo y sigue pasando active="contracts" para resaltar (ver esa
-// página) — el acceso de Contratos ya no vive en este nav, se llega desde
-// "Mis contratos" en el perfil del creador (pedido del cliente 26/7).
+// página) — el acceso de Contratos ya no vive en este nav: se llega desde
+// "Mis contratos" en /creadores/perfil y, si hay algún contrato, también
+// desde /perfil (perfil general — feedback 27/7: el link en el perfil de
+// creador no era descubrible si nunca entrabas ahí primero).
 export type CreatorsSection = "gigs" | "creators" | "contracts";
 
 const ITEMS: ReadonlyArray<{
@@ -22,8 +24,8 @@ const ITEMS: ReadonlyArray<{
 /**
  * Segmented control del módulo: Trabajos · Creadores. Server component
  * (Links reales — navegable sin JS); el activo lo dice cada página. El
- * acceso a Contratos se sacó de acá (feedback 26/7) — ahora se llega desde
- * "Mis contratos" en /creadores/perfil.
+ * acceso a Contratos se sacó de acá (feedback 26/7) — ver el comentario de
+ * `CreatorsSection` arriba para dónde vive ahora.
  */
 export function CreatorsNav({ active }: { active: CreatorsSection }) {
   return (

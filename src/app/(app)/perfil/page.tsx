@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
+  Briefcase,
   CaretRight,
   PencilSimple,
   Prohibit,
@@ -41,6 +42,8 @@ const COPY = {
   helpHeading: "Ayuda y seguridad",
   blockedTitle: "Personas bloqueadas",
   blockedDesc: "Quiénes no pueden contactarte ni aparecer en tu feed.",
+  contractsTitle: "Mis contratos",
+  contractsDesc: "Los trabajos que contrataste o entregaste como creador.",
   sessionHeading: "Tu cuenta",
   sessionAs: (email: string) => `Sesión iniciada como ${email}.`,
   signOut: "Cerrar sesión",
@@ -78,6 +81,7 @@ export default async function PerfilPage({
     { count: postsCount },
     { count: followingCount },
     postsPage,
+    { count: contractsCount },
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     supabase
@@ -101,6 +105,14 @@ export default async function PerfilPage({
       authorId: user.id,
       cursor,
     }),
+    // Acceso a "Mis contratos" (pedido cliente 26/7, movido del nav de
+    // Creadores): solo se muestra si el usuario tiene algo que ver ahí — como
+    // cliente o como creador — para no ofrecerle a cualquiera un atajo vacío.
+    supabase
+      .from("gig_contracts")
+      .select("*", { count: "exact", head: true })
+      .eq("tenant_id", tenant.id)
+      .or(`client_id.eq.${user.id},creator_id.eq.${user.id}`),
   ]);
 
   // Cuenta sin perfil (edge raro) → que complete el onboarding.
@@ -181,6 +193,38 @@ export default async function PerfilPage({
           }}
         />
       </BezelCard>
+
+      {/* Mis contratos — solo si el usuario tiene alguno (cliente o creador). */}
+      {Boolean(contractsCount) && (
+        <section className="flex flex-col gap-3">
+          <Link
+            href="/creadores/contratos"
+            className="group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+          >
+            <BezelCard coreClassName="flex items-center gap-4 p-5">
+              <span
+                aria-hidden="true"
+                className="flex size-12 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-foreground-secondary"
+              >
+                <Briefcase size={26} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-display text-base font-semibold text-foreground">
+                  {COPY.contractsTitle}
+                </span>
+                <span className="mt-0.5 block text-sm text-foreground-secondary">
+                  {COPY.contractsDesc}
+                </span>
+              </span>
+              <CaretRight
+                size={18}
+                aria-hidden="true"
+                className="shrink-0 text-foreground-muted transition-transform duration-(--duration-fast) ease-(--ease-out-premium) group-hover:translate-x-0.5"
+              />
+            </BezelCard>
+          </Link>
+        </section>
+      )}
 
       {/* Ayuda y seguridad — bloqueo de personas y demás herramientas de cuidado */}
       <section className="flex flex-col gap-3">
