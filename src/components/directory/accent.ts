@@ -13,7 +13,7 @@
  * clase armada en runtime (`` `bg-[var(--accent-${accent})]` ``) no la ve el
  * compilador y queda sin estilo en build.
  */
-export type ModuleAccent = "eventos" | "negocios" | "profesionales";
+export type ModuleAccent = "eventos" | "negocios" | "profesionales" | "empleos";
 
 /** Gradiente suave del fallback de foto (sin foto real todavía). */
 export const ACCENT_MEDIA_BG: Record<ModuleAccent, string> = {
@@ -21,6 +21,9 @@ export const ACCENT_MEDIA_BG: Record<ModuleAccent, string> = {
   negocios: "bg-gradient-to-br from-[var(--accent-negocios)]/16 via-surface-subtle to-surface-subtle",
   profesionales:
     "bg-gradient-to-br from-[var(--accent-profesionales)]/16 via-surface-subtle to-surface-subtle",
+  // Empleos apoya más el tinte (24%): la mayoría de los avisos de trabajo no
+  // trae foto, así que este gradiente ES la card — no un relleno de emergencia.
+  empleos: "bg-gradient-to-br from-[var(--accent-empleos)]/24 via-surface-subtle to-surface-subtle",
 };
 
 /** Ícono decorativo grande del fallback — ÚNICO lugar donde el acento pinta texto/ícono. */
@@ -28,6 +31,7 @@ export const ACCENT_ICON_CLASS: Record<ModuleAccent, string> = {
   eventos: "text-[var(--accent-eventos)]",
   negocios: "text-[var(--accent-negocios)]",
   profesionales: "text-[var(--accent-profesionales)]",
+  empleos: "text-[var(--accent-empleos)]",
 };
 
 /** Chip cápsula con tinte del acento (categoría, rubro) — texto siempre -foreground. */
@@ -35,4 +39,5 @@ export const ACCENT_CHIP_CLASS: Record<ModuleAccent, string> = {
   eventos: "border-[var(--accent-eventos)]/30 bg-[var(--accent-eventos)]/10 text-foreground",
   negocios: "border-[var(--accent-negocios)]/40 bg-[var(--accent-negocios)]/15 text-foreground",
   profesionales: "border-[var(--accent-profesionales)]/30 bg-[var(--accent-profesionales)]/10 text-foreground",
+  empleos: "border-[var(--accent-empleos)]/30 bg-[var(--accent-empleos)]/10 text-foreground",
 };

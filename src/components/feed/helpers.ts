@@ -179,7 +179,7 @@ export const ENTITY_KIND_META: Record<
   business: { label: "Negocio", accentVar: "var(--accent-negocios)" },
   professional: { label: "Profesional", accentVar: "var(--accent-profesionales)" },
   event: { label: "Evento", accentVar: "var(--accent-eventos)" },
-  job: { label: "Empleo", accentVar: "var(--accent-feed)" },
+  job: { label: "Empleo", accentVar: "var(--accent-empleos)" },
 };
 
 /** Etiqueta legible del vertical, con respaldo si aparece un kind nuevo. */
@@ -193,14 +193,15 @@ export function entityAccentVar(kind: string): string {
 }
 
 /**
- * Página de la entidad para el kind dado. property/professional/event tienen
- * detalle por id; business cae al directorio (no hay página por-negocio aún);
- * el resto no linkea (nombre sin link antes que un link roto).
+ * Página de la entidad para el kind dado. property/professional/event/job
+ * tienen detalle por id; business cae al directorio (no hay página por-negocio
+ * aún); el resto no linkea (nombre sin link antes que un link roto).
  */
 const ENTITY_DETAIL_ROUTE: Record<string, (id: string) => string> = {
   property: (id) => `/propiedades/${id}`,
   professional: (id) => `/profesionales/${id}`,
   event: (id) => `/eventos/${id}`,
+  job: (id) => `/empleos/${id}`,
   business: () => "/negocios",
 };
 

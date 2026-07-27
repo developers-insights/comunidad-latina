@@ -7,6 +7,7 @@
 // EXCEPCIÓN 2026-07-26 (misma razón): 0038 — saves, post_views, listing_comments,
 // posts.view_count, listings.comment_count, post_promotions.cta_whatsapp.
 // EXCEPCIÓN 2026-07-26 bis: 0039 — listings.store_verified (espejo público).
+// EXCEPCIÓN 2026-07-27 (misma razón): 0040 — job_applications (empleos).
 export type Json =
   | string
   | number
@@ -877,6 +878,64 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "guides_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_applications: {
+        Row: {
+          answers: Json
+          applicant_id: string
+          created_at: string
+          id: string
+          job_id: string
+          message: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          answers?: Json
+          applicant_id: string
+          created_at?: string
+          id?: string
+          job_id: string
+          message?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          answers?: Json
+          applicant_id?: string
+          created_at?: string
+          id?: string
+          job_id?: string
+          message?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_applications_applicant_id_fkey"
+            columns: ["applicant_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_applications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_applications_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

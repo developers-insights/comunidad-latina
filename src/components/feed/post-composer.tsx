@@ -121,7 +121,7 @@ const CREATE_MENU_TILES: CreateMenuTile[] = [
     ...COPY.composer.createMenu.tiles.job,
     accent: entityAccentVar("job"),
     Icon: Wrench,
-    action: { kind: "link", href: "/publicar?kind=job" },
+    action: { kind: "link", href: "/empleos/publicar" },
   },
   {
     key: "product",

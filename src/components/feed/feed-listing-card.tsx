@@ -45,6 +45,7 @@ const DETAIL_ROUTE: Record<string, (id: string) => string> = {
   professional: (id) => `/profesionales/${id}`,
   product: (id) => `/marketplace/${id}`,
   creator_gig: (id) => `/creadores/${id}`,
+  job: (id) => `/empleos/${id}`,
 };
 
 /** Acento del módulo por vertical (para el CTA). Cubre los kinds de esta card. */
@@ -52,7 +53,7 @@ const LISTING_ACCENT: Record<string, string> = {
   business: "var(--accent-negocios)",
   professional: "var(--accent-profesionales)",
   event: "var(--accent-eventos)",
-  job: "var(--accent-feed)",
+  job: "var(--accent-empleos)",
   product: "var(--accent-marketplace)",
   creator_gig: "var(--accent-creadores)",
 };

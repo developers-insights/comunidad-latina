@@ -252,6 +252,12 @@ const INVENTARIO: Record<string, Entrada> = {
     cobertura: "control",
   },
   "src/app/(app)/publicar/publish-form.tsx": { inks: ["text-on-media"], cobertura: "control" },
+  // Botón "Quitar foto" del wizard de publicar EMPLEO — idéntico patrón: es un
+  // <button>, el @media print ya lo esconde.
+  "src/app/(app)/empleos/publicar/publish-form.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "control",
+  },
   // Hero de la landing: el respaldo es el <picture><img> de hero-backdrop, y un
   // <img> se imprime siempre (lo que el navegador omite es `background-*`). Fuera
   // de alcance de este defecto: el usuario está revisando el hero aparte.

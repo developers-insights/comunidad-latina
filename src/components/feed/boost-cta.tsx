@@ -32,8 +32,8 @@ export interface BoostCtaProps {
  * en `text-foreground` para no arriesgar contraste (mismo criterio que
  * EntityKindChip — el amarillo de negocios no sería AA como texto).
  *
- * El destino sale de `entityHref`. Si el vertical no tiene página propia (empleo),
- * cae al detalle del post en vez de inventar una ruta.
+ * El destino sale de `entityHref`. Si el vertical no tiene página propia, cae al
+ * detalle del post en vez de inventar una ruta.
  *
  * WhatsApp: los listings NO exponen teléfono (el contacto va por RPC protegido),
  * pero una CAMPAÑA es distinta — el anunciante decide publicar su número al

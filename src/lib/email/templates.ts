@@ -245,3 +245,45 @@ export function newMessageEmail(params: {
     ),
   };
 }
+
+// -----------------------------------------------------------------------------
+// (d) Postulación recibida — a quien publicó el aviso de empleo.
+// Minimización (espejo de leadReceivedEmail): del postulante va SOLO su
+// display_name. Ni las respuestas del formulario ni su nota viajan por mail.
+// -----------------------------------------------------------------------------
+
+export function applicationReceivedEmail(params: {
+  jobId: string;
+  jobTitle: string;
+  applicantDisplayName: string;
+  tenantName: string;
+  brandHex: string;
+}): { subject: string; html: string } {
+  const title = escapeHtml(params.jobTitle);
+  const applicant = escapeHtml(params.applicantDisplayName);
+  const site = getSiteUrl();
+  const href = `${site}/empleos/${encodeURIComponent(params.jobId)}`;
+  const content = `
+    <h1 style="margin:0 0 12px;font-family:${T.fontStack};font-size:22px;line-height:29px;font-weight:700;letter-spacing:-0.01em;color:${T.ink};">
+      ${applicant} se postuló a tu aviso
+    </h1>
+    <p style="margin:0 0 8px;font-family:${T.fontStack};font-size:15px;line-height:23px;color:${T.inkSoft};">
+      Alguien de la comunidad quiere el puesto:
+    </p>
+    <p style="margin:0 0 16px;padding:14px 18px;border:1px solid ${T.border};border-radius:14px;font-family:${T.fontStack};font-size:15px;font-weight:600;line-height:22px;color:${T.ink};background-color:${T.bgPage};">
+      ${title}
+    </p>
+    <p style="margin:0;font-family:${T.fontStack};font-size:15px;line-height:23px;color:${T.inkSoft};">
+      Entrá al aviso para leer sus respuestas y decidir si la aceptás. Todo
+      queda dentro de la plataforma, protegido para los dos.
+    </p>
+    ${ctaButton(href, "Ver la postulación", params.brandHex)}`;
+  return {
+    subject: `${params.applicantDisplayName} se postuló a "${params.jobTitle}"`,
+    html: baseLayout(
+      { tenantName: params.tenantName, brandHex: params.brandHex },
+      "Tenés una postulación nueva en tu aviso de empleo.",
+      content,
+    ),
+  };
+}

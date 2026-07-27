@@ -37,10 +37,10 @@ describe("BoostCta", () => {
     expect(link.getAttribute("href")).toBe("/profesionales/pro1");
   });
 
-  it("empleo → 'Postularme' cae al detalle del post (no hay página de empleo)", () => {
+  it("empleo → 'Postularme' al detalle del aviso (ya tiene página propia)", () => {
     render(<BoostCta kind="job" entityId="j1" postId="post-42" />);
     const link = screen.getByRole("link", { name: COPY.post.boostCta.job });
-    expect(link.getAttribute("href")).toBe("/feed/post-42");
+    expect(link.getAttribute("href")).toBe("/empleos/j1");
   });
 
   it("kind desconocido usa el texto de reserva y cae al post", () => {

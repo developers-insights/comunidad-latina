@@ -24,11 +24,24 @@ describe("isModuleActive", () => {
 });
 
 describe("MODULES", () => {
-  // 8 = 7 visibles + Videos (reels, sprint 2026-07-21). Escudo sigue oculto
-  // por pedido del cliente (2026-07-20).
+  // 9 = 7 visibles + Videos (reels, sprint 2026-07-21) + Empleos (feedback
+  // 2026-07-24). Escudo sigue oculto por pedido del cliente (2026-07-20).
   it("son los módulos visibles de la plataforma, sin href repetido", () => {
-    expect(MODULES).toHaveLength(8);
-    expect(new Set(MODULES.map((m) => m.href)).size).toBe(8);
+    expect(MODULES).toHaveLength(9);
+    expect(new Set(MODULES.map((m) => m.href)).size).toBe(9);
+  });
+
+  it("Empleos figura en el menú con su acento propio", () => {
+    const empleos = MODULES.find((m) => m.href === "/empleos");
+    expect(empleos).toBeDefined();
+    expect(empleos?.palette.icon).toBe("var(--accent-empleos)");
+  });
+
+  it("ningún módulo repite el ícono de otro", () => {
+    // El ícono es la mitad de la pista visual del menú: dos módulos con el
+    // mismo dibujo se leen como el mismo destino (le pasó a Empleos y
+    // Profesionales, los dos con el maletín).
+    expect(new Set(MODULES.map((m) => m.icon)).size).toBe(MODULES.length);
   });
 
   it("Videos figura en el menú (reels del sprint 2026-07-21)", () => {

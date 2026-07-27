@@ -121,7 +121,9 @@ describe("PostComposer — menú crear publicación", () => {
       [COPY.composer.createMenu.tiles.business.title, "/publicar?kind=business"],
       [COPY.composer.createMenu.tiles.professional.title, "/publicar?kind=professional"],
       [COPY.composer.createMenu.tiles.event.title, "/publicar?kind=event"],
-      [COPY.composer.createMenu.tiles.job.title, "/publicar?kind=job"],
+      // Empleos tiene su propio flujo de publicación (como Marketplace y
+      // Creadores): el tile ya no pasa por el /publicar genérico.
+      [COPY.composer.createMenu.tiles.job.title, "/empleos/publicar"],
       [COPY.composer.createMenu.tiles.product.title, "/marketplace/publicar"],
       [COPY.composer.createMenu.tiles.creatorService.title, "/creadores/publicar"],
     ];

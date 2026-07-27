@@ -67,6 +67,8 @@ describe("entityHref", () => {
     expect(entityHref("property", "id-1")).toBe("/propiedades/id-1");
     expect(entityHref("professional", "id-1")).toBe("/profesionales/id-1");
     expect(entityHref("event", "id-1")).toBe("/eventos/id-1");
+    // Empleos ya tiene sección propia: el aviso del feed abre su detalle.
+    expect(entityHref("job", "id-1")).toBe("/empleos/id-1");
   });
 
   it("negocio cae al directorio (no hay página por-negocio aún)", () => {
@@ -74,7 +76,6 @@ describe("entityHref", () => {
   });
 
   it("kind sin página no linkea (nombre sin link antes que link roto)", () => {
-    expect(entityHref("job", "id-1")).toBeNull();
     expect(entityHref("desconocido", "id-1")).toBeNull();
   });
 });
@@ -91,6 +92,7 @@ describe("entityKindLabel / entityAccentVar", () => {
     expect(entityAccentVar("business")).toBe("var(--accent-negocios)");
     expect(entityAccentVar("event")).toBe("var(--accent-eventos)");
     expect(entityAccentVar("property")).toBe("var(--accent-vivienda)");
+    expect(entityAccentVar("job")).toBe("var(--accent-empleos)");
   });
 });
 

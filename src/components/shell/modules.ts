@@ -7,12 +7,13 @@ import {
   ShoppingBagOpen,
   Sparkle,
   Storefront,
+  UserGear,
   type Icon,
 } from "@phosphor-icons/react";
 import { t } from "@/lib/i18n";
 
 /**
- * Registro de los 8 módulos de la plataforma — fuente única para el menú
+ * Registro de los 9 módulos de la plataforma — fuente única para el menú
  * (y para cualquier superficie futura que los enumere).
  *
  * Antes vivían en un rail de cápsulas bajo el header; el cliente pidió
@@ -83,11 +84,24 @@ export const MODULES: ModuleItem[] = [
     icon: Storefront,
     palette: accentPalette("var(--accent-negocios)"),
   },
+  // El maletín pasó a ser de Empleos (es el ícono de `job` en el feed, KIND_ICON);
+  // Profesionales toma UserGear, que es el que ya lo representa ahí. Dos módulos
+  // vecinos no pueden compartir ícono en un menú donde el ícono es la mitad de
+  // la pista visual.
   {
     href: "/profesionales",
     label: t("nav", "moduleProfesionales"),
-    icon: Briefcase,
+    icon: UserGear,
     palette: accentPalette("var(--accent-profesionales)"),
+  },
+  // Empleos va pegado a Profesionales: son los dos módulos de trabajo — uno
+  // ofrece oficio, el otro busca gente. Acento propio (naranja) para que no se
+  // confundan de un vistazo en el menú.
+  {
+    href: "/empleos",
+    label: t("nav", "moduleEmpleos"),
+    icon: Briefcase,
+    palette: accentPalette("var(--accent-empleos)"),
   },
   {
     href: "/marketplace",
