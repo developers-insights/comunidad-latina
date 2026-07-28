@@ -165,6 +165,12 @@ export async function finalizeProduct(rawInput: {
   }
   const { tenant, supabase, user } = guard;
 
+  // Finalize es re-invocable (reintentos legítimos de subida de fotos), pero
+  // no gratis: sin cuota propia sería el motor de la re-publicación en loop.
+  if (!limit(`marketplace-finalize:${user.id}`, 20, DAY_MS).ok) {
+    return { ok: false, error: GENERIC_ERROR };
+  }
+
   // Paths canónicos {tenant_id}/{listing_id}/{archivo} — nada fuera del folder del aviso.
   const pathPattern = new RegExp(
     `^${tenant.id}/${listingId}/[A-Za-z0-9._-]+\\.(webp|jpe?g|png)$`,
@@ -204,15 +210,24 @@ export async function finalizeProduct(rawInput: {
   // bait-and-switch post-verificación) — solo draft/pending_review/paused/
   // removed. Acá siempre pasa a pending_review con el cliente del usuario;
   // el branch "published" (solo dev) lo hace el admin client más abajo.
-  const { error: updateError } = await supabase
+  // `.in(status, draft|pending_review)`: un producto dado de baja por
+  // moderación ('removed') NO se re-publica llamando finalize de nuevo — eso
+  // lo decide un humano en la cola, no este flujo. El `.select().maybeSingle()`
+  // hace verificable el candado: 0 filas afectadas corta acá, antes del branch
+  // de publicación y del re-encolado.
+  const { data: updated, error: updateError } = await supabase
     .from("listings")
     .update({ photos: photoPaths, status: "pending_review" })
     .eq("id", listingId)
     .eq("tenant_id", tenant.id)
-    .eq("created_by", user.id);
+    .eq("created_by", user.id)
+    .eq("kind", "product")
+    .in("status", ["draft", "pending_review"])
+    .select("id")
+    .maybeSingle();
 
-  if (updateError) {
-    console.warn("[marketplace] finalize falló", { listingId, code: updateError.code });
+  if (updateError || !updated) {
+    console.warn("[marketplace] finalize falló", { listingId, code: updateError?.code });
     return { ok: false, error: GENERIC_ERROR };
   }
 
