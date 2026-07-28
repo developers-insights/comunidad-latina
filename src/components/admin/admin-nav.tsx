@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { m } from "motion/react";
 import {
+  Briefcase,
   GlobeHemisphereWest,
   ShieldCheck,
   Storefront,
@@ -45,6 +46,14 @@ const ITEMS: NavItem[] = [
     label: "Miembros",
     icon: <UsersThree size={18} aria-hidden="true" />,
     minRank: 1,
+  },
+  {
+    href: "/admin/empleos",
+    label: "Empleos",
+    // domain_admin+: no es moderación de contenido, es operar una sección de la
+    // comunidad — y su detalle muestra datos de personas (ver admin/empleos).
+    icon: <Briefcase size={18} aria-hidden="true" />,
+    minRank: 2,
   },
   {
     href: "/admin/dominio",

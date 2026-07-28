@@ -2,7 +2,14 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { MagicWand, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { allPhotoUrls, firstPhotoUrl, ListingListSkeleton } from "@/components/listings";
-import { BezelCard, EmptyState, buttonVariants } from "@/components/ui";
+import {
+  BezelCard,
+  EmptyState,
+  SectionCta,
+  SectionHeading,
+  buttonVariants,
+} from "@/components/ui";
+import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { toTrustProps } from "@/lib/trust/signals";
@@ -29,6 +36,17 @@ const COPY = {
   copilotoTexto:
     "Mejores títulos, mejor descripción e ideas de post — sugerencias de IA que revisás vos.",
   copilotoCta: "Abrir el Copiloto",
+} as const;
+
+/**
+ * Identidad visual de la sección: el acento y el ícono 3D que ya la representan
+ * en el menú y en /buscar (shell/modules.ts). Los mismos tres lugares, el mismo
+ * dibujo — así se reconoce la sección sin leer.
+ */
+const SECCION = {
+  accent: "var(--accent-negocios)",
+  image: "/icons/menu/negocios.webp",
+  publicarHref: "/publicar?kind=business",
 } as const;
 
 /** Etiquetas legibles para las categorías más comunes de `attrs.category`. */
@@ -129,15 +147,27 @@ async function NegociosContent() {
 
   return (
     <>
-      <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-        {COPY.titulo}
-      </h1>
-      <p className="mt-1 text-sm text-foreground-secondary">{COPY.subtitulo}</p>
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={COPY.titulo}
+        subtitle={COPY.subtitulo}
+      />
+
+      {/* La burbuja de publicar, arriba de todo y antes de la lista (pedido
+          textual del cliente 2026-07-27): publicar no se busca en ajustes. */}
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishBusinessTitle")}
+        hint={t("sections", "publishBusinessHint")}
+        className="mt-3"
+      />
 
       {/* Banner premium para dueños de negocio → Presencia Verificada (§7) */}
       <BezelCard
         variant="featured"
-        className="mt-5"
+        className="mt-4"
         coreClassName="flex flex-col gap-3 p-5"
       >
         <div className="flex items-start gap-3">
@@ -250,11 +280,22 @@ async function NegociosContent() {
 export function NegociosSkeleton() {
   return (
     <div aria-busy="true">
-      <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-        {COPY.titulo}
-      </h1>
-      <p className="mt-1 text-sm text-foreground-secondary">{COPY.subtitulo}</p>
-      <div className="mt-5 h-32 rounded-xl bg-surface-2 animate-pulse" />
+      {/* Cabecera y burbuja de publicar son estáticas: se pintan de una y no
+          parpadean cuando llega el listado (cero CLS entre fallback y real). */}
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={COPY.titulo}
+        subtitle={COPY.subtitulo}
+      />
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishBusinessTitle")}
+        hint={t("sections", "publishBusinessHint")}
+        className="mt-3"
+      />
+      <div className="mt-4 h-32 rounded-xl bg-surface-subtle animate-pulse" />
       <div className="mt-6">
         <ListingListSkeleton />
       </div>

@@ -1,8 +1,10 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { Megaphone, Siren } from "@phosphor-icons/react/dist/ssr";
 import { Field, Input, Textarea } from "@/components/ui";
 import { createBroadcast, type GlobalActionState } from "@/app/admin/global/actions";
+import { cn } from "@/lib/utils";
 import { ConfirmSlowDialog } from "./confirm-slow-dialog";
 import { PendingButton } from "./pending-button";
 
@@ -36,10 +38,50 @@ const COPY = {
   confirmTitle: "¿Enviamos este broadcast?",
   confirmDescription:
     "Lo va a ver cada persona de las comunidades elegidas la próxima vez que abra la app.",
+  confirmUrgentDescription:
+    "Se muestra destacado, como una emergencia, a cada persona de las comunidades elegidas. Usalo solo cuando de verdad lo sea: si todo es urgente, nada lo es.",
   confirmLabel: "Sí, enviar",
   needTargets: "Elegí al menos una comunidad destino.",
   targetCount: (n: number) => (n === 1 ? "1 comunidad elegida" : `${n} comunidades elegidas`),
+  severity: "Tipo de aviso",
+  severityHelp: "Marcá “Emergencia” solo cuando la gente tenga que actuar ahora.",
+  severityInfo: "Aviso normal",
+  severityInfoHint: "Novedades, cambios, recordatorios",
+  severityUrgent: "Emergencia",
+  severityUrgentHint: "Persona desaparecida, centro de acopio, redada",
+  urgentBadge: "Emergencia",
 } as const;
+
+/**
+ * Severidad del broadcast (`broadcasts.severity`, migración 0041). Dos radios,
+ * no un checkbox suelto: "emergencia" es una decisión editorial explícita, y un
+ * checkbox invita a tildarlo sin pensar. El copy de cada opción dice para qué
+ * es, no qué hace el sistema.
+ */
+const SEVERITIES = [
+  {
+    value: "info",
+    label: COPY.severityInfo,
+    hint: COPY.severityInfoHint,
+    icon: Megaphone,
+    activeClass: "has-[:checked]:border-brand has-[:checked]:bg-brand-tint has-[:checked]:text-brand-ink",
+  },
+  {
+    value: "urgent",
+    label: COPY.severityUrgent,
+    hint: COPY.severityUrgentHint,
+    icon: Siren,
+    activeClass:
+      "has-[:checked]:border-danger has-[:checked]:bg-danger-bg has-[:checked]:text-danger-ink",
+  },
+] as const;
+
+const severityCardClass = cn(
+  "flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border bg-surface px-3 py-2.5",
+  "transition-[border-color,background-color,color] duration-(--duration-fast) ease-(--ease-out-premium)",
+  "hover:border-border-strong",
+  "has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-focus-ring",
+);
 
 const initialState: GlobalActionState = { status: "idle" };
 
@@ -49,7 +91,11 @@ export function BroadcastForm({ tenants }: { tenants: BroadcastTenantOption[] })
   const formRef = useRef<HTMLFormElement>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [clientError, setClientError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<{ title: string; targets: string[] }>();
+  const [summary, setSummary] = useState<{
+    title: string;
+    targets: string[];
+    severity: "info" | "urgent";
+  }>();
 
   // Cierre del diálogo: ajuste de estado en render (sin setState en effects).
   const [prevState, setPrevState] = useState<GlobalActionState>(state);
@@ -75,6 +121,7 @@ export function BroadcastForm({ tenants }: { tenants: BroadcastTenantOption[] })
     setSummary({
       title: String(fd.get("title") ?? ""),
       targets: tenants.filter((t) => targetIds.includes(t.id)).map((t) => t.name),
+      severity: fd.get("severity") === "urgent" ? "urgent" : "info",
     });
     setConfirmOpen(true);
   }
@@ -109,6 +156,39 @@ export function BroadcastForm({ tenants }: { tenants: BroadcastTenantOption[] })
           <Input id="bc-ends" name="endsAt" type="datetime-local" />
         </Field>
       </div>
+
+      <fieldset>
+        <legend className="text-sm font-medium text-foreground">{COPY.severity}</legend>
+        <p className="mt-0.5 text-sm text-foreground-muted">{COPY.severityHelp}</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {SEVERITIES.map((option) => {
+            const Icon = option.icon;
+            return (
+              <label
+                key={option.value}
+                htmlFor={`bc-severity-${option.value}`}
+                className={cn(severityCardClass, option.activeClass)}
+              >
+                <input
+                  type="radio"
+                  id={`bc-severity-${option.value}`}
+                  name="severity"
+                  value={option.value}
+                  defaultChecked={option.value === "info"}
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]"
+                />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 text-sm font-medium">
+                    <Icon size={16} weight="fill" aria-hidden="true" />
+                    {option.label}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-foreground-muted">{option.hint}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
 
       <fieldset>
         <legend className="text-sm font-medium text-foreground">{COPY.targets}</legend>
@@ -163,13 +243,21 @@ export function BroadcastForm({ tenants }: { tenants: BroadcastTenantOption[] })
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         title={COPY.confirmTitle}
-        description={COPY.confirmDescription}
+        description={
+          summary?.severity === "urgent" ? COPY.confirmUrgentDescription : COPY.confirmDescription
+        }
         confirmLabel={COPY.confirmLabel}
         confirmLoading={actionPending}
         onConfirm={onConfirm}
       >
         {summary && (
           <div className="rounded-md bg-surface-subtle px-3 py-2.5 text-sm">
+            {summary.severity === "urgent" && (
+              <span className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-danger-bg px-2.5 py-0.5 text-xs font-semibold text-danger-ink">
+                <Siren size={13} weight="fill" aria-hidden="true" />
+                {COPY.urgentBadge}
+              </span>
+            )}
             <p className="font-medium text-foreground">“{summary.title}”</p>
             <p className="mt-1 text-foreground-secondary">
               {COPY.targetCount(summary.targets.length)}:{" "}

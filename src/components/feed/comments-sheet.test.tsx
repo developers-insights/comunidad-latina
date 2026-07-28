@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 /**
  * La hoja de comentarios trae el hilo en el CLIENTE al abrir (Supabase browser),
@@ -10,6 +10,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
  */
 
 const supa = vi.hoisted(() => ({ client: null as unknown }));
+// Se puede encender por test: el auto-scroll del hilo NO debe existir con
+// prefers-reduced-motion.
+const motionPrefs = vi.hoisted(() => ({ reduce: false }));
 
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => supa.client,
@@ -54,7 +57,7 @@ vi.mock("motion/react", () => {
     AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
     m: { div },
     motion: { div },
-    useReducedMotion: () => false,
+    useReducedMotion: () => motionPrefs.reduce,
   };
 });
 
@@ -97,7 +100,11 @@ vi.mock("./comment-composer", () => ({
   ),
 }));
 
-import { CommentsSheetProvider, useCommentsSheet } from "./comments-sheet";
+import {
+  CommentsSheetProvider,
+  useCommentsSheet,
+  type CommentsSurface,
+} from "./comments-sheet";
 
 // --- Cliente Supabase falso (builder encadenable + thenable) ----------------
 
@@ -151,19 +158,30 @@ function makeClient(f: Fixtures) {
   };
 }
 
-function Opener({ postId, count }: { postId: string; count?: number }) {
+function Opener({
+  postId,
+  count,
+  surface,
+}: {
+  postId: string;
+  count?: number;
+  surface?: CommentsSurface;
+}) {
   const { open } = useCommentsSheet();
   return (
-    <button type="button" onClick={() => open({ postId, commentCount: count })}>
+    <button
+      type="button"
+      onClick={() => open({ postId, commentCount: count, surface })}
+    >
       abrir
     </button>
   );
 }
 
-function mount() {
+function mount(surface?: CommentsSurface) {
   return render(
     <CommentsSheetProvider>
-      <Opener postId="p1" count={2} />
+      <Opener postId="p1" count={2} surface={surface} />
     </CommentsSheetProvider>,
   );
 }
@@ -268,6 +286,17 @@ describe("CommentsSheet", () => {
     expect(screen.getByText("(2)")).toBeTruthy();
   });
 
+  it("por defecto la hoja es la alta y opaca de siempre", async () => {
+    supa.client = makeClient({ user: { id: "viewer" }, comments: ROWS, profiles: PROFILES });
+    mount();
+    fireEvent.click(screen.getByText("abrir"));
+    await screen.findByText("Primer comentario");
+
+    const panel = screen.getByRole("dialog").className;
+    expect(panel).toContain("h-[88dvh]");
+    expect(panel).toContain("bg-surface-raised");
+  });
+
   it("optimista confirmado: deja de mostrar 'Enviando…' y queda en la lista", async () => {
     supa.client = makeClient({ user: { id: "viewer" }, comments: ROWS, profiles: PROFILES });
     mount();
@@ -281,5 +310,178 @@ describe("CommentsSheet", () => {
     expect(screen.queryByText(/Enviando…/)).toBeNull();
     expect(screen.getByText("Comentario nuevo")).toBeTruthy();
     expect(screen.getByText("(3)")).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hoja SOBRE VIDEO (feedback cliente 2026-07-27)
+// ---------------------------------------------------------------------------
+
+/**
+ * "¿tú viste cómo salió ahí? que le bloqueó todo el video… ¿puede salir como un
+ * poquito más abajo? porque a veces la gente sigue viendo el video y está
+ * leyendo los comentarios" + "los comentarios tienen que ser transparente el
+ * fondo, no tiene que ser blanco".
+ *
+ * Lo que se fija acá: media altura, vidrio (nada de superficie opaca), velo del
+ * fondo apenas insinuado, texto en tinta de media — y el hilo que se mueve solo
+ * PERO se frena apenas la persona toca algo (y nunca arranca con reduced-motion).
+ */
+describe("CommentsSheet sobre video", () => {
+  it("ocupa media pantalla, con vidrio en vez del panel opaco", async () => {
+    supa.client = makeClient({ user: { id: "viewer" }, comments: ROWS, profiles: PROFILES });
+    mount("video");
+    fireEvent.click(screen.getByText("abrir"));
+    await screen.findByText("Primer comentario");
+
+    const panel = screen.getByRole("dialog").className;
+    // Media altura: arriba sigue viéndose el video.
+    expect(panel).toContain("h-[46dvh]");
+    expect(panel).not.toContain("h-[88dvh]");
+    // Vidrio: velo de media + desenfoque, y NADA de la superficie opaca.
+    expect(panel).toContain("bg-media-shade/72");
+    expect(panel).toContain("backdrop-blur-2xl");
+    expect(panel).not.toContain("bg-surface-raised");
+  });
+
+  it("el velo del fondo no tapa el video", async () => {
+    supa.client = makeClient({ user: { id: "viewer" }, comments: ROWS, profiles: PROFILES });
+    const { container } = mount("video");
+    fireEvent.click(screen.getByText("abrir"));
+    await screen.findByText("Primer comentario");
+
+    const scrim = container.ownerDocument.querySelector<HTMLElement>(
+      "[aria-hidden='true'].absolute.inset-0",
+    );
+    expect(scrim?.className).toContain("bg-media-shade/25");
+    expect(scrim?.className).not.toContain("bg-scrim ");
+  });
+
+  it("los comentarios se pintan con la tinta de media, no con burbuja clara", async () => {
+    supa.client = makeClient({ user: { id: "viewer" }, comments: ROWS, profiles: PROFILES });
+    mount("video");
+    fireEvent.click(screen.getByText("abrir"));
+
+    const body = await screen.findByText("Primer comentario");
+    expect(body.className).toContain("text-on-media");
+    expect(body.parentElement?.className).not.toContain("bg-surface-subtle");
+  });
+});
+
+describe("CommentsSheet sobre video: el hilo se desplaza solo", () => {
+  /** El contenedor del hilo, con un alto simulado (jsdom no hace layout). */
+  function primeThread(scrollHeight = 1200, clientHeight = 200) {
+    const thread = document.querySelector<HTMLElement>("[data-comments-thread]");
+    if (!thread) throw new Error("no hay hilo");
+    Object.defineProperty(thread, "scrollHeight", {
+      value: scrollHeight,
+      configurable: true,
+    });
+    Object.defineProperty(thread, "clientHeight", {
+      value: clientHeight,
+      configurable: true,
+    });
+    let top = 0;
+    Object.defineProperty(thread, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (next: number) => {
+        top = next;
+      },
+    });
+    return thread;
+  }
+
+  async function openOverVideo() {
+    supa.client = makeClient({ user: { id: "viewer" }, comments: ROWS, profiles: PROFILES });
+    mount("video");
+    fireEvent.click(screen.getByText("abrir"));
+    // El hilo se trae en el cliente tras un frame: con timers falsos hay que
+    // empujar el rAF y dejar resolver las promesas del cliente falso.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    expect(screen.getByText("Primer comentario")).toBeTruthy();
+    return primeThread();
+  }
+
+  beforeEach(() => {
+    motionPrefs.reduce = false;
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    motionPrefs.reduce = false;
+  });
+
+  it("arranca solo (despacio) después de un respiro", async () => {
+    const thread = await openOverVideo();
+    expect(thread.scrollTop).toBe(0);
+
+    // Todavía dentro del respiro inicial: quieto.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(thread.scrollTop).toBe(0);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500);
+    });
+    expect(thread.scrollTop).toBeGreaterThan(5);
+  });
+
+  it("se DETIENE apenas la persona toca el hilo, y no vuelve a arrancar sola", async () => {
+    const thread = await openOverVideo();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500);
+    });
+    const moved = thread.scrollTop;
+    expect(moved).toBeGreaterThan(5);
+
+    // Rueda / dedo sobre el hilo: la persona tomó el control.
+    fireEvent.wheel(thread);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(thread.scrollTop).toBe(moved);
+  });
+
+  it("enfocar el campo de escribir también lo detiene", async () => {
+    const thread = await openOverVideo();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500);
+    });
+    const moved = thread.scrollTop;
+
+    fireEvent.focusIn(screen.getByTestId("composer"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(thread.scrollTop).toBe(moved);
+  });
+
+  it("con prefers-reduced-motion no se mueve nunca", async () => {
+    motionPrefs.reduce = true;
+    const thread = await openOverVideo();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000);
+    });
+    expect(thread.scrollTop).toBe(0);
+  });
+
+  it("en la hoja normal del feed no hay desplazamiento automático", async () => {
+    supa.client = makeClient({ user: { id: "viewer" }, comments: ROWS, profiles: PROFILES });
+    mount();
+    fireEvent.click(screen.getByText("abrir"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    const thread = primeThread();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000);
+    });
+    expect(thread.scrollTop).toBe(0);
   });
 });

@@ -15,6 +15,7 @@ import { PullToRefresh } from "@/components/feed/pull-to-refresh";
 import { ParaVos, ParaVosSkeleton } from "@/components/matching";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { FeedAlert } from "./alert-banner";
 import { fetchFeedPageAction } from "./load-more";
 
 export const metadata = { title: "Feed" };
@@ -44,6 +45,17 @@ export default async function FeedPage({ searchParams }: { searchParams: SearchP
           es lo que gradúa el rebote). Acá persisten entre navegaciones. */}
       <Suspense fallback={<FeedHeader area={null} />}>
         <FeedHeaderWithArea />
+      </Suspense>
+
+      {/* Alerta comunitaria (call cliente 2026-07-27). Va ARRIBA de los tabs,
+          no entre los tabs y su lista: los tabs son el control de ese listado y
+          meterle un recuadro en el medio se lee como que algo se rompió. Acá es
+          lo primero del área de contenido y se ve en cualquier tab, incluso al
+          abrir un link viejo con `?cursor=` (donde el composer ni aparece).
+          `fallback={null}`: sin alerta —o mientras viaja la query— el feed no
+          reserva NI UN PÍXEL. */}
+      <Suspense fallback={null}>
+        <FeedAlert />
       </Suspense>
 
       <FeedTabs active={tab} />

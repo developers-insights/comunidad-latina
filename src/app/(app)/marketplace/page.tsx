@@ -1,7 +1,14 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { CaretDown, Plus } from "@phosphor-icons/react/dist/ssr";
-import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
+import {
+  Bubble,
+  EmptyState,
+  SectionCta,
+  SectionHeading,
+  Skeleton,
+  buttonVariants,
+} from "@/components/ui";
 import { allPhotoUrls, decodeCursor, encodeCursor, firstPhotoUrl } from "@/components/listings";
 import {
   CategoryChips,
@@ -16,6 +23,7 @@ import {
   sanitizeSearchQuery,
   type ProductCardModel,
 } from "@/components/marketplace";
+import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -24,6 +32,13 @@ export const metadata = { title: "Marketplace" };
 
 const PAGE_SIZE = 12;
 const C = COPY.list;
+
+/** Acento + ícono 3D de la sección (los mismos del menú y de /buscar). */
+const SECCION = {
+  accent: "var(--accent-marketplace)",
+  image: "/icons/menu/marketplace.webp",
+  publicarHref: "/marketplace/publicar",
+} as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -210,23 +225,26 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
 
   return (
     <>
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {C.title}
-          </h1>
-          <p className="mt-0.5 text-sm text-foreground-secondary">{C.subtitle}</p>
-        </div>
-        <Link
-          href="/marketplace/publicar"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
-        >
-          <Plus size={16} aria-hidden="true" />
-          {C.publishCta}
-        </Link>
-      </header>
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={C.title}
+        subtitle={C.subtitle}
+      />
 
-      <MarketplaceSearchBar className="mb-4" />
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishProductTitle")}
+        hint={t("sections", "publishProductHint")}
+        className="mt-3"
+      />
+
+      {/* Bandeja de búsqueda: la caja ya no flota sobre la plancha, va contenida
+          — es el "search de adentro de la categoría" del que habló el cliente. */}
+      <Bubble tone="tray" shape="tile" size="none" className="mb-4 mt-4 p-3">
+        <MarketplaceSearchBar />
+      </Bubble>
 
       {ownsStore && <MarketplaceOwnerBanner />}
 
@@ -289,16 +307,22 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
 function PageSkeleton() {
   return (
     <div aria-busy="true">
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {C.title}
-          </h1>
-          <Skeleton className="mt-1.5 h-4 w-48" />
-        </div>
-        <Skeleton className="h-10 w-32 rounded-md" />
-      </header>
-      <Skeleton className="mb-4 h-11 w-full rounded-md" />
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={C.title}
+        subtitle={C.subtitle}
+      />
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishProductTitle")}
+        hint={t("sections", "publishProductHint")}
+        className="mt-3"
+      />
+      <Bubble tone="tray" shape="tile" size="none" className="mb-4 mt-4 p-3">
+        <Skeleton className="h-11 w-full rounded-md" />
+      </Bubble>
       <div className="mb-5 flex gap-2">
         <Skeleton className="h-11 w-16 rounded-full" />
         <Skeleton className="h-11 w-28 rounded-full" />

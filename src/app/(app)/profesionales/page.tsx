@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { CaretDown, Plus } from "@phosphor-icons/react/dist/ssr";
-import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
+import { CaretDown } from "@phosphor-icons/react/dist/ssr";
+import { EmptyState, SectionCta, SectionHeading, Skeleton, buttonVariants } from "@/components/ui";
 import {
   allPhotoUrls,
   buildTrustSignals,
@@ -21,6 +21,7 @@ import {
   parseProfessionalAttrs,
   type ProfessionalCardModel,
 } from "@/components/directory";
+import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn, formatDate } from "@/lib/utils";
@@ -29,6 +30,13 @@ export const metadata = { title: "Profesionales" };
 
 const PAGE_SIZE = 12;
 const C = COPY.professionals;
+
+/** Acento + ícono 3D de la sección (los mismos del menú y de /buscar). */
+const SECCION = {
+  accent: "var(--accent-profesionales)",
+  image: "/icons/menu/profesionales.webp",
+  publicarHref: "/publicar?kind=professional",
+} as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -195,21 +203,20 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
 
   return (
     <>
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {C.title}
-          </h1>
-          <p className="mt-0.5 text-sm text-foreground-secondary">{C.subtitle}</p>
-        </div>
-        <Link
-          href="/publicar"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
-        >
-          <Plus size={16} aria-hidden="true" />
-          {C.publishCta}
-        </Link>
-      </header>
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={C.title}
+        subtitle={C.subtitle}
+      />
+
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishProfessionalTitle")}
+        hint={t("sections", "publishProfessionalHint")}
+        className="mb-4 mt-3"
+      />
 
       <CategoryChips className="mb-5" />
 
@@ -219,8 +226,12 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
           title={filters.rubro ? C.emptyFilteredTitle : C.emptyTitle}
           message={filters.rubro ? C.emptyFilteredMessage : C.emptyMessage}
           action={
+            // El MISMO destino que el CTA de arriba: `?kind=professional` deja el
+            // formulario abierto en Profesionales (publicar/page.tsx lo honra).
+            // Sin el parámetro, quien llega desde el estado vacío aterriza en un
+            // selector de tipo y tiene que volver a elegir lo que ya eligió.
             <Link
-              href="/publicar"
+              href={SECCION.publicarHref}
               className={buttonVariants({ variant: "primary", size: "md" })}
             >
               {C.publishCta}
@@ -255,15 +266,19 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
 function PageSkeleton() {
   return (
     <div aria-busy="true">
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {C.title}
-          </h1>
-          <Skeleton className="mt-1.5 h-4 w-40" />
-        </div>
-        <Skeleton className="h-10 w-24 rounded-md" />
-      </header>
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={C.title}
+        subtitle={C.subtitle}
+      />
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishProfessionalTitle")}
+        hint={t("sections", "publishProfessionalHint")}
+        className="mb-4 mt-3"
+      />
       <div className="mb-5 flex gap-2">
         <Skeleton className="h-11 w-20 rounded-full" />
         <Skeleton className="h-11 w-24 rounded-full" />

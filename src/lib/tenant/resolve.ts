@@ -14,6 +14,17 @@ export type Tenant = {
   locale: string;
   currency: string;
   modules: Record<string, boolean>;
+  /**
+   * `tenants.modules_soon` (migración 0041): el TERCER estado de un módulo.
+   * Misma forma que `modules` y hermana suya, nunca su reemplazo — el contrato
+   * de los tres estados, y el default de la clave ausente, viven en
+   * `@/components/shell/module-access` y en ningún otro lado.
+   *
+   * Vacío `{}` cuando la columna trae basura: sin `modules_soon` nadie queda en
+   * "muy pronto", que es la degradación correcta (el on/off de `modules` sigue
+   * mandando igual).
+   */
+  modulesSoon: Record<string, boolean>;
   theme: Record<string, unknown> | null;
   /**
    * `true` cuando la fila NO vino de la DB y `id` es un placeholder (DB caída,
@@ -29,17 +40,33 @@ export const TENANT_SLUG_HEADER = "x-tenant-slug";
 export const TENANT_ID_HEADER = "x-tenant-id";
 export const DEFAULT_TENANT_SLUG = "dominicanos";
 
-const DEFAULT_MODULES: Record<string, boolean> = {
-  feed: true,
-  propiedades: true,
-  negocios: true,
-  profesionales: true,
-  eventos: true,
-  mensajes: true,
-  escudo: true,
-  marketplace: true,
-  creadores: true,
-};
+/**
+ * Módulos del tenant de fallback: NINGUNA clave, o sea TODO activo.
+ *
+ * No está vacío por pereza — vacío ES la forma de decir "todo prendido", porque
+ * el default de una clave ausente es "activo" (`moduleAvailability` en
+ * @/components/shell/module-access, que es donde vive esa decisión y la única
+ * donde vive). Antes esto era una lista escrita a mano con las 9 claves de
+ * entonces, y envejeció mal: cuando llegaron `empleos` y `videos` nadie la
+ * actualizó, así que un tenant en fallback mostraba la app CON DOS SECCIONES
+ * MENOS. Una lista que hay que mantener sincronizada con MODULE_KEYS es una
+ * lista que se va a desincronizar; no tenerla es la única forma de que no pase.
+ *
+ * Y es lo que corresponde: el fallback se usa cuando la DB no contesta o el seed
+ * no corrió. Un tenant en fallback muestra la plataforma COMPLETA —degradación
+ * elegante §7— porque una DB caída no puede parecerse a un lanzamiento por
+ * etapas.
+ */
+const DEFAULT_MODULES: Record<string, boolean> = {};
+
+/**
+ * Fallback de `modules_soon`: NADIE en "muy pronto".
+ *
+ * Es lo correcto justamente porque el fallback se usa cuando la DB no contesta:
+ * en ese escenario todo está activo, así que un módulo marcado "muy pronto" acá
+ * jamás se leería (el estado "muy pronto" solo existe sobre lo apagado).
+ */
+const DEFAULT_MODULES_SOON: Record<string, boolean> = {};
 
 /**
  * Fallback hardcodeado para dev / degradación elegante: si la DB no responde
@@ -56,6 +83,7 @@ export const DEFAULT_TENANTS: Record<string, Tenant> = {
     locale: "es-US",
     currency: "USD",
     modules: DEFAULT_MODULES,
+    modulesSoon: DEFAULT_MODULES_SOON,
     theme: null,
     isFallback: true,
   },
@@ -68,6 +96,7 @@ export const DEFAULT_TENANTS: Record<string, Tenant> = {
     locale: "es-US",
     currency: "USD",
     modules: DEFAULT_MODULES,
+    modulesSoon: DEFAULT_MODULES_SOON,
     theme: null,
     isFallback: true,
   },
@@ -153,6 +182,13 @@ function mapTenantRow(row: Record<string, unknown>, fallback: Tenant): Tenant {
     locale: asString(row.locale) ?? fallback.locale,
     currency: asString(row.currency) ?? fallback.currency,
     modules: (asRecord(row.modules) as Record<string, boolean> | null) ?? fallback.modules,
+    /**
+     * Misma tolerancia que `modules`: si la columna trae basura (un array, un
+     * string, un null) `asRecord` devuelve null y cae al `{}` del fallback —
+     * sin "muy pronto", nunca a un estado inventado.
+     */
+    modulesSoon:
+      (asRecord(row.modules_soon) as Record<string, boolean> | null) ?? fallback.modulesSoon,
     theme: asRecord(row.theme) ?? fallback.theme,
     // La fila vino de la DB: `id` es real, así que se puede comparar con el JWT.
     isFallback: false,

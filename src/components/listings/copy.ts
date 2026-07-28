@@ -8,7 +8,6 @@ export const COPY = {
     title: "Vivienda",
     subtitleNearArea: (area: string) => `Cerca de ${area}`,
     subtitleDefault: "En tu comunidad",
-    publishCta: "Publicar",
     searchPlaceholder: "Buscá por barrio, tipo de lugar…",
     searchLabel: "Buscar propiedades",
     filterPriceLabel: "Precio máx.",

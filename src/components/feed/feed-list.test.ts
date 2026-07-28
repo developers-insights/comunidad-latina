@@ -36,6 +36,7 @@ function makePost(id: string, createdAt = "2026-01-01T00:00:00Z"): FeedItem {
       author: AUTHOR,
       likedByViewer: false,
       savedByViewer: false,
+      poll: null,
       viewCount: 0,
       entity: null,
       isPromoted: false,

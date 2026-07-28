@@ -10,6 +10,14 @@ const buttonVariants = cva(
     "active:scale-[0.97]",
     "disabled:pointer-events-none disabled:opacity-45",
     "aria-busy:pointer-events-none",
+    // Anillo de foco PROPIO, y no el global de globals.css. El global vive en
+    // `:where(a, button, …):focus-visible { box-shadow: var(--shadow-focus-ring) }`,
+    // y `shadow-xs` —que llevan `primary` y `danger`— es una utility que escribe
+    // `box-shadow`: le gana y deja esos dos variants SIN indicador de foco, en
+    // ~40 call sites incluidos los <Link> con pinta de botón (2.4.7).
+    // `ring-*` compone en `--tw-ring-shadow`, así que convive con `shadow-xs`
+    // en vez de pelearle.
+    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
     // No es una utility de Tailwind: es el hook de @media print de globals.css,
     // hermano de `.skeleton`. El bloque de impresión ya esconde `button`, pero
     // `buttonVariants` se usa muchísimo sobre <Link> (~40 call sites), y un <a>

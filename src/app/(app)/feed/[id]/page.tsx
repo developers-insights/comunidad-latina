@@ -8,6 +8,7 @@ import {
   PostCard,
   PostMenu,
   type PostEntityView,
+  type PostPollView,
 } from "@/components/feed";
 // Import por path directo (el barrel del feed es de otro agente): el item del
 // comentario es fuente única compartida con la hoja del feed.
@@ -22,6 +23,7 @@ import {
   fetchAuthorViews,
   fetchBlockedIds,
   fetchEntityViews,
+  fetchPostPolls,
   fetchViewerLikes,
   fetchViewerSaves,
   toPostCardModel,
@@ -105,11 +107,16 @@ export default async function PostDetailPage({
   ].filter((value): value is string => Boolean(value));
 
   const now = new Date();
-  const [authors, likedIds, savedIds, entityById, promoResult, promotions] =
+  const [authors, likedIds, savedIds, pollByPostId, entityById, promoResult, promotions] =
     await Promise.all([
       fetchAuthorViews(supabase, authorIds),
       fetchViewerLikes(supabase, viewerId, [post.id]),
       fetchViewerSaves(supabase, viewerId, [post.id]),
+      // Solo las preguntas pueden tener encuesta (0041): en un post común la
+      // query ni sale.
+      post.kind === "question"
+        ? fetchPostPolls(supabase, viewerId, [post.id])
+        : Promise.resolve(new Map<string, PostPollView>()),
       post.entity_listing_id
         ? fetchEntityViews(supabase, [post.entity_listing_id])
         : Promise.resolve(new Map<string, PostEntityView>()),
@@ -141,6 +148,7 @@ export default async function PostDetailPage({
     entity,
     isPromoted,
     savedByViewer: savedIds.has(post.id),
+    poll: pollByPostId.get(post.id) ?? null,
     ctaWhatsapp: isPromoted
       ? (promotions.whatsappByPostId.get(post.id) ?? null)
       : null,
@@ -188,6 +196,14 @@ export default async function PostDetailPage({
         tenantId={tenant.id}
         viewerId={viewerId}
         isDetail
+        // El reel vertical infinito existe SÓLO en /feed y /videos. Acá se ve UNA
+        // publicación —y se llega desde el perfil de alguien o desde las
+        // novedades de un evento—, así que tocar el video lo abre a pantalla
+        // completa y el "atrás" devuelve a donde estabas, en vez de mandarte a
+        // scrollear videos ajenos (feedback cliente 2026-07-27). El valor es el
+        // NO_REEL_SCOPE de components/feed/card-video.tsx (literal acá porque
+        // esto es un server component y ese módulo es "use client").
+        videoScope="sin-reel"
         menu={<PostMenu postId={post.id} authorId={post.author_id} viewerId={viewerId} />}
       />
 

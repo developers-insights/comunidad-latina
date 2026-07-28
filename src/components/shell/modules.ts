@@ -1,3 +1,10 @@
+// Los íconos vienen del build `/dist/ssr` y NO del entrypoint principal: ese
+// lleva "use client" + createContext, y desde que /buscar (Server Component)
+// consume este registro, importarlo ahí reventaba el render con
+// "createContext is not a function". Los `/dist/ssr` son componentes planos,
+// sin hooks: sirven igual en el menú (cliente) y en /buscar (servidor).
+// El tipo `Icon` sí viene del entrypoint principal, pero `import type` se borra
+// en compilación y nunca llega al bundle.
 import {
   Briefcase,
   Buildings,
@@ -8,9 +15,10 @@ import {
   Sparkle,
   Storefront,
   UserGear,
-  type Icon,
-} from "@phosphor-icons/react";
+} from "@phosphor-icons/react/dist/ssr";
+import type { Icon } from "@phosphor-icons/react";
 import { t } from "@/lib/i18n";
+import type { GatedModule } from "./module-access";
 
 /**
  * Registro de los 9 módulos de la plataforma — fuente única para el menú
@@ -44,7 +52,7 @@ function accentPalette(accentVar: string): ModulePalette {
   };
 }
 
-export interface ModuleItem {
+export interface ModuleItem extends GatedModule {
   href: string;
   label: string;
   icon: Icon;
@@ -54,11 +62,19 @@ export interface ModuleItem {
    * El Phosphor `icon` queda como fallback y para superficies chicas.
    */
   image?: string;
+  /**
+   * Clave en `tenants.modules` / `tenants.modules_soon` — lo que conecta este
+   * ítem con el interruptor del panel (/admin/dominio). Ausente = el panel
+   * todavía no lo ofrece y el módulo se muestra siempre (ver `moduleAvailability`
+   * en ./module-access, y el test de sincronía con MODULE_KEYS en modules.test).
+   */
+  moduleKey?: string;
 }
 
 export const MODULES: ModuleItem[] = [
   {
     href: "/feed",
+    moduleKey: "feed",
     image: "/icons/menu/feed.webp",
     label: t("nav", "feed"),
     icon: HouseSimple,
@@ -68,6 +84,7 @@ export const MODULES: ModuleItem[] = [
   // — es la misma capa social de la plataforma, en formato video.
   {
     href: "/videos",
+    moduleKey: "videos",
     image: "/icons/menu/videos.webp",
     label: t("nav", "videos"),
     icon: Play,
@@ -75,6 +92,7 @@ export const MODULES: ModuleItem[] = [
   },
   {
     href: "/propiedades",
+    moduleKey: "propiedades",
     image: "/icons/menu/vivienda.webp",
     label: t("nav", "moduleVivienda"),
     icon: Buildings,
@@ -82,6 +100,7 @@ export const MODULES: ModuleItem[] = [
   },
   {
     href: "/eventos",
+    moduleKey: "eventos",
     image: "/icons/menu/eventos.webp",
     label: t("nav", "moduleEventos"),
     icon: CalendarBlank,
@@ -89,6 +108,7 @@ export const MODULES: ModuleItem[] = [
   },
   {
     href: "/negocios",
+    moduleKey: "negocios",
     image: "/icons/menu/negocios.webp",
     label: t("nav", "moduleNegocios"),
     icon: Storefront,
@@ -100,6 +120,7 @@ export const MODULES: ModuleItem[] = [
   // la pista visual.
   {
     href: "/profesionales",
+    moduleKey: "profesionales",
     image: "/icons/menu/profesionales.webp",
     label: t("nav", "moduleProfesionales"),
     icon: UserGear,
@@ -110,6 +131,7 @@ export const MODULES: ModuleItem[] = [
   // confundan de un vistazo en el menú.
   {
     href: "/empleos",
+    moduleKey: "empleos",
     image: "/icons/menu/empleos.webp",
     label: t("nav", "moduleEmpleos"),
     icon: Briefcase,
@@ -117,6 +139,7 @@ export const MODULES: ModuleItem[] = [
   },
   {
     href: "/marketplace",
+    moduleKey: "marketplace",
     image: "/icons/menu/marketplace.webp",
     label: t("nav", "moduleMarketplace"),
     icon: ShoppingBagOpen,
@@ -124,6 +147,7 @@ export const MODULES: ModuleItem[] = [
   },
   {
     href: "/creadores",
+    moduleKey: "creadores",
     image: "/icons/menu/creadores.webp",
     label: t("nav", "moduleCreadores"),
     icon: Sparkle,
@@ -137,9 +161,35 @@ export const MODULES: ModuleItem[] = [
 ];
 
 /**
+ * Los módulos que /buscar ofrece como CATEGORÍAS.
+ *
+ * Es MODULES menos los que ya son una pestaña del bottom nav: Inicio y Videos
+ * están a un toque desde cualquier pantalla, y repetirlos en Buscar le enseña
+ * a la gente que hay dos caminos para lo mismo. Lo que queda son las siete
+ * secciones de listado — exactamente las siete que llevan la burbuja
+ * "Publicá tu…", así que Buscar y los listados se explican entre sí.
+ */
+export const BROWSE_MODULES: ModuleItem[] = MODULES.filter(
+  (item) => item.href !== "/feed" && item.href !== "/videos",
+);
+
+/**
  * ¿La ruta actual activa este módulo? Pura y testeada aparte.
  * `/propiedades/abc` activa `/propiedades`, pero `/propiedades-viejas` no.
  */
 export function isModuleActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/**
+ * ¿Estamos dentro de la rama de Buscar? Sirve para que la pestaña quede
+ * resaltada mientras la persona navega una categoría — antes, estando en
+ * /negocios o /eventos NINGUNA pestaña estaba marcada y el bottom nav no decía
+ * dónde estabas.
+ *
+ * Ojo: esto es señal VISUAL. `aria-current="page"` sigue reservado para la
+ * ruta exacta (/buscar), porque /negocios no es esa página.
+ */
+export function isBrowseRoute(pathname: string): boolean {
+  return BROWSE_MODULES.some((item) => isModuleActive(pathname, item.href));
 }

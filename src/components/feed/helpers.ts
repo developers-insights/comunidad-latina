@@ -49,6 +49,24 @@ export function mediaKindOf(path: string): PostMediaKind {
   return VIDEO_EXT_RE.test(path) ? "video" : "image";
 }
 
+/**
+ * Los medios VISIBLES de un post, en orden de publicación: exactamente las
+ * diapositivas que va a tener el carrusel.
+ *
+ * Normaliza acá —y en un solo lugar— el `photoUrl` retrocompat de los posts
+ * anteriores a la migración 0025 (una única foto; nunca un video). La card lo
+ * llama UNA vez y reparte el resultado: el carrusel decide qué pinta y las
+ * acciones deciden sobre qué se abre la hoja de comentarios. Si cada pieza
+ * volviera a resolver "¿media o photoUrl?" por su cuenta, podrían discrepar.
+ */
+export function postMediaItems(
+  media: PostMediaView[],
+  photoUrl: string | null,
+): PostMediaView[] {
+  if (media.length > 0) return media;
+  return photoUrl ? [{ kind: "image", url: photoUrl }] : [];
+}
+
 // ---------------------------------------------------------------------------
 // Tabs (los 5 feeds del wireframe §4.b) — el estado vive en ?tab= (URL)
 // ---------------------------------------------------------------------------
@@ -62,6 +80,23 @@ export const FEED_TABS = [
 ] as const;
 
 export type FeedTabId = (typeof FEED_TABS)[number]["id"];
+
+/**
+ * Scope de video que una card recibe de quien la monta: o un tab del feed —y el
+ * toque abre el reel acotado a ese vertical— o `"sin-reel"`, que abre el visor
+ * del propio post y no lleva a ningún lado (feedback cliente 2026-07-27: dentro
+ * de una propiedad o un evento el video no puede sacarte de la publicación).
+ *
+ * Está tipado y no es `string` a propósito. Con `string`, montar `PostCard` en
+ * una sección nueva con un scope inventado compilaba, y el reel caía al default
+ * "para-ti" —que NO filtra— mostrando el catálogo entero en silencio. Ahora eso
+ * es un error de compilación en el punto de montaje.
+ *
+ * El literal `"sin-reel"` tiene su constante en runtime en `card-video.tsx`
+ * (`NO_REEL_SCOPE`), anclada por test; acá va el literal porque este módulo es
+ * puro y no puede importar de un componente cliente sin crear un ciclo.
+ */
+export type VideoScopeProp = FeedTabId | "sin-reel";
 
 export function parseTab(raw: string | undefined): FeedTabId {
   const found = FEED_TABS.find((tab) => tab.id === raw);
@@ -93,6 +128,29 @@ export interface PostEntityView {
   kind: string;
 }
 
+/**
+ * ENCUESTA SÍ/NO de una pregunta (contrato de la migración 0041).
+ *
+ * `yes`/`no` son los contadores DENORMALIZADOS que mantiene el trigger
+ * (`posts.poll_yes_count` / `posts.poll_no_count`): la UI los LEE, nunca los
+ * escribe. `myVote` sale de leer SOLO la fila del usuario actual en
+ * `post_poll_votes` — nadie puede ver el voto de otro.
+ */
+export interface PostPollView {
+  /** Único formato por ahora; el check de la DB solo acepta 'yes_no'. */
+  kind: "yes_no";
+  yes: number;
+  no: number;
+  /** true = votó Sí · false = votó No · null = todavía no votó. */
+  myVote: boolean | null;
+}
+
+/** Porcentaje entero de una opción sobre el total (0 si nadie votó todavía). */
+export function pollPercent(part: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.round((part / total) * 100);
+}
+
 export interface PostCardModel {
   id: string;
   kind: "post" | "question";
@@ -111,6 +169,13 @@ export interface PostCardModel {
   savedByViewer: boolean;
   /** Vistas acumuladas del post (posts.view_count, 0038). 0 si todavía ninguna. */
   viewCount: number;
+  /**
+   * Encuesta Sí/No de la pregunta (0041). null cuando el post no es pregunta,
+   * cuando la pregunta se publicó sin encuesta, o cuando el entorno todavía no
+   * tiene la migración aplicada (la lectura falla en silencio: una encuesta que
+   * no se pinta es molesta; un feed roto, no).
+   */
+  poll: PostPollView | null;
   /** Post publicado COMO una entidad (se muestra la entidad como autor). */
   entity: PostEntityView | null;
   /** Campaña activa (post_promotions): se marca honestamente "Publicidad". */

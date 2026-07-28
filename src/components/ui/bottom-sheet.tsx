@@ -33,6 +33,14 @@ export interface BottomSheetProps {
    */
   bodyClassName?: string;
   /**
+   * Clases del velo que oscurece lo que hay detrás. Default `bg-scrim` (§5.3,
+   * ≥40% — aísla el diálogo del fondo). Una hoja que se abre SOBRE UN VIDEO lo
+   * baja a un tinte apenas perceptible: ahí el fondo no es "ruido a tapar", es
+   * justo lo que la persona está mirando (feedback cliente 2026-07-27: "le
+   * bloqueó todo el video"). Se mergea con tailwind-merge.
+   */
+  scrimClassName?: string;
+  /**
    * Levanta el panel por encima del teclado virtual (visualViewport). Solo lo
    * necesitan las hojas con input al fondo (comentarios); default false para no
    * tocar el resto de las hojas.
@@ -87,6 +95,7 @@ export function BottomSheet({
   className,
   size = "auto",
   bodyClassName,
+  scrimClassName,
   keyboardAware = false,
 }: BottomSheetProps) {
   const mounted = useMounted();
@@ -110,7 +119,7 @@ export function BottomSheet({
       {open && (
         <div className="fixed inset-0 z-50">
           <m.div
-            className="absolute inset-0 bg-scrim"
+            className={cn("absolute inset-0 bg-scrim", scrimClassName)}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.2 } }}

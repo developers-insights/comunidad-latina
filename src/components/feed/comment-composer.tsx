@@ -36,6 +36,14 @@ interface CommentComposerBaseProps {
    * el contenedor maneje la lista. Ausente → comportamiento del detalle SSR.
    */
   optimistic?: CommentOptimisticHandlers;
+  /**
+   * Superficie sobre la que se apoya el campo. "media" es el vidrio de la hoja
+   * de comentarios SOBRE UN VIDEO: la píldora clara de siempre taparía el video
+   * (feedback cliente 2026-07-27), así que pasa a velo de tinta + texto
+   * `on-media`. El botón de enviar conserva el color de marca en las dos: es la
+   * acción principal y tiene que verse igual de fuerte.
+   */
+  tone?: "surface" | "media";
 }
 
 /**
@@ -66,7 +74,8 @@ type SendOutcome =
  * único cambio es a qué server action le habla.
  */
 export function CommentComposer(props: CommentComposerProps) {
-  const { disabled = false, optimistic } = props;
+  const { disabled = false, optimistic, tone = "surface" } = props;
+  const onMedia = tone === "media";
   // Sin destructuring del union: ambas variantes declaran las dos claves (una
   // como `undefined`), así el acceso es seguro y el branch de abajo es explícito.
   const postId = props.postId ?? null;
@@ -193,13 +202,20 @@ export function CommentComposer(props: CommentComposerProps) {
         send();
       }}
       className={cn(
-        "flex items-end gap-2 rounded-2xl border border-border bg-surface-raised p-2 shadow-sm",
+        "flex items-end gap-2 rounded-2xl border p-2 shadow-sm",
+        // Sobre el vidrio la píldora se HUNDE (tinta) en vez de aclararse: así
+        // el texto y el placeholder quedan AA aun con un video blanco detrás.
+        onMedia
+          ? "border-on-media/25 bg-media-shade/35 shadow-none"
+          : "border-border bg-surface-raised",
         // El anillo de foco vive en el FORM, no en el textarea: así sigue la
         // píldora en vez de dibujar un rectángulo que no empalma con la card
         // (el textarea apaga su outline, y sin esto no quedaba NINGÚN indicador
         // visible de foco — el navegador ponía el suyo, cuadrado).
         "transition-shadow duration-(--duration-fast)",
-        "focus-within:ring-[3px] focus-within:ring-focus-ring",
+        onMedia
+          ? "focus-within:ring-[3px] focus-within:ring-on-media/70"
+          : "focus-within:ring-[3px] focus-within:ring-focus-ring",
       )}
     >
       <label htmlFor={fieldId} className="sr-only">
@@ -224,8 +240,11 @@ export function CommentComposer(props: CommentComposerProps) {
           }
         }}
         className={cn(
-          "max-h-36 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-foreground",
-          "placeholder:text-foreground-muted focus:outline-none focus-visible:outline-none",
+          "max-h-36 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm",
+          onMedia
+            ? "text-on-media placeholder:text-on-media/70"
+            : "text-foreground placeholder:text-foreground-muted",
+          "focus:outline-none focus-visible:outline-none",
           "disabled:opacity-60",
         )}
       />
@@ -238,7 +257,8 @@ export function CommentComposer(props: CommentComposerProps) {
           "transition-[transform,background-color,opacity] duration-(--duration-fast) ease-(--ease-spring)",
           "hover:bg-brand-hover active:scale-[0.94]",
           "disabled:pointer-events-none disabled:opacity-45",
-          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          "focus-visible:outline-none focus-visible:ring-[3px]",
+          onMedia ? "focus-visible:ring-on-media/70" : "focus-visible:ring-focus-ring",
         )}
       >
         {isPending ? (

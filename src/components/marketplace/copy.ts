@@ -26,7 +26,6 @@ export const COPY = {
   list: {
     title: "Marketplace",
     subtitle: "Lo que vende tu comunidad: tiendas y personas",
-    publishCta: "Publicar producto",
     categoryFilterLabel: "Filtrar por categoría",
     categoryAll: "Todas",
     searchLabel: "Buscar productos en el marketplace",

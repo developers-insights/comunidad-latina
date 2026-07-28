@@ -109,9 +109,14 @@ export default async function NotificacionesPage() {
 
   let pendingBroadcasts: BroadcastCardData[] = [];
   if (broadcasts.length > 0) {
+    // El filtro por dueño NO es redundante con la RLS: `broadcast_receipts` se
+    // lee con `profile_id = auth.uid() OR is_global_admin()`, así que sin esto
+    // un global_admin se trae los acuses de TODA la comunidad y cualquier
+    // broadcast que otro ya cerró le desaparece a él sin haberlo visto.
     const { data: receiptsData } = await supabase
       .from("broadcast_receipts")
       .select("broadcast_id")
+      .eq("profile_id", userId)
       .in(
         "broadcast_id",
         broadcasts.map((b) => b.id),

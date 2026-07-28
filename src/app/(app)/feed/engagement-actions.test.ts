@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Tests de las actions de ENGAGEMENT (guardar / vista de reel).
+ * Tests de las actions de ENGAGEMENT (guardar / vista de reel / voto en encuesta).
  *
  * Se aíslan los bordes con el patrón del repo (lib/tenant/guard.test.ts):
  * `vi.hoisted` + `vi.mock` + stub encadenable y "thenable" del query builder.
@@ -14,6 +14,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *  - 23505 (ya estaba guardado) → éxito idempotente, no error.
  *  - Quitar de guardados → delete acotado por sujeto + perfil propio.
  *  - Vista repetida en el día → 23505 tolerado, `ok: true`.
+ *  - Votar: solo en `kind='question'` CON `poll_kind` (el cliente no elige dónde
+ *    se puede votar), UPSERT sobre (post, votante) para que cambiar de opinión no
+ *    duplique, y degradación limpia si la 0041 todavía no está aplicada.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -22,7 +25,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
 
-import { recordPostViewAction, toggleSaveAction } from "./engagement-actions";
+import {
+  recordPostViewAction,
+  toggleSaveAction,
+  votePostPollAction,
+} from "./engagement-actions";
 
 /* -------------------------------- Fixtures -------------------------------- */
 
@@ -31,7 +38,14 @@ const USER_ID = "99999999-9999-4999-8999-999999999999";
 const POST_ID = "33333333-3333-4333-8333-333333333333";
 
 type OpResult = { data?: unknown; error?: unknown };
-type TableOps = Partial<Record<"insert" | "delete", OpResult>>;
+/**
+ * Un valor por operación, o una COLA cuando la misma tabla se lee dos veces en
+ * la misma action (votar lee `posts` para validar y otra vez para los contadores
+ * que dejó el trigger).
+ */
+type TableOps = Partial<
+  Record<"insert" | "delete" | "select" | "upsert", OpResult | OpResult[]>
+>;
 
 interface RecordedCall {
   table: string;
@@ -46,24 +60,31 @@ function createSupabaseStub(config: Record<string, TableOps> = {}) {
   const from = vi.fn((table: string) => {
     const tableConfig: TableOps = config[table] ?? {};
     let op: keyof TableOps | null = null;
-    const result = () => (op ? (tableConfig[op] ?? { error: null }) : { error: null });
+    const result = (): OpResult => {
+      if (!op) return { error: null };
+      const configured = tableConfig[op];
+      if (Array.isArray(configured)) return configured.shift() ?? { error: null };
+      return configured ?? { error: null };
+    };
+
+    const record = (method: keyof TableOps) =>
+      vi.fn((...args: unknown[]) => {
+        calls.push({ table, method, args });
+        op = method;
+        return builder;
+      });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const builder: any = {
-      insert: vi.fn((...args: unknown[]) => {
-        calls.push({ table, method: "insert", args });
-        op = "insert";
-        return builder;
-      }),
-      delete: vi.fn((...args: unknown[]) => {
-        calls.push({ table, method: "delete", args });
-        op = "delete";
-        return builder;
-      }),
+      insert: record("insert"),
+      delete: record("delete"),
+      select: record("select"),
+      upsert: record("upsert"),
       eq: vi.fn((...args: unknown[]) => {
         calls.push({ table, method: "eq", args });
         return builder;
       }),
+      maybeSingle: vi.fn(() => Promise.resolve(result())),
       then: (resolve: (v: OpResult) => unknown, reject: (e: unknown) => unknown) =>
         Promise.resolve(result()).then(resolve, reject),
     };
@@ -222,5 +243,139 @@ describe("recordPostViewAction", () => {
     await expect(recordPostViewAction({ postId: POST_ID })).resolves.toEqual({ ok: false });
 
     await expect(recordPostViewAction({ postId: "ups" })).resolves.toEqual({ ok: false });
+  });
+});
+
+/* ---------------------------- votePostPollAction --------------------------- */
+
+describe("votePostPollAction", () => {
+  /** Fila que devuelve la lectura de validación de una pregunta CON encuesta. */
+  const QUESTION_WITH_POLL = {
+    data: { id: POST_ID, kind: "question", poll_kind: "yes_no" },
+  };
+
+  function votedRow(stub: ReturnType<typeof createSupabaseStub>) {
+    return stub.calls.find(
+      (call) => call.table === "post_poll_votes" && call.method === "upsert",
+    );
+  }
+
+  it("registra el voto y devuelve los contadores frescos del trigger", async () => {
+    const stub = useGuardOk({
+      posts: {
+        select: [
+          QUESTION_WITH_POLL,
+          { data: { poll_yes_count: 31, poll_no_count: 50 } },
+        ],
+      },
+    });
+
+    const result = await votePostPollAction({ postId: POST_ID, choice: true });
+
+    expect(result).toEqual({ ok: true, choice: true, yes: 31, no: 50 });
+    expect(votedRow(stub)?.args[0]).toEqual({
+      post_id: POST_ID,
+      voter_id: USER_ID,
+      choice: true,
+    });
+  });
+
+  it("es un UPSERT sobre (post, votante): cambiar de opinión no crea otra fila", async () => {
+    const stub = useGuardOk({
+      posts: { select: [QUESTION_WITH_POLL, { data: null }] },
+    });
+
+    await votePostPollAction({ postId: POST_ID, choice: false });
+
+    expect(votedRow(stub)?.args[1]).toEqual({ onConflict: "post_id,voter_id" });
+    // Nada de insert a secas: eso rebotaría con la PK en el segundo voto.
+    expect(
+      stub.calls.some(
+        (call) => call.table === "post_poll_votes" && call.method === "insert",
+      ),
+    ).toBe(false);
+  });
+
+  it("si no se pudieron releer los contadores, el voto igual vale", async () => {
+    useGuardOk({ posts: { select: [QUESTION_WITH_POLL, { data: null }] } });
+
+    await expect(
+      votePostPollAction({ postId: POST_ID, choice: true }),
+    ).resolves.toEqual({ ok: true, choice: true, yes: null, no: null });
+  });
+
+  it("un post que NO es pregunta se rechaza SIN escribir el voto", async () => {
+    const stub = useGuardOk({
+      posts: { select: [{ data: { id: POST_ID, kind: "post", poll_kind: null } }] },
+    });
+
+    const result = await votePostPollAction({ postId: POST_ID, choice: true });
+
+    expect(result).toEqual({ ok: false, code: "not-poll" });
+    expect(stub.calls.some((call) => call.table === "post_poll_votes")).toBe(false);
+  });
+
+  it("una pregunta SIN encuesta tampoco acepta votos", async () => {
+    const stub = useGuardOk({
+      posts: { select: [{ data: { id: POST_ID, kind: "question", poll_kind: null } }] },
+    });
+
+    const result = await votePostPollAction({ postId: POST_ID, choice: false });
+
+    expect(result).toEqual({ ok: false, code: "not-poll" });
+    expect(stub.calls.some((call) => call.table === "post_poll_votes")).toBe(false);
+  });
+
+  it("un post invisible para la RLS se comporta como inexistente", async () => {
+    useGuardOk({ posts: { select: [{ data: null }] } });
+
+    await expect(
+      votePostPollAction({ postId: POST_ID, choice: true }),
+    ).resolves.toEqual({ ok: false, code: "not-poll" });
+  });
+
+  it("un fallo real de lectura NO se disfraza de 'acá no se vota'", async () => {
+    // "not-poll" es una respuesta sobre el post ("esto no tiene encuesta"); un
+    // error de la base es una respuesta sobre el sistema. Confundirlos le enseña
+    // a la persona que su pregunta no tiene encuesta cuando en realidad la tiene
+    // y lo que falló fue el servidor.
+    useGuardOk({
+      posts: { select: [{ error: { code: "57014", message: "statement timeout" } }] },
+    });
+
+    await expect(
+      votePostPollAction({ postId: POST_ID, choice: true }),
+    ).resolves.toEqual({ ok: false, code: "error" });
+  });
+
+  it("sin sesión devuelve 'unauthenticated' y no toca la base", async () => {
+    const stub = useGuardFail("unauthenticated");
+
+    const result = await votePostPollAction({ postId: POST_ID, choice: true });
+
+    expect(result).toEqual({ ok: false, code: "unauthenticated" });
+    expect(stub.from).not.toHaveBeenCalled();
+  });
+
+  it("otra comunidad: se corta con el copy del guard", async () => {
+    useGuardFail("tenant-mismatch");
+
+    await expect(
+      votePostPollAction({ postId: POST_ID, choice: true }),
+    ).resolves.toEqual({
+      ok: false,
+      code: "tenant-mismatch",
+      message: "copy del guard",
+    });
+  });
+
+  it("un payload roto se rechaza ANTES del guard (zod puro primero)", async () => {
+    await expect(
+      votePostPollAction({ postId: "no-es-uuid", choice: true }),
+    ).resolves.toEqual({ ok: false, code: "invalid" });
+    await expect(
+      votePostPollAction({ postId: POST_ID, choice: "sí" as unknown as boolean }),
+    ).resolves.toEqual({ ok: false, code: "invalid" });
+    expect(mocks.requireTenantMatch).not.toHaveBeenCalled();
   });
 });

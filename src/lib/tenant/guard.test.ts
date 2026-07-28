@@ -22,6 +22,7 @@ const DOMINICANOS: Tenant = {
   locale: "es-US",
   currency: "USD",
   modules: {},
+  modulesSoon: {},
   theme: null,
   isFallback: false,
 };

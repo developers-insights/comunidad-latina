@@ -94,7 +94,9 @@ export function RegisterForm({
     : "/entrar";
 
   return (
-    <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+    // method="post": un envío antes de hidratar no puede dejar la contraseña en
+    // la URL ni en el historial (ver el comentario largo en login-form.tsx).
+    <form method="post" onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
       <FormError>{formError}</FormError>
 
       <Field

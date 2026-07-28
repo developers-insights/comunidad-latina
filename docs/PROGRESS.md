@@ -1,5 +1,152 @@
 # PROGRESS — Comunidad Latina
 
+## Feedback de la call del 27/7 (85 min) — 8 frentes en paralelo (✅ 2026-07-27)
+
+Fuente y criterio: **`docs/feedback/2026-07-27-call-85min.md`** — las citas
+textuales de Geovanny, su traducción a producto, y lo que quedó fuera con su
+razón. Leer eso antes de tocar nada de este bloque.
+
+**Construido** (63 archivos modificados, 44 nuevos; nada commiteado todavía):
+
+- **Comentarios que no tapan el video** — sobre video la hoja ocupa ~46% del
+  alto, fondo de vidrio (scrim + blur) en vez de panel opaco, el video **sigue
+  reproduciéndose**, y los comentarios avanzan solos hasta que la persona toca,
+  scrollea o va a escribir (nunca con `prefers-reduced-motion`). Con el teclado
+  abierto la hoja baja a 34dvh para no dejar el video en 3% de pantalla.
+  Contraste medido contra el peor caso (video blanco tras el vidrio): 7.58:1.
+- **Carrusel de medios** (`media-carousel.tsx`) — swipe horizontal con
+  scroll-snap, puntitos, foto y video mezclados en el mismo post, `snap-stop:
+  always`. Un solo medio ⇒ sin puntitos. Los puntitos son indicador
+  (`aria-hidden`), no botones: a 44px cada uno taparían el área del doble toque.
+  Navegación accesible por ←/→, flechas visibles sólo con puntero fino, y
+  `aria-live` anunciando "Foto 2 de 3".
+- **Scope del reel, agujero cerrado** — el detalle `/feed/[id]` renderizaba
+  `PostCard` sin scope y caía al default "para-ti", que **no filtra**: tocar el
+  video ahí abría el reel infinito sin acotar. Se llega a esa pantalla desde el
+  perfil de alguien y desde las novedades de un evento — literalmente el «te
+  sale de la propiedad» del cliente. Además `videoScope` pasó de `string` a un
+  tipo cerrado, así que montar una card con un scope inventado ya no compila.
+- **Composer unificado** — se fueron los botones sueltos de foto/video y la
+  plancha blanca; queda el campo rápido más un único «¿Qué querés publicar?».
+  Elegir foto/video lleva a un paso con el medio a la vista y el texto debajo.
+  Publicar sin medio abre una hoja que ofrece los dos caminos (sumar foto, o
+  publicarlo como pregunta) llevándose el texto ya escrito, en vez de un botón
+  muerto: el trigger `MEDIA_REQUIRED` de 0023 sigue vivo y sólo exime a
+  `kind='question'`.
+- **Preguntas: marca de agua + encuesta Sí/No** — la marca va en tinta oscura y
+  no clara (una marca clara sobre el campo tricolor bajaba el peor stop a
+  ~3.9:1; así el delta de contraste es 0.000). El reparto de votos aparece
+  **al votar**, no antes, para no sesgar; el autor es la excepción.
+- **Buscar en el bottom nav** — reemplaza «Propiedades», y es una ruta propia
+  (`/buscar`) y no un modal: una pestaña necesita back del sistema, link
+  compartible y `aria-current`. Muestra las categorías en cápsulas; el buscador
+  con filtros sigue viviendo dentro de cada una, como pidió el cliente.
+- **Lenguaje de cápsulas** (`ui/bubble.tsx`) — tres intensidades donde la
+  diferencia significa algo: `soft` informa, `accent` acompaña, `strong` se
+  toca. Relleno mezclado contra `--color-surface` para que se lea elevada en
+  ambos temas. Aplicado a menú, `/buscar`, y cabecera + filtros de 7 secciones.
+- **CTA «publicá tu…»** en las 7 secciones, con copy propio por sección y
+  `?kind=` preseleccionado (antes todas iban a `/publicar` pelado).
+- **`/admin/empleos`** — listado con conteo real de postulaciones y detalle con
+  una barrera de dos niveles **por dueño del aviso, no por rol**: aviso de la
+  plataforma ⇒ el staff ve todo y puede responder; aviso de un miembro ⇒ sólo
+  metadatos, y las columnas privadas ni se seleccionan. Un `global_admin`
+  tampoco sube de nivel. Cada apertura se audita, y **sin auditoría no hay
+  divulgación**.
+- **Módulos en tres estados** (Activo · Muy pronto · Oculto) — y, sobre todo, el
+  cableado que faltaba: hasta ahora el admin guardaba la configuración y **la
+  app la ignoraba**. Ahora gobierna el menú, `/buscar`, el bottom nav y las
+  rutas (guard por `layout.tsx` en 8 secciones: oculto ⇒ 404, muy pronto ⇒
+  pantalla propia con URL propia). `feed` y `mensajes` quedaron marcados como no
+  apagables en el panel en vez de ofrecer un interruptor inerte, y `escudo`
+  salió: está apagado en el build y fuera del menú.
+- **`/perfil/guardados`** — ruta propia, sólo la dueña ve lo suyo (probado en
+  vivo con dos cuentas, no por lectura de código).
+- **Alerta urgente en el feed** — sólo `severity='urgent'` sube al feed; los
+  `info` se quedan en notificaciones. Reusa `broadcast_receipts`, así cerrarla
+  en un lado la cierra en el otro. Registro ámbar de cartel de ruta, sin
+  animación ni sirena.
+
+**Migraciones (aplicadas y verificadas contra la base, 32/32 checks):**
+- **0041** — `posts.poll_kind` + counters por trigger, `post_poll_votes` (voto
+  secreto: ni un moderador ve quién votó qué), `tenants.modules_soon`,
+  `broadcasts.severity`.
+- **0042** — cierra dos agujeros reales encontrados durante el trabajo:
+  `job_applications_select/_update` tenían una rama `or app.is_staff()` que
+  dejaba a **cualquier** staff (incluido `moderator`) leer `message`, `answers`
+  y `applicant_id` de postulaciones a avisos ajenos por PostgREST, salteando el
+  panel; y `listings.created_by` era reescribible, así que un `PATCH
+  {created_by: null}` convertía un aviso ajeno en «de la plataforma» y
+  destrababa la divulgación de forma legítima. Ambos probados **antes y
+  después** con un token real de staff. Se sumó la RPC `job_application_tally`
+  para que el panel siga contando sin poder leer.
+
+**Fixes de seguridad y accesibilidad que aparecieron de paso:**
+- Los formularios de auth eran `<form onSubmit>` **sin `method`**: un envío
+  antes de hidratar (teléfono lento, que es medio público de esta app) hacía un
+  GET nativo y dejaba la **contraseña en la URL y en el historial**. Ahora
+  `method="post"`.
+- `buttonVariants` dejaba `primary` y `danger` **sin anillo de foco** en ~40
+  call sites: `shadow-xs` es una utility y le ganaba al `box-shadow` del
+  `:focus-visible` global. El anillo ahora vive en la base del cva.
+- `/notificaciones` leía `broadcast_receipts` sin filtrar por dueño; a un
+  `global_admin` la policy le devuelve los de todos, así que un broadcast que
+  otro ya cerró le desaparecía sin haberlo visto.
+- El `z.url()` del panel admin aceptaba `javascript:` y eso llegaba a un `href`
+  → `safeCtaHref()`.
+- Contrato de impresión: la hoja de comentarios, la del composer y el carrusel
+  escribían tinta clara sin nada que la salvara en papel (1.00:1). Cerrado con
+  los hooks reales, no ajustando el inventario.
+- Datos demo: los niveles de confianza contradecían su puntaje (score 35 con
+  etiqueta «verificado»). Corregidos en el seed y **verificados en la base**:
+  17/17 consistentes.
+
+**Hallazgos de la ronda de review (code-reviewer + security-auditor en paralelo),
+todos cerrados:**
+- **Los defaults del panel y de la app eran opuestos.** Clave ausente ⇒ el panel
+  decía "Activo" y la app escondía. Con una base recién sembrada —o sirviendo el
+  tenant `comunidadlatina`, que arrastraba las claves de módulo **en inglés**
+  mientras la app las lee en español— desaparecían el menú, `/buscar`, la
+  pestaña de Videos y las 8 rutas, sin que el operador tuviera cómo verlo.
+  Unificado en un solo lugar (`moduleAvailability`, ausente = activo, porque
+  apagar es un acto deliberado), seed alineado, fila de la base corregida, y tres
+  tests de sincronía nuevos (app ↔ panel ↔ seed) para que no se vuelva a separar.
+- **La hoja de comentarios miraba el primer medio, no el que se está viendo.** En
+  un post `[foto, video]` —el ejemplo textual del cliente— deslizar hasta el
+  video y comentar abría la hoja vieja y opaca. El índice del carrusel se subió a
+  un `CardMediaProvider` propio; `PostActions.hasVideo` desapareció, así que la
+  superficie ya no se puede pasar mal desde afuera.
+- **Dos redirecciones abiertas**, ambas confirmadas navegando a otro origen desde
+  una tarjeta firmada como mensaje oficial de la plataforma — o sea, el escalón
+  para un login clonado contra un público de migrantes. Una estaba en
+  `broadcast-card.tsx` (`startsWith("/")` deja pasar `//evil.com`), la otra en el
+  `safeCtaHref` que este mismo lote agregó (tapaba `//` pero no `/\`, y el parser
+  de URL trata `\` como `/`). Se reemplazaron por `src/lib/url/safe-href.ts`, que
+  clasifica por **origen resuelto** en vez de por prefijo de string y sólo admite
+  http(s) — `zod.url()` acepta `javascript:` y `data:`, así que la allowlist tenía
+  que estar ahí.
+- Andamiaje de "la migración puede no estar aplicada" cuadruplicado y ya
+  inalcanzable, comentarios que describían código borrado, y copy huérfano que
+  este lote dejó al reescribir el composer: todo removido.
+
+**Bump de Next 16.2.10 → 16.2.12** (patch). Cierra las advisories del framework,
+incluida la fuga de IDs de Server Function que el auditor usó como escalón, y la
+confusión de caché de respuestas —que importa en una app con respuestas por
+usuario. Las 12 advisories que quedan son cadenas de build/dev (`postcss` y
+`sharp` anidados en next, `minimatch` vía eslint), no superficie de runtime.
+
+**Gates:** `tsc --noEmit` limpio · `npm run lint` 0 errores · **1399 tests**
+(eran 1317) · `npm run build` verde con todas las rutas nuevas · enumerador RLS
+verde, 59 superficies (corre con `RLS_ENUMERATOR_ALLOW_INSECURE_TLS=1`; el
+certificado de la conexión directa falla en este entorno) · ingreso con
+contraseña verificado contra la build de producción después de tocar los forms
+de auth: entra, la URL queda sin credenciales, consola sin errores.
+
+**Pendiente:** push + deploy (decisión de Manuel) · el 500-en-vez-de-404 con ids
+inválidos en varias rutas de detalle (preexistente, anotado aparte) · lo que se
+dejó fuera de alcance a propósito está listado con su razón en el doc de
+feedback.
+
 ## Semana 3-4 del plan + hardening — ejecución autónoma (✅ 2026-07-22)
 
 Diagnóstico (5 agentes en paralelo) + ejecución de todo lo automatizable, con

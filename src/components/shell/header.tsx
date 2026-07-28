@@ -116,7 +116,16 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
         </Link>
 
         <HeaderActions />
-        <AppMenu user={menu.user} initialUnread={menu.unread} isStaff={menu.isStaff} />
+        {/* Los módulos del menú salen de la config del tenant (panel /admin/dominio):
+            el Header ya tiene el tenant resuelto, así que se los pasa al menú
+            (cliente) como props planas — sin fetch extra ni cliente de Supabase. */}
+        <AppMenu
+          user={menu.user}
+          initialUnread={menu.unread}
+          isStaff={menu.isStaff}
+          modules={tenant.modules}
+          modulesSoon={tenant.modulesSoon}
+        />
       </div>
       {/* Firma tricolor de la marca: azul · amarillo · rojo (del logo). Reemplaza
           el hairline inferior del header y aparece en toda pantalla autenticada. */}

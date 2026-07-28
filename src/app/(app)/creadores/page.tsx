@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Plus } from "@phosphor-icons/react/dist/ssr";
-import { buttonVariants, EmptyState } from "@/components/ui";
+import { buttonVariants, EmptyState, SectionCta, SectionHeading } from "@/components/ui";
 import {
   allPhotoUrls,
   buildTrustSignals,
@@ -19,13 +19,20 @@ import {
   type GigCardModel,
 } from "@/components/creators";
 import { GigCard } from "@/components/creators/gig-card";
+import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Creadores" };
 
 const PAGE_SIZE = 20;
+
+/** Acento + ícono 3D de la sección (los mismos del menú y de /buscar). */
+const SECCION = {
+  accent: "var(--accent-creadores)",
+  image: "/icons/menu/creadores.webp",
+  publicarHref: "/creadores/publicar",
+} as const;
 
 export default async function CreadoresPage() {
   return (
@@ -110,21 +117,20 @@ async function FeedContent() {
 
   return (
     <>
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {COPY.feed.title}
-          </h1>
-          <p className="mt-0.5 text-sm text-foreground-secondary">{COPY.feed.subtitle}</p>
-        </div>
-        <Link
-          href="/creadores/publicar"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
-        >
-          <Plus size={16} aria-hidden="true" />
-          {COPY.feed.publishCta}
-        </Link>
-      </header>
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={COPY.feed.title}
+        subtitle={COPY.feed.subtitle}
+      />
+
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishGigTitle")}
+        hint={t("sections", "publishGigHint")}
+        className="mb-4 mt-3"
+      />
 
       <CreatorsNav active="gigs" />
 
@@ -157,12 +163,19 @@ async function FeedContent() {
 function PageSkeleton() {
   return (
     <div aria-busy="true">
-      <header className="mb-4">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-          {COPY.feed.title}
-        </h1>
-        <p className="mt-0.5 text-sm text-foreground-secondary">{COPY.feed.subtitle}</p>
-      </header>
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={COPY.feed.title}
+        subtitle={COPY.feed.subtitle}
+      />
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishGigTitle")}
+        hint={t("sections", "publishGigHint")}
+        className="mb-4 mt-3"
+      />
       <CreatorsNav active="gigs" />
       <div className="mt-5">
         <GigListSkeleton />

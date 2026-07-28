@@ -4,15 +4,21 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ToastProvider } from "@/components/ui";
 
 /**
- * Composer del feed — rediseño 2026-07-26. Acá se testea SOLO lo nuevo:
- * el menú "crear publicación" (fila-disparador → BottomSheet con los 10
- * tiles) y el saludo visible por franja + nombre. El resto del composer
- * (attach de foto/video síncrono, subida de video, publicar) ya tiene su
- * propio comportamiento probado en producción y no se toca acá.
+ * Composer del feed — rediseño 2026-07-27 (call con el cliente).
+ *
+ * Lo que este archivo ancla del contrato NUEVO:
+ *  1. en reposo NO hay recuadros de "Agregar foto" / "Agregar video": el único
+ *     disparador es la fila "¿Qué querés publicar?";
+ *  2. esa fila abre el menú con los 10 tipos;
+ *  3. foto y video disparan su selector y siguen en la HOJA de texto;
+ *  4. pregunta abre la hoja con su vista previa y el interruptor de encuesta;
+ *  5. escribir y publicar SIN medio no es un error: aparecen los dos caminos
+ *     (sumar medio o publicarlo como pregunta) y el texto NO se pierde;
+ *  6. el saludo por franja horaria sigue en pie.
  *
  * Dependencias pesadas (router, supabase, server actions) van stubeadas —
- * mismo patrón que comments-sheet.test.tsx / toast.test.tsx — porque lo que
- * se testea es la UI nueva, no la subida real ni el submit.
+ * mismo patrón que comments-sheet.test.tsx — porque lo que se testea es el
+ * flujo de la UI, no la subida real.
  */
 
 vi.mock("next/navigation", () => ({
@@ -75,10 +81,22 @@ vi.mock("motion/react", () => {
   }: Record<string, unknown> & { children?: React.ReactNode }) => (
     <div {...filter(props)}>{children}</div>
   );
+  const span = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) => (
+    <span {...filter(props)}>{children}</span>
+  );
+  const p = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) => (
+    <p {...filter(props)}>{children}</p>
+  );
   return {
     AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    m: { div },
-    motion: { div },
+    m: { div, span, p },
+    motion: { div, span, p },
     useReducedMotion: () => false,
   };
 });
@@ -99,10 +117,25 @@ function openMenu() {
   return screen.findByText(COPY.composer.createMenu.sheetTitle);
 }
 
+/** Escribe en el campo rápido del composer (el de arriba, no el de la hoja). */
+function typeQuick(text: string) {
+  const field = document.getElementById("post-composer-body") as HTMLTextAreaElement;
+  fireEvent.change(field, { target: { value: text } });
+  return field;
+}
+
 afterEach(cleanup);
 
-describe("PostComposer — menú crear publicación", () => {
-  it("la fila-disparador abre un sheet con los 10 tiles (foto/video/pregunta + los 7 módulos)", async () => {
+describe("PostComposer — un solo disparador", () => {
+  it("en reposo NO hay recuadros de agregar foto ni de agregar video", () => {
+    mount();
+    // El único lugar donde vuelven a aparecer es DENTRO de la hoja de texto.
+    expect(screen.queryByRole("button", { name: COPY.composer.addPhotos })).toBeNull();
+    expect(screen.queryByRole("button", { name: COPY.composer.addVideo })).toBeNull();
+    expect(screen.queryByRole("button", { name: COPY.composer.addMorePhotos })).toBeNull();
+  });
+
+  it("la fila-disparador es la única puerta y abre el menú con los 10 tiles", async () => {
     mount();
     await openMenu();
 
@@ -134,7 +167,7 @@ describe("PostComposer — menú crear publicación", () => {
     }
   });
 
-  it("el tile Foto dispara el input de fotos oculto (y cierra el sheet)", async () => {
+  it("el tile Foto dispara el input de fotos oculto (y cierra el menú)", async () => {
     const clickSpy = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
     mount();
     await openMenu();
@@ -162,20 +195,86 @@ describe("PostComposer — menú crear publicación", () => {
 
     clickSpy.mockRestore();
   });
+});
 
-  it('el tile Pregunta activa el modo pregunta con un chip "Pregunta" removible', async () => {
+describe("PostComposer — la pregunta abre su propio paso", () => {
+  it("el tile Pregunta abre la hoja con vista previa y encuesta apagada", async () => {
     mount();
     await openMenu();
 
     fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.question.title));
 
-    // El sheet cierra y el chip queda visible en el composer.
-    expect(screen.queryByText(COPY.composer.createMenu.sheetTitle)).toBeNull();
-    expect(await screen.findByText(COPY.composer.questionModeChip)).toBeTruthy();
+    expect(await screen.findByText(COPY.composer.compose.questionTitle)).toBeTruthy();
+    const toggle = screen.getByRole("switch", { name: new RegExp(COPY.composer.compose.pollLabel) });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+  });
 
-    // Es removible: lo saca de nuevo del modo pregunta.
-    fireEvent.click(screen.getByRole("button", { name: COPY.composer.questionModeRemove }));
-    expect(screen.queryByText(COPY.composer.questionModeChip)).toBeNull();
+  it("el interruptor de encuesta se prende y se apaga", async () => {
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.question.title));
+
+    const toggle = await screen.findByRole("switch", {
+      name: new RegExp(COPY.composer.compose.pollLabel),
+    });
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("con la encuesta prendida la vista previa ya muestra Sí y No", async () => {
+    mount();
+    typeQuick("¿Conviene mudarse a Jackson Heights?");
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.question.title));
+
+    fireEvent.click(
+      await screen.findByRole("switch", { name: new RegExp(COPY.composer.compose.pollLabel) }),
+    );
+
+    expect(screen.getByText(COPY.composer.compose.previewLabel)).toBeTruthy();
+    expect(screen.getAllByText(COPY.post.poll.yes).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(COPY.post.poll.no).length).toBeGreaterThan(0);
+  });
+});
+
+describe("PostComposer — la regla de la imagen no es un error", () => {
+  it("publicar texto solo abre los dos caminos en vez de fallar", async () => {
+    mount();
+    typeQuick("Hoy abrió la feria del barrio y estaba llenísima.");
+
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    expect(await screen.findByText(COPY.composer.needsMedia.sheetTitle)).toBeTruthy();
+    expect(screen.getByText(COPY.composer.needsMedia.withMediaTitle)).toBeTruthy();
+    expect(screen.getByText(COPY.composer.needsMedia.asQuestionTitle)).toBeTruthy();
+  });
+
+  it('"Con una foto o un video" abre el selector, no publica a ciegas', async () => {
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+    mount();
+    typeQuick("Hoy abrió la feria del barrio y estaba llenísima.");
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    fireEvent.click(await screen.findByText(COPY.composer.needsMedia.withMediaTitle));
+
+    const clicked = clickSpy.mock.instances[0] as unknown as HTMLInputElement;
+    expect(clicked.id).toBe("post-composer-photos");
+    clickSpy.mockRestore();
+  });
+
+  it('"Como pregunta" pasa a la hoja de pregunta SIN perder lo escrito', async () => {
+    const written = "¿Alguien sabe a qué hora abre la feria del barrio?";
+    mount();
+    typeQuick(written);
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    fireEvent.click(await screen.findByText(COPY.composer.needsMedia.asQuestionTitle));
+
+    expect(await screen.findByText(COPY.composer.compose.questionTitle)).toBeTruthy();
+    const sheetField = document.getElementById("composer-sheet-body") as HTMLTextAreaElement;
+    expect(sheetField.value).toBe(written);
   });
 });
 

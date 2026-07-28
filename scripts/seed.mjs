@@ -68,6 +68,41 @@ function die(context, error) {
 // ---------------------------------------------------------------------------
 // Tenants
 // ---------------------------------------------------------------------------
+
+/**
+ * Claves CANÓNICAS de módulos — espejo exacto de MODULE_KEYS
+ * (src/app/admin/dominio/modules.ts). `scripts/seed-modules.test.ts` compara las
+ * dos listas y falla si se separan.
+ *
+ * Es la lista que este seed escribió MAL durante meses: iba en inglés
+ * (`properties`, `businesses`, `jobs`, `guides`…) mientras la app leía las de
+ * arriba, así que ninguna clave matcheaba y el tenant sembrado con este archivo
+ * quedaba sin decisión guardada para NINGUNA sección. No se notó porque
+ * `dominicanos` se corrigió a mano, pero `comunidadlatina` arrastró las claves en
+ * inglés hasta el 28/7. No hay forma de importar el .ts desde acá (zod, tipos),
+ * así que la única defensa posible es el test.
+ */
+const MODULE_KEYS = [
+  'feed',
+  'propiedades',
+  'negocios',
+  'profesionales',
+  'eventos',
+  'empleos',
+  'mensajes',
+  'marketplace',
+  'creadores',
+  'videos',
+];
+
+/**
+ * Una comunidad nueva arranca con TODO prendido y el operador apaga desde
+ * /admin/dominio lo que no quiera abrir todavía. Es el mismo criterio que el
+ * default de una clave ausente (`moduleAvailability`): apagar es un acto
+ * deliberado, no el estado inicial de una comunidad que nadie configuró.
+ */
+const ALL_MODULES_ON = Object.fromEntries(MODULE_KEYS.map((key) => [key, true]));
+
 const TENANTS = [
   {
     slug: 'dominicanos',
@@ -78,7 +113,7 @@ const TENANTS = [
     country_focus: 'DO',
     city_seed: 'Queens, NY',
     status: 'active',
-    modules: { feed: true, properties: true, businesses: true, professionals: true, events: true, jobs: false, guides: true, messages: true },
+    modules: { ...ALL_MODULES_ON },
     domain: 'dominicanos.com',
   },
   {
@@ -90,7 +125,7 @@ const TENANTS = [
     country_focus: null,
     city_seed: 'New York, NY',
     status: 'active',
-    modules: { feed: true, properties: true, businesses: true, professionals: true, events: true, jobs: false, guides: true, messages: true },
+    modules: { ...ALL_MODULES_ON },
     domain: 'comunidadlatina.com',
   },
 ];
@@ -98,7 +133,7 @@ const TENANTS = [
 async function upsertTenant(def) {
   const { data: existing, error: selErr } = await supabase
     .from('tenants')
-    .select('id, slug')
+    .select('id, slug, modules')
     .eq('slug', def.slug)
     .maybeSingle();
   if (selErr) die(`leyendo tenant ${def.slug}`, selErr);
@@ -107,6 +142,18 @@ async function upsertTenant(def) {
   if (existing) {
     tenantId = existing.id;
     log('skip', `tenant ${def.slug} ya existe`);
+    // El skip es a propósito (no pisar la configuración de una comunidad viva),
+    // pero callarse la deriva no: si la fila guardada no habla el idioma de
+    // MODULE_KEYS, sus interruptores del panel no gobiernan nada y correr el
+    // seed de nuevo NO lo arregla. Se avisa con el fix a mano al lado.
+    const saved = existing.modules && typeof existing.modules === 'object' ? existing.modules : {};
+    const ajenas = Object.keys(saved).filter((key) => !MODULE_KEYS.includes(key));
+    if (ajenas.length > 0) {
+      console.warn(
+        `  ⚠️  ${def.slug}: la columna 'modules' tiene claves que la app no conoce (${ajenas.join(', ')}).\n` +
+          `     Ese estado no gobierna ninguna sección. Revisalo en /admin/dominio y volvé a guardar.`,
+      );
+    }
   } else {
     const { domain, ...row } = def;
     const { data, error } = await supabase.from('tenants').insert(row).select('id').single();
@@ -273,13 +320,16 @@ async function main() {
     areaLabel: 'Corona, Queens',
     bio: 'Llegué de Santiago hace 8 meses. Buscando comunidad y trabajo estable.',
     trust: {
+      // 35 cae en 30-49 ⇒ 'activo' (TRUST_LEVELS es canon, ARQUITECTURA.md §5).
+      // Decía 'verificado', que en la demo mostraba la etiqueta de un tramo
+      // dos escalones más arriba al lado del número real.
       score: 35,
-      level: 'verificado',
+      level: 'activo',
       signals: { months_in_community: 8, transactions_ok: 1, endorsements_count: 2, reports_upheld: 0 },
     },
   });
 
-  await upsertUser({
+  const carlosId = await upsertUser({
     email: 'carlos@demo.comunidadlatina.com',
     displayName: 'Carlos Rosario',
     role: 'domain_admin',
@@ -288,13 +338,14 @@ async function main() {
     areaLabel: 'Jackson Heights, Queens',
     bio: 'Administrador de la comunidad dominicana. 15 años en Queens.',
     trust: {
+      // 82 cae en 70-84 ⇒ 'verificado'. Decía 'confiable' (50-69).
       score: 82,
-      level: 'confiable',
+      level: 'verificado',
       signals: { months_in_community: 30, transactions_ok: 12, endorsements_count: 19, reports_upheld: 0 },
     },
   });
 
-  await upsertUser({
+  const geovannyId = await upsertUser({
     email: 'geovanny@demo.comunidadlatina.com',
     displayName: 'Geovanny (Global Admin)',
     role: 'global_admin',
@@ -303,8 +354,11 @@ async function main() {
     areaLabel: 'New York, NY',
     bio: 'Operador de la red Comunidad Latina.',
     trust: {
+      // 'premium' quedó fuera de la taxonomía en 0029 (nuevo/activo/confiable/
+      // verificado/destacado) y rompía trust_scores_level_check: el seed entero
+      // moría acá. 90 ≥ 85 ⇒ 'destacado' según app.user_level().
       score: 90,
-      level: 'premium',
+      level: 'destacado',
       signals: { months_in_community: 48, transactions_ok: 0, endorsements_count: 0, reports_upheld: 0 },
     },
   });
@@ -804,6 +858,94 @@ async function main() {
       });
       if (error) die('creando verification_check', error);
       log('create', `verification_check found_active (${CHECK_REGISTRY})`);
+    }
+  }
+
+  // 7. Aviso comunitario destacado (broadcast urgente, 0041) -----------------
+  // El cliente pidió "alertas comunitarias" (persona desaparecida, centro de
+  // acopio): el modelo ya era `broadcasts` (0010) y 0041 le sumó `severity`.
+  // La tabla estaba vacía, así que la demo no mostraba nunca el estilo urgente.
+  // CONTENIDO: un aviso de seguridad VERDADERO sobre la propia plataforma —
+  // jamás sembrar una emergencia inventada (persona desaparecida ficticia) que
+  // se lea como real; ese aviso lo carga el admin desde /admin/global.
+  const ALERT_TITLE = 'Nadie de Comunidad Latina te va a pedir dinero';
+  {
+    const { data: existing, error: selErr } = await supabase
+      .from('broadcasts')
+      .select('id')
+      .eq('title', ALERT_TITLE)
+      .maybeSingle();
+    if (selErr) die('buscando broadcast demo', selErr);
+
+    if (existing) {
+      log('skip', 'broadcast urgente de ejemplo ya existe');
+    } else {
+      const { data: created, error } = await supabase
+        .from('broadcasts')
+        .insert({
+          created_by: geovannyId,
+          title: ALERT_TITLE,
+          body:
+            'Si alguien te escribe diciendo que es del equipo y te pide una transferencia, ' +
+            'un código o los datos de tu tarjeta, es una estafa. Cortá la conversación y ' +
+            'reportalo desde el mismo chat.',
+          severity: 'urgent',
+          starts_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+      if (error) die('creando broadcast demo', error);
+
+      const { error: targetErr } = await supabase
+        .from('broadcast_targets')
+        .upsert(
+          { broadcast_id: created.id, tenant_id: dominicanosId },
+          { onConflict: 'broadcast_id,tenant_id', ignoreDuplicates: true },
+        );
+      if (targetErr) die('targeteando broadcast demo', targetErr);
+      log('create', `broadcast [urgent] "${ALERT_TITLE}" → dominicanos`);
+    }
+  }
+
+  // 8. Pregunta con encuesta Sí/No + votos (0041) ----------------------------
+  // Los counters los escribe el trigger app.post_poll_votes_bump_counters():
+  // el seed inserta VOTOS, nunca poll_yes_count/poll_no_count.
+  const POLL_BODY =
+    '¿Les parece bien que los avisos de trabajo pidan responder unas preguntas antes de postularse?';
+  {
+    const { data: existing, error: selErr } = await supabase
+      .from('posts')
+      .select('id')
+      .eq('tenant_id', dominicanosId)
+      .eq('body', POLL_BODY)
+      .maybeSingle();
+    if (selErr) die('buscando pregunta con encuesta', selErr);
+
+    if (existing) {
+      log('skip', 'pregunta con encuesta de ejemplo ya existe');
+    } else {
+      const { data: post, error } = await supabase
+        .from('posts')
+        .insert({
+          tenant_id: dominicanosId,
+          author_id: mariaId,
+          body: POLL_BODY,
+          media: [],
+          kind: 'question',
+          poll_kind: 'yes_no',
+          status: 'published',
+        })
+        .select('id')
+        .single();
+      if (error) die('creando pregunta con encuesta', error);
+
+      // Dos votos opuestos para que la demo muestre las dos barras.
+      const { error: voteErr } = await supabase.from('post_poll_votes').insert([
+        { tenant_id: dominicanosId, post_id: post.id, voter_id: mariaId, choice: true },
+        { tenant_id: dominicanosId, post_id: post.id, voter_id: carlosId, choice: false },
+      ]);
+      if (voteErr) die('votando la encuesta de ejemplo', voteErr);
+      log('create', 'pregunta con encuesta Sí/No + 2 votos (1 Sí / 1 No)');
     }
   }
 

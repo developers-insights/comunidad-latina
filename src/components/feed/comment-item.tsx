@@ -26,9 +26,29 @@ export interface CommentItemProps {
   timeAgoLabel: string;
   /** Optimista en vuelo: baja la opacidad hasta que el servidor confirma. */
   pending?: boolean;
+  /**
+   * Sobre qué está apoyado el comentario:
+   *  · "surface" (default) — la superficie de la app, con los tokens de tema.
+   *  · "media"   — el vidrio de la hoja SOBRE UN VIDEO. Ahí la burbuja clara
+   *    sería justo el "fondo blanco que bloquea el video" que pidió sacar el
+   *    cliente (2026-07-27): se cambia por un velo de TINTA (más oscuro que el
+   *    vidrio, no más claro) con texto `on-media`. Hundir la burbuja en vez de
+   *    levantarla es lo que salva el contraste: contra el peor caso —video
+   *    blanco detrás— el cuerpo queda en ~9:1 y el "hace 3 min" en ~6.7:1,
+   *    mientras que una burbuja clara los dejaba en 5.3:1 y 4.1:1 (esto último,
+   *    por debajo de AA).
+   */
+  tone?: "surface" | "media";
 }
 
-export function CommentItem({ author, body, timeAgoLabel, pending = false }: CommentItemProps) {
+export function CommentItem({
+  author,
+  body,
+  timeAgoLabel,
+  pending = false,
+  tone = "surface",
+}: CommentItemProps) {
+  const onMedia = tone === "media";
   return (
     <li
       className={cn(
@@ -39,9 +59,21 @@ export function CommentItem({ author, body, timeAgoLabel, pending = false }: Com
       )}
     >
       <Avatar size="sm" name={author.displayName} src={author.avatarUrl} />
-      <div className="min-w-0 flex-1 rounded-lg bg-surface-subtle px-3.5 py-2.5">
+      <div
+        className={cn(
+          "min-w-0 flex-1 rounded-lg px-3.5 py-2.5",
+          onMedia
+            ? "bg-media-shade/35 ring-1 ring-inset ring-on-media/10"
+            : "bg-surface-subtle",
+        )}
+      >
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="truncate text-sm font-semibold text-foreground">
+          <span
+            className={cn(
+              "truncate text-sm font-semibold",
+              onMedia ? "text-on-media" : "text-foreground",
+            )}
+          >
             {author.displayName}
           </span>
           {author.profileId && (
@@ -54,9 +86,21 @@ export function CommentItem({ author, body, timeAgoLabel, pending = false }: Com
               size="inline"
             />
           )}
-          <span className="text-xs text-foreground-muted">· {timeAgoLabel}</span>
+          <span
+            className={cn(
+              "text-xs",
+              onMedia ? "text-on-media/80" : "text-foreground-muted",
+            )}
+          >
+            · {timeAgoLabel}
+          </span>
         </div>
-        <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+        <p
+          className={cn(
+            "mt-1 whitespace-pre-wrap text-sm leading-relaxed",
+            onMedia ? "text-on-media" : "text-foreground",
+          )}
+        >
           {body}
         </p>
       </div>

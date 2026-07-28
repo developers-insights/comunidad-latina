@@ -302,23 +302,78 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-on-success"],
     cobertura: "cl-print-fill",
   },
+  // Composer de comentario. TRES tintas y DOS mecanismos, a propósito:
+  //  · `text-brand-foreground` es el botón redondo de enviar — un <button>, que
+  //    el @media print ya esconde en las dos superficies donde vive el composer
+  //    (el detalle SSR /feed/[id] y la hoja del feed).
+  //  · las dos `text-on-media` son la variante SOBRE VIDRIO del campo, y el campo
+  //    es un <textarea>: la regla de <button> no lo alcanza. Sólo se renderiza
+  //    con tone="media", y ese tono lo pasa ÚNICAMENTE la hoja de comentarios
+  //    abierta sobre un video. De ahí que la prueba apunte a la hoja: el panel
+  //    entero lleva cl-print-hide, así que esa tinta no llega nunca al papel.
   "src/components/feed/comment-composer.tsx": {
-    inks: ["text-brand-foreground"],
-    cobertura: "control",
+    inks: ["text-brand-foreground", "text-on-media", "text-on-media"],
+    cobertura: "cl-print-hide",
+    prueba: {
+      archivo: "src/components/feed/comments-sheet.tsx",
+      contiene: ["cl-print-hide"],
+    },
   },
-  // Composer con multi-foto + video (2026-07-21): el chip de duración del video
-  // y el botón "Quitar" viven sobre la preview <img>/<video> del medio elegido —
-  // el respaldo impreso es la preview misma (patrón CardMedia).
-  "src/components/feed/post-composer.tsx": {
-    inks: ["text-on-media", "text-on-media"],
-    cobertura: "sobre <img>",
+  // Fila del hilo. Las tres tintas son la variante tone="media" (nombre, "hace 3
+  // min" y cuerpo sobre el vidrio). El detalle SSR /feed/[id] renderiza el MISMO
+  // componente sin `tone`, o sea en tokens de tema: ahí no hay `on-*` que salvar.
+  // Igual que el composer, esa variante sólo existe dentro de la hoja, que es
+  // donde vive el hook.
+  "src/components/feed/comment-item.tsx": {
+    inks: Array<string>(3).fill("text-on-media"),
+    cobertura: "cl-print-hide",
+    prueba: {
+      archivo: "src/components/feed/comments-sheet.tsx",
+      contiene: ["cl-print-hide"],
+    },
   },
-  // Rediseño red social (2026-07-21) — la foto 4:5 es la protagonista:
-  // contador "N fotos" sobre su velo (bg-media-scrim + cl-print-fill); el
-  // corazón del doble-tap es transitorio (solo vive durante la animación).
-  "src/components/feed/card-post-media.tsx": {
+  // Hoja de comentarios sobre video (feedback cliente 2026-07-27): overlay modal
+  // sobre TODA la página que, sobre el vidrio, escribe en tinta de media el
+  // título, el contador, los dos textos del error + su botón de reintentar, los
+  // dos del vacío y el CTA de entrar. Precedente exacto: media-viewer.tsx — en
+  // papel una hoja de comentarios no significa nada, el panel entero lleva
+  // cl-print-hide. Es también el ancla de comment-item y comment-composer.
+  "src/components/feed/comments-sheet.tsx": {
+    inks: Array<string>(8).fill("text-on-media"),
+    cobertura: "cl-print-hide",
+  },
+  // Hoja de composición (2026-07-27). REEMPLAZA a post-composer.tsx, que salió
+  // del inventario: el chip de duración del video y el botón "Quitar" se mudaron
+  // acá, y se les sumó la encuesta de la vista previa (las píldoras Sí/No y su
+  // pie). Otro overlay modal, y encima uno donde se ESCRIBE una publicación: en
+  // papel no existe. cl-print-hide en el panel, mismo criterio que la hoja de
+  // comentarios y el visor.
+  "src/components/feed/composer-sheet.tsx": {
+    inks: Array<string>(4).fill("text-on-media"),
+    cobertura: "cl-print-hide",
+  },
+  // Carrusel de medios (2026-07-27). Dos tintas, dos mecanismos:
+  //  · el contador "7/12" del indicador se apoya en un velo (bg-media-scrim):
+  //    sin ese relleno impreso queda en 1.00:1. El hook va en el CONTENEDOR del
+  //    indicador y no en la píldora, porque `print-color-adjust` SE HEREDA: así
+  //    cubre también la otra forma del indicador, los puntitos, que son
+  //    `bg-on-media` puro y sin el hook desaparecerían igual. Mismo patrón que
+  //    la píldora de vistas de card-video.tsx;
+  //  · la otra vive dentro del <button> de la flecha: el @media print ya lo tapa.
+  "src/components/feed/media-carousel.tsx": {
     inks: ["text-on-media", "text-on-media"],
     cobertura: "cl-print-fill",
+  },
+  // Rediseño red social (2026-07-21) — la foto 4:5 es la protagonista. Bajó a UNA
+  // sola tinta (2026-07-27): el contador "N fotos" se mudó al carrusel y el
+  // archivo ya ni renderiza <img> (los medios los pinta MediaCarousel), así que
+  // la cobertura vieja "sobre <img>" tampoco se podía sostener. Lo único que le
+  // queda es el corazón grande del doble toque: decorativo y TRANSITORIO —vive
+  // lo que dura la animación—, y aun así lleva cl-print-hide explícito. Un
+  // destello blanco en 1.00:1 no tiene nada que hacer en una hoja impresa.
+  "src/components/feed/card-post-media.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-hide",
   },
   // Banner de las publicaciones tipo "Pregunta" (feedback cliente 2026-07-26):
   // la pregunta se compone como tinta clara sobre un campo de marca, así que sin
@@ -329,6 +384,24 @@ const INVENTARIO: Record<string, Entrada> = {
   "src/components/feed/question-banner.tsx": {
     inks: ["text-on-media"],
     cobertura: "cl-print-fill",
+  },
+  // Encuesta Sí/No de una pregunta (0041). Sus dos tintas son el tono "media", y
+  // ese tono se pasa en UN solo lugar: post-card.tsx usa tone="media" justo
+  // cuando la encuesta va DENTRO del QuestionBanner (si la pregunta trae foto, la
+  // encuesta baja al cuerpo de la card y se pinta con tokens de tema). El relleno
+  // propio de la barra no la salva —`on-media/12` es un velo translúcido, no un
+  // color—: lo que tiene que imprimirse es el campo de marca del banner, y ese
+  // hook ya está declarado en su raíz. Como `print-color-adjust` SE HEREDA (lo
+  // documenta el propio bloque print de globals.css), cubre la encuesta entera,
+  // incluido el pie de "45 votos", que queda FUERA de los <button> y por eso no
+  // alcanzaba con la cobertura "control".
+  "src/components/feed/poll-yes-no.tsx": {
+    inks: ["text-on-media", "text-on-media"],
+    cobertura: "cl-print-fill",
+    prueba: {
+      archivo: "src/components/feed/question-banner.tsx",
+      contiene: ["cl-print-fill"],
+    },
   },
   // Video del feed, tres portadores y ninguno llega al papel: el toggle de
   // sonido vive dentro de un <button>; la píldora de vistas se imprime con su
@@ -361,6 +434,13 @@ const INVENTARIO: Record<string, Entrada> = {
   // Glifo Play sobre el thumbnail de video del grid del perfil — se imprime
   // con su velo (bg-media-scrim + cl-print-fill), como el contador de gallery.
   "src/app/(app)/perfil/posts-grid.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-fill",
+  },
+  // Guardados del perfil: el mismo glifo Play sobre el thumbnail del video que
+  // guardaste, y el mismo hook (el velo bg-media-scrim ya venía con cl-print-fill
+  // puesto). Espejo de posts-grid.tsx.
+  "src/app/(app)/perfil/guardados/saved-list.tsx": {
     inks: ["text-on-media"],
     cobertura: "cl-print-fill",
   },

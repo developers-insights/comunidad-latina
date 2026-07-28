@@ -198,6 +198,73 @@ describe("QuestionBanner: el cuerpo decrece y el texto largo se recorta", () => 
   });
 });
 
+describe("QuestionBanner: la marca de agua", () => {
+  /** Las dos copias del mark (labio de luz + cuerpo prensado). */
+  function watermarkLayers(container: HTMLElement): SVGElement[] {
+    return Array.from(container.querySelectorAll("svg[viewBox='0 0 180 156']"));
+  }
+
+  it("está en el banner, sin anunciarse a los lectores de pantalla", () => {
+    const { container } = renderBanner();
+    const layers = watermarkLayers(container);
+    expect(layers).toHaveLength(2);
+    for (const layer of layers) {
+      expect(layer.getAttribute("aria-hidden")).toBe("true");
+    }
+  });
+
+  it("el cuerpo del deboss es OSCURO: una marca clara le robaría contraste a la pregunta", () => {
+    const { container } = renderBanner();
+    const [lip, body] = watermarkLayers(container) as unknown as HTMLElement[];
+    // Abajo el labio de luz (on-media), encima el cuerpo en la tinta oscura.
+    expect(lip.style.color).toContain("on-media");
+    expect(body.style.color).toContain("media-shade");
+    // Y la capa que puede quedar debajo del texto es la oscura, no la clara.
+    expect(Number(body.style.opacity)).toBeGreaterThan(Number(lip.style.opacity));
+  });
+
+  it("va DEBAJO del vignette (es papel, no una calcomanía encima)", () => {
+    const { container } = renderBanner();
+    const nodes = Array.from(container.querySelectorAll("span"));
+    const watermarkIndex = nodes.findIndex((node) =>
+      node.querySelector("svg[viewBox='0 0 180 156']"),
+    );
+    const vignetteIndex = nodes.findIndex((node) =>
+      node.style.backgroundImage.includes("radial-gradient"),
+    );
+    expect(watermarkIndex).toBeGreaterThanOrEqual(0);
+    expect(vignetteIndex).toBeGreaterThan(watermarkIndex);
+  });
+});
+
+describe("QuestionBanner: la encuesta convive con la tipografía", () => {
+  it("con encuesta se recortan más renglones (el 4:5 no se desborda)", () => {
+    const sinEncuesta = questionTypeScale(QUESTION_LONG, false, 0);
+    const conEncuesta = questionTypeScale(QUESTION_LONG, false, 4);
+    expect(sinEncuesta.clamp).toBe("line-clamp-[11]");
+    expect(conEncuesta.clamp).toBe("line-clamp-[7]");
+  });
+
+  it("nunca baja de 3 renglones: un recorte de una línea no se lee", () => {
+    expect(questionTypeScale(QUESTION_SHORT, false, 99).clamp).toBe("line-clamp-[3]");
+  });
+
+  it("en el detalle sigue sin recortar, con encuesta o sin ella", () => {
+    expect(questionTypeScale(QUESTION_LONG, true, 4).clamp).toBeNull();
+  });
+
+  it("el pie interactivo se renderiza dentro de la pieza", () => {
+    renderBanner({ footer: <button type="button">Sí</button> });
+    expect(screen.getByRole("button", { name: "Sí" })).toBeTruthy();
+  });
+
+  it("en vista previa no hay capa de toque: es una maqueta, no una publicación", () => {
+    renderBanner({ preview: true });
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText(QUESTION_SHORT)).toBeTruthy();
+  });
+});
+
 describe("QuestionBanner: el doble toque da me gusta", () => {
   beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
   afterEach(() => vi.useRealTimers());
@@ -255,6 +322,7 @@ const BASE_POST: PostCardModel = {
   },
   likedByViewer: false,
   savedByViewer: false,
+  poll: null,
   viewCount: 0,
   entity: null,
   isPromoted: false,
@@ -290,5 +358,33 @@ describe("PostCard: el banner sólo entra donde tiene que entrar", () => {
     });
     expect(container.querySelector("[style*='linear-gradient']")).toBeNull();
     expect(screen.getByText(QUESTION_SHORT)).toBeTruthy();
+  });
+});
+
+describe("PostCard: la encuesta viaja con la pregunta", () => {
+  const POLL = { kind: "yes_no", yes: 30, no: 50, myVote: null } as const;
+
+  it("una pregunta sin foto lleva la encuesta DENTRO del banner", () => {
+    const { container } = renderCard({ poll: POLL });
+    const banner = container.querySelector(".cl-print-fill");
+    expect(banner).not.toBeNull();
+    // Los dos controles viven adentro de la pieza, no sueltos en la card.
+    expect(banner?.querySelector("[role='group']")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /votar que sí/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /votar que no/i })).toBeTruthy();
+  });
+
+  it("una pregunta CON foto no pierde la encuesta: baja al cuerpo de la card", () => {
+    const { container } = renderCard({
+      poll: POLL,
+      media: [{ kind: "image", url: "https://cdn.example.com/foto.webp" }],
+    });
+    expect(container.querySelector(".cl-print-fill")).toBeNull();
+    expect(screen.getByRole("group", { name: /encuesta/i })).toBeTruthy();
+  });
+
+  it("una pregunta sin encuesta no inventa botones", () => {
+    renderCard({});
+    expect(screen.queryByRole("group", { name: /encuesta/i })).toBeNull();
   });
 });

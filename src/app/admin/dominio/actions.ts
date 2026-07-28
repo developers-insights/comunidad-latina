@@ -4,6 +4,9 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStaffContext, logAdminAction } from "../guard";
+// Helpers puros en su propio módulo: un archivo "use server" solo puede
+// exportar funciones async (ver el comentario de ./modules.ts).
+import { MODULE_KEYS, moduleStateSchema, toModuleColumns, type ModuleState } from "./modules";
 
 /**
  * Server actions del panel de Dominio (domain_admin+).
@@ -154,30 +157,6 @@ export async function resolveScamReport(
 
 /* ------------------------------ Módulos on/off ---------------------------- */
 
-/** Claves canónicas de módulos — espejo de DEFAULT_MODULES en lib/tenant/resolve. */
-export type ModuleKey =
-  | "feed"
-  | "propiedades"
-  | "negocios"
-  | "profesionales"
-  | "eventos"
-  | "mensajes"
-  | "escudo"
-  | "marketplace"
-  | "creadores";
-
-const MODULE_KEYS = [
-  "feed",
-  "propiedades",
-  "negocios",
-  "profesionales",
-  "eventos",
-  "mensajes",
-  "escudo",
-  "marketplace",
-  "creadores",
-] as const;
-
 export async function updateTenantModules(
   _prev: DomainActionState,
   formData: FormData,
@@ -187,19 +166,65 @@ export async function updateTenantModules(
   const { user, tenantId } = ctx;
   if (!tenantId) return { status: "error", message: COPY.notAllowed };
 
-  // Un checkbox apagado no viaja en el FormData: presencia = on.
-  const modules: Record<string, boolean> = {};
+  // Se recorren las claves CANÓNICAS, no las del FormData: así un cliente no
+  // puede inventar módulos ni omitir uno para dejarlo en un estado ambiguo.
+  const states: Record<string, ModuleState> = {};
   for (const moduleKey of MODULE_KEYS) {
-    modules[moduleKey] = formData.get(`module:${moduleKey}`) === "on";
+    states[moduleKey] = moduleStateSchema.parse(formData.get(`module:${moduleKey}`));
   }
+  const { modules, modulesSoon } = toModuleColumns(states);
 
   // tenants.UPDATE es global_admin-only por RLS → admin client, gateado por el
   // rol recién verificado y SIEMPRE limitado al tenant del propio JWT.
   try {
     const admin = createAdminClient();
-    const { error } = await admin.from("tenants").update({ modules }).eq("id", tenantId);
-    if (error) return { status: "error", message: COPY.genericError };
-  } catch {
+
+    /**
+     * El UPDATE reemplaza el jsonb ENTERO, así que sin este merge cualquier
+     * clave que no esté en MODULE_KEYS (una sección que agregue otro panel, o
+     * una vieja que quedó dando vueltas) se borraría en cada guardado. Se lee lo
+     * que hay y las canónicas pisan solo lo suyo — en las DOS columnas: mergear
+     * `modules` y reemplazar `modules_soon` dejaría claves con on/off pero sin
+     * su "muy pronto", que es un estado a medias que nadie eligió.
+     *
+     * Read-modify-write, sin transacción y a sabiendas. Dos admins guardando en
+     * el mismo instante: gana el último, sin aviso. Se deja así porque este form
+     * manda el estado COMPLETO de las 10 claves canónicas —"gana el último" es
+     * la semántica normal de un Guardar de formulario, no una anomalía— y lo
+     * único que el merge protege son las claves ajenas, que ningún admin edita
+     * desde acá. Resolverlo de verdad pide `modules = modules || $patch` en SQL
+     * (una RPC), y eso es una migración: si algún día hay varios operadores por
+     * comunidad editando a la vez, ese es el camino, no un lock optimista sobre
+     * el jsonb entero.
+     */
+    const { data: current } = await admin
+      .from("tenants")
+      .select("modules, modules_soon")
+      .eq("id", tenantId)
+      .maybeSingle();
+    const asRecord = (value: unknown): Record<string, boolean> =>
+      value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, boolean>)
+        : {};
+    const mergedModules = { ...asRecord(current?.modules), ...modules };
+    const mergedModulesSoon = { ...asRecord(current?.modules_soon), ...modulesSoon };
+
+    const { error } = await admin
+      .from("tenants")
+      .update({ modules: mergedModules, modules_soon: mergedModulesSoon })
+      .eq("id", tenantId);
+
+    if (error) {
+      console.error("[admin] update de módulos falló:", error.message);
+      return { status: "error", message: COPY.genericError };
+    }
+  } catch (thrown) {
+    // Sin este log, un admin client mal configurado se ve igual que un error de
+    // red y nadie sabe por dónde empezar a mirar.
+    console.error(
+      "[admin] update de módulos no se pudo ejecutar:",
+      thrown instanceof Error ? thrown.message : "error desconocido",
+    );
     return { status: "error", message: COPY.genericError };
   }
 
@@ -209,7 +234,7 @@ export async function updateTenantModules(
     tenantId,
     subjectKind: "tenant",
     subjectId: tenantId,
-    meta: { modules },
+    meta: { modules, modules_soon: modulesSoon },
   });
 
   revalidatePath("/admin/dominio");

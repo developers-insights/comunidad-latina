@@ -144,7 +144,15 @@ export function LoginForm({
         </TabsList>
 
         <TabsContent value="password">
-          <form onSubmit={onPasswordSubmit} noValidate className="flex flex-col gap-4">
+          {/*
+            `method="post"` aunque el envío real lo maneje `onSubmit`: si alguien
+            aprieta Entrar ANTES de que hidrate —un teléfono lento, que es medio
+            público de esta app— el navegador hace el envío nativo. Sin `method`
+            el default es GET y la contraseña termina en la barra de direcciones
+            y en el historial. Con POST el envío prematuro falla, que es el
+            resultado correcto: nunca filtra la credencial.
+          */}
+          <form method="post" onSubmit={onPasswordSubmit} noValidate className="flex flex-col gap-4">
             <Field htmlFor="login-email" label={COPY.email} error={emailError ?? undefined}>
               <Input
                 id="login-email"
@@ -215,7 +223,7 @@ export function LoginForm({
               <p className="text-sm text-foreground">{COPY.magicSent}</p>
             </div>
           ) : (
-            <form onSubmit={onMagicSubmit} noValidate className="flex flex-col gap-4">
+            <form method="post" onSubmit={onMagicSubmit} noValidate className="flex flex-col gap-4">
               <Field
                 htmlFor="magic-email"
                 label={COPY.email}

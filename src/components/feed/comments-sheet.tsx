@@ -46,9 +46,23 @@ import type { AuthorView } from "./helpers";
  * composer optimista y el ciclo de moderación son exactamente los mismos.
  */
 
+/**
+ * SOBRE QUÉ se abre la hoja. Cambia la forma, no el contenido:
+ *  · "default" — la hoja alta de siempre, opaca, sobre el feed.
+ *  · "video"   — media hoja de VIDRIO sobre un video que sigue corriendo
+ *    (feedback cliente 2026-07-27: "le bloqueó todo el video… ¿puede salir como
+ *    un poquito más abajo? porque a veces la gente sigue viendo el video y está
+ *    leyendo los comentarios"; "los comentarios tienen que ser transparente el
+ *    fondo, no tiene que ser blanco"). Además el hilo se desplaza solo, despacio,
+ *    hasta que la persona toca algo.
+ */
+export type CommentsSurface = "default" | "video";
+
 interface OpenCommentsBase {
   /** Conteo conocido al abrir (pinta el título al instante, antes del fetch). */
   commentCount?: number;
+  /** Superficie sobre la que se abre. Default "default". */
+  surface?: CommentsSurface;
 }
 
 export type OpenCommentsArgs = OpenCommentsBase &
@@ -80,6 +94,41 @@ export function useCommentsSheet(): CommentsSheetContextValue {
 interface Session {
   subject: CommentsSubject;
   initialCount: number;
+  surface: CommentsSurface;
+}
+
+/**
+ * ¿Está arriba el teclado virtual? Mide cuánto del layout viewport tapa, vía
+ * `visualViewport` (la única señal fiable en móvil). Sólo lo usa la hoja SOBRE
+ * VIDEO: cuando el teclado sube, la hoja se achica todavía más para que el video
+ * NO desaparezca de pantalla mientras se escribe el comentario.
+ */
+function useKeyboardOpen(active: boolean): boolean {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    // Las mediciones se difieren a un frame: un setState síncrono dentro del
+    // efecto encadena renders (react-hooks/set-state-in-effect).
+    if (!active) {
+      const raf = requestAnimationFrame(() => setOpen(false));
+      return () => cancelAnimationFrame(raf);
+    }
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const overlap = window.innerHeight - (vv.height + vv.offsetTop);
+      // 120px: por debajo de eso es la barra del navegador, no un teclado.
+      setOpen(overlap > 120);
+    };
+    const raf = requestAnimationFrame(update);
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      cancelAnimationFrame(raf);
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [active]);
+  return open;
 }
 
 export function CommentsSheetProvider({ children }: { children: ReactNode }) {
@@ -90,7 +139,11 @@ export function CommentsSheetProvider({ children }: { children: ReactNode }) {
     const subject: CommentsSubject = args.listingId
       ? { kind: "listing", id: args.listingId }
       : { kind: "post", id: args.postId ?? "" };
-    setSession({ subject, initialCount: args.commentCount ?? 0 });
+    setSession({
+      subject,
+      initialCount: args.commentCount ?? 0,
+      surface: args.surface ?? "default",
+    });
     setOpen(true);
   }, []);
 
@@ -107,6 +160,9 @@ export function CommentsSheetProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ open: openSheet }), [openSheet]);
 
+  const overVideo = session?.surface === "video";
+  const keyboardOpen = useKeyboardOpen(open && overVideo);
+
   return (
     <CommentsSheetContext.Provider value={value}>
       {children}
@@ -116,6 +172,35 @@ export function CommentsSheetProvider({ children }: { children: ReactNode }) {
         ariaLabel={COPY.comments.title}
         size="tall"
         keyboardAware
+        className={cn(
+          // EN PAPEL NO EXISTE. La hoja es un overlay modal sobre toda la
+          // página, y sobre video escribe TODO en tinta `on-media` — clara por
+          // definición, o sea 1.00:1 sobre papel blanco (ver
+          // src/test/print-contract.test.ts). Mismo criterio que el visor de
+          // medios: el panel entero lleva `cl-print-hide`. Va explícito aunque
+          // el BottomSheet ya se anuncie como role="dialog": la declaración
+          // tiene que vivir donde vive la tinta, no depender de un atributo de
+          // otro componente. Sin efecto en pantalla (la regla es @media print).
+          "cl-print-hide",
+          overVideo &&
+            cn(
+              // MEDIA hoja: arriba sigue viéndose el video, y corriendo — abrir
+              // los comentarios no lo pausa. Con el teclado arriba se achica
+              // todavía más para que el video no desaparezca.
+              keyboardOpen ? "h-[34dvh]" : "h-[46dvh]",
+              // VIDRIO, no panel blanco: velo de media-shade + desenfoque. Con
+              // 72% de tinta el texto on-media queda ≥7:1 hasta sobre un video
+              // blanco, y el movimiento del video se sigue viendo detrás.
+              "bg-media-shade/72 shadow-none backdrop-blur-2xl backdrop-saturate-150",
+              "border-t border-on-media/15",
+              // El handle de arrastre del BottomSheet usa bg-border, invisible
+              // sobre el vidrio oscuro: acá se pinta con la tinta de media.
+              "[&>[aria-hidden]]:bg-on-media/40",
+            ),
+        )}
+        // El velo del fondo baja a un tinte: sobre un video, lo de atrás no es
+        // ruido a tapar — es justo lo que la persona está mirando.
+        scrimClassName={overVideo ? "bg-media-shade/25" : undefined}
         // El body toma el control del layout: header fijo + lista scrolleable +
         // composer anclado abajo. Sin esto el BottomSheet scrollea todo junto.
         bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
@@ -127,6 +212,7 @@ export function CommentsSheetProvider({ children }: { children: ReactNode }) {
             key={`${session.subject.kind}:${session.subject.id}`}
             subject={session.subject}
             initialCount={session.initialCount}
+            surface={session.surface}
           />
         )}
       </BottomSheet>
@@ -275,17 +361,104 @@ async function loadListingThread(listingId: string): Promise<ThreadResult> {
   };
 }
 
+/** Velocidad del desplazamiento automático del hilo, en píxeles por segundo. */
+const AUTO_SCROLL_PX_PER_SECOND = 16;
+/** Respiro antes de arrancar: primero se leen los primeros comentarios quietos. */
+const AUTO_SCROLL_DELAY_MS = 1400;
+
+/**
+ * El hilo se desplaza SOLO, despacio, mientras la persona mira el video
+ * (feedback cliente 2026-07-27: "si quieren leer los comentarios, los
+ * comentarios se van moviendo solo como si fuera un scrolling").
+ *
+ * Reglas duras, para que ayude en vez de estorbar:
+ *  · sólo sobre VIDEO — en el feed las manos ya están scrolleando;
+ *  · con prefers-reduced-motion NO arranca nunca;
+ *  · cualquier señal de que la persona tomó el control (rueda, dedo, tecla, o el
+ *    foco entrando al campo de escribir) lo apaga DEFINITIVAMENTE mientras dure
+ *    esta hoja: volver a arrancar solo sería pisarle el scroll a alguien que
+ *    está leyendo;
+ *  · al llegar al final se apaga. No vuelve arriba: un loop infinito marea.
+ */
+function useAutoScrollThread(
+  scrollRef: React.RefObject<HTMLDivElement | null>,
+  rootRef: React.RefObject<HTMLDivElement | null>,
+  enabled: boolean,
+) {
+  useEffect(() => {
+    if (!enabled) return;
+    const node = scrollRef.current;
+    const root = rootRef.current;
+    if (!node || !root || typeof requestAnimationFrame !== "function") return;
+
+    let frame = 0;
+    let timer = 0;
+    let lastTime = 0;
+    // Posición propia en decimales: a 16px/s casi ningún frame llega a 1px, y
+    // leer scrollTop de vuelta (redondeado) haría que nunca avance.
+    let position = node.scrollTop;
+
+    const stop = () => {
+      if (frame) cancelAnimationFrame(frame);
+      if (timer) clearTimeout(timer);
+      frame = 0;
+      timer = 0;
+    };
+
+    const step = (now: number) => {
+      if (lastTime === 0) lastTime = now;
+      const elapsed = now - lastTime;
+      lastTime = now;
+      const max = node.scrollHeight - node.clientHeight;
+      if (max > 0) {
+        position = Math.min(
+          position + (AUTO_SCROLL_PX_PER_SECOND * elapsed) / 1000,
+          max,
+        );
+        node.scrollTop = position;
+        if (position >= max) {
+          stop();
+          return;
+        }
+      }
+      frame = requestAnimationFrame(step);
+    };
+
+    timer = window.setTimeout(() => {
+      timer = 0;
+      frame = requestAnimationFrame(step);
+    }, AUTO_SCROLL_DELAY_MS);
+
+    // Todo el panel, no sólo la lista: tocar el composer también es tomar el
+    // control (y el foco en el input llega como focusin desde ahí).
+    const events = ["pointerdown", "touchstart", "wheel", "keydown", "focusin"];
+    for (const name of events) {
+      root.addEventListener(name, stop, { passive: true });
+    }
+    return () => {
+      stop();
+      for (const name of events) root.removeEventListener(name, stop);
+    };
+  }, [enabled, rootRef, scrollRef]);
+}
+
 function CommentsSheetBody({
   subject,
   initialCount,
+  surface,
 }: {
   subject: CommentsSubject;
   initialCount: number;
+  surface: CommentsSurface;
 }) {
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
   const headingId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Sobre video todo se pinta con la tinta de media (claro sobre el vidrio
+  // oscuro); sobre el feed, con los tokens de tema de siempre.
+  const onMedia = surface === "video";
 
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [comments, setComments] = useState<LoadedComment[]>([]);
@@ -419,33 +592,74 @@ function CommentsSheetBody({
   const shownCount = status === "ready" ? visibleCount : initialCount;
   const isEmpty = status === "ready" && visibleCount === 0;
 
+  useAutoScrollThread(
+    scrollRef,
+    rootRef,
+    onMedia && !reduceMotion && status === "ready" && visibleCount > 0,
+  );
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={rootRef} className="flex min-h-0 flex-1 flex-col">
       {/* Encabezado fijo */}
       <div className="shrink-0 px-6 pb-3 pt-1">
-        <h2 id={headingId} className="font-display text-xl font-bold text-foreground">
+        <h2
+          id={headingId}
+          className={cn(
+            "font-display text-xl font-bold",
+            onMedia ? "text-on-media" : "text-foreground",
+          )}
+        >
           {COPY.comments.title}{" "}
-          <span className="numeric font-semibold text-foreground-muted">
+          <span
+            className={cn(
+              "numeric font-semibold",
+              onMedia ? "text-on-media" : "text-foreground-muted",
+            )}
+          >
             ({shownCount})
           </span>
         </h2>
       </div>
 
       {/* Región scrolleable del hilo */}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6">
-        {status === "loading" && <CommentsSkeleton />}
+      <div
+        ref={scrollRef}
+        data-comments-thread=""
+        className="min-h-0 flex-1 overflow-y-auto px-6"
+      >
+        {status === "loading" && <CommentsSkeleton onMedia={onMedia} />}
 
         {status === "error" && (
           <div className="flex flex-col items-center gap-3 py-10 text-center">
-            <p className="text-base font-semibold text-foreground">
+            <p
+              className={cn(
+                "text-base font-semibold",
+                onMedia ? "text-on-media" : "text-foreground",
+              )}
+            >
               {COPY.comments.loadErrorTitle}
             </p>
-            <p className="text-sm text-foreground-secondary">
+            <p
+              className={cn(
+                "text-sm",
+                // Sin alpha: este texto se apoya en el vidrio pelado (0.72), y
+                // ahí un 80% de tinta cae por debajo de AA sobre un video claro.
+                // La jerarquía la hace el tamaño, no la transparencia.
+                onMedia ? "text-on-media" : "text-foreground-secondary",
+              )}
+            >
               {COPY.comments.loadErrorBody}
             </p>
             <Button
               variant="secondary"
               size="sm"
+              // Sobre el vidrio, el botón claro de siempre sería justo el bloque
+              // blanco que el cliente pidió sacar: acá va contorneado en tinta
+              // de media (AA de sobra sobre el velo al 72%).
+              className={cn(
+                onMedia &&
+                  "border border-on-media/45 bg-transparent text-on-media hover:bg-on-media/10",
+              )}
               onClick={() => {
                 setStatus("loading");
                 void load();
@@ -458,10 +672,23 @@ function CommentsSheetBody({
 
         {isEmpty && (
           <div className="flex flex-col items-center gap-1.5 py-10 text-center">
-            <p className="text-base font-semibold text-foreground">
+            <p
+              className={cn(
+                "text-base font-semibold",
+                onMedia ? "text-on-media" : "text-foreground",
+              )}
+            >
               {COPY.comments.emptyTitle}
             </p>
-            <p className="text-sm text-foreground-secondary">
+            <p
+              className={cn(
+                "text-sm",
+                // Sin alpha: este texto se apoya en el vidrio pelado (0.72), y
+                // ahí un 80% de tinta cae por debajo de AA sobre un video claro.
+                // La jerarquía la hace el tamaño, no la transparencia.
+                onMedia ? "text-on-media" : "text-foreground-secondary",
+              )}
+            >
               {COPY.comments.emptyMessage}
             </p>
           </div>
@@ -475,6 +702,7 @@ function CommentsSheetBody({
                 author={comment.author}
                 body={comment.body}
                 timeAgoLabel={comment.timeAgoLabel}
+                tone={onMedia ? "media" : "surface"}
               />
             ))}
             {optimistic.map((item) => (
@@ -484,6 +712,7 @@ function CommentsSheetBody({
                 body={item.body}
                 timeAgoLabel={item.timeAgoLabel}
                 pending={item.pending}
+                tone={onMedia ? "media" : "surface"}
               />
             ))}
           </ul>
@@ -491,12 +720,21 @@ function CommentsSheetBody({
       </div>
 
       {/* Composer / CTA anclado abajo (keyboard-aware via BottomSheet) */}
-      <div className="shrink-0 border-t border-border px-4 pb-1 pt-3">
+      <div
+        className={cn(
+          "shrink-0 border-t px-4 pb-1 pt-3",
+          onMedia ? "border-on-media/15" : "border-border",
+        )}
+      >
         {viewer === null ? (
           // Anónimo: entrar y volver acá mismo (no perdemos el lugar).
           <Link
             href={`/entrar?next=${encodeURIComponent(pathname || "/feed")}`}
-            className={cn(buttonVariants({ variant: "outline", size: "md" }), "w-full")}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "md" }),
+              "w-full",
+              onMedia && "border-on-media/45 bg-transparent text-on-media hover:bg-on-media/10",
+            )}
           >
             {COPY.comments.signInPrompt}
           </Link>
@@ -505,12 +743,14 @@ function CommentsSheetBody({
             postId={subject.id}
             disabled={status !== "ready"}
             optimistic={optimisticHandlers}
+            tone={onMedia ? "media" : "surface"}
           />
         ) : (
           <CommentComposer
             listingId={subject.id}
             disabled={status !== "ready"}
             optimistic={optimisticHandlers}
+            tone={onMedia ? "media" : "surface"}
           />
         )}
       </div>
@@ -519,13 +759,18 @@ function CommentsSheetBody({
 }
 
 /** Silueta del hilo mientras carga (§5.2: nunca un spinner suelto). */
-function CommentsSkeleton() {
+function CommentsSkeleton({ onMedia = false }: { onMedia?: boolean }) {
   return (
     <ul className="flex flex-col gap-4 py-2" aria-hidden="true">
       {[0, 1, 2, 3].map((row) => (
         <li key={row} className="flex items-start gap-2.5">
           <Skeleton className="size-8 shrink-0 rounded-full" />
-          <div className="min-w-0 flex-1 rounded-lg bg-surface-subtle px-3.5 py-2.5">
+          <div
+            className={cn(
+              "min-w-0 flex-1 rounded-lg px-3.5 py-2.5",
+              onMedia ? "bg-media-shade/35" : "bg-surface-subtle",
+            )}
+          >
             <Skeleton className="h-3.5 w-28" />
             <Skeleton className="mt-2 h-3 w-full" />
             <Skeleton className="mt-1.5 h-3 w-2/3" />

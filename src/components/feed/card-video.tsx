@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { VIDEOS_COPY } from "@/app/(app)/videos/copy";
 import { useCardLike } from "./card-like-context";
 import { COPY } from "./copy";
+import type { VideoScopeProp } from "./helpers";
 import styles from "./card-post-media.module.css";
 
 /** Umbral de visibilidad para autoplay (pedido cliente: "cuando se ve el 60%"). */
@@ -21,6 +22,20 @@ const AUTOPLAY_DELAY_MS = 2000;
  * módulos y armar un ciclo (card-post-media ya importa a CardVideo).
  */
 const DOUBLE_TAP_MS = 250;
+
+/**
+ * Scope que significa "acá NO hay reel". El scroll vertical infinito de videos
+ * existe SÓLO donde el contenido ya es un flujo: el feed (`/feed`) y la sección
+ * Videos (`/videos`). En una pantalla que muestra UNA publicación —el detalle de
+ * un post, al que se llega desde el perfil de alguien o desde las novedades de
+ * un evento— el video se mira ahí y se vuelve a donde estabas (feedback cliente
+ * 2026-07-27: "si tú estás en un evento y le das click en un posting… no se
+ * scrollean"; "no lo puedes scrollear porque te sale de la propiedad").
+ *
+ * Quien monta la card pasa este valor como `videoScope`; CardPostMedia lo lee y
+ * en vez del reel abre el visor a pantalla completa del propio post.
+ */
+export const NO_REEL_SCOPE = "sin-reel";
 
 /**
  * `play()` puede devolver una promesa rechazada (política de autoplay) o
@@ -40,10 +55,27 @@ export interface CardVideoProps {
   src: string;
   /** Post de origen — para navegar al feed de videos a pantalla completa. */
   postId: string;
-  /** Contexto del feed de videos (p. ej. "para-ti" en el feed general). */
-  scope: string;
+  /**
+   * Contexto del feed de videos (p. ej. "para-ti" en el feed general). Tipado
+   * como el resto de la cadena: un scope inventado no puede llegar hasta la URL
+   * del reel sin que el compilador lo frene (ver `VideoScopeProp`).
+   */
+  scope: VideoScopeProp;
   /** Vistas acumuladas del post; 0 (o sin dato) no muestra píldora. */
   viewCount?: number;
+  /**
+   * ¿Es el medio que se está viendo? Sólo el activo puede reproducir. En un post
+   * con varios medios (MediaCarousel) esto garantiza que NUNCA suenen dos videos
+   * a la vez: al salir de su diapositiva el video se pausa, aunque siga entrando
+   * en el viewport de reojo durante el swipe. Un video suelto es siempre activo.
+   */
+  active?: boolean;
+  /**
+   * Qué hace el toque simple. Sin esto abre el reel vertical (`/videos`) — el
+   * camino del feed. Con esto manda quien monta el video: el detalle de una
+   * publicación abre el visor a pantalla completa y NO el scroll infinito.
+   */
+  onTap?: () => void;
   className?: string;
 }
 
@@ -61,7 +93,15 @@ export interface CardVideoProps {
  * prefers-reduced-motion: NO autoplay (el video reproduce en frío es movimiento).
  * Queda en pausa mostrando su primer frame; el usuario abre el visor si quiere.
  */
-export function CardVideo({ src, postId, scope, viewCount = 0, className }: CardVideoProps) {
+export function CardVideo({
+  src,
+  postId,
+  scope,
+  viewCount = 0,
+  active = true,
+  onTap,
+  className,
+}: CardVideoProps) {
   const router = useRouter();
   const reduce = usePrefersReducedMotion();
   const like = useCardLike();
@@ -71,9 +111,20 @@ export function CardVideo({ src, postId, scope, viewCount = 0, className }: Card
   const [muted, setMuted] = useState(true);
   const [bursts, setBursts] = useState(0);
 
+  // Dejar de ser el medio activo (el usuario pasó a la foto siguiente del
+  // carrusel) pausa YA, sin esperar a que el observer note que salió de vista.
+  useEffect(() => {
+    if (active) return;
+    const node = videoRef.current;
+    node?.pause();
+  }, [active]);
+
   useEffect(() => {
     // Reduced-motion: no autoplay. El video queda pausado (primer frame).
     if (reduce) return;
+    // Fuera de la diapositiva visible no se arranca nada: dos videos del mismo
+    // post no pueden sonar juntos.
+    if (!active) return;
     const node = videoRef.current;
     if (!node || typeof IntersectionObserver === "undefined") return;
 
@@ -110,7 +161,7 @@ export function CardVideo({ src, postId, scope, viewCount = 0, className }: Card
       clearDelay();
       io.disconnect();
     };
-  }, [reduce]);
+  }, [reduce, active]);
 
   // Si la card se desmonta con un toque en vuelo (scroll rápido), no dejar que
   // el timer navegue desde una card que ya no está en pantalla.
@@ -133,6 +184,12 @@ export function CardVideo({ src, postId, scope, viewCount = 0, className }: Card
   }
 
   function openVideos() {
+    // Fuera del feed y de /videos no hay reel: quien monta el video decide qué
+    // pasa (ver NO_REEL_SCOPE y CardPostMedia).
+    if (onTap) {
+      onTap();
+      return;
+    }
     router.push(
       `/videos?start=${encodeURIComponent(postId)}&scope=${encodeURIComponent(scope)}`,
     );
@@ -177,6 +234,9 @@ export function CardVideo({ src, postId, scope, viewCount = 0, className }: Card
       <button
         type="button"
         onClick={handleTap}
+        // Fuera de la diapositiva visible sale de la tabulación: entrar a un
+        // carrusel no puede obligar a pasar por los medios que no se ven.
+        tabIndex={active ? 0 : -1}
         aria-label={COPY.post.playVideo}
         className="absolute inset-0 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring"
       />
@@ -214,6 +274,7 @@ export function CardVideo({ src, postId, scope, viewCount = 0, className }: Card
       <button
         type="button"
         onClick={toggleMute}
+        tabIndex={active ? 0 : -1}
         aria-label={muted ? COPY.post.unmuteVideo : COPY.post.muteVideo}
         className="absolute bottom-2 right-2 grid min-h-11 min-w-11 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
       >

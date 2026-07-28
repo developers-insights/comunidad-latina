@@ -178,6 +178,11 @@ const broadcastSchema = z
       .optional()
       .or(z.literal("").transform(() => undefined)),
     targetIds: z.array(z.uuid()).min(1).max(100),
+    /**
+     * `broadcasts.severity` (migración 0041). Lo que no parsea cae a 'info':
+     * un valor raro jamás puede convertir un anuncio común en una emergencia.
+     */
+    severity: z.enum(["info", "urgent"]).catch("info"),
   })
   .superRefine((value, ctx) => {
     const starts = value.startsAt ? new Date(value.startsAt) : null;
@@ -204,6 +209,7 @@ export async function createBroadcast(
     startsAt: formData.get("startsAt") ?? "",
     endsAt: formData.get("endsAt") ?? "",
     targetIds: formData.getAll("targetIds").filter((v) => typeof v === "string"),
+    severity: formData.get("severity") ?? "info",
   });
   if (!parsed.success) return { status: "invalid", message: COPY.invalid };
   const input = parsed.data;
@@ -213,16 +219,18 @@ export async function createBroadcast(
   const { supabase, user } = ctx;
 
   // La policy exige created_by = auth.uid() — firmamos como uno mismo.
+  const row = {
+    created_by: user.id,
+    title: input.title,
+    body: input.body,
+    cta_url: input.ctaUrl ?? null,
+    ...(input.startsAt ? { starts_at: new Date(input.startsAt).toISOString() } : {}),
+    ends_at: input.endsAt ? new Date(input.endsAt).toISOString() : null,
+  };
+
   const { data: broadcast, error } = await supabase
     .from("broadcasts")
-    .insert({
-      created_by: user.id,
-      title: input.title,
-      body: input.body,
-      cta_url: input.ctaUrl ?? null,
-      ...(input.startsAt ? { starts_at: new Date(input.startsAt).toISOString() } : {}),
-      ends_at: input.endsAt ? new Date(input.endsAt).toISOString() : null,
-    })
+    .insert({ ...row, severity: input.severity })
     .select("id")
     .single();
 
@@ -250,15 +258,21 @@ export async function createBroadcast(
     action: "broadcast.created",
     subjectKind: "broadcast",
     subjectId: broadcast.id,
-    meta: { targets: input.targetIds.length },
+    meta: { targets: input.targetIds.length, severity: input.severity },
   });
 
   revalidatePath("/admin/global");
+
+  const where =
+    input.targetIds.length === 1
+      ? "1 comunidad"
+      : `${input.targetIds.length} comunidades`;
+
   return {
     status: "success",
     message:
-      input.targetIds.length === 1
-        ? "Broadcast enviado a 1 comunidad."
-        : `Broadcast enviado a ${input.targetIds.length} comunidades.`,
+      input.severity === "urgent"
+        ? `Alerta de emergencia enviada a ${where}.`
+        : `Broadcast enviado a ${where}.`,
   };
 }

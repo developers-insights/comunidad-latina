@@ -1,0 +1,11 @@
+import type { ReactNode } from "react";
+import { ModuleGate } from "@/components/shell/module-gate";
+
+/**
+ * Guard de módulo: si el panel apagó "Negocios" esta rama entera deja de
+ * existir (404), y si quedó en "Muy pronto" sirve esa pantalla en esta misma
+ * URL. Cubre el listado y todo lo que cuelga debajo. Ver module-gate.tsx.
+ */
+export default function NegociosLayout({ children }: { children: ReactNode }) {
+  return <ModuleGate moduleKey="negocios">{children}</ModuleGate>;
+}

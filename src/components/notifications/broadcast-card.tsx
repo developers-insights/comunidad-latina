@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Megaphone } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, Button, useToast } from "@/components/ui";
 import { dismissBroadcastAction } from "@/app/(app)/notificaciones/actions";
+import { safeExternalHref } from "@/lib/url/safe-href";
 
 const COPY = {
   eyebrow: "Mensaje de Comunidad Latina",
@@ -45,14 +46,26 @@ export function BroadcastCard({ broadcast }: { broadcast: BroadcastCardData }) {
     });
   };
 
+  /**
+   * REDIRECCIÓN ABIERTA, confirmada en vivo (auditoría 2026-07-27): acá se
+   * decidía "es interna" con `url.startsWith("/")`, y `//sitio-falso.com` pasa
+   * ese chequeo. El `router.push` navegaba FUERA del sitio sin abrir pestaña ni
+   * avisar, desde una tarjeta firmada "Mensaje de Comunidad Latina" — o sea, el
+   * escalón perfecto para un login clonado, contra un público de migrantes.
+   *
+   * La clasificación ahora la hace `safeExternalHref` mirando el ORIGEN
+   * resuelto, no el prefijo del string (ahí también se cubren `/\evil.com` y los
+   * protocolos que `zod.url()` deja pasar, como `javascript:`).
+   */
+  const cta = safeExternalHref(broadcast.ctaUrl);
+
   const openCta = () => {
-    const url = broadcast.ctaUrl;
-    if (!url) return;
+    if (!cta) return;
     acknowledge(() => {
-      if (url.startsWith("/")) {
-        router.push(url);
+      if (cta.external) {
+        window.open(cta.href, "_blank", "noopener,noreferrer");
       } else {
-        window.open(url, "_blank", "noopener,noreferrer");
+        router.push(cta.href);
       }
     });
   };
@@ -77,7 +90,9 @@ export function BroadcastCard({ broadcast }: { broadcast: BroadcastCardData }) {
             {broadcast.body}
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            {broadcast.ctaUrl && (
+            {/* Si la URL no se puede ofrecer con seguridad, no hay botón: el
+                aviso se lee igual, pero nadie toca un destino que no validamos. */}
+            {cta && (
               <Button size="sm" variant="primary" loading={pending} onClick={openCta}>
                 {COPY.cta}
               </Button>
@@ -85,7 +100,7 @@ export function BroadcastCard({ broadcast }: { broadcast: BroadcastCardData }) {
             <Button
               size="sm"
               variant="ghost"
-              loading={pending && !broadcast.ctaUrl}
+              loading={pending && !cta}
               disabled={pending}
               onClick={() => acknowledge()}
             >

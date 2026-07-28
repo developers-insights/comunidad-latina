@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
+  BookmarkSimple,
   Briefcase,
   CaretRight,
   PencilSimple,
@@ -38,6 +39,8 @@ const COPY = {
   trustHeading: "Tu Trust Score",
   trustHint:
     "Crece con tu tiempo en la comunidad, tus verificaciones y el aval de tus vecinos.",
+  savedTitle: "Guardados",
+  savedDesc: "Publicaciones y avisos que guardaste, para volver a verlos.",
   editHeading: "Editar tu perfil",
   helpHeading: "Ayuda y seguridad",
   blockedTitle: "Personas bloqueadas",
@@ -179,6 +182,37 @@ export default async function PerfilPage({
         heading={COPY.postsHeading}
         emptyMessage={COPY.postsEmpty}
       />
+
+      {/* Guardados — acceso privado a lo que guardaste del feed y del marketplace
+          (feedback cliente 27/7: el botón de guardar existía sin pantalla propia). */}
+      <section className="flex flex-col gap-3">
+        <Link
+          href="/perfil/guardados"
+          className="group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+        >
+          <BezelCard coreClassName="flex items-center gap-4 p-5">
+            <span
+              aria-hidden="true"
+              className="flex size-12 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-foreground-secondary"
+            >
+              <BookmarkSimple size={26} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-display text-base font-semibold text-foreground">
+                {COPY.savedTitle}
+              </span>
+              <span className="mt-0.5 block text-sm text-foreground-secondary">
+                {COPY.savedDesc}
+              </span>
+            </span>
+            <CaretRight
+              size={18}
+              aria-hidden="true"
+              className="shrink-0 text-foreground-muted transition-transform duration-(--duration-fast) ease-(--ease-out-premium) group-hover:translate-x-0.5"
+            />
+          </BezelCard>
+        </Link>
+      </section>
 
       {/* Editar — destino del ancla "Editar perfil" de la cabecera. */}
       <BezelCard id="editar-perfil" className="scroll-mt-20">

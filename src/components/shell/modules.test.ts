@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { MODULES, isModuleActive } from "./modules";
+import { BROWSE_MODULES, MODULES, isBrowseRoute, isModuleActive } from "./modules";
+import { ALWAYS_ON_MODULE_KEYS } from "./module-access";
+import { MODULE_KEYS } from "@/app/admin/dominio/modules";
 
 describe("isModuleActive", () => {
   it("matchea la ruta exacta", () => {
@@ -72,5 +74,103 @@ describe("MODULES", () => {
       const activos = MODULES.filter((other) => isModuleActive(item.href, other.href));
       expect(activos.map((a) => a.href)).toEqual([item.href]);
     }
+  });
+});
+
+/**
+ * El puente entre el interruptor del panel y la cápsula que ve el usuario es
+ * `ModuleItem.moduleKey`. Si se desincroniza, el panel guarda y la app ignora —
+ * exactamente el bug que este trabajo vino a cerrar. Estos tests son la alarma.
+ */
+describe("MODULES ↔ MODULE_KEYS (el panel y la app hablan del mismo módulo)", () => {
+  it("toda clave declarada existe en el panel", () => {
+    for (const item of MODULES) {
+      if (!item.moduleKey) continue;
+      expect(MODULE_KEYS as readonly string[], `${item.href} apunta a una clave fantasma`).toContain(
+        item.moduleKey,
+      );
+    }
+  });
+
+  it("ningún módulo se queda sin cablear cuando su clave entra al panel", () => {
+    // Regla: si el panel gobierna una clave con el nombre de la ruta, el ítem
+    // TIENE que declararla. Los diez módulos de hoy —incluidos /videos y
+    // /empleos, que entraron a MODULE_KEYS el 27/7— ya la declaran; este test es
+    // la alarma para el próximo que se sume al panel sin cablearse en el menú.
+    for (const item of MODULES) {
+      const slug = item.href.slice(1);
+      if (!(MODULE_KEYS as readonly string[]).includes(slug)) continue;
+      expect(item.moduleKey, `${item.href} está en el panel pero no declara su clave`).toBe(slug);
+    }
+  });
+
+  it("los módulos que el cliente quiere poder apagar son gobernables de verdad", () => {
+    // Los dos que nombró en la call del 27/7 («no vamos a abrir el Creator
+    // Marketplace ahora… cuando ya hay unos mil usuarios, prendemos el
+    // Marketplace»), más el resto de las secciones de catálogo.
+    for (const href of [
+      "/marketplace",
+      "/creadores",
+      "/propiedades",
+      "/eventos",
+      "/negocios",
+      "/profesionales",
+    ]) {
+      const item = MODULES.find((candidate) => candidate.href === href);
+      expect(item?.moduleKey, `${href} no se puede apagar desde el panel`).toBeTruthy();
+      expect(ALWAYS_ON_MODULE_KEYS.has(item?.moduleKey ?? ""), `${href} es intocable`).toBe(false);
+    }
+  });
+});
+
+describe("BROWSE_MODULES (categorías de /buscar)", () => {
+  it("son los módulos que NO tienen pestaña propia en el bottom nav", () => {
+    // Inicio y Videos están a un toque desde cualquier pantalla: repetirlos en
+    // Buscar enseñaría dos caminos para lo mismo.
+    expect(BROWSE_MODULES.map((m) => m.href)).not.toContain("/feed");
+    expect(BROWSE_MODULES.map((m) => m.href)).not.toContain("/videos");
+    expect(BROWSE_MODULES).toHaveLength(MODULES.length - 2);
+  });
+
+  it("son exactamente las siete secciones de listado", () => {
+    // Las mismas siete que llevan la burbuja "Publicá tu…": si alguien agrega
+    // un módulo nuevo, tiene que decidir a conciencia si va a los dos lados.
+    expect(BROWSE_MODULES.map((m) => m.href).sort()).toEqual([
+      "/creadores",
+      "/empleos",
+      "/eventos",
+      "/marketplace",
+      "/negocios",
+      "/profesionales",
+      "/propiedades",
+    ]);
+  });
+
+  it("cada categoría llega con su ícono 3D — la grilla es visual antes que textual", () => {
+    for (const item of BROWSE_MODULES) {
+      expect(item.image, `${item.href} sin ícono 3D`).toMatch(/^\/icons\/menu\/.+\.webp$/);
+    }
+  });
+});
+
+describe("isBrowseRoute", () => {
+  it("reconoce una categoría y sus subrutas", () => {
+    expect(isBrowseRoute("/negocios")).toBe(true);
+    expect(isBrowseRoute("/propiedades/abc-123")).toBe(true);
+    expect(isBrowseRoute("/marketplace/publicar")).toBe(true);
+  });
+
+  it("no reclama las pestañas ajenas ni /buscar", () => {
+    // /buscar es la página exacta de la pestaña: la marca `isModuleActive`,
+    // no esta función (si no, el estado se calcularía dos veces).
+    expect(isBrowseRoute("/buscar")).toBe(false);
+    expect(isBrowseRoute("/feed")).toBe(false);
+    expect(isBrowseRoute("/videos")).toBe(false);
+    expect(isBrowseRoute("/mensajes")).toBe(false);
+    expect(isBrowseRoute("/perfil")).toBe(false);
+  });
+
+  it("no se deja engañar por un prefijo de texto", () => {
+    expect(isBrowseRoute("/negocios-viejos")).toBe(false);
   });
 });

@@ -57,6 +57,7 @@ export const COPY = {
     },
     addPhoto: "Agregar foto",
     addPhotos: "Agregar fotos",
+    addMorePhotos: "Sumar otra foto",
     changePhoto: "Cambiar foto",
     removePhoto: "Quitar foto",
     photoTooBig: "Esa foto es muy pesada — probá con una de menos de 5 MB.",
@@ -97,14 +98,72 @@ export const COPY = {
     // copy (COPY.post.questionChip); esta es la del composer, antes de publicar.
     questionModeChip: "Pregunta",
     questionModeRemove: "Salir del modo pregunta",
+
+    /**
+     * PASO DE TEXTO (rediseño 2026-07-27, feedback del cliente: "no está el
+     * escrito aparte y aparte la foto, sino das una foto y en la foto te da el
+     * acceso [para] poner el comentario"). Elegido el medio, se abre una hoja
+     * con el medio a la vista y el texto debajo — el modelo de Instagram.
+     */
+    compose: {
+      mediaTitle: "Contá de qué se trata",
+      /**
+       * El texto invita a hablar de LO QUE SE VE, no de la nada: cambia según
+       * lo que la persona acaba de elegir (una foto, varias, o un video).
+       */
+      mediaPlaceholder: (photos: number, hasVideo: boolean): string => {
+        if (hasVideo && photos === 0) return "¿Qué querés contar de este video?";
+        if (hasVideo) return "¿Qué querés contar de lo que subiste?";
+        if (photos > 1) return "¿Qué querés contar de estas fotos?";
+        return "¿Qué querés contar de esta foto?";
+      },
+      questionTitle: "Preguntale a tu comunidad",
+      questionPlaceholder: "¿Qué querés preguntar?",
+      /** Encabeza la vista previa del banner de la pregunta. */
+      previewLabel: "Así se va a ver",
+      /** Encuesta Sí/No opcional (contrato 0041). */
+      pollLabel: "Agregar encuesta de Sí o No",
+      pollHint: "Tu comunidad responde con un toque y vas viendo los votos.",
+      close: "Cerrar",
+      publishQuestion: "Publicar pregunta",
+      /** Cupo de fotos y video, visible mientras se arma la publicación. */
+      mediaCount: (photos: number, hasVideo: boolean): string => {
+        const parts: string[] = [];
+        if (photos > 0) parts.push(photos === 1 ? "1 foto" : `${photos} fotos`);
+        if (hasVideo) parts.push("1 video");
+        return parts.join(" · ");
+      },
+    },
+
+    /**
+     * REGLA "TODO POST LLEVA IMAGEN" (trigger MEDIA_REQUIRED, 0023) contada en
+     * humano. Aparece cuando alguien escribe rápido y toca Publicar sin medio:
+     * en vez de un error, dos caminos — y el texto escrito NO se pierde.
+     */
+    needsMedia: {
+      sheetTitle: "¿Cómo lo mostramos?",
+      body: "Las publicaciones de la comunidad se ven con imagen. Elegí un camino y seguimos con lo que ya escribiste.",
+      withMediaTitle: "Con una foto o un video",
+      withMediaBody: "Lo elegís y escribís el texto en el mismo paso.",
+      asQuestionTitle: "Como pregunta",
+      asQuestionBody: "Sale sobre un fondo de la comunidad, sin foto.",
+      keepWriting: "Seguir escribiendo",
+    },
+
     /**
      * Menú "crear publicación" (feedback cliente 2026-07-24: "menú crear-post"
      * pendiente). Una fila-disparador abre un BottomSheet con TODOS los tipos
      * que se pueden crear desde la comunidad — no solo el post con foto/video,
      * también un acceso directo a cada módulo (vivienda, negocios, etc.).
+     *
+     * Rediseño 2026-07-27: ESTE es el único disparador del composer. Los dos
+     * recuadros grandes de "Agregar foto / Agregar video" se fueron ("tiene
+     * mucho espacio blanco esta parte tan grande de aquí"): la foto y el video
+     * ahora se eligen DENTRO del flujo que abre cada opción.
      */
     createMenu: {
       rowLabel: "¿Qué querés publicar?",
+      rowHint: "Foto, video, pregunta y todo lo demás",
       sheetTitle: "Elegí qué publicar",
       tiles: {
         photo: {
@@ -164,6 +223,31 @@ export const COPY = {
     // banner o algo"): cuando la pregunta no entra entera en el banner del feed,
     // esta píldora avisa que hay más y que tocando se lee completa.
     questionReadFull: "Ver la pregunta completa",
+
+    /**
+     * ENCUESTA SÍ / NO de una pregunta (contrato 0041, feedback cliente
+     * 2026-07-27: "acá viene sí o no, y viene el cuadro así para irse llenando
+     * los votos… sale 30 sí, 50 no").
+     *
+     * Los dos botones son los MISMOS antes y después de votar: al votar se
+     * llenan con la barra de resultados. Por eso no hay copy de "cambiar voto"
+     * como acción aparte — tocar la otra opción ya la cambia, y el hint lo dice.
+     */
+    poll: {
+      groupLabel: "Encuesta: sí o no",
+      yes: "Sí",
+      no: "No",
+      voteYes: "Votar que sí",
+      voteNo: "Votar que no",
+      /** Resultado por opción: "30 · 37%". Compacto y con las dos cifras. */
+      result: (votes: number, percent: number) => `${votes} · ${percent}%`,
+      totalVotes: (votes: number) =>
+        votes === 1 ? "1 voto" : `${votes} votos`,
+      noVotesYet: "Todavía nadie votó",
+      changeHint: "Podés cambiar tu voto",
+      errorTitle: "No pudimos registrar tu voto",
+      errorBody: "Puede ser un ratito de conexión floja — no es tu culpa. Probá de nuevo.",
+    },
     // FTC honesto: la campaña paga se divulga (igual que "Destacado" de boosts).
     adChip: "Publicidad",
     /** "· por {nombre}" bajo el nombre de la entidad. */

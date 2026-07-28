@@ -1,5 +1,6 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 
@@ -90,6 +91,115 @@ export async function toggleSaveAction(
     return { ok: false, code: "error" };
   }
   return { ok: true, saved: false };
+}
+
+// ---------------------------------------------------------------------------
+// Votar en la encuesta Sí/No de una pregunta (contrato 0041)
+// ---------------------------------------------------------------------------
+
+const votePollSchema = z.object({
+  postId: z.uuid(),
+  /** true = Sí · false = No. El check de la DB solo conoce este formato. */
+  choice: z.boolean(),
+});
+
+export type VotePostPollInput = { postId: string; choice: boolean };
+
+export type VotePostPollResult =
+  | {
+      ok: true;
+      choice: boolean;
+      /** Contadores frescos del trigger. null si no se pudieron releer. */
+      yes: number | null;
+      no: number | null;
+    }
+  | {
+      ok: false;
+      code:
+        | "unauthenticated"
+        | "tenant-mismatch"
+        | "invalid"
+        /** El post no existe, no es pregunta, o no tiene encuesta. */
+        | "not-poll"
+        | "error";
+      message?: string;
+    };
+
+/**
+ * Registra —o CAMBIA— el voto del usuario en la encuesta de una pregunta.
+ *
+ * Reglas duras:
+ * - Zod primero, guard de tenant después y ANTES de cualquier escritura.
+ * - El post se re-lee del servidor para confirmar que es `kind='question'` CON
+ *   `poll_kind='yes_no'`: el cliente no decide dónde se puede votar. Un post
+ *   común, una pregunta sin encuesta o un post de otra comunidad se rechazan
+ *   acá, antes de tocar `post_poll_votes` (la RLS es la última línea, no la
+ *   única).
+ * - Un voto por persona, cambiable: es un UPSERT sobre la PK (post_id,
+ *   voter_id). Cambiar de opinión no crea una fila nueva ni infla contadores.
+ * - Los contadores los mantiene el TRIGGER. Acá solo se releen para devolver la
+ *   verdad y que la UI optimista no quede desfasada.
+ */
+export async function votePostPollAction(
+  input: VotePostPollInput,
+): Promise<VotePostPollResult> {
+  const parsed = votePollSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, code: "invalid" };
+  const { postId, choice } = parsed.data;
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") return { ok: false, code: "unauthenticated" };
+    if (guard.reason === "tenant-mismatch") {
+      return { ok: false, code: "tenant-mismatch", message: guard.message };
+    }
+    return { ok: false, code: "error", message: guard.message };
+  }
+  const { supabase, user } = guard;
+
+  // `poll_kind` llega con la 0041 y todavía no está en database.types.ts →
+  // cliente de schema abierto (mismo patrón que `saves` en queries.ts).
+  const open = supabase as unknown as SupabaseClient;
+
+  const { data: post, error: readError } = await open
+    .from("posts")
+    .select("id, kind, poll_kind")
+    .eq("id", postId)
+    .maybeSingle();
+
+  if (readError) {
+    console.warn("[engagement] lectura de la pregunta falló", { code: readError.code });
+    return { ok: false, code: "error" };
+  }
+  // RLS mediante: si no se ve, para este usuario no existe.
+  if (!post || post.kind !== "question" || post.poll_kind !== "yes_no") {
+    return { ok: false, code: "not-poll" };
+  }
+
+  const { error: voteError } = await open
+    .from("post_poll_votes")
+    .upsert({ post_id: postId, voter_id: user.id, choice }, { onConflict: "post_id,voter_id" });
+
+  if (voteError) {
+    console.warn("[engagement] upsert de voto falló", { code: voteError.code });
+    return { ok: false, code: "error" };
+  }
+
+  // Contadores frescos (los escribió el trigger en la misma transacción). Si la
+  // relectura falla, el voto YA quedó: se devuelve ok y la UI conserva su
+  // estimación optimista en vez de mentir un fracaso.
+  const { data: counts } = await open
+    .from("posts")
+    .select("poll_yes_count, poll_no_count")
+    .eq("id", postId)
+    .maybeSingle();
+
+  return {
+    ok: true,
+    choice,
+    yes: typeof counts?.poll_yes_count === "number" ? counts.poll_yes_count : null,
+    no: typeof counts?.poll_no_count === "number" ? counts.poll_no_count : null,
+  };
 }
 
 // ---------------------------------------------------------------------------

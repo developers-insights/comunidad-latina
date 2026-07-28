@@ -1,12 +1,13 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { CaretDown, Plus } from "@phosphor-icons/react/dist/ssr";
-import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
+import { EmptyState, SectionCta, SectionHeading, Skeleton, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/empleos/copy";
 import { EmploymentTypeChips } from "@/components/empleos/employment-type-chips";
 import { EMPLOYMENT_TYPES, type EmploymentType } from "@/components/empleos/helpers";
 import { JobCard } from "@/components/empleos/job-card";
 import { JobListSkeleton } from "@/components/empleos/job-skeletons";
+import { t } from "@/lib/i18n";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import { fetchJobsPage } from "./queries";
@@ -14,6 +15,13 @@ import { fetchJobsPage } from "./queries";
 export const metadata = { title: "Empleos" };
 
 const C = COPY.list;
+
+/** Acento + ícono 3D de la sección (los mismos del menú y de /buscar). */
+const SECCION = {
+  accent: "var(--accent-empleos)",
+  image: "/icons/menu/empleos.webp",
+  publicarHref: "/empleos/publicar",
+} as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -70,31 +78,23 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
 
   return (
     <>
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {C.title}
-          </h1>
-          <p className="mt-0.5 text-sm text-foreground-secondary">{C.subtitle}</p>
-        </div>
-        {/* El título es largo ("Empleos en tu comunidad") y en un celular de
-            390px el botón entero lo partía en tres renglones. Desde sm el label
-            se completa; el nombre accesible sigue conteniendo el texto visible
-            en los dos casos (WCAG 2.5.3). */}
-        <Link
-          href="/empleos/publicar"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
-        >
-          <Plus size={16} aria-hidden="true" />
-          {/* Un solo hijo flex: el `gap-2` del botón separa el ícono del label y
-              no se cuela entre las dos palabras. El espacio de adentro es un
-              espacio de verdad, así el nombre accesible dice "Publicar empleo". */}
-          <span>
-            {C.publishCtaShort}
-            <span className="hidden sm:inline"> {C.publishCtaSuffix}</span>
-          </span>
-        </Link>
-      </header>
+      {/* El título largo ("Empleos en tu comunidad") ya no compite con un botón
+          a su derecha: publicar se fue a su propia burbuja, debajo. Adiós al
+          label que se acortaba en móvil. */}
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={C.title}
+        subtitle={C.subtitle}
+      />
+
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishJobTitle")}
+        hint={t("sections", "publishJobHint")}
+        className="mb-4 mt-3"
+      />
 
       <EmploymentTypeChips className="mb-5" />
 
@@ -146,15 +146,19 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
 function PageSkeleton() {
   return (
     <div aria-busy="true">
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {C.title}
-          </h1>
-          <Skeleton className="mt-1.5 h-4 w-48" />
-        </div>
-        <Skeleton className="h-10 w-36 rounded-md" />
-      </header>
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={C.title}
+        subtitle={C.subtitle}
+      />
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishJobTitle")}
+        hint={t("sections", "publishJobHint")}
+        className="mb-4 mt-3"
+      />
       <div className="mb-5 flex gap-2">
         <Skeleton className="h-11 w-20 rounded-full" />
         <Skeleton className="h-11 w-36 rounded-full" />

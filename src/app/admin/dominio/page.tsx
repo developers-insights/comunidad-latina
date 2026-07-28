@@ -49,7 +49,10 @@ const COPY = {
   reportsEmptyTitle: "Sin reportes abiertos",
   reportsEmptyMessage: "La comunidad no reportó nada pendiente. El Escudo sigue atento.",
   modulesTitle: "Módulos de la comunidad",
-  modulesIntro: "Encendé o apagá secciones enteras. Los cambios se aplican al instante.",
+  modulesIntro:
+    "Decidí qué secciones ve tu comunidad. Podés dejar una anunciada como “Muy pronto” antes de abrirla. Los cambios se aplican al instante.",
+  modulesUnavailable:
+    "No pudimos leer cómo está configurada tu comunidad, así que abajo ves los valores por defecto. Recargá antes de guardar — si guardás ahora podrías prender secciones que tenías apagadas.",
   targetFallback: {
     listing: "Aviso reportado",
     profile: "Perfil reportado",
@@ -65,16 +68,32 @@ export default async function DominioPage() {
   // El tenant REAL del admin es el del JWT (el Host header es cosmético acá).
   const tenantId = jwtTenantId ?? tenant.id;
 
-  // Módulos de MI tenant (el del JWT) — no del tenant del Host header.
-  const { data: tenantRow } = await supabase
+  // Módulos de MI tenant (el del JWT) — no del tenant del Host header. Las dos
+  // columnas hermanas viajan en el MISMO select: se leen siempre juntas y una
+  // sin la otra no describe ningún estado.
+  const { data: tenantRow, error: modulesError } = await supabase
     .from("tenants")
-    .select("modules")
+    .select("modules, modules_soon")
     .eq("id", tenantId)
     .maybeSingle();
+
+  const asModuleRecord = (value: unknown): Record<string, boolean> | null =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, boolean>)
+      : null;
+
+  /**
+   * OJO con el fallback: `tenant.modules` en un tenant fallback está VACÍO, y
+   * vacío significa "todo activo" (ver moduleAvailability). Si la lectura falla
+   * y caemos ahí, la pantalla pinta todo "Activo" y el próximo Guardar prende
+   * secciones que el admin tenía apagadas. Por eso el fallback se usa solo
+   * cuando la fila no trae módulos, y un ERROR de lectura se avisa en pantalla.
+   */
+  const modulesUnavailable = Boolean(modulesError);
   const modules: Record<string, boolean> =
-    tenantRow && tenantRow.modules && typeof tenantRow.modules === "object" && !Array.isArray(tenantRow.modules)
-      ? (tenantRow.modules as Record<string, boolean>)
-      : tenant.modules;
+    asModuleRecord(tenantRow?.modules) ?? tenant.modules;
+  const modulesSoon: Record<string, boolean> =
+    asModuleRecord(tenantRow?.modules_soon) ?? {};
 
   // --- Stats agregadas (counts head-only, la RLS acota igual) ---------------
   const countOf = async (
@@ -290,7 +309,12 @@ export default async function DominioPage() {
           {COPY.modulesTitle}
         </h2>
         <p className="mb-3 text-sm text-foreground-secondary">{COPY.modulesIntro}</p>
-        <ModuleToggles modules={modules} />
+        {modulesUnavailable && (
+          <p role="alert" className="mb-3 text-sm text-warning-ink">
+            {COPY.modulesUnavailable}
+          </p>
+        )}
+        <ModuleToggles modules={modules} modulesSoon={modulesSoon} />
       </section>
     </div>
   );

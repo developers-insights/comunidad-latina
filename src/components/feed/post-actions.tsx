@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { toggleSaveAction } from "@/app/(app)/feed/engagement-actions";
 import { COPY } from "./copy";
 import { useCardLike, useOptimisticLike } from "./card-like-context";
+import { useCardMedia } from "./card-media-context";
 import { useCommentsSheet } from "./comments-sheet";
 
 export interface PostActionsProps {
@@ -60,6 +61,17 @@ const actionClass = cn(
  * "Guardar" tiene su propio estado optimista (la tabla `saves` no tiene contador
  * que compartir con nadie) con la MISMA tolerancia a errores que el me gusta: se
  * pinta al instante y se revierte si el server dice que no.
+ *
+ * LA FORMA DE LA HOJA la decide el MEDIO QUE SE ESTÁ VIENDO, no el primero del
+ * post: en un carrusel mezclado ("un video, dos fotos y al final el video") el
+ * dedo ya se movió, y quien toca "comentar" está mirando la diapositiva actual.
+ * Sobre un VIDEO se pide la media hoja de vidrio, que lo deja corriendo y visible
+ * detrás (feedback cliente 2026-07-27, dicho dos veces en la misma call: "le
+ * bloqueó todo el video", "los comentarios tienen que ser transparente el
+ * fondo"). Sobre una FOTO estática el vidrio no aporta nada y arriesga contraste,
+ * así que ahí se mantiene la hoja de siempre. El dato NO viaja como prop —lo
+ * publica el carrusel en el contexto de medios de la card— justamente para que
+ * no pueda quedar congelado ni desincronizarse del riel.
  */
 export function PostActions({
   postId,
@@ -76,6 +88,10 @@ export function PostActions({
   const pathname = usePathname();
   const { toast } = useToast();
   const commentsSheet = useCommentsSheet();
+  // Sin contexto (acciones montadas fuera de una card con medios) no hay video
+  // que tapar: la hoja de siempre es el default correcto.
+  const media = useCardMedia();
+  const overVideo = media?.activeKind === "video";
 
   // Estado compartido si hay provider; si no, propio (ambos hooks se llaman
   // siempre para respetar las reglas de hooks — el no usado es inofensivo).
@@ -188,7 +204,14 @@ export function PostActions({
       ) : (
         <button
           type="button"
-          onClick={() => commentsSheet.open({ postId, commentCount })}
+          onClick={() =>
+            commentsSheet.open({
+              postId,
+              commentCount,
+              // Sobre video: media hoja de vidrio, el video sigue a la vista.
+              ...(overVideo ? { surface: "video" as const } : {}),
+            })
+          }
           aria-label={`${COPY.post.comments} (${commentCount})`}
           className={actionClass}
         >

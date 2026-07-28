@@ -3,6 +3,7 @@ import { common } from "./es/common";
 import { errors } from "./es/errors";
 import { listings } from "./es/listings";
 import { nav } from "./es/nav";
+import { sections } from "./es/sections";
 import { trust } from "./es/trust";
 
 /**
@@ -10,7 +11,7 @@ import { trust } from "./es/trust";
  * (fallback automático a ES). Server-safe: sin estado, sin contexto de React.
  */
 
-const es = { common, nav, auth, listings, trust, errors } as const;
+const es = { common, nav, auth, listings, sections, trust, errors } as const;
 
 export type Dictionary = typeof es;
 export type Namespace = keyof Dictionary;

@@ -1,7 +1,15 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { CaretDown, Megaphone, Plus } from "@phosphor-icons/react/dist/ssr";
-import { Chip, EmptyState, Skeleton, buttonVariants } from "@/components/ui";
+import {
+  Bubble,
+  Chip,
+  EmptyState,
+  SectionCta,
+  SectionHeading,
+  Skeleton,
+  buttonVariants,
+} from "@/components/ui";
 import {
   COPY,
   ListingCard,
@@ -18,6 +26,7 @@ import {
   type PublisherView,
   type VerificationView,
 } from "@/components/listings";
+import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn, formatDate } from "@/lib/utils";
@@ -25,6 +34,13 @@ import { cn, formatDate } from "@/lib/utils";
 export const metadata = { title: "Vivienda" };
 
 const PAGE_SIZE = 10;
+
+/** Acento + ícono 3D de la sección (los mismos del menú y de /buscar). */
+const SECCION = {
+  accent: "var(--accent-vivienda)",
+  image: "/icons/menu/vivienda.webp",
+  publicarHref: "/publicar?kind=property",
+} as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -308,25 +324,28 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
 
   return (
     <>
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {COPY.list.title}
-          </h1>
-          <p className="mt-0.5 text-sm text-foreground-secondary">
-            {userArea ? COPY.list.subtitleNearArea(userArea) : COPY.list.subtitleDefault}
-          </p>
-        </div>
-        <Link
-          href="/publicar"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
-        >
-          <Plus size={16} aria-hidden="true" />
-          {COPY.list.publishCta}
-        </Link>
-      </header>
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={COPY.list.title}
+        subtitle={userArea ? COPY.list.subtitleNearArea(userArea) : COPY.list.subtitleDefault}
+      />
 
-      <ListingFilters zones={zones} className="mb-5" />
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishPropertyTitle")}
+        hint={t("sections", "publishPropertyHint")}
+        className="mt-3"
+      />
+
+      {/* Bandeja de filtros: el buscador y los tres selectores flotaban sueltos
+          sobre la página (justo lo que el cliente marcó como "todo suelto").
+          Adentro de una cápsula hundida se leen como UN control de búsqueda —
+          el que él describió que tiene que vivir adentro de cada categoría. */}
+      <Bubble tone="tray" shape="tile" size="none" className="mb-5 mt-4 p-3">
+        <ListingFilters zones={zones} />
+      </Bubble>
 
       {cards.length === 0 ? (
         <EmptyState
@@ -382,23 +401,27 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
 function PageSkeleton() {
   return (
     <div aria-busy="true">
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {COPY.list.title}
-          </h1>
-          <Skeleton className="mt-1.5 h-4 w-32" />
-        </div>
-        <Skeleton className="h-10 w-24 rounded-md" />
-      </header>
-      <div className="mb-5 flex flex-col gap-3">
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={COPY.list.title}
+        subtitle={COPY.list.subtitleDefault}
+      />
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishPropertyTitle")}
+        hint={t("sections", "publishPropertyHint")}
+        className="mt-3"
+      />
+      <Bubble tone="tray" shape="tile" size="none" className="mb-5 mt-4 flex flex-col gap-3 p-3">
         <Skeleton className="h-11 w-full rounded-md" />
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Skeleton className="h-11 rounded-md" />
           <Skeleton className="h-11 rounded-md" />
-          <Skeleton className="h-11 rounded-md" />
+          <Skeleton className="col-span-2 h-11 rounded-md sm:col-span-1" />
         </div>
-      </div>
+      </Bubble>
       <ListingListSkeleton />
     </div>
   );

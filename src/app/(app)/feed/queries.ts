@@ -23,6 +23,7 @@ import {
   type PostCardModel,
   type PostEntityView,
   type PostMediaView,
+  type PostPollView,
 } from "@/components/feed";
 import { formatDate, timeAgo } from "@/lib/utils";
 
@@ -201,6 +202,86 @@ export function fetchViewerSaves(
   postIds: string[],
 ): Promise<Set<string>> {
   return fetchSavedSubjectIds(supabase, viewerId, "post", postIds);
+}
+
+// ---------------------------------------------------------------------------
+// Encuestas Sí/No de las preguntas (contrato 0041)
+// ---------------------------------------------------------------------------
+
+/**
+ * Encuestas de una tanda de posts + el voto DEL VIEWER en cada una.
+ *
+ * Query APARTE y no columnas nuevas en POST_COLUMNS a propósito: el select del
+ * feed lo comparten el detalle y /videos, y una columna que todavía no existe
+ * en el entorno (la 0041 puede no estar aplicada) haría fallar la consulta
+ * ENTERA y con ella el feed. Acá, si el schema no está, se devuelve un mapa
+ * vacío: la encuesta no se pinta y todo lo demás sigue igual.
+ *
+ * Los contadores salen de `posts.poll_yes_count` / `poll_no_count`, que mantiene
+ * el trigger. El voto propio se lee filtrando por `voter_id = viewer`: nadie
+ * puede ver el voto de otra persona (y la RLS lo re-aplica).
+ */
+export async function fetchPostPolls(
+  supabase: Supabase,
+  viewerId: string | null,
+  postIds: string[],
+): Promise<Map<string, PostPollView>> {
+  const byPostId = new Map<string, PostPollView>();
+  const ids = [...new Set(postIds.filter(Boolean))];
+  if (ids.length === 0) return byPostId;
+
+  // Schema abierto: las columnas/tabla de la 0041 todavía no están en
+  // database.types.ts (mismo patrón que `saves`).
+  const open = supabase as unknown as SupabaseClient;
+
+  const { data, error } = await open
+    .from("posts")
+    .select("id, poll_kind, poll_yes_count, poll_no_count")
+    .in("id", ids)
+    .not("poll_kind", "is", null);
+
+  if (error) {
+    // Sin la migración: no hay encuestas que mostrar, no hay error que gritar.
+    console.warn("[feed] query de encuestas falló", { code: error.code });
+    return byPostId;
+  }
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    poll_kind: string | null;
+    poll_yes_count: number | null;
+    poll_no_count: number | null;
+  }>;
+  if (rows.length === 0) return byPostId;
+
+  // Voto propio SOLO de las preguntas que sí tienen encuesta.
+  const pollIds = rows.map((row) => row.id);
+  const voteByPostId = new Map<string, boolean>();
+  if (viewerId) {
+    const { data: votes, error: voteError } = await open
+      .from("post_poll_votes")
+      .select("post_id, choice")
+      .eq("voter_id", viewerId)
+      .in("post_id", pollIds);
+    if (voteError) {
+      console.warn("[feed] query de votos falló", { code: voteError.code });
+    } else {
+      for (const vote of (votes ?? []) as Array<{ post_id: string; choice: boolean }>) {
+        voteByPostId.set(vote.post_id, vote.choice);
+      }
+    }
+  }
+
+  for (const row of rows) {
+    if (row.poll_kind !== "yes_no") continue; // formato desconocido: no se inventa UI
+    byPostId.set(row.id, {
+      kind: "yes_no",
+      yes: row.poll_yes_count ?? 0,
+      no: row.poll_no_count ?? 0,
+      myVote: voteByPostId.get(row.id) ?? null,
+    });
+  }
+  return byPostId;
 }
 
 /** Ids de avisos guardados por el viewer (detalle de propiedad/profesional/…). */
@@ -474,6 +555,8 @@ export function toPostCardModel(
     isPromoted?: boolean;
     /** Guardado por el viewer (fetchViewerSaves). Ausente → no guardado. */
     savedByViewer?: boolean;
+    /** Encuesta Sí/No de la pregunta (fetchPostPolls). Ausente → sin encuesta. */
+    poll?: PostPollView | null;
     /** WhatsApp de la campaña activa de ESTE post, si ofrece uno. */
     ctaWhatsapp?: string | null;
   },
@@ -501,6 +584,7 @@ export function toPostCardModel(
     author: authorViewOf(authors, row.author_id),
     likedByViewer: likedIds.has(row.id),
     savedByViewer: extras?.savedByViewer ?? false,
+    poll: extras?.poll ?? null,
     entity: extras?.entity ?? null,
     isPromoted: extras?.isPromoted ?? false,
     ctaWhatsapp: extras?.ctaWhatsapp ?? null,

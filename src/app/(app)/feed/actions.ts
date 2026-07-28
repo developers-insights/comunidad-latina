@@ -56,6 +56,12 @@ const postSchema = z.object({
     .transform((value) => value.trim())
     .pipe(z.string().min(2).max(2000)),
   kind: z.enum(["post", "question"]),
+  /**
+   * Encuesta Sí/No de una PREGUNTA (contrato 0041). Ausente = pregunta sin
+   * encuesta. El check de la DB solo acepta 'yes_no'; que un post común no
+   * pueda traerla se valida abajo, después de parsear.
+   */
+  pollKind: z.enum(["yes_no"]).optional(),
   /** Publicar COMO esta entidad (listing propio published) — RLS lo valida. */
   entityId: z.uuid().optional(),
 });
@@ -166,10 +172,14 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   const parsed = postSchema.safeParse({
     body: formData.get("body"),
     kind: formData.get("kind"),
+    pollKind: formData.get("pollKind") || undefined,
     entityId: formData.get("entityId") || undefined,
   });
   if (!parsed.success) return { ok: false, code: GENERIC_INVALID };
   const { body, kind, entityId } = parsed.data;
+  // Solo una PREGUNTA puede llevar encuesta: en cualquier otro kind el campo se
+  // ignora (no se confía en el cliente ni para esto).
+  const pollKind = kind === "question" ? (parsed.data.pollKind ?? null) : null;
 
   // Fotos: hasta 4 por publicación (sprint reels 2026-07-21). Se acepta el
   // campo legado `photo` (singular) por si un cliente viejo sigue en vuelo.
@@ -283,17 +293,23 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
 
   // ---- Insert con el JWT del usuario: la RLS valida tenant/autor/status y,
   // si viene entity_listing_id, que el listing sea propio y published (0023).
+  const basePayload = {
+    tenant_id: tenant.id,
+    author_id: user.id,
+    body,
+    kind,
+    media: mediaPaths,
+    status,
+    entity_listing_id: entityId ?? null,
+  };
+  type PostInsert = typeof basePayload;
+
   const { data: created, error: insertError } = await supabase
     .from("posts")
-    .insert({
-      tenant_id: tenant.id,
-      author_id: user.id,
-      body,
-      kind,
-      media: mediaPaths,
-      status,
-      entity_listing_id: entityId ?? null,
-    })
+    // `poll_kind` (0041) todavía no está en database.types.ts —el archivo se
+    // regenera aparte—, así que el cast es por el TIPO generado, no por el
+    // contrato: la columna existe en la base desde la migración.
+    .insert(pollKind ? ({ ...basePayload, poll_kind: pollKind } as PostInsert) : basePayload)
     .select("id")
     .single();
 

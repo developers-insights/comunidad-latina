@@ -168,14 +168,6 @@ export const COPY = {
   list: {
     title: "Empleos en tu comunidad",
     subtitle: "Trabajos que ofrece gente de acá",
-    publishCta: "Publicar empleo",
-    /**
-     * El mismo CTA partido en dos: en celular entra "Publicar" y desde sm se
-     * completa con "empleo" (el título de la sección ya da el contexto, y el
-     * botón entero rompía el h1 en tres renglones a 390px).
-     */
-    publishCtaShort: "Publicar",
-    publishCtaSuffix: "empleo",
     /** Chips de jornada — la etiqueta de cada tipo sale de EMPLOYMENT_TYPE_LABEL. */
     filterLabel: "Filtrar por jornada",
     filterAll: "Todos",

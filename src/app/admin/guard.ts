@@ -91,6 +91,12 @@ export async function getStaffContext(min: StaffRole = "moderator"): Promise<Sta
  * §5.4: meta jamás lleva contenido de mensajes, IPs ni user-agents — solo ids.
  * Best-effort: si el admin client no está configurado, loguea y sigue (la
  * acción de negocio ya está protegida por RLS; el panel nunca rompe).
+ *
+ * DEVUELVE si el registro quedó asentado. La mayoría de los callers lo ignoran
+ * a propósito (una auditoría caída no debe abortar una acción ya ejecutada),
+ * pero quien AUDITA UNA LECTURA de datos personales tiene que mirarlo: ahí el
+ * registro es la condición para divulgar, no un efecto posterior. Ver
+ * admin/empleos/[id]/page.tsx, que degrada la vista si esto devuelve false.
  */
 export async function logAdminAction(input: {
   actorId: string;
@@ -99,7 +105,7 @@ export async function logAdminAction(input: {
   subjectKind?: string | null;
   subjectId?: string | null;
   meta?: Record<string, Json>;
-}): Promise<void> {
+}): Promise<boolean> {
   try {
     const admin = createAdminClient();
     const { error } = await admin.from("audit_log").insert({
@@ -112,11 +118,14 @@ export async function logAdminAction(input: {
     });
     if (error) {
       console.error("[admin] audit_log falló:", error.message);
+      return false;
     }
+    return true;
   } catch (error) {
     console.error(
       "[admin] audit_log no disponible:",
       error instanceof Error ? error.message : "error desconocido",
     );
+    return false;
   }
 }

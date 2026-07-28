@@ -21,6 +21,7 @@ import {
   fetchEntityViews,
   fetchFollowedListingIds,
   fetchListingExtras,
+  fetchPostPolls,
   fetchViewerLikes,
   fetchViewerSaves,
   toFeedListingModel,
@@ -246,26 +247,34 @@ async function loadParaTiPage({
     .map((entry) => (entry.row as PostRow).entity_listing_id)
     .filter((id): id is string => Boolean(id));
 
-  const [authors, likedIds, savedIds, listingExtras, entityById] = await Promise.all([
-    fetchAuthorViews(
-      supabase,
-      visiblePosts
-        .map((entry) => (entry.row as PostRow).author_id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-    fetchViewerLikes(
-      supabase,
-      viewerId,
-      visiblePosts.map((entry) => entry.id),
-    ),
-    fetchViewerSaves(
-      supabase,
-      viewerId,
-      visiblePosts.map((entry) => entry.id),
-    ),
-    fetchListingExtras(supabase, tenantId, visibleListings, locale),
-    fetchEntityViews(supabase, entityListingIds),
-  ]);
+  // Encuestas: solo las PREGUNTAS pueden tener una (0041), así que la query
+  // extra ni se dispara en un feed sin preguntas.
+  const questionPostIds = visiblePosts
+    .filter((entry) => (entry.row as PostRow).kind === "question")
+    .map((entry) => entry.id);
+
+  const [authors, likedIds, savedIds, pollByPostId, listingExtras, entityById] =
+    await Promise.all([
+      fetchAuthorViews(
+        supabase,
+        visiblePosts
+          .map((entry) => (entry.row as PostRow).author_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+      fetchViewerLikes(
+        supabase,
+        viewerId,
+        visiblePosts.map((entry) => entry.id),
+      ),
+      fetchViewerSaves(
+        supabase,
+        viewerId,
+        visiblePosts.map((entry) => entry.id),
+      ),
+      fetchPostPolls(supabase, viewerId, questionPostIds),
+      fetchListingExtras(supabase, tenantId, visibleListings, locale),
+      fetchEntityViews(supabase, entityListingIds),
+    ]);
 
   const items: FeedItem[] = pageEntries.map((entry) => {
     if (entry.type === "post") {
@@ -280,6 +289,7 @@ async function loadParaTiPage({
             : null,
           isPromoted: promotedPostIds.has(postRow.id),
           savedByViewer: savedIds.has(postRow.id),
+          poll: pollByPostId.get(postRow.id) ?? null,
           ctaWhatsapp: promotions.whatsappByPostId.get(postRow.id) ?? null,
         }),
       };

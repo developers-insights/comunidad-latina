@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -10,17 +10,15 @@ import {
   Camera,
   House,
   PaperPlaneRight,
-  Plus,
   Question,
   ShoppingBagOpen,
   Sparkle,
   Storefront,
   VideoCamera,
   Wrench,
-  X,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
-import { Avatar, BottomSheet, Button, Chip, useToast } from "@/components/ui";
+import { Avatar, BottomSheet, Button, useToast } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 import { firstNameOf } from "@/components/listings";
 import { useMounted } from "@/lib/design/use-overlay";
@@ -31,6 +29,7 @@ import {
   prepareMediaUploadAction,
 } from "@/app/(app)/feed/actions";
 import { entityAccentVar } from "./helpers";
+import { ComposerSheet, type ComposerMode } from "./composer-sheet";
 import { COPY } from "./copy";
 
 const MAX_LENGTH = 2000;
@@ -49,6 +48,13 @@ const VIDEO_TYPES: Record<string, string> = {
 // post rápido (foto/video/pregunta, en ESTE composer) y un acceso directo a
 // cada módulo de la comunidad. El acento de cada tile es el de SU módulo
 // (entityAccentVar reutiliza el mismo mapeo que ya pinta las cards del feed).
+//
+// Rediseño 2026-07-27 (call con el cliente): esta fila es AHORA EL ÚNICO
+// disparador. Los dos recuadros grandes de "Agregar foto" / "Agregar video" se
+// fueron —"tiene mucho espacio blanco esta parte tan grande de aquí"— y cada
+// opción resuelve su medio ADENTRO de su propio flujo: foto y video abren el
+// selector y siguen en la hoja de texto (ComposerSheet), y los módulos abren su
+// formulario completo.
 // ---------------------------------------------------------------------------
 
 type CreateMenuAction =
@@ -179,9 +185,19 @@ export interface PostComposerProps {
 }
 
 /**
- * Composer de post (§4.b): textarea con autosize + hasta 4 FOTOS y 1 VIDEO
- * (sprint reels 2026-07-21). Algún medio sigue siendo obligatorio (feed
- * visual, no periódico). El usuario publica SIEMPRE como sí mismo.
+ * Composer del feed (§4.b) — rediseño 2026-07-27.
+ *
+ * Lo que se ve en reposo son DOS cosas y nada más: el campo de escritura rápida
+ * (con su Publicar, tipo Twitter) y la fila "¿Qué querés publicar?". Todo lo
+ * demás —elegir foto o video, escribir el pie, activar la encuesta— pasa dentro
+ * del flujo que abre cada opción.
+ *
+ * REGLA "TODO POST LLEVA IMAGEN". El trigger MEDIA_REQUIRED (0023) exige medio
+ * en `kind='post'` y exime a `kind='question'`. El campo rápido no la puede
+ * romper, así que tampoco la esconde: si alguien escribe y toca Publicar sin
+ * medio, en vez de un error aparece una hoja con los dos caminos posibles —
+ * sumar foto/video, o publicarlo como pregunta (que sale sobre el banner de
+ * marca, sin espacio muerto) — y el texto ya escrito viaja con la persona.
  *
  * SUBIDA DEL VIDEO: directa navegador → bucket post-media (evita el límite de
  * body de las server actions), con progreso real vía XHR. El prefijo
@@ -190,28 +206,31 @@ export interface PostComposerProps {
  *
  * GOTCHA Next 16/React 19 (memoria del proyecto, fix 21ce281): un FileList
  * leído dentro de un updater/callback diferido llega VACÍO. `selectPhotos` /
- * `selectVideo` copian `input.files` SINCRÓNICAMENTE en el handler.
+ * `selectVideo` copian `input.files` SINCRÓNICAMENTE en el handler, antes de
+ * cualquier setState.
  */
 export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [body, setBody] = useState("");
   const [media, setMedia] = useState<PickedMedia[]>([]);
-  // Realce momentáneo de los recuadros cuando intentan publicar sin medios.
-  const [mediaHint, setMediaHint] = useState(false);
   /** Progreso de subida del video (null = sin subida en curso). */
   const [uploadPct, setUploadPct] = useState<number | null>(null);
-  // Modo pregunta (menú crear-post, §b): manda kind='question' y exime del
-  // requisito de media (trigger 0023 / createPostAction ya lo contemplan).
-  const [questionMode, setQuestionMode] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  /** Hoja de texto abierta y en qué modo (null = cerrada). */
+  const [composeMode, setComposeMode] = useState<ComposerMode | null>(null);
+  /** Hoja que explica la regla de la imagen cuando el texto va solo. */
+  const [needsMediaOpen, setNeedsMediaOpen] = useState(false);
+  /** Encuesta Sí/No de la pregunta (contrato 0041). */
+  const [pollEnabled, setPollEnabled] = useState(false);
   // Solo para el tamaño del textarea (§a): compacto en reposo, cómodo con foco.
   const [focused, setFocused] = useState(false);
   const [isPending, startTransition] = useTransition();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
-  const mediaBoxRef = useRef<HTMLDivElement>(null);
+  /** Id estable de esta sesión: fija la variante de la vista previa del banner. */
+  const previewId = useId();
 
   // Saludo VISIBLE por franja horaria + nombre de pila (§c, rediseño
   // 2026-07-26): la hora es del USUARIO, no del server — antes de montar no
@@ -222,13 +241,6 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
     ? COPY.composer.greetingByHour(new Date().getHours(), firstNameOf(viewerName || ""))
     : null;
 
-  // El realce es un empujón, no un estado fijo: se apaga solo a los segundos.
-  useEffect(() => {
-    if (!mediaHint) return;
-    const timer = setTimeout(() => setMediaHint(false), 2600);
-    return () => clearTimeout(timer);
-  }, [mediaHint]);
-
   const photos = media.filter((item) => item.kind === "photo");
   const video = media.find((item) => item.kind === "video") ?? null;
 
@@ -238,51 +250,53 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
   }
 
   /**
-   * Lee el FileList VIVO del input de fotos de forma síncrona (gotcha de
+   * Lee el FileList VIVO del input de fotos de forma SÍNCRONA (gotcha de
    * arriba) y agrega hasta completar el cupo de 4, validando tipo y peso.
+   * Elegido al menos un archivo, se abre la hoja de texto: la foto y su pie
+   * pasan a ser un solo paso.
    */
   function selectPhotos(input: HTMLInputElement) {
     const files = Array.from(input.files ?? []);
     input.value = "";
     if (files.length === 0) return;
 
-    setMedia((current) => {
-      let photoCount = current.filter((item) => item.kind === "photo").length;
-      const next = [...current];
-      let rejectedType = false;
-      let rejectedSize = false;
-      let rejectedLimit = false;
+    const accepted: PickedMedia[] = [];
+    let photoCount = photos.length;
+    let rejectedType = false;
+    let rejectedSize = false;
+    let rejectedLimit = false;
 
-      for (const file of files) {
-        if (photoCount >= MAX_PHOTOS) {
-          rejectedLimit = true;
-          break;
-        }
-        if (!PHOTO_TYPES.includes(file.type)) {
-          rejectedType = true;
-          continue;
-        }
-        if (file.size > MAX_PHOTO_BYTES) {
-          rejectedSize = true;
-          continue;
-        }
-        next.push({
-          id: crypto.randomUUID(),
-          kind: "photo",
-          file,
-          preview: URL.createObjectURL(file),
-        });
-        photoCount += 1;
+    for (const file of files) {
+      if (photoCount >= MAX_PHOTOS) {
+        rejectedLimit = true;
+        break;
       }
+      if (!PHOTO_TYPES.includes(file.type)) {
+        rejectedType = true;
+        continue;
+      }
+      if (file.size > MAX_PHOTO_BYTES) {
+        rejectedSize = true;
+        continue;
+      }
+      accepted.push({
+        id: crypto.randomUUID(),
+        kind: "photo",
+        file,
+        preview: URL.createObjectURL(file),
+      });
+      photoCount += 1;
+    }
 
-      // Un solo aviso, el más útil (no una ráfaga de toasts).
-      if (rejectedLimit) toast({ title: COPY.composer.photoLimit, variant: "warning" });
-      else if (rejectedType) toast({ title: COPY.composer.photoWrongType, variant: "warning" });
-      else if (rejectedSize) toast({ title: COPY.composer.photoTooBig, variant: "warning" });
+    if (accepted.length > 0) {
+      setMedia((current) => [...current, ...accepted]);
+      openCompose("media");
+    }
 
-      return next;
-    });
-    setMediaHint(false);
+    // Un solo aviso, el más útil (no una ráfaga de toasts).
+    if (rejectedLimit) toast({ title: COPY.composer.photoLimit, variant: "warning" });
+    else if (rejectedType) toast({ title: COPY.composer.photoWrongType, variant: "warning" });
+    else if (rejectedSize) toast({ title: COPY.composer.photoTooBig, variant: "warning" });
   }
 
   /** Mismo patrón síncrono para el video (1 por publicación). */
@@ -299,18 +313,16 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
       toast({ title: COPY.composer.videoTooBig, variant: "warning" });
       return;
     }
+    if (video) {
+      toast({ title: COPY.composer.videoLimit, variant: "warning" });
+      return;
+    }
 
-    setMedia((current) => {
-      if (current.some((item) => item.kind === "video")) {
-        toast({ title: COPY.composer.videoLimit, variant: "warning" });
-        return current;
-      }
-      return [
-        ...current,
-        { id: crypto.randomUUID(), kind: "video", file, preview: URL.createObjectURL(file) },
-      ];
-    });
-    setMediaHint(false);
+    setMedia((current) => [
+      ...current,
+      { id: crypto.randomUUID(), kind: "video", file, preview: URL.createObjectURL(file) },
+    ]);
+    openCompose("media");
   }
 
   function removeMedia(id: string) {
@@ -321,10 +333,18 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
     });
   }
 
+  /** Abre la hoja de texto cerrando cualquier otra que estuviera arriba. */
+  function openCompose(mode: ComposerMode) {
+    setMenuOpen(false);
+    setNeedsMediaOpen(false);
+    setComposeMode(mode);
+  }
+
   function resetForm() {
     setBody("");
-    setMediaHint(false);
-    setQuestionMode(false);
+    setComposeMode(null);
+    setNeedsMediaOpen(false);
+    setPollEnabled(false);
     setMedia((current) => {
       for (const item of current) URL.revokeObjectURL(item.preview);
       return [];
@@ -332,7 +352,7 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   }
 
-  /** Tile del menú crear-post (§b): dispara el attach, activa "Pregunta" o navega. */
+  /** Tile del menú crear-post: dispara el selector, abre la pregunta o navega. */
   function handleMenuTile(tile: CreateMenuTile) {
     setMenuOpen(false);
     if (tile.action.kind === "photo") {
@@ -340,30 +360,23 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
     } else if (tile.action.kind === "video") {
       videoInputRef.current?.click();
     } else if (tile.action.kind === "question") {
-      setQuestionMode(true);
-      textareaRef.current?.focus();
+      openCompose("question");
     }
   }
 
-  // El botón se habilita con solo texto: los medios se validan al enviar, así
-  // el usuario recibe el aviso en vez de un botón muerto sin explicación.
+  // El botón se habilita con solo texto: la regla de la imagen se explica al
+  // enviar, con los dos caminos a mano, en vez de un botón muerto sin motivo.
   const canPublish = body.trim().length >= 2 && !isPending;
 
   function submit() {
     const trimmed = body.trim();
     if (trimmed.length < 2 || isPending) return;
 
-    // Algún medio obligatorio (feed visual): aviso cálido + ojo al recuadro.
-    // La PREGUNTA queda exenta (trigger MEDIA_REQUIRED 0023 / createPostAction
-    // ya lo contemplan para kind='question') — se puede publicar solo texto.
-    if (!questionMode && media.length === 0) {
-      setMediaHint(true);
-      toast({
-        title: COPY.composer.mediaMissingTitle,
-        description: COPY.composer.mediaMissingBody,
-        variant: "warning",
-      });
-      mediaBoxRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const isQuestion = composeMode === "question";
+    // Regla "todo post lleva imagen" (trigger MEDIA_REQUIRED 0023, exento para
+    // las preguntas): en vez de un error, la hoja con los dos caminos.
+    if (!isQuestion && media.length === 0) {
+      setNeedsMediaOpen(true);
       return;
     }
 
@@ -412,7 +425,9 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
       // ---- 2) Fotos + paths por la server action ---------------------------
       const formData = new FormData();
       formData.set("body", trimmed);
-      formData.set("kind", questionMode ? "question" : "post");
+      formData.set("kind", isQuestion ? "question" : "post");
+      // Solo una pregunta puede llevar encuesta; el server lo re-valida igual.
+      if (isQuestion && pollEnabled) formData.set("pollKind", "yes_no");
       for (const item of media) {
         if (item.kind === "photo") formData.append("photos", item.file);
       }
@@ -492,15 +507,11 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
     });
   }
 
-  const pickerButtonClass = cn(
-    "flex min-h-24 flex-1 flex-col items-center justify-center gap-1.5 rounded-md border border-dashed",
-    "transition-[transform,background-color,border-color,color] duration-(--duration-fast) ease-(--ease-spring)",
+  const choiceRowClass = cn(
+    "flex w-full items-center gap-3 rounded-lg border border-border p-3 text-left",
+    "transition-[background-color,border-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
     "hover:border-brand hover:bg-surface-subtle active:scale-[0.99]",
     "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-    "disabled:pointer-events-none disabled:opacity-45",
-    mediaHint
-      ? "border-warning bg-warning-bg text-warning-ink ring-2 ring-warning"
-      : "border-border text-foreground-secondary",
   );
 
   return (
@@ -544,25 +555,6 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
               "disabled:opacity-60",
             )}
           />
-          {questionMode && (
-            <div className="mt-1.5">
-              <Chip variant="brand" size="md" icon={<Question weight="bold" />}>
-                {COPY.composer.questionModeChip}
-                <button
-                  type="button"
-                  onClick={() => setQuestionMode(false)}
-                  aria-label={COPY.composer.questionModeRemove}
-                  className={cn(
-                    "ml-1 flex size-5 shrink-0 items-center justify-center rounded-full",
-                    "transition-colors duration-(--duration-fast) hover:bg-brand-ink/10",
-                    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-                  )}
-                >
-                  <X size={12} aria-hidden="true" />
-                </button>
-              </Chip>
-            </div>
-          )}
           {greeting && (
             <p className="mt-1.5 text-sm text-foreground-secondary">{greeting}</p>
           )}
@@ -588,27 +580,50 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
         onChange={(event) => selectVideo(event.currentTarget)}
       />
 
-      {/* Menú "crear publicación" (§b): fila-disparador + BottomSheet con TODOS
-          los tipos (post rápido acá mismo, o un módulo entero aparte). */}
+      {/* ÚNICO disparador del composer: abre el menú con TODOS los tipos. */}
       <button
         type="button"
         onClick={() => setMenuOpen(true)}
         className={cn(
-          "mt-3 flex w-full items-center gap-2.5 rounded-md border border-dashed border-border px-3 py-2.5",
-          "text-left transition-colors duration-(--duration-fast) hover:border-brand hover:bg-surface-subtle",
+          "mt-3 flex w-full items-center gap-3 rounded-lg border border-dashed border-border px-3 py-2.5",
+          "text-left transition-[background-color,border-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
+          "hover:border-brand hover:bg-surface-subtle active:scale-[0.995]",
           "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
         )}
       >
         <span aria-hidden="true" className="flex shrink-0 items-center gap-1">
           {[Camera, VideoCamera, Question].map((PreviewIcon, index) => (
-            <TileIconChip key={index} accent="var(--accent-feed)" Icon={PreviewIcon} size={24} />
+            <TileIconChip key={index} accent="var(--accent-feed)" Icon={PreviewIcon} size={26} />
           ))}
         </span>
-        <span className="flex-1 truncate text-sm font-medium text-foreground-secondary">
-          {COPY.composer.createMenu.rowLabel}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-foreground">
+            {COPY.composer.createMenu.rowLabel}
+          </span>
+          <span className="block truncate text-xs text-foreground-secondary">
+            {COPY.composer.createMenu.rowHint}
+          </span>
         </span>
         <CaretRight size={16} aria-hidden="true" className="shrink-0 text-foreground-muted" />
       </button>
+
+      <div className="mt-2.5 flex items-center border-t border-border-subtle pt-2.5">
+        <Button
+          type="submit"
+          variant="primary"
+          size="sm"
+          // `min-h-11`: el alto de `sm` es 40px y el objetivo táctil mínimo del
+          // proyecto son 44 — el ancho lo da el contenido, el alto lo forzamos.
+          className="ml-auto min-h-11"
+          disabled={!canPublish}
+          loading={isPending && composeMode === null}
+        >
+          {!isPending && <PaperPlaneRight size={16} aria-hidden="true" />}
+          {isPending && composeMode === null
+            ? COPY.composer.publishing
+            : COPY.composer.publish}
+        </Button>
+      </div>
 
       <BottomSheet
         open={menuOpen}
@@ -664,147 +679,81 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
         </ul>
       </BottomSheet>
 
-      <div ref={mediaBoxRef} className="mt-3">
-        {media.length > 0 ? (
-          <>
-            {/* Miniaturas en el ORDEN elegido (así se publica) */}
-            <ul className="grid grid-cols-2 gap-2">
-              {media.map((item, index) => (
-                <li
-                  key={item.id}
-                  className="relative aspect-square overflow-hidden rounded-md bg-surface-subtle"
-                >
-                  {item.kind === "photo" ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- preview local (blob:) del archivo elegido
-                    <img
-                      src={item.preview}
-                      alt=""
-                      className="absolute inset-0 size-full object-cover"
-                    />
-                  ) : (
-                    <>
-                      <video
-                        src={item.preview}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        className="absolute inset-0 size-full object-cover"
-                      />
-                      <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-media-scrim px-2 py-0.5 text-xs font-semibold text-on-media">
-                        <VideoCamera size={13} weight="fill" aria-hidden="true" />
-                        {COPY.composer.videoChip}
-                      </span>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeMedia(item.id)}
-                    disabled={isPending}
-                    aria-label={
-                      item.kind === "photo"
-                        ? `${COPY.composer.removePhoto} ${index + 1}`
-                        : COPY.composer.removeVideo
-                    }
-                    className={cn(
-                      "absolute right-2 top-2 flex size-9 items-center justify-center rounded-full bg-media-scrim text-on-media",
-                      "transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.92]",
-                      "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60",
-                    )}
-                  >
-                    <X size={16} aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            {/* Sumar más medios sin vaciar lo elegido */}
-            <div className="mt-2 flex gap-2">
-              {photos.length < MAX_PHOTOS && (
-                <button
-                  type="button"
-                  onClick={() => photoInputRef.current?.click()}
-                  disabled={isPending}
-                  className={cn(
-                    "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-sm font-medium text-foreground-secondary",
-                    "transition-colors duration-(--duration-fast) hover:border-brand hover:bg-surface-subtle",
-                    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-                    "disabled:pointer-events-none disabled:opacity-45",
-                  )}
-                >
-                  <Plus size={16} aria-hidden="true" />
-                  {COPY.composer.addPhotos}
-                </button>
-              )}
-              {!video && (
-                <button
-                  type="button"
-                  onClick={() => videoInputRef.current?.click()}
-                  disabled={isPending}
-                  className={cn(
-                    "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-sm font-medium text-foreground-secondary",
-                    "transition-colors duration-(--duration-fast) hover:border-brand hover:bg-surface-subtle",
-                    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-                    "disabled:pointer-events-none disabled:opacity-45",
-                  )}
-                >
-                  <VideoCamera size={16} aria-hidden="true" />
-                  {COPY.composer.addVideo}
-                </button>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => photoInputRef.current?.click()}
-              disabled={isPending}
-              className={pickerButtonClass}
-            >
-              <Camera size={24} aria-hidden="true" />
-              <span className="text-sm font-medium">{COPY.composer.addPhotos}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => videoInputRef.current?.click()}
-              disabled={isPending}
-              className={pickerButtonClass}
-            >
-              <VideoCamera size={24} aria-hidden="true" />
-              <span className="text-sm font-medium">{COPY.composer.addVideo}</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Progreso REAL de la subida del video (XHR) */}
-      {uploadPct !== null && (
-        <div className="mt-3" role="status">
-          <p className="text-xs font-medium text-foreground-secondary">
-            {COPY.composer.videoUploading(uploadPct)}
-          </p>
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-subtle">
-            <div
-              className="h-full rounded-full bg-brand transition-[width] duration-(--duration-fast)"
-              style={{ width: `${uploadPct}%` }}
-            />
-          </div>
+      {/* Regla de la imagen, contada en humano y con salida por los dos lados. */}
+      <BottomSheet
+        open={needsMediaOpen}
+        onClose={() => setNeedsMediaOpen(false)}
+        title={COPY.composer.needsMedia.sheetTitle}
+      >
+        <p className="text-sm text-foreground-secondary">
+          {COPY.composer.needsMedia.body}
+        </p>
+        <div className="mt-4 flex flex-col gap-2 pb-2">
+          <button
+            type="button"
+            onClick={() => {
+              setNeedsMediaOpen(false);
+              photoInputRef.current?.click();
+            }}
+            className={choiceRowClass}
+          >
+            <TileIconChip accent="var(--accent-feed)" Icon={Camera} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-foreground">
+                {COPY.composer.needsMedia.withMediaTitle}
+              </span>
+              <span className="block text-xs text-foreground-secondary">
+                {COPY.composer.needsMedia.withMediaBody}
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => openCompose("question")}
+            className={choiceRowClass}
+          >
+            <TileIconChip accent="var(--accent-feed)" Icon={Question} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-foreground">
+                {COPY.composer.needsMedia.asQuestionTitle}
+              </span>
+              <span className="block text-xs text-foreground-secondary">
+                {COPY.composer.needsMedia.asQuestionBody}
+              </span>
+            </span>
+          </button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="self-center"
+            onClick={() => setNeedsMediaOpen(false)}
+          >
+            {COPY.composer.needsMedia.keepWriting}
+          </Button>
         </div>
-      )}
+      </BottomSheet>
 
-      <div className="mt-2.5 flex items-center border-t border-border-subtle pt-2.5">
-        <Button
-          type="submit"
-          variant="primary"
-          size="sm"
-          className="ml-auto"
-          disabled={!canPublish}
-          loading={isPending}
-        >
-          {!isPending && <PaperPlaneRight size={16} aria-hidden="true" />}
-          {isPending ? COPY.composer.publishing : COPY.composer.publish}
-        </Button>
-      </div>
+      {/* Paso de texto: el medio (o la pregunta) a la vista y el texto debajo. */}
+      <ComposerSheet
+        open={composeMode !== null}
+        onClose={() => setComposeMode(null)}
+        mode={composeMode ?? "media"}
+        body={body}
+        onBodyChange={setBody}
+        media={media}
+        canAddPhoto={photos.length < MAX_PHOTOS}
+        canAddVideo={!video}
+        onAddPhotos={() => photoInputRef.current?.click()}
+        onAddVideo={() => videoInputRef.current?.click()}
+        onRemoveMedia={removeMedia}
+        pollEnabled={pollEnabled}
+        onPollChange={setPollEnabled}
+        previewId={previewId}
+        uploadPct={uploadPct}
+        isPending={isPending}
+        onPublish={submit}
+      />
     </form>
   );
 }

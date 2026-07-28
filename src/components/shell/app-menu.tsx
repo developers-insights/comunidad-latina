@@ -20,6 +20,8 @@ import { createClient } from "@/lib/supabase/client";
 import { signOutAction } from "@/app/(app)/perfil/actions";
 import { useBodyScrollLock, useFocusTrap, useMounted } from "@/lib/design/use-overlay";
 import { cn } from "@/lib/utils";
+import { ModuleBubble } from "./module-bubble";
+import { visibleModules } from "./module-access";
 import { MODULES, isModuleActive } from "./modules";
 
 const COPY = {
@@ -45,6 +47,14 @@ export interface AppMenuProps {
   user: { displayName: string; avatarUrl: string | null } | null;
   initialUnread: number;
   isStaff: boolean;
+  /**
+   * `tenants.modules` / `tenants.modules_soon` del tenant del request, tal cual
+   * los guardó el panel. Llegan como props desde el Header (Server Component) —
+   * son objetos planos, serializables, y así el menú no necesita ni cliente de
+   * Supabase ni un fetch propio para saber qué mostrar.
+   */
+  modules: Record<string, boolean>;
+  modulesSoon: Record<string, boolean>;
 }
 
 /**
@@ -61,7 +71,13 @@ export interface AppMenuProps {
  * módulos, las acciones de cuenta y los ajustes. Un drawer nunca reemplaza a
  * la nav primaria.
  */
-export function AppMenu({ user, initialUnread, isStaff }: AppMenuProps) {
+export function AppMenu({
+  user,
+  initialUnread,
+  isStaff,
+  modules,
+  modulesSoon,
+}: AppMenuProps) {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(initialUnread);
   const [prevInitial, setPrevInitial] = useState(initialUnread);
@@ -144,6 +160,8 @@ export function AppMenu({ user, initialUnread, isStaff }: AppMenuProps) {
         unread={unread}
         isStaff={isStaff}
         pathname={pathname}
+        modules={modules}
+        modulesSoon={modulesSoon}
       />
     </>
   );
@@ -157,9 +175,21 @@ interface MenuPanelProps {
   unread: number;
   isStaff: boolean;
   pathname: string;
+  modules: Record<string, boolean>;
+  modulesSoon: Record<string, boolean>;
 }
 
-function MenuPanel({ id, open, onClose, user, unread, isStaff, pathname }: MenuPanelProps) {
+function MenuPanel({
+  id,
+  open,
+  onClose,
+  user,
+  unread,
+  isStaff,
+  pathname,
+  modules,
+  modulesSoon,
+}: MenuPanelProps) {
   const reduceMotion = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = `${id}-title`;
@@ -171,6 +201,12 @@ function MenuPanel({ id, open, onClose, user, unread, isStaff, pathname }: MenuP
   useBodyScrollLock(open);
 
   if (!mounted) return null;
+
+  // Qué módulos ofrece el menú lo decide el panel, no esta lista: `MODULES` es
+  // el catálogo completo y `visibleModules` le aplica los tres estados. Misma
+  // función que usa /buscar — imposible que las dos superficies muestren
+  // catálogos distintos.
+  const explore = visibleModules(MODULES, modules, modulesSoon);
 
   const accountRows = [
     {
@@ -307,78 +343,30 @@ function MenuPanel({ id, open, onClose, user, unread, isStaff, pathname }: MenuP
                 </Link>
               )}
 
-              {/* Módulos */}
-              <h3 className="mb-2 mt-5 px-1 text-[11px] font-semibold uppercase tracking-wide text-foreground-muted">
-                {COPY.explore}
-              </h3>
-              <ul className="grid grid-cols-2 gap-2">
-                {MODULES.map((item) => {
-                  const active = isModuleActive(pathname, item.href);
-                  const IconComponent = item.icon;
-                  return (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        onClick={onClose}
-                        prefetch={false}
-                        aria-current={active ? "page" : undefined}
-                        className={cn(
-                          "flex min-h-14 items-center gap-2.5 rounded-xl border p-2.5",
-                          "transition-colors duration-(--duration-fast) ease-(--ease-out-premium)",
-                          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-                          active
-                            ? "border-transparent"
-                            : "border-border-subtle bg-surface hover:bg-surface-hover",
-                        )}
-                        style={
-                          active
-                            ? {
-                                backgroundColor: item.palette.bg,
-                                boxShadow: `inset 0 0 0 1.5px ${item.palette.ring}`,
-                              }
-                            : undefined
-                        }
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg"
-                          style={{ backgroundColor: item.palette.chip }}
-                        >
-                          {item.image ? (
-                            /* Set premium 3D (Meshy): la imagen trae su propio
-                               fondo pastel del acento — full-bleed en el chip. */
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={item.image}
-                              alt=""
-                              width={36}
-                              height={36}
-                              loading="lazy"
-                              className="size-full object-cover"
-                            />
-                          ) : (
-                            <IconComponent
-                              size={20}
-                              weight={active ? "fill" : "regular"}
-                              style={{ color: item.palette.icon }}
-                            />
-                          )}
-                        </span>
-                        <span
-                          className={cn(
-                            "min-w-0 flex-1 text-[13px] leading-tight",
-                            active
-                              ? "font-semibold text-foreground"
-                              : "font-medium text-foreground-secondary",
-                          )}
-                        >
-                          {item.label}
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
+              {/* Módulos. Si el panel los apagó a todos, no queda ni el título:
+                  una sección "Explorar" vacía es peor que no tenerla. */}
+              {explore.length > 0 && (
+                <>
+                  <h3 className="mb-2 mt-5 px-1 text-[11px] font-semibold uppercase tracking-wide text-foreground-muted">
+                    {COPY.explore}
+                  </h3>
+                  {/* Misma cápsula que la grilla de /buscar (ModuleBubble): un solo
+                      componente para las dos superficies, imposible que se
+                      desincronicen el ícono, el acento ni la forma. */}
+                  <ul className="grid grid-cols-2 gap-2">
+                    {explore.map(({ item, state }) => (
+                      <li key={item.href}>
+                        <ModuleBubble
+                          item={item}
+                          active={isModuleActive(pathname, item.href)}
+                          state={state}
+                          onNavigate={onClose}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
 
               {/* Cuenta */}
               <h3 className="mb-2 mt-5 px-1 text-[11px] font-semibold uppercase tracking-wide text-foreground-muted">

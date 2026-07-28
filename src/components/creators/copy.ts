@@ -27,7 +27,6 @@ export const COPY = {
   feed: {
     title: "Creadores",
     subtitle: "Trabajos para creadores de contenido en tu comunidad.",
-    publishCta: "Publicar trabajo",
     urgentChip: "Urgente",
     budgetPrefix: "Presupuesto",
     viewGig: "Ver trabajo",

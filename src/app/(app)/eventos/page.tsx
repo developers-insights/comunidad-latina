@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Plus } from "@phosphor-icons/react/dist/ssr";
-import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
+import { EmptyState, SectionCta, SectionHeading, buttonVariants } from "@/components/ui";
 import {
   COPY,
   EventCard,
@@ -17,15 +16,22 @@ import {
   firstPhotoUrl,
   toTrustLevel,
 } from "@/components/listings";
+import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Eventos" };
 
 const C = COPY.events;
 const MAX_EVENTS = 40;
 const MAX_PAST = 5;
+
+/** Acento + ícono 3D de la sección (los mismos del menú y de /buscar). */
+const SECCION = {
+  accent: "var(--accent-eventos)",
+  image: "/icons/menu/eventos.webp",
+  publicarHref: "/publicar?kind=event",
+} as const;
 
 export default async function EventosPage() {
   return (
@@ -128,21 +134,20 @@ async function EventosContent() {
 
   return (
     <>
-      <header className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {C.title}
-          </h1>
-          <p className="mt-0.5 text-sm text-foreground-secondary">{C.subtitle}</p>
-        </div>
-        <Link
-          href="/publicar"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
-        >
-          <Plus size={16} aria-hidden="true" />
-          {C.publishCta}
-        </Link>
-      </header>
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={C.title}
+        subtitle={C.subtitle}
+      />
+
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishEventTitle")}
+        hint={t("sections", "publishEventHint")}
+        className="mb-5 mt-3"
+      />
 
       {upcoming.length === 0 && past.length === 0 ? (
         <EmptyState
@@ -150,7 +155,14 @@ async function EventosContent() {
           title={C.emptyTitle}
           message={C.emptyMessage}
           action={
-            <Link href="/publicar" className={buttonVariants({ variant: "primary", size: "md" })}>
+            // El MISMO destino que el CTA de arriba: `?kind=event` deja el
+            // formulario abierto en Eventos (publicar/page.tsx lo honra). Sin el
+            // parámetro, quien llega desde el estado vacío de Eventos aterriza
+            // en un selector de tipo y tiene que volver a elegir lo que ya eligió.
+            <Link
+              href={SECCION.publicarHref}
+              className={buttonVariants({ variant: "primary", size: "md" })}
+            >
               {C.publishCta}
             </Link>
           }
@@ -184,15 +196,19 @@ async function EventosContent() {
 function PageSkeleton() {
   return (
     <div aria-busy="true">
-      <header className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-            {C.title}
-          </h1>
-          <Skeleton className="mt-1.5 h-4 w-44" />
-        </div>
-        <Skeleton className="h-10 w-24 rounded-md" />
-      </header>
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={C.title}
+        subtitle={C.subtitle}
+      />
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishEventTitle")}
+        hint={t("sections", "publishEventHint")}
+        className="mb-5 mt-3"
+      />
       <EventListSkeleton />
     </div>
   );

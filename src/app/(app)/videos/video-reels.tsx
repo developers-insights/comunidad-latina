@@ -525,7 +525,13 @@ function ReelActions({
       <button
         type="button"
         onClick={() =>
-          commentsSheet.open({ postId: post.id, commentCount: post.commentCount })
+          commentsSheet.open({
+            postId: post.id,
+            commentCount: post.commentCount,
+            // Media hoja de vidrio: el video sigue arriba, visible y corriendo
+            // (feedback cliente 2026-07-27: "le bloqueó todo el video").
+            surface: "video",
+          })
         }
         aria-label={`${VIDEOS_COPY.comments} (${post.commentCount})`}
         className={railButtonClass}

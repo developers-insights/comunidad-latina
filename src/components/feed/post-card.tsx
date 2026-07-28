@@ -14,11 +14,19 @@ import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 import { AdChip } from "./card-ad-chip";
 import { CardLikeProvider } from "./card-like-context";
+import { CardMediaProvider } from "./card-media-context";
 import { CardPostMedia } from "./card-post-media";
+import { PollYesNo } from "./poll-yes-no";
 import { PostActions } from "./post-actions";
 import { QuestionBanner } from "./question-banner";
-import { entityAccentVar, entityHref, entityKindLabel, postKindOf } from "./helpers";
-import type { PostCardModel, PostEntityView } from "./helpers";
+import {
+  entityAccentVar,
+  entityHref,
+  entityKindLabel,
+  postKindOf,
+  postMediaItems,
+} from "./helpers";
+import type { PostCardModel, PostEntityView, VideoScopeProp } from "./helpers";
 
 export interface PostCardProps {
   post: PostCardModel;
@@ -29,7 +37,7 @@ export interface PostCardProps {
   /** Slot para el menú ⋯ (solo en el detalle). */
   menu?: React.ReactNode;
   /** Contexto del feed de videos para el tap sobre un video (§5). Default "para-ti". */
-  videoScope?: string;
+  videoScope?: VideoScopeProp;
   className?: string;
 }
 
@@ -106,7 +114,14 @@ function EntityHeader({
  * cabecera y las acciones conservan su margen. Doble-tap para me gusta y un toque
  * abre el visor; el estado de me gusta se comparte entre la foto y el botón vía
  * CardLikeProvider (por eso envuelve foto + acciones). La cabecera y el cuerpo
- * son server (pasan como children del provider y no se hidratan).
+ * son server (pasan como children del provider y no se hidratan) — esta card se
+ * monta tanto desde el feed ("use client") como desde /feed/[id] (server), así
+ * que NO puede tener hooks: todo estado suyo vive en los providers de abajo.
+ *
+ * El segundo provider, CardMediaProvider, comparte QUÉ MEDIO SE ESTÁ VIENDO
+ * entre el carrusel y las acciones: la hoja de comentarios se abre según la
+ * diapositiva a la vista, no según la primera del post (feedback cliente
+ * 2026-07-27, dos veces en la misma call: "le bloqueó todo el video").
  *
  * Cuando el post es de una ENTIDAD, la entidad se muestra como autor y linkea a
  * su página. Si está PROMOCIONADO, se marca honesto con el chip "Publicidad"
@@ -122,7 +137,14 @@ export function PostCard({
   videoScope = "para-ti",
   className,
 }: PostCardProps) {
-  const hasMedia = post.media.length > 0 || Boolean(post.photoUrl);
+  /**
+   * Las diapositivas del post, resueltas UNA vez acá (incluye el `photoUrl`
+   * retrocompat). Van al CardMediaProvider y de ahí las leen las dos islas que
+   * las necesitan: el carrusel, que las pinta, y la fila de acciones, que mira
+   * cuál está a la vista para elegir la forma de la hoja de comentarios.
+   */
+  const mediaItems = postMediaItems(post.media, post.photoUrl);
+  const hasMedia = mediaItems.length > 0;
   const isQuestion = postKindOf(post.kind) === "question";
   /**
    * Una pregunta sin foto ni video quedaba como texto pelado entre cards con
@@ -133,6 +155,24 @@ export function PostCard({
    * protagonista + su texto arriba.
    */
   const showQuestionBanner = isQuestion && !hasMedia && Boolean(post.body);
+
+  /**
+   * Encuesta Sí/No (0041). Vive DENTRO del banner cuando la pregunta es la
+   * pieza gráfica — el cliente la dibujó pegada a la pregunta— y baja al cuerpo
+   * de la card, en tinta de superficie, cuando la pregunta trae foto o video y
+   * el banner no se renderiza. Nunca se pierde por el camino.
+   */
+  const poll = post.poll
+    ? (
+        <PollYesNo
+          postId={post.id}
+          poll={post.poll}
+          viewerId={viewerId}
+          isAuthor={Boolean(viewerId) && post.author.profileId === viewerId}
+          tone={showQuestionBanner ? "media" : "surface"}
+        />
+      )
+    : null;
 
   const bodyText = (
     <p
@@ -177,97 +217,110 @@ export function PostCard({
         className,
       )}
     >
-      <CardLikeProvider
-        postId={post.id}
-        tenantId={tenantId}
-        viewerId={viewerId}
-        initialLiked={post.likedByViewer}
-        initialCount={post.likeCount}
-      >
-        {/* Cabecera + cuerpo con margen; la foto de abajo va full-bleed. */}
-        <div className="flex flex-col gap-2.5 px-4 pb-2.5 pt-3.5">
-          <header className="flex items-start gap-2.5">
-            <Avatar size="sm" name={avatarName} src={avatarSrc} />
-            {entity ? (
-              <EntityHeader entity={entity} authorName={post.author.displayName} />
-            ) : (
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <span className="truncate text-sm font-semibold text-foreground">
-                    {post.author.displayName}
-                  </span>
-                  {post.author.profileId && (
-                    <PublisherTrust
-                      displayName={post.author.displayName}
-                      firstName={firstNameOf(post.author.displayName)}
-                      score={post.author.score}
-                      level={post.author.level}
-                      signals={post.author.signals}
-                      size="inline"
-                    />
-                  )}
-                </div>
-                <p className="text-xs text-foreground-muted">{post.timeAgoLabel}</p>
-              </div>
-            )}
-            {/* Sin media (posts viejos de texto / preguntas): el chip va en la cabecera. */}
-            {post.isPromoted && !hasMedia && <AdChip />}
-            {isQuestion && (
-              <Chip size="sm" variant="info" icon={<Question aria-hidden="true" />}>
-                {COPY.post.questionChip}
-              </Chip>
-            )}
-            {menu}
-          </header>
-
-          {/* timeAgo del post de entidad: bajo la cabecera para no competir con "por…" */}
-          {entity && (
-            <p className="text-xs text-foreground-muted">{post.timeAgoLabel}</p>
-          )}
-
-          {body}
-        </div>
-
-        {showQuestionBanner && (
-          <QuestionBanner
-            postId={post.id}
-            question={post.body}
-            isDetail={isDetail}
-          />
-        )}
-
-        {hasMedia && (
-          <CardPostMedia
-            postId={post.id}
-            authorName={avatarName}
-            media={post.media}
-            photoUrl={post.photoUrl}
-            isPromoted={post.isPromoted}
-            entity={post.entity}
-            videoScope={videoScope}
-            viewCount={post.viewCount}
-            ctaWhatsapp={post.ctaWhatsapp}
-          />
-        )}
-
-        <div
-          className={cn(
-            "px-2 pb-1 pt-1",
-            !hasMedia && !showQuestionBanner && "border-t border-border-subtle",
-          )}
+      {/* Dos providers, dos responsabilidades: el de medios dice QUÉ SE ESTÁ
+          VIENDO (lo mueve el carrusel, lo lee la fila de acciones) y el de me
+          gusta comparte la reacción entre el doble toque y el botón. Ninguno
+          pinta DOM: la cabecera y el cuerpo siguen siendo server. */}
+      <CardMediaProvider items={mediaItems}>
+        <CardLikeProvider
+          postId={post.id}
+          tenantId={tenantId}
+          viewerId={viewerId}
+          initialLiked={post.likedByViewer}
+          initialCount={post.likeCount}
         >
-          <PostActions
-            postId={post.id}
-            tenantId={tenantId}
-            viewerId={viewerId}
-            likeCount={post.likeCount}
-            likedByViewer={post.likedByViewer}
-            commentCount={post.commentCount}
-            savedByViewer={post.savedByViewer}
-            isDetail={isDetail}
-          />
-        </div>
-      </CardLikeProvider>
+          {/* Cabecera + cuerpo con margen; la foto de abajo va full-bleed. */}
+          <div className="flex flex-col gap-2.5 px-4 pb-2.5 pt-3.5">
+            <header className="flex items-start gap-2.5">
+              <Avatar size="sm" name={avatarName} src={avatarSrc} />
+              {entity ? (
+                <EntityHeader entity={entity} authorName={post.author.displayName} />
+              ) : (
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="truncate text-sm font-semibold text-foreground">
+                      {post.author.displayName}
+                    </span>
+                    {post.author.profileId && (
+                      <PublisherTrust
+                        displayName={post.author.displayName}
+                        firstName={firstNameOf(post.author.displayName)}
+                        score={post.author.score}
+                        level={post.author.level}
+                        signals={post.author.signals}
+                        size="inline"
+                      />
+                    )}
+                  </div>
+                  <p className="text-xs text-foreground-muted">{post.timeAgoLabel}</p>
+                </div>
+              )}
+              {/* Sin media (posts viejos de texto / preguntas): el chip va en la cabecera. */}
+              {post.isPromoted && !hasMedia && <AdChip />}
+              {isQuestion && (
+                <Chip size="sm" variant="info" icon={<Question aria-hidden="true" />}>
+                  {COPY.post.questionChip}
+                </Chip>
+              )}
+              {menu}
+            </header>
+
+            {/* timeAgo del post de entidad: bajo la cabecera para no competir con "por…" */}
+            {entity && (
+              <p className="text-xs text-foreground-muted">{post.timeAgoLabel}</p>
+            )}
+
+            {body}
+          </div>
+
+          {showQuestionBanner && (
+            <QuestionBanner
+              postId={post.id}
+              question={post.body}
+              isDetail={isDetail}
+              footer={poll}
+            />
+          )}
+
+          {hasMedia && (
+            <CardPostMedia
+              postId={post.id}
+              authorName={avatarName}
+              isPromoted={post.isPromoted}
+              entity={post.entity}
+              videoScope={videoScope}
+              viewCount={post.viewCount}
+              ctaWhatsapp={post.ctaWhatsapp}
+            />
+          )}
+
+          {/* Pregunta CON foto o video: la encuesta va acá, ya en tinta de card. */}
+          {poll && !showQuestionBanner && (
+            <div className="px-4 pb-1 pt-3">{poll}</div>
+          )}
+
+          <div
+            className={cn(
+              "px-2 pb-1 pt-1",
+              !hasMedia && !showQuestionBanner && "border-t border-border-subtle",
+            )}
+          >
+            {/* Sin `hasVideo`: la superficie de la hoja la resuelve PostActions
+                leyendo el medio a la vista. Un prop calculado acá volvería a
+                congelar la decisión en el PRIMER medio del post. */}
+            <PostActions
+              postId={post.id}
+              tenantId={tenantId}
+              viewerId={viewerId}
+              likeCount={post.likeCount}
+              likedByViewer={post.likedByViewer}
+              commentCount={post.commentCount}
+              savedByViewer={post.savedByViewer}
+              isDetail={isDetail}
+            />
+          </div>
+        </CardLikeProvider>
+      </CardMediaProvider>
     </article>
   );
 }

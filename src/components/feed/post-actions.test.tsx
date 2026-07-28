@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   toggleSave: vi.fn(),
   toast: vi.fn(),
   push: vi.fn(),
+  openComments: vi.fn(),
 }));
 
 vi.mock("@/app/(app)/feed/engagement-actions", () => ({
@@ -39,11 +40,14 @@ vi.mock("@/components/ui", async (importOriginal) => {
 // La hoja de comentarios no es lo que se testea acá, y su módulo arrastra
 // Supabase + las server actions del marketplace: la cortamos de raíz.
 vi.mock("./comments-sheet", () => ({
-  useCommentsSheet: () => ({ open: vi.fn() }),
+  useCommentsSheet: () => ({ open: state.openComments }),
 }));
 
+import { CardMediaProvider } from "./card-media-context";
 import { PostActions } from "./post-actions";
+import { PostCard } from "./post-card";
 import { COPY } from "./copy";
+import type { PostMediaView } from "./helpers";
 
 const BASE = {
   postId: "post-1",
@@ -63,6 +67,7 @@ describe("PostActions — guardar", () => {
     state.toggleSave.mockClear();
     state.toast.mockClear();
     state.push.mockClear();
+    state.openComments.mockClear();
   });
   afterEach(cleanup);
 
@@ -126,5 +131,184 @@ describe("PostActions — guardar", () => {
     await waitFor(() => expect(state.push).toHaveBeenCalledWith("/entrar?next=%2Ffeed"));
     expect(saveButton().getAttribute("aria-pressed")).toBe("false");
     expect(state.toast).not.toHaveBeenCalled();
+  });
+});
+
+const PHOTO: PostMediaView = { kind: "image", url: "https://cdn.example.com/foto.webp" };
+const VIDEO: PostMediaView = { kind: "video", url: "https://cdn.example.com/reel.mp4" };
+
+/**
+ * La hoja de comentarios cambia de FORMA según lo que hay detrás (feedback
+ * cliente 2026-07-27: "le bloqueó todo el video… ¿puede salir como un poquito
+ * más abajo?"). Sobre video se pide la media hoja de vidrio; sobre una foto
+ * estática, la de siempre — ahí el vidrio no aporta y arriesga contraste.
+ *
+ * El dato lo lee del contexto de medios de la card, no de un prop.
+ */
+describe("PostActions — la forma de la hoja sale del contexto de medios", () => {
+  beforeEach(() => {
+    state.openComments.mockClear();
+  });
+  afterEach(cleanup);
+
+  const commentsButton = () =>
+    screen.getByRole("button", { name: new RegExp(COPY.post.comments) });
+
+  function renderActions(items: PostMediaView[]) {
+    return render(
+      <CardMediaProvider items={items}>
+        <PostActions {...BASE} />
+      </CardMediaProvider>,
+    );
+  }
+
+  it("con un video a la vista abre la hoja de VIDRIO", () => {
+    renderActions([VIDEO]);
+    fireEvent.click(commentsButton());
+    expect(state.openComments).toHaveBeenCalledWith({
+      postId: BASE.postId,
+      commentCount: BASE.commentCount,
+      surface: "video",
+    });
+  });
+
+  it("con una foto a la vista no pide superficie: se abre como siempre", () => {
+    renderActions([PHOTO]);
+    fireEvent.click(commentsButton());
+    expect(state.openComments).toHaveBeenCalledWith({
+      postId: BASE.postId,
+      commentCount: BASE.commentCount,
+    });
+    expect(state.openComments.mock.calls[0][0]).not.toHaveProperty("surface");
+  });
+
+  it("un post de puro texto no pide superficie", () => {
+    renderActions([]);
+    fireEvent.click(commentsButton());
+    expect(state.openComments.mock.calls[0][0]).not.toHaveProperty("surface");
+  });
+
+  it("fuera de una card con medios no rompe: abre la hoja de siempre", () => {
+    render(<PostActions {...BASE} />);
+    fireEvent.click(commentsButton());
+    expect(state.openComments.mock.calls[0][0]).not.toHaveProperty("surface");
+  });
+});
+
+/**
+ * EL CABLEADO REAL, con el carrusel de por medio. Este es el escenario que el
+ * cliente describió con todas las letras: "puede ser un video, dos fotos… y a
+ * veces un video, dos fotos y al final el video". Mirando el PRIMER medio, un
+ * post [foto, video] abría la hoja alta y opaca justo encima del video que la
+ * persona acababa de deslizar — exactamente lo que pidió arreglar dos veces.
+ *
+ * Sin estas anclas, la decisión puede volver a congelarse en `media[0]` y nadie
+ * se entera hasta que el cliente lo ve otra vez.
+ */
+describe("PostCard → PostActions: la hoja sigue a la diapositiva ACTIVA", () => {
+  beforeEach(() => {
+    state.openComments.mockClear();
+  });
+  afterEach(cleanup);
+
+  const BASE_POST = {
+    id: "3f1c9d2e-0b44-4a77-9d21-77c2a1b40e10",
+    kind: "post" as const,
+    body: "Miren cómo quedó la cancha del barrio.",
+    photoUrl: null,
+    media: [] as Array<{ kind: "image" | "video"; url: string }>,
+    likeCount: 0,
+    commentCount: 4,
+    createdAt: "2026-07-27T12:00:00.000Z",
+    timeAgoLabel: "hace un rato",
+    author: {
+      profileId: null,
+      displayName: "Carlos Reyes",
+      avatarUrl: null,
+      score: 60,
+      level: "verificado" as const,
+      signals: [],
+    },
+    likedByViewer: false,
+    savedByViewer: false,
+    poll: null,
+    viewCount: 0,
+    entity: null,
+    isPromoted: false,
+    ctaWhatsapp: null,
+  };
+
+  function renderCard(media: PostMediaView[]) {
+    return render(
+      <PostCard
+        post={{ ...BASE_POST, media }}
+        tenantId="11111111-1111-4111-8111-111111111111"
+        viewerId="user-1"
+      />,
+    );
+  }
+
+  /**
+   * El swipe: en jsdom el riel mide 0, así que le fijamos el ancho de un móvil
+   * (375px) y disparamos el scroll a mano — es lo que hace el navegador al
+   * soltar el dedo con scroll-snap.
+   */
+  function swipeTo(container: HTMLElement, index: number, width = 375) {
+    const node = container.querySelector<HTMLElement>("[data-carousel-track]");
+    if (!node) throw new Error("no hay riel: la card no montó el carrusel");
+    Object.defineProperty(node, "clientWidth", { value: width, configurable: true });
+    node.scrollLeft = index * width;
+    fireEvent.scroll(node);
+  }
+
+  const openComments = () =>
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.post.comments) }));
+
+  /** Con qué se abrió la hoja la ÚLTIMA vez (se abre varias por test). */
+  const lastOpen = () => state.openComments.mock.calls.at(-1)?.[0];
+
+  it("[foto, video]: en la foto, hoja de siempre; deslizando al video, la de vidrio", () => {
+    const { container } = renderCard([PHOTO, VIDEO]);
+
+    openComments();
+    expect(lastOpen()).not.toHaveProperty("surface");
+
+    swipeTo(container, 1);
+    openComments();
+    expect(lastOpen()).toMatchObject({ surface: "video" });
+  });
+
+  it("[video, foto]: arranca de vidrio y al deslizar a la foto vuelve a la de siempre", () => {
+    const { container } = renderCard([VIDEO, PHOTO]);
+
+    openComments();
+    expect(lastOpen()).toMatchObject({ surface: "video" });
+
+    swipeTo(container, 1);
+    openComments();
+    expect(lastOpen()).not.toHaveProperty("surface");
+  });
+
+  it("el video al FINAL de un carrusel largo también manda cuando se llega a él", () => {
+    const { container } = renderCard([PHOTO, PHOTO, VIDEO]);
+
+    openComments();
+    expect(lastOpen()).not.toHaveProperty("surface");
+
+    swipeTo(container, 2);
+    openComments();
+    expect(lastOpen()).toMatchObject({ surface: "video" });
+  });
+
+  it("un solo video (sin carrusel) pide la hoja de vidrio, como antes", () => {
+    renderCard([VIDEO]);
+    openComments();
+    expect(lastOpen()).toMatchObject({ surface: "video" });
+  });
+
+  it("una sola foto no la pide (ahí el vidrio no aporta)", () => {
+    renderCard([PHOTO]);
+    openComments();
+    expect(lastOpen()).not.toHaveProperty("surface");
   });
 });

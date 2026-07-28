@@ -70,7 +70,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       >
         {children}
       </main>
-      <BottomNav />
+      {/* La barra esconde la pestaña de un módulo apagado — la config del tenant
+          baja como props planas desde acá (ver bottom-nav.tsx). */}
+      <BottomNav modules={tenant.modules} modulesSoon={tenant.modulesSoon} />
       <InstallPrompt />
     </div>
     </CommentsSheetProvider>

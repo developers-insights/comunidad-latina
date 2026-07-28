@@ -71,22 +71,31 @@ const velo = (pct: number) =>
  * Las tres identidades del banner. Cada una mueve el ángulo, el orden del
  * tricolor y de dónde viene la luz: dos preguntas seguidas en el feed no se leen
  * como la misma plantilla repintada.
+ *
+ * LA LUZ ES PARTE DE LA CUENTA DE CONTRASTE (corregido 2026-07-27). Los
+ * porcentajes de `tinte` estaban calculados sobre las paradas del degradado
+ * SOLAS, pero encima va este `glow`, que suma blanco: con la luz al 17% el peor
+ * píxel bajo un glifo medía 4.25:1 — por debajo de AA — en la variante azul.
+ * Medido en el navegador (captura del banner con el texto oculto, luminancia
+ * relativa WCAG del fondo bajo cada píxel de glifo pleno), bajarla a 9/8/7 deja
+ * el peor caso en 4.67:1 y el cambio no se nota a simple vista. Si alguien sube
+ * estos números, que vuelva a medir.
  */
 const VARIANTS = [
   {
     // Atardecer — azul profundo que cae en rojo ladrillo.
     field: `linear-gradient(152deg, ${tinte("var(--brand-blue)", 94)} 0%, ${tinte("var(--brand-blue)", 60)} 44%, ${tinte("var(--brand-red)", 64)} 100%)`,
-    glow: `radial-gradient(84% 58% at 16% 6%, ${luz(17)} 0%, transparent 64%)`,
+    glow: `radial-gradient(84% 58% at 16% 6%, ${luz(9)} 0%, transparent 64%)`,
   },
   {
     // Brasa — rojo que se abre en bronce (el amarillo del logo, rebajado).
     field: `linear-gradient(158deg, ${tinte("var(--brand-red)", 84)} 0%, ${tinte("var(--brand-red)", 56)} 38%, ${tinte("var(--brand-yellow)", 58)} 100%)`,
-    glow: `radial-gradient(78% 56% at 84% 10%, ${luz(15)} 0%, transparent 60%)`,
+    glow: `radial-gradient(78% 56% at 84% 10%, ${luz(8)} 0%, transparent 60%)`,
   },
   {
     // Sobremesa — bronce arriba, azul noche abajo. La más editorial de las tres.
     field: `linear-gradient(146deg, ${tinte("var(--brand-yellow)", 54)} 0%, ${tinte("var(--brand-blue)", 64)} 52%, ${tinte("var(--brand-blue)", 98)} 100%)`,
-    glow: `radial-gradient(92% 64% at 24% 92%, ${luz(13)} 0%, transparent 66%)`,
+    glow: `radial-gradient(92% 64% at 24% 92%, ${luz(7)} 0%, transparent 66%)`,
   },
 ] as const;
 
@@ -98,6 +107,86 @@ const VIGNETTE = `radial-gradient(118% 96% at 50% 46%, transparent 34%, ${velo(4
  * patrón, se ve una superficie impresa en vez de un degradado de CSS.
  */
 const GRAIN = `radial-gradient(var(--color-on-media) 0.5px, transparent 0.6px)`;
+
+// ---------------------------------------------------------------------------
+// MARCA DE AGUA (feedback cliente 2026-07-27: "puede ser el fondo, el watermark
+// de comunidad latina… no tan clarito, pero que esté como watermark")
+// ---------------------------------------------------------------------------
+
+/**
+ * Las tres figuras del logo, dibujadas con primitivas que se funden en una sola
+ * silueta. Va inline y en `currentColor` a propósito: el PNG de marca pesa 318
+ * KB —una barbaridad para repetirlo en cada pregunta del feed— y además trae
+ * sus colores fijos, que acá pelearían con el tricolor del campo. Una marca de
+ * agua es un relieve monocromo, no el logo pegado encima.
+ */
+function BrandFigures({
+  className,
+  style,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const figure = (key: string, transform?: string) => (
+    <g key={key} transform={transform}>
+      <circle cx="34" cy="16" r="16" />
+      <rect x="4" y="38" width="60" height="44" rx="22" />
+      <rect x="13" y="64" width="42" height="40" rx="6" />
+      <rect x="4" y="54" width="15" height="44" rx="7.5" />
+      <rect x="49" y="54" width="15" height="44" rx="7.5" />
+      <rect x="13" y="90" width="18" height="62" rx="9" />
+      <rect x="37" y="90" width="18" height="62" rx="9" />
+    </g>
+  );
+  return (
+    <svg
+      viewBox="0 0 180 156"
+      aria-hidden="true"
+      fill="currentColor"
+      className={className}
+      style={style}
+    >
+      {figure("left")}
+      {figure("center", "translate(52 -8) scale(1.07)")}
+      {figure("right", "translate(112 0)")}
+    </svg>
+  );
+}
+
+/**
+ * La marca prensada en el papel. Dos copias con 1.5px de corrimiento: abajo el
+ * labio de luz, encima el cuerpo en tinta OSCURA — un deboss, no una calcomanía.
+ *
+ * DOS DECISIONES QUE NO SON DE GUSTO:
+ *
+ *  · EL CUERPO ES OSCURO. Una marca de agua clara sobre este campo levanta la
+ *    luminancia justo donde cae la tinta `on-media` y tira la pregunta por
+ *    debajo de 4.5:1 (con apenas 6% de blanco encima, el peor stop del degradado
+ *    cae a ~3.9:1). Oscureciendo, el texto encima solo puede GANAR contraste.
+ *    Por eso además va antes del vignette: el velo de los bordes la asienta.
+ *
+ *  · VA ABAJO A LA IZQUIERDA, NO CENTRADA. Centrada compite de frente con el
+ *    titular y ensucia la caja tipográfica. Sangrando por la esquina libre —el
+ *    `¿` toma la de arriba a la izquierda y el `?` la de abajo a la derecha—
+ *    firma la pieza sin meterse en la lectura.
+ */
+function BrandWatermark() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute -bottom-[9%] -left-[7%] w-[58%]"
+    >
+      <BrandFigures
+        className="absolute inset-0 h-auto w-full translate-x-[1.5px] translate-y-[1.5px]"
+        style={{ color: "var(--color-on-media)", opacity: 0.08 }}
+      />
+      <BrandFigures
+        className="relative h-auto w-full"
+        style={{ color: SHADE, opacity: 0.17 }}
+      />
+    </span>
+  );
+}
 
 /**
  * Variante del banner para un post. Hash determinístico (djb2-ish) sobre el id:
@@ -129,6 +218,23 @@ export interface QuestionTypeScale {
 }
 
 /**
+ * Los `line-clamp-[N]` posibles, ESCRITOS COMO LITERALES: Tailwind los descubre
+ * escaneando el fuente, así que una clase armada en runtime
+ * (`line-clamp-[${n}]`) no generaría CSS y el recorte no existiría.
+ */
+const CLAMP: Record<number, string> = {
+  3: "line-clamp-[3]",
+  4: "line-clamp-[4]",
+  5: "line-clamp-[5]",
+  6: "line-clamp-[6]",
+  7: "line-clamp-[7]",
+  8: "line-clamp-[8]",
+  9: "line-clamp-[9]",
+  10: "line-clamp-[10]",
+  11: "line-clamp-[11]",
+};
+
+/**
  * Cuerpo decreciente por longitud, al estilo de los posts de color: una pregunta
  * de seis palabras es un titular; una de tres renglones es un párrafo.
  *
@@ -144,21 +250,31 @@ export interface QuestionTypeScale {
 export function questionTypeScale(
   question: string,
   isDetail: boolean,
+  /**
+   * Renglones que OTRO contenido del banner ya reservó. Hoy lo usa la encuesta
+   * Sí/No: dos barras de 44px + su pie ocupan ~120px, que a estos cuerpos son
+   * unos cuatro renglones. Sin descontarlos, una pregunta larga con encuesta
+   * empujaría la card muy por debajo del 4:5 del resto del feed.
+   */
+  reservedLines = 0,
 ): QuestionTypeScale {
   const length = question.trim().length;
-  const clamp = (lines: string) => (isDetail ? null : lines);
+  // Nunca por debajo de 3 renglones: un recorte de una línea no es un recorte,
+  // es una pregunta ilegible.
+  const clamp = (lines: number) =>
+    isDetail ? null : (CLAMP[Math.max(3, lines - reservedLines)] ?? CLAMP[3]);
   if (length <= 48) {
-    return { size: "text-3xl", rhythm: "leading-tight tracking-tight", clamp: clamp("line-clamp-[7]") };
+    return { size: "text-3xl", rhythm: "leading-tight tracking-tight", clamp: clamp(7) };
   }
   if (length <= 110) {
-    return { size: "text-2xl", rhythm: "leading-snug tracking-tight", clamp: clamp("line-clamp-[9]") };
+    return { size: "text-2xl", rhythm: "leading-snug tracking-tight", clamp: clamp(9) };
   }
   if (length <= 200) {
-    return { size: "text-xl", rhythm: "leading-snug", clamp: clamp("line-clamp-[11]") };
+    return { size: "text-xl", rhythm: "leading-snug", clamp: clamp(11) };
   }
   // 11 y no 12: en este tramo aparece la píldora de "ver completa", que se come
   // un renglón largo del presupuesto vertical.
-  return { size: "text-lg", rhythm: "leading-relaxed", clamp: clamp("line-clamp-[11]") };
+  return { size: "text-lg", rhythm: "leading-relaxed", clamp: clamp(11) };
 }
 
 export interface QuestionBannerProps {
@@ -167,6 +283,17 @@ export interface QuestionBannerProps {
   question: string;
   /** true en /feed/[id]: sin recorte y sin navegación al tocar. */
   isDetail?: boolean;
+  /**
+   * Contenido interactivo bajo la pregunta, DENTRO de la pieza (hoy: la
+   * encuesta Sí/No). Va por encima de la capa de toque, así que sus botones
+   * reciben el tap sin que el banner navegue al detalle.
+   */
+  footer?: React.ReactNode;
+  /**
+   * Vista previa del composer: sin capa de toque, sin navegación y sin doble
+   * toque. Es una maqueta de "así se va a ver", no una publicación.
+   */
+  preview?: boolean;
   className?: string;
 }
 
@@ -174,6 +301,8 @@ export function QuestionBanner({
   postId,
   question,
   isDetail = false,
+  footer,
+  preview = false,
   className,
 }: QuestionBannerProps) {
   const reduce = useReducedMotion();
@@ -192,9 +321,9 @@ export function QuestionBanner({
   );
 
   const variant = VARIANTS[questionVariantOf(postId)];
-  const type = questionTypeScale(question, isDetail);
-  const href = isDetail ? null : `/feed/${postId}`;
-  const showMore = !isDetail && question.trim().length > LONG_QUESTION;
+  const type = questionTypeScale(question, isDetail, footer ? 4 : 0);
+  const href = isDetail || preview ? null : `/feed/${postId}`;
+  const showMore = !isDetail && !preview && question.trim().length > LONG_QUESTION;
 
   function handleDoubleTap() {
     if (!like) return;
@@ -241,6 +370,10 @@ export function QuestionBanner({
         aria-hidden="true"
         className="col-start-1 row-start-1 block w-full pt-[125%]"
       />
+
+      {/* Marca de agua ANTES de la luz y el vignette: es parte del papel, no
+          algo apoyado encima (ver el comentario de BrandWatermark). */}
+      <BrandWatermark />
 
       {/* Luz de la variante + vignette que cierra los bordes. */}
       <span
@@ -301,6 +434,11 @@ export function QuestionBanner({
             {COPY.post.questionReadFull}
           </span>
         )}
+
+        {/* La encuesta vive DENTRO de la pieza (el cliente la dibujó pegada a la
+            pregunta) pero por encima de la capa de toque: tocar "Sí" vota, no
+            abre el detalle. `w-full` para que las barras midan la columna. */}
+        {footer && <div className="relative z-20 mt-1 w-full">{footer}</div>}
       </div>
 
       {/* Capa de toque. En el feed es un link real (Enter navega, ⌘+clic abre en
@@ -313,7 +451,7 @@ export function QuestionBanner({
           onClick={handleTap}
           className="absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring"
         />
-      ) : (
+      ) : preview ? null : (
         <span
           aria-hidden="true"
           onClick={handleTap}

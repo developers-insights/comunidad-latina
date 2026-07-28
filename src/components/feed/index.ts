@@ -14,6 +14,7 @@ export {
 export { FeedListingCard } from "./feed-listing-card";
 export { FeedTabs } from "./feed-tabs";
 export { GuideCard } from "./guide-card";
+export { PollYesNo, type PollTone, type PollYesNoProps } from "./poll-yes-no";
 export {
   FEED_TABS,
   ENTITY_KIND_META,
@@ -24,6 +25,7 @@ export {
   feedPostVisibilityFilter,
   mediaKindOf,
   parseTab,
+  pollPercent,
   postKindOf,
   postMediaUrl,
   type AuthorView,
@@ -35,6 +37,7 @@ export {
   type PostEntityView,
   type PostMediaKind,
   type PostMediaView,
+  type PostPollView,
 } from "./helpers";
 export { PostActions, type PostActionsProps } from "./post-actions";
 export { PostCard, type PostCardProps } from "./post-card";

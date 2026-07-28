@@ -8,6 +8,9 @@
 // posts.view_count, listings.comment_count, post_promotions.cta_whatsapp.
 // EXCEPCIÓN 2026-07-26 bis: 0039 — listings.store_verified (espejo público).
 // EXCEPCIÓN 2026-07-27 (misma razón): 0040 — job_applications (empleos).
+// EXCEPCIÓN 2026-07-27 bis: 0041 — posts.poll_* + post_poll_votes (encuestas
+// Sí/No), tenants.modules_soon ("Muy pronto") y broadcasts.severity (alerta
+// urgente); y 0042 — la función job_application_tally.
 export type Json =
   | string
   | number
@@ -267,6 +270,7 @@ export type Database = {
           cta_url: string | null
           ends_at: string | null
           id: string
+          severity: string
           starts_at: string
           title: string
         }
@@ -277,6 +281,7 @@ export type Database = {
           cta_url?: string | null
           ends_at?: string | null
           id?: string
+          severity?: string
           starts_at?: string
           title: string
         }
@@ -287,6 +292,7 @@ export type Database = {
           cta_url?: string | null
           ends_at?: string | null
           id?: string
+          severity?: string
           starts_at?: string
           title?: string
         }
@@ -1364,6 +1370,9 @@ export type Database = {
           kind: string
           like_count: number
           media: string[]
+          poll_kind: string | null
+          poll_no_count: number
+          poll_yes_count: number
           status: string
           tenant_id: string
           updated_at: string
@@ -1379,6 +1388,9 @@ export type Database = {
           kind?: string
           like_count?: number
           media?: string[]
+          poll_kind?: string | null
+          poll_no_count?: number
+          poll_yes_count?: number
           status?: string
           tenant_id: string
           updated_at?: string
@@ -1394,6 +1406,9 @@ export type Database = {
           kind?: string
           like_count?: number
           media?: string[]
+          poll_kind?: string | null
+          poll_no_count?: number
+          poll_yes_count?: number
           status?: string
           tenant_id?: string
           updated_at?: string
@@ -1416,6 +1431,52 @@ export type Database = {
           },
           {
             foreignKeyName: "posts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_poll_votes: {
+        Row: {
+          choice: boolean
+          created_at: string
+          post_id: string
+          tenant_id: string
+          voter_id: string
+        }
+        Insert: {
+          choice: boolean
+          created_at?: string
+          post_id: string
+          tenant_id?: string
+          voter_id: string
+        }
+        Update: {
+          choice?: boolean
+          created_at?: string
+          post_id?: string
+          tenant_id?: string
+          voter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_poll_votes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_poll_votes_voter_id_fkey"
+            columns: ["voter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_poll_votes_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1839,6 +1900,7 @@ export type Database = {
           locale: string
           logo_url: string | null
           modules: Json
+          modules_soon: Json
           name: string
           slug: string
           status: string
@@ -1855,6 +1917,7 @@ export type Database = {
           locale?: string
           logo_url?: string | null
           modules?: Json
+          modules_soon?: Json
           name: string
           slug: string
           status?: string
@@ -1871,6 +1934,7 @@ export type Database = {
           locale?: string
           logo_url?: string | null
           modules?: Json
+          modules_soon?: Json
           name?: string
           slug?: string
           status?: string
@@ -2040,6 +2104,14 @@ export type Database = {
       }
       block_user: { Args: { p_profile_id: string }; Returns: undefined }
       get_tenant_by_domain: { Args: { p_domain: string }; Returns: Json }
+      job_application_tally: {
+        Args: { p_job_ids: string[] }
+        Returns: {
+          job_id: string
+          pending: number
+          total: number
+        }[]
+      }
       report_scam: {
         Args: {
           p_details?: string
