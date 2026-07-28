@@ -15,7 +15,7 @@ import { PullToRefresh } from "@/components/feed/pull-to-refresh";
 import { ParaVos, ParaVosSkeleton } from "@/components/matching";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { fetchFeedPageAction } from "./load-more";
+import { fetchFeedPageAction } from "../load-more";
 
 export const metadata = { title: "Feed" };
 

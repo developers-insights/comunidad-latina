@@ -1,14 +1,28 @@
 import { Skeleton } from "@/components/ui";
 
 /**
- * Loading raíz: skeleton premium que replica la SILUETA del shell real
- * (header sticky + contenido mobile-first + barra inferior), no un spinner
- * (§ estados). Shimmer vía la utility `skeleton`. Server component: cero JS.
+ * Skeleton del shell: silueta del header sticky + contenido mobile-first +
+ * barra inferior, no un spinner (§ estados). Shimmer vía la utility `skeleton`.
+ * Server component: cero JS.
  *
  * Coherente con (app)/layout.tsx: mismo ancho (max-w-lg), mismo padding y una
  * pista de bottom-nav para que la transición al contenido real no salte.
+ *
+ * ── Dónde puede montarse (IMPORTANTE) ──────────────────────────────────────
+ * Vivía en `src/app/loading.tsx`, o sea un Suspense alrededor de TODA la app.
+ * Eso hacía que el shell se enviara antes de que corriera el cuerpo de la
+ * página: con los headers ya mandados, `notFound()` no podía cambiar el status
+ * y TODA ruta de detalle devolvía 200 en vez de 404 (soft 404). Ver
+ * `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/loading.md`
+ * §Status Codes.
+ *
+ * Por eso su `loading.tsx` sólo puede colgar de segmentos que NO tengan ninguna
+ * ruta con `notFound()` debajo — en la práctica, las rutas de LISTA aisladas en
+ * un route group `(lista)/`, hermano del `[id]/` que sí hace notFound(). El
+ * test `src/app/loading-boundaries.test.ts` verifica esta invariante sobre el
+ * árbol real de `src/app` y falla si alguien vuelve a poner un boundary de más.
  */
-export default function RootLoading() {
+export function AppShellSkeleton() {
   return (
     <div
       aria-busy="true"

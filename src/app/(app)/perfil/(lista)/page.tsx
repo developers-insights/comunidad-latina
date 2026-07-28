@@ -20,10 +20,10 @@ import {
   trustSignalsFrom,
 } from "@/components/auth/trust-signals";
 import { cn } from "@/lib/utils";
-import { signOutAction } from "./actions";
-import { ProfileHeader } from "./profile-header";
-import { ProfilePostsGrid } from "./posts-grid";
-import { fetchAuthorPostTiles } from "./posts";
+import { signOutAction } from "../actions";
+import { ProfileHeader } from "../profile-header";
+import { ProfilePostsGrid } from "../posts-grid";
+import { fetchAuthorPostTiles } from "../posts";
 
 export const metadata = { title: "Tu perfil" };
 
