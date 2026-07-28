@@ -202,7 +202,15 @@ export function CommentComposer(props: CommentComposerProps) {
         send();
       }}
       className={cn(
-        "flex items-end gap-2 rounded-2xl border p-2 shadow-sm",
+        // `rounded-full` y no un radio fijo (era `rounded-2xl`, 32px): con un
+        // valor fijo el navegador clampea el BORDE al alto real del pill pero
+        // clampea el box-shadow del anillo de foco con la lógica de "radio
+        // declarado", y a la altura de este input (62px) ambos números casi
+        // coinciden — la costura queda visible en las puntas, sólo con el
+        // anillo puesto. `rounded-full` (9999px) no tiene ese punto ambiguo:
+        // border y box-shadow clampean igual, en cualquier alto (el campo
+        // crece hasta max-h-36 al escribir varias líneas).
+        "flex items-end gap-2 rounded-full border p-2 shadow-sm",
         // Sobre el vidrio la píldora se HUNDE (tinta) en vez de aclararse: así
         // el texto y el placeholder quedan AA aun con un video blanco detrás.
         onMedia

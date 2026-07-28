@@ -8,6 +8,11 @@ const buttonVariants = cva(
     "inline-flex shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap font-semibold",
     "transition-[transform,background-color,border-color,color,opacity] duration-(--duration-fast) ease-(--ease-spring)",
     "active:scale-[0.97]",
+    // `<a>` trae el puntero del navegador gratis; un `<button>` no — sin esto
+    // ~40 call sites de este primitivo (el que se usa como botón real) se
+    // sienten "al revés" al pasar el mouse, como el que reportó el cliente en
+    // la encuesta del feed (bug local aparte, mismo origen).
+    "cursor-pointer disabled:cursor-not-allowed",
     "disabled:pointer-events-none disabled:opacity-45",
     "aria-busy:pointer-events-none",
     // Anillo de foco PROPIO, y no el global de globals.css. El global vive en

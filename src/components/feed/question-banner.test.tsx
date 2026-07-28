@@ -11,8 +11,11 @@ import type { PostCardModel } from "./helpers";
  *  1. la pregunta SE VE (es la pieza gráfica, no un adorno vacío);
  *  2. la variante de fondo es determinística por id — el mismo post no cambia de
  *     color al recargar ni entre el feed y el detalle;
- *  3. el texto largo se recorta en el feed y NO se recorta en el detalle;
- *  4. el doble toque da me gusta (misma ventana de 250ms que la foto);
+ *  3. el texto largo se recorta en el feed y NO se recorta en el detalle — y en
+ *     el feed se puede expandir EN EL LUGAR, sin navegar (corregido 2026-07-28:
+ *     antes un toque simple navegaba a `/feed/[id]`);
+ *  4. el doble toque da me gusta (misma ventana de 250ms que la foto); un toque
+ *     simple NO HACE NADA;
  *  5. un post kind='post' no muestra banner (y una pregunta CON foto tampoco).
  *
  * La animación se neutraliza (mismo patrón que media-viewer.test.tsx): acá se
@@ -115,6 +118,7 @@ function questionParagraph(container: HTMLElement): HTMLElement {
 afterEach(() => {
   cleanup();
   push.mockClear();
+  insert.mockClear();
 });
 
 describe("QuestionBanner: la pregunta ES la pieza gráfica", () => {
@@ -123,13 +127,12 @@ describe("QuestionBanner: la pregunta ES la pieza gráfica", () => {
     expect(screen.getByText(QUESTION_SHORT)).toBeTruthy();
   });
 
-  it("en el feed el banner entero es un link al detalle", () => {
+  it("ni en el feed ni en el detalle hay un link o control que navegue: tocar la pregunta no lleva a ningún lado", () => {
     renderBanner();
-    const link = screen.getByRole("link", { name: /ver publicación/i });
-    expect(link.getAttribute("href")).toBe(`/feed/${POST_ID}`);
-  });
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull(); // pregunta corta: sin "ver completa"
+    cleanup();
 
-  it("en el detalle no hay link ni control: un toque simple no lleva a ningún lado", () => {
     renderBanner({ isDetail: true });
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
@@ -187,14 +190,25 @@ describe("QuestionBanner: el cuerpo decrece y el texto largo se recorta", () => 
     expect(questionTypeScale(QUESTION_LONG, true).clamp).toBeNull();
   });
 
-  it("una pregunta larga avisa en el feed que se puede leer completa", () => {
+  it("una pregunta larga avisa en el feed que se puede leer completa, con un botón real", () => {
     renderBanner({ question: QUESTION_LONG });
-    expect(screen.getByText(/ver la pregunta completa/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /ver la pregunta completa/i })).toBeTruthy();
   });
 
   it("una pregunta corta no muestra ese aviso (no hay nada escondido)", () => {
     renderBanner();
     expect(screen.queryByText(/ver la pregunta completa/i)).toBeNull();
+  });
+
+  it("tocar 'ver la pregunta completa' expande EN EL LUGAR, sin navegar (corregido 2026-07-28)", () => {
+    const { container } = renderBanner({ question: QUESTION_LONG });
+    expect(questionParagraph(container).className).toMatch(/line-clamp-/);
+
+    fireEvent.click(screen.getByRole("button", { name: /ver la pregunta completa/i }));
+
+    expect(questionParagraph(container).className).not.toMatch(/line-clamp-/);
+    // Ya no hay nada que expandir: la píldora desaparece, como en el detalle.
+    expect(screen.queryByRole("button", { name: /ver la pregunta completa/i })).toBeNull();
   });
 });
 
@@ -265,36 +279,45 @@ describe("QuestionBanner: la encuesta convive con la tipografía", () => {
   });
 });
 
-describe("QuestionBanner: el doble toque da me gusta", () => {
+/**
+ * La capa de toque invisible (sólo existe para el doble toque). El banner tiene
+ * VARIOS `span[aria-hidden] absolute inset-0` decorativos (luz+vignette, grano
+ * de papel) — la capa de toque es la única sin `pointer-events-none` y con
+ * `z-10`, así que ese es el selector que la distingue de las demás.
+ */
+function tapLayer(container: HTMLElement): HTMLElement {
+  const node = container.querySelector('[aria-hidden="true"].absolute.inset-0.z-10');
+  expect(node, "no está la capa de toque").not.toBeNull();
+  return node as HTMLElement;
+}
+
+describe("QuestionBanner: el doble toque da me gusta, un toque simple no hace nada", () => {
   beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
   afterEach(() => vi.useRealTimers());
 
-  it("dos toques dentro de la ventana likean y NO navegan", () => {
-    renderBanner();
-    const link = screen.getByRole("link", { name: /ver publicación/i });
-    fireEvent.click(link, { detail: 1 });
-    fireEvent.click(link, { detail: 1 });
+  it("dos toques dentro de la ventana likean", () => {
+    const { container } = renderBanner();
+    const layer = tapLayer(container);
+    fireEvent.click(layer);
+    fireEvent.click(layer);
     vi.advanceTimersByTime(400);
-    expect(push).not.toHaveBeenCalled();
     expect(insert).toHaveBeenCalled();
   });
 
-  it("un toque simple abre el detalle recién pasada la ventana", () => {
-    renderBanner();
-    const link = screen.getByRole("link", { name: /ver publicación/i });
-    fireEvent.click(link, { detail: 1 });
-    expect(push).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(300);
-    expect(push).toHaveBeenCalledWith(`/feed/${POST_ID}`);
+  it("un toque simple, pasada la ventana, no likea (y no navega a ningún lado)", () => {
+    const { container } = renderBanner();
+    const layer = tapLayer(container);
+    fireEvent.click(layer);
+    vi.advanceTimersByTime(400);
+    expect(insert).not.toHaveBeenCalled();
   });
 
-  it("el teclado (Enter, detail 0) navega por el link, sin esperar la ventana", () => {
-    renderBanner();
-    const link = screen.getByRole("link", { name: /ver publicación/i });
-    const event = fireEvent.click(link, { detail: 0 });
-    // No se llamó a preventDefault: el <Link> real navega solo.
-    expect(event).toBe(true);
-    expect(push).not.toHaveBeenCalled();
+  it("la capa de toque no es focusable ni se anuncia: el camino accesible al me gusta es el botón de PostActions", () => {
+    const { container } = renderBanner();
+    const layer = tapLayer(container);
+    expect(layer.tagName).toBe("SPAN");
+    expect(layer.getAttribute("aria-hidden")).toBe("true");
+    expect(layer.hasAttribute("tabindex")).toBe(false);
   });
 });
 
@@ -344,7 +367,6 @@ describe("PostCard: el banner sólo entra donde tiene que entrar", () => {
     renderCard({});
     // Una sola aparición: el banner ES el cuerpo, no un duplicado de la frase.
     expect(screen.getAllByText(QUESTION_SHORT)).toHaveLength(1);
-    expect(screen.getByRole("link", { name: /ver publicación/i })).toBeTruthy();
   });
 
   it("un post kind='post' NO muestra banner", () => {

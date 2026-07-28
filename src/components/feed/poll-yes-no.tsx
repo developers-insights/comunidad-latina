@@ -183,7 +183,12 @@ export function PollYesNo({
           .filter(Boolean)
           .join(" — ")}
         className={cn(
-          "relative isolate flex min-h-11 w-full items-center overflow-hidden rounded-full border",
+          // `cursor-pointer` explícito: Tailwind no le pone puntero a un
+          // <button> por default (a diferencia de <a>, que sí lo trae del
+          // navegador) — sin esto, el botón vota igual pero se siente al
+          // revés: la mano aparece en el link invisible de alrededor y la
+          // flecha justo encima del control que sí hace algo.
+          "relative isolate flex min-h-11 w-full cursor-pointer items-center overflow-hidden rounded-full border",
           "px-4 text-left transition-[transform,border-color,background-color]",
           "duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.985]",
           "focus-visible:outline-none focus-visible:ring-[3px]",

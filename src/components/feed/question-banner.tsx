@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Heart } from "@phosphor-icons/react/dist/ssr";
 import { m, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
@@ -40,10 +38,19 @@ import { useCardLike } from "./card-like-context";
  *
  *  · ES MEDIA A TODOS LOS EFECTOS. Doble toque = me gusta con el mismo estado
  *    compartido de la card (useCardLike) y la misma ventana de 250ms que la foto.
- *    Toque simple: en el feed abre el detalle (no hay visor para un banner); en
- *    el detalle no hace nada, y por eso ahí la capa de toque ni siquiera es
- *    focusable — el camino accesible al me gusta sigue siendo el botón de
- *    PostActions, el doble toque es un extra táctil.
+ *    Toque simple: NO HACE NADA, ni en el feed ni en el detalle — y por eso la
+ *    capa de toque ni siquiera es focusable: el camino accesible al me gusta
+ *    sigue siendo el botón de PostActions, el doble toque es un extra táctil.
+ *
+ *  · TOCAR LA PREGUNTA NUNCA SACA DEL FEED (corregido 2026-07-28). Hasta acá, un
+ *    toque simple navegaba a `/feed/[id]` — la excusa era que una foto tiene
+ *    visor de pantalla completa y un banner de texto no. Pero el resto del post
+ *    ya vive en la card (la encuesta se vota ahí mismo, los comentarios abren en
+ *    hoja): lo único que el detalle seguía resolviendo era leer una pregunta
+ *    recortada, y eso no necesita navegar — se expande en el lugar. `expanded`
+ *    hace que el banner deje de recortar (mismo `questionTypeScale` que ya usaba
+ *    el detalle) y la píldora "ver completa" pasa de decorativa a un botón real,
+ *    elevado por encima de la capa de toque para recibir el clic.
  */
 
 /** Ventana para distinguir un toque simple de un doble toque (misma que la foto). */
@@ -281,7 +288,7 @@ export interface QuestionBannerProps {
   postId: string;
   /** El cuerpo del post: acá ES la pieza gráfica, no se repite abajo. */
   question: string;
-  /** true en /feed/[id]: sin recorte y sin navegación al tocar. */
+  /** true en /feed/[id]: sin recorte — igual que el feed una vez expandido. */
   isDetail?: boolean;
   /**
    * Contenido interactivo bajo la pregunta, DENTRO de la pieza (hoy: la
@@ -306,13 +313,11 @@ export function QuestionBanner({
   className,
 }: QuestionBannerProps) {
   const reduce = useReducedMotion();
-  const router = useRouter();
   const like = useCardLike();
   const [bursts, setBursts] = useState(0);
+  const [expanded, setExpanded] = useState(false);
   const tapTimer = useRef<number | null>(null);
 
-  // Si la card se desmonta con un toque en vuelo (scroll rápido), que el timer no
-  // navegue desde una card que ya no está. Mismo cuidado que en la foto.
   useEffect(
     () => () => {
       if (tapTimer.current !== null) clearTimeout(tapTimer.current);
@@ -320,10 +325,10 @@ export function QuestionBanner({
     [],
   );
 
+  const unclamped = isDetail || expanded;
   const variant = VARIANTS[questionVariantOf(postId)];
-  const type = questionTypeScale(question, isDetail, footer ? 4 : 0);
-  const href = isDetail || preview ? null : `/feed/${postId}`;
-  const showMore = !isDetail && !preview && question.trim().length > LONG_QUESTION;
+  const type = questionTypeScale(question, unclamped, footer ? 4 : 0);
+  const showMore = !unclamped && !preview && question.trim().length > LONG_QUESTION;
 
   function handleDoubleTap() {
     if (!like) return;
@@ -333,11 +338,10 @@ export function QuestionBanner({
     like.likeOnce();
   }
 
-  function handleTap(event: React.MouseEvent) {
-    // Teclado (Enter sobre el link) y ctrl/⌘+clic: no son gestos táctiles, no
-    // tienen por qué esperar la ventana del doble toque. Dejamos pasar el link.
-    if (href && (event.detail === 0 || event.metaKey || event.ctrlKey)) return;
-    event.preventDefault();
+  // Un toque simple no hace NADA (ver docblock): el timer solo distingue "este
+  // toque es el primero de dos" de "este toque estuvo solo", para el doble
+  // toque = me gusta. Expandir la pregunta pasa por su propio botón, no por acá.
+  function handleTap() {
     if (tapTimer.current !== null) {
       clearTimeout(tapTimer.current);
       tapTimer.current = null;
@@ -346,9 +350,6 @@ export function QuestionBanner({
     }
     tapTimer.current = window.setTimeout(() => {
       tapTimer.current = null;
-      // En el detalle un toque simple no hace nada: no hay visor para un banner
-      // y ya estás en la publicación.
-      if (href) router.push(href);
     }, DOUBLE_TAP_MS);
   }
 
@@ -430,9 +431,17 @@ export function QuestionBanner({
         </m.p>
 
         {showMore && (
-          <span className="rounded-full border border-on-media/25 bg-media-scrim px-3 py-1 text-xs font-semibold">
+          // z-20: por encima de la capa de toque (z-10) de más abajo, si no el
+          // overlay de doble-toque le gana el clic a este botón. `cursor-pointer`
+          // explícito: un <button> no lo trae por default (a diferencia de un
+          // link), y sin esto la píldora se ve clickeable pero el mouse no lo dice.
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="relative z-20 cursor-pointer rounded-full border border-on-media/25 bg-media-scrim px-3 py-1 text-xs font-semibold transition-colors duration-(--duration-fast) hover:bg-on-media/15 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60"
+          >
             {COPY.post.questionReadFull}
-          </span>
+          </button>
         )}
 
         {/* La encuesta vive DENTRO de la pieza (el cliente la dibujó pegada a la
@@ -441,17 +450,10 @@ export function QuestionBanner({
         {footer && <div className="relative z-20 mt-1 w-full">{footer}</div>}
       </div>
 
-      {/* Capa de toque. En el feed es un link real (Enter navega, ⌘+clic abre en
-          otra pestaña); en el detalle no hay acción simple, así que no es
-          focusable ni se anuncia: el doble toque es un extra táctil. */}
-      {href ? (
-        <Link
-          href={href}
-          aria-label={COPY.post.openPost}
-          onClick={handleTap}
-          className="absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring"
-        />
-      ) : preview ? null : (
+      {/* Capa de toque: sólo para el doble-toque = me gusta (extra táctil, no
+          focusable — el camino accesible sigue siendo el botón de PostActions).
+          No navega ni en el feed ni en el detalle; ver docblock del archivo. */}
+      {!preview && (
         <span
           aria-hidden="true"
           onClick={handleTap}
