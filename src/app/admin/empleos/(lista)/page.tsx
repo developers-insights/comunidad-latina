@@ -2,8 +2,8 @@ import { Briefcase, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState } from "@/components/ui";
 import { JobListingRow } from "@/components/admin/job-listing-row";
 import { getTenant } from "@/lib/tenant/resolve";
-import { requireStaff } from "../guard";
-import { fetchAdminJobs, type AdminJobRow } from "./queries";
+import { requireStaff } from "../../guard";
+import { fetchAdminJobs, type AdminJobRow } from "../queries";
 
 export const metadata = { title: "Empleos" };
 

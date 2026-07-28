@@ -10,7 +10,7 @@ import { JobListSkeleton } from "@/components/empleos/job-skeletons";
 import { t } from "@/lib/i18n";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
-import { fetchJobsPage } from "./queries";
+import { fetchJobsPage } from "../queries";
 
 export const metadata = { title: "Empleos" };
 

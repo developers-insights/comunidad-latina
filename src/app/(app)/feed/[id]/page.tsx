@@ -65,21 +65,12 @@ export default async function PostDetailPage({
   if (error) {
     console.warn("[feed] query de detalle falló", { code: error.code });
   }
-  if (!postRow) {
-    return (
-      <EmptyState
-        illustration="/images/empty-state-search.png"
-        title={COPY.detail.notFoundTitle}
-        message={COPY.detail.notFoundMessage}
-        action={
-          <Link href="/feed" className={buttonVariants({ variant: "secondary", size: "md" })}>
-            <ArrowLeft size={16} aria-hidden="true" />
-            {COPY.detail.backToFeed}
-          </Link>
-        }
-      />
-    );
-  }
+  // Post inexistente (o invisible por RLS) → notFound(), NO un return con la
+  // UI de vacío: devolviendo JSX el status quedaba en 200 y un link muerto
+  // parecía una página válida para crawlers y analytics. La misma pantalla
+  // —"volvé al feed"— vive ahora en ./not-found.tsx, que Next renderiza con
+  // 404 de verdad.
+  if (!postRow) notFound();
 
   const post = postRow as PostRow;
 
