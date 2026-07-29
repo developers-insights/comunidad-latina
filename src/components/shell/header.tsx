@@ -1,10 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ChatCircle } from "@phosphor-icons/react/dist/ssr";
 import type { Tenant } from "@/lib/tenant/resolve";
-import { createClient } from "@/lib/supabase/server";
-import { isStaffRole } from "@/app/admin/guard";
+import { Avatar } from "@/components/ui";
 import { HeaderActions } from "@/components/shell/header-actions";
-import { AppMenu } from "@/components/shell/app-menu";
+import { getShellContext } from "@/components/shell/shell-context";
+import { t } from "@/lib/i18n";
+
+const COPY = {
+  profile: "Tu perfil",
+  signIn: "Entrar",
+} as const;
 
 const SUPABASE_ORIGIN = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/+$/, "");
 
@@ -16,59 +22,18 @@ function isOptimizableSrc(src: string): boolean {
   );
 }
 
-interface MenuContext {
-  user: { displayName: string; avatarUrl: string | null } | null;
-  unread: number;
-  isStaff: boolean;
-}
-
-/**
- * Lo que el menú necesita del server: identidad, notificaciones sin leer
- * (RLS: solo las propias) y si la cuenta es staff (el rol SIEMPRE del JWT,
- * nunca de `profiles.role`, que es informativa — mismo criterio que la RLS).
- * Sin sesión o sin DB devuelve un contexto vacío: el menú sigue sirviendo
- * para explorar, nunca un error.
- */
-async function getMenuContext(): Promise<MenuContext> {
-  const empty: MenuContext = { user: null, unread: 0, isStaff: false };
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return empty;
-
-    const [{ data: profile }, { count, error }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("display_name, avatar_url")
-        .eq("id", user.id)
-        .maybeSingle(),
-      supabase.from("notifications").select("id", { count: "exact", head: true }).is("read_at", null),
-    ]);
-
-    return {
-      user: {
-        displayName: profile?.display_name ?? "Tu cuenta",
-        avatarUrl: profile?.avatar_url ?? null,
-      },
-      unread: !error && typeof count === "number" ? count : 0,
-      isStaff: isStaffRole(user.app_metadata?.role),
-    };
-  } catch {
-    return empty;
-  }
-}
-
 /**
  * Header del shell autenticado: zona de logo del tenant (única zona de marca
- * masiva permitida), selector de ubicación (placeholder, lo cablea SOCIAL) y
- * el botón de menú.
+ * masiva permitida), selector de ubicación (placeholder, lo cablea SOCIAL),
+ * Mensajes y el avatar de perfil.
  *
- * Un solo control a la derecha (feedback cliente 2026-07-20): el toggle de
- * tema y la campana se mudaron adentro del menú, junto con los 8 módulos que
- * antes vivían en el rail de cápsulas. El header respira y el nombre de la
- * comunidad deja de competir con tres botones.
+ * Historia de esta esquina derecha, porque cambió dos veces:
+ *  · 2026-07-20 — el rail de módulos, el toggle de tema y la campana se fueron
+ *    adentro de UN botón de menú, para que el header respirara.
+ *  · 2026-07-29 — ese menú se eliminó (pedido de Manuel): su contenido se
+ *    repartió entre /buscar (los módulos) y /ajustes (cuenta, notificaciones,
+ *    tema, sesión), y su lugar lo tomó el avatar. Mensajes subió acá al mismo
+ *    tiempo, porque salió del bottom nav.
  *
  * Superficie elevada: `bg-surface/85` (no canvas) + firma tricolor abajo,
  * que voltean solas con el tema.
@@ -76,7 +41,7 @@ async function getMenuContext(): Promise<MenuContext> {
  * El `sticky top-0 z-40` vive en el wrapper de `(app)/layout.tsx`, NO acá.
  */
 export async function Header({ tenant, className }: { tenant: Tenant; className?: string }) {
-  const menu = await getMenuContext();
+  const menu = await getShellContext();
   // Single-community: si el tenant no trae logo propio, cae al logo de la
   // plataforma (las tres figuras azul·amarillo·rojo).
   const logoSrc = tenant.logoUrl ?? "/brand/logo-mark.png";
@@ -116,16 +81,42 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
         </Link>
 
         <HeaderActions />
-        {/* Los módulos del menú salen de la config del tenant (panel /admin/dominio):
-            el Header ya tiene el tenant resuelto, así que se los pasa al menú
-            (cliente) como props planas — sin fetch extra ni cliente de Supabase. */}
-        <AppMenu
-          user={menu.user}
-          initialUnread={menu.unread}
-          isStaff={menu.isStaff}
-          modules={tenant.modules}
-          modulesSoon={tenant.modulesSoon}
-        />
+
+        {/* Mensajes: bajó del menú lateral y subió acá porque es adonde apunta
+            CADA CTA de contacto de la app (la tarjeta de un negocio, la de una
+            propiedad, el mensaje inline del feed) y salió del bottom nav para
+            hacerle lugar a Ajustes. Sin globito de "sin leer": la tabla
+            `messages` no guarda estado de lectura (0006), y un punto que no
+            responde a nada es peor que ninguno. */}
+        <Link
+          href="/mensajes"
+          aria-label={t("nav", "messages")}
+          className="flex size-11 shrink-0 items-center justify-center rounded-full text-foreground-secondary transition-colors duration-(--duration-fast) hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+        >
+          <ChatCircle size={24} aria-hidden="true" />
+        </Link>
+
+        {/* Perfil, en el lugar donde estaba el botón de menú (pedido de Manuel,
+            2026-07-29). El avatar es el control de identidad más reconocible que
+            existe en una app social: dice de quién es la sesión ANTES de tocarlo,
+            cosa que un ícono de hamburguesa nunca hizo. Sin sesión, la misma
+            posición invita a entrar. */}
+        {menu.user ? (
+          <Link
+            href="/perfil"
+            aria-label={COPY.profile}
+            className="flex size-11 shrink-0 items-center justify-center rounded-full transition-colors duration-(--duration-fast) hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+          >
+            <Avatar size="sm" name={menu.user.displayName} src={menu.user.avatarUrl} />
+          </Link>
+        ) : (
+          <Link
+            href="/entrar"
+            className="flex min-h-11 shrink-0 items-center rounded-full px-3 text-sm font-semibold text-brand-ink transition-colors duration-(--duration-fast) hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+          >
+            {COPY.signIn}
+          </Link>
+        )}
       </div>
       {/* Firma tricolor de la marca: azul · amarillo · rojo (del logo). Reemplaza
           el hairline inferior del header y aparece en toda pantalla autenticada. */}

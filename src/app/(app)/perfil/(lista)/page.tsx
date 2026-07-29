@@ -1,27 +1,24 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
-  BookmarkSimple,
   Briefcase,
   CaretRight,
+  GearSix,
   PencilSimple,
-  Prohibit,
   ShieldCheck,
 } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { BezelCard, Button, buttonVariants } from "@/components/ui";
+import { BezelCard, buttonVariants } from "@/components/ui";
 import { TrustScoreCard } from "@/components/trust";
 import { decodeCursor } from "@/components/listings";
 import { EditProfileForm } from "@/components/auth/edit-profile-form";
-import { DeleteAccount } from "@/components/auth/delete-account";
 import { countryName } from "@/components/auth/countries";
 import {
   normalizeTrustLevel,
   trustSignalsFrom,
 } from "@/components/auth/trust-signals";
 import { cn } from "@/lib/utils";
-import { signOutAction } from "../actions";
 import { ProfileHeader } from "../profile-header";
 import { ProfilePostsGrid } from "../posts-grid";
 import { fetchAuthorPostTiles } from "../posts";
@@ -39,19 +36,12 @@ const COPY = {
   trustHeading: "Tu Trust Score",
   trustHint:
     "Crece con tu tiempo en la comunidad, tus verificaciones y el aval de tus vecinos.",
-  savedTitle: "Guardados",
-  savedDesc: "Publicaciones y avisos que guardaste, para volver a verlos.",
   editHeading: "Editar tu perfil",
-  helpHeading: "Ayuda y seguridad",
-  blockedTitle: "Personas bloqueadas",
-  blockedDesc: "Quiénes no pueden contactarte ni aparecer en tu feed.",
   contractsTitle: "Mis contratos",
   contractsDesc: "Los trabajos que contrataste o entregaste como creador.",
-  sessionHeading: "Tu cuenta",
-  sessionAs: (email: string) => `Sesión iniciada como ${email}.`,
-  signOut: "Cerrar sesión",
-  deleteHint:
-    "Si eliminás tu cuenta, borramos todo lo tuyo de verdad — perfil, publicaciones y mensajes.",
+  settingsTitle: "Ajustes de tu cuenta",
+  settingsDesc:
+    "Guardados, notificaciones, personas bloqueadas, tema y cerrar sesión.",
 } as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -183,37 +173,6 @@ export default async function PerfilPage({
         emptyMessage={COPY.postsEmpty}
       />
 
-      {/* Guardados — acceso privado a lo que guardaste del feed y del marketplace
-          (feedback cliente 27/7: el botón de guardar existía sin pantalla propia). */}
-      <section className="flex flex-col gap-3">
-        <Link
-          href="/perfil/guardados"
-          className="group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-        >
-          <BezelCard coreClassName="flex items-center gap-4 p-5">
-            <span
-              aria-hidden="true"
-              className="flex size-12 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-foreground-secondary"
-            >
-              <BookmarkSimple size={26} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block font-display text-base font-semibold text-foreground">
-                {COPY.savedTitle}
-              </span>
-              <span className="mt-0.5 block text-sm text-foreground-secondary">
-                {COPY.savedDesc}
-              </span>
-            </span>
-            <CaretRight
-              size={18}
-              aria-hidden="true"
-              className="shrink-0 text-foreground-muted transition-transform duration-(--duration-fast) ease-(--ease-out-premium) group-hover:translate-x-0.5"
-            />
-          </BezelCard>
-        </Link>
-      </section>
-
       {/* Editar — destino del ancla "Editar perfil" de la cabecera. */}
       <BezelCard id="editar-perfil" className="scroll-mt-20">
         <h2 className="mb-4 font-display text-lg font-semibold text-foreground">
@@ -260,13 +219,14 @@ export default async function PerfilPage({
         </section>
       )}
 
-      {/* Ayuda y seguridad — bloqueo de personas y demás herramientas de cuidado */}
+      {/* Administrar la cuenta ya no vive acá (2026-07-29). Guardados, cuentas
+          bloqueadas, tema y el bloque de sesión —cerrar sesión y eliminar la
+          cuenta— se mudaron ENTEROS a /ajustes, la pestaña nueva del bottom nav.
+          El perfil quedó para lo que es: quién sos de cara a la comunidad. Este
+          enlace es el puente, para quien venía con el camino viejo en la cabeza. */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold text-foreground">
-          {COPY.helpHeading}
-        </h2>
         <Link
-          href="/perfil/bloqueados"
+          href="/ajustes"
           className="group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
         >
           <BezelCard coreClassName="flex items-center gap-4 p-5">
@@ -274,14 +234,14 @@ export default async function PerfilPage({
               aria-hidden="true"
               className="flex size-12 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-foreground-secondary"
             >
-              <Prohibit size={26} />
+              <GearSix size={26} />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block font-display text-base font-semibold text-foreground">
-                {COPY.blockedTitle}
+                {COPY.settingsTitle}
               </span>
               <span className="mt-0.5 block text-sm text-foreground-secondary">
-                {COPY.blockedDesc}
+                {COPY.settingsDesc}
               </span>
             </span>
             <CaretRight
@@ -291,23 +251,6 @@ export default async function PerfilPage({
             />
           </BezelCard>
         </Link>
-      </section>
-
-      {/* Cuenta: correo + cerrar sesión + eliminar (alto riesgo, al final) */}
-      <section className="flex flex-col gap-3 border-t border-border-subtle pt-6">
-        <h2 className="text-sm font-semibold text-foreground">
-          {COPY.sessionHeading}
-        </h2>
-        {user.email && (
-          <p className="text-xs text-foreground-muted">{COPY.sessionAs(user.email)}</p>
-        )}
-        <form action={signOutAction}>
-          <Button type="submit" variant="outline">
-            {COPY.signOut}
-          </Button>
-        </form>
-        <p className="text-xs text-foreground-muted">{COPY.deleteHint}</p>
-        <DeleteAccount />
       </section>
     </div>
   );

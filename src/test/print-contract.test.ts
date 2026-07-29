@@ -487,17 +487,21 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-brand-foreground"],
     cobertura: "control",
   },
-  // Menú de la app (2026-07-20): el CTA "Publicar" y el contador de no leídas
-  // viven en un panel montado por PORTAL en <body> — fuera de <main> y fuera
-  // del <header>, así que ni `header:not(main header)` ni la regla de <button>
-  // lo alcanzan. Cobertura explícita: el panel lleva `cl-print-hide` (es chrome:
-  // en papel no significa nada). Reemplaza a la campana del header, borrada
-  // junto con el rail de módulos.
-  // Dos usos, y el inventario cuenta ocurrencias a propósito: el CTA "Publicar
-  // algo" y el contador de no leídas de la fila de Notificaciones.
-  "src/components/shell/app-menu.tsx": {
-    inks: ["text-brand-foreground", "text-brand-foreground"],
+  // Contador de notificaciones sin leer de /ajustes (2026-07-29): vive en una
+  // fila de <main>, así que no lo alcanza ninguna regla de chrome. Lleva
+  // `cl-print-hide` propio — un número de avisos pendientes no significa nada
+  // en papel, y sin el hook sería blanco sobre blanco.
+  "src/app/(app)/ajustes/page.tsx": {
+    inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",
+  },
+  // El "+" del bottom nav (2026-07-29): disco de marca con el signo en
+  // `text-brand-foreground`. Vive DENTRO del <nav> de la barra, que el papel ya
+  // no imprime — misma cobertura que el resto de la navegación. Reemplaza a la
+  // entrada del menú lateral, borrado junto con el rail de módulos y la campana.
+  "src/components/shell/bottom-nav.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "nav",
   },
   "src/components/onboarding/onboarding-wizard.tsx": {
     inks: ["text-brand-foreground"],

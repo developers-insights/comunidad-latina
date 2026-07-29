@@ -3,6 +3,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/shell/header";
 import { BottomNav } from "@/components/shell/bottom-nav";
+import { getShellContext } from "@/components/shell/shell-context";
 import { CommentsSheetProvider, MediaViewerProvider } from "@/components/feed";
 import { OfflineBanner } from "@/components/shell/offline-banner";
 import { TenantMismatchBanner } from "@/components/shell/tenant-mismatch-banner";
@@ -21,7 +22,7 @@ import { InstallPrompt } from "@/components/pwa/install-prompt";
  * la trata como activa).
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const tenant = await getTenant();
+  const [tenant, shell] = await Promise.all([getTenant(), getShellContext()]);
 
   const supabase = await createClient();
   const {
@@ -71,8 +72,17 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         {children}
       </main>
       {/* La barra esconde la pestaña de un módulo apagado — la config del tenant
-          baja como props planas desde acá (ver bottom-nav.tsx). */}
-      <BottomNav modules={tenant.modules} modulesSoon={tenant.modulesSoon} />
+          baja como props planas desde acá (ver bottom-nav.tsx). `unread` pinta
+          el punto de Ajustes (que es donde viven las notificaciones desde que se
+          eliminó el menú lateral) y `canCreate` decide si el "+" abre el menú de
+          publicar o lleva a entrar. `getShellContext` está memoizado por
+          request: el Header pide lo mismo y la DB se consulta una sola vez. */}
+      <BottomNav
+        modules={tenant.modules}
+        modulesSoon={tenant.modulesSoon}
+        canCreate={Boolean(user)}
+        unread={shell.unread}
+      />
       <InstallPrompt />
     </div>
     </CommentsSheetProvider>

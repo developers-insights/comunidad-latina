@@ -1,23 +1,14 @@
 "use client";
 
-import { useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
-  Briefcase,
-  Calendar,
   CaretRight,
   Camera,
-  House,
   PaperPlaneRight,
   Question,
-  ShoppingBagOpen,
-  Sparkle,
-  Storefront,
   VideoCamera,
-  Wrench,
 } from "@phosphor-icons/react/dist/ssr";
-import type { Icon } from "@phosphor-icons/react";
 import { Avatar, BottomSheet, Button, useToast } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 import { firstNameOf } from "@/components/listings";
@@ -25,10 +16,14 @@ import { useMounted } from "@/lib/design/use-overlay";
 import { cn } from "@/lib/utils";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import {
+  CreateMenu,
+  TileIconChip,
+  type QuickPostKind,
+} from "@/components/shell/create-menu";
+import {
   createPostAction,
   prepareMediaUploadAction,
 } from "@/app/(app)/feed/actions";
-import { entityAccentVar } from "./helpers";
 import { ComposerSheet, type ComposerMode } from "./composer-sheet";
 import { COPY } from "./copy";
 
@@ -42,134 +37,17 @@ const VIDEO_TYPES: Record<string, string> = {
   "video/webm": "webm",
 };
 
-// ---------------------------------------------------------------------------
-// Menú "crear publicación" (§b, feedback cliente 2026-07-24): la fila-disparador
-// abre un BottomSheet con TODOS los tipos que se pueden crear desde acá — el
-// post rápido (foto/video/pregunta, en ESTE composer) y un acceso directo a
-// cada módulo de la comunidad. El acento de cada tile es el de SU módulo
-// (entityAccentVar reutiliza el mismo mapeo que ya pinta las cards del feed).
-//
-// Rediseño 2026-07-27 (call con el cliente): esta fila es AHORA EL ÚNICO
-// disparador. Los dos recuadros grandes de "Agregar foto" / "Agregar video" se
-// fueron —"tiene mucho espacio blanco esta parte tan grande de aquí"— y cada
-// opción resuelve su medio ADENTRO de su propio flujo: foto y video abren el
-// selector y siguen en la hoja de texto (ComposerSheet), y los módulos abren su
-// formulario completo.
-// ---------------------------------------------------------------------------
-
-type CreateMenuAction =
-  | { kind: "photo" }
-  | { kind: "video" }
-  | { kind: "question" }
-  | { kind: "link"; href: string };
-
-interface CreateMenuTile {
-  key: string;
-  title: string;
-  description: string;
-  accent: string;
-  Icon: Icon;
-  action: CreateMenuAction;
-}
-
-const CREATE_MENU_TILES: CreateMenuTile[] = [
-  {
-    key: "photo",
-    ...COPY.composer.createMenu.tiles.photo,
-    accent: "var(--accent-feed)",
-    Icon: Camera,
-    action: { kind: "photo" },
-  },
-  {
-    key: "video",
-    ...COPY.composer.createMenu.tiles.video,
-    accent: "var(--accent-feed)",
-    Icon: VideoCamera,
-    action: { kind: "video" },
-  },
-  {
-    key: "question",
-    ...COPY.composer.createMenu.tiles.question,
-    accent: "var(--accent-feed)",
-    Icon: Question,
-    action: { kind: "question" },
-  },
-  {
-    key: "property",
-    ...COPY.composer.createMenu.tiles.property,
-    accent: entityAccentVar("property"),
-    Icon: House,
-    action: { kind: "link", href: "/publicar?kind=property" },
-  },
-  {
-    key: "business",
-    ...COPY.composer.createMenu.tiles.business,
-    accent: entityAccentVar("business"),
-    Icon: Storefront,
-    action: { kind: "link", href: "/publicar?kind=business" },
-  },
-  {
-    key: "professional",
-    ...COPY.composer.createMenu.tiles.professional,
-    accent: entityAccentVar("professional"),
-    Icon: Briefcase,
-    action: { kind: "link", href: "/publicar?kind=professional" },
-  },
-  {
-    key: "event",
-    ...COPY.composer.createMenu.tiles.event,
-    accent: entityAccentVar("event"),
-    Icon: Calendar,
-    action: { kind: "link", href: "/publicar?kind=event" },
-  },
-  {
-    key: "job",
-    ...COPY.composer.createMenu.tiles.job,
-    accent: entityAccentVar("job"),
-    Icon: Wrench,
-    action: { kind: "link", href: "/empleos/publicar" },
-  },
-  {
-    key: "product",
-    ...COPY.composer.createMenu.tiles.product,
-    accent: "var(--accent-marketplace)",
-    Icon: ShoppingBagOpen,
-    action: { kind: "link", href: "/marketplace/publicar" },
-  },
-  {
-    key: "creatorService",
-    ...COPY.composer.createMenu.tiles.creatorService,
-    accent: "var(--accent-creadores)",
-    Icon: Sparkle,
-    action: { kind: "link", href: "/creadores/publicar" },
-  },
-];
-
-/** Chip de ícono tintado (14% del acento) — mismo lenguaje visual que AccentLink. */
-function TileIconChip({
-  accent,
-  Icon: TileIcon,
-  size = 44,
-}: {
-  accent: string;
-  Icon: Icon;
-  size?: number;
-}) {
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        width: size,
-        height: size,
-        backgroundColor: `color-mix(in oklab, ${accent} 14%, transparent)`,
-        color: accent,
-      }}
-      className="flex shrink-0 items-center justify-center rounded-full"
-    >
-      <TileIcon size={Math.round(size * 0.5)} weight="bold" />
-    </span>
-  );
-}
+/**
+ * El menú "crear publicación" (§b, feedback cliente 2026-07-24) vive ahora en
+ * `@/components/shell/create-menu`: el "+" del bottom nav abre EL MISMO menú
+ * desde cualquier pantalla (2026-07-29), así que las diez opciones no pueden
+ * seguir siendo una lista privada de este archivo.
+ *
+ * Lo que sí sigue siendo de acá: qué pasa cuando elegís foto, video o pregunta.
+ * Este composer las resuelve sin navegar (selector + hoja de texto). Cuando el
+ * menú se abre desde otra pantalla, esas tres viajan como /feed?crear=… y las
+ * levanta el efecto de abajo.
+ */
 
 /** Un medio elegido, en el ORDEN de selección (posts.media respeta ese orden). */
 interface PickedMedia {
@@ -182,6 +60,9 @@ interface PickedMedia {
 export interface PostComposerProps {
   viewerName: string;
   viewerAvatarUrl: string | null;
+  /** `tenants.modules` / `modules_soon`: filtran los tiles del menú de crear. */
+  modules: Record<string, boolean>;
+  modulesSoon: Record<string, boolean>;
 }
 
 /**
@@ -209,7 +90,12 @@ export interface PostComposerProps {
  * `selectVideo` copian `input.files` SINCRÓNICAMENTE en el handler, antes de
  * cualquier setState.
  */
-export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps) {
+export function PostComposer({
+  viewerName,
+  viewerAvatarUrl,
+  modules,
+  modulesSoon,
+}: PostComposerProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [body, setBody] = useState("");
@@ -243,6 +129,47 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
 
   const photos = media.filter((item) => item.kind === "photo");
   const video = media.find((item) => item.kind === "video") ?? null;
+
+  /**
+   * Arranque por URL: `/feed?crear=photo|video|question`. Es el camino del "+"
+   * del bottom nav cuando el menú se abrió desde otra pantalla y este composer
+   * todavía no existía.
+   *
+   * Se lee de `window.location` y no con `useSearchParams` a propósito: es un
+   * efecto de una sola vez y no vale arrastrar un Suspense boundary a toda la
+   * página del feed por él.
+   */
+  const consumedUrlIntent = useRef(false);
+  useEffect(() => {
+    if (consumedUrlIntent.current) return;
+    consumedUrlIntent.current = true;
+
+    const params = new URLSearchParams(window.location.search);
+    const quick = params.get("crear");
+    if (quick !== "photo" && quick !== "video" && quick !== "question") return;
+
+    // El parámetro se CONSUME: recargar o volver atrás no puede reabrir la hoja.
+    params.delete("crear");
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}`,
+    );
+
+    if (quick === "question") {
+      openCompose("question");
+      return;
+    }
+
+    // La hoja se abre SIEMPRE (adentro tiene "Agregar foto"/"Agregar video") y
+    // además se intenta abrir el selector del sistema. El intento puede no
+    // prosperar —varios browsers piden gesto del usuario y acá venimos de una
+    // navegación—, así que la garantía del camino es la hoja, no el click.
+    openCompose("media");
+    const input = quick === "photo" ? photoInputRef.current : videoInputRef.current;
+    input?.click();
+  }, []);
 
   function autosize(element: HTMLTextAreaElement) {
     element.style.height = "auto";
@@ -352,14 +279,13 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   }
 
-  /** Tile del menú crear-post: dispara el selector, abre la pregunta o navega. */
-  function handleMenuTile(tile: CreateMenuTile) {
-    setMenuOpen(false);
-    if (tile.action.kind === "photo") {
+  /** Opción rápida del menú: dispara el selector de archivos o abre la pregunta. */
+  function handleQuickPost(quick: QuickPostKind) {
+    if (quick === "photo") {
       photoInputRef.current?.click();
-    } else if (tile.action.kind === "video") {
+    } else if (quick === "video") {
       videoInputRef.current?.click();
-    } else if (tile.action.kind === "question") {
+    } else {
       openCompose("question");
     }
   }
@@ -625,59 +551,13 @@ export function PostComposer({ viewerName, viewerAvatarUrl }: PostComposerProps)
         </Button>
       </div>
 
-      <BottomSheet
+      <CreateMenu
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
-        title={COPY.composer.createMenu.sheetTitle}
-      >
-        <ul className="flex flex-col gap-0.5 pb-2">
-          {CREATE_MENU_TILES.map((tile) => {
-            const rowClass = cn(
-              "flex w-full items-center gap-3 rounded-lg p-2.5 text-left",
-              "transition-colors duration-(--duration-fast) ease-(--ease-spring)",
-              "hover:bg-surface-subtle active:scale-[0.99]",
-              "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-            );
-            const rowContent = (
-              <>
-                <TileIconChip accent={tile.accent} Icon={tile.Icon} />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-foreground">
-                    {tile.title}
-                  </span>
-                  <span className="block text-xs text-foreground-secondary">
-                    {tile.description}
-                  </span>
-                </span>
-                {tile.action.kind === "link" && (
-                  <CaretRight
-                    size={16}
-                    aria-hidden="true"
-                    className="shrink-0 text-foreground-muted"
-                  />
-                )}
-              </>
-            );
-            return (
-              <li key={tile.key}>
-                {tile.action.kind === "link" ? (
-                  <Link
-                    href={tile.action.href}
-                    onClick={() => setMenuOpen(false)}
-                    className={rowClass}
-                  >
-                    {rowContent}
-                  </Link>
-                ) : (
-                  <button type="button" onClick={() => handleMenuTile(tile)} className={rowClass}>
-                    {rowContent}
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </BottomSheet>
+        modules={modules}
+        modulesSoon={modulesSoon}
+        onQuickPost={handleQuickPost}
+      />
 
       {/* Regla de la imagen, contada en humano y con salida por los dos lados. */}
       <BottomSheet

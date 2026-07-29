@@ -143,7 +143,12 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
       {tab === "para-ti" ? (
         <>
           {user ? (
-            <PostComposer viewerName={viewerName} viewerAvatarUrl={viewerAvatarUrl} />
+            <PostComposer
+              viewerName={viewerName}
+              viewerAvatarUrl={viewerAvatarUrl}
+              modules={tenant.modules}
+              modulesSoon={tenant.modulesSoon}
+            />
           ) : (
             <ComposerInvite />
           )}

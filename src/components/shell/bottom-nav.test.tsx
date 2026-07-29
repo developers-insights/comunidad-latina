@@ -4,13 +4,15 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { BottomNav } from "./bottom-nav";
 
 /**
- * Feedback del cliente (27/7): "Propiedades" deja de ocupar una pestaña fija y
- * entra "Buscar", que abre la grilla de categorías. Videos sigue al centro
- * (decisión previa del sprint de reels — patrón Instagram/TikTok).
+ * Barra 2026-07-29 (pedido de Manuel): Inicio · Buscar · [+] · Videos · Ajustes.
+ * Mensajes y Perfil se mudaron al header; el centro dejó de ser un destino y
+ * pasó a ser la acción de publicar.
  *
  * Lo que este test protege:
- *  - que Vivienda no vuelva a robarle el lugar a Buscar;
- *  - que Videos no se corra del centro;
+ *  - el orden y que el "+" quede en el MEDIO (es el centro óptico de la barra);
+ *  - que el "+" no sea un enlace ni marque página: es un disparador de menú;
+ *  - que sin sesión lleve a entrar en vez de abrir un menú de opciones muertas;
+ *  - que apagar Videos NO corra el "+" de lugar (casillero vacío a propósito);
  *  - la diferencia entre estado VISUAL (rama) y `aria-current="page"` (la
  *    página exacta), que es donde es fácil meter un bug de accesibilidad.
  */
@@ -36,38 +38,98 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+/** El "+" anima su rotación; acá se testea la barra, no la animación. */
+vi.mock("motion/react", () => {
+  const passthrough = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) => {
+    const domProps = Object.fromEntries(
+      Object.entries(props).filter(
+        ([key]) => !["initial", "animate", "exit", "transition", "whileTap"].includes(key),
+      ),
+    );
+    return <span {...domProps}>{children}</span>;
+  };
+  return {
+    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
+    m: { span: passthrough, div: passthrough },
+    useReducedMotion: () => true,
+  };
+});
+
 /** Todos los módulos prendidos: el estado normal de la app. */
 const TODO_PRENDIDO = { feed: true, videos: true, mensajes: true };
 
 function renderAt(
   pathname: string,
-  modules: Record<string, boolean> = TODO_PRENDIDO,
-  modulesSoon: Record<string, boolean> = {},
+  {
+    modules = TODO_PRENDIDO,
+    modulesSoon = {},
+    canCreate = true,
+    unread = 0,
+  }: {
+    modules?: Record<string, boolean>;
+    modulesSoon?: Record<string, boolean>;
+    canCreate?: boolean;
+    unread?: number;
+  } = {},
 ) {
   state.pathname = pathname;
-  return render(<BottomNav modules={modules} modulesSoon={modulesSoon} />);
+  return render(
+    <BottomNav
+      modules={modules}
+      modulesSoon={modulesSoon}
+      canCreate={canCreate}
+      unread={unread}
+    />,
+  );
 }
 
 function hrefs() {
   return screen.getAllByRole("link").map((link) => link.getAttribute("href"));
 }
 
+/** Los <li> de la barra, incluido el casillero del "+" y los vacíos. */
+function slots() {
+  return [...screen.getByRole("navigation").querySelectorAll("li")];
+}
+
 describe("BottomNav", () => {
   afterEach(cleanup);
 
-  it("ofrece Buscar en lugar de Propiedades, con Videos al centro", () => {
+  it("son cuatro pestañas y el '+' al medio", () => {
     renderAt("/feed");
-    expect(hrefs()).toEqual(["/feed", "/buscar", "/videos", "/mensajes", "/perfil"]);
-    // El ítem del medio de cinco es el tercero: Videos, a un pulgar.
-    expect(hrefs()[2]).toBe("/videos");
+    expect(hrefs()).toEqual(["/feed", "/buscar", "/videos", "/ajustes"]);
+    // Cinco casilleros; el tercero —el del medio— es el del disparador.
+    const casilleros = slots();
+    expect(casilleros).toHaveLength(5);
+    expect(casilleros[2]?.querySelector("button")).not.toBeNull();
   });
 
-  it("las cinco pestañas llevan texto visible, nunca solo ícono", () => {
+  it("el '+' es un disparador de menú, no un destino", () => {
+    renderAt("/feed");
+    const crear = screen.getByRole("button", { name: "Crear" });
+    expect(crear.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(crear.getAttribute("aria-expanded")).toBe("false");
+    // Nunca marca página: no es una pestaña.
+    expect(crear.getAttribute("aria-current")).toBeNull();
+  });
+
+  it("sin sesión el '+' lleva a entrar en vez de abrir opciones muertas", () => {
+    renderAt("/feed", { canCreate: false });
+    expect(screen.queryByRole("button", { name: "Crear" })).toBeNull();
+    const crear = screen.getByRole("link", { name: "Crear" });
+    expect(crear.getAttribute("href")).toBe("/entrar?next=/feed");
+  });
+
+  it("las cuatro pestañas llevan texto visible, nunca solo ícono", () => {
     renderAt("/feed");
     for (const link of screen.getAllByRole("link")) {
       expect(link.textContent?.trim().length ?? 0).toBeGreaterThan(0);
     }
     expect(screen.getByRole("link", { name: "Buscar" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Ajustes" })).toBeTruthy();
   });
 
   it("marca aria-current='page' sólo en la pestaña de la página actual", () => {
@@ -102,43 +164,61 @@ describe("BottomNav", () => {
     expect(screen.getByRole("link", { name: "Buscar" }).className).not.toContain("text-brand-ink");
     expect(screen.getByRole("link", { name: "Videos" }).getAttribute("aria-current")).toBe("page");
   });
+
+  it("las notificaciones sin leer avisan en Ajustes, que es donde viven", () => {
+    renderAt("/feed", { unread: 3 });
+    const ajustes = screen.getByRole("link", { name: /Ajustes/ });
+    // Texto, no sólo un punto de color: el aviso tiene que llegar también a
+    // quien escucha la pantalla.
+    expect(ajustes.textContent).toContain("sin leer");
+  });
+
+  it("sin novedades no hay aviso", () => {
+    renderAt("/feed", { unread: 0 });
+    expect(screen.getByRole("link", { name: "Ajustes" }).textContent).not.toContain("sin leer");
+  });
 });
 
 /**
  * Módulos apagados desde /admin/dominio. La regla: una pestaña de la navegación
  * primaria sólo existe si su módulo está ACTIVO — ni oculto ni "muy pronto". Un
- * lugar de cinco no puede llevar a un cartel de "todavía no abrimos".
+ * lugar de la barra no puede llevar a un cartel de "todavía no abrimos".
  */
 describe("BottomNav — módulos apagados desde el panel", () => {
   afterEach(cleanup);
 
-  it("Videos apagado saca su pestaña, y las otras cuatro se corren sin dejar hueco", () => {
-    renderAt("/feed", { feed: true, videos: false, mensajes: true }, { videos: false });
-    expect(hrefs()).toEqual(["/feed", "/buscar", "/mensajes", "/perfil"]);
+  it("Videos apagado saca su pestaña SIN correr el '+' del centro", () => {
+    renderAt("/feed", { modules: { feed: true, videos: false, mensajes: true }, modulesSoon: { videos: false } });
+    expect(hrefs()).toEqual(["/feed", "/buscar", "/ajustes"]);
     expect(screen.queryByRole("link", { name: "Videos" })).toBeNull();
+    // El casillero queda vacío a propósito: la grilla es de cinco columnas y el
+    // disparador tiene que seguir cayendo bajo el pulgar, en el medio.
+    const casilleros = slots();
+    expect(casilleros).toHaveLength(5);
+    expect(casilleros[2]?.querySelector("button")).not.toBeNull();
+    expect(casilleros[3]?.textContent).toBe("");
   });
 
   it("Videos en 'muy pronto' TAMPOCO ocupa pestaña: la barra no anuncia, navega", () => {
-    // El anuncio vive en el menú y en /buscar, con su etiqueta "Muy pronto".
-    renderAt("/feed", { feed: true, videos: false, mensajes: true }, { videos: true });
-    expect(hrefs()).toEqual(["/feed", "/buscar", "/mensajes", "/perfil"]);
+    // El anuncio vive en /buscar, con su etiqueta "Muy pronto".
+    renderAt("/feed", { modules: { feed: true, videos: false, mensajes: true }, modulesSoon: { videos: true } });
+    expect(hrefs()).toEqual(["/feed", "/buscar", "/ajustes"]);
   });
 
-  it("Inicio y Mensajes NO se apagan: son la infraestructura del shell", () => {
+  it("Inicio no se apaga: es la infraestructura del shell", () => {
     // ALWAYS_ON_MODULE_KEYS. Sin Inicio la app queda sin casa (el logo del
-    // header apunta ahí) y sin Mensajes se rompen los CTA de contacto de toda
-    // la plataforma, que ni pasan por esta barra.
-    renderAt("/feed", { feed: false, videos: false, mensajes: false }, {});
-    expect(hrefs()).toEqual(["/feed", "/buscar", "/mensajes", "/perfil"]);
+    // header apunta ahí). Buscar y Ajustes no tienen clave: son estructurales.
+    renderAt("/feed", { modules: { feed: false, videos: false, mensajes: false } });
+    expect(hrefs()).toEqual(["/feed", "/buscar", "/ajustes"]);
   });
 
   it("con la config vacía (DB caída / comunidad recién sembrada) la barra sale ENTERA", () => {
-    // Sin una sola decisión guardada no hay nada que respetar: las cinco
+    // Sin una sola decisión guardada no hay nada que respetar: las cuatro
     // pestañas están. Videos incluido — que se le caiga la pestaña a una
     // comunidad porque nadie tocó todavía el panel sería un apagado que nadie
     // pidió (ver el default en shell/module-access.ts).
-    renderAt("/feed", {}, {});
-    expect(hrefs()).toEqual(["/feed", "/buscar", "/videos", "/mensajes", "/perfil"]);
+    renderAt("/feed", { modules: {}, modulesSoon: {} });
+    expect(hrefs()).toEqual(["/feed", "/buscar", "/videos", "/ajustes"]);
     for (const link of screen.getAllByRole("link")) {
       expect(link.textContent?.trim().length ?? 0).toBeGreaterThan(0);
     }

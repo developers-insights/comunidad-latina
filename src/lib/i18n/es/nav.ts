@@ -10,6 +10,14 @@ export const nav = {
   messages: "Mensajes",
   profile: "Perfil",
   notifications: "Notificaciones",
+  // Quinta pestaña del bottom nav (2026-07-29). Absorbió el menú lateral que se
+  // eliminó cuando el botón del header pasó a ser el avatar: notificaciones,
+  // tema, privacidad y sesión viven ahí.
+  settings: "Ajustes",
+  // El "+" del centro de la barra: acción, no destino.
+  create: "Crear",
+  /** Se suma al nombre accesible de la pestaña que tiene el punto de aviso. */
+  unreadSuffix: "(tenés novedades sin leer)",
   mainNav: "Navegación principal",
   chooseLocation: "Elegí tu zona",
   locationPlaceholder: "Tu zona",

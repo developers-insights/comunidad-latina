@@ -104,10 +104,19 @@ vi.mock("motion/react", () => {
 import { PostComposer } from "./post-composer";
 import { COPY } from "./copy";
 
+/**
+ * `modules` vacío = nadie decidió nada en el panel, que es el default de
+ * `moduleAvailability`: el menú de crear sale con las diez opciones.
+ */
 function mount(viewerName = "Ana Gómez") {
   return render(
     <ToastProvider>
-      <PostComposer viewerName={viewerName} viewerAvatarUrl={null} />
+      <PostComposer
+        viewerName={viewerName}
+        viewerAvatarUrl={null}
+        modules={{}}
+        modulesSoon={{}}
+      />
     </ToastProvider>,
   );
 }
