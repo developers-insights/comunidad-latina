@@ -153,7 +153,7 @@ export function pollPercent(part: number, total: number): number {
 
 export interface PostCardModel {
   id: string;
-  kind: "post" | "question";
+  kind: "post" | "question" | "text";
   body: string;
   /** URL pública de la primera FOTO (ya resuelta) o null — retrocompat. */
   photoUrl: string | null;
@@ -222,8 +222,10 @@ export type FeedItem =
   | { type: "listing"; createdAt: string; id: string; listing: FeedListingModel }
   | { type: "guide"; createdAt: string; id: string; guide: GuideCardModel };
 
-export function postKindOf(raw: string): "post" | "question" {
-  return raw === "question" ? "question" : "post";
+export function postKindOf(raw: string): "post" | "question" | "text" {
+  if (raw === "question") return "question";
+  if (raw === "text") return "text";
+  return "post";
 }
 
 // ---------------------------------------------------------------------------

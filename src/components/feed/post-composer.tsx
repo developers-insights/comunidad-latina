@@ -2,24 +2,12 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  CaretRight,
-  Camera,
-  PaperPlaneRight,
-  Question,
-  VideoCamera,
-} from "@phosphor-icons/react/dist/ssr";
-import { Avatar, BottomSheet, Button, useToast } from "@/components/ui";
+import { CaretRight } from "@phosphor-icons/react/dist/ssr";
+import { Avatar, useToast } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
-import { firstNameOf } from "@/components/listings";
-import { useMounted } from "@/lib/design/use-overlay";
 import { cn } from "@/lib/utils";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
-import {
-  CreateMenu,
-  TileIconChip,
-  type QuickPostKind,
-} from "@/components/shell/create-menu";
+import { CreateMenu, type QuickPostKind } from "@/components/shell/create-menu";
 import {
   createPostAction,
   prepareMediaUploadAction,
@@ -27,7 +15,6 @@ import {
 import { ComposerSheet, type ComposerMode } from "./composer-sheet";
 import { COPY } from "./copy";
 
-const MAX_LENGTH = 2000;
 const MAX_PHOTOS = 4;
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 60 * 1024 * 1024;
@@ -66,19 +53,22 @@ export interface PostComposerProps {
 }
 
 /**
- * Composer del feed (§4.b) — rediseño 2026-07-27.
+ * Composer del feed (§4.b) — rediseño 2026-07-29 (pedido de Manuel: "no quiero
+ * que tenga un input para escribir… quiero que el principal y único sea el de
+ * '¿Qué querés publicar?'").
  *
- * Lo que se ve en reposo son DOS cosas y nada más: el campo de escritura rápida
- * (con su Publicar, tipo Twitter) y la fila "¿Qué querés publicar?". Todo lo
- * demás —elegir foto o video, escribir el pie, activar la encuesta— pasa dentro
- * del flujo que abre cada opción.
+ * En reposo hay UNA sola cosa: la tarjeta "¿Qué querés publicar?", con nada
+ * más que la abra o la reemplace — sin campo de texto ni botón Publicar
+ * afuera. Tocarla abre el menú (CreateMenu, compartido con el "+" del bottom
+ * nav) y ahí se elige QUÉ se publica; escribir el cuerpo pasa a vivir siempre
+ * DENTRO de ese flujo (ComposerSheet), nunca en esta tarjeta.
  *
- * REGLA "TODO POST LLEVA IMAGEN". El trigger MEDIA_REQUIRED (0023) exige medio
- * en `kind='post'` y exime a `kind='question'`. El campo rápido no la puede
- * romper, así que tampoco la esconde: si alguien escribe y toca Publicar sin
- * medio, en vez de un error aparece una hoja con los dos caminos posibles —
- * sumar foto/video, o publicarlo como pregunta (que sale sobre el banner de
- * marca, sin espacio muerto) — y el texto ya escrito viaja con la persona.
+ * REGLA "TODO POST LLEVA IMAGEN". El trigger MEDIA_REQUIRED (0023/0043) exige
+ * medio en `kind='post'` y exime a `question` y a `text`. Como ya no hay forma
+ * de escribir y publicar SIN pasar por un tile del menú, no hace falta una
+ * hoja aparte que explique la regla: el modo `media` de ComposerSheet
+ * simplemente mantiene su Publicar apagado hasta que haya al menos una foto o
+ * un video.
  *
  * SUBIDA DEL VIDEO: directa navegador → bucket post-media (evita el límite de
  * body de las server actions), con progreso real vía XHR. El prefijo
@@ -105,35 +95,21 @@ export function PostComposer({
   const [menuOpen, setMenuOpen] = useState(false);
   /** Hoja de texto abierta y en qué modo (null = cerrada). */
   const [composeMode, setComposeMode] = useState<ComposerMode | null>(null);
-  /** Hoja que explica la regla de la imagen cuando el texto va solo. */
-  const [needsMediaOpen, setNeedsMediaOpen] = useState(false);
   /** Encuesta Sí/No de la pregunta (contrato 0041). */
   const [pollEnabled, setPollEnabled] = useState(false);
-  // Solo para el tamaño del textarea (§a): compacto en reposo, cómodo con foco.
-  const [focused, setFocused] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   /** Id estable de esta sesión: fija la variante de la vista previa del banner. */
   const previewId = useId();
 
-  // Saludo VISIBLE por franja horaria + nombre de pila (§c, rediseño
-  // 2026-07-26): la hora es del USUARIO, no del server — antes de montar no
-  // se muestra nada (useMounted es hydration-safe, sin mismatch); el
-  // placeholder del textarea ya no depende de la hora (queda neutro y fijo).
-  const mounted = useMounted();
-  const greeting = mounted
-    ? COPY.composer.greetingByHour(new Date().getHours(), firstNameOf(viewerName || ""))
-    : null;
-
   const photos = media.filter((item) => item.kind === "photo");
   const video = media.find((item) => item.kind === "video") ?? null;
 
   /**
-   * Arranque por URL: `/feed?crear=photo|video|question`. Es el camino del "+"
-   * del bottom nav cuando el menú se abrió desde otra pantalla y este composer
-   * todavía no existía.
+   * Arranque por URL: `/feed?crear=photo|video|text|question`. Es el camino
+   * del "+" del bottom nav cuando el menú se abrió desde otra pantalla y este
+   * composer todavía no existía.
    *
    * Se lee de `window.location` y no con `useSearchParams` a propósito: es un
    * efecto de una sola vez y no vale arrastrar un Suspense boundary a toda la
@@ -146,7 +122,7 @@ export function PostComposer({
 
     const params = new URLSearchParams(window.location.search);
     const quick = params.get("crear");
-    if (quick !== "photo" && quick !== "video" && quick !== "question") return;
+    if (quick !== "photo" && quick !== "video" && quick !== "text" && quick !== "question") return;
 
     // El parámetro se CONSUME: recargar o volver atrás no puede reabrir la hoja.
     params.delete("crear");
@@ -157,8 +133,8 @@ export function PostComposer({
       `${window.location.pathname}${query ? `?${query}` : ""}`,
     );
 
-    if (quick === "question") {
-      openCompose("question");
+    if (quick === "question" || quick === "text") {
+      openCompose(quick);
       return;
     }
 
@@ -170,11 +146,6 @@ export function PostComposer({
     const input = quick === "photo" ? photoInputRef.current : videoInputRef.current;
     input?.click();
   }, []);
-
-  function autosize(element: HTMLTextAreaElement) {
-    element.style.height = "auto";
-    element.style.height = `${Math.min(element.scrollHeight, 200)}px`;
-  }
 
   /**
    * Lee el FileList VIVO del input de fotos de forma SÍNCRONA (gotcha de
@@ -263,48 +234,40 @@ export function PostComposer({
   /** Abre la hoja de texto cerrando cualquier otra que estuviera arriba. */
   function openCompose(mode: ComposerMode) {
     setMenuOpen(false);
-    setNeedsMediaOpen(false);
     setComposeMode(mode);
   }
 
   function resetForm() {
     setBody("");
     setComposeMode(null);
-    setNeedsMediaOpen(false);
     setPollEnabled(false);
     setMedia((current) => {
       for (const item of current) URL.revokeObjectURL(item.preview);
       return [];
     });
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
   }
 
-  /** Opción rápida del menú: dispara el selector de archivos o abre la pregunta. */
+  /** Opción rápida del menú: dispara el selector de archivos o abre texto/pregunta. */
   function handleQuickPost(quick: QuickPostKind) {
     if (quick === "photo") {
       photoInputRef.current?.click();
     } else if (quick === "video") {
       videoInputRef.current?.click();
     } else {
-      openCompose("question");
+      openCompose(quick);
     }
   }
-
-  // El botón se habilita con solo texto: la regla de la imagen se explica al
-  // enviar, con los dos caminos a mano, en vez de un botón muerto sin motivo.
-  const canPublish = body.trim().length >= 2 && !isPending;
 
   function submit() {
     const trimmed = body.trim();
     if (trimmed.length < 2 || isPending) return;
 
     const isQuestion = composeMode === "question";
-    // Regla "todo post lleva imagen" (trigger MEDIA_REQUIRED 0023, exento para
-    // las preguntas): en vez de un error, la hoja con los dos caminos.
-    if (!isQuestion && media.length === 0) {
-      setNeedsMediaOpen(true);
-      return;
-    }
+    const isText = composeMode === "text";
+    // Regla "todo post lleva imagen" (trigger MEDIA_REQUIRED 0023, exenta para
+    // pregunta y texto): acá no hace falta reaccionar — ComposerSheet ya
+    // mantiene su botón de Publicar apagado en modo `media` sin medio elegido,
+    // así que esta función nunca se llama en ese estado.
 
     startTransition(async () => {
       // ---- 1) Video primero: subida directa al bucket con progreso ---------
@@ -351,7 +314,7 @@ export function PostComposer({
       // ---- 2) Fotos + paths por la server action ---------------------------
       const formData = new FormData();
       formData.set("body", trimmed);
-      formData.set("kind", isQuestion ? "question" : "post");
+      formData.set("kind", isQuestion ? "question" : isText ? "text" : "post");
       // Solo una pregunta puede llevar encuesta; el server lo re-valida igual.
       if (isQuestion && pollEnabled) formData.set("pollKind", "yes_no");
       for (const item of media) {
@@ -433,59 +396,32 @@ export function PostComposer({
     });
   }
 
-  const choiceRowClass = cn(
-    "flex w-full items-center gap-3 rounded-lg border border-border p-3 text-left",
-    "transition-[background-color,border-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
-    "hover:border-brand hover:bg-surface-subtle active:scale-[0.99]",
-    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-  );
-
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-      aria-label={COPY.composer.placeholder}
-      className="rounded-lg border border-border-subtle bg-surface p-4 shadow-xs"
-    >
-      <div className="flex items-start gap-2.5">
+    <div className="rounded-lg border border-border-subtle bg-surface p-4 shadow-xs">
+      {/* ÚNICO elemento en reposo (pedido de Manuel, 2026-07-29): nada de campo
+          de texto ni de botón Publicar acá — toda la tarjeta es el disparador,
+          y presionarla es lo que despliega las opciones (CreateMenu). Escribir
+          pasa a vivir siempre DENTRO del paso que abre cada opción
+          (ComposerSheet), nunca acá afuera. */}
+      <button
+        type="button"
+        onClick={() => setMenuOpen(true)}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-md text-left",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+        )}
+      >
         <Avatar size="sm" name={viewerName} src={viewerAvatarUrl} />
-        <div className="min-w-0 flex-1">
-          <label htmlFor="post-composer-body" className="sr-only">
-            {COPY.composer.placeholder}
-          </label>
-          <textarea
-            id="post-composer-body"
-            ref={textareaRef}
-            rows={1}
-            maxLength={MAX_LENGTH}
-            value={body}
-            placeholder={COPY.composer.placeholder}
-            disabled={isPending}
-            onFocus={(event) => {
-              setFocused(true);
-              autosize(event.target);
-            }}
-            onBlur={() => setFocused(false)}
-            onChange={(event) => {
-              setBody(event.target.value);
-              autosize(event.target);
-            }}
-            className={cn(
-              "max-h-50 w-full resize-none bg-transparent py-1.5 text-base text-foreground",
-              "placeholder:text-foreground-muted focus:outline-none",
-              "transition-[min-height] duration-(--duration-fast) ease-(--ease-spring)",
-              // Compacto en reposo (§a); crece con foco o con texto ya escrito.
-              focused || body.length > 0 ? "min-h-16" : "min-h-11",
-              "disabled:opacity-60",
-            )}
-          />
-          {greeting && (
-            <p className="mt-1.5 text-sm text-foreground-secondary">{greeting}</p>
-          )}
-        </div>
-      </div>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-display text-base font-semibold text-foreground">
+            {COPY.composer.createMenu.rowLabel}
+          </span>
+          <span className="block truncate text-sm text-foreground-secondary">
+            {COPY.composer.createMenu.rowHint}
+          </span>
+        </span>
+        <CaretRight size={18} aria-hidden="true" className="shrink-0 text-foreground-muted" />
+      </button>
 
       {/* Inputs reales, ocultos: los FileList se leen SINCRÓNICAMENTE (gotcha) */}
       <input
@@ -506,51 +442,6 @@ export function PostComposer({
         onChange={(event) => selectVideo(event.currentTarget)}
       />
 
-      {/* ÚNICO disparador del composer: abre el menú con TODOS los tipos. */}
-      <button
-        type="button"
-        onClick={() => setMenuOpen(true)}
-        className={cn(
-          "mt-3 flex w-full items-center gap-3 rounded-lg border border-dashed border-border px-3 py-2.5",
-          "text-left transition-[background-color,border-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
-          "hover:border-brand hover:bg-surface-subtle active:scale-[0.995]",
-          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-        )}
-      >
-        <span aria-hidden="true" className="flex shrink-0 items-center gap-1">
-          {[Camera, VideoCamera, Question].map((PreviewIcon, index) => (
-            <TileIconChip key={index} accent="var(--accent-feed)" Icon={PreviewIcon} size={26} />
-          ))}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-foreground">
-            {COPY.composer.createMenu.rowLabel}
-          </span>
-          <span className="block truncate text-xs text-foreground-secondary">
-            {COPY.composer.createMenu.rowHint}
-          </span>
-        </span>
-        <CaretRight size={16} aria-hidden="true" className="shrink-0 text-foreground-muted" />
-      </button>
-
-      <div className="mt-2.5 flex items-center border-t border-border-subtle pt-2.5">
-        <Button
-          type="submit"
-          variant="primary"
-          size="sm"
-          // `min-h-11`: el alto de `sm` es 40px y el objetivo táctil mínimo del
-          // proyecto son 44 — el ancho lo da el contenido, el alto lo forzamos.
-          className="ml-auto min-h-11"
-          disabled={!canPublish}
-          loading={isPending && composeMode === null}
-        >
-          {!isPending && <PaperPlaneRight size={16} aria-hidden="true" />}
-          {isPending && composeMode === null
-            ? COPY.composer.publishing
-            : COPY.composer.publish}
-        </Button>
-      </div>
-
       <CreateMenu
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
@@ -559,62 +450,7 @@ export function PostComposer({
         onQuickPost={handleQuickPost}
       />
 
-      {/* Regla de la imagen, contada en humano y con salida por los dos lados. */}
-      <BottomSheet
-        open={needsMediaOpen}
-        onClose={() => setNeedsMediaOpen(false)}
-        title={COPY.composer.needsMedia.sheetTitle}
-      >
-        <p className="text-sm text-foreground-secondary">
-          {COPY.composer.needsMedia.body}
-        </p>
-        <div className="mt-4 flex flex-col gap-2 pb-2">
-          <button
-            type="button"
-            onClick={() => {
-              setNeedsMediaOpen(false);
-              photoInputRef.current?.click();
-            }}
-            className={choiceRowClass}
-          >
-            <TileIconChip accent="var(--accent-feed)" Icon={Camera} />
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-foreground">
-                {COPY.composer.needsMedia.withMediaTitle}
-              </span>
-              <span className="block text-xs text-foreground-secondary">
-                {COPY.composer.needsMedia.withMediaBody}
-              </span>
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => openCompose("question")}
-            className={choiceRowClass}
-          >
-            <TileIconChip accent="var(--accent-feed)" Icon={Question} />
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-foreground">
-                {COPY.composer.needsMedia.asQuestionTitle}
-              </span>
-              <span className="block text-xs text-foreground-secondary">
-                {COPY.composer.needsMedia.asQuestionBody}
-              </span>
-            </span>
-          </button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="self-center"
-            onClick={() => setNeedsMediaOpen(false)}
-          >
-            {COPY.composer.needsMedia.keepWriting}
-          </Button>
-        </div>
-      </BottomSheet>
-
-      {/* Paso de texto: el medio (o la pregunta) a la vista y el texto debajo. */}
+      {/* Paso de texto: el medio (o la pregunta/texto) a la vista y el cuerpo debajo. */}
       <ComposerSheet
         open={composeMode !== null}
         onClose={() => setComposeMode(null)}
@@ -634,7 +470,7 @@ export function PostComposer({
         isPending={isPending}
         onPublish={submit}
       />
-    </form>
+    </div>
   );
 }
 

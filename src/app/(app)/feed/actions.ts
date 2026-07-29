@@ -55,7 +55,7 @@ const postSchema = z.object({
     .string()
     .transform((value) => value.trim())
     .pipe(z.string().min(2).max(2000)),
-  kind: z.enum(["post", "question"]),
+  kind: z.enum(["post", "question", "text"]),
   /**
    * Encuesta Sí/No de una PREGUNTA (contrato 0041). Ausente = pregunta sin
    * encuesta. El check de la DB solo acepta 'yes_no'; que un post común no

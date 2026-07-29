@@ -11,6 +11,7 @@ import {
   ShoppingBagOpen,
   Sparkle,
   Storefront,
+  TextAa,
   VideoCamera,
   Wrench,
 } from "@phosphor-icons/react/dist/ssr";
@@ -41,7 +42,7 @@ import { moduleAvailability } from "./module-access";
  * existe. Los tres primeros no llevan clave — son el feed, que nunca se apaga.
  */
 
-export type QuickPostKind = "photo" | "video" | "question";
+export type QuickPostKind = "photo" | "video" | "text" | "question";
 
 type CreateMenuAction =
   | { kind: "quick"; quick: QuickPostKind }
@@ -72,6 +73,13 @@ const CREATE_MENU_TILES: CreateMenuTile[] = [
     accent: "var(--accent-feed)",
     Icon: VideoCamera,
     action: { kind: "quick", quick: "video" },
+  },
+  {
+    key: "text",
+    ...COPY.composer.createMenu.tiles.text,
+    accent: "var(--accent-feed)",
+    Icon: TextAa,
+    action: { kind: "quick", quick: "text" },
   },
   {
     key: "question",

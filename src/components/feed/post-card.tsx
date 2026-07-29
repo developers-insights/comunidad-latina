@@ -19,6 +19,7 @@ import { CardPostMedia } from "./card-post-media";
 import { PollYesNo } from "./poll-yes-no";
 import { PostActions } from "./post-actions";
 import { QuestionBanner } from "./question-banner";
+import { TextBanner } from "./text-banner";
 import {
   entityAccentVar,
   entityHref,
@@ -145,7 +146,16 @@ export function PostCard({
    */
   const mediaItems = postMediaItems(post.media, post.photoUrl);
   const hasMedia = mediaItems.length > 0;
-  const isQuestion = postKindOf(post.kind) === "question";
+  const postKind = postKindOf(post.kind);
+  const isQuestion = postKind === "question";
+  /**
+   * `kind='text'` (2026-07-29): la MISMA idea que la pregunta, sin la forma de
+   * pregunta. Nunca trae media —el trigger de la DB la exime igual que a
+   * question, pero el menú de crear ni le ofrece adjuntar— así que
+   * `!hasMedia` es defensivo, no una condición que vaya a fallar en la
+   * práctica.
+   */
+  const isText = postKind === "text";
   /**
    * Una pregunta sin foto ni video quedaba como texto pelado entre cards con
    * foto a sangre (feedback cliente 2026-07-26). Su propio cuerpo pasa a ser el
@@ -155,6 +165,8 @@ export function PostCard({
    * protagonista + su texto arriba.
    */
   const showQuestionBanner = isQuestion && !hasMedia && Boolean(post.body);
+  const showTextBanner = isText && !hasMedia && Boolean(post.body);
+  const showAnyBanner = showQuestionBanner || showTextBanner;
 
   /**
    * Encuesta Sí/No (0041). Vive DENTRO del banner cuando la pregunta es la
@@ -184,7 +196,7 @@ export function PostCard({
       {post.body}
     </p>
   );
-  const body = showQuestionBanner
+  const body = showAnyBanner
     ? null
     : post.body
     ? isDetail
@@ -282,6 +294,10 @@ export function PostCard({
             />
           )}
 
+          {showTextBanner && (
+            <TextBanner postId={post.id} text={post.body} isDetail={isDetail} />
+          )}
+
           {hasMedia && (
             <CardPostMedia
               postId={post.id}
@@ -295,14 +311,14 @@ export function PostCard({
           )}
 
           {/* Pregunta CON foto o video: la encuesta va acá, ya en tinta de card. */}
-          {poll && !showQuestionBanner && (
+          {poll && !showAnyBanner && (
             <div className="px-4 pb-1 pt-3">{poll}</div>
           )}
 
           <div
             className={cn(
               "px-2 pb-1 pt-1",
-              !hasMedia && !showQuestionBanner && "border-t border-border-subtle",
+              !hasMedia && !showAnyBanner && "border-t border-border-subtle",
             )}
           >
             {/* Sin `hasVideo`: la superficie de la hoja la resuelve PostActions

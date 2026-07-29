@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus } from "@phosphor-icons/react";
 import { m, useReducedMotion } from "motion/react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -219,6 +218,11 @@ function NavTab({
  * eso es lo único de la barra que sobresale, lleva la marca tricolor y no
  * marca `aria-current` nunca.
  *
+ * Badge 3D del set Meshy (public/icons/nav/crear.webp, 2026-07-29): un disco
+ * tricolor pinwheel (azul·amarillo·rojo, el orden del logo) con el "+" en clay
+ * blanco embebido — reemplaza al disco de CSS + ícono Phosphor de antes, para
+ * que el disparador tenga la misma calidad premium que el resto de la barra.
+ *
  * Sin sesión no abre nada: lleva a entrar. Un disparador que abre un menú donde
  * las diez opciones terminan en "necesitás una cuenta" es una promesa falsa.
  */
@@ -237,28 +241,15 @@ function CreateButton({
 
   const face = (
     <>
-      <span
+      <m.span
         aria-hidden="true"
-        className={cn(
-          "flex size-14 items-center justify-center rounded-full p-[2.5px]",
-          "shadow-[0_6px_18px_-6px_rgb(0_0_0/0.45)] ring-4 ring-surface",
-        )}
-        // Aro tricolor de la marca alrededor del disco: distintivo sin ser
-        // estridente (un gradiente tricolor de lado a lado se empasta al pasar
-        // por el verde entre el azul y el amarillo).
-        style={{
-          backgroundImage:
-            "conic-gradient(from 210deg, var(--brand-blue), var(--brand-red), var(--brand-yellow), var(--brand-blue))",
-        }}
+        className="flex size-14 items-center justify-center rounded-full shadow-[0_6px_18px_-6px_rgb(0_0_0/0.45)] ring-4 ring-surface"
+        animate={reduceMotion ? undefined : { rotate: open ? 45 : 0 }}
+        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
       >
-        <m.span
-          className="flex size-full items-center justify-center rounded-full bg-brand text-brand-foreground"
-          animate={reduceMotion ? undefined : { rotate: open ? 45 : 0 }}
-          transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-        >
-          <Plus size={26} weight="bold" />
-        </m.span>
-      </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icons/nav/crear.webp" alt="" width={56} height={56} className="size-14" />
+      </m.span>
       <span className="text-[11px] font-semibold text-brand-ink">{label}</span>
     </>
   );

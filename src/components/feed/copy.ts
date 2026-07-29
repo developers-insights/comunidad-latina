@@ -19,42 +19,6 @@ export const COPY = {
   },
 
   composer: {
-    // Simplificado en el rediseño 2026-07-26: el saludo por franja ya no vive
-    // SOLO en el placeholder — ahora es una línea visible propia (ver
-    // `greetingByHour` abajo), así que el placeholder vuelve a ser neutro.
-    placeholder: "Contale algo a tu comunidad…",
-    /**
-     * Saludo visible bajo el input (rediseño 2026-07-26, antes vivía solo como
-     * placeholder — pedido cliente 2026-07-21 original): CUATRO franjas —
-     * madrugada, mañana, tarde, noche —, cada una cálida y con nombre de pila
-     * cuando el perfil lo tiene (firstNameOf sobre viewerName). Se resuelve en
-     * el cliente tras montar (la hora es del USUARIO, no existe en el server)
-     * — antes de eso el composer no muestra esta línea (evita mismatch de
-     * hidratación, mismo criterio que el resto del proyecto).
-     */
-    greetingByHour: (hour: number, firstName?: string | null): string => {
-      const name = firstName?.trim() || "";
-      if (hour >= 5 && hour < 12) {
-        return name
-          ? `Buenos días, ${name} ☀️ ¿Qué se cuenta hoy?`
-          : "Buenos días ☀️ ¿Qué se cuenta hoy en tu comunidad?";
-      }
-      if (hour >= 12 && hour < 19) {
-        return name
-          ? `Buenas tardes, ${name} 🌤️ ¿Qué anda pasando por el barrio?`
-          : "Buenas tardes 🌤️ ¿Qué anda pasando por el barrio?";
-      }
-      if (hour >= 19) {
-        return name
-          ? `Buenas noches, ${name} 🌙 Contale a tu comunidad cómo te fue hoy.`
-          : "Buenas noches 🌙 Contale a tu comunidad cómo te fue hoy.";
-      }
-      // Madrugada (0–4): mismo saludo que la noche —en español no hay uno
-      // propio para esta franja—, pero con un guiño a quien sigue despierto.
-      return name
-        ? `Buenas noches, ${name} 🌙 Si seguís despierto, contanos qué se te cruza por la cabeza.`
-        : "Buenas noches 🌙 Si seguís despierto, contanos qué se te cruza por la cabeza.";
-    },
     addPhoto: "Agregar foto",
     addPhotos: "Agregar fotos",
     addMorePhotos: "Sumar otra foto",
@@ -119,7 +83,16 @@ export const COPY = {
       },
       questionTitle: "Preguntale a tu comunidad",
       questionPlaceholder: "¿Qué querés preguntar?",
-      /** Encabeza la vista previa del banner de la pregunta. */
+      /**
+       * Modo TEXTO (2026-07-29, pedido de Manuel): una actualización simple,
+       * sin la forma de pregunta ni su encuesta. Mismo patrón de vista previa
+       * que la pregunta —el cuerpo ES la pieza gráfica (TextBanner)— pero con
+       * su propio título y placeholder: "contale" invita a compartir, no a
+       * consultar.
+       */
+      textTitle: "Contale algo a tu comunidad",
+      textPlaceholder: "¿Qué querés compartir?",
+      /** Encabeza la vista previa del banner de la pregunta o del texto. */
       previewLabel: "Así se va a ver",
       /** Encuesta Sí/No opcional (contrato 0041). */
       pollLabel: "Agregar encuesta de Sí o No",
@@ -136,21 +109,6 @@ export const COPY = {
     },
 
     /**
-     * REGLA "TODO POST LLEVA IMAGEN" (trigger MEDIA_REQUIRED, 0023) contada en
-     * humano. Aparece cuando alguien escribe rápido y toca Publicar sin medio:
-     * en vez de un error, dos caminos — y el texto escrito NO se pierde.
-     */
-    needsMedia: {
-      sheetTitle: "¿Cómo lo mostramos?",
-      body: "Las publicaciones de la comunidad se ven con imagen. Elegí un camino y seguimos con lo que ya escribiste.",
-      withMediaTitle: "Con una foto o un video",
-      withMediaBody: "Lo elegís y escribís el texto en el mismo paso.",
-      asQuestionTitle: "Como pregunta",
-      asQuestionBody: "Sale sobre un fondo de la comunidad, sin foto.",
-      keepWriting: "Seguir escribiendo",
-    },
-
-    /**
      * Menú "crear publicación" (feedback cliente 2026-07-24: "menú crear-post"
      * pendiente). Una fila-disparador abre un BottomSheet con TODOS los tipos
      * que se pueden crear desde la comunidad — no solo el post con foto/video,
@@ -163,7 +121,7 @@ export const COPY = {
      */
     createMenu: {
       rowLabel: "¿Qué querés publicar?",
-      rowHint: "Foto, video, pregunta y todo lo demás",
+      rowHint: "Foto, video, texto, pregunta y todo lo demás",
       sheetTitle: "Elegí qué publicar",
       tiles: {
         photo: {
@@ -173,6 +131,10 @@ export const COPY = {
         video: {
           title: "Video",
           description: "Subí un video corto, hasta 60 MB.",
+        },
+        text: {
+          title: "Texto",
+          description: "Contale algo a tu comunidad, sin necesidad de foto.",
         },
         question: {
           title: "Pregunta",
@@ -223,6 +185,9 @@ export const COPY = {
     // banner o algo"): cuando la pregunta no entra entera en el banner del feed,
     // esta píldora avisa que hay más y que tocando se lee completa.
     questionReadFull: "Ver la pregunta completa",
+    // Mismo mecanismo del TextBanner (2026-07-29), en genérico: un texto no es
+    // "una pregunta", así que la píldora no puede decir "pregunta".
+    textReadFull: "Ver completo",
 
     /**
      * ENCUESTA SÍ / NO de una pregunta (contrato 0041, feedback cliente

@@ -385,6 +385,12 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-on-media"],
     cobertura: "cl-print-fill",
   },
+  // Hermano de QuestionBanner para `kind='text'` (2026-07-29): mismo motivo,
+  // mismo hook en la misma raíz — tinta clara sobre el campo de marca.
+  "src/components/feed/text-banner.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-fill",
+  },
   // Encuesta Sí/No de una pregunta (0041). Sus dos tintas son el tono "media", y
   // ese tono se pasa en UN solo lugar: post-card.tsx usa tone="media" justo
   // cuando la encuesta va DENTRO del QuestionBanner (si la pregunta trae foto, la
@@ -494,14 +500,6 @@ const INVENTARIO: Record<string, Entrada> = {
   "src/app/(app)/ajustes/page.tsx": {
     inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",
-  },
-  // El "+" del bottom nav (2026-07-29): disco de marca con el signo en
-  // `text-brand-foreground`. Vive DENTRO del <nav> de la barra, que el papel ya
-  // no imprime — misma cobertura que el resto de la navegación. Reemplaza a la
-  // entrada del menú lateral, borrado junto con el rail de módulos y la campana.
-  "src/components/shell/bottom-nav.tsx": {
-    inks: ["text-brand-foreground"],
-    cobertura: "nav",
   },
   "src/components/onboarding/onboarding-wizard.tsx": {
     inks: ["text-brand-foreground"],

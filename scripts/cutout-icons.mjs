@@ -1,7 +1,11 @@
 /**
  * Recorta el fondo blanco de un render 3D y lo deja como webp con alfa.
  *
- *   node scripts/cutout-icons.mjs <dir-de-png> public/icons/nav
+ *   node scripts/cutout-icons.mjs <dir-de-png> <dir-salida> [nombre[:semilla_x,semilla_y] ...]
+ *
+ * Sin nombres, procesa el set fijo del bottom nav (inicio/buscar/videos/ajustes).
+ * Con nombres, procesa esos archivos `<nombre>.png` del dir de entrada — así se
+ * agregó `crear` (el "+", 2026-07-29) sin tocar la lista de abajo.
  *
  * Así se hizo el set del bottom nav (2026-07-29): íconos generados con
  * nano-banana-pro pidiendo "fondo blanco plano #FFFFFF" y pasados por acá. El
@@ -37,7 +41,7 @@ const SAT_MAX = 12;
 /** Tamaño final: 3x sobre los ~32px que muestra la barra. */
 const OUT_SIZE = 128;
 
-const ICONS = [
+const DEFAULT_ICONS = [
   { name: "inicio", seeds: [] },
   { name: "buscar", seeds: [] },
   { name: "videos", seeds: [] },
@@ -45,6 +49,16 @@ const ICONS = [
   // alcanza el relleno de los bordes, así que se siembra a mano.
   { name: "ajustes", seeds: [[0.5, 0.5]] },
 ];
+
+/** `crear:0.5,0.5` → { name: "crear", seeds: [[0.5, 0.5]] }; sin `:` → sin semillas. */
+function parseArgIcon(arg) {
+  const [name, rawSeed] = arg.split(":");
+  if (!rawSeed) return { name, seeds: [] };
+  const [sx, sy] = rawSeed.split(",").map(Number);
+  return { name, seeds: [[sx, sy]] };
+}
+
+const ICONS = process.argv.length > 4 ? process.argv.slice(4).map(parseArgIcon) : DEFAULT_ICONS;
 
 function isBackgroundish(r, g, b) {
   const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;

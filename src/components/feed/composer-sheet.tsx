@@ -5,6 +5,7 @@ import { BottomSheet, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 import { QuestionBanner } from "./question-banner";
+import { TextBanner } from "./text-banner";
 
 /**
  * PASO DE TEXTO del composer rápido (feedback cliente 2026-07-27).
@@ -14,11 +15,14 @@ import { QuestionBanner } from "./question-banner";
  * publica y recién entonces se abre esta hoja, con el medio a la vista y el
  * texto debajo: el modelo de Instagram (subir → siguiente → escribir el pie).
  *
- * Una sola hoja para los dos caminos rápidos, porque comparten todo lo que
+ * Una sola hoja para los TRES caminos rápidos, porque comparten todo lo que
  * importa (texto, publicar, progreso, errores) y solo cambia la pieza de arriba:
  *  · `media`    → el medio elegido, grande, y el pie debajo.
  *  · `question` → la pregunta se ve COMO VA A SALIR (el banner de marca real) y
  *                 abajo el interruptor de la encuesta Sí/No.
+ *  · `text`     → mismo principio que `question` (el cuerpo ES la pieza
+ *                 gráfica, vista previa real vía TextBanner) pero SIN encuesta
+ *                 — `kind='text'` nunca lleva poll_kind (0041/0043).
  *
  * Es presentacional a propósito: el estado (texto, archivos, subida) vive en
  * PostComposer, que es quien publica. Así no hay dos fuentes de verdad ni un
@@ -27,7 +31,7 @@ import { QuestionBanner } from "./question-banner";
 
 const MAX_LENGTH = 2000;
 
-export type ComposerMode = "media" | "question";
+export type ComposerMode = "media" | "question" | "text";
 
 export interface ComposerMediaItem {
   id: string;
@@ -158,14 +162,22 @@ export function ComposerSheet({
   onPublish,
 }: ComposerSheetProps) {
   const isQuestion = mode === "question";
+  const isText = mode === "text";
+  // Ambos exentos del trigger MEDIA_REQUIRED (0023/0043): question y text.
+  const exemptFromMedia = isQuestion || isText;
   const photos = media.filter((item) => item.kind === "photo");
   const hasVideo = media.some((item) => item.kind === "video");
   const trimmed = body.trim();
-  // Un post SIN medio no pasa el trigger MEDIA_REQUIRED (0023). Acá el botón sí
-  // se apaga —el medio está a un toque, en la misma pantalla— en vez de abrir
-  // otra hoja encima de esta y pelearse dos focus traps.
+  // Un post kind='post' SIN medio no pasa el trigger. Acá el botón sí se apaga
+  // —el medio está a un toque, en la misma pantalla— en vez de abrir otra hoja
+  // encima de esta y pelearse dos focus traps.
   const canPublish =
-    trimmed.length >= 2 && !isPending && (isQuestion || media.length > 0);
+    trimmed.length >= 2 && !isPending && (exemptFromMedia || media.length > 0);
+  const bodyPlaceholder = isQuestion
+    ? COPY.composer.compose.questionPlaceholder
+    : isText
+      ? COPY.composer.compose.textPlaceholder
+      : COPY.composer.compose.mediaPlaceholder(photos.length, hasVideo);
 
   const addTileClass = cn(
     "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full border border-dashed border-border",
@@ -184,7 +196,9 @@ export function ComposerSheet({
       title={
         isQuestion
           ? COPY.composer.compose.questionTitle
-          : COPY.composer.compose.mediaTitle
+          : isText
+            ? COPY.composer.compose.textTitle
+            : COPY.composer.compose.mediaTitle
       }
       // EN PAPEL NO EXISTE: es la hoja donde se COMPONE una publicación, un
       // overlay modal sobre toda la página. Además escribe tinta `on-media`
@@ -218,6 +232,23 @@ export function ComposerSheet({
               ) : (
                 <p className="bg-surface-subtle px-5 py-10 text-center text-sm text-foreground-muted">
                   {COPY.composer.compose.questionPlaceholder}
+                </p>
+              )}
+            </div>
+          </>
+        ) : isText ? (
+          <>
+            {/* Mismo principio que la pregunta: el texto ya se ve como va a
+                salir, sin encuesta debajo (kind='text' nunca la lleva). */}
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-foreground-muted">
+              {COPY.composer.compose.previewLabel}
+            </p>
+            <div className="overflow-hidden rounded-xl border border-border-subtle">
+              {trimmed.length > 0 ? (
+                <TextBanner preview postId={previewId} text={body} />
+              ) : (
+                <p className="bg-surface-subtle px-5 py-10 text-center text-sm text-foreground-muted">
+                  {COPY.composer.compose.textPlaceholder}
                 </p>
               )}
             </div>
@@ -323,9 +354,7 @@ export function ComposerSheet({
         )}
 
         <label htmlFor="composer-sheet-body" className="sr-only">
-          {isQuestion
-            ? COPY.composer.compose.questionPlaceholder
-            : COPY.composer.compose.mediaPlaceholder(photos.length, hasVideo)}
+          {bodyPlaceholder}
         </label>
         <textarea
           id="composer-sheet-body"
@@ -334,11 +363,7 @@ export function ComposerSheet({
           value={body}
           disabled={isPending}
           onChange={(event) => onBodyChange(event.target.value)}
-          placeholder={
-            isQuestion
-              ? COPY.composer.compose.questionPlaceholder
-              : COPY.composer.compose.mediaPlaceholder(photos.length, hasVideo)
-          }
+          placeholder={bodyPlaceholder}
           className={cn(
             "mt-3 min-h-24 w-full resize-none rounded-lg border border-border bg-surface p-3",
             "text-base text-foreground placeholder:text-foreground-muted",

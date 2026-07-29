@@ -1,25 +1,32 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ToastProvider } from "@/components/ui";
 
 /**
- * Composer del feed — rediseño 2026-07-27 (call con el cliente).
+ * Composer del feed — rediseño 2026-07-29 (pedido de Manuel).
  *
  * Lo que este archivo ancla del contrato NUEVO:
- *  1. en reposo NO hay recuadros de "Agregar foto" / "Agregar video": el único
- *     disparador es la fila "¿Qué querés publicar?";
- *  2. esa fila abre el menú con los 10 tipos;
+ *  1. en reposo hay UNA sola cosa, sin campo de texto ni botón Publicar afuera:
+ *     la tarjeta "¿Qué querés publicar?" — tocarla es lo único que hace algo;
+ *  2. esa tarjeta abre el menú con los 11 tipos (10 + Texto, 2026-07-29);
  *  3. foto y video disparan su selector y siguen en la HOJA de texto;
- *  4. pregunta abre la hoja con su vista previa y el interruptor de encuesta;
- *  5. escribir y publicar SIN medio no es un error: aparecen los dos caminos
- *     (sumar medio o publicarlo como pregunta) y el texto NO se pierde;
- *  6. el saludo por franja horaria sigue en pie.
+ *  4. Texto abre la hoja con su propia vista previa, sin encuesta;
+ *  5. Pregunta abre la hoja con su vista previa y el interruptor de encuesta;
+ *  6. Texto y Pregunta publican con su `kind` correcto — la regla "todo post
+ *     lleva imagen" ya no necesita una hoja aparte que la explique: ningún
+ *     camino de la UI llega a "escribí y publicá sin medio" para poder
+ *     violarla (ver el docblock de post-composer.tsx).
  *
  * Dependencias pesadas (router, supabase, server actions) van stubeadas —
  * mismo patrón que comments-sheet.test.tsx — porque lo que se testea es el
  * flujo de la UI, no la subida real.
  */
+
+const { createPostAction, prepareMediaUploadAction } = vi.hoisted(() => ({
+  createPostAction: vi.fn(),
+  prepareMediaUploadAction: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -49,10 +56,12 @@ vi.mock("@/lib/supabase/client", () => ({
 }));
 
 // Server actions reales no aplican en un test de UI (y arrastran cadenas de
-// server-only) — se stubean, ninguno de estos tests llega a publicar.
+// server-only) — se stubean. `createPostAction` sí se ejecuta en los dos
+// tests de publicación (Texto/Pregunta): son los únicos que necesitan una
+// respuesta resuelta para inspeccionar el `kind` que viajó.
 vi.mock("@/app/(app)/feed/actions", () => ({
-  createPostAction: vi.fn(),
-  prepareMediaUploadAction: vi.fn(),
+  createPostAction,
+  prepareMediaUploadAction,
 }));
 
 // motion neutralizado: el DOM refleja el estado del BottomSheet al instante
@@ -106,7 +115,7 @@ import { COPY } from "./copy";
 
 /**
  * `modules` vacío = nadie decidió nada en el panel, que es el default de
- * `moduleAvailability`: el menú de crear sale con las diez opciones.
+ * `moduleAvailability`: el menú de crear sale con las once opciones.
  */
 function mount(viewerName = "Ana Gómez") {
   return render(
@@ -126,16 +135,24 @@ function openMenu() {
   return screen.findByText(COPY.composer.createMenu.sheetTitle);
 }
 
-/** Escribe en el campo rápido del composer (el de arriba, no el de la hoja). */
-function typeQuick(text: string) {
-  const field = document.getElementById("post-composer-body") as HTMLTextAreaElement;
-  fireEvent.change(field, { target: { value: text } });
-  return field;
+/** El textarea de la HOJA (el único que existe: ya no hay uno afuera). */
+function sheetBody(): HTMLTextAreaElement {
+  return document.getElementById("composer-sheet-body") as HTMLTextAreaElement;
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  createPostAction.mockReset();
+  prepareMediaUploadAction.mockReset();
+});
 
-describe("PostComposer — un solo disparador", () => {
+describe("PostComposer — un solo elemento en reposo", () => {
+  it("no hay campo de texto ni botón Publicar afuera de la hoja", () => {
+    mount();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: new RegExp(COPY.composer.publish) })).toBeNull();
+  });
+
   it("en reposo NO hay recuadros de agregar foto ni de agregar video", () => {
     mount();
     // El único lugar donde vuelven a aparecer es DENTRO de la hoja de texto.
@@ -144,7 +161,7 @@ describe("PostComposer — un solo disparador", () => {
     expect(screen.queryByRole("button", { name: COPY.composer.addMorePhotos })).toBeNull();
   });
 
-  it("la fila-disparador es la única puerta y abre el menú con los 10 tiles", async () => {
+  it("la tarjeta entera es el disparador y abre el menú con los 11 tiles", async () => {
     mount();
     await openMenu();
 
@@ -206,6 +223,48 @@ describe("PostComposer — un solo disparador", () => {
   });
 });
 
+describe("PostComposer — Texto abre su propio paso, sin encuesta", () => {
+  it("el tile Texto abre la hoja con su título y sin interruptor de encuesta", async () => {
+    mount();
+    await openMenu();
+
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.text.title));
+
+    expect(await screen.findByText(COPY.composer.compose.textTitle)).toBeTruthy();
+    // `kind='text'` nunca lleva poll_kind (0041/0043): el interruptor no existe.
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+
+  it("sin escribir todavía, muestra el placeholder de la vista previa", async () => {
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.text.title));
+
+    // Aparece dos veces a propósito: la vista previa Y el <label> sr-only del
+    // textarea comparten el mismo texto (mismo patrón que questionPlaceholder).
+    await waitFor(() => {
+      expect(screen.getAllByText(COPY.composer.compose.textPlaceholder).length).toBeGreaterThan(0);
+    });
+  });
+
+  it("publica con kind='text' (no 'post' ni 'question')", async () => {
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.text.title));
+
+    fireEvent.change(await screen.findByLabelText(COPY.composer.compose.textPlaceholder), {
+      target: { value: "Hoy abrió la feria del barrio y estaba llenísima." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect(sent.get("kind")).toBe("text");
+    expect(sent.get("pollKind")).toBeNull();
+  });
+});
+
 describe("PostComposer — la pregunta abre su propio paso", () => {
   it("el tile Pregunta abre la hoja con vista previa y encuesta apagada", async () => {
     mount();
@@ -234,69 +293,61 @@ describe("PostComposer — la pregunta abre su propio paso", () => {
 
   it("con la encuesta prendida la vista previa ya muestra Sí y No", async () => {
     mount();
-    typeQuick("¿Conviene mudarse a Jackson Heights?");
     await openMenu();
     fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.question.title));
 
+    fireEvent.change(await screen.findByLabelText(COPY.composer.compose.questionPlaceholder), {
+      target: { value: "¿Conviene mudarse a Jackson Heights?" },
+    });
     fireEvent.click(
-      await screen.findByRole("switch", { name: new RegExp(COPY.composer.compose.pollLabel) }),
+      screen.getByRole("switch", { name: new RegExp(COPY.composer.compose.pollLabel) }),
     );
 
     expect(screen.getByText(COPY.composer.compose.previewLabel)).toBeTruthy();
     expect(screen.getAllByText(COPY.post.poll.yes).length).toBeGreaterThan(0);
     expect(screen.getAllByText(COPY.post.poll.no).length).toBeGreaterThan(0);
   });
-});
 
-describe("PostComposer — la regla de la imagen no es un error", () => {
-  it("publicar texto solo abre los dos caminos en vez de fallar", async () => {
+  it("publica con kind='question' y la encuesta cuando está prendida", async () => {
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
     mount();
-    typeQuick("Hoy abrió la feria del barrio y estaba llenísima.");
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.question.title));
 
-    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+    fireEvent.change(await screen.findByLabelText(COPY.composer.compose.questionPlaceholder), {
+      target: { value: "¿Alguien sabe a qué hora abre la feria?" },
+    });
+    fireEvent.click(
+      screen.getByRole("switch", { name: new RegExp(COPY.composer.compose.pollLabel) }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(COPY.composer.compose.publishQuestion) }),
+    );
 
-    expect(await screen.findByText(COPY.composer.needsMedia.sheetTitle)).toBeTruthy();
-    expect(screen.getByText(COPY.composer.needsMedia.withMediaTitle)).toBeTruthy();
-    expect(screen.getByText(COPY.composer.needsMedia.asQuestionTitle)).toBeTruthy();
-  });
-
-  it('"Con una foto o un video" abre el selector, no publica a ciegas', async () => {
-    const clickSpy = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
-    mount();
-    typeQuick("Hoy abrió la feria del barrio y estaba llenísima.");
-    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
-
-    fireEvent.click(await screen.findByText(COPY.composer.needsMedia.withMediaTitle));
-
-    const clicked = clickSpy.mock.instances[0] as unknown as HTMLInputElement;
-    expect(clicked.id).toBe("post-composer-photos");
-    clickSpy.mockRestore();
-  });
-
-  it('"Como pregunta" pasa a la hoja de pregunta SIN perder lo escrito', async () => {
-    const written = "¿Alguien sabe a qué hora abre la feria del barrio?";
-    mount();
-    typeQuick(written);
-    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
-
-    fireEvent.click(await screen.findByText(COPY.composer.needsMedia.asQuestionTitle));
-
-    expect(await screen.findByText(COPY.composer.compose.questionTitle)).toBeTruthy();
-    const sheetField = document.getElementById("composer-sheet-body") as HTMLTextAreaElement;
-    expect(sheetField.value).toBe(written);
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect(sent.get("kind")).toBe("question");
+    expect(sent.get("pollKind")).toBe("yes_no");
   });
 });
 
-describe("PostComposer — saludo visible", () => {
-  it("saluda por franja horaria y nombre de pila una vez montado", async () => {
-    mount("Ana Gómez");
-    const expected = COPY.composer.greetingByHour(new Date().getHours(), "Ana");
-    expect(await screen.findByText(expected)).toBeTruthy();
-  });
+describe("PostComposer — el cuerpo no se pierde si cambiás de idea", () => {
+  it("cerrar Texto sin publicar y abrir Pregunta conserva lo ya escrito", async () => {
+    // Mismo criterio que el viejo flujo "¿cómo lo mostramos?" (needsMedia,
+    // ya retirado): un cambio de tipo de publicación nunca debería borrar lo
+    // que la persona ya tipeó. `body` vive en PostComposer, no en la hoja.
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.text.title));
+    fireEvent.change(await screen.findByLabelText(COPY.composer.compose.textPlaceholder), {
+      target: { value: "Che, esto lo escribí como texto." },
+    });
 
-  it("sin display_name en el perfil: saluda igual de cálido, sin nombre", async () => {
-    mount("");
-    const expected = COPY.composer.greetingByHour(new Date().getHours(), null);
-    expect(await screen.findByText(expected)).toBeTruthy();
+    // Cerrar sin publicar (botón "Cerrar" del pie de la hoja).
+    fireEvent.click(screen.getByRole("button", { name: COPY.composer.compose.close }));
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.question.title));
+
+    expect(sheetBody().value).toBe("Che, esto lo escribí como texto.");
   });
 });
