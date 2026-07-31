@@ -1,5 +1,91 @@
 # PROGRESS — Comunidad Latina
 
+## Feedback consolidado del 30/7 — 7 specs escritas + call de 85 min (✅ 2026-07-31)
+
+Fuente y criterio: **`docs/feedback/2026-07-30-feedback-consolidado.md`**. Ahí
+están los **3 conflictos entre las dos fuentes** ya resueltos con su
+fundamento, y todo lo que quedó afuera **con su razón**. Leer eso antes de
+tocar nada de este bloque.
+
+Ejecutado por 9 agentes en tres olas con fronteras de archivo estrictas, más
+una ronda de integración (las costuras entre frentes no las hace ningún
+frente). Commits `e8412a8` y `ce614ed`.
+
+**Esquema — migraciones 0044–0052, aplicadas y verificadas contra la base:**
+- **0044** búsqueda global por RPC `security invoker` (RLS decide qué se ve, y
+  así ninguna superficie tiene que acordarse de filtrar), con el `href` saliendo
+  de la RPC para que nadie re-invente el ruteo.
+- **0045** notificaciones con categoría (13), prioridad, agrupación por
+  `group_key` y preferencias por canal. Seguridad, pagos y cuenta **no se
+  pueden silenciar** — lo impone un CHECK, no la UI.
+- **0046** `short_video` vs `advertising_video`. La regla cuelga de
+  `eligible_for_short_feed` y **no** del tipo: si colgara del tipo, bastaba
+  dejarlo en NULL para meter 10 minutos en el reel.
+- **0047** reclutamiento: embudo monótono por trigger, CV en bucket privado con
+  la ruta atada por CHECK, y la nota del empleador en **tabla aparte** porque
+  candidato y empleador llegan los dos como `authenticated` y RLS filtra filas,
+  no columnas.
+- **0048** tier `free`/`premium`, CTAs como columnas con un CHECK atómico,
+  campañas y membresías de tienda.
+- **0049** arregla un CHECK de 0046 que quedaba **dormido** por su fecha de
+  corte. Lo destapó la prueba negativa, no la revisión.
+- **0050** vistas y compartidos de aviso (las métricas que el panel declaraba
+  como hueco en vez de mostrar un cero que parece dato).
+- **0051** cierra la deuda que la propia 0044 se había anotado:
+  `video_post_href` mandaba **todo** video al reel, publicitarios incluidos.
+- **0052** búsqueda insensible a tildes (ver abajo).
+
+**App:**
+- **Búsqueda global** mientras se escribe, agrupada por tipo, con historial y
+  sugerencias de datos reales; más buscador propio en Eventos, Negocios y
+  Colaboraciones, que no tenían.
+- **Notificaciones** con pestañas, contadores, agrupación por tiempo, acciones
+  por fila y pantalla de preferencias.
+- **Videos Cortos**: tope de 90 s validado en el navegador **y** en el
+  servidor, menú de categorías al entrar, y los cuatro topes de duración
+  (90/59/300/600) en un solo módulo con tests, para que no se separen.
+- **Empleos** end-to-end: aplicar con CV y portafolio, "Mis aplicaciones", y
+  panel de candidatos del **dueño del aviso** — que no es lo mismo que la vista
+  de staff de `/admin/empleos`, que tiene su propia barrera auditada y no se
+  tocó.
+- **Monetización**: gratis vs premium en un solo módulo, botones por módulo,
+  "Impulsar"/"Crear campaña" al publicar, estadísticas en dos niveles.
+- **Tiendas** de USD 10/mes con apagado automático al vencer, y **política de
+  productos prohibidos** como página legal propia.
+- **Colaboraciones** (era "Contratos"), con 308 desde la ruta vieja.
+- **Lienzo crema con la tarjeta blanca** — el pedido era *"blanco con blanco no
+  notamos nada"*. La escala está anclada por **luminancia**, así que ningún par
+  de contraste bajó: el peor del tema claro mejoró de 4.51:1 a 4.55:1.
+
+**Defectos encontrados probando, no leyendo (los que valen):**
+- **`current_period_end` ya no existe en la raíz de `Subscription`** en
+  stripe-node 22 — se movió a `SubscriptionItem`. Leerlo como enseñan los
+  ejemplos viejos dejaba la fecha en NULL, el cron nunca vencía la fila y **la
+  tienda quedaba prendida para siempre**.
+- **"Ver perfil" estaba construido y llegaba a 0 de sus 9 puntos de montaje.**
+  Un frente construyó el componente, otro tenía las páginas: nadie lo cableó.
+  Es el modo de falla típico de trabajar en paralelo y por eso existe la ronda
+  de integración.
+- **El chat sin sesión mandaba a `/propiedades/<id>` desde cualquier módulo** —
+  un 404 justo después de que la persona se molestara en entrar.
+- **El anuncio con la campaña vencida volvía a comportarse como orgánico**: la
+  tarjeta sólo miraba `post_promotions`, que caduca. El hueco no estaba en el
+  reel sino en el feed.
+- **La búsqueda fallaba con las palabras más comunes escritas sin tilde**, que
+  es como se escribe desde el teléfono. Medido: el stemmer español convierte
+  `Habitación` en `habit`, pero `habitacion` queda entera y no matchea — dos
+  avisos de habitación invisibles para quien no pone la tilde. Cerrado en 0052.
+- Dos migraciones nacieron con el prefijo `0050`; la del orquestador se
+  renumeró a `0051`.
+
+**Gates:** `tsc` 0 · `lint` 0 errores · **1911 tests** (eran 1450) · `build`
+verde con todas las rutas nuevas · enumerador RLS verde con **69 superficies**
+(eran 59). Las garantías de la base se probaron **en vivo con rollback**, no
+por lectura: un video de 600 s no entra al reel, un aviso gratis no guarda un
+botón externo, nadie silencia las notificaciones de pagos, nadie lee el CV de
+otro, y bajar de premium a gratis **falla** si no se limpian los CTAs en la
+misma sentencia.
+
 ## Feedback de la call del 27/7 (85 min) — 8 frentes en paralelo (✅ 2026-07-27)
 
 Fuente y criterio: **`docs/feedback/2026-07-27-call-85min.md`** — las citas

@@ -125,6 +125,16 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
     .limit(PAGE_SIZE + 1);
 
   if (filters.q) {
+    // config "spanish" A PROPÓSITO, aunque 0052 haya hecho la búsqueda
+    // insensible a los acentos. Lo que cambió está del lado del documento:
+    // listings.search guarda el texto analizado DE LAS DOS MANERAS (spanish +
+    // spanish_unaccent), así que tipear "habitacion" sin tilde ya encuentra
+    // "Habitación" consultando con "spanish" — verificado contra la base.
+    //
+    // Pasar esto a "spanish_unaccent" no agrega nada y RESTA: el stemmer
+    // español reconoce los sufijos POR la tilde, y sin ella "barbería" deja de
+    // encontrar "barba" (medido: 5 → 4 resultados) y "orientación" pierde
+    // "orientativa" (3 → 1). Se queda como está.
     query = query.textSearch("search", filters.q, { type: "websearch", config: "spanish" });
   }
   if (filters.precio !== null) {
