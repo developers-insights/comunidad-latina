@@ -91,7 +91,13 @@ export function ProductCard({ product }: { product: ProductCardModel }) {
           />
         </PhotoTap>
 
-        <div className="flex flex-1 flex-col gap-2 p-3">
+        {/* `gap-2.5 p-4` = el ritmo vertical de TODA tarjeta de listado
+            (Propiedades, Negocios, Colaboraciones, Empleos). Acá era `gap-2 p-3`
+            por la grilla de 2 columnas, y era justo lo que hacía que estas
+            tarjetas se sintieran de otra familia — el pedido del cliente
+            («todas las tarjetas de todos, el mismo tamaño») incluye el aire
+            interno, no sólo la foto. */}
+        <div className="flex flex-1 flex-col gap-2.5 p-4">
           {/* Quién vende: tienda (con su acento y link a la vidriera) o particular. */}
           <SellerChip seller={product.seller} />
 

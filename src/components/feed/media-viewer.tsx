@@ -389,6 +389,16 @@ export interface ViewerVideoProps {
   onDoubleTap?: () => void;
   /** Clases extra de la barra inferior (p.ej. despejar el bottom nav en reels). */
   controlsClassName?: string;
+  /**
+   * TOPE DE REPRODUCCIÓN de esta superficie, en segundos (ver
+   * `src/lib/media/video-policy.ts`). Al llegar, el video vuelve al principio en
+   * vez de seguir. Es lo que hace que "Videos Cortos" siga siendo corto aunque
+   * un archivo viejo dure más de lo que declara —los 7 videos anteriores a la
+   * 0046 no tienen duración conocida—, y lo que sostiene la vista previa del
+   * feed. Sin tope (undefined) el video se reproduce entero: es el caso del
+   * detalle de una publicación, donde se ve completo.
+   */
+  maxPlaybackSeconds?: number | null;
   className?: string;
 }
 
@@ -402,6 +412,7 @@ export function ViewerVideo({
   showMute = true,
   onDoubleTap,
   controlsClassName,
+  maxPlaybackSeconds,
   className,
 }: ViewerVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -445,12 +456,29 @@ export function ViewerVideo({
   }, [active]);
 
   // Barra de progreso sin re-render por frame: se escribe el style directo.
+  // Y, si la superficie tiene tope, es acá donde se aplica: `timeupdate` es el
+  // único punto que ve el reloj del video sin montar un intervalo propio.
   const onTimeUpdate = useCallback(() => {
     const video = videoRef.current;
     const bar = progressRef.current;
-    if (!video || !bar || !Number.isFinite(video.duration) || video.duration === 0) return;
-    bar.style.width = `${(video.currentTime / video.duration) * 100}%`;
-  }, []);
+    if (!video || !Number.isFinite(video.duration) || video.duration === 0) return;
+
+    const cap =
+      typeof maxPlaybackSeconds === "number" && maxPlaybackSeconds > 0
+        ? Math.min(maxPlaybackSeconds, video.duration)
+        : video.duration;
+
+    if (video.currentTime >= cap) {
+      // `loop` ya está puesto: volver a 0 continúa reproduciendo sin cortes.
+      video.currentTime = 0;
+      if (bar) bar.style.width = "0%";
+      return;
+    }
+    // La barra mide la VENTANA que se está mostrando, no el archivo: si el tope
+    // corta a los 59 s, llenarla hasta el final del archivo mentiría dos veces
+    // (parecería que falta mucho, y saltaría antes de llegar).
+    if (bar) bar.style.width = `${(video.currentTime / cap) * 100}%`;
+  }, [maxPlaybackSeconds]);
 
   // Un toque en vuelo cuando el slide se desmonta (scroll rápido del reel) no
   // puede pausar un video que ya no está.

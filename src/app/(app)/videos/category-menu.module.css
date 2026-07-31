@@ -1,0 +1,42 @@
+/**
+ * Entrada escalonada del menú de categorías.
+ *
+ * CSS y no `motion/react` a propósito: la pantalla no tiene estado ni gestos, y
+ * animarla desde JS obligaría a marcarla "use client" y a hidratar diez enlaces
+ * que no lo necesitan. El delay lo pone cada tarjeta con una custom property
+ * (`--cl-stagger`), así que el escalonado se declara en el markup sin generar
+ * una clase por índice.
+ *
+ * Sólo `transform` y `opacity`: nada que dispare layout. Sin `will-change` — en
+ * este repo ya costó caro (`.cl-page-transition` creaba un containing block
+ * permanente que rompía `position: fixed`; ver PROGRESS 2026-07-21).
+ */
+
+.item {
+  animation: cl-video-cat-in var(--duration-slow, 400ms)
+    var(--ease-out-premium, cubic-bezier(0.32, 0.72, 0, 1)) backwards;
+  animation-delay: var(--cl-stagger, 0ms);
+}
+
+@keyframes cl-video-cat-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/**
+ * Movimiento reducido: la pantalla aparece, no entra. Sin animación NI delay —
+ * un `animation-delay` sin animación dejaría las tarjetas invisibles hasta que
+ * venciera el timer, que es peor que no animar.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .item {
+    animation: none;
+    animation-delay: 0ms;
+  }
+}

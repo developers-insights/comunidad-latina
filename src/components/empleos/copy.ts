@@ -206,24 +206,38 @@ export const COPY = {
     pendingBanner:
       "Tu empleo está en revisión — lo publicamos apenas pase el control de seguridad.",
 
-    /** Vista de quien publicó el aviso: las postulaciones que le llegaron. */
+    /** Vista de quien publicó el aviso: el acceso a su bandeja de candidatos. */
     applications: {
-      title: (count: number) => `Postulaciones (${count})`,
+      title: "Quién se postuló",
+      count: (total: number) =>
+        total === 1 ? "1 persona se postuló" : `${total} personas se postularon`,
+      openCount: (open: number) =>
+        open === 1 ? "1 esperando tu respuesta" : `${open} esperando tu respuesta`,
+      allAnswered: "Ya respondiste a todas.",
+      open: "Ver candidatos",
       emptyTitle: "Todavía no se postuló nadie",
-      emptyMessage: "Apenas alguien se postule vas a verlo acá, con sus respuestas y su mensaje.",
+      emptyMessage: "Apenas alguien se postule vas a verlo acá, con sus respuestas y su currículum.",
       pendingNote:
         "Mientras el aviso está en revisión no lo ve la comunidad, así que todavía no van a llegar postulaciones.",
-      messageTitle: "Su mensaje",
-      answersTitle: "Sus respuestas",
-      accept: "Aceptar",
-      decline: "Rechazar",
-      statusSubmitted: "Nueva",
-      statusAccepted: "Aceptada",
-      statusDeclined: "Rechazada",
-      statusWithdrawn: "Retirada",
-      acceptedNote: "Escribile por Mensajes para arreglar los detalles.",
-      updated: "Listo, actualizamos la postulación.",
-      errorGeneric: "No pudimos actualizarla — probá de nuevo en un ratito.",
+    },
+  },
+
+  // ===========================================================================
+  // REGIÓN status — vocabulario del embudo, COMPARTIDO por las dos vistas
+  //
+  // Es el vocabulario que pidió el cliente, palabra por palabra. Vive una sola
+  // vez: si "En revisión" dijera una cosa en la pantalla del candidato y otra
+  // en la del empleador, las dos partes estarían hablando de cosas distintas.
+  // ===========================================================================
+  status: {
+    label: {
+      submitted: "Solicitud enviada",
+      reviewing: "En revisión",
+      interview: "Entrevista",
+      hired: "Contratado",
+      rejected: "No seleccionado",
+      withdrawn: "Retirada",
+      closed: "Vacante cerrada",
     },
   },
 
@@ -235,26 +249,93 @@ export const COPY = {
     ctaLoggedOut: "Entrar para postularme",
     sheetTitle: "Postularte a este empleo",
     intro:
-      "Respondé las preguntas y, si querés, contale algo de vos. Solo lo ve quien publicó el aviso.",
+      "Todo esto lo ve solo quien publicó el aviso. Antes de enviar te mostramos exactamente qué va a recibir.",
     /** Botones segmentados de una pregunta de sí/no. */
     yes: "Sí",
     no: "No",
     questionCounter: (index: number, total: number) => `Pregunta ${index} de ${total}`,
+    questionsHeading: "Las preguntas del aviso",
     messageLabel: "Un mensaje para quien contrata",
     messageHelp: "Contá tu experiencia o cuándo podrías empezar. Un par de líneas alcanzan.",
     messagePlaceholder: "Ej.: Tengo tres años cuidando chicos y puedo empezar la semana que viene.",
+
+    /** Autocompletado desde el perfil + el control para no compartirlo. */
+    profile: {
+      heading: "Tus datos",
+      shared: "Quien contrata va a ver esto de tu perfil:",
+      hidden: "Vas a postularte sin mostrar tu perfil.",
+      hiddenHint:
+        "Van a ver tus respuestas, tu mensaje y tu currículum, pero no tu foto, tu nombre ni tu zona.",
+      toggleLabel: "Compartir mi perfil con quien contrata",
+      toggleHelp: "Se completa solo desde tu perfil. Podés cambiarlo cuando quieras.",
+      trustLabel: "Nivel de confianza",
+      verified: "Identidad verificada",
+      noCity: "Sin zona cargada",
+      completeProfile: "Completar mi perfil",
+    },
+
+    /** Currículum adjunto. */
+    cv: {
+      label: "Tu currículum",
+      help: "PDF o Word, hasta 5 MB. Opcional, pero suma muchísimo.",
+      choose: "Adjuntar currículum",
+      replace: "Cambiar archivo",
+      remove: "Quitar el archivo",
+      removed: "Quitamos el archivo.",
+      uploading: "Subiendo tu currículum…",
+      uploadingLive: (pct: number) => `Subiendo tu currículum, ${pct} por ciento`,
+      uploaded: "Currículum listo",
+      /** Peso legible al lado del nombre del archivo. */
+      size: (kb: number) => (kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`),
+      errorType: "Ese archivo no nos sirve. Adjuntá tu currículum en PDF o Word.",
+      errorSize: "El archivo pesa más de 5 MB. Probá con uno más liviano.",
+      errorEmpty: "Ese archivo está vacío. Probá con otro.",
+      errorUpload: "No pudimos subir el archivo. Fijate la señal y probá de nuevo.",
+    },
+
+    /** Enlaces de portafolio. */
+    portfolio: {
+      label: "Enlaces de tu trabajo",
+      help: "Hasta 5. Tu portafolio, tu perfil profesional o fotos de trabajos que hiciste.",
+      placeholder: "https://",
+      add: "Agregar otro enlace",
+      remove: (index: number) => `Quitar el enlace ${index}`,
+      inputLabel: (index: number) => `Enlace ${index}`,
+      errorInvalid: "Los enlaces tienen que empezar con http:// o https://.",
+      errorTooMany: "Podés sumar hasta 5 enlaces.",
+    },
+
+    /** Paso de confirmación: qué va a recibir quien contrata. */
+    review: {
+      cta: "Revisar y enviar",
+      title: "Esto es lo que va a recibir",
+      back: "Volver a editar",
+      profileTitle: "Tu perfil",
+      profileHidden: "No compartís tu perfil",
+      answersTitle: "Tus respuestas",
+      messageTitle: "Tu mensaje",
+      messageEmpty: "Sin mensaje",
+      cvTitle: "Currículum",
+      cvEmpty: "Sin currículum adjunto",
+      portfolioTitle: "Enlaces",
+      portfolioEmpty: "Sin enlaces",
+    },
+
     submit: "Enviar mi postulación",
     submitting: "Enviando…",
     successTitle: "¡Listo, ya te postulaste!",
     successBody:
-      "Quien publicó el aviso va a ver tus respuestas. Si le interesa tu perfil, te escribe por acá.",
+      "Quien publicó el aviso va a ver lo que enviaste. Seguí el estado desde Mis postulaciones.",
     successClose: "Entendido",
+    successMyApplications: "Ver mis postulaciones",
     errors: {
       unanswered: "Respondé todas las preguntas antes de enviar.",
       ownJob: "Este aviso lo publicaste vos, así que no podés postularte.",
       rateLimited: "Enviaste varias postulaciones seguidas. Esperá un ratito y probá de nuevo.",
       tenantMismatch: "Este aviso es de otra comunidad.",
       invalid: "Algo quedó incompleto — revisá las respuestas y probá de nuevo.",
+      cv: "Revisá el currículum: tiene que ser PDF o Word y pesar menos de 5 MB.",
+      portfolio: "Revisá los enlaces: cada uno tiene que empezar con http:// o https://.",
       generic:
         "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo en un ratito.",
     },
@@ -263,21 +344,166 @@ export const COPY = {
     status: {
       submittedTitle: "Ya te postulaste",
       submittedBody:
-        "Quien publicó el aviso está mirando las postulaciones. Te avisamos apenas te responda.",
-      acceptedTitle: "¡Te eligieron para este trabajo!",
-      acceptedBody:
-        "Aceptaron tu postulación. Escribile por Mensajes para arreglar horarios y detalles.",
-      declinedTitle: "Esta vez eligieron a otra persona",
-      declinedBody:
+        "Quien publicó el aviso todavía no la abrió. Te avisamos apenas haya novedades.",
+      reviewingTitle: "Están mirando tu postulación",
+      reviewingBody:
+        "Quien publicó el aviso ya la abrió. Si le interesa tu perfil, te escribe por acá.",
+      interviewTitle: "Te invitaron a una entrevista",
+      interviewBody: "Quieren conocerte. Entrá a Mensajes para acordar el día y la hora.",
+      hiredTitle: "¡Te eligieron para este trabajo!",
+      hiredBody: "Escribile por Mensajes para arreglar horarios y todos los detalles.",
+      rejectedTitle: "Esta vez eligieron a otra persona",
+      rejectedBody:
         "No quedaste en este aviso, pero seguí mirando: la comunidad publica trabajos nuevos todo el tiempo.",
+      closedTitle: "Se cerró la búsqueda",
+      closedBody:
+        "El aviso dejó de buscar gente. No hace falta que hagas nada; tu postulación queda cerrada.",
       withdrawnTitle: "Retiraste tu postulación",
       withdrawnBody:
         "Ya no aparece en la lista de quien publicó el aviso, y en este empleo no se puede volver a enviar.",
       withdraw: "Retirar mi postulación",
+      withdrawConfirmTitle: "¿Retirás tu postulación?",
+      withdrawConfirmBody:
+        "Deja de aparecer en la lista de quien publicó el aviso y no se puede volver a enviar en este empleo.",
+      withdrawConfirm: "Sí, retirarla",
+      withdrawCancel: "Mejor no",
       withdrawn: "Retiraste tu postulación.",
       withdrawError: "No pudimos retirarla — probá de nuevo en un ratito.",
       browseMore: "Ver otros empleos",
       goToMessages: "Ir a Mensajes",
+      seeAll: "Ver todas mis postulaciones",
     },
+  },
+
+  // ===========================================================================
+  // REGIÓN myApplications — /empleos/mis-aplicaciones (vista del candidato)
+  // ===========================================================================
+  myApplications: {
+    metaTitle: "Mis postulaciones",
+    title: "Mis postulaciones",
+    subtitle: "Todos los empleos a los que te postulaste y en qué anda cada uno",
+    backToJobs: "Ver empleos",
+
+    needLoginTitle: "Entrá para ver tus postulaciones",
+    needLoginBody:
+      "Con tu cuenta seguís el estado de cada empleo al que te postulaste, en un solo lugar.",
+    needLoginCta: "Entrar",
+
+    emptyTitle: "Todavía no te postulaste a nada",
+    emptyMessage:
+      "Cuando te postules a un empleo, acá vas a poder seguir en qué anda: si lo están mirando, si te invitan a una entrevista o si eligieron a otra persona.",
+    emptyCta: "Ver empleos abiertos",
+
+    filterAll: "Todas",
+    filterOpen: "En curso",
+    filterClosed: "Cerradas",
+    emptyOpenTitle: "No tenés postulaciones en curso",
+    emptyOpenMessage: "Todas las que enviaste ya tienen respuesta. Podés seguir mirando avisos.",
+    emptyClosedTitle: "Todavía no hay postulaciones cerradas",
+    emptyClosedMessage: "Acá van a quedar las que ya tuvieron respuesta.",
+
+    appliedAt: (when: string) => `Te postulaste ${when}`,
+    updatedAt: (when: string) => `Última novedad ${when}`,
+    jobClosed: "Este aviso ya no está publicado",
+    withCv: "Con currículum",
+    withLinks: (count: number) => (count === 1 ? "1 enlace" : `${count} enlaces`),
+    profileShared: "Compartís tu perfil",
+    profileHidden: "Sin compartir tu perfil",
+    profileToggleOn: "Compartir mi perfil",
+    profileToggleOff: "Dejar de compartir mi perfil",
+    profileUpdated: "Listo, actualizamos qué ve quien contrata.",
+    profileError: "No pudimos cambiarlo — probá de nuevo en un ratito.",
+    viewJob: "Ver el aviso",
+  },
+
+  // ===========================================================================
+  // REGIÓN candidates — /empleos/[id]/candidatos (vista del DUEÑO del aviso)
+  // ===========================================================================
+  candidates: {
+    metaTitle: "Candidatos",
+    title: "Candidatos",
+    subtitle: (jobTitle: string) => `Quiénes se postularon a «${jobTitle}»`,
+    backToJob: "Volver al aviso",
+    notOwnerTitle: "Esta pantalla es de quien publicó el aviso",
+    notOwnerBody:
+      "Acá se ven las postulaciones que recibió el aviso, así que solo entra quien lo publicó.",
+
+    countAll: (total: number) => (total === 1 ? "1 candidato" : `${total} candidatos`),
+    countOpen: (open: number) =>
+      open === 1 ? "1 esperando respuesta" : `${open} esperando respuesta`,
+
+    emptyTitle: "Todavía no se postuló nadie",
+    emptyMessage:
+      "Un aviso recién publicado tarda un poco en llegar. Podés impulsarlo para que lo vea más gente de tu zona.",
+    emptyCta: "Impulsar este aviso",
+    emptySecondary: "Volver al aviso",
+    pendingTitle: "Tu aviso está en revisión",
+    pendingMessage:
+      "Mientras lo revisamos no lo ve la comunidad, así que todavía no van a llegar postulaciones.",
+
+    /** Filtros por estado, arriba de la lista. */
+    filterAll: "Todos",
+    filterOpen: "Sin responder",
+    filterInterview: "En entrevista",
+    filterResolved: "Resueltos",
+    emptyFilterTitle: "Nada en este filtro",
+    emptyFilterMessage: "Probá con otro filtro para ver el resto de los candidatos.",
+
+    anonymousName: "Candidato sin perfil compartido",
+    anonymousHint: "Eligió no mostrar su perfil. Sí podés leer todo lo que te envió.",
+    noCity: "Sin zona",
+    messageTitle: "Su mensaje",
+    answersTitle: "Sus respuestas",
+    cvTitle: "Currículum",
+    cvOpen: "Abrir currículum",
+    cvOpening: "Abriendo…",
+    cvNone: "No adjuntó currículum",
+    cvError: "No pudimos abrir el archivo — probá de nuevo en un ratito.",
+    cvPrivacyNote: "El enlace del archivo dura un minuto y es solo tuyo.",
+    portfolioTitle: "Sus enlaces",
+
+    /** Nota privada del empleador. */
+    noteTitle: "Tu nota privada",
+    noteHelp: "Solo la ves vos. La persona que se postuló nunca se entera de esto.",
+    notePlaceholder: "Ej.: Habla inglés, puede empezar el lunes. Llamar el martes.",
+    noteAdd: "Agregar una nota",
+    noteSave: "Guardar nota",
+    noteSaving: "Guardando…",
+    noteSaved: "Guardamos tu nota.",
+    noteRemoved: "Borramos tu nota.",
+    noteError: "No pudimos guardar la nota — probá de nuevo en un ratito.",
+    noteCancel: "Cancelar",
+
+    /** Acciones sobre el candidato. */
+    viewProfile: "Ver perfil",
+    sendMessage: "Enviar mensaje",
+    save: "Guardar para después",
+    saved: "Guardado",
+    saveHint: "Queda en tu lista para futuras vacantes. La persona no se entera.",
+    savedToast: "Lo guardamos para futuras vacantes.",
+    unsavedToast: "Lo sacamos de tu lista.",
+    saveError: "No pudimos guardarlo — probá de nuevo en un ratito.",
+
+    /** Avanzar el embudo. Los verbos son acciones, no etiquetas de estado. */
+    advance: {
+      reviewing: "Marcar en revisión",
+      interview: "Invitar a entrevista",
+      hired: "Marcar contratado",
+      rejected: "No seleccionar",
+      closed: "Cerrar la vacante",
+    },
+    advanceHint: "Le avisamos a la persona en cada paso.",
+    advanceMore: "Más acciones",
+    advanceDone: (label: string) => `Listo, quedó en «${label}».`,
+    advanceError: "No pudimos actualizarla — probá de nuevo en un ratito.",
+    advanceConflict:
+      "Esta postulación ya se resolvió y no vuelve atrás. Actualizá la pantalla para ver cómo quedó.",
+    /** Confirmación de las decisiones que no tienen vuelta atrás. */
+    confirmTitle: (label: string) => `¿Marcar «${label}»?`,
+    confirmBody:
+      "Esta decisión no se puede deshacer y le avisamos a la persona en el momento.",
+    confirmCta: "Sí, confirmar",
+    confirmCancel: "Cancelar",
+    hiredNote: "Escribile por Mensajes para arreglar los detalles.",
   },
 } as const;

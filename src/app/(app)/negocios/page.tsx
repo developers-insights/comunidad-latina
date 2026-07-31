@@ -1,7 +1,14 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { MagicWand, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { MagicWand, SealCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { allPhotoUrls, firstPhotoUrl, ListingListSkeleton } from "@/components/listings";
+import {
+  ModuleFilterSelect,
+  ModuleFilterToggle,
+  ModuleSearchBar,
+  sanitizeSearchQuery,
+  type FilterOption,
+} from "@/components/search";
 import {
   BezelCard,
   EmptyState,
@@ -13,10 +20,11 @@ import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { toTrustProps } from "@/lib/trust/signals";
-import type { Json, Tables } from "@/lib/types/database.types";
+import type { Tables } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
 import { BusinessCard, type BusinessCardModel } from "./business-card";
 import type { OwnerTrust } from "./business-trust-badge";
+import { BUSINESS_CATEGORIES, businessCategoryLabel, businessCategoryOf } from "./categories";
 
 export const metadata = { title: "Negocios" };
 
@@ -38,6 +46,53 @@ const COPY = {
   copilotoCta: "Abrir el Copiloto",
 } as const;
 
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+/**
+ * FILTROS DE NEGOCIOS: los que la base puede responder HOY, y sólo esos.
+ *
+ *   · `q`           → `listings.search`, el índice FTS español de 0004;
+ *   · `rubro`       → `attrs.category` (texto libre; el set curado vive en
+ *                     ./categories.ts);
+ *   · `verificados` → `listings.store_verified`, el espejo público de
+ *                     `business_accounts.verified_presence` (0039).
+ *
+ * LO QUE PIDE LA SPEC Y NO SE CONSTRUYE, con el motivo:
+ *   · "Abierto ahora" — no hay horarios de atención en ninguna tabla
+ *     (`business_accounts` guarda categoría, plan y verificación; nada de
+ *     horarios). Un filtro así necesita una columna nueva y un huso horario
+ *     por negocio.
+ *   · "Mejor calificados" — no existen reseñas de negocios. La única tabla de
+ *     reseñas del esquema es `gig_reviews`, que es de Colaboraciones y no tiene
+ *     nada que ver.
+ * Los dos quedan anotados como pendientes de base: sin el dato, el filtro
+ * devolvería siempre lo mismo y mentiría sobre lo que sabe la app.
+ */
+interface Filters {
+  q: string;
+  rubro: string;
+  verificados: boolean;
+}
+
+function firstValue(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value) ?? "";
+}
+
+function parseFilters(sp: Record<string, string | string[] | undefined>): Filters {
+  return {
+    q: sanitizeSearchQuery(firstValue(sp.q)),
+    // Sin validar contra el set curado: `attrs.category` es texto libre y un
+    // rubro fuera de la lista simplemente no devuelve filas.
+    rubro: firstValue(sp.rubro).slice(0, 40),
+    verificados: firstValue(sp.verificados) === "1",
+  };
+}
+
+const CATEGORY_OPTIONS: FilterOption[] = [
+  { value: "", label: t("sections", "businessCategoryAny") },
+  ...BUSINESS_CATEGORIES.map((option) => ({ value: option.value, label: option.label })),
+];
+
 /**
  * Identidad visual de la sección: el acento y el ícono 3D que ya la representan
  * en el menú y en /buscar (shell/modules.ts). Los mismos tres lugares, el mismo
@@ -48,23 +103,6 @@ const SECCION = {
   image: "/icons/menu/negocios.webp",
   publicarHref: "/publicar?kind=business",
 } as const;
-
-/** Etiquetas legibles para las categorías más comunes de `attrs.category`. */
-const CATEGORIA_LABELS: Record<string, string> = {
-  restaurante: "Restaurante",
-  envios: "Envíos",
-  belleza: "Belleza",
-  mecanica: "Mecánica",
-  mercado: "Mercado",
-  servicios: "Servicios",
-};
-
-function categoriaLabel(attrs: Json): string | null {
-  if (attrs === null || typeof attrs !== "object" || Array.isArray(attrs)) return null;
-  const raw = (attrs as Record<string, unknown>).category;
-  if (typeof raw !== "string" || raw.length === 0) return null;
-  return CATEGORIA_LABELS[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1);
-}
 
 /** Solo estas columnas de `trust_scores` alimentan el badge (over-fetch §perf). */
 type OwnerTrustRow = Pick<Tables<"trust_scores">, "score" | "level" | "signals">;
@@ -84,12 +122,15 @@ function buildOwnerTrust(
   return { name: ownerName, ...props };
 }
 
-export default function NegociosPage() {
+export default async function NegociosPage({ searchParams }: { searchParams: SearchParams }) {
+  const filters = parseFilters(await searchParams);
+
   // Streaming (§5.2): el shell + banners se pintan ya; el listado (que depende de
-  // la DB) llega por Suspense sin bloquear el resto de la página.
+  // la DB) llega por Suspense sin bloquear el resto de la página. La key remonta
+  // el Suspense en cada cambio de filtro para que vuelva el skeleton.
   return (
-    <Suspense fallback={<NegociosSkeleton />}>
-      <NegociosContent />
+    <Suspense key={JSON.stringify(filters)} fallback={<NegociosSkeleton />}>
+      <NegociosContent filters={filters} />
     </Suspense>
   );
 }
@@ -98,7 +139,7 @@ export default function NegociosPage() {
 // Contenido (streamed): datos reales con RLS del usuario
 // ---------------------------------------------------------------------------
 
-async function NegociosContent() {
+async function NegociosContent({ filters }: { filters: Filters }) {
   // createClient() NO hace red (solo lee cookies): lo creamos primero y así
   // solapamos el round-trip a DB de getTenant() con el de Auth (getUser()).
   const supabase = await createClient();
@@ -109,19 +150,32 @@ async function NegociosContent() {
     },
   ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
 
-  const { data: negocios } = await supabase
+  let query = supabase
     .from("listings")
     .select(
       "id, title, description, area_label, attrs, photos, publisher_name, created_by, published_at, created_at",
     )
     .eq("tenant_id", tenant.id)
     .eq("kind", "business")
-    .eq("status", "published")
+    .eq("status", "published");
+
+  if (filters.q) {
+    // Mismo índice FTS que /propiedades y /marketplace (listings.search, 0004).
+    query = query.textSearch("search", filters.q, { type: "websearch", config: "spanish" });
+  }
+  // `attrs->>category` y no `attrs->category`: `->>` devuelve TEXTO, que es lo
+  // que se compara. Con `->` la comparación sería contra un json y `"belleza"`
+  // (con comillas) nunca sería igual a `belleza`.
+  if (filters.rubro) query = query.eq("attrs->>category", filters.rubro);
+  if (filters.verificados) query = query.eq("store_verified", true);
+
+  const { data: negocios } = await query
     .order("published_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(30);
 
   const rows = negocios ?? [];
+  const filtering = Boolean(filters.q || filters.rubro || filters.verificados);
 
   // Trust Score del dueño (si el negocio tiene dueño con score computado).
   const ownerIds = Array.from(
@@ -163,6 +217,30 @@ async function NegociosContent() {
         hint={t("sections", "publishBusinessHint")}
         className="mt-3"
       />
+
+      {/* Buscador y filtros ARRIBA de los dos banners: los banners son
+          promoción y el buscador es la tarea. Quien entra a /negocios busca un
+          negocio; enterrarle el campo debajo de dos tarjetas de venta es
+          hacerle scrollear para llegar a lo que vino a hacer. */}
+      <div className="mt-4 flex flex-col gap-3">
+        <ModuleSearchBar
+          label={t("sections", "searchBusinessLabel")}
+          placeholder={t("sections", "searchBusinessPlaceholder")}
+        />
+        <div className="flex gap-2">
+          <ModuleFilterSelect
+            param="rubro"
+            label={t("sections", "businessCategoryLabel")}
+            options={CATEGORY_OPTIONS}
+            className="flex-1"
+          />
+          <ModuleFilterToggle
+            param="verificados"
+            label={t("sections", "businessVerifiedFilter")}
+            icon={<SealCheck weight="fill" />}
+          />
+        </div>
+      </div>
 
       {/* Banner premium para dueños de negocio → Presencia Verificada (§7) */}
       <BezelCard
@@ -221,20 +299,40 @@ async function NegociosContent() {
       )}
 
       {rows.length === 0 ? (
-        <EmptyState
-          className="mt-4"
-          illustration="/images/empty-state-search.png"
-          title={COPY.vacioTitulo}
-          message={COPY.vacioMensaje}
-          action={
-            <Link
-              href="/negocios/presencia"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              {COPY.vacioCta}
-            </Link>
-          }
-        />
+        filtering ? (
+          /* Buscó y no hay ⇒ mensaje de búsqueda, no el de sección vacía. Decir
+             "todavía no hay negocios publicados" cuando en realidad hay pero
+             ninguno matchea es información falsa sobre la comunidad. */
+          <EmptyState
+            className="mt-4"
+            illustration="/images/empty-state-search.png"
+            title={t("sections", "moduleNoMatchTitle")}
+            message={t("sections", "moduleNoMatchMessage")}
+            action={
+              <Link
+                href="/negocios"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                {t("sections", "moduleClearFilters")}
+              </Link>
+            }
+          />
+        ) : (
+          <EmptyState
+            className="mt-4"
+            illustration="/images/empty-state-search.png"
+            title={COPY.vacioTitulo}
+            message={COPY.vacioMensaje}
+            action={
+              <Link
+                href="/negocios/presencia"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                {COPY.vacioCta}
+              </Link>
+            }
+          />
+        )
       ) : (
         <div className="mt-6 flex flex-col gap-4">
           {rows.map((negocio) => {
@@ -253,7 +351,7 @@ async function NegociosContent() {
               id: negocio.id,
               title: negocio.title,
               description: negocio.description,
-              categoryLabel: categoriaLabel(negocio.attrs),
+              categoryLabel: businessCategoryLabel(businessCategoryOf(negocio.attrs)),
               areaLabel: negocio.area_label,
               photoUrl: firstPhotoUrl(negocio.photos),
               // Tocar la foto abre el visor con todas; "Ver negocio" sigue
@@ -295,6 +393,16 @@ export function NegociosSkeleton() {
         hint={t("sections", "publishBusinessHint")}
         className="mt-3"
       />
+      {/* Silueta del buscador + los dos filtros, con las MISMAS alturas que la
+          barra real (44px cada control): sin esto, la lista salta hacia abajo
+          88px cuando llega el contenido. */}
+      <div className="mt-4 flex flex-col gap-3">
+        <div className="h-11 rounded-md bg-surface-subtle" />
+        <div className="flex gap-2">
+          <div className="h-11 flex-1 rounded-md bg-surface-subtle" />
+          <div className="h-11 w-32 rounded-full bg-surface-subtle" />
+        </div>
+      </div>
       <div className="mt-4 h-32 rounded-xl bg-surface-subtle animate-pulse" />
       <div className="mt-6">
         <ListingListSkeleton />

@@ -351,6 +351,11 @@ async function activateBoost(
     tenantId: boost.tenant_id,
     profileId: boost.buyer_id,
     kind: "boost",
+    category: "publicidad",
+    // `ignorePrefs`: le llega a quien PAGÓ el impulso. Silenciar "Publicidad"
+    // es no querer que te promocionen cosas, no renunciar al comprobante de lo
+    // que compraste.
+    ignorePrefs: true,
     title: "¡Tu aviso ya está destacado!",
     body: `Aparece primero en tu zona, marcado como "Destacado", hasta el ${formatDate(endsAt, { style: "long" })}.`,
     href: detailBase ? `${detailBase}/${boost.listing_id}` : null,
@@ -432,6 +437,8 @@ async function activatePostPromotion(
     tenantId: promo.tenant_id,
     profileId: promo.buyer_id,
     kind: "post_promotion",
+    category: "publicidad",
+    ignorePrefs: true,
     title: "¡Tu campaña ya está activa!",
     body: `Tu publicación llega a toda la comunidad hasta el ${formatDate(endsAt, { style: "long" })}.`,
     href: `/feed/${promo.post_id}`,
@@ -521,6 +528,9 @@ async function handleIdentityVerified(
     tenantId: profile.tenant_id,
     profileId: userId,
     kind: "identity",
+    // "cuenta" es una de las tres que no se pueden silenciar: el emisor ni
+    // siquiera consulta preferencias (0045).
+    category: "cuenta",
     title: "Tu identidad quedó verificada ✓",
     body: "El tilde ya aparece en tu perfil y tu Trust Score subió. Gracias por hacer tu comunidad más segura.",
     href: "/perfil",
@@ -559,6 +569,9 @@ async function handleIdentityRequiresInput(
     tenantId: profile.tenant_id,
     profileId: userId,
     kind: "identity",
+    category: "cuenta",
+    // Pide una acción concreta (repetir la foto): entra en "Importantes".
+    priority: "high",
     title: "Nos faltó un detalle para verificarte",
     body: "No pudimos leer bien tu documento — pasa seguido con fotos movidas. Probá de nuevo con buena luz; toma menos de un minuto.",
     href: "/perfil/verificar",

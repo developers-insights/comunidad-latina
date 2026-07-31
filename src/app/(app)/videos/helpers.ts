@@ -1,4 +1,5 @@
 import { mediaKindOf } from "@/components/feed/helpers";
+import { parseVideoCategory, type VideoCategory } from "@/lib/media/video-policy";
 
 /**
  * Helpers PUROS del módulo VIDEOS (reels). Sin dependencias de servidor:
@@ -54,4 +55,59 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export function parseStartId(raw: string | undefined): string | null {
   const value = (raw ?? "").trim();
   return UUID_RE.test(value) ? value : null;
+}
+
+// ---------------------------------------------------------------------------
+// Menú de categorías (pedido de la call 1:20) — `?cat=`
+// ---------------------------------------------------------------------------
+
+/**
+ * Valor del menú que significa "no filtres por tema". No es una categoría de la
+ * base: es la opción "Todos" del menú, y por eso vive acá y no en el catálogo
+ * cerrado de `video-policy`.
+ */
+export const ALL_CATEGORIES = "todos" as const;
+
+export type VideoCategoryFilter = VideoCategory | typeof ALL_CATEGORIES;
+
+/**
+ * `?cat=` → categoría del catálogo, "todos", o null si no vino (o vino basura).
+ *
+ * NULL Y "todos" NO SON LO MISMO, y de esa diferencia depende la pantalla:
+ * null = la persona todavía no eligió ⇒ se le muestra el MENÚ;
+ * "todos" = eligió ver todo ⇒ se le muestra el reel sin filtro de tema.
+ * Colapsar los dos casos devolvería el módulo a "entra reproduciendo de una",
+ * que es justo lo que el cliente pidió cambiar.
+ */
+export function parseVideoCategoryParam(
+  raw: string | undefined,
+): VideoCategoryFilter | null {
+  const value = (raw ?? "").trim();
+  if (value.length === 0) return null;
+  if (value === ALL_CATEGORIES) return ALL_CATEGORIES;
+  return parseVideoCategory(value);
+}
+
+/** El tema que se manda a la query: null cuando no hay que filtrar por tema. */
+export function categoryFilterValue(
+  filter: VideoCategoryFilter | null,
+): VideoCategory | null {
+  return filter && filter !== ALL_CATEGORIES ? filter : null;
+}
+
+/**
+ * ¿Hay que mostrar el MENÚ de categorías en vez del reel?
+ *
+ * Sólo cuando la persona llega a `/videos` pelado. Con `?start=` (un video
+ * compartido o tocado en el feed) se va derecho al video: interponer un menú
+ * rompería el deep link, que es exactamente lo que se comparte. Con `?scope=`
+ * (el reel acotado a un módulo) también, porque ese link YA declara qué quiere
+ * ver — el menú de temas es otra dimensión, no la misma.
+ */
+export function shouldShowCategoryMenu(args: {
+  category: VideoCategoryFilter | null;
+  startId: string | null;
+  rawScope: string;
+}): boolean {
+  return args.category === null && !args.startId && args.rawScope.trim().length === 0;
 }

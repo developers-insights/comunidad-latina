@@ -20,18 +20,18 @@ import {
 } from "@/components/auth/trust-signals";
 import { cn } from "@/lib/utils";
 import { ProfileHeader } from "../profile-header";
-import { ProfilePostsGrid } from "../posts-grid";
-import { fetchAuthorPostTiles } from "../posts";
+import { ShareProfileButton } from "../share-profile-button";
+import { ProfileTabSection } from "../profile-tab-section";
+import { fetchProfileCounts } from "../profile-data";
+import { memberSinceLabel, parseProfileTab, profileTabHref } from "../profile-tabs";
 
 export const metadata = { title: "Tu perfil" };
 
 const COPY = {
   editAction: "Editar perfil",
   verifyAction: "Verificar",
-  postsHeading: "Tus publicaciones",
-  postsEmpty:
-    "Todavía no compartiste nada. Tu primera foto es el mejor comienzo para que la comunidad te conozca.",
   statPosts: "Publicaciones",
+  statFollowers: "Seguidores",
   statFollowing: "Siguiendo",
   trustHeading: "Tu Trust Score",
   trustHint:
@@ -66,47 +66,27 @@ export default async function PerfilPage({
   if (!user) redirect("/entrar?next=/perfil");
 
   const cursor = decodeCursor(firstValue(sp.fotos) || undefined);
+  const tab = parseProfileTab(firstValue(sp.t) || undefined);
 
-  // Perfil + Trust Score + contadores reales + primera página de publicaciones.
-  const [
-    { data: profile },
-    { data: trust },
-    { count: postsCount },
-    { count: followingCount },
-    postsPage,
-    { count: contractsCount },
-  ] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-    supabase
-      .from("trust_scores")
-      .select("score, level, signals")
-      .eq("profile_id", user.id)
-      .maybeSingle(),
-    supabase
-      .from("posts")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", tenant.id)
-      .eq("author_id", user.id)
-      .eq("status", "published"),
-    supabase
-      .from("follows")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", tenant.id)
-      .eq("follower_id", user.id),
-    fetchAuthorPostTiles(supabase, {
-      tenantId: tenant.id,
-      authorId: user.id,
-      cursor,
-    }),
-    // Acceso a "Mis contratos" (pedido cliente 26/7, movido del nav de
-    // Creadores): solo se muestra si el usuario tiene algo que ver ahí — como
-    // cliente o como creador — para no ofrecerle a cualquiera un atajo vacío.
-    supabase
-      .from("gig_contracts")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", tenant.id)
-      .or(`client_id.eq.${user.id},creator_id.eq.${user.id}`),
-  ]);
+  // Perfil + Trust Score + los cuatro contadores + acceso a contratos.
+  const [{ data: profile }, { data: trust }, counts, { count: contractsCount }] =
+    await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      supabase
+        .from("trust_scores")
+        .select("score, level, signals")
+        .eq("profile_id", user.id)
+        .maybeSingle(),
+      fetchProfileCounts(supabase, { tenantId: tenant.id, profileId: user.id }),
+      // Acceso a "Mis contratos" (pedido cliente 26/7, movido del nav de
+      // Creadores): solo se muestra si el usuario tiene algo que ver ahí — como
+      // cliente o como creador — para no ofrecerle a cualquiera un atajo vacío.
+      supabase
+        .from("gig_contracts")
+        .select("*", { count: "exact", head: true })
+        .eq("tenant_id", tenant.id)
+        .or(`client_id.eq.${user.id},creator_id.eq.${user.id}`),
+    ]);
 
   // Cuenta sin perfil (edge raro) → que complete el onboarding.
   if (!profile) redirect("/bienvenida");
@@ -117,8 +97,7 @@ export default async function PerfilPage({
   const firstName = profile.display_name.split(/\s+/)[0] ?? profile.display_name;
   const country = countryName(profile.country_origin);
   const location = [country, profile.area_label].filter(Boolean).join(" · ") || null;
-
-  const nextHref = postsPage.nextCursor ? `/perfil?fotos=${postsPage.nextCursor}` : null;
+  const memberSince = memberSinceLabel(profile.created_at, tenant.locale);
 
   return (
     <div className="flex flex-col gap-8">
@@ -127,12 +106,22 @@ export default async function PerfilPage({
         avatarUrl={profile.avatar_url}
         identityVerified={profile.identity_verified}
         location={location}
+        memberSince={memberSince}
         stats={[
-          { label: COPY.statPosts, value: postsCount ?? 0 },
-          { label: COPY.statFollowing, value: followingCount ?? 0 },
+          { label: COPY.statPosts, value: counts.posts, href: "/perfil" },
+          {
+            label: COPY.statFollowers,
+            value: counts.followers,
+            href: profileTabHref("/perfil", "seguidores"),
+          },
+          {
+            label: COPY.statFollowing,
+            value: counts.following,
+            href: profileTabHref("/perfil", "siguiendo"),
+          },
         ]}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               href="#editar-perfil"
               className={cn(buttonVariants({ variant: "secondary", size: "md" }), "flex-1")}
@@ -149,6 +138,14 @@ export default async function PerfilPage({
                 {COPY.verifyAction}
               </Link>
             )}
+            {/* Compartir el perfil PROPIO apunta a su URL pública (`/perfil/<id>`),
+                no a `/perfil`: esta última redirige a "tu perfil" para quien
+                abra el link, o sea que compartirla mandaría a cada persona a su
+                propio perfil. Es el bug clásico de este botón. */}
+            <ShareProfileButton
+              path={`/perfil/${profile.id}`}
+              displayName={profile.display_name}
+            />
           </div>
         }
       />
@@ -165,12 +162,24 @@ export default async function PerfilPage({
         <p className="px-1 text-xs text-foreground-muted">{COPY.trustHint}</p>
       </section>
 
-      {/* Grid de publicaciones — el perfil se siente red social. */}
-      <ProfilePostsGrid
-        tiles={postsPage.tiles}
-        nextHref={nextHref}
-        heading={COPY.postsHeading}
-        emptyMessage={COPY.postsEmpty}
+      {/* Las siete pestañas (contrato 2026-07-30 §B.6). Publicaciones · Fotos ·
+          Videos · Información · Reseñas · Seguidores · Siguiendo. */}
+      <ProfileTabSection
+        supabase={supabase}
+        tenantId={tenant.id}
+        profileId={user.id}
+        baseHref="/perfil"
+        tab={tab}
+        counts={counts}
+        isOwn
+        cursor={cursor}
+        info={{
+          bio: profile.bio,
+          country,
+          areaLabel: profile.area_label,
+          memberSince,
+          identityVerified: profile.identity_verified,
+        }}
       />
 
       {/* Editar — destino del ancla "Editar perfil" de la cabecera. */}

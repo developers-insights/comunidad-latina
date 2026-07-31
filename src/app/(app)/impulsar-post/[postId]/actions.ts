@@ -196,6 +196,12 @@ export async function crearCampanaPost(
         tenantId: tenant.id,
         profileId: user.id,
         kind: "post_promotion",
+        category: "publicidad",
+        // `ignorePrefs`: es el resultado de algo que la persona acaba de hacer
+        // (activar su propia campaña). Haber silenciado "Publicidad" significa
+        // "no me avises de promociones", no "no me cuentes cómo salió lo que
+        // pedí hace diez segundos".
+        ignorePrefs: true,
         title: "¡Tu campaña ya está activa!",
         body: `Tu publicación llega a toda la comunidad hasta el ${formatDate(endsAt, { style: "long" })}. (Modo demostración)`,
         href: `/feed/${post.id}`,

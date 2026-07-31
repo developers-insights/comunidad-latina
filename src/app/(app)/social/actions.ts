@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { requireTenantMatch } from "@/lib/tenant/guard";
+import { notifyNewFollower } from "@/lib/notifications/follow";
 
 /**
  * Server actions del grafo social (0023 — feedback cliente 2026-07-19).
@@ -87,6 +88,16 @@ export async function toggleFollowAction(raw: {
     }
     console.warn("[social] seguir falló", { targetKind, targetId, code: insertError.code });
     return { ok: false, error: GENERIC_ERROR };
+  }
+
+  // Aviso al seguido (módulo NOTIFICACIONES, best-effort — nunca lanza). Sólo
+  // para personas: seguir un aviso no le notifica nada a nadie.
+  if (targetKind === "profile") {
+    await notifyNewFollower({
+      tenantId: tenant.id,
+      followerId: user.id,
+      targetProfileId: targetId,
+    });
   }
 
   return { ok: true, following: true };

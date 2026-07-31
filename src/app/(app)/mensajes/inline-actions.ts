@@ -178,6 +178,12 @@ export async function sendListingMessageAction(input: {
         tenantId: listing.tenant_id,
         profileId: listing.created_by,
         kind: "contact_request",
+        // "mensajes" y no "propiedades": una solicitud de contacto ABRE una
+        // conversación, así que vive en el mismo hilo que el chat. Es el mismo
+        // criterio del backfill de 0045; separarlos partiría en dos pestañas la
+        // misma conversación.
+        category: "mensajes",
+        priority: "high",
         title: `Te escribieron por "${listing.title}"`,
         body: "Entrá a Mensajes para leer el mensaje y aceptar o ignorar la solicitud.",
         href: "/mensajes",

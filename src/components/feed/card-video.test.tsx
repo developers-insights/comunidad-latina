@@ -181,3 +181,84 @@ describe("CardVideo: píldora de vistas", () => {
     expect(supa.insert).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// VISTA PREVIA DE 59 s (contrato 2026-07-30 §6)
+// ---------------------------------------------------------------------------
+
+/**
+ * jsdom no implementa el reloj de un `<video>`: `duration` es NaN y
+ * `currentTime` no avanza. Se definen a mano —igual que haría el navegador al
+ * cargar la metadata— para poder testear la regla, que es lo que importa: la
+ * tarjeta reproduce 59 s, y lo dice cuando hay más video del que muestra.
+ */
+function stubMediaClock(node: HTMLVideoElement, duration: number) {
+  let time = 0;
+  Object.defineProperty(node, "duration", { configurable: true, value: duration });
+  Object.defineProperty(node, "currentTime", {
+    configurable: true,
+    get: () => time,
+    set: (next: number) => {
+      time = next;
+    },
+  });
+  return {
+    seek: (seconds: number) => {
+      time = seconds;
+    },
+    now: () => time,
+  };
+}
+
+function videoNode(): HTMLVideoElement {
+  const node = document.querySelector("video");
+  if (!node) throw new Error("la card no renderizó un <video>");
+  return node as HTMLVideoElement;
+}
+
+describe("CardVideo: la tarjeta muestra 59 s, no el video entero", () => {
+  it("un video más largo que el tope se anuncia como vista previa", () => {
+    renderCard();
+    const node = videoNode();
+    stubMediaClock(node, 90);
+    fireEvent.loadedMetadata(node);
+
+    expect(screen.getByText("Vista previa")).toBeTruthy();
+    // Y el toque promete lo que hace: abrir el video completo.
+    expect(screen.getByRole("button", { name: "Ver el video completo" })).toBeTruthy();
+  });
+
+  it("un video que entra completo NO dice vista previa", () => {
+    renderCard();
+    const node = videoNode();
+    stubMediaClock(node, 30);
+    fireEvent.loadedMetadata(node);
+
+    expect(screen.queryByText("Vista previa")).toBeNull();
+    expect(screen.getByRole("button", { name: "Ver el video" })).toBeTruthy();
+  });
+
+  it("al llegar a los 59 s vuelve al principio en vez de seguir", () => {
+    renderCard();
+    const node = videoNode();
+    const clock = stubMediaClock(node, 300);
+    fireEvent.loadedMetadata(node);
+
+    clock.seek(58);
+    fireEvent.timeUpdate(node);
+    expect(clock.now()).toBe(58); // todavía dentro de la ventana
+
+    clock.seek(59);
+    fireEvent.timeUpdate(node);
+    expect(clock.now()).toBe(0);
+  });
+
+  it("sin metadata legible no promete que haya más video", () => {
+    renderCard();
+    const node = videoNode();
+    stubMediaClock(node, Number.NaN);
+    fireEvent.loadedMetadata(node);
+
+    expect(screen.queryByText("Vista previa")).toBeNull();
+  });
+});

@@ -19,6 +19,7 @@ import {
   type GigCardModel,
 } from "@/components/creators";
 import { GigCard } from "@/components/creators/gig-card";
+import { ModuleSearchBar, sanitizeSearchQuery } from "@/components/search";
 import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -27,6 +28,12 @@ export const metadata = { title: "Creadores" };
 
 const PAGE_SIZE = 20;
 
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+function firstValue(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value) ?? "";
+}
+
 /** Acento + ícono 3D de la sección (los mismos del menú y de /buscar). */
 const SECCION = {
   accent: "var(--accent-creadores)",
@@ -34,27 +41,36 @@ const SECCION = {
   publicarHref: "/creadores/publicar",
 } as const;
 
-export default async function CreadoresPage() {
+export default async function CreadoresPage({ searchParams }: { searchParams: SearchParams }) {
+  const q = sanitizeSearchQuery(firstValue((await searchParams).q));
+
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <FeedContent />
+    <Suspense key={q} fallback={<PageSkeleton />}>
+      <FeedContent q={q} />
     </Suspense>
   );
 }
 
-async function FeedContent() {
+async function FeedContent({ q }: { q: string }) {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
 
   // Todos los avisos publicados, juntos (sin filtro por categoría): se muestran
   // todos los trabajos que buscan creadores.
-  const { data: rows, error } = await supabase
+  let query = supabase
     .from("listings")
     .select(
       "id, title, price_amount, price_currency, price_period, area_label, photos, attrs, created_by, publisher_name, created_at",
     )
     .eq("tenant_id", tenant.id)
     .eq("kind", "creator_gig")
-    .eq("status", "published")
+    .eq("status", "published");
+
+  // Mismo índice FTS español que el resto de los listados (listings.search,
+  // migración 0004): `creator_gig` está en la misma tabla, así que el buscador
+  // de Colaboraciones sale del índice que ya existe.
+  if (q) query = query.textSearch("search", q, { type: "websearch", config: "spanish" });
+
+  const { data: rows, error } = await query
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(PAGE_SIZE);
@@ -134,21 +150,45 @@ async function FeedContent() {
 
       <CreatorsNav active="gigs" />
 
+      <ModuleSearchBar
+        className="mb-4 mt-4"
+        label={t("sections", "searchGigsLabel")}
+        placeholder={t("sections", "searchGigsPlaceholder")}
+      />
+
       {gigs.length === 0 ? (
-        <EmptyState
-          illustration="/images/empty-state-search.png"
-          title={COPY.feed.emptyTitle}
-          message={COPY.feed.emptyMessage}
-          action={
-            <Link
-              href="/creadores/publicar"
-              className={buttonVariants({ variant: "primary", size: "md" })}
-            >
-              <Plus size={18} aria-hidden="true" />
-              {COPY.feed.emptyCta}
-            </Link>
-          }
-        />
+        q ? (
+          /* Buscó y no hay: el cartel de "todavía no hay trabajos" sería falso
+             si la sección tiene avisos y ninguno matchea. */
+          <EmptyState
+            illustration="/images/empty-state-search.png"
+            title={t("sections", "moduleNoMatchTitle")}
+            message={t("sections", "moduleNoMatchMessage")}
+            action={
+              <Link
+                href="/creadores"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                {t("sections", "moduleClearFilters")}
+              </Link>
+            }
+          />
+        ) : (
+          <EmptyState
+            illustration="/images/empty-state-search.png"
+            title={COPY.feed.emptyTitle}
+            message={COPY.feed.emptyMessage}
+            action={
+              <Link
+                href="/creadores/publicar"
+                className={buttonVariants({ variant: "primary", size: "md" })}
+              >
+                <Plus size={18} aria-hidden="true" />
+                {COPY.feed.emptyCta}
+              </Link>
+            }
+          />
+        )
       ) : (
         <div className="flex flex-col gap-4">
           {gigs.map((gig) => (
@@ -177,7 +217,10 @@ function PageSkeleton() {
         className="mb-4 mt-3"
       />
       <CreatorsNav active="gigs" />
-      <div className="mt-5">
+      {/* Silueta del buscador con su altura real (44px): sin esto la lista
+          salta cuando llega el contenido. */}
+      <div className="mb-4 mt-4 h-11 rounded-md bg-surface-subtle" />
+      <div>
         <GigListSkeleton />
       </div>
     </div>

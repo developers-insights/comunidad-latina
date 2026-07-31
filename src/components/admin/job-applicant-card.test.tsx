@@ -60,12 +60,21 @@ describe("<JobApplicantCard /> · aviso de la plataforma", () => {
   });
 
   it("una postulación ya resuelta no vuelve a ofrecer botones", () => {
-    render(
-      <JobApplicantCard application={{ ...REVEALED, status: "accepted" }} canResolve />,
-    );
+    render(<JobApplicantCard application={{ ...REVEALED, status: "hired" }} canResolve />);
 
     expect(screen.queryByRole("button", { name: /Aceptar/ })).toBeNull();
-    expect(screen.getByText("Aceptada")).toBeDefined();
+    expect(screen.getByText("Contratado")).toBeDefined();
+  });
+
+  // 0047 renombró el vocabulario (`accepted`→`hired`, `declined`→`rejected`),
+  // pero una fila que se resolvió con el build viejo puede seguir llegando con
+  // la palabra anterior. La tarjeta la traduce en vez de dibujar el estado
+  // crudo: mostrar "Contratado" siempre es mejor que mostrar "accepted".
+  it("traduce el vocabulario viejo en vez de mostrar el estado crudo", () => {
+    render(<JobApplicantCard application={{ ...REVEALED, status: "accepted" }} canResolve />);
+
+    expect(screen.getByText("Contratado")).toBeDefined();
+    expect(screen.queryByText("accepted")).toBeNull();
   });
 });
 

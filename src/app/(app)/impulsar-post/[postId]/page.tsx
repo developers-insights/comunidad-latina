@@ -19,10 +19,10 @@ const COPY = {
   volver: "Volver a la publicación",
   titulo: "Promocionar tu publicación",
   subtitulo:
-    "Tu publicación aparece en el feed de toda la comunidad, marcada como \"Publicidad\".",
+    "Tu publicación aparece en el feed de toda la comunidad, marcada como \"Patrocinado\".",
   // FTC §255: transparencia total — la promoción es publicidad y se dice.
   comoFunciona:
-    "Promocionar es publicidad: tu publicación llega al feed de más gente con la etiqueta \"Publicidad\", para que siempre se sepa que es un espacio pago. Sin trucos.",
+    "Promocionar es publicidad: tu publicación llega al feed de más gente con la etiqueta \"Patrocinado\", para que siempre se sepa que es un espacio pago. Sin trucos.",
   notaHonesta:
     "Promocionar no cambia tu Trust Score ni el de nadie, no altera el verificador del centro de seguridad y no garantiza nada: solo amplía el alcance de tu publicación mientras dura. Es un pago único, sin renovación automática.",
   exito:
@@ -30,7 +30,7 @@ const COPY = {
   cancelado: "No se hizo ningún cargo. Tus opciones de promoción te esperan acá.",
   yaActivaTitulo: "Esta publicación ya está promocionada",
   yaActivaCuerpo: (fecha: string) =>
-    `Llega al feed de toda la comunidad, marcada como "Publicidad", hasta el ${fecha}. Cuando termine, podés promocionarla de nuevo desde acá.`,
+    `Llega al feed de toda la comunidad, marcada como "Patrocinado", hasta el ${fecha}. Cuando termine, podés promocionarla de nuevo desde acá.`,
   noPublicadoTitulo: "Todavía no se puede promocionar",
   noPublicadoCuerpo:
     "La publicación tiene que estar publicada para promocionarla. Apenas la apruebe el equipo de tu comunidad, volvé por acá.",

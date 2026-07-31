@@ -4,7 +4,14 @@ export { Badge, type BadgeProps } from "./badge";
 export { Banner, type BannerProps } from "./banner";
 export { BezelCard, type BezelCardProps } from "./bezel-card";
 export { Bubble, bubbleStyle, bubbleVariants, type BubbleProps } from "./bubble";
-export { CardMedia, MediaScrimBottom, type CardMediaProps } from "./card-media";
+export {
+  CARD_MEDIA_ASPECT,
+  CardMedia,
+  LISTING_CARD_ASPECT,
+  MediaScrimBottom,
+  type CardMediaAspect,
+  type CardMediaProps,
+} from "./card-media";
 export { BottomSheet, type BottomSheetProps } from "./bottom-sheet";
 export { Button, buttonVariants, type ButtonProps } from "./button";
 export { Chip, type ChipProps } from "./chip";
@@ -31,6 +38,8 @@ export { Select, type SelectProps } from "./select";
 export { Skeleton } from "./skeleton";
 export { Spinner } from "./spinner";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
+/** Pestañas que NAVEGAN (una URL por pestaña). Ver la cabecera de nav-tabs.tsx. */
+export { NavTabs, type NavTabItem, type NavTabsProps } from "./nav-tabs";
 export { Textarea, type TextareaProps } from "./textarea";
 export {
   ToastProvider,

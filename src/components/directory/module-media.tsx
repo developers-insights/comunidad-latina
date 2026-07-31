@@ -1,15 +1,24 @@
 import type { Icon } from "@phosphor-icons/react";
-import { CardMedia, MediaScrimBottom, type CardMediaProps } from "@/components/ui";
+import {
+  CARD_MEDIA_ASPECT,
+  CardMedia,
+  LISTING_CARD_ASPECT,
+  MediaScrimBottom,
+  type CardMediaAspect,
+  type CardMediaProps,
+} from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ACCENT_ICON_CLASS, ACCENT_MEDIA_BG, type ModuleAccent } from "./accent";
 
-const ASPECT_CLASS = {
-  video: "aspect-video",
-  square: "aspect-square",
-  portrait: "aspect-[4/5]",
-} as const;
+/**
+ * La tabla de proporciones se IMPORTA del primitivo (`ui/card-media.tsx`); acá
+ * había una copia textual. Mantener dos tablas iguales era el mecanismo exacto
+ * por el que las tarjetas de Negocios podían quedar con otra proporción que las
+ * del resto sin que ningún cambio pareciera tener la culpa.
+ */
+const ASPECT_CLASS = CARD_MEDIA_ASPECT;
 
-type Aspect = keyof typeof ASPECT_CLASS;
+type Aspect = CardMediaAspect;
 
 export interface ModuleFallbackBoxProps {
   accent: ModuleAccent;
@@ -24,7 +33,12 @@ export interface ModuleFallbackBoxProps {
  * COMPONENTE, nunca un asset binario nuevo. Misma caja (aspect + overflow)
  * que <CardMedia> para que ambas ramas de <DirectoryMedia> midan igual.
  */
-export function ModuleFallbackBox({ accent, icon: IconCmp, aspect = "video", className }: ModuleFallbackBoxProps) {
+export function ModuleFallbackBox({
+  accent,
+  icon: IconCmp,
+  aspect = LISTING_CARD_ASPECT,
+  className,
+}: ModuleFallbackBoxProps) {
   return (
     <div
       className={cn(
@@ -52,12 +66,27 @@ export interface DirectoryMediaProps extends Omit<CardMediaProps, "fallbackSrc" 
  * módulos con la foto grande de propiedades"). <CardMedia> real cuando el
  * listing tiene foto; gradiente + ícono del módulo cuando no — nunca la card
  * se ve pobre por falta de foto de seed.
+ *
+ * ── EL DEFAULT PASÓ DE 16:9 A 4:5 (2026-07-30) ───────────────────────────────
+ * Este default era `video`, y era la razón concreta de que las tarjetas de
+ * Negocios se vieran "más chicas que las de propiedades" (call 29/7, 1:05):
+ * `business-card.tsx` no pasa `aspect`, así que heredaba 16:9 mientras
+ * Propiedades, Marketplace, Creadores, Colaboraciones y Empleos dibujaban 4:5.
+ * A igual ancho, 16:9 es ~44% más bajo — no era una impresión, era la caja.
+ *
+ * Se corrige ACÁ y no en `business-card.tsx` a propósito: esa tarjeta es de
+ * otro agente, y además arreglarla sola habría dejado el mismo agujero abierto
+ * para la próxima que naciera sin pasar `aspect`. El default ahora ES la
+ * decisión de producto.
+ *
+ * Quien de verdad necesite 16:9 lo sigue pidiendo explícitamente — el prop no
+ * desapareció.
  */
 export function DirectoryMedia({
   src,
   accent,
   icon: IconCmp,
-  aspect = "video",
+  aspect = LISTING_CARD_ASPECT,
   className,
   sizes,
   alt,

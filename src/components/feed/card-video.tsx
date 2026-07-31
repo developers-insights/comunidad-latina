@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Eye, Heart, SpeakerHigh, SpeakerSlash } from "@phosphor-icons/react/dist/ssr";
 import { usePrefersReducedMotion } from "@/components/motion";
 import { cn } from "@/lib/utils";
+import { isPreviewTruncated, playbackCapSeconds } from "@/lib/media/video-policy";
 import { VIDEOS_COPY } from "@/app/(app)/videos/copy";
 import { useCardLike } from "./card-like-context";
 import { COPY } from "./copy";
@@ -79,10 +80,20 @@ export interface CardVideoProps {
   className?: string;
 }
 
+/** Segundos que la TARJETA reproduce. El completo se abre desde la publicación. */
+const PREVIEW_CAP_SECONDS = playbackCapSeconds("feed");
+
 /**
  * Video en el feed (§5): autoplay MUTED cuando ≥60% visible, con ~2s de espera
  * para que un scroll rápido no dispare decenas de reproducciones; loop,
  * playsInline, preload=metadata. Ícono de sonido tocable (no navega).
+ *
+ * VISTA PREVIA DE 59 s (contrato 2026-07-30 §6): la tarjeta muestra un anticipo,
+ * no el video. Al llegar al tope vuelve a empezar, y si el archivo dura más se
+ * dice —"Vista previa"— en vez de dejar que parezca un video que se corta solo.
+ * La duración sale de la METADATA del archivo, ya cargada acá: es el dato más
+ * honesto disponible y no depende de que la fila la haya declarado (los videos
+ * anteriores a la 0046 no la declaran).
  *
  * Interacción sobre el video — MISMA gramática que la foto (card-post-media):
  *  - un toque abre el feed de videos a pantalla completa (`/videos`);
@@ -110,6 +121,9 @@ export function CardVideo({
   const tapTimer = useRef<number | null>(null);
   const [muted, setMuted] = useState(true);
   const [bursts, setBursts] = useState(0);
+  /** Duración MEDIDA del archivo (metadata), no la declarada. null = todavía no. */
+  const [measuredSeconds, setMeasuredSeconds] = useState<number | null>(null);
+  const isPreview = isPreviewTruncated(measuredSeconds);
 
   // Dejar de ser el medio activo (el usuario pasó a la foto siguiente del
   // carrusel) pausa YA, sin esperar a que el observer note que salió de vista.
@@ -228,6 +242,17 @@ export function CardVideo({
         loop
         playsInline
         preload="metadata"
+        onLoadedMetadata={(event) => {
+          const value = event.currentTarget.duration;
+          setMeasuredSeconds(Number.isFinite(value) ? value : null);
+        }}
+        // El tope de la vista previa: al llegar vuelve a empezar (el `loop` ya
+        // está puesto, así que no hay corte). Escribir `currentTime` acá y no
+        // en un intervalo propio evita un timer por cada video del feed.
+        onTimeUpdate={(event) => {
+          const node = event.currentTarget;
+          if (node.currentTime >= PREVIEW_CAP_SECONDS) node.currentTime = 0;
+        }}
       />
 
       {/* Capa de toque: simple = reel a pantalla completa, doble = me gusta. */}
@@ -237,18 +262,31 @@ export function CardVideo({
         // Fuera de la diapositiva visible sale de la tabulación: entrar a un
         // carrusel no puede obligar a pasar por los medios que no se ven.
         tabIndex={active ? 0 : -1}
-        aria-label={COPY.post.playVideo}
+        // La etiqueta dice lo que el toque HACE. Sobre una vista previa eso es
+        // "ver el video completo", que además es la única forma de enterarse de
+        // que hay más video sin ver la píldora.
+        aria-label={isPreview ? COPY.post.playFullVideo : COPY.post.playVideo}
         className="absolute inset-0 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring"
       />
 
-      {/* Vistas: píldora chica a la IZQUIERDA — el sonido vive a la derecha. */}
-      {viewCount > 0 && (
+      {/* Píldora chica a la IZQUIERDA — el sonido vive a la derecha. Lleva dos
+          datos que conviven en la misma cápsula a propósito: dos píldoras
+          apiladas sobre el video son ruido, y la de vistas ya estaba acá.
+          `aria-hidden`: lo que significan lo dice el botón de abajo, que es el
+          elemento que se enfoca y se toca. */}
+      {(isPreview || viewCount > 0) && (
         <span
-          className="cl-print-fill pointer-events-none absolute bottom-3 left-3 flex items-center gap-1 rounded-full bg-media-scrim px-2 py-0.5 text-xs font-semibold text-on-media backdrop-blur-sm"
+          className="cl-print-fill pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-media-scrim px-2 py-0.5 text-xs font-semibold text-on-media backdrop-blur-sm"
           aria-hidden="true"
         >
-          <Eye size={13} weight="fill" />
-          {VIDEOS_COPY.viewsLabel(viewCount)}
+          {isPreview && <span>{COPY.post.previewChip}</span>}
+          {isPreview && viewCount > 0 && <span className="opacity-60">·</span>}
+          {viewCount > 0 && (
+            <span className="flex items-center gap-1">
+              <Eye size={13} weight="fill" />
+              {VIDEOS_COPY.viewsLabel(viewCount)}
+            </span>
+          )}
         </span>
       )}
 

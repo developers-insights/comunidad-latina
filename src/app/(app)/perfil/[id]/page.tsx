@@ -16,8 +16,10 @@ import {
   trustSignalsFrom,
 } from "@/components/auth/trust-signals";
 import { ProfileHeader } from "../profile-header";
-import { ProfilePostsGrid } from "../posts-grid";
-import { fetchAuthorPostTiles } from "../posts";
+import { ShareProfileButton } from "../share-profile-button";
+import { ProfileTabSection } from "../profile-tab-section";
+import { fetchProfileCounts } from "../profile-data";
+import { memberSinceLabel, parseProfileTab, profileTabHref } from "../profile-tabs";
 
 export const metadata = { title: "Perfil" };
 
@@ -28,9 +30,8 @@ const COPY = {
     "Entrá a tu cuenta para ver los perfiles y el Trust Score de tus vecinos.",
   loginCta: "Entrar",
   statPosts: "Publicaciones",
+  statFollowers: "Seguidores",
   statFollowing: "Siguiendo",
-  postsHeading: "Publicaciones",
-  postsEmpty: "Todavía no publicó nada. Cuando comparta algo, va a aparecer acá.",
   trustHeading: (name: string) => `Trust Score de ${name}`,
 } as const;
 
@@ -90,15 +91,10 @@ export default async function PerfilPublicoPage({
   }
 
   const cursor = decodeCursor(firstValue(sp.fotos) || undefined);
+  const tab = parseProfileTab(firstValue(sp.t) || undefined);
 
-  // Con perfil (⇒ hay sesión por RLS): conversación previa + contadores reales
-  // + primera página de publicaciones, todo en paralelo.
-  const [
-    { data: existingConversation },
-    { count: postsCount },
-    { count: followingCount },
-    postsPage,
-  ] = await Promise.all([
+  // Con perfil (⇒ hay sesión por RLS): conversación previa + los contadores.
+  const [{ data: existingConversation }, counts] = await Promise.all([
     supabase
       .from("conversations")
       .select("id, status, created_at")
@@ -107,18 +103,7 @@ export default async function PerfilPublicoPage({
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
-      .from("posts")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", tenant.id)
-      .eq("author_id", id)
-      .eq("status", "published"),
-    supabase
-      .from("follows")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", tenant.id)
-      .eq("follower_id", id),
-    fetchAuthorPostTiles(supabase, { tenantId: tenant.id, authorId: id, cursor }),
+    fetchProfileCounts(supabase, { tenantId: tenant.id, profileId: id }),
   ]);
 
   const score = trust?.score ?? 0;
@@ -127,10 +112,8 @@ export default async function PerfilPublicoPage({
   const firstName = profile.display_name.split(/\s+/)[0] ?? profile.display_name;
   const country = countryName(profile.country_origin);
   const location = [country, profile.area_label].filter(Boolean).join(" · ") || null;
-
-  const nextHref = postsPage.nextCursor
-    ? `/perfil/${id}?fotos=${postsPage.nextCursor}`
-    : null;
+  const base = `/perfil/${id}`;
+  const memberSince = memberSinceLabel(profile.created_at, tenant.locale);
 
   return (
     <div className="flex flex-col gap-6">
@@ -139,26 +122,40 @@ export default async function PerfilPublicoPage({
         avatarUrl={profile.avatar_url}
         identityVerified={profile.identity_verified}
         location={location}
+        memberSince={memberSince}
         stats={[
-          { label: COPY.statPosts, value: postsCount ?? 0 },
-          { label: COPY.statFollowing, value: followingCount ?? 0 },
+          { label: COPY.statPosts, value: counts.posts, href: base },
+          {
+            label: COPY.statFollowers,
+            value: counts.followers,
+            href: profileTabHref(base, "seguidores"),
+          },
+          {
+            label: COPY.statFollowing,
+            value: counts.following,
+            href: profileTabHref(base, "siguiendo"),
+          },
         ]}
         // Menú ⋯ con "Reportar como estafa" SIEMPRE primero (§3.3 / §4.c).
         headerRight={<ProfileActionsMenu profileId={profile.id} />}
         // 1 CTA primario por pantalla: hilo real si ya hay conversación; si no,
         // estado honesto (el contacto perfil→perfil llega con el módulo social).
+        // "Compartir" va al lado como secundario, nunca compitiendo con él.
         actions={
-          existingConversation ? (
-            <Link
-              href={`/mensajes/${existingConversation.id}`}
-              className={cn(buttonVariants({ variant: "primary", size: "lg" }), "w-full")}
-            >
-              <ChatCircle size={20} aria-hidden="true" />
-              {COPY.sendMessage}
-            </Link>
-          ) : (
-            <MessageCta firstName={firstName} />
-          )
+          <>
+            {existingConversation ? (
+              <Link
+                href={`/mensajes/${existingConversation.id}`}
+                className={cn(buttonVariants({ variant: "primary", size: "lg" }), "w-full")}
+              >
+                <ChatCircle size={20} aria-hidden="true" />
+                {COPY.sendMessage}
+              </Link>
+            ) : (
+              <MessageCta firstName={firstName} />
+            )}
+            <ShareProfileButton path={base} displayName={profile.display_name} />
+          </>
         }
       />
 
@@ -177,12 +174,23 @@ export default async function PerfilPublicoPage({
         </p>
       )}
 
-      {/* Grid de publicaciones del autor. */}
-      <ProfilePostsGrid
-        tiles={postsPage.tiles}
-        nextHref={nextHref}
-        heading={COPY.postsHeading}
-        emptyMessage={COPY.postsEmpty}
+      {/* Las siete pestañas — la MISMA sección que el perfil propio. */}
+      <ProfileTabSection
+        supabase={supabase}
+        tenantId={tenant.id}
+        profileId={id}
+        baseHref={base}
+        tab={tab}
+        counts={counts}
+        isOwn={false}
+        cursor={cursor}
+        info={{
+          bio: profile.bio,
+          country,
+          areaLabel: profile.area_label,
+          memberSince,
+          identityVerified: profile.identity_verified,
+        }}
       />
     </div>
   );

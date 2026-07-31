@@ -1,3 +1,5 @@
+import { SHORT_VIDEO_LIMIT_MESSAGE } from "@/lib/media/video-policy";
+
 /**
  * Copy del módulo FEED SOCIAL — español cálido, directo, sin jerga (§5 del
  * contrato). Ningún string de UI hardcodeado en JSX de páginas.
@@ -45,6 +47,18 @@ export const COPY = {
     videoUploading: (percent: number) => `Subiendo tu video… ${percent}%`,
     videoUploadErrorTitle: "No pudimos subir el video",
     videoUploadErrorBody: "Revisá tu conexión y probá de nuevo en un ratito.",
+    /**
+     * TOPE DE 90 s (spec nº4). El título y el cuerpo salen del módulo de
+     * política: el texto es literal y tiene que ser el MISMO que devuelve el
+     * servidor cuando rebota la publicación. Acá no se reescribe, se muestra.
+     */
+    videoTooLongTitle: "Ese video es muy largo",
+    videoTooLongBody: SHORT_VIDEO_LIMIT_MESSAGE,
+    /** El navegador no pudo leer la duración: sin ese dato no se publica. */
+    videoUnknownDurationTitle: "No pudimos leer la duración",
+    videoUnknownDurationBody:
+      "Probá con otro archivo MP4 o WebM. Necesitamos saber cuánto dura para publicarlo.",
+    videoMeasuring: "Revisando el video…",
     publish: "Publicar",
     publishing: "Publicando…",
     successTitle: "¡Publicado!",
@@ -94,6 +108,15 @@ export const COPY = {
       textPlaceholder: "¿Qué querés compartir?",
       /** Encabeza la vista previa del banner de la pregunta o del texto. */
       previewLabel: "Así se va a ver",
+      /**
+       * CATEGORÍA DEL VIDEO (0046) — opcional, con default. La pregunta es "de
+       * qué se trata" y no "elegí una categoría" porque lo primero es lo que la
+       * persona sabe responder; y el beneficio se dice al lado (que lo
+       * encuentren), que es lo que la hace valer la pena.
+       */
+      videoCategoryLabel: "¿De qué se trata tu video?",
+      videoCategoryHint:
+        "Así lo encuentran en Videos Cortos. Podés cambiarlo cuando quieras.",
       /** Encuesta Sí/No opcional (contrato 0041). */
       pollLabel: "Agregar encuesta de Sí o No",
       pollHint: "Tu comunidad responde con un toque y vas viendo los votos.",
@@ -214,7 +237,20 @@ export const COPY = {
       errorBody: "Puede ser un ratito de conexión floja — no es tu culpa. Probá de nuevo.",
     },
     // FTC honesto: la campaña paga se divulga (igual que "Destacado" de boosts).
-    adChip: "Publicidad",
+    // "Patrocinado" y no "Publicidad" desde el contrato del 2026-07-30 (§4): es
+    // la palabra que la spec pide para el contenido pago, y tiene que ser LA
+    // MISMA en el feed, en el reel y en los resultados de búsqueda — si cada
+    // superficie usa la suya, la divulgación deja de leerse como una sola cosa.
+    adChip: "Patrocinado",
+    /**
+     * VISTA PREVIA EN LA TARJETA (spec nº3/nº6): el feed reproduce hasta 59 s;
+     * el video completo se abre desde la publicación. Se dice, no se esconde —
+     * si no, el corte parece un video roto.
+     */
+    previewChip: "Vista previa",
+    previewHint: "Tocá para verlo completo",
+    /** Nombre accesible del toque cuando lo que se ve es sólo un anticipo. */
+    playFullVideo: "Ver el video completo",
     /** "· por {nombre}" bajo el nombre de la entidad. */
     byAuthor: (name: string) => `por ${name}`,
     /** Badge que solo ve el autor en el detalle de un post promocionado. */

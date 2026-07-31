@@ -15,6 +15,7 @@ import {
 } from "@/app/(app)/feed/queries";
 import { feedPostVisibilityFilter, type PostCardModel } from "@/components/feed";
 import { encodeCursor } from "@/components/listings";
+import { isEligibleForShortFeed, type VideoCategory } from "@/lib/media/video-policy";
 import { hasVideoMedia, scopeListingKind, type VideosScope } from "./helpers";
 
 /**
@@ -27,6 +28,13 @@ import { hasVideoMedia, scopeListingKind, type VideosScope } from "./helpers";
  * filtro por vertical del listing (posts de entidad de ese kind) encima de esa
  * misma regla — no la reemplaza.
  *
+ * QUÉ ENTRA AL REEL (contrato 0046 + §4 del feedback consolidado): SÓLO
+ * `video_type = 'short_video'` con `eligible_for_short_feed`. El video
+ * publicitario —hasta 10 minutos, atado a una campaña— NUNCA aparece acá ni
+ * como "el siguiente" al deslizar: se reproduce dentro de su anuncio. El
+ * predicado es el mismo del índice parcial `posts_short_feed_idx`, así que
+ * además de correcto es barato.
+ *
  * CÓMO SE PAGINA: posts.media es text[] sin columna de tipo, y PostgREST no
  * filtra arrays por patrón de extensión. Entonces: keyset por (created_at, id)
  * en barridas de SCAN_CHUNK posts, filtrando en memoria los que traen video,
@@ -36,6 +44,22 @@ import { hasVideoMedia, scopeListingKind, type VideosScope } from "./helpers";
  */
 
 type Supabase = SupabaseClient<Database>;
+
+/**
+ * Columnas de video de la 0046 que el reel necesita ADEMÁS de POST_COLUMNS.
+ * Se piden en el mismo select (no en una query aparte como las encuestas)
+ * porque acá no son un adorno: sin ellas no se puede decidir qué es un corto.
+ */
+const VIDEO_COLUMNS = "video_type, duration_seconds, is_paid_ad, eligible_for_short_feed, video_category";
+
+/** Fila de post + sus columnas de video. */
+type VideoPostRow = PostRow & {
+  video_type: string | null;
+  duration_seconds: number | null;
+  is_paid_ad: boolean | null;
+  eligible_for_short_feed: boolean | null;
+  video_category: string | null;
+};
 
 const SCAN_CHUNK = 40;
 const MAX_SCANS = 4;
@@ -83,6 +107,8 @@ interface FetchArgs {
   tenantId: string;
   viewerId: string | null;
   scope: VideosScope;
+  /** Tema elegido en el menú de entrada. null = "Todos" (sin filtro de tema). */
+  category?: VideoCategory | null;
   cursor: ReelsCursor | null;
   /** Post que abre el reel (?start=): va primero y el resto pagina detrás. */
   startId?: string | null;
@@ -94,6 +120,7 @@ export async function fetchVideoReelsPage({
   tenantId,
   viewerId,
   scope,
+  category = null,
   cursor,
   startId = null,
   pageSize = DEFAULT_PAGE_SIZE,
@@ -126,12 +153,31 @@ export async function fetchVideoReelsPage({
   const buildQuery = (keyset: ReelsCursor | null) => {
     let query = supabase
       .from("posts")
-      .select(POST_COLUMNS)
+      .select(`${POST_COLUMNS}, ${VIDEO_COLUMNS}`)
       .eq("tenant_id", tenantId)
       .eq("status", "published")
+      // EL FILTRO QUE SOSTIENE LA SUPERFICIE (0046 §6): sólo cortos elegibles.
+      // Un `advertising_video` no entra ni por casualidad — ni acá ni como "el
+      // siguiente" al deslizar, porque el siguiente sale de esta misma query.
+      .eq("video_type", "short_video")
+      .eq("eligible_for_short_feed", true)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(SCAN_CHUNK);
+
+    // Tema del menú de entrada. "Todos" no filtra (category null).
+    //
+    // "Otros" incluye además los videos SIN categoría. La columna es nullable y
+    // los videos anteriores a la 0046 quedaron en NULL (el backfill les puso
+    // `video_type`, no un tema que nadie eligió). Un video sin tema declarado ES
+    // "todo lo demás": mandarlo a ninguna parte lo haría inalcanzable desde el
+    // menú, que es justo lo que el menú vino a resolver. `otros` también es el
+    // default al publicar, así que las dos puntas dicen lo mismo.
+    if (category === "otros") {
+      query = query.or("video_category.is.null,video_category.eq.otros");
+    } else if (category) {
+      query = query.eq("video_category", category);
+    }
 
     if (kindListingIds) {
       // Scope de módulo: solo posts DE una entidad de ese vertical.
@@ -159,25 +205,43 @@ export async function fetchVideoReelsPage({
     return query;
   };
 
-  const videoRows: PostRow[] = [];
+  const videoRows: VideoPostRow[] = [];
   const seenIds = new Set<string>();
+
+  /**
+   * ¿Esta fila puede vivir en el reel? Una sola pregunta, un solo módulo
+   * (`video-policy`), para el `?start=` y para las barridas. La query ya filtra
+   * en la base; esto es la segunda llave: un `?start=` escrito a mano apunta a
+   * CUALQUIER post publicado, y sin este chequeo un video publicitario de 10
+   * minutos abriría el scroll aunque la query nunca lo hubiera traído.
+   */
+  const canEnterReel = (row: VideoPostRow): boolean =>
+    isEligibleForShortFeed({
+      videoType: row.video_type,
+      eligibleForShortFeed: row.eligible_for_short_feed,
+      status: row.status,
+      hasVideoMedia: hasVideoMedia(row.media),
+      durationSeconds: row.duration_seconds,
+      isPaidAd: row.is_paid_ad,
+    });
 
   // El post de arranque (?start=) va PRIMERO: el reel abre en el video tocado
   // y el scroll sigue con los más viejos (mismo orden del feed). Un post
-  // published es público en su detalle — acá solo respetamos el bloqueo.
+  // published es público en su detalle — acá respetamos el bloqueo Y la
+  // elegibilidad (un video publicitario se mira en su anuncio, no acá).
   let effectiveCursor = cursor;
   if (startId && !cursor) {
     const { data: startRow } = await supabase
       .from("posts")
-      .select(POST_COLUMNS)
+      .select(`${POST_COLUMNS}, ${VIDEO_COLUMNS}`)
       .eq("tenant_id", tenantId)
       .eq("status", "published")
       .eq("id", startId)
       .maybeSingle();
-    const start = startRow as PostRow | null;
+    const start = startRow as unknown as VideoPostRow | null;
     if (
       start &&
-      hasVideoMedia(start.media) &&
+      canEnterReel(start) &&
       !(start.author_id && blockedIds.has(start.author_id))
     ) {
       videoRows.push(start);
@@ -200,13 +264,13 @@ export async function fetchVideoReelsPage({
     // Doble cast: `POST_COLUMNS` está anotado como `string` (ver su comentario
     // en feed/queries.ts), así que supabase-js no puede derivar la forma de la
     // fila y devuelve `GenericStringError[]`. El contrato real lo fija PostRow.
-    const rows = (data ?? []) as unknown as PostRow[];
+    const rows = (data ?? []) as unknown as VideoPostRow[];
     if (rows.length === 0) {
       exhausted = true;
       break;
     }
     for (const row of rows) {
-      if (!seenIds.has(row.id) && hasVideoMedia(row.media)) {
+      if (!seenIds.has(row.id) && canEnterReel(row)) {
         videoRows.push(row);
         seenIds.add(row.id);
       }
@@ -258,8 +322,8 @@ export async function fetchVideoReelsPage({
     fetchViewerSaves(supabase, viewerId, pageIds),
   ]);
 
-  const items = pageRows.map((row) =>
-    toPostCardModel(row, authors, likedIds, now, {
+  const items = pageRows.map((row) => ({
+    ...toPostCardModel(row, authors, likedIds, now, {
       entity: row.entity_listing_id
         ? (entityById.get(row.entity_listing_id) ?? null)
         : null,
@@ -267,7 +331,16 @@ export async function fetchVideoReelsPage({
       // El botón GUARDAR del riel arranca en su estado real (no siempre vacío).
       savedByViewer: savedIds.has(row.id),
     }),
-  );
+    // Las columnas de video viajan con el modelo: el slide vuelve a preguntarse
+    // si el post puede estar en el reel antes de pintarlo. La query ya lo
+    // filtró, pero un `video-reels` que reciba items de cualquier otro lado
+    // (una acción futura, un test mal armado) no puede volverse el agujero.
+    videoType: row.video_type,
+    durationSeconds: row.duration_seconds,
+    isPaidAd: row.is_paid_ad ?? false,
+    eligibleForShortFeed: row.eligible_for_short_feed ?? true,
+    videoCategory: row.video_category,
+  }));
 
   return { items, nextCursor };
 }

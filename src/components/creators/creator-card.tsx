@@ -119,7 +119,9 @@ export function CreatorCard({ creator }: { creator: CreatorCardModel }) {
           )}
         </PhotoTap>
 
-        <div className="flex flex-col gap-3 p-4">
+        {/* `gap-2.5`, no `gap-3`: el mismo ritmo vertical que el resto de las
+            tarjetas de listado (ver product-card.tsx). */}
+        <div className="flex flex-col gap-2.5 p-4">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <RatingStars avg={creator.ratingAvg} count={creator.ratingCount} />
             {creator.completedJobs > 0 && (

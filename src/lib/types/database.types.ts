@@ -11,6 +11,13 @@
 // EXCEPCIÓN 2026-07-27 bis: 0041 — posts.poll_* + post_poll_votes (encuestas
 // Sí/No), tenants.modules_soon ("Muy pronto") y broadcasts.severity (alerta
 // urgente); y 0042 — la función job_application_tally.
+// EXCEPCIÓN 2026-07-30 (misma razón): 0044–0049 — posts.search + las RPC
+// global_search / notification_counts / record_cta_click; notifications.category
+// /priority/group_key/dismissed_at + notification_prefs; posts.video_type /
+// duration_seconds / is_paid_ad / eligible_for_short_feed / video_category;
+// job_applications.cv_url/portfolio_links/share_profile + job_application_notes
+// + saved_candidates; listings.tier/store_active/cta_* + campaigns + cta_clicks
+// + store_memberships.
 export type Json =
   | string
   | number
@@ -368,6 +375,110 @@ export type Database = {
           },
         ]
       }
+      campaigns: {
+        Row: {
+          age_max: number | null
+          age_min: number | null
+          budget_cents: number
+          cities: string[]
+          countries: string[]
+          created_at: string
+          created_by: string
+          currency: string
+          duration_days: number
+          ends_at: string | null
+          id: string
+          interests: string[]
+          languages: string[]
+          listing_id: string | null
+          objective: string
+          post_id: string | null
+          review_note: string | null
+          starts_at: string | null
+          status: string
+          stripe_checkout_session_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          age_max?: number | null
+          age_min?: number | null
+          budget_cents: number
+          cities?: string[]
+          countries?: string[]
+          created_at?: string
+          created_by: string
+          currency?: string
+          duration_days: number
+          ends_at?: string | null
+          id?: string
+          interests?: string[]
+          languages?: string[]
+          listing_id?: string | null
+          objective: string
+          post_id?: string | null
+          review_note?: string | null
+          starts_at?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          age_max?: number | null
+          age_min?: number | null
+          budget_cents?: number
+          cities?: string[]
+          countries?: string[]
+          created_at?: string
+          created_by?: string
+          currency?: string
+          duration_days?: number
+          ends_at?: string | null
+          id?: string
+          interests?: string[]
+          languages?: string[]
+          listing_id?: string | null
+          objective?: string
+          post_id?: string | null
+          review_note?: string | null
+          starts_at?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comments: {
         Row: {
           author_id: string | null
@@ -538,6 +649,45 @@ export type Database = {
           },
           {
             foreignKeyName: "creator_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cta_clicks: {
+        Row: {
+          clicked_on: string
+          clicks: number
+          cta_kind: string
+          listing_id: string
+          tenant_id: string
+        }
+        Insert: {
+          clicked_on?: string
+          clicks?: number
+          cta_kind: string
+          listing_id: string
+          tenant_id: string
+        }
+        Update: {
+          clicked_on?: string
+          clicks?: number
+          cta_kind?: string
+          listing_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cta_clicks_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cta_clicks_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -891,14 +1041,66 @@ export type Database = {
           },
         ]
       }
+      job_application_notes: {
+        Row: {
+          application_id: string
+          author_id: string
+          created_at: string
+          note: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          application_id: string
+          author_id: string
+          created_at?: string
+          note: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          application_id?: string
+          author_id?: string
+          created_at?: string
+          note?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_application_notes_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "job_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_application_notes_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_application_notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_applications: {
         Row: {
           answers: Json
           applicant_id: string
           created_at: string
+          cv_url: string | null
           id: string
           job_id: string
           message: string | null
+          portfolio_links: string[]
+          share_profile: boolean
           status: string
           tenant_id: string
           updated_at: string
@@ -907,9 +1109,12 @@ export type Database = {
           answers?: Json
           applicant_id: string
           created_at?: string
+          cv_url?: string | null
           id?: string
           job_id: string
           message?: string | null
+          portfolio_links?: string[]
+          share_profile?: boolean
           status?: string
           tenant_id: string
           updated_at?: string
@@ -918,9 +1123,12 @@ export type Database = {
           answers?: Json
           applicant_id?: string
           created_at?: string
+          cv_url?: string | null
           id?: string
           job_id?: string
           message?: string | null
+          portfolio_links?: string[]
+          share_profile?: boolean
           status?: string
           tenant_id?: string
           updated_at?: string
@@ -1051,6 +1259,13 @@ export type Database = {
           contact_protected: boolean
           created_at: string
           created_by: string | null
+          cta_address: string | null
+          cta_booking_url: string | null
+          cta_phone: string | null
+          cta_purchase_url: string | null
+          cta_tickets_url: string | null
+          cta_website: string | null
+          cta_whatsapp: string | null
           description: string | null
           geo_zone: string | null
           id: string
@@ -1065,8 +1280,10 @@ export type Database = {
           search: unknown
           source: string
           status: string
+          store_active: boolean
           store_verified: boolean
           tenant_id: string
+          tier: string
           title: string
           updated_at: string
         }
@@ -1077,6 +1294,13 @@ export type Database = {
           contact_protected?: boolean
           created_at?: string
           created_by?: string | null
+          cta_address?: string | null
+          cta_booking_url?: string | null
+          cta_phone?: string | null
+          cta_purchase_url?: string | null
+          cta_tickets_url?: string | null
+          cta_website?: string | null
+          cta_whatsapp?: string | null
           description?: string | null
           geo_zone?: string | null
           id?: string
@@ -1091,8 +1315,10 @@ export type Database = {
           search?: unknown
           source?: string
           status?: string
+          store_active?: boolean
           store_verified?: boolean
           tenant_id: string
+          tier?: string
           title: string
           updated_at?: string
         }
@@ -1103,6 +1329,13 @@ export type Database = {
           contact_protected?: boolean
           created_at?: string
           created_by?: string | null
+          cta_address?: string | null
+          cta_booking_url?: string | null
+          cta_phone?: string | null
+          cta_purchase_url?: string | null
+          cta_tickets_url?: string | null
+          cta_website?: string | null
+          cta_whatsapp?: string | null
           description?: string | null
           geo_zone?: string | null
           id?: string
@@ -1117,8 +1350,10 @@ export type Database = {
           search?: unknown
           source?: string
           status?: string
+          store_active?: boolean
           store_verified?: boolean
           tenant_id?: string
+          tier?: string
           title?: string
           updated_at?: string
         }
@@ -1261,14 +1496,69 @@ export type Database = {
           },
         ]
       }
+      notification_prefs: {
+        Row: {
+          category: string
+          created_at: string
+          email: boolean
+          frequency: string
+          in_app: boolean
+          profile_id: string
+          push: boolean
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          email?: boolean
+          frequency?: string
+          in_app?: boolean
+          profile_id: string
+          push?: boolean
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          email?: boolean
+          frequency?: string
+          in_app?: boolean
+          profile_id?: string
+          push?: boolean
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_prefs_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_prefs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           body: string | null
+          category: string
           created_at: string
+          dismissed_at: string | null
           expires_at: string
+          group_key: string | null
           href: string | null
           id: string
           kind: string
+          priority: string
           profile_id: string
           read_at: string | null
           tenant_id: string
@@ -1276,11 +1566,15 @@ export type Database = {
         }
         Insert: {
           body?: string | null
+          category?: string
           created_at?: string
+          dismissed_at?: string | null
           expires_at?: string
+          group_key?: string | null
           href?: string | null
           id?: string
           kind: string
+          priority?: string
           profile_id: string
           read_at?: string | null
           tenant_id: string
@@ -1288,11 +1582,15 @@ export type Database = {
         }
         Update: {
           body?: string | null
+          category?: string
           created_at?: string
+          dismissed_at?: string | null
           expires_at?: string
+          group_key?: string | null
           href?: string | null
           id?: string
           kind?: string
+          priority?: string
           profile_id?: string
           read_at?: string | null
           tenant_id?: string
@@ -1365,17 +1663,23 @@ export type Database = {
           body: string
           comment_count: number
           created_at: string
+          duration_seconds: number | null
+          eligible_for_short_feed: boolean
           entity_listing_id: string | null
           id: string
+          is_paid_ad: boolean
           kind: string
           like_count: number
           media: string[]
           poll_kind: string | null
           poll_no_count: number
           poll_yes_count: number
+          search: unknown
           status: string
           tenant_id: string
           updated_at: string
+          video_category: string | null
+          video_type: string | null
           view_count: number
         }
         Insert: {
@@ -1383,17 +1687,23 @@ export type Database = {
           body: string
           comment_count?: number
           created_at?: string
+          duration_seconds?: number | null
+          eligible_for_short_feed?: boolean
           entity_listing_id?: string | null
           id?: string
+          is_paid_ad?: boolean
           kind?: string
           like_count?: number
           media?: string[]
           poll_kind?: string | null
           poll_no_count?: number
           poll_yes_count?: number
+          search?: unknown
           status?: string
           tenant_id: string
           updated_at?: string
+          video_category?: string | null
+          video_type?: string | null
           view_count?: number
         }
         Update: {
@@ -1401,17 +1711,23 @@ export type Database = {
           body?: string
           comment_count?: number
           created_at?: string
+          duration_seconds?: number | null
+          eligible_for_short_feed?: boolean
           entity_listing_id?: string | null
           id?: string
+          is_paid_ad?: boolean
           kind?: string
           like_count?: number
           media?: string[]
           poll_kind?: string | null
           poll_no_count?: number
           poll_yes_count?: number
+          search?: unknown
           status?: string
           tenant_id?: string
           updated_at?: string
+          video_category?: string | null
+          video_type?: string | null
           view_count?: number
         }
         Relationships: [
@@ -1761,6 +2077,59 @@ export type Database = {
           },
         ]
       }
+      saved_candidates: {
+        Row: {
+          candidate_id: string
+          created_at: string
+          employer_id: string
+          source_application_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          candidate_id: string
+          created_at?: string
+          employer_id: string
+          source_application_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          candidate_id?: string
+          created_at?: string
+          employer_id?: string
+          source_application_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_candidates_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_candidates_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_candidates_source_application_id_fkey"
+            columns: ["source_application_id"]
+            isOneToOne: false
+            referencedRelation: "job_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_candidates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saves: {
         Row: {
           created_at: string
@@ -1850,6 +2219,73 @@ export type Database = {
           },
           {
             foreignKeyName: "scam_reports_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_memberships: {
+        Row: {
+          created_at: string
+          currency: string
+          current_period_end: string | null
+          id: string
+          owner_id: string
+          price_cents: number
+          status: string
+          store_id: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          id?: string
+          owner_id: string
+          price_cents?: number
+          status?: string
+          store_id: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          id?: string
+          owner_id?: string
+          price_cents?: number
+          status?: string
+          store_id?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_memberships_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_memberships_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: true
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_memberships_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -2104,6 +2540,18 @@ export type Database = {
       }
       block_user: { Args: { p_profile_id: string }; Returns: undefined }
       get_tenant_by_domain: { Args: { p_domain: string }; Returns: Json }
+      global_search: {
+        Args: { limit_per_type?: number; q: string }
+        Returns: {
+          href: string
+          id: string
+          image_url: string | null
+          rank: number
+          result_type: string
+          subtitle: string | null
+          title: string
+        }[]
+      }
       job_application_tally: {
         Args: { p_job_ids: string[] }
         Returns: {
@@ -2111,6 +2559,17 @@ export type Database = {
           pending: number
           total: number
         }[]
+      }
+      notification_counts: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          category: string
+          unread: number
+        }[]
+      }
+      record_cta_click: {
+        Args: { p_cta_kind: string; p_listing_id: string }
+        Returns: undefined
       }
       report_scam: {
         Args: {

@@ -69,8 +69,19 @@ const NEUTRAL_950 = "#0D0C08";
 
 /** --cl-light-surface: el fondo MÁS CLARO del tema light (peor caso para texto). */
 const LIGHT_SURFACE = "#FFFFFF";
-/** --cl-light-canvas: el fondo de página del tema light. */
-const LIGHT_CANVAS = "#FCFCFB";
+/**
+ * --cl-light-canvas: el fondo de página del tema light.
+ *
+ * 2026-07-30: pasó de #FCFCFB al CREMA (`--color-cream-25`) por pedido del
+ * cliente. No es cosmético para este archivo: el lazo de `ctaTone()` empuja el
+ * relleno de marca a oscurecerse hasta cruzar 3:1 CONTRA ESTA CONSTANTE, y el
+ * barrido de tenants adversarios mostraba fills que quedaban justo en 3.00:1.
+ * Con el canvas más oscuro y el ancla vieja, esos mismos fills medían 2.85:1
+ * REALES — o sea, el pipeline habría seguido reportando que pasaba mientras la
+ * pantalla fallaba. Por eso se mueve acá el mismo día, y por eso
+ * `theme-contrast.test.ts` afirma explícitamente que los dos valores coinciden.
+ */
+const LIGHT_CANVAS = "#FCF6E6";
 /** --cl-dark-canvas: el fondo de página del tema dark (§2.8, nunca #000). */
 const DARK_CANVAS = "#17150F";
 /** --cl-dark-surface-raised: el fondo MÁS CLARO del tema dark (peor caso para texto). */

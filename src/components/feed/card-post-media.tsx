@@ -78,7 +78,21 @@ export function CardPostMedia({
    */
   const openViewerAt = (startIndex: number) =>
     viewer.open({ items, startIndex, postId, authorName });
-  const reelDisabled = videoScope === NO_REEL_SCOPE;
+  /**
+   * Sin reel por DOS motivos distintos, y los dos terminan igual: el video se
+   * abre a pantalla completa sobre esta misma publicación y al cerrar volvés acá.
+   *
+   *  1. `NO_REEL_SCOPE` — la pantalla muestra UNA publicación (el detalle).
+   *  2. `isPromoted` — es contenido PAGO (chip "Patrocinado"). Un anuncio se
+   *     mira dentro del anuncio: mandarlo al scroll infinito se lleva a la
+   *     persona lejos de lo que el anunciante pagó por mostrar, y es el bug que
+   *     el cliente reportó para propiedades y eventos (call 29/7, 1:19: "cuando
+   *     cierras el video, se regresa de nuevo a la publicación… no puede ir
+   *     scrolling"). Además el video publicitario largo NO está en el reel
+   *     (contrato 0046), así que abrirlo ahí llevaría a un scroll donde ese
+   *     video, por definición, no existe.
+   */
+  const reelDisabled = videoScope === NO_REEL_SCOPE || isPromoted;
 
   function handleDoubleTap() {
     if (!like) return;

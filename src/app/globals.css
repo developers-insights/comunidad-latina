@@ -24,6 +24,11 @@
  * Vocabulario:
  *  superficies  bg-canvas · bg-surface · bg-surface-subtle · bg-surface-raised
  *               bg-surface-hover · bg-surface-inverse
+ *               ⚠ En LIGHT el lienzo es CREMA y la tarjeta es BLANCA (cambio del
+ *                 2026-07-30, ver la escala `--color-cream-*`). Una tarjeta que
+ *                 quiera despegarse del fondo usa `bg-surface`; una zona que
+ *                 quiera fundirse con la página usa `bg-canvas`. Antes daba
+ *                 igual —los dos eran blanco—, ahora NO: elegir mal se ve.
  *  texto        text-foreground · text-foreground-secondary · text-foreground-muted
  *               text-placeholder · text-on-surface-inverse
  *  bordes       border-border · border-border-subtle · border-border-strong
@@ -117,6 +122,40 @@
   --color-neutral-900: #17150f;
   --color-neutral-950: #0d0c08;
 
+  /* ── Escala CREMA (§ lienzo, feedback cliente 2026-07-30) ─────────────────────
+        «esto es blanco, y el fondo es blanco… blanco con blanco no notamos nada.
+         Va a ir un amarillo bien bajito, como pastel, crema, bien bajito, y va a
+         diferenciar las cajas» (call del 29/7, 1:05).
+
+        Es la MISMA rampa cálida de arriba con croma real en el hue del crema
+        (~92 en OKLCH, contra 0.001–0.016 de los neutros): lo que despega la
+        tarjeta blanca del lienzo es el TONO, no la oscuridad. Por eso sólo la
+        usa el tema LIGHT y sólo en superficies-que-no-son-tarjeta: `surface` y
+        `surface-raised` siguen siendo blanco puro — son "las cajas".
+
+        LUMINANCIA ANCLADA, no lightness OKLCH. `cream-100/200/300` tienen la
+        MISMA luminancia relativa que los `neutral-100/200/300` que reemplazan,
+        así que todo par de contraste ya medido contra ellos vale idéntico: el
+        croma es gratis en WCAG. Los dos que sí se mueven a propósito son
+        `cream-25` (el lienzo: 1.027:1 → 1.079:1 contra la tarjeta blanca) y
+        `cream-50` (1.081 → 1.110, para que la superficie hundida siga hundida
+        DEBAJO del lienzo nuevo y no lo pise).
+
+        Matriz completa re-medida con culori tras el cambio (src/test/
+        theme-contrast.test.ts la corre en cada push). Peor par de todo el tema
+        light: `danger-ink` sobre `surface-hover` = 4.55:1 — mejor que el 4.51:1
+        que había antes. Ninguno bajó de 4.5.
+
+        NO se usan crudos en JSX (`bg-cream-50` está prohibido igual que
+        `bg-neutral-50`: no voltean con el tema). Se consumen sólo desde los
+        alias `--cl-light-*` de abajo. El guard vive en
+        src/test/theme-invariants.test.ts. ── */
+  --color-cream-25: #fcf6e6;
+  --color-cream-50: #f9f3e0;
+  --color-cream-100: #f5eed8;
+  --color-cream-200: #e6dfc8;
+  --color-cream-300: #cbc3ab;
+
   /* ── Marca (Capa 3) — defaults azul #1A5EDB; el ROOT layout los pisa por tenant.
         --color-brand y --color-brand-foreground se REDEFINEN abajo en :root a
         partir del tema activo. Acá quedan sólo para que Tailwind genere las
@@ -142,6 +181,11 @@
         · media-shade    → tinta de los degradados de legibilidad (usar con /N).
         · media-backdrop → color sólido detrás de un <Image> antes de que cargue. */
   --color-on-media: #f7f6f3;
+  /* Misma familia que `on-media` y por la misma razón: la marca tricolor en
+     pastel (`--brand-*-pastel`, definida en :root) es un objeto CONSTANTE en
+     los dos temas, así que lo que se dibuja encima también lo es. Hoy: el "+"
+     del bottom nav. 11.04–13.66:1 sobre los tres pasteles. */
+  --color-on-pastel: #17150f;
   --color-media-scrim: rgba(13, 12, 8, 0.62);
   --color-media-shade: #0d0c08;
   --color-media-backdrop: #17150f;
@@ -335,16 +379,24 @@
 
 :root {
   /* ───────────────────── PALETA LIGHT (valores, fuente única) ──────────────── */
-  --cl-light-canvas: var(--color-neutral-25);
+  /* EL LIENZO ES CREMA Y LA TARJETA ES BLANCA. Esa es toda la idea del cambio
+     del 30/7: antes `canvas` (#fcfcfb) y `surface` (#ffffff) daban 1.027:1 —
+     el borde de la card sólo existía por el hairline. Ahora 1.079:1 más un hue
+     propio, y la caja se despega sola. `surface`/`surface-raised` NO se tocan:
+     si la tarjeta también se tiñe, no hay contraste que ganar. */
+  --cl-light-canvas: var(--color-cream-25);
   --cl-light-surface: var(--color-neutral-0);
-  --cl-light-surface-subtle: var(--color-neutral-50);
+  /* Sigue siendo la superficie HUNDIDA: un escalón por DEBAJO del lienzo nuevo
+     (1.110:1 contra blanco vs. 1.079:1 del canvas). Si se quedaba en
+     neutral-50 quedaba más CLARA que el lienzo y el hundido se daba vuelta. */
+  --cl-light-surface-subtle: var(--color-cream-50);
   --cl-light-surface-raised: var(--color-neutral-0);
   /* superficie de hover: reemplaza `hover:bg-neutral-100` */
-  --cl-light-surface-hover: var(--color-neutral-100);
+  --cl-light-surface-hover: var(--color-cream-100);
   /* barra intencionalmente invertida (offline banner) */
   --cl-light-surface-inverse: var(--color-neutral-800);
   --cl-light-on-surface-inverse: var(--color-neutral-50);
-  --cl-light-bezel-shell: var(--color-neutral-50);
+  --cl-light-bezel-shell: var(--color-cream-50);
   --cl-light-bezel-highlight: rgba(255, 255, 255, 0.6);
   --cl-light-foreground: var(--color-neutral-900);
   --cl-light-foreground-secondary: var(--color-neutral-600);
@@ -368,10 +420,14 @@
      transparente sobre bg-surface-raised, así que el placeholder cae en 4.53–5.30:1;
      el día que un buscador se pinte sobre bg-surface-subtle, sigue siendo AA. */
   --cl-light-placeholder: var(--cl-light-foreground-muted);
-  --cl-light-border: var(--color-neutral-200);
-  --cl-light-border-subtle: var(--color-neutral-100);
+  /* Los tres hairlines pasan al crema por la misma razón que las superficies: un
+     borde gris frío sobre lienzo crema se lee sucio. Luminancia IDÉNTICA a los
+     neutral-100/200/300 que reemplazan, así que el argumento de §"POR QUÉ border
+     NO SE TESTEA A 3:1" de theme-contrast.test.ts sigue valiendo sin recalcular. */
+  --cl-light-border: var(--color-cream-200);
+  --cl-light-border-subtle: var(--color-cream-100);
   /* borde fuerte / hover: reemplaza `hover:border-neutral-300` */
-  --cl-light-border-strong: var(--color-neutral-300);
+  --cl-light-border-strong: var(--color-cream-300);
   --cl-light-scrim: rgba(13, 12, 8, 0.5);
   --cl-light-skeleton-highlight: rgba(255, 255, 255, 0.65);
 
@@ -608,6 +664,34 @@
   --brand-blue: #1f5da6;
   --brand-yellow: #d9a22b;
   --brand-red: #cf2532;
+
+  /*
+   * ── LA MISMA MARCA, EN PASTEL (feedback cliente 2026-07-30) ──────────────
+   * «que sea con los colores de Comunidad Latina pero en pastel, que no sea tan
+   *  chillón». Vive en el disco del "+" del bottom nav (components/shell/
+   *  bottom-nav.tsx) y en cualquier acento tricolor que venga después.
+   *
+   * Derivados de los tres de arriba en OKLCH: se sube lightness a 0.845–0.905 y
+   * se baja croma a ~0.06–0.10 CONSERVANDO EL HUE exacto (255.1 · 81.6 · 23.8).
+   * Por eso siguen leyéndose como el azul, el amarillo y el rojo del logo, y no
+   * como "tres pasteles cualquiera". El amarillo aguanta más croma que los otros
+   * dos sin volverse chillón —es la zona más clara del gamut— y por eso no está
+   * igualado a ojo sino por lightness percibida.
+   *
+   * CONSTANTES EN AMBOS TEMAS, igual que `--brand-*` y que la familia `on-media`:
+   * el "+" es un objeto físico de la marca, no una superficie de la app; no se
+   * repinta porque alguien prendió el tema oscuro.
+   *
+   * CONTRASTE: los tres son fondos DECORATIVOS (1.24–1.65:1 contra el lienzo
+   * claro), así que jamás pueden ser lo único que identifica al control. Lo que
+   * identifica al "+" es su GLIFO, que va en `--color-on-pastel` y mide 11.04:1
+   * (rojo), 12.13:1 (azul) y 13.66:1 (amarillo) — muy por encima del 3:1 de WCAG
+   * 1.4.11. Un "+" blanco sobre estos tonos daba 1.3:1: era el bug del asset 3D
+   * que esto reemplaza.
+   */
+  --brand-blue-pastel: #b8d5fc;
+  --brand-yellow-pastel: #ffda96;
+  --brand-red-pastel: #fbb9b4;
 
   /* Acentos por módulo (feedback cliente 2026-07-19: "tiene que tener color la
      app"). DECORATIVOS: cápsulas de módulo, anillos, gradientes de cabecera —

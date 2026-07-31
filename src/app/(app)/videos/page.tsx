@@ -1,22 +1,37 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { firstParamValue, parseStartId, parseVideosScope } from "./helpers";
+import { VideoCategoryMenu } from "./category-menu";
+import {
+  categoryFilterValue,
+  firstParamValue,
+  parseStartId,
+  parseVideoCategoryParam,
+  parseVideosScope,
+  shouldShowCategoryMenu,
+  type VideoCategoryFilter,
+} from "./helpers";
 import { fetchVideoReelsPage } from "./queries";
 import { VideoReels } from "./video-reels";
 import { VIDEOS_COPY } from "./copy";
 
-export const metadata = { title: "Videos" };
+export const metadata = { title: "Videos Cortos" };
 
 /**
- * /videos — reels vertical de la comunidad (pedido cliente 2026-07-21).
+ * /videos — VIDEOS CORTOS: menú de categorías + reel vertical.
  *
- * Query params:
+ * Query params (los tres son deep links compartibles y ninguno se puede romper):
+ * - `cat`: todos | comida | musica | eventos | propiedades | negocios | humor |
+ *   deportes | comunidad | otros — el tema elegido en el menú de entrada.
+ *   AUSENTE (y sin los otros dos) = todavía no eligió ⇒ se muestra el MENÚ.
  * - `scope`: para-ti | propiedades | negocios | profesionales | eventos —
  *   filtra por el vertical del listing asociado al post (mismo reproductor,
  *   distinto módulo). Default: para-ti (todos los videos visibles).
  * - `start`: id del post que abre el reel (viene de tocar un video en el
  *   feed): ese video va primero y el scroll sigue con los más viejos.
+ *
+ * Llegar con `?start=` va DERECHO al video: el menú se interpone sólo cuando la
+ * persona entra a la sección, nunca cuando abre algo que alguien compartió.
  *
  * La primera página se resuelve en el server (RLS del usuario); el scroll
  * infinito sigue por server action con el MISMO keyset del feed.
@@ -28,12 +43,21 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function VideosPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
-  const scope = parseVideosScope(firstParamValue(sp.scope) || undefined);
+  const rawScope = firstParamValue(sp.scope);
+  const scope = parseVideosScope(rawScope || undefined);
   const startId = parseStartId(firstParamValue(sp.start));
+  const category = parseVideoCategoryParam(firstParamValue(sp.cat));
+
+  if (shouldShowCategoryMenu({ category, startId, rawScope })) {
+    return <VideoCategoryMenu />;
+  }
 
   return (
-    <Suspense key={`${scope}|${startId ?? ""}`} fallback={<ReelsLoading />}>
-      <ReelsContent scope={scope} startId={startId} />
+    <Suspense
+      key={`${scope}|${category ?? ""}|${startId ?? ""}`}
+      fallback={<ReelsLoading />}
+    >
+      <ReelsContent scope={scope} startId={startId} category={category} />
     </Suspense>
   );
 }
@@ -41,9 +65,11 @@ export default async function VideosPage({ searchParams }: { searchParams: Searc
 async function ReelsContent({
   scope,
   startId,
+  category,
 }: {
   scope: ReturnType<typeof parseVideosScope>;
   startId: string | null;
+  category: VideoCategoryFilter | null;
 }) {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
   const {
@@ -55,6 +81,7 @@ async function ReelsContent({
     tenantId: tenant.id,
     viewerId: user?.id ?? null,
     scope,
+    category: categoryFilterValue(category),
     cursor: null,
     startId,
     pageSize: FIRST_PAGE_SIZE,
@@ -62,10 +89,11 @@ async function ReelsContent({
 
   return (
     <VideoReels
-      key={scope}
+      key={`${scope}|${category ?? ""}`}
       tenantId={tenant.id}
       viewerId={user?.id ?? null}
       scope={scope}
+      category={category}
       initialItems={page.items}
       initialCursor={page.nextCursor}
     />

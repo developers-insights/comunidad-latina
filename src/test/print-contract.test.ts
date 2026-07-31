@@ -428,13 +428,22 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: Array<string>(5).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
+  // Menú de entrada de Videos Cortos (2026-07-30): el glifo Play del acceso
+  // "Todos los videos" sobre el círculo de marca. Es la ÚNICA tinta clara de la
+  // pantalla —las tarjetas de categoría escriben `foreground`— y se imprime con
+  // su relleno.
+  "src/app/(app)/videos/category-menu.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-fill",
+  },
   // Reels /videos: superficie de video fullscreen (fixed, bg-media-shade) — el
   // contenedor raíz entero lleva cl-print-hide; imprimir reels no existe.
   // 9 tras quitar los chips de scope del reel (commit cba8e0b): el inventario
   // había quedado en 10 y desactualizó este guard. 11 desde 2026-07-26: suma el
-  // contador de vistas junto al autor y el corazón del doble-tap.
+  // contador de vistas junto al autor y el corazón del doble-tap. 12 desde
+  // 2026-07-30: la cápsula de categoría activa, que además es la salida al menú.
   "src/app/(app)/videos/video-reels.tsx": {
-    inks: Array<string>(11).fill("text-on-media"),
+    inks: Array<string>(12).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
   // Glifo Play sobre el thumbnail de video del grid del perfil — se imprime
@@ -499,6 +508,21 @@ const INVENTARIO: Record<string, Entrada> = {
   // en papel, y sin el hook sería blanco sobre blanco.
   "src/app/(app)/ajustes/page.tsx": {
     inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
+  // Pestañas de /notificaciones (2026-07-30): el contador de la pestaña activa
+  // es la MISMA tinta que el badge de /ajustes, con el mismo problema y la misma
+  // salida. El hook va en el contenedor de toda la tira, no en el número: una
+  // barra de pestañas impresa es chrome que no dice nada, y esconder sólo el
+  // contador dejaría media pestaña.
+  "src/components/notifications/category-tabs.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
+  // Filtro Todas/No leídas/Importantes: el chip activo se pinta con la tinta
+  // inversa. Mismo criterio — el grupo entero es chrome de navegación.
+  "src/components/notifications/inbox-filters.tsx": {
+    inks: ["text-on-surface-inverse"],
     cobertura: "cl-print-hide",
   },
   "src/components/onboarding/onboarding-wizard.tsx": {

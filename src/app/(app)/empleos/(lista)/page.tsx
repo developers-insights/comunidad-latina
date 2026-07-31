@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { CaretDown, Plus } from "@phosphor-icons/react/dist/ssr";
+import { CaretDown, CaretRight, ClipboardText, Plus } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, SectionCta, SectionHeading, Skeleton, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/empleos/copy";
 import { EmploymentTypeChips } from "@/components/empleos/employment-type-chips";
@@ -93,8 +93,26 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
         href={SECCION.publicarHref}
         title={t("sections", "publishJobTitle")}
         hint={t("sections", "publishJobHint")}
-        className="mb-4 mt-3"
+        className="mb-3 mt-3"
       />
+
+      {/* Entrada a "Mis postulaciones": quien busca trabajo vuelve todos los
+          días a ver si le contestaron, y el único camino no puede ser abrir
+          aviso por aviso. Va acá arriba, antes de los filtros, porque es una
+          visita RECURRENTE — no una acción del listado. */}
+      <Link
+        href="/empleos/mis-aplicaciones"
+        className={cn(
+          "mb-5 flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 py-2",
+          "text-sm font-semibold text-foreground-secondary",
+          "transition-colors duration-(--duration-fast) hover:bg-surface-subtle hover:text-foreground",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+        )}
+      >
+        <ClipboardText size={18} aria-hidden="true" className="text-[var(--accent-empleos)]" />
+        {COPY.myApplications.title}
+        <CaretRight size={14} weight="bold" aria-hidden="true" className="ml-auto" />
+      </Link>
 
       <EmploymentTypeChips className="mb-5" />
 

@@ -8,3 +8,16 @@ export {
   NotificationItem,
   type NotificationItemData,
 } from "./notification-item";
+export { CriticalNotification } from "./critical-notification";
+export { CategoryIcon } from "./category-icon";
+export {
+  CategoryTabs,
+  INBOX_PANEL_ID,
+  inboxTabId,
+  type CategoryTabsProps,
+} from "./category-tabs";
+export { InboxFilters } from "./inbox-filters";
+export { PrefRow } from "./pref-row";
+export { MarkAllRead } from "./mark-all-read";
+export { NotificationMenu } from "./notification-menu";
+export { COPY as notificationsCopy, PREFS_COPY } from "./copy";

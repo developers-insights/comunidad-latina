@@ -15,33 +15,33 @@ import {
   type EmploymentType,
   type JobQuestion,
 } from "@/components/empleos/helpers";
+import {
+  isVisibleToEmployer,
+  toJobApplicationStatus,
+  type JobApplicationStatus,
+} from "@/lib/empleos/application-status";
 import { timeAgo } from "@/lib/utils";
 
 /**
  * LECTURAS de Empleos. Un empleo es un `listings` kind='job' (0004) — no hay
- * tabla de avisos propia; lo único nuevo es `job_applications` (0040).
+ * tabla de avisos propia; lo nuevo son `job_applications` (0040/0047),
+ * `job_application_notes` y `saved_candidates`.
  *
  * Todo con el cliente del USUARIO: la RLS decide qué se ve. El listado es
- * contenido `published` (lectura pública a propósito), mientras que las
- * postulaciones solo las ven las partes — `job_applications_select` filtra por
- * postulante o dueño del aviso, así que acá no hay que re-chequear el rol.
+ * contenido `published` (lectura pública a propósito); las postulaciones solo
+ * las ven las partes — `job_applications_select` (0042) filtra por postulante
+ * o por DUEÑO DEL AVISO, así que acá no hay que re-chequear el rol.
+ *
+ * ── LO QUE ESTE ARCHIVO NO HACE, Y ES DELIBERADO ───────────────────────────
+ * · No devuelve NUNCA `cv_url` al componente. El path del archivo se queda en
+ *   el servidor; la pantalla recibe un booleano ("tiene currículum") y pide la
+ *   URL firmada por action cuando alguien la toca. Un path en el HTML es un
+ *   path que se puede probar contra el endpoint público.
+ * · No lee `job_application_notes` de nadie más que su propio autor — que es
+ *   además lo único que la policy permite.
  */
 
 const PAGE_SIZE = 12;
-
-type ApplicationStatus = "submitted" | "accepted" | "declined" | "withdrawn";
-
-const APPLICATION_STATUSES = new Set<string>([
-  "submitted",
-  "accepted",
-  "declined",
-  "withdrawn",
-]);
-
-/** `status` viene como text de la DB; si llegara algo raro degrada a submitted. */
-function toApplicationStatus(raw: string | null | undefined): ApplicationStatus {
-  return raw && APPLICATION_STATUSES.has(raw) ? (raw as ApplicationStatus) : "submitted";
-}
 
 // ---------------------------------------------------------------------------
 // Listado
@@ -143,13 +143,13 @@ export async function fetchJobsPage(input: {
 }
 
 // ---------------------------------------------------------------------------
-// Postulación del viewer
+// Postulación del viewer sobre UN aviso
 // ---------------------------------------------------------------------------
 
 /** Estado de la postulación del viewer sobre un aviso (null = nunca postuló). */
 export type ViewerApplication = {
   id: string;
-  status: ApplicationStatus;
+  status: JobApplicationStatus;
 };
 
 export async function fetchViewerApplication(
@@ -168,75 +168,328 @@ export async function fetchViewerApplication(
     console.warn("[empleos] no se pudo leer la postulación propia", { code: error.code });
     return null;
   }
-  return data ? { id: data.id, status: toApplicationStatus(data.status) } : null;
+  return data ? { id: data.id, status: toJobApplicationStatus(data.status) } : null;
 }
 
 // ---------------------------------------------------------------------------
-// Postulaciones recibidas (vista del dueño del aviso)
+// "Mis postulaciones" (vista del candidato)
 // ---------------------------------------------------------------------------
 
-/** Fila lista-para-render de la vista del dueño (respuestas ya etiquetadas). */
-export type JobApplicationView = {
+export type MyApplication = {
   id: string;
-  applicantId: string;
-  displayName: string;
-  avatarUrl: string | null;
-  status: ApplicationStatus;
-  message: string | null;
-  /** Pregunta legible + respuesta legible ("Sí"/"No" u opción elegida). */
-  answers: Array<{ question: string; answer: string }>;
+  jobId: string;
+  jobTitle: string;
+  salaryLabel: string | null;
+  areaLabel: string | null;
+  /** El aviso puede haberse despublicado: lo decimos en vez de ocultar la fila. */
+  jobIsOpen: boolean;
+  status: JobApplicationStatus;
   createdAtLabel: string;
-  trust: { score: number; level: string } | null;
+  updatedAtLabel: string;
+  hasCv: boolean;
+  portfolioLinks: string[];
+  shareProfile: boolean;
+  message: string | null;
 };
 
-export async function fetchJobApplications(
-  jobId: string,
-  questions: JobQuestion[],
-): Promise<JobApplicationView[]> {
+/**
+ * Todas las postulaciones de una persona, la más reciente arriba.
+ *
+ * Incluye las retiradas: para el CANDIDATO su propio historial es información
+ * legítima ("¿me postulé a este aviso o me lo imaginé?"). Lo que desaparece al
+ * retirarse es la fila en la bandeja del DUEÑO, que es la promesa real.
+ */
+export async function fetchMyApplications(input: {
+  tenantId: string;
+  viewerId: string;
+}): Promise<MyApplication[]> {
   const supabase = await createClient();
-  // Sin 'withdrawn': el copy le promete al postulante que al retirarse su
-  // postulación deja de verse — la query cumple esa promesa. Y con tope: un
-  // aviso viral no puede tumbar la página de su dueño trayendo todo.
+
   const { data: rows, error } = await supabase
     .from("job_applications")
-    .select("id, applicant_id, status, message, answers, created_at")
-    .eq("job_id", jobId)
-    .neq("status", "withdrawn")
+    .select(
+      "id, job_id, status, message, cv_url, portfolio_links, share_profile, created_at, updated_at",
+    )
+    .eq("tenant_id", input.tenantId)
+    .eq("applicant_id", input.viewerId)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(100);
 
   if (error) {
-    console.warn("[empleos] query de postulaciones falló", { code: error.code });
+    console.warn("[empleos] query de mis postulaciones falló", { code: error.code });
     return [];
   }
-
   const applications = rows ?? [];
   if (applications.length === 0) return [];
 
-  // Batch de perfil + confianza (espejo de OwnerApplications en creadores).
-  const applicantIds = [...new Set(applications.map((row) => row.applicant_id))];
-  const [{ data: profiles }, { data: trusts }] = await Promise.all([
-    supabase.from("profiles").select("id, display_name, avatar_url").in("id", applicantIds),
-    supabase.from("trust_scores").select("profile_id, score, level").in("profile_id", applicantIds),
-  ]);
-
-  const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
-  const trustById = new Map((trusts ?? []).map((t) => [t.profile_id, t]));
+  const jobIds = [...new Set(applications.map((row) => row.job_id))];
+  const { data: jobs } = await supabase
+    .from("listings")
+    .select("id, title, status, area_label, price_amount, price_currency, price_period")
+    .in("id", jobIds);
+  const jobById = new Map((jobs ?? []).map((job) => [job.id, job]));
   const now = new Date();
 
   return applications.map((row) => {
-    const profile = profileById.get(row.applicant_id);
-    const trust = trustById.get(row.applicant_id);
+    const job = jobById.get(row.job_id);
     return {
       id: row.id,
-      applicantId: row.applicant_id,
-      displayName: profile?.display_name ?? "Alguien de la comunidad",
-      avatarUrl: profile?.avatar_url ?? null,
-      status: toApplicationStatus(row.status),
-      message: row.message,
-      answers: labelJobAnswers(questions, row.answers),
+      jobId: row.job_id,
+      jobTitle: job?.title ?? "Aviso no disponible",
+      salaryLabel: job
+        ? formatListingPrice(job.price_amount, job.price_currency, job.price_period)
+        : null,
+      areaLabel: job?.area_label ?? null,
+      jobIsOpen: job?.status === "published",
+      status: toJobApplicationStatus(row.status),
       createdAtLabel: timeAgo(row.created_at, now),
-      trust: trust ? { score: trust.score, level: toTrustLevel(trust.level) } : null,
+      updatedAtLabel: timeAgo(row.updated_at, now),
+      // Booleano, nunca el path: ver la nota de arriba.
+      hasCv: Boolean(row.cv_url),
+      portfolioLinks: row.portfolio_links ?? [],
+      shareProfile: row.share_profile,
+      message: row.message,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// "Candidatos" (vista de quien PUBLICÓ el aviso)
+// ---------------------------------------------------------------------------
+
+/**
+ * Una candidatura lista para render.
+ *
+ * `profile` viene en null cuando la persona NO compartió su perfil
+ * (`share_profile = false`): el consentimiento se respeta acá, en la lectura,
+ * no en el render — así el dato ni siquiera entra al payload RSC que viaja al
+ * navegador. Mismo criterio que `discloseApplication` en /admin/empleos.
+ */
+export type JobCandidateView = {
+  id: string;
+  /**
+   * SOLO cuando la persona compartió su perfil. Sin consentimiento, su id ni
+   * siquiera viaja al navegador: con el id, "no comparto mi perfil" duraría lo
+   * que tarda alguien en escribir /perfil/{id} a mano.
+   */
+  applicantId: string | null;
+  status: JobApplicationStatus;
+  createdAtLabel: string;
+  message: string | null;
+  answers: Array<{ question: string; answer: string }>;
+  hasCv: boolean;
+  portfolioLinks: string[];
+  /** null = la persona eligió no compartir su perfil con quien contrata. */
+  profile: {
+    displayName: string;
+    avatarUrl: string | null;
+    areaLabel: string | null;
+    identityVerified: boolean;
+    trust: { score: number; level: string; signals: unknown } | null;
+  } | null;
+  /** Nota privada de quien mira. El candidato jamás la recibe. */
+  note: string | null;
+  saved: boolean;
+};
+
+export type JobCandidatesResult = {
+  candidates: JobCandidateView[];
+  /** Postulaciones todavía sin resolver — el número que le importa al dueño. */
+  openCount: number;
+};
+
+export async function fetchJobCandidates(input: {
+  jobId: string;
+  tenantId: string;
+  viewerId: string;
+  questions: JobQuestion[];
+}): Promise<JobCandidatesResult> {
+  const supabase = await createClient();
+
+  // Sin 'withdrawn': el copy le promete al postulante que al retirarse su
+  // postulación deja de verse. Y con tope: un aviso viral no puede tumbar la
+  // página de su dueño trayendo todo.
+  const { data: rows, error } = await supabase
+    .from("job_applications")
+    .select(
+      "id, applicant_id, status, message, answers, cv_url, portfolio_links, share_profile, created_at",
+    )
+    .eq("job_id", input.jobId)
+    .eq("tenant_id", input.tenantId)
+    .neq("status", "withdrawn")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    console.warn("[empleos] query de candidatos falló", { code: error.code });
+    return { candidates: [], openCount: 0 };
+  }
+
+  const applications = (rows ?? []).filter((row) =>
+    isVisibleToEmployer(toJobApplicationStatus(row.status)),
+  );
+  if (applications.length === 0) return { candidates: [], openCount: 0 };
+
+  // Perfil + confianza solo de quienes SÍ compartieron su perfil: pedirle a la
+  // base los datos de los demás sería traerlos al servidor para descartarlos.
+  const sharedIds = [
+    ...new Set(
+      applications.filter((row) => row.share_profile).map((row) => row.applicant_id),
+    ),
+  ];
+  const applicationIds = applications.map((row) => row.id);
+  const candidateIds = [...new Set(applications.map((row) => row.applicant_id))];
+
+  const [{ data: profiles }, { data: trusts }, { data: notes }, { data: saved }] =
+    await Promise.all([
+      sharedIds.length
+        ? supabase
+            .from("profiles")
+            .select("id, display_name, avatar_url, area_label, identity_verified")
+            .in("id", sharedIds)
+        : Promise.resolve({
+            data: [] as Array<{
+              id: string;
+              display_name: string;
+              avatar_url: string | null;
+              area_label: string | null;
+              identity_verified: boolean;
+            }>,
+          }),
+      sharedIds.length
+        ? supabase
+            .from("trust_scores")
+            .select("profile_id, score, level, signals")
+            .in("profile_id", sharedIds)
+        : Promise.resolve({
+            data: [] as Array<{
+              profile_id: string;
+              score: number;
+              level: string;
+              signals: unknown;
+            }>,
+          }),
+      // Solo LAS PROPIAS: la policy no devolvería otras, y el filtro explícito
+      // deja escrito que acá no se leen notas de terceros ni por accidente.
+      supabase
+        .from("job_application_notes")
+        .select("application_id, note")
+        .eq("author_id", input.viewerId)
+        .in("application_id", applicationIds),
+      supabase
+        .from("saved_candidates")
+        .select("candidate_id")
+        .eq("employer_id", input.viewerId)
+        .in("candidate_id", candidateIds),
+    ]);
+
+  const profileById = new Map((profiles ?? []).map((row) => [row.id, row]));
+  const trustById = new Map((trusts ?? []).map((row) => [row.profile_id, row]));
+  const noteByApplication = new Map((notes ?? []).map((row) => [row.application_id, row.note]));
+  const savedIds = new Set((saved ?? []).map((row) => row.candidate_id));
+  const now = new Date();
+
+  const candidates: JobCandidateView[] = applications.map((row) => {
+    const status = toJobApplicationStatus(row.status);
+    const profile = row.share_profile ? profileById.get(row.applicant_id) : undefined;
+    const trust = profile ? trustById.get(row.applicant_id) : undefined;
+
+    return {
+      id: row.id,
+      applicantId: profile ? row.applicant_id : null,
+      status,
+      createdAtLabel: timeAgo(row.created_at, now),
+      message: row.message,
+      answers: labelJobAnswers(input.questions, row.answers),
+      hasCv: Boolean(row.cv_url),
+      portfolioLinks: row.portfolio_links ?? [],
+      profile: profile
+        ? {
+            displayName: profile.display_name,
+            avatarUrl: profile.avatar_url,
+            areaLabel: profile.area_label,
+            identityVerified: profile.identity_verified,
+            trust: trust
+              ? { score: trust.score, level: toTrustLevel(trust.level), signals: trust.signals }
+              : null,
+          }
+        : null,
+      note: noteByApplication.get(row.id) ?? null,
+      saved: savedIds.has(row.applicant_id),
+    };
+  });
+
+  return {
+    candidates,
+    openCount: candidates.filter(
+      (candidate) => candidate.status === "submitted" || candidate.status === "reviewing",
+    ).length,
+  };
+}
+
+/**
+ * Conteo para la tarjeta de la página de detalle: cuántas postulaciones tiene
+ * el aviso y cuántas siguen sin resolver. Es una lectura barata (head+count),
+ * no una versión reducida de la de arriba.
+ */
+export async function fetchJobApplicationCounts(input: {
+  jobId: string;
+  tenantId: string;
+}): Promise<{ total: number; open: number }> {
+  const supabase = await createClient();
+  const [{ count: total }, { count: open }] = await Promise.all([
+    supabase
+      .from("job_applications")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", input.jobId)
+      .eq("tenant_id", input.tenantId)
+      .neq("status", "withdrawn"),
+    supabase
+      .from("job_applications")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", input.jobId)
+      .eq("tenant_id", input.tenantId)
+      .in("status", ["submitted", "reviewing"]),
+  ]);
+  return { total: total ?? 0, open: open ?? 0 };
+}
+
+/**
+ * Datos del perfil que se le ofrecen a quien va a postularse, para que no
+ * vuelva a escribir lo mismo en cada aviso. Se muestran ANTES de enviar, con
+ * el interruptor para no compartirlos.
+ */
+export type ApplicantProfilePreview = {
+  displayName: string;
+  avatarUrl: string | null;
+  areaLabel: string | null;
+  identityVerified: boolean;
+  trust: { score: number; level: string } | null;
+};
+
+export async function fetchApplicantProfilePreview(
+  viewerId: string,
+): Promise<ApplicantProfilePreview | null> {
+  const supabase = await createClient();
+  const [{ data: profile }, { data: trust }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("display_name, avatar_url, area_label, identity_verified")
+      .eq("id", viewerId)
+      .maybeSingle(),
+    supabase
+      .from("trust_scores")
+      .select("score, level")
+      .eq("profile_id", viewerId)
+      .maybeSingle(),
+  ]);
+
+  if (!profile) return null;
+  return {
+    displayName: profile.display_name,
+    avatarUrl: profile.avatar_url,
+    areaLabel: profile.area_label,
+    identityVerified: profile.identity_verified,
+    trust: trust ? { score: trust.score, level: toTrustLevel(trust.level) } : null,
+  };
 }

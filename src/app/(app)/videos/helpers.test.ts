@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { VIDEO_CATEGORIES } from "@/lib/media/video-policy";
 import {
+  ALL_CATEGORIES,
   VIDEO_SCOPES,
+  categoryFilterValue,
   firstParamValue,
   hasVideoMedia,
   parseStartId,
+  parseVideoCategoryParam,
   parseVideosScope,
   scopeListingKind,
+  shouldShowCategoryMenu,
 } from "./helpers";
 
 describe("parseVideosScope", () => {
@@ -74,5 +79,75 @@ describe("firstParamValue", () => {
     expect(firstParamValue("a")).toBe("a");
     expect(firstParamValue(["b", "c"])).toBe("b");
     expect(firstParamValue(undefined)).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Menú de categorías (call 29/7, 1:20)
+// ---------------------------------------------------------------------------
+
+describe("parseVideoCategoryParam", () => {
+  it("acepta las nueve categorías del catálogo", () => {
+    for (const category of VIDEO_CATEGORIES) {
+      expect(parseVideoCategoryParam(category)).toBe(category);
+    }
+  });
+
+  it("acepta 'todos', que NO es una categoría de la base", () => {
+    expect(parseVideoCategoryParam(ALL_CATEGORIES)).toBe("todos");
+    expect(VIDEO_CATEGORIES).not.toContain("todos");
+  });
+
+  it("ausente y basura son null — y null NO es 'todos'", () => {
+    // De esta diferencia depende qué pantalla se ve: null = mostrar el menú.
+    expect(parseVideoCategoryParam(undefined)).toBeNull();
+    expect(parseVideoCategoryParam("")).toBeNull();
+    expect(parseVideoCategoryParam("   ")).toBeNull();
+    expect(parseVideoCategoryParam("recetas")).toBeNull();
+    expect(parseVideoCategoryParam("COMIDA")).toBeNull();
+    expect(parseVideoCategoryParam("comida'; drop table posts")).toBeNull();
+  });
+});
+
+describe("categoryFilterValue", () => {
+  it("'todos' y null no filtran; una categoría sí", () => {
+    expect(categoryFilterValue(null)).toBeNull();
+    expect(categoryFilterValue(ALL_CATEGORIES)).toBeNull();
+    expect(categoryFilterValue("comida")).toBe("comida");
+  });
+});
+
+describe("shouldShowCategoryMenu", () => {
+  it("entrar a /videos pelado abre el MENÚ (antes arrancaba reproduciendo)", () => {
+    expect(
+      shouldShowCategoryMenu({ category: null, startId: null, rawScope: "" }),
+    ).toBe(true);
+  });
+
+  it("un deep link con ?start= va DERECHO al video, sin menú de por medio", () => {
+    // Es el link que se comparte y el que abre un video tocado en el feed:
+    // interponer una pantalla de categorías lo rompería.
+    expect(
+      shouldShowCategoryMenu({
+        category: null,
+        startId: "0198c9a1-1111-7222-8333-444455556666",
+        rawScope: "",
+      }),
+    ).toBe(false);
+  });
+
+  it("?scope= sigue abriendo el reel del módulo, sin menú", () => {
+    expect(
+      shouldShowCategoryMenu({ category: null, startId: null, rawScope: "negocios" }),
+    ).toBe(false);
+  });
+
+  it("con categoría elegida (incluida 'todos') se ve el reel", () => {
+    expect(
+      shouldShowCategoryMenu({ category: "comida", startId: null, rawScope: "" }),
+    ).toBe(false);
+    expect(
+      shouldShowCategoryMenu({ category: ALL_CATEGORIES, startId: null, rawScope: "" }),
+    ).toBe(false);
   });
 });

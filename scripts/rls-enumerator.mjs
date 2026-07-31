@@ -51,7 +51,19 @@ const GLOBAL_TABLES_BY_DESIGN = {
   broadcast_receipts: 'receipt (broadcast, profile) — el tenant vive en profiles (0010)',
 };
 
-const STORAGE_BUCKETS = ['avatars', 'listing-photos', 'tenant-assets'];
+/**
+ * Buckets auditados: se les exige existir y tener policy para los 4 cmds.
+ *  - avatars / listing-photos / tenant-assets — 0012_storage.sql
+ *  - post-media   — 0025_post_media_storage.sql. Estaba fuera de esta lista
+ *    desde que se creó: existía con sus 4 policies pero NADIE lo auditaba, que
+ *    es exactamente el modo de falla que este script documenta arriba ("la
+ *    policy que nunca se escribió"). Se suma en 0047.
+ *  - job-cvs      — 0047_empleos_reclutamiento.sql. PRIVADO (public=false): el
+ *    currículum lleva nombre, teléfono y trayectoria laboral de una persona; en
+ *    un bucket público la URL sería la autorización. Es el bucket donde una
+ *    policy floja duele más de todo el proyecto.
+ */
+const STORAGE_BUCKETS = ['avatars', 'listing-photos', 'tenant-assets', 'post-media', 'job-cvs'];
 const CMDS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'];
 const SUFFIX_BY_CMD = { SELECT: 'select', INSERT: 'insert', UPDATE: 'update', DELETE: 'delete' };
 

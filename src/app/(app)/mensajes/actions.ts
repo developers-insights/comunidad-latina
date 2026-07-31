@@ -159,9 +159,13 @@ export async function sendMessageAction(input: {
       tenantId: conversation.tenant_id,
       profileId: recipientId,
       kind: "message",
+      category: "mensajes",
       title: me?.display_name
         ? `${me.display_name} te escribió`
         : "Tenés un mensaje nuevo",
+      // PRIVACIDAD: el cuerpo NUNCA lleva el texto del mensaje. La bandeja se
+      // ve en pantallas compartidas y de costado; quién te escribió es dato de
+      // la conversación, qué te escribió es de la conversación.
       body: "Abrí la conversación para leerlo.",
       href: `/mensajes/${conversationId}`,
       dedupeUnread: true,

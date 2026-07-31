@@ -28,16 +28,31 @@ const COPY = {
   anonymous: "Postulación",
   answersTitle: "Sus respuestas",
   messageTitle: "Su nota",
+  // Vocabulario del embudo de 0047. Se mantienen las claves viejas
+  // (accepted/declined) porque una fila migrada antes del deploy podría
+  // llegar con ellas: mostrar "Contratado" es siempre mejor que la palabra
+  // cruda de la base. El panel del staff resuelve en dos pasos, así que
+  // reviewing/interview no aparecen acá — los mueve el dueño del aviso.
   statusLabel: {
     submitted: "Sin responder",
-    accepted: "Aceptada",
-    declined: "Rechazada",
+    reviewing: "En revisión",
+    interview: "Entrevista",
+    hired: "Contratado",
+    rejected: "No seleccionado",
+    closed: "Vacante cerrada",
+    accepted: "Contratado",
+    declined: "No seleccionado",
   } as Record<string, string>,
   actingNote: "Al responder, le avisamos en nombre del equipo de la comunidad.",
 } as const;
 
 const STATUS_VARIANT: Record<string, NonNullable<BadgeProps["variant"]>> = {
   submitted: "info",
+  reviewing: "info",
+  interview: "warning",
+  hired: "success",
+  rejected: "neutral",
+  closed: "neutral",
   accepted: "success",
   declined: "neutral",
 };

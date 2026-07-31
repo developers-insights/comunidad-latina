@@ -8,7 +8,14 @@ export interface CardMediaProps {
   fallbackSrc: string;
   /** Decorativa por default (alt="") — pasar alt solo si la foto ES el contenido. */
   alt?: string;
-  /** 16:9 default (la estética de Propiedades que pidió el cliente). */
+  /**
+   * Proporción del recuadro de media.
+   *
+   * El default sigue siendo `video` (16:9) por retrocompatibilidad, pero la
+   * proporción de TARJETA de la app es `portrait` (4:5): el cliente pidió el
+   * 2026-07-30 que "todas las tarjetas de todos tengan el mismo tamaño", y
+   * quien decidía era este prop. Ver `CARD_MEDIA_ASPECT`.
+   */
   aspect?: "video" | "square" | "portrait";
   sizes?: string;
   /** Allowlist en next.config.ts: [62, 75]. 62 en tarjetas chicas (§perf). */
@@ -22,11 +29,36 @@ export interface CardMediaProps {
   overlayBottom?: React.ReactNode;
 }
 
-const ASPECT: Record<NonNullable<CardMediaProps["aspect"]>, string> = {
+export type CardMediaAspect = NonNullable<CardMediaProps["aspect"]>;
+
+/**
+ * LA ÚNICA TABLA DE PROPORCIONES DE LA APP.
+ *
+ * Estaba duplicada textualmente en `components/directory/module-media.tsx`
+ * (`ASPECT_CLASS`), que es la que usan las tarjetas de Negocios y Empleos. Dos
+ * copias de la misma tabla no se ven distintas hasta que alguien toca UNA —
+ * y entonces media app cambia de proporción y la otra media no. Se exporta
+ * para que ese archivo la importe en vez de re-declararla.
+ */
+export const CARD_MEDIA_ASPECT: Record<CardMediaAspect, string> = {
   video: "aspect-video",
   square: "aspect-square",
   portrait: "aspect-[4/5]",
 };
+
+/**
+ * La proporción con la que se dibuja una TARJETA de listado en esta app.
+ *
+ * Pedido textual del cliente (call 29/7, 1:05): «todas las tarjetas de todos
+ * tienen que ser igual, el mismo tamaño». La única excepción son los videos,
+ * que conservan su formato vertical propio en /videos.
+ *
+ * Existe como constante y no como literal repetido para que la próxima tarjeta
+ * que alguien escriba herede la decisión en vez de re-elegirla.
+ */
+export const LISTING_CARD_ASPECT: CardMediaAspect = "portrait";
+
+const ASPECT = CARD_MEDIA_ASPECT;
 
 /**
  * Franja de VIDRIO ("tipo iPhone" — feedback cliente 2026-07-24) para el

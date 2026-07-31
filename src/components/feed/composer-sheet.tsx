@@ -3,6 +3,11 @@
 import { Check, Plus, VideoCamera, X } from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { formatDuration, type VideoCategory } from "@/lib/media/video-policy";
+import {
+  VIDEO_CATEGORY_LABELS,
+  VIDEO_CATEGORY_ORDER,
+} from "@/app/(app)/videos/copy";
 import { COPY } from "./copy";
 import { QuestionBanner } from "./question-banner";
 import { TextBanner } from "./text-banner";
@@ -38,6 +43,8 @@ export interface ComposerMediaItem {
   kind: "photo" | "video";
   /** URL local (blob:) de la vista previa. */
   preview: string;
+  /** Duración medida del video, en segundos (sólo en `kind: "video"`). */
+  durationSeconds?: number;
 }
 
 export interface ComposerSheetProps {
@@ -54,10 +61,15 @@ export interface ComposerSheetProps {
   onRemoveMedia: (id: string) => void;
   pollEnabled: boolean;
   onPollChange: (next: boolean) => void;
+  /** Categoría de Videos Cortos elegida (0046). Sólo se usa si hay video. */
+  videoCategory: VideoCategory;
+  onVideoCategoryChange: (next: VideoCategory) => void;
   /** Id estable de la sesión: fija la variante de color de la vista previa. */
   previewId: string;
   /** Progreso real de la subida del video, o null si no hay ninguna en curso. */
   uploadPct: number | null;
+  /** Leyendo la duración del archivo recién elegido (antes de subir nada). */
+  measuringVideo?: boolean;
   isPending: boolean;
   onPublish: () => void;
 }
@@ -156,8 +168,11 @@ export function ComposerSheet({
   onRemoveMedia,
   pollEnabled,
   onPollChange,
+  videoCategory,
+  onVideoCategoryChange,
   previewId,
   uploadPct,
+  measuringVideo = false,
   isPending,
   onPublish,
 }: ComposerSheetProps) {
@@ -285,9 +300,12 @@ export function ComposerSheet({
                           preload="metadata"
                           className="absolute inset-0 size-full object-cover"
                         />
+                        {/* La DURACIÓN medida, no la palabra "Video": es el
+                            dato que importa cuando el tope son 90 s, y ya lo
+                            tenemos —se midió antes de aceptar el archivo. */}
                         <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-full bg-media-scrim px-2 py-0.5 text-xs font-semibold text-on-media">
                           <VideoCamera size={12} weight="fill" aria-hidden="true" />
-                          {COPY.composer.videoChip}
+                          {formatDuration(item.durationSeconds) ?? COPY.composer.videoChip}
                         </span>
                       </>
                     )}
@@ -349,6 +367,61 @@ export function ComposerSheet({
               <p className="mt-2 text-xs text-foreground-muted">
                 {COPY.composer.compose.mediaCount(photos.length, hasVideo)}
               </p>
+            )}
+
+            {/* Midiendo el archivo recién elegido: es una espera corta pero
+                REAL (el navegador baja la cabecera del contenedor), y sin aviso
+                parecería que el botón no hizo nada. */}
+            {measuringVideo && (
+              <p role="status" className="mt-2 text-xs font-medium text-foreground-secondary">
+                {COPY.composer.videoMeasuring}
+              </p>
+            )}
+
+            {/* CATEGORÍA DE VIDEOS CORTOS (0046). Sólo aparece cuando hay un
+                video: en una publicación de fotos no significa nada, y la base
+                la rechaza sin video. Radios reales (no botones con aria): dentro
+                de una hoja con trampa de foco, las flechas del teclado tienen
+                que moverse entre opciones sin que lo implementemos a mano. */}
+            {hasVideo && (
+              <fieldset className="mt-4" disabled={isPending}>
+                <legend className="text-sm font-semibold text-foreground">
+                  {COPY.composer.compose.videoCategoryLabel}
+                </legend>
+                <p className="mt-0.5 text-xs text-foreground-secondary">
+                  {COPY.composer.compose.videoCategoryHint}
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  {VIDEO_CATEGORY_ORDER.map((category) => (
+                    <label key={category} className="cursor-pointer">
+                      <input
+                        type="radio"
+                        name="composer-video-category"
+                        value={category}
+                        checked={videoCategory === category}
+                        onChange={() => onVideoCategoryChange(category)}
+                        className="peer sr-only"
+                      />
+                      <span
+                        className={cn(
+                          "inline-flex min-h-11 items-center rounded-full border px-4 text-sm font-medium",
+                          "border-border bg-surface text-foreground-secondary",
+                          "transition-colors duration-(--duration-fast)",
+                          "hover:bg-surface-hover",
+                          // El estado seleccionado se lee por relleno Y por
+                          // peso, no sólo por color.
+                          "peer-checked:border-brand peer-checked:bg-brand-tint",
+                          "peer-checked:font-semibold peer-checked:text-brand-ink",
+                          "peer-focus-visible:outline-none peer-focus-visible:ring-[3px] peer-focus-visible:ring-focus-ring",
+                          "peer-disabled:opacity-45",
+                        )}
+                      >
+                        {VIDEO_CATEGORY_LABELS[category]}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
             )}
           </>
         )}

@@ -13,8 +13,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *  - Aviso propio → `own-job` con copy amable (no un error rojo).
  *  - Respuesta incompleta → `invalid` sin llegar al insert.
  *  - 23505 (unique job+applicant) → `alreadyApplied`, no un error.
- *  - Aceptar una postulación: UPDATE optimista sobre 'submitted' (la RLS decide
- *    el rol) + aviso al postulante.
+ *  - CURRÍCULUM: un path del prefijo AJENO no se persiste nunca, y el tipo/peso
+ *    se validan con los metadatos REALES del objeto en Storage, no con lo que
+ *    declaró el navegador.
+ *  - EMBUDO: la action no intenta una transición que la base va a rechazar, y
+ *    el UPDATE es optimista sobre el estado que leyó (control de concurrencia).
  */
 
 const mocks = vi.hoisted(() => ({
@@ -44,7 +47,11 @@ vi.mock("@/lib/email/templates", () => ({
   applicationReceivedEmail: mocks.applicationReceivedEmail,
 }));
 
-import { applyToJobAction, updateJobApplicationAction } from "./actions";
+import {
+  advanceJobApplicationAction,
+  applyToJobAction,
+  withdrawJobApplicationAction,
+} from "./actions";
 
 /* -------------------------------- Fixtures -------------------------------- */
 
@@ -53,6 +60,9 @@ const USER_ID = "99999999-9999-4999-8999-999999999999";
 const OWNER_ID = "88888888-8888-4888-8888-888888888888";
 const JOB_ID = "44444444-4444-4444-8444-444444444444";
 const APPLICATION_ID = "66666666-6666-4666-8666-666666666666";
+
+const OWN_CV_PATH = `${TENANT_ID}/${USER_ID}/cv-abc.pdf`;
+const OTHER_CV_PATH = `${TENANT_ID}/${OWNER_ID}/cv-secreto.pdf`;
 
 const QUESTIONS = [
   { id: "q1", type: "yes_no", label: "¿Tenés experiencia cuidando niños?" },
@@ -95,9 +105,24 @@ function createSupabaseStub(
     insert?: OpResult;
     application?: OpResult;
     update?: OpResult;
+    /** Metadatos que devuelve Storage para el objeto del CV. */
+    cvInfo?: OpResult;
   } = {},
 ) {
   const calls: RecordedCall[] = [];
+  const removed: string[][] = [];
+
+  const storage = {
+    from: vi.fn(() => ({
+      info: vi.fn(async () =>
+        config.cvInfo ?? { data: { size: 1024, contentType: "application/pdf" }, error: null },
+      ),
+      remove: vi.fn(async (paths: string[]) => {
+        removed.push(paths);
+        return { data: null, error: null };
+      }),
+    })),
+  };
 
   const resolveFor = (table: string, mode: string): OpResult => {
     if (table === "listings") {
@@ -108,7 +133,12 @@ function createSupabaseStub(
       if (mode === "update") return config.update ?? { data: { id: APPLICATION_ID }, error: null };
       return (
         config.application ?? {
-          data: { id: APPLICATION_ID, job_id: JOB_ID, applicant_id: USER_ID },
+          data: {
+            id: APPLICATION_ID,
+            job_id: JOB_ID,
+            applicant_id: USER_ID,
+            status: "submitted",
+          },
           error: null,
         }
       );
@@ -145,7 +175,7 @@ function createSupabaseStub(
     return builder;
   });
 
-  return { client: { from }, from, calls };
+  return { client: { from, storage }, from, calls, removed };
 }
 
 function useGuardOk(config: Parameters<typeof createSupabaseStub>[0] = {}) {
@@ -190,6 +220,9 @@ describe("applyToJobAction", () => {
       applicant_id: USER_ID,
       message: "Puedo empezar la semana que viene.",
       answers: VALID_ANSWERS,
+      cv_url: null,
+      portfolio_links: [],
+      share_profile: true,
     });
     expect(mocks.revalidatePath).toHaveBeenCalledWith(`/empleos/${JOB_ID}`);
   });
@@ -205,7 +238,24 @@ describe("applyToJobAction", () => {
         tenantId: TENANT_ID,
         profileId: OWNER_ID,
         kind: "job_application",
-        href: `/empleos/${JOB_ID}`,
+        href: `/empleos/${JOB_ID}/candidatos`,
+        category: "trabajos",
+      }),
+    );
+  });
+
+  it("también le confirma al postulante que su solicitud salió", async () => {
+    useGuardOk();
+
+    await applyToJobAction({ jobId: JOB_ID, answers: VALID_ANSWERS });
+
+    expect(mocks.createNotification).toHaveBeenCalledWith(
+      { admin: true },
+      expect.objectContaining({
+        profileId: USER_ID,
+        kind: "job_application_sent",
+        href: "/empleos/mis-aplicaciones",
+        category: "trabajos",
       }),
     );
   });
@@ -322,80 +372,268 @@ describe("applyToJobAction", () => {
   });
 });
 
-/* ------------------------ updateJobApplicationAction ----------------------- */
+/* --------------------------- El currículum adjunto ------------------------- */
 
-describe("updateJobApplicationAction", () => {
-  it("acepta la postulación con UPDATE optimista sobre 'submitted'", async () => {
+describe("applyToJobAction · currículum", () => {
+  it("persiste la ruta cuando es del prefijo propio y el objeto es un PDF de buen peso", async () => {
+    const stub = useGuardOk();
+
+    const result = await applyToJobAction({
+      jobId: JOB_ID,
+      answers: VALID_ANSWERS,
+      cvPath: OWN_CV_PATH,
+    });
+
+    expect(result).toEqual({ ok: true });
+    const inserted = stub.calls.find((call) => call.method === "insert");
+    expect((inserted?.args[0] as { cv_url: string }).cv_url).toBe(OWN_CV_PATH);
+  });
+
+  it("RECHAZA el path de OTRA persona sin tocar Storage ni la base", async () => {
+    const stub = useGuardOk();
+
+    const result = await applyToJobAction({
+      jobId: JOB_ID,
+      answers: VALID_ANSWERS,
+      cvPath: OTHER_CV_PATH,
+    });
+
+    if (result.ok) throw new Error("esperaba fallo");
+    expect(result.code).toBe("cv");
+    expect(stub.calls.some((call) => call.method === "insert")).toBe(false);
+    // Y no se borra: el archivo es de otra persona, no nuestro para tocarlo.
+    expect(stub.removed).toEqual([]);
+  });
+
+  it("rechaza el objeto que Storage registró como otra cosa (el File.type mentía)", async () => {
     const stub = useGuardOk({
-      application: {
-        data: { id: APPLICATION_ID, job_id: JOB_ID, applicant_id: USER_ID },
+      cvInfo: { data: { size: 2048, contentType: "text/html" }, error: null },
+    });
+
+    const result = await applyToJobAction({
+      jobId: JOB_ID,
+      answers: VALID_ANSWERS,
+      cvPath: OWN_CV_PATH,
+    });
+
+    if (result.ok) throw new Error("esperaba fallo");
+    expect(result.code).toBe("cv");
+    expect(stub.calls.some((call) => call.method === "insert")).toBe(false);
+    // El objeto propio que no sirve se limpia, no queda de basura en el bucket.
+    expect(stub.removed).toEqual([[OWN_CV_PATH]]);
+  });
+
+  it("rechaza por peso con el tamaño REAL del objeto, no con el declarado", async () => {
+    useGuardOk({
+      cvInfo: {
+        data: { size: 6 * 1024 * 1024, contentType: "application/pdf" },
         error: null,
       },
     });
 
-    const result = await updateJobApplicationAction({
-      applicationId: APPLICATION_ID,
-      action: "accept",
+    const result = await applyToJobAction({
+      jobId: JOB_ID,
+      answers: VALID_ANSWERS,
+      cvPath: OWN_CV_PATH,
     });
 
-    expect(result).toEqual({ ok: true, status: "accepted" });
+    if (result.ok) throw new Error("esperaba fallo");
+    expect(result.code).toBe("cv");
+  });
+
+  it("un enlace de portafolio sin http(s) no llega al insert", async () => {
+    const stub = useGuardOk();
+
+    const result = await applyToJobAction({
+      jobId: JOB_ID,
+      answers: VALID_ANSWERS,
+      portfolioLinks: ["javascript:alert(1)"],
+    });
+
+    if (result.ok) throw new Error("esperaba fallo");
+    expect(result.code).toBe("portfolio");
+    expect(stub.from).not.toHaveBeenCalled();
+  });
+
+  it("share_profile=false viaja tal cual: el consentimiento es de la persona", async () => {
+    const stub = useGuardOk();
+
+    await applyToJobAction({
+      jobId: JOB_ID,
+      answers: VALID_ANSWERS,
+      shareProfile: false,
+    });
+
+    const inserted = stub.calls.find((call) => call.method === "insert");
+    expect((inserted?.args[0] as { share_profile: boolean }).share_profile).toBe(false);
+  });
+});
+
+/* ----------------------- advanceJobApplicationAction ----------------------- */
+
+describe("advanceJobApplicationAction", () => {
+  it("avanza a 'en revisión' con UPDATE optimista sobre el estado que leyó", async () => {
+    const stub = useGuardOk();
+
+    const result = await advanceJobApplicationAction({
+      applicationId: APPLICATION_ID,
+      next: "reviewing",
+    });
+
+    expect(result).toEqual({ ok: true, status: "reviewing" });
     const updated = stub.calls.find((call) => call.method === "update");
-    expect(updated?.args[0]).toEqual({ status: "accepted" });
-    // La transición solo aplica si seguía sin resolverse.
+    expect(updated?.args[0]).toEqual({ status: "reviewing" });
+    // Control de concurrencia: si alguien la movió mientras tanto, no hay fila.
     expect(stub.calls).toContainEqual({
       table: "job_applications",
       method: "eq",
       args: ["status", "submitted"],
     });
-    expect(mocks.revalidatePath).toHaveBeenCalledWith(`/empleos/${JOB_ID}`);
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(`/empleos/${JOB_ID}/candidatos`);
   });
 
-  it("le avisa al postulante con copy de buenas noticias", async () => {
+  it("NO intenta una transición que la base va a rechazar (contratado → rechazado)", async () => {
+    const stub = useGuardOk({
+      application: {
+        data: {
+          id: APPLICATION_ID,
+          job_id: JOB_ID,
+          applicant_id: USER_ID,
+          status: "hired",
+        },
+        error: null,
+      },
+    });
+
+    const result = await advanceJobApplicationAction({
+      applicationId: APPLICATION_ID,
+      next: "rejected",
+    });
+
+    if (result.ok) throw new Error("esperaba fallo");
+    expect(result.code).toBe("conflict");
+    // Ni siquiera se manda el UPDATE: el trigger habría tirado PROTECTED_TRANSITION.
+    expect(stub.calls.some((call) => call.method === "update")).toBe(false);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
+
+  it("tampoco deja retroceder de entrevista a en revisión", async () => {
+    const stub = useGuardOk({
+      application: {
+        data: {
+          id: APPLICATION_ID,
+          job_id: JOB_ID,
+          applicant_id: USER_ID,
+          status: "interview",
+        },
+        error: null,
+      },
+    });
+
+    const result = await advanceJobApplicationAction({
+      applicationId: APPLICATION_ID,
+      next: "reviewing",
+    });
+
+    if (result.ok) throw new Error("esperaba fallo");
+    expect(result.code).toBe("conflict");
+    expect(stub.calls.some((call) => call.method === "update")).toBe(false);
+  });
+
+  it("al contratar le avisa al postulante con copy de buenas noticias", async () => {
     useGuardOk();
 
-    await updateJobApplicationAction({ applicationId: APPLICATION_ID, action: "accept" });
+    await advanceJobApplicationAction({ applicationId: APPLICATION_ID, next: "hired" });
 
     expect(mocks.createNotification).toHaveBeenCalledWith(
       { admin: true },
       expect.objectContaining({
         profileId: USER_ID,
         kind: "job_application_update",
-        href: `/empleos/${JOB_ID}`,
-        title: expect.stringContaining("Te aceptaron"),
+        href: "/empleos/mis-aplicaciones",
+        category: "trabajos",
+        title: expect.stringContaining("Te eligieron"),
       }),
     );
   });
 
-  it("al retirarse la persona no se auto-notifica", async () => {
-    useGuardOk();
-
-    const result = await updateJobApplicationAction({
-      applicationId: APPLICATION_ID,
-      action: "withdraw",
-    });
-
-    expect(result).toEqual({ ok: true, status: "withdrawn" });
-    expect(mocks.createNotification).not.toHaveBeenCalled();
-  });
-
-  it("si la RLS no devuelve fila (no autorizado o ya resuelta) avisa sin inventar", async () => {
+  it("si la RLS no devuelve fila (aviso ajeno) avisa sin inventar", async () => {
     useGuardOk({ update: { data: null, error: null } });
 
-    const result = await updateJobApplicationAction({
+    const result = await advanceJobApplicationAction({
       applicationId: APPLICATION_ID,
-      action: "decline",
+      next: "rejected",
     });
 
     if (result.ok) throw new Error("esperaba fallo");
-    expect(result.code).toBe("error");
+    expect(result.code).toBe("conflict");
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("una acción desconocida muere en zod, antes del guard", async () => {
-    const result = await updateJobApplicationAction({
+  it("un estado que el empleador no puede escribir muere en zod, antes del guard", async () => {
+    const result = await advanceJobApplicationAction({
       applicationId: APPLICATION_ID,
-      action: "borrar" as "accept",
+      next: "withdrawn" as "hired",
     });
+
+    if (result.ok) throw new Error("esperaba fallo");
+    expect(result.code).toBe("invalid");
+    expect(mocks.requireTenantMatch).not.toHaveBeenCalled();
+  });
+});
+
+/* ----------------------- withdrawJobApplicationAction ---------------------- */
+
+describe("withdrawJobApplicationAction", () => {
+  it("retira la propia postulación y le avisa al dueño del aviso", async () => {
+    const stub = useGuardOk();
+
+    const result = await withdrawJobApplicationAction({ applicationId: APPLICATION_ID });
+
+    expect(result).toEqual({ ok: true });
+    const updated = stub.calls.find((call) => call.method === "update");
+    expect(updated?.args[0]).toEqual({ status: "withdrawn" });
+    // El filtro por applicant_id es explícito: retirarse es de quien se postuló.
+    expect(stub.calls).toContainEqual({
+      table: "job_applications",
+      method: "eq",
+      args: ["applicant_id", USER_ID],
+    });
+  });
+
+  it("quien se retira NO se auto-notifica: acaba de hacerlo con el dedo", async () => {
+    useGuardOk();
+
+    await withdrawJobApplicationAction({ applicationId: APPLICATION_ID });
+
+    const targets = (
+      mocks.createNotification.mock.calls as unknown as Array<[unknown, { profileId: string }]>
+    ).map(([, payload]) => payload.profileId);
+    expect(targets).not.toContain(USER_ID);
+  });
+
+  it("una postulación ya resuelta no se puede retirar", async () => {
+    const stub = useGuardOk({
+      application: {
+        data: {
+          id: APPLICATION_ID,
+          job_id: JOB_ID,
+          applicant_id: USER_ID,
+          status: "rejected",
+        },
+        error: null,
+      },
+    });
+
+    const result = await withdrawJobApplicationAction({ applicationId: APPLICATION_ID });
+
+    if (result.ok) throw new Error("esperaba fallo");
+    expect(result.code).toBe("conflict");
+    expect(stub.calls.some((call) => call.method === "update")).toBe(false);
+  });
+
+  it("un applicationId que no es uuid muere en zod, antes del guard", async () => {
+    const result = await withdrawJobApplicationAction({ applicationId: "no-es-uuid" });
 
     if (result.ok) throw new Error("esperaba fallo");
     expect(result.code).toBe("invalid");

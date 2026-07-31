@@ -303,7 +303,9 @@ describe("resolveJobApplication · efecto", () => {
     expect(state.status).toBe("success");
     const updated = stub.calls.find((call) => call.method === "update");
     expect(updated?.table).toBe("job_applications");
-    expect(updated?.args[0]).toEqual({ status: "accepted" });
+    // 0047 renombró el estado terminal: `accepted` ya no pasa el CHECK de la
+    // tabla, la acción tiene que escribir `hired`.
+    expect(updated?.args[0]).toEqual({ status: "hired" });
     expect(stub.calls).toContainEqual({
       table: "job_applications",
       method: "eq",

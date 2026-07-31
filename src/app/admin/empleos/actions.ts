@@ -16,9 +16,21 @@ import { canStaffResolve } from "./policy";
  *    camino que usa la respuesta del dueño en (app)/empleos/actions.ts.
  *  - No se hace pasar por el empleador. El copy dice que respondió el equipo de
  *    la comunidad, y el audit_log guarda QUIÉN del staff lo hizo.
- *  - No estrena semántica. Reusa la de la migración 0040: accepted/declined,
- *    monótona desde 'submitted' (el `.eq('status','submitted')` acá y el
- *    trigger `app.job_applications_freeze` en la DB dicen lo mismo).
+ *  - No estrena semántica. Reusa la del embudo de la migración 0047:
+ *    `hired`/`rejected`, monótona desde 'submitted' (el `.eq('status',
+ *    'submitted')` acá y el trigger `app.job_applications_freeze` en la DB
+ *    dicen lo mismo).
+ *
+ * ALINEACIÓN DE VOCABULARIO (2026-07-30). 0047 migró los estados:
+ * `accepted`→`hired` y `declined`→`rejected`, y el CHECK de la tabla dejó de
+ * admitir los viejos. Este archivo seguía escribiendo `accepted`/`declined`, o
+ * sea que el botón del panel fallaba con una violación de CHECK. Se cambian
+ * SOLO las dos constantes de estado: la política de divulgación (./policy.ts)
+ * y el gate `canStaffResolve` no se tocan — son otra cosa y están auditados.
+ *
+ * El panel del staff sigue teniendo DOS decisiones (contratar / no seleccionar)
+ * y no el embudo completo del dueño: mover a "en revisión" o "entrevista" es
+ * hablar por el empleador sobre un proceso que la plataforma no conduce.
  *
  * Y solo se habilita sobre avisos de la PLATAFORMA (sin dueño miembro, o
  * publicados por este mismo staff) — ver ./policy.ts para el porqué.
@@ -56,7 +68,8 @@ const resolveSchema = z.object({
   decision: z.enum(["accept", "decline"]),
 });
 
-const NEXT_STATUS = { accept: "accepted", decline: "declined" } as const;
+/** Vocabulario del embudo de 0047 — el CHECK de la tabla ya no admite otro. */
+const NEXT_STATUS = { accept: "hired", decline: "rejected" } as const;
 
 /**
  * Aviso al postulante. Nombra al actor con todas las letras: quien se postuló
@@ -193,6 +206,8 @@ export async function resolveJobApplication(
       tenantId: application.tenant_id,
       profileId: application.applicant_id,
       kind: "job_application_update",
+      category: "trabajos",
+      priority: "high",
       title: notice.title,
       body: notice.body,
       href: `/empleos/${application.job_id}`,

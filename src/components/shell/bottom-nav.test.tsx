@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { t } from "@/lib/i18n";
 import { BottomNav } from "./bottom-nav";
+
+/**
+ * La etiqueta sale del DICCIONARIO, no de un literal. El 2026-07-30 el módulo
+ * pasó a llamarse "Videos Cortos" (contrato §4) y estos tres tests se cayeron
+ * por buscar la cadena vieja: la pestaña estaba perfecta, el hardcode no.
+ */
+const VIDEOS = t("nav", "videos");
 
 /**
  * Barra 2026-07-29 (pedido de Manuel): Inicio · Buscar · [+] · Videos · Ajustes.
@@ -162,7 +170,7 @@ describe("BottomNav", () => {
   it("Videos NO enciende Buscar: es su propia pestaña", () => {
     renderAt("/videos");
     expect(screen.getByRole("link", { name: "Buscar" }).className).not.toContain("text-brand-ink");
-    expect(screen.getByRole("link", { name: "Videos" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: VIDEOS }).getAttribute("aria-current")).toBe("page");
   });
 
   it("las notificaciones sin leer avisan en Ajustes, que es donde viven", () => {
@@ -190,7 +198,7 @@ describe("BottomNav — módulos apagados desde el panel", () => {
   it("Videos apagado saca su pestaña SIN correr el '+' del centro", () => {
     renderAt("/feed", { modules: { feed: true, videos: false, mensajes: true }, modulesSoon: { videos: false } });
     expect(hrefs()).toEqual(["/feed", "/buscar", "/ajustes"]);
-    expect(screen.queryByRole("link", { name: "Videos" })).toBeNull();
+    expect(screen.queryByRole("link", { name: VIDEOS })).toBeNull();
     // El casillero queda vacío a propósito: la grilla es de cinco columnas y el
     // disparador tiene que seguir cayendo bajo el pulgar, en el medio.
     const casilleros = slots();

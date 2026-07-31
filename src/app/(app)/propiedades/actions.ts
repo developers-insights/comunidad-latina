@@ -145,6 +145,10 @@ export async function requestContactAction(
         tenantId: listing.tenant_id,
         profileId: listing.created_by,
         kind: "contact_request",
+        // Cae en "Mensajes" y no en "Propiedades": la solicitud abre una
+        // conversación (mismo criterio que el backfill de 0045).
+        category: "mensajes",
+        priority: "high",
         title: `Alguien quiere contactarte por "${listing.title}"`,
         body: "Entrá a Mensajes para aceptar o ignorar la solicitud.",
         href: "/mensajes",

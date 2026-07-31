@@ -217,9 +217,17 @@ function soloCodigo(src: string): string {
  */
 const RE_DARK = /\bdark:[a-z[(][^\s"'`]*/g;
 
-/** Los primitivos que NO voltean con el tema. `\b` evita comerse `auto-black`. */
+/**
+ * Los primitivos que NO voltean con el tema. `\b` evita comerse `auto-black`.
+ *
+ * `cream-\d+` entró el 2026-07-30 con la escala del lienzo crema. Es exactamente
+ * el mismo problema que `neutral-\d+` y de hecho uno peor: `bg-cream-50` se ve
+ * bien en light —es el color del lienzo— y en dark pinta un rectángulo crema
+ * sobre la página oscura. La escala existe SOLO para que los alias
+ * `--cl-light-*` la consuman; en JSX va `bg-canvas` / `bg-surface-subtle`.
+ */
 const RE_PRIMITIVO =
-  /\b(bg|text|border|from|to|via|ring|divide|placeholder|fill|stroke|decoration|caret|accent|outline|shadow)-(white|black|neutral-\d+)\b/g;
+  /\b(bg|text|border|from|to|via|ring|divide|placeholder|fill|stroke|decoration|caret|accent|outline|shadow)-(white|black|neutral-\d+|cream-\d+)\b/g;
 
 /** Hex CSS válido: 3, 4, 6 u 8 dígitos. `href="#faq"` no matchea; `#fff` sí. */
 const RE_HEX =
@@ -262,6 +270,11 @@ const REEMPLAZO: Record<string, string> = {
   "neutral-800": "bg-surface-inverse · bg-surface (dark)",
   "neutral-900": "text-foreground · bg-canvas (dark)",
   "neutral-950": "text-on-warning / text-on-success / text-on-danger · bg-media-shade",
+  "cream-25": "bg-canvas",
+  "cream-50": "bg-surface-subtle (y el shell del Double-Bezel)",
+  "cream-100": "bg-surface-hover · border-border-subtle",
+  "cream-200": "border-border",
+  "cream-300": "border-border-strong",
 };
 
 function sugerencia(match: string): string {
@@ -420,6 +433,8 @@ describe("los detectores detectan (y no se rompen con los falsos positivos reale
     ['<p className="from-black via-white to-neutral-900" />', true],
     ["// antes decía bg-neutral-800", false],
     ['<p className="bg-surface text-foreground-muted border-border" />', false],
+    ['<p className="bg-cream-50" />', true], // la escala del lienzo tampoco voltea
+    ['<p className="hover:bg-cream-100" />', true],
     ['<p className="bg-media-shade/92 text-on-media" />', false],
     ['style={{ color: "var(--color-neutral-500)" }}', false], // `color-` no está en la lista
     ['const clase = "auto-black";', false], // sin `\b`, `to-black` matcheaba acá adentro

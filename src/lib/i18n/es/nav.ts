@@ -5,7 +5,11 @@ export const nav = {
   // adentro de cada categoría ("cuando ya le dan clic en vivienda, ahí dentro
   // hay un search… apartamento, cuarto, de cuánto a cuánto").
   search: "Buscar",
-  videos: "Videos",
+  // "Videos Cortos" y no "Videos" (contrato 2026-07-30 §4): el nombre distingue
+  // el módulo del scroll de ≤90 s del video publicitario largo, que vive DENTRO
+  // de su anuncio y nunca acá. Esta clave gobierna la pestaña del bottom nav, el
+  // menú de módulos y /buscar — todos leen del diccionario, no del literal.
+  videos: "Videos Cortos",
   community: "Comunidad",
   messages: "Mensajes",
   profile: "Perfil",

@@ -11,6 +11,7 @@ import {
   Heart,
   Megaphone,
   ShareNetwork,
+  SlidersHorizontal,
   SpeakerHigh,
   SpeakerSlash,
 } from "@phosphor-icons/react/dist/ssr";
@@ -27,9 +28,14 @@ import {
 } from "@/app/(app)/feed/engagement-actions";
 import { useMounted } from "@/lib/design/use-overlay";
 import { cn } from "@/lib/utils";
+import {
+  isEligibleForShortFeed,
+  playbackCapSeconds,
+  type VideoCategory,
+} from "@/lib/media/video-policy";
 import { loadMoreVideosAction } from "./actions";
-import type { VideosScope } from "./helpers";
-import { VIDEOS_COPY } from "./copy";
+import { ALL_CATEGORIES, type VideoCategoryFilter, type VideosScope } from "./helpers";
+import { VIDEOS_COPY, VIDEO_CATEGORY_LABELS } from "./copy";
 
 /**
  * Reels vertical (pedido cliente 2026-07-21: "cuando un usuario abre un video
@@ -50,10 +56,29 @@ import { VIDEOS_COPY } from "./copy";
 
 const NEAR_END_THRESHOLD = 3;
 
+/**
+ * SEGUNDA LLAVE del scroll. La query ya trae sólo cortos elegibles; esto vuelve
+ * a preguntarlo con el mismo módulo de política antes de montar un slide. Es
+ * barato y cubre el caso que no se ve venir: una lista que llegue por otro
+ * camino (una acción nueva, un fixture) no puede convertir el reel en el lugar
+ * donde termina un video publicitario de 10 minutos.
+ */
+function reelPlayable(post: PostCardModel): boolean {
+  return isEligibleForShortFeed({
+    videoType: post.videoType,
+    eligibleForShortFeed: post.eligibleForShortFeed,
+    hasVideoMedia: post.media.some((item) => item.kind === "video"),
+    durationSeconds: post.durationSeconds,
+    isPaidAd: post.isPaidAd,
+  });
+}
+
 export interface VideoReelsProps {
   tenantId: string;
   viewerId: string | null;
   scope: VideosScope;
+  /** Tema elegido en el menú de entrada (para la cabecera y el scroll infinito). */
+  category?: VideoCategoryFilter | null;
   initialItems: PostCardModel[];
   initialCursor: string | null;
 }
@@ -62,10 +87,16 @@ export function VideoReels({
   tenantId,
   viewerId,
   scope,
+  category = null,
   initialItems,
   initialCursor,
 }: VideoReelsProps) {
-  const [items, setItems] = useState<PostCardModel[]>(initialItems);
+  // El filtro se aplica al ENTRAR al estado, no al pintar: el índice activo se
+  // calcula por posición de scroll, así que la lista que se renderiza y la que
+  // se indexa tienen que ser exactamente la misma.
+  const [items, setItems] = useState<PostCardModel[]>(() =>
+    initialItems.filter(reelPlayable),
+  );
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [activeIndex, setActiveIndex] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -91,10 +122,17 @@ export function VideoReels({
     loadingRef.current = true;
     setLoadingMore(true);
     try {
-      const page = await loadMoreVideosAction({ scope, cursor: current });
+      const page = await loadMoreVideosAction({
+        scope,
+        category: category ?? undefined,
+        cursor: current,
+      });
       setItems((prev) => {
         const seen = new Set(prev.map((item) => item.id));
-        return [...prev, ...page.items.filter((item) => !seen.has(item.id))];
+        return [
+          ...prev,
+          ...page.items.filter((item) => !seen.has(item.id) && reelPlayable(item)),
+        ];
       });
       setCursor(page.nextCursor);
     } catch {
@@ -104,7 +142,7 @@ export function VideoReels({
       loadingRef.current = false;
       setLoadingMore(false);
     }
-  }, [cursor, scope]);
+  }, [category, cursor, scope]);
 
   // Prefetch: al acercarse al final (o si la primera página vino corta porque
   // el escaneo agotó su tope), pedimos la siguiente tanda. Diferido con un
@@ -146,8 +184,13 @@ export function VideoReels({
     >
       <h1 className="sr-only">{VIDEOS_COPY.title}</h1>
 
+      {/* Qué se está viendo + la salida al menú. Llegar por el menú y no poder
+          volver a él sin el botón del sistema sería un callejón: la categoría
+          es un filtro, y un filtro siempre tiene que poder deshacerse. */}
+      {category && <ReelCategoryBar category={category} />}
+
       {isEmpty ? (
-        <EmptyReels />
+        <EmptyReels category={category} />
       ) : (
         <div
           ref={scrollRef}
@@ -242,6 +285,10 @@ function ReelSlide({
           fit="cover"
           showMute={false}
           onDoubleTap={handleDoubleTap}
+          // Videos Cortos es corto también cuando el archivo no lo es: los 7
+          // videos anteriores a la 0046 no declaran duración, y su archivo puede
+          // durar lo que sea. A los 90 s el reel vuelve a empezar.
+          maxPlaybackSeconds={playbackCapSeconds("reel")}
           // La barra de progreso queda por ENCIMA del bottom nav (z-40 fijo).
           controlsClassName="pb-[calc(4rem+env(safe-area-inset-bottom))]"
         />
@@ -582,23 +629,68 @@ function ReelActions({
 }
 
 // ---------------------------------------------------------------------------
+// Cabecera del reel filtrado — qué estoy viendo y cómo vuelvo a elegir
+// ---------------------------------------------------------------------------
+
+/** Etiqueta legible del filtro activo ("Todos" incluido). */
+function categoryLabel(category: VideoCategoryFilter): string {
+  return category === ALL_CATEGORIES
+    ? VIDEOS_COPY.reel.allLabel
+    : VIDEO_CATEGORY_LABELS[category as VideoCategory];
+}
+
+function ReelCategoryBar({ category }: { category: VideoCategoryFilter }) {
+  const label = categoryLabel(category);
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-[4.25rem] z-20 px-4">
+      <div className="mx-auto w-full max-w-lg">
+        <Link
+          href="/videos"
+          // El nombre accesible dice las DOS cosas: qué se está viendo y adónde
+          // lleva el toque. Visualmente alcanza con el nombre del tema.
+          aria-label={`${VIDEOS_COPY.reel.activeCategory(label)}. ${VIDEOS_COPY.reel.backToMenu}`}
+          className={cn(
+            "pointer-events-auto inline-flex min-h-11 items-center gap-2 rounded-full",
+            "bg-media-scrim px-3.5 text-sm font-semibold text-on-media backdrop-blur-sm",
+            "transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.96]",
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60",
+          )}
+        >
+          <SlidersHorizontal size={16} weight="bold" aria-hidden="true" />
+          {label}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Estado vacío — cálido y con salida clara (publicar desde el feed)
 // ---------------------------------------------------------------------------
 
-function EmptyReels() {
+function EmptyReels({ category }: { category?: VideoCategoryFilter | null }) {
+  // Un tema sin videos no es "no hay videos": es "acá todavía no". La salida
+  // cambia igual — de una categoría vacía se sale viendo todos, no yendo a
+  // publicar (que es la salida cuando de verdad no hay nada).
+  const filtered = Boolean(category) && category !== ALL_CATEGORIES;
+  const label = category ? categoryLabel(category) : "";
+
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-8 text-center">
       <FilmSlate size={44} className="text-on-media/70" aria-hidden="true" />
       <div>
         <h2 className="font-display text-lg font-bold text-on-media">
-          {VIDEOS_COPY.emptyTitle}
+          {filtered ? VIDEOS_COPY.emptyCategoryTitle(label) : VIDEOS_COPY.emptyTitle}
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-on-media/80">
-          {VIDEOS_COPY.emptyMessage}
+          {filtered ? VIDEOS_COPY.emptyCategoryMessage : VIDEOS_COPY.emptyMessage}
         </p>
       </div>
-      <Link href="/feed" className={buttonVariants({ variant: "primary", size: "md" })}>
-        {VIDEOS_COPY.emptyCta}
+      <Link
+        href={filtered ? `/videos?cat=${ALL_CATEGORIES}` : "/feed"}
+        className={buttonVariants({ variant: "primary", size: "md" })}
+      >
+        {filtered ? VIDEOS_COPY.emptyCategoryCta : VIDEOS_COPY.emptyCta}
       </Link>
     </div>
   );

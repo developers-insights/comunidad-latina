@@ -1,6 +1,15 @@
 import { notFound } from "next/navigation";
-import { Briefcase, Clock, MapPin, Question, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, Badge, Banner, BezelCard } from "@/components/ui";
+import Link from "next/link";
+import {
+  Briefcase,
+  CaretRight,
+  Clock,
+  MapPin,
+  Question,
+  Storefront,
+  UsersThree,
+} from "@phosphor-icons/react/dist/ssr";
+import { Avatar, Badge, Banner, BezelCard, buttonVariants } from "@/components/ui";
 import {
   DetailTopBar,
   PublisherTrust,
@@ -17,12 +26,16 @@ import { DirectoryDetailHero } from "@/components/directory";
 import { ScamShieldNotice } from "@/components/trust";
 import { COPY } from "@/components/empleos/copy";
 import { EMPLOYMENT_TYPE_LABEL, parseJobAttrs, type JobQuestion } from "@/components/empleos/helpers";
-import { JobApplicationRow } from "@/components/empleos/job-application-row";
 import { JobApplicationStatus } from "@/components/empleos/job-application-status";
 import { JobApplySheet } from "@/components/empleos/job-apply-sheet";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { fetchJobApplications, fetchViewerApplication } from "../queries";
+import { cn } from "@/lib/utils";
+import {
+  fetchApplicantProfilePreview,
+  fetchJobApplicationCounts,
+  fetchViewerApplication,
+} from "../queries";
 
 const C = COPY.detail;
 
@@ -242,7 +255,7 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
         {isOwner ? (
           <OwnerApplications
             jobId={listing.id}
-            questions={attrs.questions}
+            tenantId={tenant.id}
             isPending={listing.status !== "published"}
           />
         ) : (
@@ -271,48 +284,44 @@ async function ApplicantAction({
   questions: JobQuestion[];
 }) {
   if (!userId) {
-    return <JobApplySheet jobId={jobId} questions={questions} isLoggedIn={false} />;
+    return (
+      <JobApplySheet jobId={jobId} questions={questions} isLoggedIn={false} profile={null} />
+    );
   }
 
   const application = await fetchViewerApplication(jobId, userId);
-  if (!application) {
-    return <JobApplySheet jobId={jobId} questions={questions} isLoggedIn />;
+  if (application) {
+    return <JobApplicationStatus application={application} />;
   }
 
-  return <JobApplicationStatus application={application} />;
+  // El autocompletado se lee UNA vez, acá, y viaja como props a la hoja: así el
+  // bloque "esto va a ver quien contrata" ya está armado cuando se abre, sin un
+  // spinner adentro del formulario.
+  const profile = await fetchApplicantProfilePreview(userId);
+  return <JobApplySheet jobId={jobId} questions={questions} isLoggedIn profile={profile} />;
 }
 
 // ---------------------------------------------------------------------------
-// Vista de quien publicó: las postulaciones recibidas
+// Vista de quien publicó: el acceso a su bandeja de candidatos
+//
+// El detalle NO lista las candidaturas: cada una trae respuestas, mensaje,
+// currículum, enlaces y una nota privada, y apilarlas debajo del aviso hace una
+// página infinita donde lo importante —responderle a alguien— queda enterrado.
+// Acá va el titular ("cuántos hay, cuántos esperan") y el camino a la pantalla
+// que sí está hecha para trabajar: /empleos/[id]/candidatos.
 // ---------------------------------------------------------------------------
 
 async function OwnerApplications({
   jobId,
-  questions,
+  tenantId,
   isPending,
 }: {
   jobId: string;
-  questions: JobQuestion[];
+  tenantId: string;
   isPending: boolean;
 }) {
-  const applications = await fetchJobApplications(jobId, questions);
+  const { total, open } = await fetchJobApplicationCounts({ jobId, tenantId });
   const A = C.applications;
-
-  // El desglose del Trust Score (buildTrustSignals) no viaja en el modelo de
-  // lectura: se arma acá en UN batch para todas las filas, así el badge de cada
-  // postulante explica su número en vez de mostrarlo mudo (§3.3).
-  const applicantIds = [...new Set(applications.map((row) => row.applicantId))];
-  const supabase = await createClient();
-  const [{ data: profiles }, { data: trusts }] = await Promise.all([
-    applicantIds.length > 0
-      ? supabase.from("profiles").select("id, identity_verified").in("id", applicantIds)
-      : Promise.resolve({ data: [] as { id: string; identity_verified: boolean }[] }),
-    applicantIds.length > 0
-      ? supabase.from("trust_scores").select("profile_id, signals").in("profile_id", applicantIds)
-      : Promise.resolve({ data: [] as { profile_id: string; signals: unknown }[] }),
-  ]);
-  const verifiedById = new Map((profiles ?? []).map((row) => [row.id, row.identity_verified]));
-  const signalsById = new Map((trusts ?? []).map((row) => [row.profile_id, row.signals]));
 
   return (
     <section className="flex flex-col gap-3">
@@ -322,30 +331,39 @@ async function OwnerApplications({
         </BezelCard>
       )}
 
-      <h2 className="font-display text-lg font-bold text-foreground">
-        {A.title(applications.length)}
-      </h2>
+      <h2 className="font-display text-lg font-bold text-foreground">{A.title}</h2>
 
-      {applications.length === 0 ? (
+      {total === 0 ? (
         <p className="rounded-lg border border-dashed border-border bg-surface-subtle px-4 py-6 text-center text-sm text-foreground-muted">
           <span className="block font-semibold text-foreground-secondary">{A.emptyTitle}</span>
           <span className="mt-1 block">{A.emptyMessage}</span>
         </p>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {applications.map((application) => (
-            <JobApplicationRow
-              key={application.id}
-              application={application}
-              trustSignals={buildTrustSignals(
-                (signalsById.get(application.applicantId) ?? {}) as Parameters<
-                  typeof buildTrustSignals
-                >[0],
-                verifiedById.get(application.applicantId) ?? false,
-              )}
-            />
-          ))}
-        </ul>
+        <Link
+          href={`/empleos/${jobId}/candidatos`}
+          className={cn(
+            "group flex items-center gap-3 rounded-lg border border-border-subtle bg-surface p-4",
+            "transition-colors duration-(--duration-fast) hover:bg-surface-subtle",
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-[var(--accent-empleos)] group-hover:bg-surface"
+          >
+            <UsersThree size={22} weight="fill" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-foreground">{A.count(total)}</span>
+            <span className="block text-sm text-foreground-secondary">
+              {open > 0 ? A.openCount(open) : A.allAnswered}
+            </span>
+          </span>
+          <span className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}>
+            {A.open}
+            <CaretRight size={14} weight="bold" aria-hidden="true" />
+          </span>
+        </Link>
       )}
     </section>
   );

@@ -7,6 +7,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { isVisionConfigured } from "@/lib/config/services";
 import {
+  DEFAULT_VIDEO_CATEGORY,
+  VIDEO_CATEGORIES,
+  VIDEO_TYPES,
+  checkVideoDuration,
+  type DurationRejection,
+} from "@/lib/media/video-policy";
+import {
   TIER_HUMAN,
   TIER_REVIEW,
   enqueueModeration,
@@ -64,6 +71,17 @@ const postSchema = z.object({
   pollKind: z.enum(["yes_no"]).optional(),
   /** Publicar COMO esta entidad (listing propio published) — RLS lo valida. */
   entityId: z.uuid().optional(),
+  /**
+   * DECLARACIÓN DE VIDEO (contrato 0046). Todo post con media de video tiene
+   * que declarar QUÉ es y CUÁNTO dura o el INSERT rebota contra el CHECK
+   * `posts_video_declaration`. Los tres campos son opcionales en el borde
+   * porque la mayoría de las publicaciones no traen video; abajo se exigen
+   * cuando corresponde.
+   */
+  videoType: z.enum(VIDEO_TYPES).optional(),
+  /** Duración DECLARADA por el navegador (metadata del archivo), en segundos. */
+  durationSeconds: z.coerce.number().finite().positive().max(36_000).optional(),
+  videoCategory: z.enum(VIDEO_CATEGORIES).optional(),
 });
 
 const PHOTO_TYPES: Record<string, string> = {
@@ -131,6 +149,14 @@ export type CreatePostResult =
       entity: boolean;
     }
   | { ok: false; code: "invalid" | "unauthenticated" | "photo" | "error" }
+  /**
+   * El video no cumple la política de duración (`src/lib/media/video-policy.ts`).
+   * `reason` viaja para que el composer muestre el mensaje EXACTO de la spec en
+   * vez de un "no se pudo publicar" genérico: son dos problemas distintos —el
+   * video es muy largo, o no se pudo saber cuánto dura— y tienen dos salidas
+   * distintas para la persona.
+   */
+  | { ok: false; code: "video"; reason: DurationRejection }
   /** El JWT y el header apuntan a comunidades distintas — copy ya resuelto. */
   | { ok: false; code: "tenant-mismatch"; message: string };
 
@@ -174,6 +200,9 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     kind: formData.get("kind"),
     pollKind: formData.get("pollKind") || undefined,
     entityId: formData.get("entityId") || undefined,
+    videoType: formData.get("videoType") || undefined,
+    durationSeconds: formData.get("durationSeconds") || undefined,
+    videoCategory: formData.get("videoCategory") || undefined,
   });
   if (!parsed.success) return { ok: false, code: GENERIC_INVALID };
   const { body, kind, entityId } = parsed.data;
@@ -219,6 +248,41 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     }
   } catch {
     mediaOrder = []; // orden inválido → fallback fotos-primero, nunca se pierde un medio
+  }
+
+  // ---- DECLARACIÓN Y TOPE DEL VIDEO (contrato 0046 + spec nº4) ------------
+  //
+  // Se resuelve ACÁ, antes del guard, de la moderación y de tocar storage: si
+  // el video no puede publicarse, nada más tiene por qué pasar.
+  //
+  // QUÉ PUEDE Y QUÉ NO PUEDE HACER ESTE SERVIDOR. No mide el archivo: el video
+  // viaja del navegador DIRECTO al bucket (por el límite de body de las server
+  // actions), así que acá nunca hay bytes que abrir — medirlo pediría ffprobe
+  // sobre el objeto ya subido, que es otro proyecto. Lo que sí hace, y es lo
+  // que pide el contrato, es RE-VALIDAR el número declarado contra la misma
+  // política que usó el navegador: un cliente modificado que mande 600 no
+  // publica, y uno que no mande nada tampoco. La última línea sigue siendo el
+  // CHECK de la base, que rechaza el INSERT sin declaración.
+  let declaredVideoType: "short_video" | null = null;
+  let declaredDuration: number | null = null;
+  let declaredCategory: string | null = null;
+
+  if (videoPaths.length > 0) {
+    // Un post NUNCA nace publicitario: la campaña referencia al post, así que
+    // en el INSERT todavía no puede existir (trigger app.posts_validate_video +
+    // policy posts_insert). Declararse `advertising_video` acá es un cliente
+    // mintiendo, no un caso de uso.
+    if (parsed.data.videoType && parsed.data.videoType !== "short_video") {
+      return { ok: false, code: "video", reason: "too-long" };
+    }
+    const duration = checkVideoDuration("short_video", parsed.data.durationSeconds);
+    if (!duration.ok) return { ok: false, code: "video", reason: duration.reason };
+    declaredVideoType = "short_video";
+    declaredDuration = duration.seconds;
+    // Categoría opcional con default sensato. Sólo viaja si hay video: una
+    // categoría sin video no significa nada y la base lo rechaza (constraint
+    // `posts_video_category_needs_video`).
+    declaredCategory = parsed.data.videoCategory ?? DEFAULT_VIDEO_CATEGORY;
   }
 
   // ALGÚN medio obligatorio en posts (feedback cliente 2026-07-19: feed
@@ -301,6 +365,11 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     media: mediaPaths,
     status,
     entity_listing_id: entityId ?? null,
+    // Declaración de video (0046). Null cuando la publicación no trae video —
+    // que es lo que la columna significa, no "un video sin tipo".
+    video_type: declaredVideoType,
+    duration_seconds: declaredDuration,
+    video_category: declaredCategory,
   };
   type PostInsert = typeof basePayload;
 

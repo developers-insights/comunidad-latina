@@ -12,10 +12,12 @@ import {
   ShieldCheck,
   ShieldStar,
   SignIn,
+  SlidersHorizontal,
   UserCircle,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { Avatar, Button, buttonVariants } from "@/components/ui";
+import { PREFS_COPY } from "@/components/notifications";
 import { DeleteAccount } from "@/components/auth/delete-account";
 import { getShellContext } from "@/components/shell/shell-context";
 import { createClient } from "@/lib/supabase/server";
@@ -149,8 +151,17 @@ export default async function AjustesPage() {
         </>
       )}
 
-      {/* Preferencias y legales sirven con o sin sesión. */}
+      {/* Preferencias y legales sirven con o sin sesión. La de notificaciones
+          NO: sin cuenta no hay bandeja que configurar, así que sólo aparece con
+          sesión (arriba de Tema, que es lo único que sirve anónimo). */}
       <Group title={COPY.groups.preferences}>
+        {shell.user && (
+          <Row
+            href="/ajustes/notificaciones"
+            icon={SlidersHorizontal}
+            {...PREFS_COPY.row}
+          />
+        )}
         <ThemeRow />
       </Group>
 

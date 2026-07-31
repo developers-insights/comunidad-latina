@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { m, useReducedMotion } from "motion/react";
+import { Plus } from "@phosphor-icons/react/dist/ssr";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { CreateMenu } from "./create-menu";
@@ -214,14 +215,39 @@ function NavTab({
 }
 
 /**
+ * Los tres sectores del disco, en el orden del logo. `from -90deg` arranca
+ * arriba: azul al norte, amarillo abajo-derecha, rojo abajo-izquierda. Los
+ * cortes son DUROS (mismo ángulo dos veces) — un degradado suave entre pastel y
+ * pastel se vuelve barro y pierde la marca.
+ */
+const PASTEL_PINWHEEL =
+  "conic-gradient(from -90deg," +
+  " var(--brand-blue-pastel) 0deg 120deg," +
+  " var(--brand-yellow-pastel) 120deg 240deg," +
+  " var(--brand-red-pastel) 240deg 360deg)";
+
+/**
  * El "+" del centro. No es una pestaña: es la acción principal de la app, y por
  * eso es lo único de la barra que sobresale, lleva la marca tricolor y no
  * marca `aria-current` nunca.
  *
- * Badge 3D del set Meshy (public/icons/nav/crear.webp, 2026-07-29): un disco
- * tricolor pinwheel (azul·amarillo·rojo, el orden del logo) con el "+" en clay
- * blanco embebido — reemplaza al disco de CSS + ícono Phosphor de antes, para
- * que el disparador tenga la misma calidad premium que el resto de la barra.
+ * ── POR QUÉ EL DISCO VOLVIÓ A SER CSS (2026-07-30) ───────────────────────────
+ * Hasta ayer era un webp 3D del set Meshy: un pinwheel azul·amarillo·rojo
+ * saturado con un "+" blanco embebido. El cliente lo vio en la call y pidió
+ * "los colores de Comunidad Latina pero en pastel, que no sea tan chillón".
+ *
+ * Un asset no se puede despintar: el pastel tiene que ser un TOKEN o el próximo
+ * ajuste vuelve a ser un round-trip de render. Y había un defecto de fondo que
+ * el asset arrastraba: el "+" blanco sobre los pasteles mide ~1.3:1 — el glifo
+ * es lo que IDENTIFICA el control (WCAG 1.4.11 pide 3:1) y en pastel
+ * desaparecía. Acá el glifo va en `on-pastel` (tinta oscura constante) y mide
+ * 11.04:1 sobre el rojo, 12.13:1 sobre el azul y 13.66:1 sobre el amarillo.
+ *
+ * Sigue leyéndose como un objeto físico y no como un botón plano —que es lo que
+ * hacía juego con el resto de los íconos 3D de la barra— por tres capas que ya
+ * son vocabulario de la casa: el collar `ring-4 ring-surface` que lo recorta de
+ * la barra, la sombra difusa cálida de §2.5, y un highlight interno (el mismo
+ * `inset` del Double-Bezel) que le da volumen al disco.
  *
  * Sin sesión no abre nada: lleva a entrar. Un disparador que abre un menú donde
  * las diez opciones terminan en "necesitás una cuenta" es una promesa falsa.
@@ -243,12 +269,19 @@ function CreateButton({
     <>
       <m.span
         aria-hidden="true"
-        className="flex size-14 items-center justify-center rounded-full shadow-[0_6px_18px_-6px_rgb(0_0_0/0.45)] ring-4 ring-surface"
+        className={cn(
+          "relative flex size-14 items-center justify-center rounded-full ring-4 ring-surface",
+          // Volumen del disco en UNA sola sombra: highlight interno (el mismo
+          // `inset` del core del Double-Bezel) + la difusa cálida de §2.5.
+          "shadow-[inset_0_1px_2px_rgb(255_255_255/0.55),0_6px_18px_-6px_rgb(0_0_0/0.35)]",
+        )}
+        style={{ backgroundImage: PASTEL_PINWHEEL }}
         animate={reduceMotion ? undefined : { rotate: open ? 45 : 0 }}
         transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icons/nav/crear.webp" alt="" width={56} height={56} className="size-14" />
+        {/* El glifo. `on-pastel` es tinta CONSTANTE (no voltea con el tema):
+            el disco es el mismo objeto en light y en dark. */}
+        <Plus size={26} weight="bold" className="text-on-pastel" />
       </m.span>
       <span className="text-[11px] font-semibold text-brand-ink">{label}</span>
     </>

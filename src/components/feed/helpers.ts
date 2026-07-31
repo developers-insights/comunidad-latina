@@ -178,8 +178,25 @@ export interface PostCardModel {
   poll: PostPollView | null;
   /** Post publicado COMO una entidad (se muestra la entidad como autor). */
   entity: PostEntityView | null;
-  /** Campaña activa (post_promotions): se marca honestamente "Publicidad". */
+  /** Campaña activa (post_promotions): se marca honestamente "Patrocinado". */
   isPromoted: boolean;
+  /**
+   * COLUMNAS DE VIDEO (migración 0046). OPCIONALES a propósito: las resuelve
+   * quien las necesita —hoy el reel de Videos Cortos, que es la superficie
+   * donde un error deja entrar un video de 10 minutos— y el feed general sigue
+   * armando su modelo sin pedirlas. Ausentes ≠ falsas: significan "esta
+   * consulta no preguntó", y por eso `isEligibleForShortFeed` exige
+   * `video_type === 'short_video'` en positivo en vez de descartar por negación.
+   */
+  videoType?: string | null;
+  /** posts.duration_seconds. null = DESCONOCIDA (no "corta"): ver 0049. */
+  durationSeconds?: number | null;
+  /** posts.is_paid_ad — publicidad paga, se marca "Patrocinado". */
+  isPaidAd?: boolean;
+  /** posts.eligible_for_short_feed — VETO del scroll, no afirmación. */
+  eligibleForShortFeed?: boolean;
+  /** posts.video_category — catálogo cerrado del menú de Videos Cortos. */
+  videoCategory?: string | null;
   /**
    * Teléfono del botón de WhatsApp que la campaña activa ofrece
    * (post_promotions.cta_whatsapp, 0038). null cuando el anunciante no cargó

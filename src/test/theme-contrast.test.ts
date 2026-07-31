@@ -250,6 +250,52 @@ describe.each(TEMAS)("globals.css — matriz de contraste, tema %s", (tema, scop
   });
 });
 
+/* ══════════════ 1b. el lienzo crema: la caja se tiene que despegar ══════════════
+ *
+ * El pedido del cliente (call 29/7, 1:05) fue literalmente que la tarjeta se
+ * distinga del fondo: «blanco con blanco no notamos nada». Eso es una propiedad
+ * MEDIBLE, y sin un test es una propiedad que el próximo refactor de tokens
+ * revierte sin que nadie se entere — el resto de la matriz de arriba pasa igual
+ * de bien con canvas = #ffffff.
+ *
+ * Los umbrales no son arbitrarios: el piso 1.05 es lo mínimo que se ve en un
+ * teléfono de gama media con brillo bajo; el techo 1.20 es la promesa de «bien
+ * bajito, como pastel» — un lienzo más oscuro que eso deja de ser crema y se
+ * convierte en una superficie gris, que es justo lo que el design system NO es.
+ */
+describe("el lienzo crema (feedback cliente 2026-07-30)", () => {
+  const canvas = color("--color-canvas", LIGHT);
+  const surface = color("--color-surface", LIGHT);
+  const subtle = color("--color-surface-subtle", LIGHT);
+
+  it("la tarjeta blanca se despega del lienzo, sin pasarse de crema", () => {
+    const ratio = wcagContrast(canvas, surface);
+    expect(
+      ratio,
+      `canvas ${canvas} vs surface ${surface} = ${ratio.toFixed(3)}:1.\n` +
+        "  Antes del crema esto daba 1.027:1 y el cliente no veía las cajas.",
+    ).toBeGreaterThanOrEqual(1.05);
+    expect(ratio, "«bien bajito, como pastel»: más que esto ya es una superficie gris").toBeLessThan(1.2);
+  });
+
+  it("la tarjeta sigue siendo BLANCA (si se tiñe, no hay contraste que ganar)", () => {
+    expect(surface.toLowerCase()).toBe("#ffffff");
+    expect(color("--color-surface-raised", LIGHT).toLowerCase()).toBe("#ffffff");
+  });
+
+  it("`surface-subtle` sigue HUNDIDA: por debajo del lienzo, no por encima", () => {
+    // Se dio vuelta durante el cambio: neutral-50 quedaba más claro que el crema.
+    expect(wcagContrast(subtle, surface)).toBeGreaterThan(wcagContrast(canvas, surface));
+  });
+
+  it("el crema tiene croma de verdad: es amarillo bajo, no un gris cálido", () => {
+    // Un neutro tiene R≈G≈B. El pedido fue «un amarillo bien bajito»: el canal
+    // azul tiene que quedar netamente por debajo del rojo. #fcfcfb daba Δ=1.
+    const [r, , b] = [1, 3, 5].map((i) => parseInt(canvas.slice(i, i + 2), 16));
+    expect(r - b, `canvas ${canvas}: Δ(R−B) = ${r - b}`).toBeGreaterThanOrEqual(12);
+  });
+});
+
 /* ═══════════════════ 2. la marca del tenant (brand-pipeline) ═══════════════════ */
 
 /**
@@ -341,7 +387,9 @@ describe("brand-pipeline — las anclas del pipeline son las superficies del CSS
     // contra un fondo que ya no existe y `brand-ink` deja de ser AA sin avisar.
     expect(FONDOS.light.surface.toLowerCase()).toBe("#ffffff");
     expect(FONDOS.dark["surface-raised"].toLowerCase()).toBe("#2b2820");
-    expect(FONDOS.light.canvas.toLowerCase()).toBe("#fcfcfb");
+    // Crema desde 2026-07-30 (`--color-cream-25`). Si se mueve, se mueve también
+    // LIGHT_CANVAS en brand-pipeline.ts: el fill de marca se valida contra él.
+    expect(FONDOS.light.canvas.toLowerCase()).toBe("#fcf6e6");
     expect(FONDOS.dark.canvas.toLowerCase()).toBe("#17150f");
   });
 });

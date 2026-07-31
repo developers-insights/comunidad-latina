@@ -8,6 +8,12 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { CreateMenu, type QuickPostKind } from "@/components/shell/create-menu";
+import { readVideoDurationSeconds } from "@/lib/media/measure-video";
+import {
+  DEFAULT_VIDEO_CATEGORY,
+  checkVideoDuration,
+  type VideoCategory,
+} from "@/lib/media/video-policy";
 import {
   createPostAction,
   prepareMediaUploadAction,
@@ -42,6 +48,12 @@ interface PickedMedia {
   kind: "photo" | "video";
   file: File;
   preview: string;
+  /**
+   * Duración MEDIDA del video, en segundos enteros (sólo en `kind: "video"`).
+   * Es el número que se declara al publicar: la base no abre el archivo, así
+   * que este valor es el contrato entre lo que se subió y lo que se dice.
+   */
+  durationSeconds?: number;
 }
 
 export interface PostComposerProps {
@@ -97,6 +109,12 @@ export function PostComposer({
   const [composeMode, setComposeMode] = useState<ComposerMode | null>(null);
   /** Encuesta Sí/No de la pregunta (contrato 0041). */
   const [pollEnabled, setPollEnabled] = useState(false);
+  /** Categoría de Videos Cortos (0046). Opcional: arranca en el default. */
+  const [videoCategory, setVideoCategory] = useState<VideoCategory>(
+    DEFAULT_VIDEO_CATEGORY,
+  );
+  /** Midiendo la duración del archivo recién elegido (antes de subir nada). */
+  const [measuringVideo, setMeasuringVideo] = useState(false);
   const [isPending, startTransition] = useTransition();
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -197,8 +215,18 @@ export function PostComposer({
     else if (rejectedSize) toast({ title: COPY.composer.photoTooBig, variant: "warning" });
   }
 
-  /** Mismo patrón síncrono para el video (1 por publicación). */
-  function selectVideo(input: HTMLInputElement) {
+  /**
+   * Mismo patrón síncrono para el video (1 por publicación) y, además, EL TOPE
+   * DE 90 s (spec nº4).
+   *
+   * El archivo se MIDE acá, con la metadata del `<video>`, antes de subir un
+   * solo byte: el video va directo del navegador al bucket, así que enterarse
+   * después sería gastarle los datos a la persona para terminar diciéndole que
+   * no. Un video que no se puede medir tampoco entra — sin duración la base
+   * rechaza el INSERT (`posts_video_declaration`), y un error de Postgres no es
+   * un mensaje para nadie.
+   */
+  async function selectVideo(input: HTMLInputElement) {
     const file = input.files?.[0] ?? null;
     input.value = "";
     if (!file) return;
@@ -216,9 +244,40 @@ export function PostComposer({
       return;
     }
 
+    setMeasuringVideo(true);
+    const measured = await readVideoDurationSeconds(file);
+    setMeasuringVideo(false);
+
+    // MISMA función que corre el servidor. No hay dos reglas.
+    const duration = checkVideoDuration("short_video", measured);
+    if (!duration.ok) {
+      toast(
+        duration.reason === "too-long"
+          ? {
+              title: COPY.composer.videoTooLongTitle,
+              description: COPY.composer.videoTooLongBody,
+              variant: "warning",
+              duration: 9000,
+            }
+          : {
+              title: COPY.composer.videoUnknownDurationTitle,
+              description: COPY.composer.videoUnknownDurationBody,
+              variant: "warning",
+              duration: 8000,
+            },
+      );
+      return;
+    }
+
     setMedia((current) => [
       ...current,
-      { id: crypto.randomUUID(), kind: "video", file, preview: URL.createObjectURL(file) },
+      {
+        id: crypto.randomUUID(),
+        kind: "video",
+        file,
+        preview: URL.createObjectURL(file),
+        durationSeconds: duration.seconds,
+      },
     ]);
     openCompose("media");
   }
@@ -241,6 +300,7 @@ export function PostComposer({
     setBody("");
     setComposeMode(null);
     setPollEnabled(false);
+    setVideoCategory(DEFAULT_VIDEO_CATEGORY);
     setMedia((current) => {
       for (const item of current) URL.revokeObjectURL(item.preview);
       return [];
@@ -320,7 +380,17 @@ export function PostComposer({
       for (const item of media) {
         if (item.kind === "photo") formData.append("photos", item.file);
       }
-      if (videoPath) formData.set("videoPaths", JSON.stringify([videoPath]));
+      if (videoPath) {
+        formData.set("videoPaths", JSON.stringify([videoPath]));
+        // DECLARACIÓN OBLIGATORIA (0046): sin estos dos campos el INSERT rebota
+        // contra `posts_video_declaration`. La duración es la MEDIDA al elegir
+        // el archivo, y el servidor la vuelve a pasar por la misma política.
+        formData.set("videoType", "short_video");
+        if (video?.durationSeconds) {
+          formData.set("durationSeconds", String(video.durationSeconds));
+        }
+        formData.set("videoCategory", videoCategory);
+      }
       formData.set(
         "mediaOrder",
         JSON.stringify(media.map((item) => (item.kind === "photo" ? "photo" : "video"))),
@@ -384,6 +454,27 @@ export function PostComposer({
         });
         return;
       }
+      if (result.code === "video") {
+        // El servidor rebotó la declaración de video. El mensaje es el MISMO
+        // que muestra el navegador al elegir el archivo — sale del módulo de
+        // política, no de dos copys parecidos.
+        toast(
+          result.reason === "too-long"
+            ? {
+                title: COPY.composer.videoTooLongTitle,
+                description: COPY.composer.videoTooLongBody,
+                variant: "warning",
+                duration: 9000,
+              }
+            : {
+                title: COPY.composer.videoUnknownDurationTitle,
+                description: COPY.composer.videoUnknownDurationBody,
+                variant: "warning",
+                duration: 8000,
+              },
+        );
+        return;
+      }
       if (result.code === "invalid") {
         toast({ title: COPY.composer.tooShort, variant: "warning" });
         return;
@@ -439,7 +530,10 @@ export function PostComposer({
         accept="video/mp4,video/webm"
         className="sr-only"
         id="post-composer-video"
-        onChange={(event) => selectVideo(event.currentTarget)}
+        // `void`: la medición del archivo es asíncrona, pero el FileList se lee
+        // SINCRÓNICAMENTE dentro (antes del primer await) — ver el gotcha de
+        // arriba. Nada que esperar acá.
+        onChange={(event) => void selectVideo(event.currentTarget)}
       />
 
       <CreateMenu
@@ -459,14 +553,17 @@ export function PostComposer({
         onBodyChange={setBody}
         media={media}
         canAddPhoto={photos.length < MAX_PHOTOS}
-        canAddVideo={!video}
+        canAddVideo={!video && !measuringVideo}
         onAddPhotos={() => photoInputRef.current?.click()}
         onAddVideo={() => videoInputRef.current?.click()}
         onRemoveMedia={removeMedia}
         pollEnabled={pollEnabled}
         onPollChange={setPollEnabled}
+        videoCategory={videoCategory}
+        onVideoCategoryChange={setVideoCategory}
         previewId={previewId}
         uploadPct={uploadPct}
+        measuringVideo={measuringVideo}
         isPending={isPending}
         onPublish={submit}
       />
