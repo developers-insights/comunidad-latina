@@ -20,6 +20,10 @@
 // + store_memberships.
 // EXCEPCIÓN 2026-07-31 (misma razón): 0050 — listing_views + listings.view_count,
 // listing_shares y las RPC listing_reach / record_listing_share.
+// EXCEPCIÓN 2026-07-31 bis: 0053 — save_listing_ctas y
+// set_application_share_profile (dos `security definer` que existen porque la
+// policy de su tabla autoriza FILAS y lo que hacía falta era autorizar
+// COLUMNAS; ver el encabezado de la migración).
 export type Json =
   | string
   | number
@@ -2657,6 +2661,23 @@ export type Database = {
       }
       record_cta_click: {
         Args: { p_cta_kind: string; p_listing_id: string }
+        Returns: undefined
+      }
+      save_listing_ctas: {
+        Args: {
+          p_address?: string | null
+          p_booking_url?: string | null
+          p_listing_id: string
+          p_phone?: string | null
+          p_purchase_url?: string | null
+          p_tickets_url?: string | null
+          p_website?: string | null
+          p_whatsapp?: string | null
+        }
+        Returns: undefined
+      }
+      set_application_share_profile: {
+        Args: { p_application_id: string; p_share: boolean }
         Returns: undefined
       }
       record_listing_share: {

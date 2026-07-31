@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { handleStoreMembershipEvent } from "@/app/(app)/marketplace/membresia/webhook-handlers";
 import { isStripeConfigured } from "@/lib/config/services";
+import { listingViewHref } from "@/lib/monetization/href";
 import { createNotification } from "@/lib/notifications/notify";
 import { PLAN_IDS, getStripe, type PlanId } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -289,12 +290,12 @@ export async function POST(request: Request) {
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-/** Ruta de detalle por vertical — para el href de la notificación de boost. */
-const LISTING_DETAIL_PATH: Record<string, string> = {
-  property: "/propiedades",
-  professional: "/profesionales",
-  event: "/eventos",
-};
+// El mapeo kind→ruta NO se escribe acá: vive en `listingViewHref`
+// (src/lib/monetization/href.ts), que cubre los 7 valores de `listings.kind` y
+// nunca devuelve null. Este archivo tenía su propia copia con 3 de los 7, así
+// que impulsar un empleo, un negocio, un producto o una colaboración —todas
+// compras que SÍ se cobran— emitía el comprobante "¡Tu aviso ya está
+// destacado!" con href null, que la bandeja pinta como un botón muerto.
 
 /**
  * Activa un boost pagado (§7): status active + ventana [now, now + días].
@@ -360,7 +361,6 @@ async function activateBoost(
   if (updateError) throw new Error(`update boosts: ${updateError.code}`);
 
   // Notificación + auditoría: best-effort, jamás rompen la activación.
-  const detailBase = LISTING_DETAIL_PATH[boost.listings?.kind ?? ""];
   await createNotification(admin, {
     tenantId: boost.tenant_id,
     profileId: boost.buyer_id,
@@ -372,7 +372,7 @@ async function activateBoost(
     ignorePrefs: true,
     title: "¡Tu aviso ya está destacado!",
     body: `Aparece primero en tu zona, marcado como "Destacado", hasta el ${formatDate(endsAt, { style: "long" })}.`,
-    href: detailBase ? `${detailBase}/${boost.listing_id}` : null,
+    href: listingViewHref(boost.listings?.kind, boost.listing_id),
   });
   await admin.from("audit_log").insert({
     tenant_id: boost.tenant_id,

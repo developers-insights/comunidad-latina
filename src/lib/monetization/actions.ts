@@ -174,15 +174,23 @@ export async function saveListingCtasAction(
     if (result.value) saved.push(kind);
   }
 
-  const { error } = await supabase
-    .from("listings")
-    // Las columnas de la 0048 ya están en database.types.ts, pero el patch se
-    // arma dinámicamente (7 claves derivadas de CTA_COLUMN): TypeScript no
-    // puede probar la forma de un objeto construido en un loop.
-    .update(patch as never)
-    .eq("id", listing.id)
-    .eq("tenant_id", tenant.id)
-    .eq("created_by", user.id);
+  // Va por RPC y no por UPDATE directo: `listings_update` (0004) excluye
+  // status='published' a propósito —para que un aviso no se reescriba después
+  // de pasar moderación— y eso rebotaba TAMBIÉN este parche, que sólo toca las
+  // 7 columnas cta_* y ni mira el status. El comercio premium cargaba su
+  // teléfono, tocaba Guardar y recibía un error genérico, siempre.
+  // `save_listing_ctas` (0053) revalida tenant + dueño + source adentro, y el
+  // CHECK listings_cta_premium_only sigue rigiendo: en tier free rebota igual.
+  const { error } = await supabase.rpc("save_listing_ctas", {
+    p_listing_id: listing.id,
+    p_phone: patch.cta_phone ?? null,
+    p_whatsapp: patch.cta_whatsapp ?? null,
+    p_website: patch.cta_website ?? null,
+    p_purchase_url: patch.cta_purchase_url ?? null,
+    p_tickets_url: patch.cta_tickets_url ?? null,
+    p_booking_url: patch.cta_booking_url ?? null,
+    p_address: patch.cta_address ?? null,
+  });
 
   if (error) {
     console.warn("[monetizacion] no se pudieron guardar los CTAs", {

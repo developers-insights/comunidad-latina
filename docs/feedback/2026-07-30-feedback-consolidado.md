@@ -258,12 +258,27 @@ tomada (el propio texto dice "más adelante").
   rojo), *"que no sea tan chillón"*.
 - **Perfil completo**: seguidores (faltaban), "miembro desde", **compartir
   perfil**, y pestañas Publicaciones · Fotos · Videos · Información · Reseñas ·
-  Seguidores · Siguiendo. Más los controles de privacidad (quién puede
-  seguirte, escribirte, comentarte, etiquetarte; si tu ciudad y tus seguidores
-  son visibles).
+  Seguidores · Siguiendo.
 - **"Ver perfil" en los avisos** — *"si quieres ver el perfil de la gente que
-  está posteando, para ver si es una gente confiable"*. Aparece salvo que la
-  persona lo haya desactivado en privacidad.
+  está posteando, para ver si es una gente confiable"*.
+
+> **Corrección del 31/7 — esta sección decía de más.** Dos cosas quedaron
+> anotadas acá como construidas y **no lo están**, y lo detectó la revisión, no
+> yo:
+>
+> 1. **Los controles de privacidad del perfil no existen.** No hay columnas en
+>    `profiles`, no hay pantalla, y no hay una sola cadena de UI de "quién puede
+>    seguirte / escribirte / comentarte / etiquetarte". El agente que tenía ese
+>    frente se quedó sin sesión justo antes de ese punto. El componente que los
+>    consumiría ya está listo y documentado (`profileVisible` en
+>    `publisher-trust.tsx`, modelado como VETO con default visible), así que
+>    cuando existan las columnas se cablea en un solo lugar — pero **hoy nadie
+>    puede desactivar que se vea su perfil desde su aviso**.
+> 2. **"Ver perfil" llega a 11 de sus 19 puntos de montaje.** Está en los 8
+>    detalles, el reel, la tarjeta del feed y la de colaboraciones; **falta** en
+>    las tarjetas de listado, evento, profesional, comentario y candidato. No es
+>    un olvido de props: esos modelos no traen el id de quien publica, así que
+>    hay que tocar sus consultas.
 - **Tarjetas del mismo tamaño en todos los módulos** — sólo los videos
   conservan su proporción vertical.
 - **Las burbujas de módulos del feed** ahora incluyen Marketplace y

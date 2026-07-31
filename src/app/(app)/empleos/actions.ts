@@ -76,6 +76,9 @@ const COPY = {
     "Te postulaste a muchos avisos en poco tiempo. Esperá un rato y seguimos.",
   updateFailed:
     "No pudimos actualizar esta postulación. Puede que ya la haya resuelto alguien más.",
+  candidateHidden:
+    "Esta persona eligió no compartir su perfil, así que no podés escribirle por chat. Podés responderle desde su postulación.",
+  candidateWithdrew: "Esta persona retiró su postulación.",
   cvRejected:
     "Ese archivo no nos sirve como currículum. Tiene que ser PDF o Word y pesar menos de 5 MB.",
   cvNotYours: "Ese archivo no es tuyo. Volvé a adjuntar tu currículum.",
@@ -344,16 +347,29 @@ export async function applyToJobAction(input: {
 
       // Email al dueño (fire-and-forget). Minimización §11: del postulante
       // viaja SOLO su display_name — ni respuestas, ni nota, ni currículum.
+      //
+      // Y SOLO SI ACEPTÓ COMPARTIR SU PERFIL. La app le promete, textual, que
+      // "van a ver tus respuestas, tu mensaje y tu currículum, pero no tu foto,
+      // tu nombre ni tu zona" (components/empleos/copy.ts). La notificación
+      // in-app ya respetaba eso; el mail no, y salía con el nombre completo en
+      // el asunto — o sea que el consentimiento se rompía antes de que el
+      // empleador llegara siquiera a abrir la app, donde la tarjeta sí dice
+      // "Candidato sin perfil compartido".
       const [fullTenant, ownerEmail, { data: applicant }] = await Promise.all([
         getTenant(),
         getRecipientEmail(admin, job.created_by),
-        supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+        shareProfile
+          ? supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle()
+          : Promise.resolve({ data: null }),
       ]);
       if (ownerEmail) {
         const mail = applicationReceivedEmail({
           jobId,
           jobTitle: job.title,
-          applicantDisplayName: applicant?.display_name ?? "Alguien de la comunidad",
+          applicantDisplayName:
+            shareProfile && applicant?.display_name
+              ? applicant.display_name
+              : "Alguien de la comunidad",
           tenantName: fullTenant.name,
           brandHex: fullTenant.brandHex,
         });
@@ -602,25 +618,30 @@ export async function updateShareProfileAction(input: {
     }
     return { ok: false, code: "error", message: guard.message };
   }
-  const { tenant, supabase, user } = guard;
+  // `tenant` y `user` ya no se desestructuran: el tenant y la identidad los
+  // revalida la propia función de la 0053, que es donde tienen que vivir.
+  const { supabase } = guard;
 
-  const { data, error } = await supabase
-    .from("job_applications")
-    .update({ share_profile: share })
-    .eq("id", applicationId)
-    .eq("tenant_id", tenant.id)
-    // Redundante con el trigger de 0047, y a propósito: retirar el
-    // consentimiento es un derecho del postulante, no una edición del aviso.
-    .eq("applicant_id", user.id)
-    .select("share_profile")
-    .maybeSingle();
+  // Por RPC y no por UPDATE directo: el `with check` de job_applications_update
+  // (0047) limita la rama del postulante a los estados submitted/withdrawn, así
+  // que apenas el empleador movía la postulación a "en revisión" este botón
+  // empezaba a fallar con un error genérico. El trigger de congelado SÍ lo
+  // permitía —share_profile es la única columna suya que queda editable— pero
+  // la policy no lo dejaba llegar. Y no es un botón cualquiera: es retirar el
+  // consentimiento sobre dato personal, que la app promete que se puede hacer
+  // siempre. `set_application_share_profile` (0053) sólo toca esa columna y
+  // sólo en filas propias.
+  const { error } = await supabase.rpc("set_application_share_profile", {
+    p_application_id: applicationId,
+    p_share: share,
+  });
 
-  if (error || !data) {
+  if (error) {
     return { ok: false, code: "error", message: COPY.updateFailed };
   }
 
   revalidatePath("/empleos/mis-aplicaciones");
-  return { ok: true, share: data.share_profile };
+  return { ok: true, share };
 }
 
 // ===========================================================================
@@ -855,13 +876,30 @@ export async function startCandidateConversationAction(input: {
 
   const { data: application } = await supabase
     .from("job_applications")
-    .select("id, applicant_id, job_id")
+    .select("id, applicant_id, job_id, share_profile, status")
     .eq("id", parsed.data.applicationId)
     .eq("tenant_id", tenant.id)
     .neq("applicant_id", user.id)
     .maybeSingle();
 
   if (!application) return { ok: false, code: "error", message: COPY.updateFailed };
+
+  // Abrir el chat REVELA la identidad: /mensajes/[id] pinta nombre, foto,
+  // verificación y Trust Score de la contraparte en el encabezado. Así que si
+  // la persona pidió no compartir su perfil, acá no hay conversación que valga
+  // — de lo contrario el botón de al lado deshace en un toque lo que la
+  // tarjeta se esforzó en ocultar. Se eligió NO ofrecer el chat en vez de
+  // enmascarar la identidad en el hilo: una máscara tiene que aguantar en cada
+  // pantalla del hilo, y una sola que se olvide filtra igual.
+  if (!application.share_profile) {
+    return { ok: false, code: "error", message: COPY.candidateHidden };
+  }
+
+  // Retirarse tiene que significar algo. La lista ya filtra `withdrawn`, pero
+  // la acción se puede invocar con una tarjeta vieja todavía en pantalla.
+  if (application.status === "withdrawn") {
+    return { ok: false, code: "error", message: COPY.candidateWithdrew };
+  }
 
   // ¿Ya hay hilo entre los dos? Puede haberlo abierto la persona desde el aviso
   // (request_contact). Reusarlo evita dos conversaciones sobre lo mismo.
@@ -959,13 +997,24 @@ export async function createCvSignedUrlAction(input: {
 
   const { data: application } = await supabase
     .from("job_applications")
-    .select("id, cv_url")
+    .select("id, cv_url, applicant_id, status")
     .eq("id", parsed.data.applicationId)
     .eq("tenant_id", tenant.id)
     .maybeSingle();
 
   if (!application?.cv_url) {
     return { ok: false, code: "not-found", message: "Esta postulación no tiene currículum." };
+  }
+
+  // Retirar la postulación tiene que APAGAR el acceso al currículum, no sólo
+  // sacar la tarjeta de la lista. Hasta acá esa promesa vivía en un solo lugar
+  // —el `.neq('status','withdrawn')` de la consulta que arma la bandeja— y ni
+  // la RLS de la fila ni la policy del bucket miran el estado. O sea: con la
+  // pantalla ya abierta, el empleador seguía firmando una URL nueva un minuto
+  // (o un mes) después de que la persona se retirara, y bajaba un PDF con
+  // nombre, teléfono y domicilio. Quien SÍ puede seguir viéndolo es su dueño.
+  if (application.status === "withdrawn" && application.applicant_id !== user.id) {
+    return { ok: false, code: "not-found", message: COPY.candidateWithdrew };
   }
 
   const extension = application.cv_url.split(".").pop()?.toLowerCase() ?? "pdf";

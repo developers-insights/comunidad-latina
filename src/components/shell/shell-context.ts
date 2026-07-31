@@ -43,7 +43,15 @@ export const getShellContext = cache(async (): Promise<ShellContext> => {
       supabase
         .from("notifications")
         .select("id", { count: "exact", head: true })
-        .is("read_at", null),
+        .is("read_at", null)
+        // `dismissed_at` es borrado LÓGICO (0045): la fila sigue existiendo para
+        // poder deshacer, pero ya no está en la bandeja. Sin este filtro el
+        // punto del nav cuenta algo que no se puede abrir: quitar un aviso sin
+        // leerlo lo saca de la lista y de notification_counts(), pero el badge
+        // seguía prendido y NO quedaba ningún camino de UI para apagarlo —
+        // "marcar todas como leídas" también saltea las descartadas — así que
+        // el punto se quedaba hasta que expirara la fila, 60 días después.
+        .is("dismissed_at", null),
     ]);
 
     return {

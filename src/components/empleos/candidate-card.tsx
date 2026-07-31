@@ -294,10 +294,17 @@ export function CandidateCard({ candidate, trustSignals }: CandidateCardProps) {
             {C.viewProfile}
           </Link>
         )}
-        <Button variant="ghost" size="sm" loading={messagePending} onClick={message}>
-          <ChatCircleDots size={16} aria-hidden="true" />
-          {C.sendMessage}
-        </Button>
+        {/* Mismo gate que "Ver perfil", y por la misma razón: abrir el chat
+            muestra nombre, foto y verificación de la persona en el encabezado
+            del hilo. Ofrecerlo acá deshacía en un toque lo que esta tarjeta
+            oculta a propósito. La acción del servidor también lo rechaza —esto
+            es para no ofrecer lo que va a fallar, no la barrera. */}
+        {candidate.applicantId && (
+          <Button variant="ghost" size="sm" loading={messagePending} onClick={message}>
+            <ChatCircleDots size={16} aria-hidden="true" />
+            {C.sendMessage}
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"

@@ -130,10 +130,39 @@ function useGuardOk(config: Parameters<typeof createSupabaseStub>[0] = {}) {
   return stub;
 }
 
-/** Objeto que el UPDATE de listings recibió (o null si nunca se llamó). */
+/**
+ * Lo que se terminó escribiendo en las 7 columnas `cta_*`, o null si no se
+ * escribió nada.
+ *
+ * Desde la 0053 el guardado NO va por `.update()` sino por la RPC
+ * `save_listing_ctas`: la policy `listings_update` (0004) excluye a propósito
+ * `status='published'` —para que un aviso no se reescriba después de pasar
+ * moderación— y eso rebotaba también este parche, que sólo toca los botones.
+ * Los parámetros de la función se traducen de vuelta a nombres de columna para
+ * que las aserciones de este archivo sigan hablando del ESQUEMA y no de la
+ * forma de la llamada.
+ */
+const RPC_PARAM_TO_COLUMN: Record<string, string> = {
+  p_phone: "cta_phone",
+  p_whatsapp: "cta_whatsapp",
+  p_website: "cta_website",
+  p_purchase_url: "cta_purchase_url",
+  p_tickets_url: "cta_tickets_url",
+  p_booking_url: "cta_booking_url",
+  p_address: "cta_address",
+};
+
 function updatePatch(stub: ReturnType<typeof createSupabaseStub>) {
-  const call = stub.calls.find((c) => c.table === "listings" && c.method === "update");
-  return (call?.args[0] as Record<string, unknown>) ?? null;
+  const call = stub.calls.find(
+    (c) => c.table === "__rpc__" && c.method === "save_listing_ctas",
+  );
+  if (!call) return null;
+  const args = call.args[0] as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+  for (const [param, column] of Object.entries(RPC_PARAM_TO_COLUMN)) {
+    patch[column] = args[param] ?? null;
+  }
+  return patch;
 }
 
 beforeEach(() => {

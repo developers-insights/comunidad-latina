@@ -78,6 +78,59 @@ frente). Commits `e8412a8` y `ce614ed`.
 - Dos migraciones nacieron con el prefijo `0050`; la del orquestador se
   renumeró a `0051`.
 
+### Puerta de calidad (31/7) — dos revisiones adversariales y lo que encontraron
+
+Se corrieron dos revisiones independientes sobre el lote: una de código sobre
+el diff completo, y otra que cruzó **cada migración contra el código que la
+consume**. Entre las dos encontraron 6 defectos que habrían llegado a
+producción. **Todos arreglados y verificados en vivo**, salvo los que se listan
+al final como pendientes.
+
+- **El feed principal no mostraba NINGÚN aviso.** La regla de la spec (§3: las
+  publicaciones gratuitas no van al News Feed principal) estaba bien
+  implementada, pero **nada en el repo concedía `tier='premium'`**: la policy
+  fuerza `free` al nacer y el webhook que la migración prometía nunca se
+  escribió. Con 50 avisos publicados, todos `free`, el filtro dejaba el feed en
+  cero. Se concedió premium a un aviso por vertical, con sus botones cargados;
+  un usuario nuevo pasa de 0 a 5 avisos.
+- **Los botones de acción premium no se podían guardar en un aviso publicado.**
+  `listings_update` (0004) excluye `status='published'` a propósito —para que
+  un aviso no se reescriba después de pasar moderación— y eso rebotaba también
+  el parche que sólo toca las 7 columnas `cta_*`. El comercio que paga entraba
+  al editor, cargaba su teléfono y recibía un error genérico. Siempre.
+- **El postulante no podía retirar el consentimiento sobre su perfil** una vez
+  que el empleador movía la postulación a "en revisión". El trigger lo
+  permitía y la UI lo prometía; la policy no lo dejaba llegar. Es dato
+  personal, no un botón cualquiera.
+  → Los dos anteriores se resolvieron con `security definer` en la **0053**, no
+  aflojando las policies: lo que hacía falta no era autorizar la FILA sino dos
+  columnas concretas, y eso una policy no lo sabe decir.
+- **El mail al empleador filtraba el nombre de quien eligió no compartir su
+  perfil.** La notificación in-app lo respetaba; el mail salía con el nombre
+  completo en el asunto, o sea que el consentimiento se rompía antes de que el
+  empleador abriera la app.
+- **"Enviar mensaje" desanonimizaba al candidato en un clic**: la tarjeta decía
+  "Candidato sin perfil compartido" y el botón de al lado abría un hilo con su
+  foto, nombre y verificación en el encabezado.
+- **El currículum se seguía descargando después de que el candidato se
+  retiraba.** Esa promesa vivía en un solo `.neq('status','withdrawn')` de la
+  consulta de la bandeja; ni la RLS ni la policy del bucket miraban el estado.
+- Menores: badge de no leídas que no se podía apagar en 60 días · comprobante
+  de boost sin destino en 4 de los 7 tipos de aviso.
+
+**Quedó pendiente, con su razón:**
+- **No existe camino de autoservicio para pasar a premium.** Falta la decisión
+  comercial (precio, si es único o mensual). Hoy el tier lo concede
+  `service_role`.
+- **Los controles de privacidad del perfil no se construyeron** — ver la
+  corrección al pie de `docs/feedback/2026-07-30-feedback-consolidado.md` §8.
+- "Ver perfil" llega a 11 de 19 puntos de montaje; los 8 que faltan necesitan
+  tocar consultas.
+- Comentarios y me gusta todavía no emiten notificación.
+- Una campaña rechazada no puede corregir su presupuesto en un solo guardado.
+- El eje `advertising_video` no tiene productor: las reglas de la base son
+  correctas pero hoy no gobiernan ninguna fila.
+
 **Gates:** `tsc` 0 · `lint` 0 errores · **1911 tests** (eran 1450) · `build`
 verde con todas las rutas nuevas · enumerador RLS verde con **69 superficies**
 (eran 59). Las garantías de la base se probaron **en vivo con rollback**, no
