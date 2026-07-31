@@ -350,6 +350,9 @@ function ReelSlide({
                         level={post.author.level}
                         signals={post.author.signals}
                         size="inline"
+                        // "Ver el perfil de…" también acá: el reel es donde más
+                        // aparece gente que no conocés (call 29/7, 1:02:24).
+                        profileId={post.author.profileId}
                       />
                     </span>
                   )

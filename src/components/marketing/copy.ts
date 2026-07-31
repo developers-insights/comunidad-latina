@@ -111,10 +111,14 @@ export const COPY = {
       { label: "Para negocios", href: "/negocios/presencia" },
     ],
     legalTitle: "Legal",
+    // Esta lista alimenta el footer Y los cross-links al pie de cada documento
+    // legal (ver (marketing)/legal/layout.tsx): sumar acá es sumar en los dos
+    // lados, y es lo que evita que un documento quede sin camino de vuelta.
     legal: [
       { label: "Términos de uso", href: "/legal/terminos" },
       { label: "Privacidad", href: "/legal/privacidad" },
       { label: "Normas de la comunidad", href: "/legal/normas" },
+      { label: "Reglas del Marketplace", href: "/legal/marketplace" },
     ],
     soon: "Pronto",
     disclaimer:

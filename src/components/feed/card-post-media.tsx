@@ -8,17 +8,31 @@ import { AdChip } from "./card-ad-chip";
 import { BoostCta } from "./boost-cta";
 import { useCardLike } from "./card-like-context";
 import { useCardMedia } from "./card-media-context";
-import { NO_REEL_SCOPE } from "./card-video";
 import { MediaCarousel } from "./media-carousel";
 import { useMediaViewer } from "./media-viewer";
-import type { PostEntityView, VideoScopeProp } from "./helpers";
+import {
+  isPaidAdvertising,
+  videoOpensReel,
+  viewerPlaybackCapFor,
+  type PostEntityView,
+  type VideoScopeProp,
+} from "./helpers";
 import styles from "./card-post-media.module.css";
 
 export interface CardPostMediaProps {
   postId: string;
   /** Nombre visible del autor/entidad para el encabezado del visor. */
   authorName: string;
+  /** Campaña VIGENTE (post_promotions). Ver `isPaidAdvertising` en helpers. */
   isPromoted: boolean;
+  /**
+   * posts.is_paid_ad (0046). PERMANENTE, a diferencia de `isPromoted`: un
+   * anuncio cuya campaña ya terminó sigue siendo un anuncio, y su video largo
+   * sigue teniendo que mirarse acá adentro.
+   */
+  isPaidAd?: boolean;
+  /** posts.video_type (0046): 'advertising_video' = el video es de una campaña. */
+  videoType?: string | null;
   entity: PostEntityView | null;
   /** Contexto del feed de videos para el tap sobre un video. */
   videoScope: VideoScopeProp;
@@ -54,6 +68,8 @@ export function CardPostMedia({
   postId,
   authorName,
   isPromoted,
+  isPaidAd = false,
+  videoType = null,
   entity,
   videoScope,
   viewCount = 0,
@@ -70,29 +86,44 @@ export function CardPostMedia({
   if (!media || media.items.length === 0) return null;
   const { items, index, setIndex } = media;
 
+  /**
+   * ¿Este post es un espacio PAGO? Una sola pregunta para las dos consecuencias
+   * —el chip y el ruteo del video— porque separarlas es cómo se llega a un
+   * anuncio que se marca pero se comporta como contenido orgánico.
+   *
+   * OJO con la diferencia entre las tres señales: `isPromoted` es la campaña
+   * VIGENTE y se apaga sola cuando termina; `isPaidAd`/`videoType` son lo que
+   * el post ES, y no caducan. Mirar sólo la primera era el agujero: un
+   * `advertising_video` con la campaña terminada seguía abriendo el reel.
+   */
+  const paidAd = { isPromoted, isPaidAd, videoType };
+  const isAd = isPaidAdvertising(paidAd);
   const showBoostCta = isPromoted && Boolean(entity);
   /**
-   * Pantallas que muestran UNA publicación (el detalle) no tienen reel: el video
-   * se abre a pantalla completa dentro del propio post y el "atrás" devuelve a
-   * donde estabas. El scroll infinito de videos vive sólo en /feed y /videos.
+   * El visor a pantalla completa SOBRE esta misma publicación: se abre acá y al
+   * cerrar —termine solo, atrás, la X o deslizando hacia abajo— volvés a la
+   * card, en la misma posición del feed (es un overlay, no una navegación; el
+   * bloqueo de scroll es `overflow:hidden`, que conserva el scrollTop).
+   *
+   * El tope de reproducción lo decide la superficie, no el componente: 600 s
+   * dentro de un anuncio, 300 s en el detalle (ver `viewerPlaybackCapFor`, que
+   * lee los números de video-policy).
    */
   const openViewerAt = (startIndex: number) =>
-    viewer.open({ items, startIndex, postId, authorName });
+    viewer.open({
+      items,
+      startIndex,
+      postId,
+      authorName,
+      maxPlaybackSeconds: viewerPlaybackCapFor(paidAd),
+    });
   /**
    * Sin reel por DOS motivos distintos, y los dos terminan igual: el video se
    * abre a pantalla completa sobre esta misma publicación y al cerrar volvés acá.
-   *
-   *  1. `NO_REEL_SCOPE` — la pantalla muestra UNA publicación (el detalle).
-   *  2. `isPromoted` — es contenido PAGO (chip "Patrocinado"). Un anuncio se
-   *     mira dentro del anuncio: mandarlo al scroll infinito se lleva a la
-   *     persona lejos de lo que el anunciante pagó por mostrar, y es el bug que
-   *     el cliente reportó para propiedades y eventos (call 29/7, 1:19: "cuando
-   *     cierras el video, se regresa de nuevo a la publicación… no puede ir
-   *     scrolling"). Además el video publicitario largo NO está en el reel
-   *     (contrato 0046), así que abrirlo ahí llevaría a un scroll donde ese
-   *     video, por definición, no existe.
+   * La regla vive en `videoOpensReel` (helpers) para que el reel y la tarjeta no
+   * puedan opinar distinto.
    */
-  const reelDisabled = videoScope === NO_REEL_SCOPE || isPromoted;
+  const reelDisabled = !videoOpensReel({ scope: videoScope, post: paidAd });
 
   function handleDoubleTap() {
     if (!like) return;
@@ -123,7 +154,10 @@ export function CardPostMedia({
         dotsClassName={showBoostCta ? "bottom-[3.75rem]" : undefined}
       />
 
-      {isPromoted && (
+      {/* Divulgación honesta (FTC): el chip acompaña a TODO espacio pago, no
+          sólo a la campaña vigente. Un video publicitario cuya campaña terminó
+          sigue siendo publicidad mientras está publicado. */}
+      {isAd && (
         <div className="absolute right-2.5 top-2.5 z-[3]">
           <AdChip />
         </div>

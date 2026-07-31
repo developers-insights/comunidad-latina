@@ -133,6 +133,10 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
           level={level}
           signals={signals}
           size="card"
+          // El perfil de creador y el de comunidad son dos páginas distintas:
+          // desde el profesional se puede ir al general, que es donde están sus
+          // publicaciones y su gente.
+          profileId={id}
         />
       </section>
 

@@ -20,12 +20,16 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
         <p className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">
           También podés leer
         </p>
-        <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+        {/* `mt-2` + el alto del propio target: sin `min-h-11` estos enlaces
+            medían entre 18 y 42px según si el texto envolvía a dos líneas —
+            "Privacidad" era el peor, 18px de alto, en el pie de un documento
+            que se lee en el teléfono. */}
+        <ul className="mt-2 flex flex-wrap gap-x-6">
           {COPY.footer.legal.map((item) => (
             <li key={item.href}>
               <Link
                 href={item.href}
-                className="text-sm font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 transition-colors hover:decoration-brand-ink"
+                className="inline-flex min-h-11 items-center text-sm font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 transition-colors hover:decoration-brand-ink"
               >
                 {item.label}
               </Link>

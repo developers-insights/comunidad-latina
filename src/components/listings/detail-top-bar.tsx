@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -11,7 +11,11 @@ import {
 import { BottomSheet, useToast } from "@/components/ui";
 import { ReportScamButton, ReportSheet } from "@/components/trust";
 import { cn } from "@/lib/utils";
-import { toggleSaveAction } from "@/app/(app)/feed/engagement-actions";
+import {
+  recordListingShareAction,
+  recordListingViewAction,
+  toggleSaveAction,
+} from "@/app/(app)/feed/engagement-actions";
 import { COPY } from "./copy";
 
 const iconButtonClass = cn(
@@ -43,6 +47,13 @@ export interface DetailTopBarProps {
  *
  * "Guardar" es optimista con la misma tolerancia a errores que el del feed: se
  * pinta al instante y se revierte si el server dice que no.
+ *
+ * ADEMÁS ES EL SENSOR DE "VISTAS" Y "COMPARTIDOS" del aviso (0050), y está acá
+ * por una razón de cobertura, no de comodidad: los seis detalles de aviso
+ * (propiedades, negocios, profesionales, eventos, marketplace, empleos) montan
+ * esta barra, así que un vertical nuevo hereda la métrica sin que nadie se
+ * acuerde de agregársela. Un tracker suelto que hay que recordar poner en cada
+ * página es un contador que en algún momento va a estar mintiendo por omisión.
  */
 export function DetailTopBar({ title, listingId, initialSaved }: DetailTopBarProps) {
   const router = useRouter();
@@ -52,6 +63,23 @@ export function DetailTopBar({ title, listingId, initialSaved }: DetailTopBarPro
   const [reportOpen, setReportOpen] = useState(false);
   const [saved, setSaved] = useState(initialSaved ?? false);
   const [, startSaveTransition] = useTransition();
+  const viewedRef = useRef<string | null>(null);
+
+  /**
+   * Vista del aviso, una sola vez por aviso y por montaje.
+   *
+   * El `ref` no es una optimización: en desarrollo el StrictMode monta dos
+   * veces, y aunque la PK de `listing_views` deduplica por día del lado de la
+   * base (el segundo insert vuelve como 23505 tolerado), mandar dos veces el
+   * mismo round-trip por cada apertura es ruido gratis. Se guarda el id y no un
+   * booleano para que navegar de un aviso a otro sin desmontar la barra cuente
+   * el segundo aviso.
+   */
+  useEffect(() => {
+    if (viewedRef.current === listingId) return;
+    viewedRef.current = listingId;
+    void recordListingViewAction({ listingId }).catch(() => undefined);
+  }, [listingId]);
 
   function toggleSave() {
     const next = !saved;
@@ -85,14 +113,23 @@ export function DetailTopBar({ title, listingId, initialSaved }: DetailTopBarPro
     });
   }
 
+  /**
+   * Compartir. El contador se suma DESPUÉS de que el share nativo o el
+   * copiar-link resolvieron bien, nunca antes: cancelar el diálogo del sistema
+   * lanza, y contarlo igual convertiría cada arrepentimiento en una compartida
+   * que no pasó. La métrica nunca se espera (`void`) — compartir no puede
+   * quedar esperando a un contador.
+   */
   async function handleShare() {
     const url = window.location.href;
     try {
       if (navigator.share) {
         await navigator.share({ title, url });
+        void recordListingShareAction({ listingId }).catch(() => undefined);
         return;
       }
       await navigator.clipboard.writeText(url);
+      void recordListingShareAction({ listingId }).catch(() => undefined);
       toast({
         title: COPY.detail.shareCopiedTitle,
         description: COPY.detail.shareCopiedBody,

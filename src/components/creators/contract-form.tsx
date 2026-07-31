@@ -7,6 +7,7 @@ import { BottomSheet, Button, Field, Input, Textarea, type ButtonProps } from "@
 import { cn } from "@/lib/utils";
 import { proposeContract } from "@/app/(app)/creadores/actions";
 import { dollarsToCents } from "./money";
+import { ContactBlockNotice, hasContactInfo } from "./contact-block-notice";
 import { DemoSeal } from "./demo-seal";
 import { COPY } from "./copy";
 
@@ -27,8 +28,14 @@ export interface ContractFormProps {
 
 /**
  * Propuesta de contrato (bottom-sheet). La abre el CLIENTE: define qué se
- * entrega, en cuánto tiempo y por cuánto. Al crear, navega al detalle del
- * contrato donde deposita el pago en garantía (modo demostración).
+ * entrega, en cuánto tiempo y por cuánto. Al crear, navega al detalle de la
+ * colaboración donde deposita el pago en garantía (modo demostración).
+ *
+ * Bloqueo de datos de contacto (§6): corre sobre título y alcance, los dos
+ * campos de texto libre que lee la otra parte. La regla es simétrica con la
+ * del creador — si sólo se controlara del otro lado, el "coordinamos por
+ * WhatsApp" entraría por acá. El servidor vuelve a chequearlo antes de
+ * escribir; esto es para no hacer escribir de más.
  */
 export function ContractForm({
   creatorId,
@@ -53,7 +60,10 @@ export function ContractForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const contactBlocked = hasContactInfo(title, scope);
+
   async function handleSubmit() {
+    if (contactBlocked) return;
     const amountValue = Number(amount);
     if (title.trim().length < 6) return setError(COPY.contract.errors.titleShort);
     if (scope.trim().length < 10) return setError(COPY.contract.errors.scopeShort);
@@ -84,7 +94,7 @@ export function ContractForm({
         setError(result.error);
         return;
       }
-      router.push(`/creadores/contratos/${result.contractId}`);
+      router.push(`/creadores/colaboraciones/${result.contractId}`);
     } catch {
       setError(COPY.contract.errors.generic);
     } finally {
@@ -168,6 +178,8 @@ export function ContractForm({
             </Field>
           </div>
 
+          <ContactBlockNotice text={[title, scope].join("\n")} />
+
           {error && (
             <p role="alert" className="text-sm font-medium text-danger">
               {error}
@@ -179,6 +191,7 @@ export function ContractForm({
             size="lg"
             className="w-full"
             loading={submitting}
+            disabled={contactBlocked}
             onClick={handleSubmit}
           >
             {submitting ? COPY.contract.creating : COPY.contract.create}

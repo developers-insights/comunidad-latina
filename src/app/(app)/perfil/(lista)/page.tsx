@@ -37,7 +37,7 @@ const COPY = {
   trustHint:
     "Crece con tu tiempo en la comunidad, tus verificaciones y el aval de tus vecinos.",
   editHeading: "Editar tu perfil",
-  contractsTitle: "Mis contratos",
+  contractsTitle: "Mis colaboraciones",
   contractsDesc: "Los trabajos que contrataste o entregaste como creador.",
   settingsTitle: "Ajustes de tu cuenta",
   settingsDesc:
@@ -196,11 +196,14 @@ export default async function PerfilPage({
         />
       </BezelCard>
 
-      {/* Mis contratos — solo si el usuario tiene alguno (cliente o creador). */}
+      {/* Mis colaboraciones — solo si el usuario tiene alguna (cliente o creador).
+          La pestaña se llamaba "Contratos" hasta el pedido del cliente del 30/7;
+          la ruta vieja sigue viva como 308, pero desde acá se entra derecho a la
+          nueva para no gastar un redirect en cada visita. */}
       {Boolean(contractsCount) && (
         <section className="flex flex-col gap-3">
           <Link
-            href="/creadores/contratos"
+            href="/creadores/colaboraciones"
             className="group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           >
             <BezelCard coreClassName="flex items-center gap-4 p-5">

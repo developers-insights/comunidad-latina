@@ -91,6 +91,97 @@ export const COPY = {
     messageTitle: "¿Querés preguntarle algo?",
     messageCta: "Escribirle a la tienda",
     messagePlaceholder: "Hola, quería consultarles por…",
+
+    // --- Tienda apagada (membresía vencida o cancelada, §7) -----------------
+    // Dos lecturas del MISMO hecho. Al visitante no le sirve saber que alguien
+    // no pagó: le sirve saber que la vidriera no está y qué puede hacer. Al
+    // dueño le sirve saber exactamente qué pasó y cómo volver.
+    offVisitorTitle: "Esta tienda no está disponible por ahora",
+    offVisitorMessage:
+      "Sus productos no se están mostrando en el Marketplace. Si conocés al negocio, avisale — vuelve apenas reactive su tienda.",
+    offVisitorCta: "Ver otras tiendas y productos",
+    offOwnerTitle: "Tu tienda no se está mostrando",
+    offOwnerMessage:
+      "Tus productos siguen guardados: nada se borró. Reactivá tu membresía y tu vidriera vuelve tal como estaba.",
+    offOwnerCta: "Reactivar mi tienda",
+  },
+
+  // -------------------------------------------------------------------------
+  // MEMBRESÍA DE TIENDA — USD 10/mes (§7)
+  // -------------------------------------------------------------------------
+  membership: {
+    title: "Membresía de tienda",
+    subtitle: "Tu vidriera en el Marketplace de la comunidad, por un precio fijo al mes.",
+    priceSuffix: "por mes, por tienda",
+    includesTitle: "Qué incluye",
+    excludesTitle: "Lo que no cobramos",
+    activateCta: "Activar mi tienda",
+    reactivateCta: "Reactivar mi tienda",
+    manageCta: "Gestionar o cancelar",
+    manageHint: "Se abre la facturación de Stripe: ahí cambiás la tarjeta o cancelás.",
+    statusTitle: "Estado de tu membresía",
+    renewsOn: (date: string) => `Se renueva el ${date}`,
+    endsOn: (date: string) => `Vence el ${date}`,
+    endedOn: (date: string) => `Venció el ${date}`,
+    visibleNow: "Tu tienda se está mostrando",
+    hiddenNow: "Tu tienda no se está mostrando",
+
+    needLoginTitle: "Entrá para activar tu tienda",
+    needLoginMessage:
+      "Con tu cuenta podés activar la membresía de tus tiendas y ver su estado.",
+    needLoginCta: "Entrar a mi cuenta",
+
+    noStoresTitle: "Todavía no tenés una tienda",
+    noStoresMessage:
+      "La membresía se activa sobre una tienda. Creá la tuya y volvé — se hace en un par de minutos.",
+    noStoresCta: "Crear mi tienda",
+
+    /** Estados que devuelve el Checkout al volver de Stripe. */
+    successTitle: "¡Listo! Tu tienda ya está activa",
+    successMessage:
+      "Puede tardar unos segundos en aparecer. Si no la ves enseguida, recargá esta página.",
+    canceledTitle: "No se cobró nada",
+    canceledMessage: "Cerraste el pago antes de terminar. Podés volver a intentarlo cuando quieras.",
+
+    /** Cómo funciona el cobro, dicho antes de pagar y no después. */
+    billingNote:
+      "Se cobra una vez al mes por cada tienda activa. Cancelás desde acá cuando quieras y no hay cargo por darte de baja.",
+
+    errors: {
+      generic:
+        "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo en un ratito.",
+      notYours: "Esa tienda no figura como tuya. Revisá desde cuál estás entrando.",
+      noPortal:
+        "Todavía no hay una facturación abierta para esta tienda. Activá la membresía primero.",
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // COMPRAR — el checkout ocurre AFUERA (§7)
+  //
+  // Todo esto se lee ANTES de tocar el botón, no en la letra chica. No es
+  // prudencia legal: es el modelo. Comunidad Latina no procesa el pago, y si
+  // alguien cree que sí, el reclamo lo vamos a recibir igual.
+  // -------------------------------------------------------------------------
+  purchase: {
+    cta: "Comprar en el sitio del negocio",
+    ariaCta: (store: string) => `Comprar en el sitio de ${store} — se abre en otra pestaña`,
+    noticeTitle: "Antes de seguir, dos cosas",
+    externalHint: "Se abre el sitio del negocio en otra pestaña.",
+    /** Regla de oro del repo — la misma frase que usa el Escudo Anti-Estafa. */
+    goldenRule: "Nunca envíes dinero por adelantado a alguien que no conocés.",
+    policyLink: "Reglas del Marketplace",
+  },
+
+  // -------------------------------------------------------------------------
+  // REPORTAR un producto (§7) — misma hoja y misma acción que el resto de la
+  // app; lo único propio son los motivos.
+  // -------------------------------------------------------------------------
+  report: {
+    title: "¿Este producto no debería estar acá?",
+    body: "Contanos qué pasa. Es anónimo para quien vende y lo revisa nuestro equipo.",
+    cta: "Reportar este producto",
+    policyPrompt: "Mirá qué no se puede vender",
   },
   publish: {
     title: "Publicar un producto",
@@ -129,6 +220,13 @@ export const COPY = {
     tooManyPhotos: "Podés subir hasta 4 fotos.",
     tooBigPhoto: "Esa foto es muy pesada — probá con una de menos de 8 MB.",
     reviewNote: "Las fotos pasan por un control de seguridad antes de publicarse.",
+    // Política de productos prohibidos (§7): se acepta AL PUBLICAR, y el enlace
+    // está a la vista antes de tocar el botón — no escondido en un tilde.
+    policyTitle: "Qué se puede vender",
+    policyBody:
+      "Hay cosas que no se pueden publicar acá: armas, falsificaciones, medicamentos, documentos y algunas más. Leelas antes de publicar.",
+    policyLink: "Reglas del Marketplace",
+    policyAccept: "Al publicar aceptás las Reglas del Marketplace.",
     submit: "Publicar producto",
     submitting: "Publicando…",
     errors: {

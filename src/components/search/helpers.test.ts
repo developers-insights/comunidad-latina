@@ -111,6 +111,25 @@ describe("groupSearchResults", () => {
     const posts = groups.find((group) => group.type === "publicaciones");
     expect(posts?.items[0].sponsored).toBe(false);
   });
+
+  it("un video patrocinado abre su ANUNCIO, no el scroll de Videos Cortos", () => {
+    // `app.video_post_href` (0044) manda todo video a `/videos?start=id`. Ese
+    // reel filtra `video_type='short_video'`, así que el patrocinado no está
+    // ahí: la persona termina viendo OTROS videos y se fue del anuncio. El
+    // destino correcto es el detalle, donde el video se ve dentro del anuncio.
+    const groups = groupSearchResults(
+      [
+        row({ result_type: "videos", id: "vid-pago", href: "/videos?start=vid-pago" }),
+        row({ result_type: "videos", id: "vid-organico", href: "/videos?start=vid-organico" }),
+      ],
+      new Set(["vid-pago"]),
+    );
+    const videos = groups.find((group) => group.type === "videos");
+    expect(videos?.items.map((item) => item.href)).toEqual([
+      "/feed/vid-pago",
+      "/videos?start=vid-organico",
+    ]);
+  });
 });
 
 describe("countResults", () => {

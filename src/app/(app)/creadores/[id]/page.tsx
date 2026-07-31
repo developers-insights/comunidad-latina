@@ -95,6 +95,7 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
             level={toTrustLevel(trust?.level)}
             signals={buildTrustSignals(trust?.signals ?? {}, profile?.identity_verified ?? false)}
             size="inline"
+            profileId={profile?.id ?? null}
           />
         </div>
       </div>

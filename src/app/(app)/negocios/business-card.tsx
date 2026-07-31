@@ -1,9 +1,7 @@
-"use client";
-
-import { useState } from "react";
+import Link from "next/link";
 import { ArrowRight, MapPin, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { ACCENT_CHIP_CLASS, DirectoryMedia } from "@/components/directory";
-import { BezelCard, BottomSheet, Button, Chip, Skeleton } from "@/components/ui";
+import { BezelCard, Chip, Skeleton, buttonVariants } from "@/components/ui";
 import { PhotoTap } from "@/components/media/photo-tap";
 import { cn } from "@/lib/utils";
 import { BusinessTrustBadge, type OwnerTrust } from "./business-trust-badge";
@@ -11,8 +9,7 @@ import { BusinessTrustBadge, type OwnerTrust } from "./business-trust-badge";
 const COPY = {
   viewBusiness: "Ver negocio",
   publishedBy: "Publicado por",
-  close: "Cerrar",
-  /** Tocar la foto la abre en el visor; "Ver negocio" sigue abriendo la hoja. */
+  /** Tocar la foto la abre en el visor; "Ver negocio" abre el perfil. */
   openPhotos: (title: string) => `Ver fotos de ${title}`,
 } as const;
 
@@ -36,17 +33,22 @@ export interface BusinessCardModel {
 
 /**
  * Card de negocio (§ feedback cliente 2026-07-19: misma estética que
- * Propiedades — foto 16:9 grande, contenido debajo, 1 solo CTA). Negocios no
- * tiene página de detalle propia (mismo desvío documentado que
- * <FeedListingCard>): el CTA abre un BottomSheet con la info completa en vez
- * de navegar. Acento --accent-negocios (amarillo/dorado), solo decorativo.
+ * Propiedades — foto 16:9 grande, contenido debajo, 1 solo CTA). Acento
+ * --accent-negocios (amarillo/dorado), solo decorativo.
+ *
+ * "VER NEGOCIO" AHORA NAVEGA (call del 29/7, 1:05: "si le das ver al negocio…
+ * tiene que salir profile del negocio, toda la información del negocio").
+ * Antes abría un BottomSheet con tres datos —era el desvío documentado por no
+ * haber página propia—; hoy `/negocios/[id]` existe y tiene la información
+ * completa, las publicaciones del negocio y sus botones de contacto. Al irse la
+ * hoja se fue también el único estado del componente: esta card volvió a ser
+ * server, o sea cero JS por cada negocio del listado.
  *
  * Mismo reparto de gestos que el resto de las cards (feedback 2026-07-26):
- * tocar la FOTO abre el visor a pantalla completa; "Ver negocio" sigue abriendo
- * la hoja con la info. Sin foto, el gradiente del módulo no es tocable.
+ * tocar la FOTO abre el visor a pantalla completa; "Ver negocio" abre el
+ * perfil. Sin foto, el gradiente del módulo no es tocable.
  */
 export function BusinessCard({ business }: { business: BusinessCardModel }) {
-  const [open, setOpen] = useState(false);
   const photos = business.photos?.length
     ? business.photos
     : business.photoUrl
@@ -54,105 +56,58 @@ export function BusinessCard({ business }: { business: BusinessCardModel }) {
       : [];
 
   return (
-    <>
-      <BezelCard coreClassName="overflow-hidden p-0">
-        <article aria-label={business.title}>
-          <PhotoTap
-            photos={photos}
-            label={COPY.openPhotos(business.title)}
-            authorName={business.title}
-          >
-            <DirectoryMedia src={business.photoUrl} accent="negocios" icon={Storefront} />
-          </PhotoTap>
+    <BezelCard coreClassName="overflow-hidden p-0">
+      <article aria-label={business.title}>
+        <PhotoTap
+          photos={photos}
+          label={COPY.openPhotos(business.title)}
+          authorName={business.title}
+        >
+          <DirectoryMedia src={business.photoUrl} accent="negocios" icon={Storefront} />
+        </PhotoTap>
 
-          <div className="flex flex-col gap-2.5 p-4">
-            {business.categoryLabel && (
-              <Chip className={cn("self-start", ACCENT_CHIP_CLASS.negocios)}>
-                {business.categoryLabel}
-              </Chip>
-            )}
+        <div className="flex flex-col gap-2.5 p-4">
+          {business.categoryLabel && (
+            <Chip className={cn("self-start", ACCENT_CHIP_CLASS.negocios)}>
+              {business.categoryLabel}
+            </Chip>
+          )}
 
-            <h3 className="font-display text-lg font-bold leading-snug text-foreground">
-              {business.title}
-            </h3>
+          <h3 className="font-display text-lg font-bold leading-snug text-foreground">
+            {business.title}
+          </h3>
 
-            {business.areaLabel && (
-              <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
-                <MapPin size={16} aria-hidden="true" className="shrink-0" />
-                {business.areaLabel}
-              </p>
-            )}
-
-            {business.ownerTrust ? (
-              <BusinessTrustBadge trust={business.ownerTrust} />
-            ) : (
-              business.publisherName && (
-                <p className="text-sm text-foreground-muted">
-                  {COPY.publishedBy} {business.publisherName}
-                </p>
-              )
-            )}
-
-            <Button
-              type="button"
-              variant="secondary"
-              size="md"
-              className="mt-1 w-full"
-              onClick={() => setOpen(true)}
-            >
-              {COPY.viewBusiness}
-              <ArrowRight size={16} aria-hidden="true" />
-            </Button>
-          </div>
-        </article>
-      </BezelCard>
-
-      <BottomSheet open={open} onClose={() => setOpen(false)} title={business.title}>
-        <div className="flex flex-col gap-4 pb-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {business.categoryLabel && (
-              <Chip className={ACCENT_CHIP_CLASS.negocios}>{business.categoryLabel}</Chip>
-            )}
-            {business.areaLabel && (
-              <span className="flex items-center gap-1 text-sm text-foreground-secondary">
-                <MapPin size={14} aria-hidden="true" />
-                {business.areaLabel}
-              </span>
-            )}
-          </div>
-
-          {business.description && (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground-secondary">
-              {business.description}
+          {business.areaLabel && (
+            <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
+              <MapPin size={16} aria-hidden="true" className="shrink-0" />
+              {business.areaLabel}
             </p>
           )}
 
           {business.ownerTrust ? (
-            <div className="rounded-lg border border-border-subtle bg-surface-subtle p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-                {COPY.publishedBy}
-              </p>
-              <div className="mt-2">
-                <BusinessTrustBadge trust={business.ownerTrust} />
-              </div>
-            </div>
+            <BusinessTrustBadge trust={business.ownerTrust} />
           ) : (
             business.publisherName && (
-              <div className="rounded-lg border border-border-subtle bg-surface-subtle p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-                  {COPY.publishedBy}
-                </p>
-                <p className="mt-2 text-sm text-foreground-secondary">{business.publisherName}</p>
-              </div>
+              <p className="text-sm text-foreground-muted">
+                {COPY.publishedBy} {business.publisherName}
+              </p>
             )
           )}
 
-          <Button variant="secondary" className="w-full" onClick={() => setOpen(false)}>
-            {COPY.close}
-          </Button>
+          {/* El nombre accesible dice A QUÉ negocio lleva: en una lista de
+              treinta tarjetas, treinta enlaces que dicen "Ver negocio" no
+              orientan a nadie que navegue por enlaces. */}
+          <Link
+            href={`/negocios/${business.id}`}
+            aria-label={`${COPY.viewBusiness}: ${business.title}`}
+            className={cn(buttonVariants({ variant: "secondary", size: "md" }), "mt-1 w-full")}
+          >
+            {COPY.viewBusiness}
+            <ArrowRight size={16} aria-hidden="true" />
+          </Link>
         </div>
-      </BottomSheet>
-    </>
+      </article>
+    </BezelCard>
   );
 }
 

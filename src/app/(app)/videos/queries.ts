@@ -46,20 +46,14 @@ import { hasVideoMedia, scopeListingKind, type VideosScope } from "./helpers";
 type Supabase = SupabaseClient<Database>;
 
 /**
- * Columnas de video de la 0046 que el reel necesita ADEMÁS de POST_COLUMNS.
- * Se piden en el mismo select (no en una query aparte como las encuestas)
- * porque acá no son un adorno: sin ellas no se puede decidir qué es un corto.
+ * Las columnas de video de la 0046 ya viajan en POST_COLUMNS desde el
+ * 2026-07-30: el reel no era la única superficie que necesitaba distinguir un
+ * corto de un video publicitario —la tarjeta del feed también, para no mandar
+ * al scroll a quien tocó un anuncio— así que se subieron a la fila común en vez
+ * de vivir sólo acá. `VideoPostRow` queda como alias para no reescribir el
+ * archivo entero; el contrato es el mismo `PostRow`.
  */
-const VIDEO_COLUMNS = "video_type, duration_seconds, is_paid_ad, eligible_for_short_feed, video_category";
-
-/** Fila de post + sus columnas de video. */
-type VideoPostRow = PostRow & {
-  video_type: string | null;
-  duration_seconds: number | null;
-  is_paid_ad: boolean | null;
-  eligible_for_short_feed: boolean | null;
-  video_category: string | null;
-};
+type VideoPostRow = PostRow;
 
 const SCAN_CHUNK = 40;
 const MAX_SCANS = 4;
@@ -153,7 +147,7 @@ export async function fetchVideoReelsPage({
   const buildQuery = (keyset: ReelsCursor | null) => {
     let query = supabase
       .from("posts")
-      .select(`${POST_COLUMNS}, ${VIDEO_COLUMNS}`)
+      .select(POST_COLUMNS)
       .eq("tenant_id", tenantId)
       .eq("status", "published")
       // EL FILTRO QUE SOSTIENE LA SUPERFICIE (0046 §6): sólo cortos elegibles.
@@ -233,7 +227,7 @@ export async function fetchVideoReelsPage({
   if (startId && !cursor) {
     const { data: startRow } = await supabase
       .from("posts")
-      .select(`${POST_COLUMNS}, ${VIDEO_COLUMNS}`)
+      .select(POST_COLUMNS)
       .eq("tenant_id", tenantId)
       .eq("status", "published")
       .eq("id", startId)
@@ -322,8 +316,13 @@ export async function fetchVideoReelsPage({
     fetchViewerSaves(supabase, viewerId, pageIds),
   ]);
 
-  const items = pageRows.map((row) => ({
-    ...toPostCardModel(row, authors, likedIds, now, {
+  // Las columnas de video viajan con el modelo (las mapea `toPostCardModel`,
+  // para TODA superficie): el slide vuelve a preguntarse si el post puede estar
+  // en el reel antes de pintarlo. La query ya lo filtró, pero un `video-reels`
+  // que reciba items de cualquier otro lado (una acción futura, un test mal
+  // armado) no puede volverse el agujero.
+  const items = pageRows.map((row) =>
+    toPostCardModel(row, authors, likedIds, now, {
       entity: row.entity_listing_id
         ? (entityById.get(row.entity_listing_id) ?? null)
         : null,
@@ -331,16 +330,7 @@ export async function fetchVideoReelsPage({
       // El botón GUARDAR del riel arranca en su estado real (no siempre vacío).
       savedByViewer: savedIds.has(row.id),
     }),
-    // Las columnas de video viajan con el modelo: el slide vuelve a preguntarse
-    // si el post puede estar en el reel antes de pintarlo. La query ya lo
-    // filtró, pero un `video-reels` que reciba items de cualquier otro lado
-    // (una acción futura, un test mal armado) no puede volverse el agujero.
-    videoType: row.video_type,
-    durationSeconds: row.duration_seconds,
-    isPaidAd: row.is_paid_ad ?? false,
-    eligibleForShortFeed: row.eligible_for_short_feed ?? true,
-    videoCategory: row.video_category,
-  }));
+  );
 
   return { items, nextCursor };
 }

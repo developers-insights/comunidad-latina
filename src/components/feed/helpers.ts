@@ -1,5 +1,6 @@
 import type { TrustLevel, TrustSignal } from "@/components/trust";
 import type { ListingCardModel } from "@/components/listings";
+import { playbackCapSeconds } from "@/lib/media/video-policy";
 
 /**
  * Helpers puros del módulo FEED SOCIAL. Sin dependencias de servidor:
@@ -205,6 +206,86 @@ export interface PostCardModel {
   ctaWhatsapp: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Publicidad paga: qué se marca "Patrocinado" y qué se mira DENTRO del anuncio
+// ---------------------------------------------------------------------------
+
+/** Lo mínimo que hay que saber de un post para responder las dos preguntas. */
+export interface PaidAdSubject {
+  /** posts.video_type (0046). 'advertising_video' = video de una campaña. */
+  videoType?: string | null;
+  /** posts.is_paid_ad (0046) — columna blindada, la escribe el servidor. */
+  isPaidAd?: boolean;
+  /** Campaña VIGENTE en post_promotions (0038). Cambia con el calendario. */
+  isPromoted?: boolean;
+}
+
+/**
+ * ¿Este post es un espacio PAGO? Tres señales, unidas por OR, y hace falta que
+ * sean las tres porque miden cosas distintas:
+ *
+ *  · `isPromoted` es la campaña VIGENTE (post_promotions). Se apaga sola cuando
+ *    la campaña termina — por eso NO alcanza: el post sigue siendo el anuncio
+ *    que fue, y su video largo sigue existiendo.
+ *  · `isPaidAd` es la columna de la 0046, blindada contra escritura directa
+ *    (`app.protect_post_counters`). Es permanente y es la que manda.
+ *  · `videoType === 'advertising_video'` es la misma verdad dicha por el tipo.
+ *    Se mira igual por si una fila vieja quedó con la bandera sin el tipo, o al
+ *    revés: entre "de más" y "de menos", en divulgación de publicidad se marca
+ *    de más.
+ *
+ * De acá salen las DOS consecuencias, y a propósito de la misma función: el
+ * chip "Patrocinado" y el ruteo del video. Que un anuncio se marque pero se
+ * comporte como contenido orgánico (o al revés) es justamente el bug.
+ */
+export function isPaidAdvertising(post: PaidAdSubject): boolean {
+  if (post.isPromoted === true) return true;
+  if (post.isPaidAd === true) return true;
+  return post.videoType === "advertising_video";
+}
+
+/**
+ * ¿El video de este post ABRE EL REEL al tocarlo, o se queda en su publicación?
+ *
+ * Devuelve `false` —no hay reel— por dos motivos que terminan igual: el video
+ * se abre a pantalla completa SOBRE esta misma publicación y al cerrar volvés
+ * exactamente a donde estabas.
+ *
+ *  1. La pantalla muestra UNA publicación (`scope === 'sin-reel'`): el detalle,
+ *     al que se llega desde el perfil de alguien o desde las novedades de un
+ *     evento (feedback cliente 2026-07-27: "no lo puedes scrollear porque te
+ *     sale de la propiedad").
+ *  2. Es un espacio PAGO. Mandar a quien tocó un anuncio al scroll infinito lo
+ *     lleva lejos de lo que el anunciante pagó por mostrar; y encima el video
+ *     publicitario NO está en el reel (contrato 0046), así que sería un scroll
+ *     donde ese video, por definición, no existe. Es el bug que el cliente
+ *     reportó en la call del 29/7 (1:19) para propiedades y eventos.
+ */
+export function videoOpensReel(input: {
+  scope: VideoScopeProp;
+  post: PaidAdSubject;
+}): boolean {
+  if (input.scope === "sin-reel") return false;
+  return !isPaidAdvertising(input.post);
+}
+
+/**
+ * Segundos que el visor a pantalla completa reproduce de ESTE post. Los números
+ * no se escriben acá: salen de `playbackCapSeconds` (video-policy), que es el
+ * único lugar donde viven los cuatro topes.
+ *
+ *  · anuncio  → 600 s (el video publicitario completo, dentro de su anuncio).
+ *  · el resto → 300 s (el video completo de una publicación en su detalle).
+ *
+ * Que el segundo tenga tope y no sea "infinito" importa por los 7 videos
+ * anteriores a la 0046: su `duration_seconds` es DESCONOCIDA, así que el
+ * archivo puede durar cualquier cosa. El tope es lo que hace que la promesa de
+ * la superficie no dependa de un dato que no tenemos.
+ */
+export function viewerPlaybackCapFor(post: PaidAdSubject): number {
+  return playbackCapSeconds(isPaidAdvertising(post) ? "advertising" : "detail");
+}
+
 /** Listing NO-property para la card propia del feed (los property usan ListingCard). */
 export interface FeedListingModel {
   id: string;
@@ -277,16 +358,19 @@ export function entityAccentVar(kind: string): string {
 }
 
 /**
- * Página de la entidad para el kind dado. property/professional/event/job
- * tienen detalle por id; business cae al directorio (no hay página por-negocio
- * aún); el resto no linkea (nombre sin link antes que un link roto).
+ * Página de la entidad para el kind dado. Los cinco verticales tienen detalle
+ * por id; un kind desconocido no linkea (nombre sin link antes que link roto).
+ *
+ * `business` apuntaba al directorio entero porque no existía página por-negocio
+ * — el nombre del negocio en un post te dejaba en la lista de todos. Desde el
+ * 2026-07-30 existe `/negocios/[id]` (call del 29/7, 1:05) y linkea al negocio.
  */
 const ENTITY_DETAIL_ROUTE: Record<string, (id: string) => string> = {
   property: (id) => `/propiedades/${id}`,
   professional: (id) => `/profesionales/${id}`,
   event: (id) => `/eventos/${id}`,
   job: (id) => `/empleos/${id}`,
-  business: () => "/negocios",
+  business: (id) => `/negocios/${id}`,
 };
 
 export function entityHref(kind: string, id: string): string | null {

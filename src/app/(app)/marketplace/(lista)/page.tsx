@@ -152,14 +152,22 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
     storeIds.length > 0
       ? supabase
           .from("listings")
-          // store_verified es el espejo público de Presencia Verificada (0039):
-          // vive en el propio aviso de la tienda, visible para cualquiera.
-          .select("id, title, store_verified")
+          // store_verified es el espejo público de Presencia Verificada (0039);
+          // store_active, el de la membresía de tienda (0048). Los dos viven en
+          // el propio aviso de la tienda y son visibles para cualquiera — por
+          // eso el Marketplace puede decidir con UN select y sin tocar
+          // store_memberships, que la RLS le esconde al visitante.
+          .select("id, title, store_verified, store_active")
           .eq("tenant_id", tenant.id)
           .eq("kind", "business")
           .in("id", storeIds)
       : Promise.resolve({
-          data: [] as { id: string; title: string; store_verified: boolean }[],
+          data: [] as {
+            id: string;
+            title: string;
+            store_verified: boolean;
+            store_active: boolean;
+          }[],
         }),
     privateOwnerIds.length > 0
       ? supabase.from("profiles").select("id, display_name").in("id", privateOwnerIds)
@@ -178,7 +186,7 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
   const storeById = new Map(
     (storesResult.data ?? []).map((store) => [
       store.id,
-      { name: store.title, verified: store.store_verified },
+      { name: store.title, verified: store.store_verified, active: store.store_active },
     ]),
   );
   const sellerNameById = new Map(
@@ -186,7 +194,26 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
   );
   const ownsStore = (ownsStoreResult.count ?? 0) > 0;
 
-  const cards: ProductCardModel[] = pageRows.map((row) => {
+  // MEMBRESÍA VENCIDA ⇒ la tienda y sus productos salen de la vidriera (§7).
+  //
+  // El filtro se aplica ACÁ y no en la query principal a propósito: `listings`
+  // no sabe a qué tienda pertenece un producto (la relación vive en
+  // `attrs.store_listing_id`, un jsonb), así que no hay join que hacer en el
+  // where. Se descarta después de resolver el lote de tiendas — el mismo que ya
+  // se pedía para el nombre y el sello de verificada, sin una vuelta extra.
+  //
+  // Un producto de PARTICULAR nunca se filtra: no tiene tienda detrás y la
+  // membresía no lo alcanza.
+  const visibleRows = pageRows.filter((row) => {
+    const storeId = attrsByRow.get(row.id)?.storeListingId;
+    if (!storeId) return true;
+    const store = storeById.get(storeId);
+    // Tienda que no se pudo leer ⇒ no se muestra: preferimos una vidriera con
+    // menos productos antes que una que muestra los de una tienda apagada.
+    return store?.active === true;
+  });
+
+  const cards: ProductCardModel[] = visibleRows.map((row) => {
     const attrs = attrsByRow.get(row.id) ?? parseProductAttrs(row.attrs);
     const store = attrs.storeListingId ? storeById.get(attrs.storeListingId) : undefined;
     return {
@@ -250,7 +277,11 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
 
       <CategoryChips className={cn(ownsStore ? "mt-4" : "", "mb-5")} />
 
-      {cards.length === 0 ? (
+      {/* `cards.length === 0 && hasMore` es un caso real desde la membresía: una
+          página entera puede quedar vacía porque todos sus productos eran de
+          tiendas apagadas. Ahí NO va el estado vacío ("no hay productos" sería
+          falso) — va el botón para seguir avanzando el cursor. */}
+      {cards.length === 0 && !hasMore ? (
         <EmptyState
           illustration="/images/empty-state-search.png"
           title={

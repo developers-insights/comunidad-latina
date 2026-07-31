@@ -3,12 +3,15 @@ import { Briefcase, Users } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 
-// "contracts" se mantiene en el tipo porque /creadores/contratos sigue
-// existiendo y sigue pasando active="contracts" para resaltar (ver esa
-// página) — el acceso de Contratos ya no vive en este nav: se llega desde
-// "Mis contratos" en /creadores/perfil y, si hay algún contrato, también
-// desde /perfil (perfil general — feedback 27/7: el link en el perfil de
-// creador no era descubrible si nunca entrabas ahí primero).
+// "contracts" se mantiene como CLAVE del tipo (no como etiqueta) porque
+// /creadores/colaboraciones sigue pasando active="contracts" para resaltar —
+// renombrar la clave no cambiaría nada visible y sí tocaría más archivos. La
+// sección se llama "Colaboraciones" desde el 30/7 (pedido textual del cliente).
+//
+// Su acceso no vive en este nav: se llega desde "Mis colaboraciones" en
+// /creadores/perfil y, si hay alguna, también desde /perfil (perfil general —
+// feedback 27/7: el link en el perfil de creador no era descubrible si nunca
+// entrabas ahí primero).
 export type CreatorsSection = "gigs" | "creators" | "contracts";
 
 const ITEMS: ReadonlyArray<{
@@ -24,8 +27,8 @@ const ITEMS: ReadonlyArray<{
 /**
  * Segmented control del módulo: Trabajos · Creadores. Server component
  * (Links reales — navegable sin JS); el activo lo dice cada página. El
- * acceso a Contratos se sacó de acá (feedback 26/7) — ver el comentario de
- * `CreatorsSection` arriba para dónde vive ahora.
+ * acceso a Colaboraciones se sacó de acá (feedback 26/7) — ver el comentario
+ * de `CreatorsSection` arriba para dónde vive ahora.
  */
 export function CreatorsNav({ active }: { active: CreatorsSection }) {
   return (

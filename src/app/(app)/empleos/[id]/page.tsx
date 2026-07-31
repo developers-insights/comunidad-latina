@@ -129,6 +129,7 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
             level={toTrustLevel(trust?.level)}
             signals={buildTrustSignals(trust?.signals ?? {}, profile?.identity_verified ?? false)}
             size="inline"
+            profileId={profile?.id ?? null}
           />
         </div>
       </BezelCard>

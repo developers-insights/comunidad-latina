@@ -33,6 +33,14 @@ function makeRow(overrides: Partial<PostRow> = {}): PostRow {
     created_at: "2026-07-26T11:00:00Z",
     author_id: "u1",
     entity_listing_id: null,
+    // Columnas de video (0046). Una publicación de TEXTO las trae así: sin
+    // tipo, sin duración, no paga, y con el veto en su default `true` — que
+    // por sí solo no mete nada en el reel (es veto, no afirmación).
+    video_type: null,
+    duration_seconds: null,
+    is_paid_ad: false,
+    eligible_for_short_feed: true,
+    video_category: null,
     ...overrides,
   };
 }

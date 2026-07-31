@@ -5,12 +5,18 @@ import { useRouter } from "next/navigation";
 import { CheckCircle, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, Button, Field, Input, Textarea } from "@/components/ui";
 import { applyToGig } from "@/app/(app)/creadores/actions";
+import { ContactBlockNotice, hasContactInfo } from "./contact-block-notice";
 import { COPY } from "./copy";
 
 /**
  * Aplicar a un aviso (bottom-sheet): mensaje + monto propuesto opcional.
  * Optimista en la navegación: al enviar refresca la página para que el estado
  * "ya aplicaste" aparezca sin recargar.
+ *
+ * Bloqueo de datos de contacto (§6): el aviso aparece mientras se escribe y el
+ * botón queda inhabilitado. La decisión real la toma el servidor —`applyToGig`
+ * corre el mismo detector antes de escribir— así que este control es para que
+ * nadie escriba de más, no para autorizar.
  */
 export function ApplySheet({ gigId }: { gigId: string }) {
   const router = useRouter();
@@ -21,11 +27,18 @@ export function ApplySheet({ gigId }: { gigId: string }) {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Mismo detector que corre el servidor: si avisara con otra regla, habría
+  // textos que pasan el aviso y rebotan igual al enviar.
+  const contactBlocked = hasContactInfo(message);
+
   async function handleSubmit() {
     if (message.trim().length < 20) {
       setError(COPY.apply.errors.messageShort);
       return;
     }
+    // Cinturón: el botón ya está inhabilitado, pero un Enter en el textarea o
+    // un doble evento no pueden saltearse la regla.
+    if (contactBlocked) return;
     setError(null);
     setSubmitting(true);
     try {
@@ -107,6 +120,8 @@ export function ApplySheet({ gigId }: { gigId: string }) {
               />
             </Field>
 
+            <ContactBlockNotice text={message} />
+
             {error && (
               <p role="alert" className="text-sm font-medium text-danger">
                 {error}
@@ -118,6 +133,7 @@ export function ApplySheet({ gigId }: { gigId: string }) {
               size="lg"
               className="w-full"
               loading={submitting}
+              disabled={contactBlocked}
               onClick={handleSubmit}
             >
               {submitting ? COPY.apply.submitting : COPY.apply.submit}

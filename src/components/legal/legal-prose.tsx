@@ -51,12 +51,18 @@ export function LegalToc({ items }: { items: LegalTocItem[] }) {
       <p className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">
         En este documento
       </p>
-      <ol className="mt-3 space-y-1.5">
+      <ol className="mt-1">
         {items.map((item, index) => (
           <li key={item.id}>
+            {/* min-h-11: el índice de un documento legal se toca con el pulgar,
+                en un teléfono, muchas veces seguidas. Con `min-h-6` los enlaces
+                medían 24px —el mínimo de WCAG AA, pero por debajo de la barra
+                del repo (≥44px)— y quedaban a 6px uno de otro: en esa densidad
+                el error de toque es constante. El aire lo pone el propio
+                target, así que la lista no crece de más. */}
             <a
               href={`#${item.id}`}
-              className="inline-flex min-h-6 items-baseline gap-2 text-sm text-foreground-secondary transition-colors hover:text-brand-ink"
+              className="inline-flex min-h-11 items-center gap-2 text-sm text-foreground-secondary transition-colors hover:text-brand-ink"
             >
               <span className="text-foreground-muted">{index + 1}.</span>
               {item.label}

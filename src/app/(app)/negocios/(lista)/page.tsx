@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { MagicWand, SealCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { allPhotoUrls, firstPhotoUrl, ListingListSkeleton } from "@/components/listings";
+import { allPhotoUrls, firstPhotoUrl } from "@/components/listings";
 import {
   ModuleFilterSelect,
   ModuleFilterToggle,
@@ -22,29 +22,12 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { toTrustProps } from "@/lib/trust/signals";
 import type { Tables } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
-import { BusinessCard, type BusinessCardModel } from "./business-card";
-import type { OwnerTrust } from "./business-trust-badge";
-import { BUSINESS_CATEGORIES, businessCategoryLabel, businessCategoryOf } from "./categories";
+import { BusinessCard, type BusinessCardModel } from "../business-card";
+import type { OwnerTrust } from "../business-trust-badge";
+import { BUSINESS_CATEGORIES, businessCategoryLabel, businessCategoryOf } from "../categories";
+import { COPY, NegociosSkeleton, SECCION } from "./list-shell";
 
 export const metadata = { title: "Negocios" };
-
-/** Copy local del módulo PAGOS/negocios — no toca src/lib/i18n (compartido). */
-const COPY = {
-  titulo: "Negocios de la comunidad",
-  subtitulo: "Comercios y servicios de tu gente, cerca tuyo.",
-  bannerTitulo: "Tu negocio, presente y verificado",
-  bannerTexto:
-    "Aunque no tengas un aviso activo, tu negocio queda presente en el directorio de tu comunidad.",
-  bannerCta: "Conocer Presencia Verificada",
-  vacioTitulo: "Todavía no hay negocios publicados",
-  vacioMensaje:
-    "Los comercios de la comunidad van a aparecer acá. Si tenés un negocio, este es tu lugar.",
-  vacioCta: "Sumar mi negocio",
-  copilotoTitulo: "¿Tenés un negocio? Probá el Copiloto",
-  copilotoTexto:
-    "Mejores títulos, mejor descripción e ideas de post — sugerencias de IA que revisás vos.",
-  copilotoCta: "Abrir el Copiloto",
-} as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -92,17 +75,6 @@ const CATEGORY_OPTIONS: FilterOption[] = [
   { value: "", label: t("sections", "businessCategoryAny") },
   ...BUSINESS_CATEGORIES.map((option) => ({ value: option.value, label: option.label })),
 ];
-
-/**
- * Identidad visual de la sección: el acento y el ícono 3D que ya la representan
- * en el menú y en /buscar (shell/modules.ts). Los mismos tres lugares, el mismo
- * dibujo — así se reconoce la sección sin leer.
- */
-const SECCION = {
-  accent: "var(--accent-negocios)",
-  image: "/icons/menu/negocios.webp",
-  publicarHref: "/publicar?kind=business",
-} as const;
 
 /** Solo estas columnas de `trust_scores` alimentan el badge (over-fetch §perf). */
 type OwnerTrustRow = Pick<Tables<"trust_scores">, "score" | "level" | "signals">;
@@ -366,47 +338,5 @@ async function NegociosContent({ filters }: { filters: Filters }) {
         </div>
       )}
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Fallback: título + subtítulo estáticos + siluetas del banner y el listado.
-// Se reutiliza tal cual en negocios/loading.tsx para que el shell no parpadee
-// al navegar (Server Component, cero JS).
-// ---------------------------------------------------------------------------
-
-export function NegociosSkeleton() {
-  return (
-    <div aria-busy="true">
-      {/* Cabecera y burbuja de publicar son estáticas: se pintan de una y no
-          parpadean cuando llega el listado (cero CLS entre fallback y real). */}
-      <SectionHeading
-        accent={SECCION.accent}
-        image={SECCION.image}
-        title={COPY.titulo}
-        subtitle={COPY.subtitulo}
-      />
-      <SectionCta
-        accent={SECCION.accent}
-        href={SECCION.publicarHref}
-        title={t("sections", "publishBusinessTitle")}
-        hint={t("sections", "publishBusinessHint")}
-        className="mt-3"
-      />
-      {/* Silueta del buscador + los dos filtros, con las MISMAS alturas que la
-          barra real (44px cada control): sin esto, la lista salta hacia abajo
-          88px cuando llega el contenido. */}
-      <div className="mt-4 flex flex-col gap-3">
-        <div className="h-11 rounded-md bg-surface-subtle" />
-        <div className="flex gap-2">
-          <div className="h-11 flex-1 rounded-md bg-surface-subtle" />
-          <div className="h-11 w-32 rounded-full bg-surface-subtle" />
-        </div>
-      </div>
-      <div className="mt-4 h-32 rounded-xl bg-surface-subtle animate-pulse" />
-      <div className="mt-6">
-        <ListingListSkeleton />
-      </div>
-    </div>
   );
 }

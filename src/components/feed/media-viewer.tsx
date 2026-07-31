@@ -71,6 +71,13 @@ export interface OpenMediaViewerArgs {
   postId?: string;
   /** Nombre visible del autor para el encabezado del visor. */
   authorName?: string;
+  /**
+   * TOPE DE REPRODUCCIÓN de la superficie, en segundos. Lo calcula quien abre
+   * (ver `viewerPlaybackCapFor` en helpers.ts, que lo saca de video-policy):
+   * 600 s dentro de un anuncio, 300 s en el detalle de una publicación. Sin
+   * valor, el video se reproduce entero.
+   */
+  maxPlaybackSeconds?: number | null;
 }
 
 interface MediaViewerContextValue {
@@ -296,6 +303,7 @@ function ViewerPanel({
                 muted={muted}
                 onMutedChange={setMuted}
                 authorLabel={authorLabel}
+                maxPlaybackSeconds={args.maxPlaybackSeconds}
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element -- visor fullscreen: URL pública del bucket, sin optimizador

@@ -24,6 +24,7 @@ import {
   entityAccentVar,
   entityHref,
   entityKindLabel,
+  isPaidAdvertising,
   postKindOf,
   postMediaItems,
 } from "./helpers";
@@ -146,6 +147,13 @@ export function PostCard({
    */
   const mediaItems = postMediaItems(post.media, post.photoUrl);
   const hasMedia = mediaItems.length > 0;
+  /**
+   * Espacio PAGO — campaña vigente O video publicitario (0046). Se resuelve acá
+   * arriba porque decide dos cosas a la vez: el chip de la cabecera cuando el
+   * post no trae medios, y —bajando a CardPostMedia— que el video se mire
+   * DENTRO del anuncio en vez de abrir el scroll de Videos Cortos.
+   */
+  const isAd = isPaidAdvertising(post);
   const postKind = postKindOf(post.kind);
   const isQuestion = postKind === "question";
   /**
@@ -261,6 +269,10 @@ export function PostCard({
                         level={post.author.level}
                         signals={post.author.signals}
                         size="inline"
+                        // "Ver el perfil de…" dentro del desglose del score
+                        // (call 29/7, 1:02:24). El perfil público ya existe en
+                        // /perfil/[id]; acá sólo se ofrece el camino.
+                        profileId={post.author.profileId}
                       />
                     )}
                   </div>
@@ -268,7 +280,7 @@ export function PostCard({
                 </div>
               )}
               {/* Sin media (posts viejos de texto / preguntas): el chip va en la cabecera. */}
-              {post.isPromoted && !hasMedia && <AdChip />}
+              {isAd && !hasMedia && <AdChip />}
               {isQuestion && (
                 <Chip size="sm" variant="info" icon={<Question aria-hidden="true" />}>
                   {COPY.post.questionChip}
@@ -303,6 +315,11 @@ export function PostCard({
               postId={post.id}
               authorName={avatarName}
               isPromoted={post.isPromoted}
+              // Las dos columnas de la 0046 que NO caducan: sin ellas, un
+              // anuncio con la campaña terminada volvía a comportarse como un
+              // corto cualquiera y el toque abría el reel.
+              isPaidAd={post.isPaidAd}
+              videoType={post.videoType}
               entity={post.entity}
               videoScope={videoScope}
               viewCount={post.viewCount}

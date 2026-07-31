@@ -14,6 +14,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *  - 23505 (ya estaba guardado) → éxito idempotente, no error.
  *  - Quitar de guardados → delete acotado por sujeto + perfil propio.
  *  - Vista repetida en el día → 23505 tolerado, `ok: true`.
+ *  - Vista de AVISO: mismo contrato que la de post (0050), incluida la
+ *    tolerancia al 23505 — que en el detalle de un aviso es el caso normal.
+ *  - Compartir un aviso va por RPC (las policies de escritura de listing_shares
+ *    están en false) y sin sesión no llama a nadie.
  *  - Votar: solo en `kind='question'` CON `poll_kind` (el cliente no elige dónde
  *    se puede votar), UPSERT sobre (post, votante) para que cambiar de opinión no
  *    duplique, y degradación limpia si la 0041 todavía no está aplicada.
@@ -26,6 +30,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
 
 import {
+  recordListingShareAction,
+  recordListingViewAction,
   recordPostViewAction,
   toggleSaveAction,
   votePostPollAction,
@@ -36,6 +42,7 @@ import {
 const TENANT_ID = "11111111-1111-4111-8111-111111111111";
 const USER_ID = "99999999-9999-4999-8999-999999999999";
 const POST_ID = "33333333-3333-4333-8333-333333333333";
+const LISTING_ID = "55555555-5555-4555-8555-555555555555";
 
 type OpResult = { data?: unknown; error?: unknown };
 /**
@@ -54,7 +61,10 @@ interface RecordedCall {
 }
 
 /** Query builder falso, encadenable y thenable (patrón route.test.ts de Stripe). */
-function createSupabaseStub(config: Record<string, TableOps> = {}) {
+function createSupabaseStub(
+  config: Record<string, TableOps> = {},
+  rpcResults: Record<string, OpResult> = {},
+) {
   const calls: RecordedCall[] = [];
 
   const from = vi.fn((table: string) => {
@@ -91,11 +101,21 @@ function createSupabaseStub(config: Record<string, TableOps> = {}) {
     return builder;
   });
 
-  return { client: { from }, from, calls };
+  // Las RPC no pasan por el builder: se resuelven de una. Se registran con
+  // `table: "rpc:<nombre>"` para poder afirmar el nombre Y los argumentos.
+  const rpc = vi.fn((name: string, args: unknown) => {
+    calls.push({ table: `rpc:${name}`, method: "rpc", args: [args] });
+    return Promise.resolve(rpcResults[name] ?? { error: null });
+  });
+
+  return { client: { from, rpc }, from, rpc, calls };
 }
 
-function useGuardOk(config: Record<string, TableOps> = {}) {
-  const stub = createSupabaseStub(config);
+function useGuardOk(
+  config: Record<string, TableOps> = {},
+  rpcResults: Record<string, OpResult> = {},
+) {
+  const stub = createSupabaseStub(config, rpcResults);
   mocks.requireTenantMatch.mockResolvedValue({
     ok: true,
     tenant: { id: TENANT_ID, slug: "dominicanos", name: "Dominicanos" },
@@ -243,6 +263,95 @@ describe("recordPostViewAction", () => {
     await expect(recordPostViewAction({ postId: POST_ID })).resolves.toEqual({ ok: false });
 
     await expect(recordPostViewAction({ postId: "ups" })).resolves.toEqual({ ok: false });
+  });
+});
+
+/* -------------------------- recordListingViewAction ------------------------ */
+
+describe("recordListingViewAction", () => {
+  it("registra la vista del aviso con el viewer y el tenant del guard", async () => {
+    const stub = useGuardOk();
+
+    await expect(recordListingViewAction({ listingId: LISTING_ID })).resolves.toEqual({
+      ok: true,
+    });
+    expect(insertedRow(stub, "listing_views")).toEqual({
+      tenant_id: TENANT_ID,
+      listing_id: LISTING_ID,
+      viewer_id: USER_ID,
+    });
+  });
+
+  it("volver a abrir el aviso el mismo día (23505) no es una falla", async () => {
+    // En el detalle de un aviso éste es el caso FRECUENTE, no el raro: la PK
+    // (aviso, persona, día) es la deduplicación y el conflicto es el éxito.
+    useGuardOk({ listing_views: { insert: { error: { code: "23505" } } } });
+
+    await expect(recordListingViewAction({ listingId: LISTING_ID })).resolves.toEqual({
+      ok: true,
+    });
+  });
+
+  it("un error real de la base sí devuelve ok:false", async () => {
+    useGuardOk({ listing_views: { insert: { error: { code: "42501" } } } });
+
+    await expect(recordListingViewAction({ listingId: LISTING_ID })).resolves.toEqual({
+      ok: false,
+    });
+  });
+
+  it("anónimo o payload roto sale en silencio, sin escribir", async () => {
+    const stub = useGuardFail("unauthenticated");
+    await expect(recordListingViewAction({ listingId: LISTING_ID })).resolves.toEqual({
+      ok: false,
+    });
+    expect(stub.from).not.toHaveBeenCalled();
+
+    await expect(recordListingViewAction({ listingId: "ups" })).resolves.toEqual({
+      ok: false,
+    });
+  });
+});
+
+/* ------------------------- recordListingShareAction ------------------------ */
+
+describe("recordListingShareAction", () => {
+  it("suma la compartida por RPC, no por insert directo", async () => {
+    // `listing_shares` tiene las 3 policies de escritura en false: si esta
+    // action dejara de ir por la RPC, la métrica se caería en silencio.
+    const stub = useGuardOk();
+
+    await recordListingShareAction({ listingId: LISTING_ID });
+
+    expect(stub.rpc).toHaveBeenCalledWith("record_listing_share", {
+      p_listing_id: LISTING_ID,
+    });
+    expect(stub.from).not.toHaveBeenCalled();
+  });
+
+  it("un fallo de la RPC no lanza: compartir ya funcionó", async () => {
+    useGuardOk({}, { record_listing_share: { error: { code: "P0001" } } });
+
+    await expect(
+      recordListingShareAction({ listingId: LISTING_ID }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("sin sesión no llama a la RPC", async () => {
+    const stub = useGuardFail("unauthenticated");
+
+    await recordListingShareAction({ listingId: LISTING_ID });
+
+    expect(stub.rpc).not.toHaveBeenCalled();
+  });
+
+  it("rechaza un id que no es uuid ANTES de tocar el guard", async () => {
+    const stub = useGuardOk();
+
+    await recordListingShareAction({ listingId: "ups" });
+
+    expect(mocks.requireTenantMatch).not.toHaveBeenCalled();
+    expect(stub.rpc).not.toHaveBeenCalled();
   });
 });
 

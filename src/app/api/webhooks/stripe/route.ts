@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
+import { handleStoreMembershipEvent } from "@/app/(app)/marketplace/membresia/webhook-handlers";
 import { isStripeConfigured } from "@/lib/config/services";
 import { createNotification } from "@/lib/notifications/notify";
 import { PLAN_IDS, getStripe, type PlanId } from "@/lib/stripe";
@@ -128,6 +129,19 @@ export async function POST(request: Request) {
 
   // 3. Procesamiento — corto y puntual para responder 2xx rápido.
   try {
+    // Membresía de tienda (§7, USD 10/mes): se reconoce por
+    // metadata.kind='store_membership' y la maneja su propio módulo, junto a la
+    // action que abre su Checkout. Devuelve true ⇒ el evento ya está atendido y
+    // ningún otro flujo lo mira. Si devuelve false, sigue el switch de siempre.
+    if (await handleStoreMembershipEvent(admin, event)) {
+      await admin
+        .from("payment_events")
+        .update({ processed: true })
+        .eq("provider", "stripe")
+        .eq("event_id", event.id);
+      return NextResponse.json({ received: true });
+    }
+
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;

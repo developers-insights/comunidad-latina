@@ -5,6 +5,7 @@ import { limit, DAY_MS } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { isVisionConfigured } from "@/lib/config/services";
+import { MONETIZATION_COPY, checkPhotoCount } from "@/lib/monetization";
 
 /**
  * Server actions de /publicar.
@@ -174,13 +175,24 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
 
 // ---------------------------------------------------------------------------
 
+/**
+ * El array llega SIN tope de zod a propósito (bueno: con uno absurdo que sólo
+ * frena un payload malicioso). El tope real depende del TIER del aviso, que se
+ * lee de la base más abajo — ponerlo acá lo congelaría en el número de gratis y
+ * un aviso premium no podría subir sus 20 fotos.
+ */
 const finalizeSchema = z.object({
   listingId: z.uuid(),
-  photoPaths: z.array(z.string().min(1).max(300)).max(6),
+  photoPaths: z.array(z.string().min(1).max(300)).max(100),
 });
 
 export type FinalizeResult =
-  | { ok: true; status: "published" | "pending_review" }
+  | {
+      ok: true;
+      status: "published" | "pending_review";
+      /** El vertical del aviso: la pantalla de éxito arma con esto sus links. */
+      kind: string;
+    }
   | { ok: false; error: string; needsAuth?: boolean };
 
 export async function finalizeListing(rawInput: {
@@ -211,6 +223,30 @@ export async function finalizeListing(rawInput: {
     return { ok: false, error: GENERIC_ERROR };
   }
 
+  // -------------------------------------------------------------------------
+  // TOPE DE FOTOS — EN EL SERVIDOR (§3 del feedback consolidado).
+  //
+  // El tope de la publicación gratuita ES la diferencia que se cobra, así que
+  // un tope que sólo vive en el formulario no es un tope: alcanza con llamar a
+  // esta action con 20 paths para llevarse el beneficio premium gratis.
+  //
+  // El tier se lee de la FILA. Un aviso nace `free` (la policy listings_insert
+  // lo exige) y sólo el flujo de pago lo mueve — así que preguntar acá es
+  // preguntarle al único que sabe la verdad.
+  // -------------------------------------------------------------------------
+  const { data: current } = await supabase
+    .from("listings")
+    .select("tier")
+    .eq("id", listingId)
+    .eq("tenant_id", tenant.id)
+    .eq("created_by", user.id)
+    .maybeSingle();
+
+  const photoCheck = checkPhotoCount(current?.tier, photoPaths.length);
+  if (!photoCheck.ok) {
+    return { ok: false, error: MONETIZATION_COPY.errors.tooManyPhotos(photoCheck.max) };
+  }
+
   // La RLS de UPDATE garantiza que solo el dueño puede tocar la fila.
   const { data: updated, error: updateError } = await supabase
     .from("listings")
@@ -218,7 +254,7 @@ export async function finalizeListing(rawInput: {
     .eq("id", listingId)
     .eq("tenant_id", tenant.id)
     .eq("created_by", user.id)
-    .select("id, created_by")
+    .select("id, created_by, kind")
     .maybeSingle();
 
   if (updateError || !updated) {
@@ -235,14 +271,16 @@ export async function finalizeListing(rawInput: {
   const devAutoApprove =
     process.env.MODERATION_DEV_AUTO_APPROVE === "true" && !isProduction;
 
+  const kind = updated.kind;
+
   if (hasPhotos && !isVisionConfigured && !devAutoApprove) {
     // §5.6: imagen sin moderar NUNCA se publica. Queda en revisión.
-    return { ok: true, status: "pending_review" };
+    return { ok: true, status: "pending_review", kind };
   }
 
   if (!devAutoApprove) {
     // Sin auto-aprobación dev, todo pasa por moderación (contrato de RLS).
-    return { ok: true, status: "pending_review" };
+    return { ok: true, status: "pending_review", kind };
   }
 
   // Auto-aprobación DEV: acto de moderación server-side (uso permitido del
@@ -260,12 +298,12 @@ export async function finalizeListing(rawInput: {
         listingId,
         code: publishError.code,
       });
-      return { ok: true, status: "pending_review" };
+      return { ok: true, status: "pending_review", kind };
     }
   } catch {
     // Admin no configurado — el aviso queda en revisión, nunca rompemos.
-    return { ok: true, status: "pending_review" };
+    return { ok: true, status: "pending_review", kind };
   }
 
-  return { ok: true, status: "published" };
+  return { ok: true, status: "published", kind };
 }

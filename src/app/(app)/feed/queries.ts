@@ -54,6 +54,24 @@ export interface PostRow {
   created_at: string;
   author_id: string | null;
   entity_listing_id: string | null;
+  /**
+   * COLUMNAS DE VIDEO (0046) — viajan con TODA fila de post, no sólo con las del
+   * reel. Fue el agujero del 2026-07-30: el feed sólo sabía de `isPromoted`
+   * (campaña VIGENTE en post_promotions), así que un `advertising_video` cuya
+   * campaña ya había terminado seguía siendo, para la tarjeta, un video
+   * cualquiera — y tocarlo abría el scroll de Videos Cortos, donde ese video
+   * por contrato no existe. Con la columna a la vista, la tarjeta decide por lo
+   * que el post ES y no por lo que su campaña está haciendo hoy.
+   */
+  video_type: string | null;
+  /** posts.duration_seconds. null = DESCONOCIDA (no "corta"): ver 0049. */
+  duration_seconds: number | null;
+  /** posts.is_paid_ad — publicidad paga. Se marca "Patrocinado" y no va al reel. */
+  is_paid_ad: boolean | null;
+  /** posts.eligible_for_short_feed — VETO del scroll, no afirmación. */
+  eligible_for_short_feed: boolean | null;
+  /** posts.video_category — catálogo cerrado del menú de Videos Cortos. */
+  video_category: string | null;
 }
 
 /** El juego de columnas que supabase-js sabe parsear HOY (sin view_count). */
@@ -61,17 +79,26 @@ type ParsablePostColumns =
   "id, body, kind, media, status, like_count, comment_count, created_at, author_id, entity_listing_id";
 
 /**
- * El VALOR pide view_count a PostgREST; el TIPO se queda en las columnas que
- * database.types.ts ya conoce.
+ * El VALOR pide view_count y las columnas de video a PostgREST; el TIPO se
+ * queda en las columnas que database.types.ts ya conoce.
  *
- * view_count llega con la 0038 y los tipos se regeneran recién después: sin el
- * `as`, el parser del select marcaría la columna como inexistente y rompería
- * los `as PostRow` de TODOS los consumidores (feed, detalle, videos). El
- * contrato real de la fila lo fija `PostRow`, que sí la declara.
- * Al regenerar database.types.ts con la 0038, borrar el `as` y el alias.
+ * view_count llega con la 0038 y las de video con la 0046; los tipos se
+ * regeneran recién después: sin el `as`, el parser del select marcaría esas
+ * columnas como inexistentes y rompería los `as PostRow` de TODOS los
+ * consumidores (feed, detalle, videos). El contrato real de la fila lo fija
+ * `PostRow`, que sí las declara.
+ * Al regenerar database.types.ts con 0038+0046, borrar el `as` y el alias.
+ *
+ * POR QUÉ LAS DE VIDEO VAN ACÁ Y NO EN UN SELECT APARTE (como las encuestas):
+ * porque la decisión que habilitan —¿este video se mira DENTRO del anuncio o
+ * abre el reel?— la toma la tarjeta, y la tarjeta se monta en las cuatro
+ * superficies (feed, scroll infinito, detalle, reel). Un select que las pidiera
+ * sólo en una deja a las otras tres decidiendo con datos que no tienen; es
+ * exactamente el agujero que este bloque vino a cerrar. Son cinco columnas
+ * escalares: el costo es nulo al lado de la clase de bug que evitan.
  */
 export const POST_COLUMNS =
-  "id, body, kind, media, status, like_count, comment_count, view_count, created_at, author_id, entity_listing_id" as ParsablePostColumns;
+  "id, body, kind, media, status, like_count, comment_count, view_count, created_at, author_id, entity_listing_id, video_type, duration_seconds, is_paid_ad, eligible_for_short_feed, video_category" as ParsablePostColumns;
 
 const FALLBACK_AUTHOR: AuthorView = {
   profileId: null,
@@ -587,6 +614,16 @@ export function toPostCardModel(
     poll: extras?.poll ?? null,
     entity: extras?.entity ?? null,
     isPromoted: extras?.isPromoted ?? false,
+    // Columnas de video (0046). Se mapean SIEMPRE, en todas las superficies:
+    // son las que dejan que la tarjeta sepa que un video es publicitario aunque
+    // su campaña ya no esté vigente. `?? false` / `?? true` espejan los defaults
+    // de la migración (is_paid_ad default false, eligible_for_short_feed default
+    // true — que es un VETO, no una afirmación).
+    videoType: row.video_type,
+    durationSeconds: row.duration_seconds,
+    isPaidAd: row.is_paid_ad ?? false,
+    eligibleForShortFeed: row.eligible_for_short_feed ?? true,
+    videoCategory: row.video_category,
     ctaWhatsapp: extras?.ctaWhatsapp ?? null,
   };
 }

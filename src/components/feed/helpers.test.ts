@@ -1,11 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  ADVERTISING_VIDEO_MAX_SECONDS,
+  PREMIUM_DETAIL_MAX_SECONDS,
+  isEligibleForShortFeed,
+} from "@/lib/media/video-policy";
+import {
   canPromotePost,
   entityAccentVar,
   entityHref,
   entityKindLabel,
   feedPostVisibilityFilter,
+  isPaidAdvertising,
   postMediaUrl,
+  videoOpensReel,
+  viewerPlaybackCapFor,
 } from "./helpers";
 
 /**
@@ -71,8 +79,8 @@ describe("entityHref", () => {
     expect(entityHref("job", "id-1")).toBe("/empleos/id-1");
   });
 
-  it("negocio cae al directorio (no hay página por-negocio aún)", () => {
-    expect(entityHref("business", "id-1")).toBe("/negocios");
+  it("negocio linkea a SU perfil, no al directorio entero (call 29/7, 1:05)", () => {
+    expect(entityHref("business", "id-1")).toBe("/negocios/id-1");
   });
 
   it("kind sin página no linkea (nombre sin link antes que link roto)", () => {
@@ -114,6 +122,119 @@ describe("postMediaUrl", () => {
   it("URL absoluta (seed/API) se respeta tal cual", () => {
     expect(postMediaUrl("https://cdn.example.com/x.jpg")).toBe(
       "https://cdn.example.com/x.jpg",
+    );
+  });
+});
+
+/**
+ * UN VIDEO PUBLICITARIO NO ENTRA AL REEL POR NINGÚN CAMINO.
+ *
+ * "Ningún camino" son dos, y hay que verificar los dos porque son módulos
+ * distintos que podrían separarse:
+ *
+ *   a) el CONTENIDO del reel — `isEligibleForShortFeed` (video-policy), que es
+ *      lo que filtran la query de `/videos` y cada slide antes de pintarse;
+ *   b) la ENTRADA al reel — `videoOpensReel` (este módulo), que es lo que decide
+ *      qué pasa al TOCAR el video de una tarjeta.
+ *
+ * Si (a) dice "no entra" y (b) dice "abrí el reel", el resultado es el bug del
+ * cliente: te vas de la publicación a un scroll donde el video que tocaste no
+ * existe. Este bloque los ancla juntos, a propósito.
+ */
+describe("el video publicitario se mira DENTRO de su anuncio", () => {
+  /** Las filas que la 0046 puede producir para un video de campaña. */
+  const AD_ROWS = [
+    {
+      what: "advertising_video completo (lo que garantiza el constraint)",
+      videoType: "advertising_video",
+      isPaidAd: true,
+      eligibleForShortFeed: false,
+      durationSeconds: 480,
+    },
+    {
+      what: "campaña TERMINADA: el tipo y la bandera siguen ahí",
+      videoType: "advertising_video",
+      isPaidAd: true,
+      eligibleForShortFeed: false,
+      durationSeconds: 600,
+    },
+    {
+      what: "duración DESCONOCIDA (null no es 'corto')",
+      videoType: "advertising_video",
+      isPaidAd: true,
+      eligibleForShortFeed: false,
+      durationSeconds: null,
+    },
+  ] as const;
+
+  for (const row of AD_ROWS) {
+    it(`no es contenido del reel — ${row.what}`, () => {
+      expect(
+        isEligibleForShortFeed({
+          hasVideoMedia: true,
+          status: "published",
+          videoType: row.videoType,
+          isPaidAd: row.isPaidAd,
+          eligibleForShortFeed: row.eligibleForShortFeed,
+          durationSeconds: row.durationSeconds,
+        }),
+      ).toBe(false);
+    });
+
+    it(`no es entrada al reel — ${row.what}`, () => {
+      // En CUALQUIER scope: el del feed general y el de un tab de módulo.
+      expect(
+        videoOpensReel({ scope: "para-ti", post: { ...row, isPromoted: false } }),
+      ).toBe(false);
+      expect(
+        videoOpensReel({ scope: "eventos", post: { ...row, isPromoted: false } }),
+      ).toBe(false);
+    });
+  }
+
+  it("basta `is_paid_ad` para que no haya reel, aunque el tipo quedara en NULL", () => {
+    // Fila defensiva: la base no la produce hoy, pero entre marcar de más y
+    // mandar a alguien fuera de un anuncio pago, se marca de más.
+    const post = { videoType: null, isPaidAd: true, isPromoted: false };
+    expect(isPaidAdvertising(post)).toBe(true);
+    expect(videoOpensReel({ scope: "para-ti", post })).toBe(false);
+  });
+
+  it("una campaña VIGENTE sobre un post orgánico tampoco abre el reel", () => {
+    const post = { videoType: "short_video", isPaidAd: false, isPromoted: true };
+    expect(isPaidAdvertising(post)).toBe(true);
+    expect(videoOpensReel({ scope: "para-ti", post })).toBe(false);
+  });
+
+  it("un corto orgánico SIN campaña sí abre el reel — el veto no es universal", () => {
+    const post = { videoType: "short_video", isPaidAd: false, isPromoted: false };
+    expect(isPaidAdvertising(post)).toBe(false);
+    expect(videoOpensReel({ scope: "para-ti", post })).toBe(true);
+    expect(
+      isEligibleForShortFeed({
+        hasVideoMedia: true,
+        status: "published",
+        videoType: "short_video",
+        isPaidAd: false,
+        eligibleForShortFeed: true,
+        durationSeconds: 62,
+      }),
+    ).toBe(true);
+  });
+
+  it("el detalle de UNA publicación nunca abre el reel, sea o no publicidad", () => {
+    expect(
+      videoOpensReel({ scope: "sin-reel", post: { videoType: "short_video" } }),
+    ).toBe(false);
+  });
+
+  it("el tope de reproducción sale de video-policy, no de un número suelto", () => {
+    expect(viewerPlaybackCapFor({ isPaidAd: true })).toBe(ADVERTISING_VIDEO_MAX_SECONDS);
+    expect(viewerPlaybackCapFor({ videoType: "advertising_video" })).toBe(
+      ADVERTISING_VIDEO_MAX_SECONDS,
+    );
+    expect(viewerPlaybackCapFor({ videoType: "short_video" })).toBe(
+      PREMIUM_DETAIL_MAX_SECONDS,
     );
   });
 });

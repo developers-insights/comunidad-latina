@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { LockKey } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/server";
+import { getTenant } from "@/lib/tenant/resolve";
 import { formatDate } from "@/lib/utils";
 import { Banner } from "@/components/ui";
 import { AcceptBanner } from "@/components/messaging/accept-banner";
@@ -10,6 +11,7 @@ import { COPY } from "@/components/messaging/copy";
 import { MessageBubble } from "@/components/messaging/message-bubble";
 import { ScrollAnchor } from "@/components/messaging/scroll-anchor";
 import { ThreadHeader } from "@/components/messaging/thread-header";
+import { ThreadListingCard } from "@/components/messaging/thread-listing-card";
 import { ThreadRefresh } from "@/components/messaging/thread-refresh";
 import { toTrustProps } from "@/components/messaging/trust";
 
@@ -31,7 +33,15 @@ type ConversationRow = {
   created_at: string;
   created_by: string;
   counterpart_id: string;
-  listing: { id: string; title: string; kind: string } | null;
+  listing: {
+    id: string;
+    title: string;
+    kind: string;
+    photos: string[] | null;
+    price_amount: number | null;
+    price_currency: string | null;
+    price_period: string | null;
+  } | null;
   creator: ProfileLite | null;
   counterpart: ProfileLite | null;
 };
@@ -42,12 +52,6 @@ type MessageRow = {
   body: string;
   created_at: string;
 };
-
-/** Solo el detalle de propiedad tiene ruta hoy; el resto muestra el título sin link. */
-function listingHref(listing: { id: string; kind: string } | null): string | null {
-  if (!listing) return null;
-  return listing.kind === "property" ? `/propiedades/${listing.id}` : null;
-}
 
 /**
  * /mensajes/[id] — hilo del contacto protegido (§9.2): el cierre ocurre
@@ -61,7 +65,7 @@ export default async function HiloPage({
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const supabase = await createClient();
+  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -71,7 +75,7 @@ export default async function HiloPage({
     .from("conversations")
     .select(
       `id, status, created_at, created_by, counterpart_id,
-       listing:listings(id, title, kind),
+       listing:listings(id, title, kind, photos, price_amount, price_currency, price_period),
        creator:profiles!conversations_created_by_fkey(id, display_name, avatar_url, identity_verified),
        counterpart:profiles!conversations_counterpart_id_fkey(id, display_name, avatar_url, identity_verified)`,
     )
@@ -121,15 +125,30 @@ export default async function HiloPage({
           avatarUrl: other?.avatar_url ?? null,
         }}
         trust={trust}
-        listing={
-          conversation.listing
-            ? {
-                title: conversation.listing.title,
-                href: listingHref(conversation.listing),
-              }
-            : null
-        }
+        // El aviso ya no viaja en el header: ahora es la tarjeta de abajo, que
+        // se lee de un vistazo. Repetir el título en 12 px al lado del Trust
+        // Score era competir por el mismo renglón y quedaba truncado casi
+        // siempre.
+        listing={null}
       />
+
+      {/* LA TARJETA DEL AVISO, ARRIBA DE TODO (§3): las dos partes tienen que
+          saber de qué anuncio están hablando antes del primer mensaje. */}
+      {conversation.listing && (
+        <ThreadListingCard
+          className="mt-3"
+          locale={tenant.locale}
+          listing={{
+            id: conversation.listing.id,
+            kind: conversation.listing.kind,
+            title: conversation.listing.title,
+            photos: conversation.listing.photos,
+            priceAmount: conversation.listing.price_amount,
+            priceCurrency: conversation.listing.price_currency,
+            pricePeriod: conversation.listing.price_period,
+          }}
+        />
+      )}
 
       {/* Aviso fijo de seguridad (§9.2) — discreto, siempre visible arriba del hilo */}
       <Banner variant="info" className="mt-4 rounded-lg">

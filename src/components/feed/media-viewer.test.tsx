@@ -139,3 +139,87 @@ describe("MediaViewer: contrato open/close", () => {
     expect(screen.getByRole("dialog").textContent).toContain("2/2");
   });
 });
+
+/**
+ * "SE QUEDA DENTRO DEL ANUNCIO" — lo que el cliente describió en la call del
+ * 29/7 (1:19) no es una pantalla nueva: es que abrir y cerrar el video NO SEA
+ * una navegación. El visor es un overlay sobre la misma publicación, así que
+ * cerrarlo no puede cambiar de ruta ni perder dónde estabas leyendo.
+ *
+ * Lo que se ancla acá es exactamente eso, porque es lo que se rompe solo si
+ * alguien "mejora" el visor convirtiéndolo en una ruta.
+ */
+describe("MediaViewer: abrir y cerrar no es navegar", () => {
+  const VIDEO_DE_ANUNCIO: OpenMediaViewerArgs = {
+    items: [{ kind: "video", url: "https://cdn.example.com/anuncio.mp4" }],
+    authorName: "Doña Rosa",
+    postId: "post-ad",
+    // 600 s: el video publicitario completo (video-policy). Lo calcula la card.
+    maxPlaybackSeconds: 600,
+  };
+
+  it("el bloqueo de scroll usa overflow, que CONSERVA la posición de la página", () => {
+    // `position: fixed` en el body también bloquea el scroll, pero manda el
+    // scrollTop a 0: al cerrar, el feed vuelve arriba de todo y la persona
+    // pierde dónde estaba. Con `overflow: hidden` la posición queda intacta.
+    render(
+      <MediaViewerProvider>
+        <Trigger args={VIDEO_DE_ANUNCIO} />
+      </MediaViewerProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "abrir visor" }));
+
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(document.body.style.position).not.toBe("fixed");
+    expect(document.body.style.top).toBe("");
+  });
+
+  it("al cerrar con la X, el body vuelve a scrollear y el visor se va", () => {
+    render(
+      <MediaViewerProvider>
+        <Trigger args={VIDEO_DE_ANUNCIO} />
+      </MediaViewerProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "abrir visor" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /cerrar/i }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("el gesto atrás cierra el visor, no la publicación", () => {
+    // El visor apila UNA entrada de historial al abrir: el "atrás" del teléfono
+    // la consume y cierra el visor. Sin eso, atrás te sacaría de la publicación
+    // —que es justo la queja— en vez de devolverte a ella.
+    render(
+      <MediaViewerProvider>
+        <Trigger args={VIDEO_DE_ANUNCIO} />
+      </MediaViewerProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "abrir visor" }));
+
+    fireEvent.popState(window);
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("el video del visor está en loop: al terminar vuelve a empezar, no salta al siguiente", () => {
+    // Es la cuarta forma de "cerrar" que pidió probarse: que el video TERMINE.
+    // Con `loop`, terminar no es un evento que pueda navegar a ningún lado —
+    // el video vuelve al principio y la persona sigue dentro del anuncio.
+    render(
+      <MediaViewerProvider>
+        <Trigger args={VIDEO_DE_ANUNCIO} />
+      </MediaViewerProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "abrir visor" }));
+
+    const video = screen.getByRole("dialog").querySelector("video");
+    expect(video).toBeTruthy();
+    expect(video?.hasAttribute("loop")).toBe(true);
+    // Y no hay ningún handler de "terminó" que pueda llevar a otra parte.
+    expect(video?.getAttribute("onended")).toBeNull();
+  });
+});

@@ -122,6 +122,7 @@ export function GigCard({ gig }: { gig: GigCardModel }) {
                 level={gig.publisher.level}
                 signals={gig.publisher.signals}
                 size="inline"
+                profileId={gig.publisher.profileId}
               />
             </div>
           ) : gig.publisher?.type === "external" ? (

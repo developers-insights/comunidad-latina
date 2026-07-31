@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import {
   Bathtub,
   Bed,
+  ChartBar,
   MapPin,
   RocketLaunch,
   Ruler,
@@ -15,6 +16,7 @@ import {
   COPY,
   ContactCta,
   DetailTopBar,
+  ListingActions,
   ListingGallery,
   PublisherTrust,
   VerificationBand,
@@ -48,7 +50,10 @@ const fetchListingById = cache(async (id: string) => {
   return supabase
     .from("listings")
     .select(
-      "id, tenant_id, kind, title, description, price_amount, price_currency, price_period, attrs, area_label, photos, status, created_by, publisher_name, publisher_kind, source, created_at",
+      // tier + los 3 CTAs que ofrece Propiedades (MODULE_CTAS.property): se
+      // piden acá y no en otra query porque son columnas de la MISMA fila
+      // (por eso la 0048 los puso como columnas y no en una tabla aparte).
+      "id, tenant_id, kind, title, description, price_amount, price_currency, price_period, attrs, area_label, photos, status, created_by, publisher_name, publisher_kind, source, created_at, tier, cta_phone, cta_whatsapp, cta_address",
     )
     .eq("id", id)
     .eq("kind", "property")
@@ -154,6 +159,7 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
               level={toTrustLevel(trust?.level)}
               signals={buildTrustSignals(trust?.signals ?? {}, profile?.identity_verified ?? false)}
               size="inline"
+              profileId={profile?.id ?? null}
             />
           </div>
         </div>
@@ -238,15 +244,46 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
         </div>
       )}
 
-      {/* Boost §7: solo el dueño de un aviso publicado puede impulsarlo */}
+      {/* Botones de acción (premium). En una publicación gratuita no renderiza
+          NADA: el contacto es la barra de "Contactar" de abajo, que está visible
+          al mismo tiempo — por eso acá el chat va con showChat={false} y no se
+          duplica el mismo botón dos veces en la misma pantalla. */}
+      <ListingActions
+        className="mt-5"
+        listingId={listing.id}
+        kind={listing.kind}
+        tier={listing.tier}
+        subject={listing.title}
+        showChat={false}
+        isLoggedIn={Boolean(user)}
+        values={{
+          phone: listing.cta_phone,
+          whatsapp: listing.cta_whatsapp,
+          directions: listing.cta_address,
+        }}
+      />
+
+      {/* Boost §7: solo el dueño de un aviso publicado puede promocionarlo.
+          "Impulsar este aviso" se conserva con ese nombre porque ya existía y
+          al cliente le gustó; la pantalla que abre es la que ahora tiene los
+          dos caminos. */}
       {isOwner && listing.status === "published" && (
-        <Link
-          href={`/impulsar/${listing.id}`}
-          className={cn(buttonVariants({ variant: "outline", size: "md" }), "mt-4 w-full")}
-        >
-          <RocketLaunch size={18} aria-hidden="true" />
-          Impulsar este aviso
-        </Link>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Link
+            href={`/impulsar/${listing.id}`}
+            className={cn(buttonVariants({ variant: "outline", size: "md" }), "w-full")}
+          >
+            <RocketLaunch size={18} aria-hidden="true" />
+            Impulsar este aviso
+          </Link>
+          <Link
+            href={`/impulsar/${listing.id}/estadisticas`}
+            className={cn(buttonVariants({ variant: "ghost", size: "md" }), "w-full")}
+          >
+            <ChartBar size={18} aria-hidden="true" />
+            Ver estadísticas
+          </Link>
+        </div>
       )}
 
       {publisherCard && (

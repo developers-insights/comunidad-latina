@@ -248,7 +248,7 @@ export const COPY = {
     createdBody: "El creador ya lo puede ver. Para arrancar, depositá el pago en garantía.",
     goToContract: "Ver el contrato",
     // Detalle
-    detailBack: "Volver a mis contratos",
+    detailBack: "Volver a mis colaboraciones",
     codeLabel: "Código de trabajo",
     scopeTitle: "Qué se entrega",
     timelineTitle: "Historial",
@@ -346,16 +346,56 @@ export const COPY = {
   } satisfies Record<ContractAction, string>,
 
   // -------------------------------------------------------------------------
+  // "Contratos" pasó a llamarse "Colaboraciones" (pedido textual del cliente,
+  // 2026-07-30). El cambio es de NOMBRE, no de contenido: adentro sigue
+  // habiendo un contrato con su código, su alcance y su máquina de estados —
+  // eso se sigue diciendo "contrato" donde corresponde, porque llamarle
+  // "colaboración" a la cláusula de entrega sería confuso. Lo que cambia es
+  // cómo se llama la SECCIÓN: la relación entre un negocio y un creador es una
+  // colaboración, y así la nombra la gente.
   contractsList: {
-    title: "Mis contratos",
-    subtitle: "Los trabajos que contrataste y los que estás creando.",
+    title: "Mis colaboraciones",
+    subtitle: "Los trabajos que acordaste con creadores y con negocios.",
     asClient: "Como negocio",
     asCreator: "Como creador",
-    emptyTitle: "Todavía no tenés contratos",
+    emptyTitle: "Todavía no tenés colaboraciones",
     emptyMessage:
-      "Cuando acuerdes un trabajo con un creador (o con un negocio), el contrato con pago en garantía aparece acá.",
+      "Cuando acuerdes un trabajo con un creador (o con un negocio), la colaboración aparece acá con su contrato y su pago en garantía.",
     exploreGigs: "Ver trabajos",
     exploreCreators: "Ver creadores",
+  },
+
+  // -------------------------------------------------------------------------
+  // REQUISITOS PARA RECIBIR TRABAJOS (§6)
+  //
+  // El copy no felicita ni reta: informa. Lo que le importa a alguien que abre
+  // esta tarjeta es una sola cosa —cuánto me falta— y eso es lo que se dice.
+  // -------------------------------------------------------------------------
+  requirements: {
+    title: "Requisitos para recibir trabajos",
+    subtitleMet: "Cumplís los requisitos: los negocios ya te pueden proponer trabajos.",
+    subtitlePending:
+      "Los negocios pueden proponerle trabajos a los creadores que cumplen estos cinco puntos. Así vas:",
+    progressLabel: (met: number, total: number) => `${met} de ${total} cumplidos`,
+    /** Barra de un requisito — el lector de pantalla necesita el número, no el color. */
+    barLabel: (label: string, value: string) => `${label}: ${value}`,
+    unmeasuredNote:
+      "Hay un dato que todavía no medimos. No te frena: cuando lo tengamos, aparece acá solo.",
+    whyTitle: "¿Por qué hay requisitos?",
+    whyBody:
+      "Un negocio que contrata a distancia necesita saber que del otro lado hay alguien real, con trabajo publicado y recorrido. Estos números son la forma más simple de mostrarlo sin pedirte papeles.",
+  },
+
+  // -------------------------------------------------------------------------
+  // AUDIENCIA (§6) — número, sin enlace y sin clic. Es explícito en la spec:
+  // desde acá no se abre Instagram ni TikTok.
+  // -------------------------------------------------------------------------
+  audience: {
+    title: "Audiencia",
+    community: "Seguidores en la comunidad",
+    external: "Audiencia en otras redes",
+    externalUnmeasured: "Todavía no lo medimos",
+    note: "Los números se muestran como dato. Desde acá no se abre ninguna red externa.",
   },
 
   // -------------------------------------------------------------------------

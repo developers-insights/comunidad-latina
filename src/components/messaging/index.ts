@@ -5,5 +5,9 @@ export { COPY } from "./copy";
 export { MessageBubble } from "./message-bubble";
 export { ScrollAnchor } from "./scroll-anchor";
 export { ThreadHeader, type ThreadHeaderProps } from "./thread-header";
+export {
+  ThreadListingCard,
+  type ThreadListingCardProps,
+} from "./thread-listing-card";
 export { ThreadRefresh } from "./thread-refresh";
 export { toTrustLevel, toTrustProps, buildTrustSignals } from "./trust";

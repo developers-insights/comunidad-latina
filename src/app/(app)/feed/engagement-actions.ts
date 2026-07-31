@@ -5,7 +5,14 @@ import { z } from "zod";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 
 /**
- * Server actions de ENGAGEMENT del feed (migración 0038): guardar y vistas.
+ * Server actions de ENGAGEMENT (migraciones 0038 y 0050): guardar, vistas de
+ * post y de aviso, voto de encuesta y compartir un aviso.
+ *
+ * Vive en `feed/` porque `saves` es polimórfica (post | listing) y este módulo
+ * es su dueño: el detalle de un aviso ya importaba `toggleSaveAction` desde
+ * acá, y partir el engagement de los avisos en otro archivo dejaría la misma
+ * mecánica escrita dos veces. Lo que sí vive en `lib/monetization` es lo que
+ * PAGA (los clics de los botones premium); esto es gratuito y de todos.
  *
  * Reglas que gobiernan este archivo:
  * - Zod PRIMERO (parseo puro, sin I/O), `requireTenantMatch()` DESPUÉS y ANTES
@@ -240,5 +247,97 @@ export async function recordPostViewAction(
   } catch {
     // Ni un error inesperado (red, cookies raras) puede romper la reproducción.
     return { ok: false };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Registrar la vista de un AVISO
+// ---------------------------------------------------------------------------
+
+const recordListingViewSchema = z.object({ listingId: z.uuid() });
+
+export type RecordListingViewInput = { listingId: string };
+
+/**
+ * Registra que alguien abrió el detalle de un aviso (`listing_views`, 0050).
+ * Mismo contrato que `recordPostViewAction`, y por las mismas razones:
+ *
+ *  - La PK deduplica por (aviso, persona, DÍA): volver a abrir el mismo aviso
+ *    no infla `listings.view_count`, y el 23505 es el caso ESPERADO — de hecho
+ *    es el más frecuente de todos, porque el detalle se revisita.
+ *  - Fire-and-forget: sin sesión, con tenant divergente o con la base caída
+ *    sale `ok: false` en silencio. Nadie merece un cartel de error porque una
+ *    métrica no se registró.
+ *
+ * El dueño que mira su propio aviso TAMBIÉN cuenta, igual que el autor de un
+ * reel en `post_views`. Excluirlo obligaría a leer `created_by` antes de cada
+ * vista y el número que se protegería es el que esa persona se muestra a sí
+ * misma; no vale una query por visita.
+ */
+export async function recordListingViewAction(
+  input: RecordListingViewInput,
+): Promise<{ ok: boolean }> {
+  try {
+    const parsed = recordListingViewSchema.safeParse(input);
+    if (!parsed.success) return { ok: false };
+
+    const guard = await requireTenantMatch();
+    if (!guard.ok) return { ok: false };
+    const { tenant, supabase, user } = guard;
+
+    const { error } = await supabase.from("listing_views").insert({
+      tenant_id: tenant.id,
+      listing_id: parsed.data.listingId,
+      viewer_id: user.id,
+    });
+
+    if (error && error.code !== UNIQUE_VIOLATION) return { ok: false };
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Registrar que se compartió un AVISO
+// ---------------------------------------------------------------------------
+
+const recordListingShareSchema = z.object({ listingId: z.uuid() });
+
+export type RecordListingShareInput = { listingId: string };
+
+/**
+ * Suma 1 al contador diario de compartidas de un aviso.
+ *
+ * Va por RPC (`record_listing_share`, 0050) y no por un insert: las policies de
+ * escritura de `listing_shares` están en `false` justamente para que el
+ * contador no se pueda escribir con un número elegido por el cliente.
+ *
+ * Se llama DESPUÉS de que el share nativo/copiar-link resolvió bien, nunca
+ * antes: contar la intención en vez del hecho convertiría cada cancelación del
+ * diálogo del sistema en una compartida que no ocurrió. Y devuelve `void`
+ * porque el resultado no cambia nada en pantalla — compartir tiene que
+ * funcionar aunque la métrica falle.
+ */
+export async function recordListingShareAction(
+  input: RecordListingShareInput,
+): Promise<void> {
+  try {
+    const parsed = recordListingShareSchema.safeParse(input);
+    if (!parsed.success) return;
+
+    const guard = await requireTenantMatch();
+    // Sin sesión no hay métrica: la RPC exige auth.uid() y devolvería
+    // AUTH_REQUIRED. Se sale en silencio — compartir ya funcionó.
+    if (!guard.ok) return;
+
+    const { error } = await guard.supabase.rpc("record_listing_share", {
+      p_listing_id: parsed.data.listingId,
+    });
+    if (error) {
+      console.warn("[engagement] record_listing_share falló", { code: error.code });
+    }
+  } catch {
+    // Silencio deliberado: ver el comentario de arriba.
   }
 }

@@ -25,10 +25,10 @@ describe("BoostCta", () => {
     expect(link.getAttribute("href")).toBe("/eventos/e1");
   });
 
-  it("negocio → 'Ver negocio' al directorio (no hay página por-negocio aún)", () => {
+  it("negocio → 'Ver negocio' al perfil DE ESE negocio (call 29/7, 1:05)", () => {
     render(<BoostCta kind="business" entityId="b1" postId="post-1" />);
     const link = screen.getByRole("link", { name: COPY.post.boostCta.business });
-    expect(link.getAttribute("href")).toBe("/negocios");
+    expect(link.getAttribute("href")).toBe("/negocios/b1");
   });
 
   it("profesional → 'Agendar cita' al detalle del profesional", () => {

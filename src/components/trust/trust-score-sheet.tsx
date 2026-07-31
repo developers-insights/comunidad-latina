@@ -27,6 +27,14 @@ export interface TrustScoreSheetProps {
   signals: TrustSignal[];
   /** Destino de "Leer cómo funciona el Trust Score". Sin valor, no se renderiza el link. */
   learnMoreHref?: string;
+  /**
+   * Acción propia de quien monta la hoja, DEBAJO del desglose (hoy: "Ver el
+   * perfil de…" en los avisos — call del 29/7, 1:02:24: "solo sale el score,
+   * pero debería también salir ahí, ver perfil"). Va después de las señales
+   * porque primero se lee el porqué del número y recién ahí se decide si vale
+   * la pena ir al perfil. Sin valor, la hoja queda exactamente como estaba.
+   */
+  footer?: React.ReactNode;
 }
 
 /**
@@ -41,6 +49,7 @@ export function TrustScoreSheet({
   level,
   signals,
   learnMoreHref,
+  footer,
 }: TrustScoreSheetProps) {
   const config = TRUST_LEVELS[level];
   const filled = levelSegments(level);
@@ -116,6 +125,8 @@ export function TrustScoreSheet({
           </li>
         ))}
       </ul>
+
+      {footer && <div className="mt-6">{footer}</div>}
 
       {/* Sin destino explícito no hay link (feature oculta 2026-07-20). */}
       {learnMoreHref && (

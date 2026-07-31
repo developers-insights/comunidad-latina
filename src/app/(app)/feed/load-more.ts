@@ -3,6 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database.types";
 import { getTenant } from "@/lib/tenant/resolve";
+import { recommendedFeedListingFilter } from "@/lib/monetization/feed";
 import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { decodeCursor, encodeCursor } from "@/components/listings";
 import {
@@ -170,6 +171,15 @@ async function loadParaTiPage({
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(PAGE_SIZE + 1);
+
+  // MONETIZACIÓN §3 — el News Feed principal recomendado es premium.
+  // El aviso gratuito NO desaparece: sigue en su módulo (los otros tabs de esta
+  // misma función), en las búsquedas, en el perfil de quien lo publicó y acá
+  // mismo para sus seguidores y para su dueño. Lo único que se reserva a
+  // premium es el empujón que la app da sin que nadie lo pida.
+  listingsQuery = listingsQuery.or(
+    recommendedFeedListingFilter({ followedListingIds, viewerId }),
+  );
 
   if (blockedIds.size > 0) {
     listingsQuery = listingsQuery.or(

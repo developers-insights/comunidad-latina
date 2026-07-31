@@ -16,10 +16,13 @@ import {
 import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 import {
   COPY,
+  ExternalPurchaseCta,
   ListingCommentsRow,
   ProductGallery,
+  ReportProductRow,
   SellerChip,
   StoreCard,
+  StoreOffNotice,
   categoryLabel,
   conditionLabel,
   formatProductPrice,
@@ -28,6 +31,7 @@ import {
   type StoreCardModel,
 } from "@/components/marketplace";
 import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
+import { visibleCtasFor } from "@/lib/monetization/tier";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -46,7 +50,11 @@ const fetchProductById = cache(async (id: string) => {
   return supabase
     .from("listings")
     .select(
-      "id, tenant_id, kind, title, description, price_amount, price_currency, attrs, area_label, photos, status, created_by, publisher_name, created_at, comment_count",
+      // `tier` y `cta_purchase_url` son del contrato de monetización (0048):
+      // el botón "Comprar" EXISTE sólo en premium — lo garantiza el CHECK
+      // `listings_cta_premium_only`, así que un aviso free no puede ni siquiera
+      // guardar la URL. Acá se consume, no se decide.
+      "id, tenant_id, kind, title, description, price_amount, price_currency, attrs, area_label, photos, status, created_by, publisher_name, created_at, comment_count, tier, cta_purchase_url",
     )
     .eq("id", id)
     .eq("kind", "product")
@@ -101,14 +109,20 @@ export default async function ProductoDetallePage({ params }: { params: Params }
     trust: NonNullable<StoreCardModel["trust"]>;
   } | null = null;
 
+  // La tienda dueña, cuando la hay. `storeOff` marca que su membresía venció:
+  // el producto sigue existiendo en la base, pero no se muestra a nadie salvo
+  // a su dueño (§7).
+  let storeOff = false;
+
   if (attrs.storeListingId) {
     const storeId = attrs.storeListingId;
     const [{ data: store }, { count: followerCount }, { data: myFollow }] =
       await Promise.all([
         supabase
           .from("listings")
-          // store_verified: espejo público de Presencia Verificada (0039).
-          .select("id, title, area_label, photos, created_by, store_verified")
+          // store_verified: espejo de Presencia Verificada (0039).
+          // store_active: espejo de la membresía de tienda (0048).
+          .select("id, title, area_label, photos, created_by, store_verified, store_active")
           .eq("id", storeId)
           .eq("tenant_id", tenant.id)
           .eq("kind", "business")
@@ -132,6 +146,9 @@ export default async function ProductoDetallePage({ params }: { params: Params }
       ]);
 
     const verified = Boolean(store?.store_verified);
+    // Sin fila de tienda (borrada, o invisible para este usuario) también se
+    // considera apagada: sin poder verificar que está activa, no se muestra.
+    storeOff = !store || store.store_active !== true;
 
     if (store) {
       let trust: StoreCardModel["trust"] = null;
@@ -206,6 +223,23 @@ export default async function ProductoDetallePage({ params }: { params: Params }
     seller = { kind: "private", name: displayName };
   }
 
+  // Tienda apagada: el producto deja de existir para la comunidad. Se corta
+  // ANTES de renderizar nada del aviso — mostrar precio y botón de compra de un
+  // negocio que no está en el Marketplace es exactamente lo que hay que evitar.
+  // El dueño sí lo ve (con el aviso de que nadie más lo ve).
+  if (storeOff && !isOwner) {
+    return <StoreOffNotice isOwner={false} />;
+  }
+
+  // "Comprar": el botón EXISTE sólo si el módulo lo ofrece, el tier lo habilita
+  // y hay URL cargada. La regla la resuelve `visibleCtasFor` (src/lib/
+  // monetization) — este módulo la CONSUME, no la duplica.
+  const showPurchase = visibleCtasFor({
+    kind: product.kind,
+    tier: product.tier,
+    values: { purchase: product.cta_purchase_url },
+  }).includes("purchase");
+
   return (
     // pb-24: el contacto dejó de ser una barra `fixed` (ahora el mensaje se
     // escribe EN la página, ver InlineMessageCta), así que sólo hace falta aire
@@ -219,6 +253,14 @@ export default async function ProductoDetallePage({ params }: { params: Params }
         <Banner variant="info" className="mt-4 rounded-lg">
           {COPY.detail.pendingBanner}
         </Banner>
+      )}
+
+      {/* Dueño de una tienda apagada: su producto sigue acá, pero nadie más lo
+          ve. Se lo decimos arriba de todo, con el camino de vuelta. */}
+      {storeOff && isOwner && (
+        <div className="mt-4">
+          <StoreOffNotice isOwner />
+        </div>
       )}
 
       <h1 className="mt-4 font-display text-xl font-bold leading-snug text-foreground">
@@ -254,6 +296,20 @@ export default async function ProductoDetallePage({ params }: { params: Params }
         </div>
       )}
 
+      {/* COMPRAR — el checkout ocurre AFUERA (§7). Va arriba de la ficha de la
+          tienda y del chat porque es la acción principal cuando existe; y lleva
+          pegado, en el mismo bloque, quién cobra y quién responde por el envío.
+          Ese aviso NO puede quedar debajo del pliegue: es lo que evita que
+          alguien crea que Comunidad Latina está en el medio de la compra. */}
+      {showPurchase && (
+        <section className="mt-5">
+          <ExternalPurchaseCta
+            purchaseUrl={product.cta_purchase_url}
+            storeName={seller.kind === "store" ? seller.name : null}
+          />
+        </section>
+      )}
+
       {storeCardModel && (
         <section className="mt-6">
           <h2 className="mb-2 text-sm font-semibold text-foreground-secondary">
@@ -275,7 +331,15 @@ export default async function ProductoDetallePage({ params }: { params: Params }
               <p className="truncate font-display text-base font-bold text-foreground">
                 {privateSeller.displayName}
               </p>
-              <PublisherTrust {...privateSeller.trust} size="inline" />
+              {/* `profileId` va suelto y no adentro de `privateSeller.trust`:
+                  ese objeto está tipado como el `trust` de StoreCardModel y
+                  sumarle un campo lo desalinearía de la tarjeta de tienda, que
+                  no tiene una persona detrás. */}
+              <PublisherTrust
+                {...privateSeller.trust}
+                size="inline"
+                profileId={product.created_by}
+              />
               <p className="mt-1 flex items-center gap-1.5 text-xs text-foreground-muted">
                 <User size={13} aria-hidden="true" className="shrink-0" />
                 {COPY.detail.privateSellerNote}
@@ -326,6 +390,18 @@ export default async function ProductoDetallePage({ params }: { params: Params }
             </p>
           </BezelCard>
         </section>
+      )}
+
+      {/* Reportar + Reglas del Marketplace, al pie: quien duda de un aviso
+          quiere las dos cosas —qué está prohibido y cómo avisar— juntas. No es
+          otro sistema de reportes: es el <ReportSheet> de siempre con los
+          motivos del Marketplace. Al dueño no se le ofrece reportar lo suyo. */}
+      {!isOwner && (
+        <ReportProductRow
+          productId={product.id}
+          productTitle={product.title}
+          className="mt-8"
+        />
       )}
     </div>
   );

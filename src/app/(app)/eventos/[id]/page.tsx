@@ -1,10 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarBlank, MapPin, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, Badge, Banner, BezelCard } from "@/components/ui";
+import {
+  CalendarBlank,
+  ChartBar,
+  MapPin,
+  RocketLaunch,
+  Storefront,
+} from "@phosphor-icons/react/dist/ssr";
+import { Avatar, Badge, Banner, BezelCard, buttonVariants } from "@/components/ui";
 import {
   DetailTopBar,
+  ListingActions,
   PublisherTrust,
   buildTrustSignals,
   firstNameOf,
@@ -52,7 +59,9 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   const { data: listing } = await supabase
     .from("listings")
     .select(
-      "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, created_at",
+      // tier + los 2 CTAs de Eventos (MODULE_CTAS.event): comprar boletos y
+      // cómo llegar. Van en la misma fila — por eso son columnas (0048).
+      "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, created_at, tier, cta_tickets_url, cta_address",
     )
     .eq("id", id)
     .eq("kind", "event")
@@ -168,6 +177,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
             level={toTrustLevel(trust?.level)}
             signals={buildTrustSignals(trust?.signals ?? {}, profile?.identity_verified ?? false)}
             size="inline"
+            profileId={profile?.id ?? null}
           />
         </div>
       </BezelCard>
@@ -303,6 +313,41 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
             {listing.description}
           </p>
         </section>
+      )}
+
+      {/* Botones de acción (premium) — Comprar boletos · Cómo llegar, con el
+          chat de Comunidad Latina al lado. Eventos no tiene barra sticky de
+          contacto, así que el chat va ACÁ (showChat por defecto en true). */}
+      <ListingActions
+        className="mt-5"
+        listingId={listing.id}
+        kind={listing.kind}
+        tier={listing.tier}
+        subject={listing.title}
+        isLoggedIn={Boolean(user)}
+        values={{
+          tickets: listing.cta_tickets_url,
+          directions: listing.cta_address,
+        }}
+      />
+
+      {isOwner && listing.status === "published" && (
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Link
+            href={`/impulsar/${listing.id}`}
+            className={cn(buttonVariants({ variant: "outline", size: "md" }), "w-full")}
+          >
+            <RocketLaunch size={18} aria-hidden="true" />
+            Promocionar este evento
+          </Link>
+          <Link
+            href={`/impulsar/${listing.id}/estadisticas`}
+            className={cn(buttonVariants({ variant: "ghost", size: "md" }), "w-full")}
+          >
+            <ChartBar size={18} aria-hidden="true" />
+            Ver estadísticas
+          </Link>
+        </div>
       )}
 
       {publisherCard && (

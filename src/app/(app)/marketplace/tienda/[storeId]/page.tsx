@@ -8,6 +8,7 @@ import {
   ProductCard,
   ProductGridSkeleton,
   StoreHeader,
+  StoreOffNotice,
   formatProductPrice,
   parseProductAttrs,
   type ProductCardModel,
@@ -33,7 +34,10 @@ const fetchStoreById = cache(async (id: string) => {
     .from("listings")
     .select(
       // store_verified: espejo público de Presencia Verificada (0039).
-      "id, tenant_id, kind, title, area_label, photos, status, created_by, created_at, store_verified",
+      // store_active: espejo público de la membresía de tienda (0048) — la app
+      // lee ESTA columna, nunca store_memberships (que la RLS le esconde al
+      // visitante). true = la tienda se muestra.
+      "id, tenant_id, kind, title, area_label, photos, status, created_by, created_at, store_verified, store_active",
     )
     .eq("id", id)
     .eq("kind", "business")
@@ -75,6 +79,22 @@ async function TiendaContent({ storeId }: { storeId: string }) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const isOwner = Boolean(user && store.created_by === user.id);
+
+  // MEMBRESÍA VENCIDA O CANCELADA ⇒ la vidriera no se muestra (§7).
+  //
+  // Corta ANTES de pedir productos y seguidores: no tiene sentido traer datos
+  // de una tienda que no se va a pintar. No es un 404 —la tienda existe y
+  // puede volver— ni un 500: es un estado claro, distinto para el dueño (qué
+  // pasó y cómo volver) y para el visitante (que no tiene por qué enterarse
+  // del estado de pago de un negocio ajeno).
+  //
+  // El dueño SÍ entra a su propia tienda apagada: necesita ver que sus
+  // productos siguen ahí. El aviso de arriba le dice que nadie más los ve.
+  if (!store.store_active && !isOwner) {
+    return <StoreOffNotice isOwner={false} />;
+  }
+
   const [
     { data: productRows, error },
     { count: followerCount },
@@ -112,7 +132,6 @@ async function TiendaContent({ storeId }: { storeId: string }) {
   }
 
   const verified = store.store_verified;
-  const isOwner = Boolean(user && store.created_by === user.id);
 
   const storeModel: StoreHeaderModel = {
     id: store.id,
@@ -137,6 +156,14 @@ async function TiendaContent({ storeId }: { storeId: string }) {
 
   return (
     <div>
+      {/* El dueño ve su tienda apagada con sus productos intactos y un camino
+          de vuelta; nadie más llega hasta acá (se corta más arriba). */}
+      {!store.store_active && isOwner && (
+        <div className="mb-4">
+          <StoreOffNotice isOwner />
+        </div>
+      )}
+
       <StoreHeader store={storeModel} />
 
       {/* Escribirle a la tienda sin salir de su vidriera. El destinatario es el

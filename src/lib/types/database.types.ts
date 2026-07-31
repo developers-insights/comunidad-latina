@@ -18,6 +18,8 @@
 // job_applications.cv_url/portfolio_links/share_profile + job_application_notes
 // + saved_candidates; listings.tier/store_active/cta_* + campaigns + cta_clicks
 // + store_memberships.
+// EXCEPCIÓN 2026-07-31 (misma razón): 0050 — listing_views + listings.view_count,
+// listing_shares y las RPC listing_reach / record_listing_share.
 export type Json =
   | string
   | number
@@ -1251,6 +1253,85 @@ export type Database = {
           },
         ]
       }
+      listing_shares: {
+        Row: {
+          listing_id: string
+          shared_on: string
+          shares: number
+          tenant_id: string
+        }
+        Insert: {
+          listing_id: string
+          shared_on?: string
+          shares?: number
+          tenant_id: string
+        }
+        Update: {
+          listing_id?: string
+          shared_on?: string
+          shares?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_shares_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_shares_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listing_views: {
+        Row: {
+          listing_id: string
+          tenant_id: string
+          viewed_on: string
+          viewer_id: string
+        }
+        Insert: {
+          listing_id: string
+          tenant_id: string
+          viewed_on?: string
+          viewer_id: string
+        }
+        Update: {
+          listing_id?: string
+          tenant_id?: string
+          viewed_on?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_views_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_views_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_views_viewer_id_fkey"
+            columns: ["viewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       listings: {
         Row: {
           area_label: string | null
@@ -1286,6 +1367,7 @@ export type Database = {
           tier: string
           title: string
           updated_at: string
+          view_count: number
         }
         Insert: {
           area_label?: string | null
@@ -1321,6 +1403,7 @@ export type Database = {
           tier?: string
           title: string
           updated_at?: string
+          view_count?: number
         }
         Update: {
           area_label?: string | null
@@ -1356,6 +1439,7 @@ export type Database = {
           tier?: string
           title?: string
           updated_at?: string
+          view_count?: number
         }
         Relationships: [
           {
@@ -2560,6 +2644,10 @@ export type Database = {
           total: number
         }[]
       }
+      listing_reach: {
+        Args: { p_listing_id: string }
+        Returns: number
+      }
       notification_counts: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -2569,6 +2657,10 @@ export type Database = {
       }
       record_cta_click: {
         Args: { p_cta_kind: string; p_listing_id: string }
+        Returns: undefined
+      }
+      record_listing_share: {
+        Args: { p_listing_id: string }
         Returns: undefined
       }
       report_scam: {

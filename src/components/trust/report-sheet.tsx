@@ -9,11 +9,16 @@ import { cn } from "@/lib/utils";
 export type ReportTargetKind = "profile" | "listing" | "message";
 
 /**
- * Motivos únicos para las 12+ superficies del flujo unificado: cortos,
+ * Motivos por DEFECTO para las 12+ superficies del flujo unificado: cortos,
  * tocables como fila completa, el primero preseleccionado para que reportar
  * sea "elegí (ya viene marcado) → enviar" — 2 taps.
+ *
+ * Un módulo puede pasar su propia lista por `reasons` sin montar un segundo
+ * sistema de reportes: el sheet, la server action y la RPC siguen siendo los
+ * mismos. Lo usa el Marketplace, donde "me trató mal" no sirve para denunciar
+ * una falsificación y sin un motivo que encaje todo termina en "Otra cosa".
  */
-const REPORT_REASONS = [
+const DEFAULT_REPORT_REASONS = [
   "Pidió dinero por adelantado",
   "Se hace pasar por otra persona",
   "Publicó algo falso o engañoso",
@@ -48,6 +53,12 @@ export interface ReportSheetProps {
   targetId: string;
   /** Ej. título del aviso o nombre de la persona — da contexto al equipo. */
   contextLabel?: string;
+  /**
+   * Motivos propios del módulo. Sin esto van los genéricos. El `value` viaja
+   * tal cual a `report_scam.p_reason` (máx. 80 caracteres, ver el schema de
+   * `reportTargetAction`) y es lo que lee el equipo de moderación.
+   */
+  reasons?: readonly string[];
 }
 
 /**
@@ -62,6 +73,7 @@ export function ReportSheet({
   targetKind,
   targetId,
   contextLabel,
+  reasons,
 }: ReportSheetProps) {
   return (
     <BottomSheet open={open} onClose={onClose} ariaLabel={COPY.title}>
@@ -74,6 +86,7 @@ export function ReportSheet({
         targetKind={targetKind}
         targetId={targetId}
         contextLabel={contextLabel}
+        reasons={reasons}
       />
     </BottomSheet>
   );
@@ -84,8 +97,11 @@ function ReportSheetBody({
   targetKind,
   targetId,
   contextLabel,
+  reasons,
 }: Omit<ReportSheetProps, "open">) {
-  const [reason, setReason] = useState<string>(REPORT_REASONS[0]);
+  // Una lista vacía sería un formulario sin opciones: se cae a los genéricos.
+  const options = reasons && reasons.length > 0 ? reasons : DEFAULT_REPORT_REASONS;
+  const [reason, setReason] = useState<string>(options[0]!);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [details, setDetails] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -160,7 +176,7 @@ function ReportSheetBody({
             <legend className="mb-1 text-sm font-medium text-foreground-secondary">
               {COPY.reasonLegend}
             </legend>
-            {REPORT_REASONS.map((option) => {
+            {options.map((option) => {
               const selected = reason === option;
               return (
                 <label

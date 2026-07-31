@@ -1,4 +1,9 @@
-export { ContactCta, type ContactCtaProps } from "./contact-cta";
+export {
+  ContactCta,
+  ListingActions,
+  type ContactCtaProps,
+  type ListingActionsProps,
+} from "./contact-cta";
 export { COPY } from "./copy";
 export { DetailTopBar } from "./detail-top-bar";
 export { ListingGallery, type ListingGalleryProps } from "./gallery";

@@ -440,15 +440,41 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
         {photos.length > 0 && <p className="text-xs text-foreground-muted">{C.reviewNote}</p>}
       </div>
 
+      {/* REGLAS DEL MARKETPLACE (§7). Van ANTES del botón y con el enlace a la
+          vista, no en un tilde que se marca sin leer: quien publica un producto
+          prohibido casi nunca lo hace a propósito — no sabe que no se puede. Y
+          la aceptación se declara donde ocurre, al publicar. */}
+      <section className="rounded-lg border border-border-subtle bg-surface-subtle p-4">
+        <p className="text-sm font-semibold text-foreground">{C.policyTitle}</p>
+        <p className="mt-1 text-sm leading-relaxed text-foreground-secondary">
+          {C.policyBody}
+        </p>
+        <Link
+          href="/legal/marketplace"
+          className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-brand-ink underline underline-offset-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+        >
+          {C.policyLink}
+        </Link>
+      </section>
+
       {error && (
         <p role="alert" className="text-sm font-medium text-danger">
           {error}
         </p>
       )}
 
-      <Button variant="primary" size="lg" className="w-full" loading={submitting} onClick={handleSubmit}>
-        {submitting ? C.submitting : C.submit}
-      </Button>
+      <div className="flex flex-col gap-2">
+        <Button
+          variant="primary"
+          size="lg"
+          className="w-full"
+          loading={submitting}
+          onClick={handleSubmit}
+        >
+          {submitting ? C.submitting : C.submit}
+        </Button>
+        <p className="text-center text-xs text-foreground-muted">{C.policyAccept}</p>
+      </div>
     </div>
   );
 }

@@ -38,6 +38,20 @@ export {
   formatCents,
   type ContractBreakdown,
 } from "./money";
+export {
+  REQUIREMENT_IDS,
+  REQUIREMENT_TARGETS,
+  accountAgeInDays,
+  computeCreatorRequirements,
+  formatRequirementGap,
+  formatRequirementNumber,
+  formatRequirementValue,
+  type CreatorRequirementsInput,
+  type CreatorRequirementsResult,
+  type Requirement,
+  type RequirementId,
+  type RequirementUnit,
+} from "./requirements";
 
 export { CreatorsNav, type CreatorsSection } from "./creators-nav";
 export { GigCard, type GigCardModel } from "./gig-card";
@@ -46,6 +60,8 @@ export { RatingStars } from "./rating-stars";
 export { DemoSeal } from "./demo-seal";
 export { ContractStepper, ContractStatusBadge } from "./contract-stepper";
 export { ContractBreakdown as ContractBreakdownCard } from "./contract-breakdown";
+export { CreatorRequirementsCard } from "./requirements-card";
+export { SocialAudience } from "./social-audience";
 export { GigListSkeleton, CreatorListSkeleton, ContractsListSkeleton } from "./skeletons";
 
 export { ApplySheet } from "./apply-sheet";

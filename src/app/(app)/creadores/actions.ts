@@ -13,6 +13,7 @@ import {
   moderateText,
   moderationTier,
 } from "@/lib/moderation";
+import { blockContactInfoIn } from "@/lib/moderation/contact-block";
 import {
   findTransition,
   roleOf,
@@ -294,7 +295,7 @@ const applySchema = z.object({
 
 export type ApplyResult =
   | { ok: true; alreadyApplied?: boolean }
-  | { ok: false; error: string; needsAuth?: boolean };
+  | { ok: false; error: string; needsAuth?: boolean; contactBlocked?: boolean };
 
 export async function applyToGig(rawInput: z.input<typeof applySchema>): Promise<ApplyResult> {
   const parsed = applySchema.safeParse(rawInput);
@@ -302,6 +303,15 @@ export async function applyToGig(rawInput: z.input<typeof applySchema>): Promise
     return { ok: false, error: COPY.apply.errors.messageShort };
   }
   const { gigId, message, proposedAmount } = parsed.data;
+
+  // BLOQUEO DE DATOS DE CONTACTO (§6). Va DESPUÉS de Zod (que ya acotó la
+  // longitud) y ANTES de cualquier escritura: el dato no se guarda ni tachado.
+  // El servidor es la frontera — el aviso del formulario es cortesía, no
+  // control; quien manda un POST a mano se saltea la UI.
+  const contact = blockContactInfoIn([message]);
+  if (!contact.ok) {
+    return { ok: false, contactBlocked: true, error: contact.message };
+  }
 
   const guard = await requireTenantMatch();
   if (!guard.ok) {
@@ -488,7 +498,7 @@ const proposeSchema = z.object({
 
 export type ProposeContractResult =
   | { ok: true; contractId: string; code: string }
-  | { ok: false; error: string; needsAuth?: boolean };
+  | { ok: false; error: string; needsAuth?: boolean; contactBlocked?: boolean };
 
 export async function proposeContract(
   rawInput: z.input<typeof proposeSchema>,
@@ -498,6 +508,16 @@ export async function proposeContract(
     return { ok: false, error: COPY.contract.errors.scopeShort };
   }
   const input = parsed.data;
+
+  // BLOQUEO DE DATOS DE CONTACTO (§6), también del lado del negocio: el título
+  // y el alcance del contrato son texto libre que lee la otra parte, así que
+  // sirven igual de bien para mudar la conversación afuera. La regla es
+  // simétrica — si sólo se controlara al creador, el "coordinamos por WhatsApp"
+  // entraría por el campo del cliente.
+  const contact = blockContactInfoIn([input.title, input.scope]);
+  if (!contact.ok) {
+    return { ok: false, contactBlocked: true, error: contact.message };
+  }
 
   const guard = await requireTenantMatch();
   if (!guard.ok) {

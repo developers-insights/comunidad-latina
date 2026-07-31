@@ -287,15 +287,31 @@ export function groupSearchResults(
   for (const row of rows) {
     if (!isSearchResultType(row.result_type)) continue;
     const type = row.result_type;
+    const sponsored = type === "videos" && sponsoredIds.has(row.id);
     const bucket = byType.get(type) ?? [];
     bucket.push({
       type,
       id: row.id,
       title: row.title,
       subtitle: row.subtitle,
-      href: row.href,
+      // UN VIDEO PATROCINADO ABRE SU ANUNCIO, NO EL REEL (contrato §4).
+      //
+      // `app.video_post_href` (0044) devuelve `/videos?start=id` para TODO
+      // video. Su propio comentario dice que la 0046 iba a re-crearla cuando
+      // apareciera el video publicitario, y no llegó a hacerlo. El efecto: tocar
+      // un resultado patrocinado te manda al scroll de Videos Cortos, donde ese
+      // video —por el filtro `video_type='short_video'`— NO existe; el reel
+      // arranca con OTROS videos y la persona se fue del anuncio que tocó.
+      //
+      // Se corrige acá y no en la base porque el dato que hace falta
+      // (`is_paid_ad`) ya está resuelto en esta misma línea, y porque el destino
+      // correcto —el detalle de la publicación, donde el video se reproduce
+      // dentro de su anuncio— es una ruta de la app. Cuando la RPC se re-cree
+      // con el href correcto, esto se vuelve un no-op: `/feed/{id}` es el mismo
+      // valor que devolvería.
+      href: sponsored ? `/feed/${row.id}` : row.href,
       media: resolveSearchMedia(type, row.image_url),
-      sponsored: type === "videos" && sponsoredIds.has(row.id),
+      sponsored,
     });
     byType.set(type, bucket);
   }

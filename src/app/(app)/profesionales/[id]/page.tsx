@@ -1,9 +1,18 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Certificate, MapPin, Storefront, UserGear } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, Banner, BezelCard, Chip } from "@/components/ui";
+import {
+  Certificate,
+  ChartBar,
+  MapPin,
+  RocketLaunch,
+  Storefront,
+  UserGear,
+} from "@phosphor-icons/react/dist/ssr";
+import { Avatar, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui";
 
 import {
   DetailTopBar,
+  ListingActions,
   PublisherTrust,
   VerificationBand,
   buildTrustSignals,
@@ -25,7 +34,7 @@ import {
 import { fetchViewerSavedListingIds } from "@/app/(app)/feed/queries";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 const C = COPY.professionals;
 
@@ -50,7 +59,9 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
   const { data: listing } = await supabase
     .from("listings")
     .select(
-      "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, created_at",
+      // tier + los 3 CTAs de Profesionales (MODULE_CTAS.professional): reservar
+      // cita, llamar y WhatsApp.
+      "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, created_at, tier, cta_booking_url, cta_phone, cta_whatsapp",
     )
     .eq("id", id)
     .eq("kind", "professional")
@@ -155,6 +166,7 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
               level={toTrustLevel(trust?.level)}
               signals={buildTrustSignals(trust?.signals ?? {}, profile?.identity_verified ?? false)}
               size="inline"
+              profileId={profile?.id ?? null}
             />
           </div>
         </div>
@@ -288,6 +300,43 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
             </div>
           </BezelCard>
         </section>
+      )}
+
+      {/* Botones de acción (premium) — Reservar cita · Llamar · WhatsApp, con
+          el chat de Comunidad Latina al lado. En una publicación gratuita esto
+          no renderiza nada y el único contacto sigue siendo el CTA de abajo. */}
+      <ListingActions
+        className="mt-6"
+        listingId={listing.id}
+        kind={listing.kind}
+        tier={listing.tier}
+        subject={listing.title}
+        showChat={false}
+        isLoggedIn={Boolean(user)}
+        values={{
+          booking: listing.cta_booking_url,
+          phone: listing.cta_phone,
+          whatsapp: listing.cta_whatsapp,
+        }}
+      />
+
+      {isOwner && listing.status === "published" && (
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Link
+            href={`/impulsar/${listing.id}`}
+            className={cn(buttonVariants({ variant: "outline", size: "md" }), "w-full")}
+          >
+            <RocketLaunch size={18} aria-hidden="true" />
+            Promocionar mi perfil
+          </Link>
+          <Link
+            href={`/impulsar/${listing.id}/estadisticas`}
+            className={cn(buttonVariants({ variant: "ghost", size: "md" }), "w-full")}
+          >
+            <ChartBar size={18} aria-hidden="true" />
+            Ver estadísticas
+          </Link>
+        </div>
       )}
 
       {/* Contacto protegido — mismo RPC request_contact que vivienda (§9.2) */}

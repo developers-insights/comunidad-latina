@@ -6,8 +6,13 @@ import {
   Briefcase,
   Calendar,
   CheckCircle,
+  Eye,
   House,
   ImageSquare,
+  MapPin,
+  Megaphone,
+  PencilSimple,
+  RocketLaunch,
   Storefront,
   Wrench,
   X,
@@ -27,9 +32,12 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Celebration, useCelebration } from "@/components/motion";
 import { COPY } from "@/components/listings";
+import { MONETIZATION_COPY, FREE_MAX_PHOTOS } from "@/lib/monetization";
+import { listingViewHref } from "@/lib/monetization/href";
 import { createListingDraft, finalizeListing } from "./actions";
 
 const C = COPY.publish;
+const M = MONETIZATION_COPY;
 
 // Campos específicos de professional/event (módulo DIRECTORIOS) — copy local
 // para no tocar el COPY de vivienda.
@@ -77,9 +85,21 @@ const KIND_OPTIONS: Array<{ value: Kind; label: string; Icon: typeof House }> = 
   { value: "job", label: "Trabajo", Icon: Wrench },
 ];
 
-const MAX_PHOTOS = 6;
+/**
+ * Un aviso NACE gratuito — la policy `listings_insert` (0048) lo exige, y el
+ * tier lo mueve el pago, no el formulario. Así que el tope de este wizard es
+ * SIEMPRE el de gratis, y sale del módulo de monetización en vez de ser un 6
+ * suelto que nadie sabe de dónde salió.
+ *
+ * El servidor vuelve a contar en `finalizeListing`: acá el número es UX (avisar
+ * antes de que alguien elija 12 fotos), allá es el tope de verdad.
+ */
+const MAX_PHOTOS = FREE_MAX_PHOTOS;
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
-const TOTAL_STEPS = 5;
+
+/** 0 tipo · 1 texto · 2 precio · 3 zona · 4 fotos · 5 vista previa. */
+const STEP_PREVIEW = 5;
+const TOTAL_STEPS = 6;
 
 interface PhotoItem {
   file: File;
@@ -128,7 +148,11 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
   const [step, setStep] = useState(initialKind ? 1 : 0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState<"published" | "pending_review" | null>(null);
+  const [done, setDone] = useState<{
+    status: "published" | "pending_review";
+    kind: Kind;
+    listingId: string;
+  } | null>(null);
 
   const [kind, setKind] = useState<Kind | null>(initialKind);
   const [title, setTitle] = useState("");
@@ -204,7 +228,9 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
       const next = [...current];
       for (const file of incoming) {
         if (next.length >= MAX_PHOTOS) {
-          toast({ title: C.steps.photos.tooMany, variant: "warning" });
+          // Copy del módulo de monetización: dice el número real Y qué se gana
+          // con premium, en vez del "hasta 6 fotos" hardcodeado de antes.
+          toast({ title: M.tier.photoLimitReached(MAX_PHOTOS), variant: "warning" });
           break;
         }
         if (file.size > MAX_PHOTO_BYTES) {
@@ -313,7 +339,11 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
         setError(finalized.error);
         return;
       }
-      setDone(finalized.status);
+      setDone({
+        status: finalized.status,
+        kind: (finalized.kind as Kind) ?? (kind as Kind),
+        listingId,
+      });
       // Celebración sutil solo cuando el aviso quedó publicado de verdad (no en
       // "queda en revisión", que es un estado de espera, no un logro cerrado).
       if (finalized.status === "published") celebrate();
@@ -328,40 +358,76 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
   // Pantalla de éxito
   // -------------------------------------------------------------------------
   if (done) {
-    const published = done === "published";
+    const published = done.status === "published";
+    const viewHref = listingViewHref(done.kind, done.listingId);
     return (
       <>
-      {published && (
-        <Celebration active={celebrating} message={C.success.publishedTitle} />
-      )}
-      <BezelCard
-        variant={published ? "success" : "default"}
-        coreClassName="flex flex-col items-center gap-3 px-6 py-10 text-center"
-      >
-        <CheckCircle
-          size={56}
-          weight="fill"
-          aria-hidden="true"
-          className={published ? "text-success" : "text-brand"}
-        />
-        <h2 className="font-display text-xl font-bold text-foreground">
-          {published ? C.success.publishedTitle : C.success.reviewTitle}
-        </h2>
-        <p className="max-w-[40ch] text-sm text-foreground-secondary">
-          {published ? C.success.publishedBody : C.success.reviewBody}
-        </p>
-        <div className="mt-3 flex w-full flex-col gap-2">
-          <Link
-            href="/propiedades"
-            className={cn(buttonVariants({ variant: "primary", size: "md" }), "w-full")}
+        {published && (
+          <Celebration active={celebrating} message={C.success.publishedTitle} />
+        )}
+        <div className="flex flex-col gap-4">
+          <BezelCard
+            variant={published ? "success" : "default"}
+            coreClassName="flex flex-col items-center gap-3 px-6 py-9 text-center"
           >
-            {C.success.goToListings}
-          </Link>
+            <CheckCircle
+              size={56}
+              weight="fill"
+              aria-hidden="true"
+              className={published ? "text-success" : "text-brand"}
+            />
+            <h2 className="font-display text-xl font-bold text-foreground">
+              {published ? C.success.publishedTitle : C.success.reviewTitle}
+            </h2>
+            <p className="max-w-[40ch] text-sm text-foreground-secondary">
+              {published ? C.success.publishedBody : C.success.reviewBody}
+            </p>
+            <Link
+              href={viewHref}
+              className={cn(
+                buttonVariants({ variant: "primary", size: "md" }),
+                "mt-2 w-full",
+              )}
+            >
+              <Eye size={18} aria-hidden="true" />
+              {M.success.viewCta}
+            </Link>
+          </BezelCard>
+
+          {/* Pedido literal de la call (1:00:07): "cuando dice publicar aviso,
+              debería haber un botón acá y otro acá… crear campaña o impulsar
+              este anuncio". Aplica a los 5 verticales del wizard.
+
+              Sólo si el aviso YA está publicado: las dos rutas exigen
+              status='published' (la RLS de campaigns_insert y el gate de
+              /impulsar), así que ofrecerlas en revisión sería mandar a alguien
+              a una pantalla que le dice que no. Cuando está en revisión se lo
+              decimos con una línea, que es más honesto que un botón muerto. */}
+          {published ? (
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <PromoteCard
+                href={`/impulsar/${done.listingId}`}
+                icon={<RocketLaunch size={20} weight="fill" aria-hidden="true" />}
+                title={M.success.boostCta}
+                hint={M.success.boostHint}
+              />
+              <PromoteCard
+                href={`/impulsar/${done.listingId}?modo=campana`}
+                icon={<Megaphone size={20} weight="fill" aria-hidden="true" />}
+                title={M.success.campaignCta}
+                hint={M.success.campaignHint}
+              />
+            </div>
+          ) : (
+            <p className="text-center text-xs leading-relaxed text-foreground-muted">
+              {M.success.laterNote}
+            </p>
+          )}
+
           <Button variant="ghost" className="w-full" onClick={resetForm}>
             {C.success.publishAnother}
           </Button>
         </div>
-      </BezelCard>
       </>
     );
   }
@@ -613,7 +679,12 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
           <h2 className="font-display text-xl font-bold text-foreground">
             {C.steps.photos.title}
           </h2>
-          <p className="-mt-2 text-sm text-foreground-secondary">{C.steps.photos.help}</p>
+          {/* El número sale del módulo de monetización, no de un string fijo:
+              C.steps.photos.help sigue diciendo "6" y lo comparte con otros
+              wizards que todavía tienen ese tope. */}
+          <p className="-mt-2 text-sm text-foreground-secondary">
+            {M.tier.photoStepHelp(MAX_PHOTOS)}
+          </p>
 
           <div className="grid grid-cols-3 gap-2">
             {photos.map((item, index) => (
@@ -668,6 +739,83 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
         </div>
       )}
 
+
+      {step === STEP_PREVIEW && (
+        <div className="flex flex-col gap-4">
+          <div>
+            <h2 className="font-display text-xl font-bold text-foreground">
+              {M.preview.title}
+            </h2>
+            <p className="mt-0.5 text-sm text-foreground-secondary">{M.preview.help}</p>
+          </div>
+
+          {/* La tarjeta imita el aviso real —foto, título, precio, zona— para que
+              "así te va a quedar" sea literal y no una lista de campos. */}
+          <BezelCard coreClassName="overflow-hidden">
+            {photos.length > 0 ? (
+              <div className="relative aspect-[4/3] w-full bg-surface-subtle">
+                {/* eslint-disable-next-line @next/next/no-img-element -- preview local (blob URL) */}
+                <img
+                  src={photos[0].previewUrl}
+                  alt=""
+                  className="size-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="flex aspect-[4/3] w-full items-center justify-center gap-2 bg-surface-subtle text-foreground-muted">
+                <ImageSquare size={22} aria-hidden="true" />
+                <span className="text-sm font-medium">{M.preview.photosNone}</span>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1.5 p-4">
+              <p className="font-display text-lg font-bold leading-snug text-foreground">
+                {title.trim() || "—"}
+              </p>
+              {photos.length > 1 && (
+                // El contador va en el cuerpo y NO encima de la foto: sobre la
+                // imagen pedía `text-on-media`, que es tinta clara por
+                // definición y desaparece al imprimir sin su relleno
+                // (src/test/print-contract.test.ts). Acá se lee siempre.
+                <p className="text-xs text-foreground-muted">
+                  {M.preview.photoCount(photos.length)}
+                </p>
+              )}
+              {price && (
+                <p className="numeric text-2xl font-bold text-brand">
+                  {`$${Number(price).toLocaleString("es-US")}`}
+                  {hasPriceFrequency && period === "month" ? "/mes" : ""}
+                </p>
+              )}
+              {areaLabel.trim() && (
+                <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
+                  <MapPin size={14} aria-hidden="true" />
+                  {areaLabel.trim()}
+                </p>
+              )}
+              {description.trim() && (
+                <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm leading-relaxed text-foreground-secondary">
+                  {description.trim()}
+                </p>
+              )}
+            </div>
+          </BezelCard>
+
+          {/* Contacto: en gratis es el chat y nada más. Se dice ACÁ, antes de
+              publicar, para que nadie descubra después que su teléfono no
+              aparece por ningún lado. */}
+          <div className="rounded-lg bg-surface-subtle px-4 py-3">
+            <p className="text-sm text-foreground">{M.tier.freeContactNote}</p>
+            <p className="mt-1 text-xs text-foreground-muted">{M.tier.upgradeTeaser}</p>
+          </div>
+
+          <Button variant="outline" className="w-full" onClick={() => setStep(1)}>
+            <PencilSimple size={18} aria-hidden="true" />
+            {M.preview.edit}
+          </Button>
+        </div>
+      )}
+
       {error && (
         <p role="alert" className="text-sm font-medium text-danger">
           {error}
@@ -696,5 +844,49 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
         )}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tarjeta de promoción de la pantalla de éxito
+// ---------------------------------------------------------------------------
+
+/**
+ * Las dos rutas de "Promocionar", una al lado de la otra y con su diferencia
+ * escrita. Son tarjetas y no dos botones apilados a propósito: impulsar y armar
+ * una campaña no son la misma acción con distinto precio, y dos botones
+ * idénticos invitan a elegir el de arriba sin leer.
+ */
+function PromoteCard({
+  href,
+  icon,
+  title,
+  hint,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  hint: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "group flex min-h-11 items-start gap-3 rounded-lg border border-border-subtle bg-surface p-4 text-left",
+        "transition-[transform,background-color,border-color] duration-(--duration-fast) ease-(--ease-spring)",
+        "hover:border-brand hover:bg-brand-tint active:scale-[0.98]",
+        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+      )}
+    >
+      <span className="mt-0.5 shrink-0 text-brand">{icon}</span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-foreground group-hover:text-brand-ink">
+          {title}
+        </span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-foreground-secondary">
+          {hint}
+        </span>
+      </span>
+    </Link>
   );
 }

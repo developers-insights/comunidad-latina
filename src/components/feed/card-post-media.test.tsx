@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { ADVERTISING_VIDEO_MAX_SECONDS } from "@/lib/media/video-policy";
 import { CardMediaProvider } from "./card-media-context";
 import { CardPostMedia } from "./card-post-media";
 import { NO_REEL_SCOPE } from "./card-video";
@@ -61,14 +62,21 @@ const POST_ID = "11111111-1111-4111-8111-111111111111";
  * publica el CardMediaProvider (lo monta PostCard) para que la fila de acciones
  * pueda leer el MISMO medio que se está viendo. Acá se monta a mano.
  */
-function renderMedia(media: PostMediaView[], videoScope: VideoScopeProp = "para-ti") {
+function renderMedia(
+  media: PostMediaView[],
+  videoScope: VideoScopeProp = "para-ti",
+  /** Columnas de publicidad (0038 campaña vigente + 0046 video publicitario). */
+  ad: { isPromoted?: boolean; isPaidAd?: boolean; videoType?: string | null } = {},
+) {
   return render(
     <MediaViewerProvider>
       <CardMediaProvider items={media}>
         <CardPostMedia
           postId={POST_ID}
           authorName="María Peralta"
-          isPromoted={false}
+          isPromoted={ad.isPromoted ?? false}
+          isPaidAd={ad.isPaidAd ?? false}
+          videoType={ad.videoType ?? null}
           entity={null}
           videoScope={videoScope}
         />
@@ -247,5 +255,77 @@ describe("CardPostMedia: el reel infinito sólo donde corresponde", () => {
     // El detalle es un server component y no puede importar de un módulo
     // "use client": copia el literal. Si acá cambia, allá queda desincronizado.
     expect(NO_REEL_SCOPE).toBe("sin-reel");
+  });
+});
+
+/**
+ * EL VIDEO PUBLICITARIO SE MIRA DENTRO DE SU ANUNCIO (contrato 2026-07-30 §4;
+ * call del 29/7, 1:19: "cuando cierras el video se regresa de nuevo a la
+ * publicación… no puedes ir scrolling, tiene que quedarse dentro del anuncio").
+ *
+ * Los tres casos de abajo NO son el mismo caso escrito tres veces: son las tres
+ * señales que pueden estar prendidas por separado, y la del medio —campaña ya
+ * terminada, columna `is_paid_ad` todavía en true— es la que se escapaba,
+ * porque la tarjeta sólo miraba `isPromoted`, que caduca con el calendario.
+ */
+describe("CardPostMedia: un anuncio nunca te tira al reel", () => {
+  const AD_CASES = [
+    { name: "campaña VIGENTE (post_promotions)", ad: { isPromoted: true } },
+    {
+      name: "campaña TERMINADA pero is_paid_ad sigue en true (0046)",
+      ad: { isPromoted: false, isPaidAd: true },
+    },
+    {
+      name: "video_type='advertising_video' sin ninguna otra señal",
+      ad: { isPromoted: false, isPaidAd: false, videoType: "advertising_video" },
+    },
+  ] as const;
+
+  for (const testCase of AD_CASES) {
+    it(`no navega al reel — ${testCase.name}`, () => {
+      renderMedia([VIDEO(1)], "para-ti", { ...testCase.ad });
+      fireEvent.click(screen.getByRole("button", { name: /ver el video/i }));
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+
+      // Ni al scroll de Videos Cortos, ni a ninguna otra ruta.
+      expect(nav.push).not.toHaveBeenCalled();
+      // Se abre el visor SOBRE la publicación: al cerrarlo (termine solo, atrás,
+      // la X o deslizando) el feed queda donde estaba, porque nunca navegó.
+      expect(viewerOpen).toHaveBeenCalledWith(
+        expect.objectContaining({ startIndex: 0, postId: POST_ID }),
+      );
+    });
+
+    it(`se marca "Patrocinado" — ${testCase.name}`, () => {
+      renderMedia([VIDEO(1)], "para-ti", { ...testCase.ad });
+      expect(screen.getByText("Patrocinado")).toBeTruthy();
+    });
+  }
+
+  it("el video del anuncio se reproduce completo: 10 minutos, no 59 segundos", () => {
+    renderMedia([VIDEO(1)], "para-ti", { isPaidAd: true });
+    fireEvent.click(screen.getByRole("button", { name: /ver el video/i }));
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(viewerOpen).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxPlaybackSeconds: ADVERTISING_VIDEO_MAX_SECONDS,
+      }),
+    );
+  });
+
+  it("un post orgánico SÍ abre el reel (el veto es del anuncio, no de todos)", () => {
+    renderMedia([VIDEO(1)], "para-ti", { videoType: "short_video" });
+    fireEvent.click(screen.getByRole("button", { name: /ver el video/i }));
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(nav.push).toHaveBeenCalledWith(`/videos?start=${POST_ID}&scope=para-ti`);
+    expect(screen.queryByText("Patrocinado")).toBeNull();
   });
 });
