@@ -6,9 +6,12 @@ import { limit, HOUR_MS, clientIpFromHeaders } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenant } from "@/lib/tenant/resolve";
-import { sendEmailInBackground } from "@/lib/email";
-import { welcomeEmail } from "@/lib/email/templates";
+import {
+  sendConfirmationEmail,
+  resendConfirmationForCredentials,
+} from "@/lib/auth/confirmation";
 import type { ActionResult } from "@/components/auth/action-result";
+import { safeNextPath } from "@/components/auth/next-param";
 import { resolveOrigin } from "./recuperar/origin";
 
 /** Versión del set legal (Términos/Privacidad/Normas) vigente al registrarse. */
@@ -40,6 +43,12 @@ const COPY = {
 // jamás puede elegir su propio role/tenant desde el cliente.
 // ---------------------------------------------------------------------------
 
+/** Las 5 necesidades del onboarding — compartidas por registro y onboarding. */
+const needsSchema = z
+  .array(z.enum(["vivienda", "trabajo", "gente", "estafas", "tramites"]))
+  .min(1, COPY.needsMin)
+  .max(5);
+
 const registerSchema = z.object({
   displayName: z
     .string()
@@ -57,6 +66,13 @@ const registerSchema = z.object({
   // Minimización de datos: solo la atestación 18+, jamás la fecha de nacimiento.
   ageConfirmed: z.literal(true, { error: COPY.ageRequired }),
   termsAccepted: z.literal(true, { error: COPY.termsRequired }),
+  // Onboarding ya respondido (el wizard pregunta ANTES de crear la cuenta, para
+  // que no quede nada a medias esperando la confirmación del correo). Opcional:
+  // el registro suelto de /registro no los trae y completa después.
+  needs: needsSchema.optional(),
+  area: z.string().trim().min(2, COPY.areaShort).max(80).optional(),
+  /** Ruta interna a la que aterriza al confirmar (se sanitiza server-side). */
+  next: z.string().optional(),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
@@ -75,7 +91,10 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
   if (!parsed.success) {
     return { ok: false, fieldErrors: firstIssuePerField(parsed.error.issues) };
   }
-  const { displayName, email, password } = parsed.data;
+  const { displayName, email, password, needs, area } = parsed.data;
+  // Open redirect: el `next` viaja en el correo, así que se sanitiza acá y no
+  // en el cliente (misma función que el resto de los flujos de auth).
+  const next = safeNextPath(parsed.data.next, "/bienvenida");
 
   // Rate limit: 5 registros/hora por IP. La IP se usa SOLO como key en memoria
   // del limiter (expira con la ventana) — jamás se persiste ni se loguea (§11).
@@ -103,12 +122,15 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
     return { ok: false, formError: COPY.genericError };
   }
 
-  // email_confirm: true — en dev no hay verificación por email (Resend degradado);
-  // cuando el módulo de emails esté activo, esto pasa a un flujo de confirmación real.
+  // `email_confirm: false` — la cuenta nace SIN confirmar y no hay sesión hasta
+  // que la persona toca el enlace del correo (el proyecto rechaza el login con
+  // `email_not_confirmed`, así que esto no es una convención nuestra: es la
+  // regla del backend). El correo lo manda Resend, no el mailer de Supabase:
+  // ver src/lib/auth/confirmation.ts.
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email,
     password,
-    email_confirm: true,
+    email_confirm: false,
     user_metadata: { display_name: displayName },
     app_metadata: { tenant_id: tenant.id, role: "member" },
   });
@@ -122,6 +144,20 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
     return { ok: false, formError: COPY.genericError };
   }
 
+  // El onboarding (necesidades + zona) ahora se completa ANTES de crear la
+  // cuenta, así que se persiste acá mismo con el admin client: sin sesión hasta
+  // confirmar el correo, el usuario no puede escribir su propio perfil vía RLS.
+  // El país de origen se hereda del país foco de la comunidad (nunca se pregunta).
+  let countryOrigin: string | null = null;
+  if (area) {
+    const { data: tenantRow } = await admin
+      .from("tenants")
+      .select("country_focus")
+      .eq("id", tenant.id)
+      .maybeSingle();
+    countryOrigin = tenantRow?.country_focus ?? null;
+  }
+
   // Sello de consentimiento del registro: misma marca temporal para edad y
   // términos (se atestan juntos). No guardamos fecha de nacimiento, solo esto.
   const consentedAt = new Date().toISOString();
@@ -133,6 +169,8 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
     age_confirmed_at: consentedAt,
     terms_accepted_at: consentedAt,
     terms_version: TERMS_VERSION,
+    ...(area ? { area_label: area } : {}),
+    ...(countryOrigin ? { country_origin: countryOrigin } : {}),
   });
 
   if (profileError) {
@@ -144,27 +182,78 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
     return { ok: false, formError: COPY.genericError };
   }
 
-  // Login inmediato desde el server (cookies @supabase/ssr).
-  const supabase = await createClient();
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  if (signInError) {
-    console.error("[auth] registro: signIn post-registro falló", {
-      code: signInError.code,
-    });
-    return { ok: false, formError: COPY.genericError };
+  if (needs && needs.length > 0) {
+    // Dato sensible (§11): vive en profiles_private, que solo lee su dueño.
+    // Si falla, la cuenta igual sirve — se pierde la personalización, no el alta.
+    const { error: privateError } = await admin.from("profiles_private").upsert(
+      { profile_id: created.user.id, tenant_id: tenant.id, needs },
+      { onConflict: "profile_id" },
+    );
+    if (privateError) {
+      console.error("[auth] registro: upsert de profiles_private falló", {
+        code: privateError.code,
+      });
+    }
   }
 
-  // Email de bienvenida (módulo EMAILS): fire-and-forget — si Resend no está
-  // configurado se saltea con log; jamás afecta el registro.
-  const welcome = welcomeEmail({
+  // Correo de confirmación. Ya no hay login inmediato: la sesión la crea
+  // /confirmar cuando la persona toca el enlace.
+  //
+  // Si el envío falla, la respuesta sigue siendo `ok: true` a propósito: la
+  // cuenta YA existe, y devolver un error mandaría a la persona a registrarse
+  // de nuevo contra un "ese email ya está en uso". La salida está en /entrar,
+  // que reenvía el enlace al detectar una cuenta sin confirmar. La falla queda
+  // en el log y en Sentry (ver sendConfirmationEmail).
+  await sendConfirmationEmail({
+    email,
+    password,
     displayName,
     tenantName: tenant.name,
     brandHex: tenant.brandHex,
+    origin: resolveOrigin(headerStore),
+    next,
   });
-  sendEmailInBackground({ to: email, subject: welcome.subject, html: welcome.html });
+
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Reenvío del enlace de confirmación (lo dispara /entrar cuando Supabase
+// responde `email_not_confirmed`). Devuelve SIEMPRE ok: quien lo llama ya sabe
+// que la cuenta existe sin confirmar; el detalle de si el correo salió no
+// agrega nada útil y sí filtraría información.
+// ---------------------------------------------------------------------------
+
+const resendConfirmationSchema = z.object({
+  email: z.string().trim().toLowerCase().pipe(z.email(COPY.emailInvalid)),
+  password: z.string().min(1),
+  next: z.string().optional(),
+});
+
+export type ResendConfirmationInput = z.infer<typeof resendConfirmationSchema>;
+
+export async function resendConfirmationAction(
+  input: ResendConfirmationInput,
+): Promise<ActionResult> {
+  const parsed = resendConfirmationSchema.safeParse(input);
+  if (!parsed.success) return { ok: true };
+
+  // Mismo límite que registro y recuperación: 5/hora por IP, en memoria.
+  const headerStore = await headers();
+  const ip = clientIpFromHeaders(headerStore);
+  if (!limit(`confirmar:${ip}`, 5, HOUR_MS).ok) {
+    return { ok: false, formError: COPY.tooManyAttempts };
+  }
+
+  const tenant = await getTenant();
+  await resendConfirmationForCredentials({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    tenantName: tenant.name,
+    brandHex: tenant.brandHex,
+    origin: resolveOrigin(headerStore),
+    next: safeNextPath(parsed.data.next, "/bienvenida"),
+  });
 
   return { ok: true };
 }
@@ -173,13 +262,14 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
 // Onboarding: la zona va a profiles; needs a profiles_private (solo-dueño).
 // El país de origen ya no se pregunta — se hereda del país de la comunidad
 // (tenants.country_focus). Corre con el cliente server (cookies del usuario) → RLS aplica.
+//
+// Este camino es el de quien YA tiene sesión y vuelve a /bienvenida a completar
+// su perfil. Quien se registra desde el wizard responde antes de crear la cuenta
+// y lo persiste `registerAction` (no hay sesión hasta confirmar el correo).
 // ---------------------------------------------------------------------------
 
 const onboardingSchema = z.object({
-  needs: z
-    .array(z.enum(["vivienda", "trabajo", "gente", "estafas", "tramites"]))
-    .min(1, COPY.needsMin)
-    .max(5),
+  needs: needsSchema,
   area: z.string().trim().min(2, COPY.areaShort).max(80),
 });
 

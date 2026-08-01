@@ -1,7 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { RegisterForm } from "@/components/auth/register-form";
+import { CheckEmail } from "@/components/auth/check-email";
 
 const COPY = {
   title: "Sumate a tu comunidad",
@@ -10,7 +11,13 @@ const COPY = {
 } as const;
 
 export function RegistroClient() {
-  const router = useRouter();
+  // Con la cuenta creada NO hay sesión todavía: la crea /confirmar cuando la
+  // persona toca el enlace del correo. Por eso acá no se navega a ningún lado.
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
+
+  if (registeredEmail !== null) {
+    return <CheckEmail email={registeredEmail} />;
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -22,11 +29,11 @@ export function RegistroClient() {
       </header>
 
       <RegisterForm
-        onSuccess={() => {
-          // Cuenta creada y logueada → completar el onboarding.
-          router.replace("/bienvenida");
-          router.refresh();
-        }}
+        // Al confirmar aterriza en /bienvenida a completar el onboarding: este
+        // registro suelto no pasó por el wizard, así que no trae zona ni
+        // necesidades.
+        next="/bienvenida"
+        onSuccess={setRegisteredEmail}
       />
     </div>
   );

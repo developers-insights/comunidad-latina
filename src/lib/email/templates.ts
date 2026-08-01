@@ -347,12 +347,9 @@ export function applicationReceivedEmail(params: {
 // firmado por Supabase Auth Admin API (`generateLink({ type: "signup", ... })`).
 //
 // Este template NO arma ni firma tokens — eso es responsabilidad de auth, no
-// de emails. Es del caller (fuera de este módulo) resolver `confirmUrl` antes
-// de llamar acá. Ver nota de integración completa en el retorno de esta tarea:
-// hoy `registerAction` (src/app/(auth)/actions.ts) crea el usuario con
-// `email_confirm: true` (auto-confirmado, sin este paso) — activar este
-// template requiere cambiar esa flag y mintear el link, ninguno de los dos
-// dentro de la frontera de este módulo.
+// de emails. Es del caller resolver `confirmUrl` antes de llamar acá: hoy lo
+// hace `sendConfirmationEmail` (src/lib/auth/confirmation.ts), que mintea el
+// `hashed_token` con la Admin API y lo apunta a la ruta /confirmar.
 // -----------------------------------------------------------------------------
 
 export function confirmAccountEmail(params: {
@@ -363,10 +360,12 @@ export function confirmAccountEmail(params: {
   tenantName: string;
   brandHex: string;
 }): { subject: string; html: string } {
-  const name = escapeHtml(params.displayName);
+  // El nombre puede faltar (reenvío desde /entrar, donde solo hay email): sin
+  // él el saludo va sin coma, jamás "Confirmá tu cuenta, " colgando.
+  const name = escapeHtml(params.displayName.trim());
   const content = `
     <h1 style="margin:0 0 12px;font-family:${T.fontStack};font-size:22px;line-height:29px;font-weight:700;letter-spacing:-0.01em;color:${T.ink};">
-      Confirmá tu cuenta, ${name}
+      ${name ? `Confirmá tu cuenta, ${name}` : "Confirmá tu cuenta"}
     </h1>
     <p style="margin:0 0 20px;font-family:${T.fontStack};font-size:15px;line-height:23px;color:${T.inkSoft};">
       Ya casi estás. Tocá el botón para confirmar tu email y activar tu cuenta

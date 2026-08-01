@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EnvelopeSimple, Eye, EyeSlash, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/client";
+import { resendConfirmationAction } from "@/app/(auth)/actions";
 import { safeNextPath } from "@/components/auth/next-param";
 import { FormError } from "@/components/auth/form-error";
 import {
@@ -44,6 +45,10 @@ const COPY = {
     "No pudimos conectar — revisá tu conexión e intentá de nuevo.",
   linkExpired:
     "Ese enlace ya venció o ya fue usado. Pedí uno nuevo acá abajo.",
+  confirmExpired:
+    "Ese enlace de confirmación venció o ya se usó. Entrá con tu email y contraseña y te mandamos uno nuevo.",
+  notConfirmed:
+    "Te falta confirmar tu cuenta. Te acabamos de mandar el enlace de nuevo — revisá tu correo (y el no deseado).",
   noAccount: "¿Primera vez por acá?",
   goRegister: "Sumate a tu comunidad",
 } as const;
@@ -65,7 +70,11 @@ export function LoginForm({
   const [pending, setPending] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
   const [error, setError] = useState<string | null>(
-    urlError === "enlace" ? COPY.linkExpired : null,
+    urlError === "enlace"
+      ? COPY.linkExpired
+      : urlError === "confirmacion"
+        ? COPY.confirmExpired
+        : null,
   );
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -94,6 +103,19 @@ export function LoginForm({
       password,
     });
     if (signInError) {
+      // Cuenta creada pero nunca confirmada: en vez de dejarla encerrada, le
+      // reenviamos el enlace ahí mismo. La action lo mintea solo si estas
+      // credenciales son correctas (ver lib/auth/confirmation.ts).
+      if (signInError.code === "email_not_confirmed") {
+        await resendConfirmationAction({
+          email: email.trim().toLowerCase(),
+          password,
+          next: destination,
+        });
+        setPending(false);
+        setError(COPY.notConfirmed);
+        return;
+      }
       setPending(false);
       if (signInError.code === "invalid_credentials") setError(COPY.badCredentials);
       else if (signInError.status === 429) setError(COPY.tooManyRequests);

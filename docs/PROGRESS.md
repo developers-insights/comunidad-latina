@@ -1,5 +1,71 @@
 # PROGRESS — Comunidad Latina
 
+## Confirmación de cuenta (✅ 2026-08-01)
+
+Se cierra el hueco que dejó la semana 4: **el registro ya no auto-confirma**.
+`createUser` pasa a `email_confirm: false`, el correo lo manda **Resend** (no el
+mailer compartido de Supabase, que sólo entrega a miembros del team) y la
+sesión la crea la ruta nueva **`/confirmar`** al canjear el token.
+
+**Lo que se probó contra el proyecto real antes de escribir una línea** (tres
+spikes, usuarios de prueba creados y borrados):
+
+- El proyecto **exige** confirmación: `signInWithPassword` sobre un usuario sin
+  confirmar devuelve `400 email_not_confirmed`. O sea, dejar de auto-confirmar
+  implica que el registro **no puede iniciar sesión** — no es una convención
+  nuestra, es la regla del backend.
+- `generateLink({ type: "signup" })` sobre un usuario **ya creado** devuelve 200
+  y **conserva su `app_metadata`** (tenant_id, role). Por eso el usuario se crea
+  con `createUser` y el link se mintea después, en dos pasos: `generateLink` no
+  acepta `app_metadata`, y sin tenant_id en el JWT el usuario no ve nada.
+- `verifyOtp({ type: "signup", token_hash })` confirma el email **y devuelve
+  sesión** — se entra directo desde el correo, sin reescribir la contraseña. El
+  token es de un solo uso (segundo intento: 403).
+- El `action_link` de Supabase **no sirve**: redirige al `Site URL` del proyecto,
+  hoy `localhost:3000`, porque los dominios de producción no están en la
+  allow-list del dashboard. Usamos el `hashed_token` contra ruta propia, así que
+  **esto no depende de tocar el dashboard** y siempre vuelve al host donde la
+  persona se registró.
+
+**El onboarding se reordenó: necesidades → zona → cuenta.** Antes la zona se
+preguntaba *después* del registro, aprovechando que había sesión. Sin sesión esa
+pregunta quedaría colgada esperando un clic en un mail, así que ahora el wizard
+pregunta todo antes y `registerAction` guarda perfil + necesidades + zona de una
+sola vez con el admin client. Nada queda a medias. Con sesión ya abierta el
+wizard corta en la zona y guarda por el camino normal, con RLS.
+
+**Reenvío sin endpoint nuevo de spam:** quien intenta entrar con una cuenta sin
+confirmar recibe el enlace de nuevo automáticamente. La action **exige la
+contraseña correcta** — verifica contra Supabase con un cliente anónimo efímero
+y sólo manda el correo cuando la respuesta es exactamente `email_not_confirmed`.
+Con contraseña incorrecta o cuenta ya confirmada no manda nada (verificado en
+vivo: el log no mintea ningún token). Sin esa puerta sería una forma de mandarle
+correos a direcciones ajenas escribiéndolas en un formulario.
+
+Decisiones que importan:
+
+- **El correo caído no invalida el alta.** `registerAction` devuelve `ok` aunque
+  el envío falle: la cuenta ya existe, y un error mandaría a la persona a
+  registrarse de nuevo contra un "ese email ya está en uso". La salida es
+  /entrar, que reenvía.
+- **La bienvenida se manda al confirmar, no al registrarse** — quien nunca
+  confirma no recibe un "bienvenido" a una cuenta que no puede usar.
+- **En dev sin Resend el enlace se loguea en la consola del server**; si no, una
+  cuenta recién creada sería inaccesible en local.
+
+Verificado end-to-end en el navegador con Resend apagado (cero correos reales):
+wizard completo → "Revisá tu correo" → enlace del log → sesión y aterrizaje en
+`/propiedades?zona=Bronx`; en la base, `email_confirmed_at` sellado recién al
+confirmar, `area_label`, `country_origin` heredado y `needs`. Enlace ya usado →
+`/entrar?error=confirmacion`. Los dos usuarios de prueba quedaron borrados.
+
+Gates: typecheck 0 · lint 0 errores · **2000 tests** (20 nuevos) · build verde.
+
+**Sigue pendiente y es de Manuel:** el **SMTP propio en el dashboard de
+Supabase**. La recuperación de contraseña y el ingreso sin contraseña siguen
+saliendo por el mailer compartido de Supabase, que sólo entrega a miembros del
+team. Eso no se arregla desde el código.
+
 ## Plan de 12 semanas: semanas 3, 4, 6, 7 y 11 (✅ 2026-08-01)
 
 Fuente: el plan publicado en `https://planes-insights.vercel.app/comunidad-latina`
@@ -52,8 +118,9 @@ fallas de envío fueran **invisibles**: `sendEmail` atrapa todo a propósito par
 romper el flujo, y sin `captureException` explícito eso no llegaba a Sentry ni con
 DSN puesto. **Correo real enviado y verificado** (ID de Resend
 `cd039a0a-20c6-4e13-8212-5685331ae7ad`), repetible con `scripts/probe-email.mjs`.
-**Hueco que queda:** la confirmación de cuenta **no existe** — `createUser` usa
-`email_confirm: true` y auto-confirma. Y ojo con esto: **recuperación de
+**Hueco que queda** (→ **cerrado el 2026-08-01**, ver la sección de arriba): la
+confirmación de cuenta **no existe** — `createUser` usa `email_confirm: true` y
+auto-confirma. Y ojo con esto: **recuperación de
 contraseña e ingreso sin contraseña dependen del mailer compartido de Supabase**,
 que sólo entrega a miembros del team; el plan da esa tarea por terminada y en
 producción podría no estar llegando a nadie.

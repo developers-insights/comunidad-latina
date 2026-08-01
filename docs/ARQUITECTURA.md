@@ -36,6 +36,9 @@ src/
 │  │  └─ guias/[slug]/
 │  ├─ (auth)/                  ← login, registro, onboarding (AUTH)
 │  │  ├─ entrar/  ├─ registro/  └─ bienvenida/   ← onboarding "Recién Llegado"
+│  │  ├─ callback/             ← canjea ?code= (PKCE: magic link, reset)
+│  │  └─ confirmar/            ← canjea ?token_hash= (confirmación de cuenta,
+│  │                             minteado por lib/auth/confirmation.ts)
 │  ├─ (app)/                   ← app autenticada con bottom-nav (shell: INFRA)
 │  │  ├─ feed/                 ← feed principal (SOCIAL)
 │  │  ├─ propiedades/          ← vertical vivienda (VIVIENDA)

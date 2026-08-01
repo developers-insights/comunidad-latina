@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
-import { registerAction } from "@/app/(auth)/actions";
+import { registerAction, type RegisterInput } from "@/app/(auth)/actions";
 import { FormError } from "@/components/auth/form-error";
 import { Button, Field, Input } from "@/components/ui";
 
@@ -35,18 +35,35 @@ const legalLinkClass =
   "rounded-sm font-medium text-brand-ink underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring";
 
 export interface RegisterFormProps {
-  /** Se llama con la sesión ya creada (cookies listas). */
-  onSuccess: () => void;
+  /**
+   * Cuenta creada — OJO: todavía NO hay sesión. La sesión la crea /confirmar
+   * cuando la persona toca el enlace del correo, así que lo que corresponde acá
+   * es mostrar "revisá tu correo", nunca navegar a una pantalla con sesión.
+   *
+   * Recibe el email tal como lo escribió la persona, para poder repetírselo.
+   */
+  onSuccess: (email: string) => void;
   /** Oculta el link "¿Ya tenés cuenta?" (ej. dentro del onboarding). */
   hideLoginLink?: boolean;
   /** Se agrega al link de login (ej. "/bienvenida" para retomar el onboarding). */
   loginNext?: string;
+  /**
+   * Respuestas del onboarding ya recolectadas (el wizard pregunta antes de
+   * crear la cuenta). Se guardan junto con el perfil en el mismo registro.
+   */
+  needs?: readonly string[];
+  area?: string;
+  /** Ruta interna a la que aterriza al confirmar el correo. */
+  next?: string;
 }
 
 export function RegisterForm({
   onSuccess,
   hideLoginLink = false,
   loginNext,
+  needs,
+  area,
+  next,
 }: RegisterFormProps) {
   const [pending, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
@@ -77,11 +94,14 @@ export function RegisterForm({
       password: String(form.get("password") ?? ""),
       ageConfirmed,
       termsAccepted,
-    } as const;
+      ...(needs && needs.length > 0 ? { needs: [...needs] } : {}),
+      ...(area?.trim() ? { area: area.trim() } : {}),
+      ...(next ? { next } : {}),
+    } as RegisterInput;
     startTransition(async () => {
       const result = await registerAction(input);
       if (result.ok) {
-        onSuccess();
+        onSuccess(input.email.trim());
         return;
       }
       setFieldErrors(result.fieldErrors ?? {});
