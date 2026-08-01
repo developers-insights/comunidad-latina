@@ -74,7 +74,11 @@ export const COPY = {
   session: {
     as: (email: string) => `Estás en la app como ${email}.`,
     signOut: "Cerrar sesión",
+    // Tiene que decir la verdad de `0015_account_deletion_fk.sql`: los mensajes y
+    // avisos se borran (CASCADE), pero las publicaciones y comentarios quedan sin
+    // tu nombre (SET NULL). Prometer que "se borra todo" era falso, y es la clase
+    // de promesa que alguien descubre justo cuando ya no puede volver atrás.
     deleteHint:
-      "Eliminar tu cuenta borra tu perfil, tus publicaciones y tus mensajes. No se puede deshacer.",
+      "Eliminar tu cuenta borra tu perfil, tus mensajes y tus avisos. Lo que publicaste en el muro queda, pero sin tu nombre. No se puede deshacer.",
   },
 } as const;

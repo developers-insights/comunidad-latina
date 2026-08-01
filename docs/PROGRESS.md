@@ -1,5 +1,110 @@
 # PROGRESS — Comunidad Latina
 
+## Plan de 12 semanas: semanas 3, 4, 6, 7 y 11 (✅ 2026-08-01)
+
+Fuente: el plan publicado en `https://planes-insights.vercel.app/comunidad-latina`
+(tabla `published_plans` del proyecto Supabase `yzmtzyuncekspgtsetwk`, slug
+`comunidad-latina`). Cinco frentes en paralelo con fronteras de archivo duras +
+ronda de integración.
+
+**El plan tenía tres tareas mal clasificadas.** Se descubrió llamando a cada API,
+no leyendo el `.env.local` — que usa **comentarios en línea**, así que una
+variable vacía parece llena si se mide por longitud:
+
+- **Resend estaba marcada bloqueada y NO lo estaba.** La clave responde 200,
+  `assistify.lat` está verified y `EMAIL_FROM` usa ese dominio. Semana 4
+  desbloqueada.
+- **Sentry figuraba "en curso" y está bloqueada por credencial**: DSN, org y
+  project vacíos. Producción hoy **falla en silencio**.
+- Stripe y Google Vision sí estaban bloqueadas: 401 y `API_KEY_INVALID`.
+
+**Deploy — se cierra el pendiente nº 0**, que sólo vivía en memoria de sesión:
+team **`insights3`**, proyecto **`comunidad-latina`**, dominio
+`comunidad-latina-sigma.vercel.app`. **El auto-deploy funciona**: el sha `7967583`
+estaba a la vez en el HEAD local, en `developers-insights/main` y en el deploy
+READY. La trampa eran los dos remotes — `origin` (`INSIGHTSAPPS`) es **legacy**,
+pide contraseña interactiva y hace parecer roto lo que anda. Nombrar siempre
+`developers-insights`.
+
+**Producción tenía 7 de 20 variables de entorno.** Nuevo
+[`scripts/vercel-env-sync.mjs`](../scripts/vercel-env-sync.mjs): audita
+`.env.local` contra Vercel sin imprimir un solo valor, clasifica cada variable
+(prod / build / local / sin uso) y sube con `--push` explícito. Detectó de paso
+que `SUPABASE_DB_PASSWORD` está en producción sin motivo — el runtime nunca abre
+conexión directa a Postgres.
+
+**Semana 3 — reglas claras y datos protegidos.** Las páginas legales existían;
+lo que faltaba era que dijeran la verdad. **7 divergencias** entre texto y código,
+corregidas: TTLs incompletos, Stripe Identity y el asistente con IA (que manda la
+pregunta a Anthropic) sin declarar, y sobre todo el borrado de cuenta, que
+prometía "se borra todo" cuando `0015` deja posts y comentarios **anonimizados**
+(SET NULL), no borrados. Dos defectos reales encontrados probando:
+`business_accounts.owner_id` era RESTRICT y hacía **fallar el borrado con un error
+opaco** que reintentar nunca arreglaba; y **el cascade de Postgres no toca
+Storage**, así que avatar, fotos y CVs quedaban huérfanos para siempre — una fuga
+que sobrevivía a la cuenta. Verificado en vivo: cuenta creada por UI, post con
+foto real, borrada, y conteos antes/después contra la base.
+
+**Semana 4 — correos.** Bienvenida y avisos ya existían y estaban cableados. Se
+arregló que los links apuntaran a `localhost` (ahora la URL base sale de las
+variables de sistema de Vercel, así que se autocorrige por entorno) y que las
+fallas de envío fueran **invisibles**: `sendEmail` atrapa todo a propósito para no
+romper el flujo, y sin `captureException` explícito eso no llegaba a Sentry ni con
+DSN puesto. **Correo real enviado y verificado** (ID de Resend
+`cd039a0a-20c6-4e13-8212-5685331ae7ad`), repetible con `scripts/probe-email.mjs`.
+**Hueco que queda:** la confirmación de cuenta **no existe** — `createUser` usa
+`email_confirm: true` y auto-confirma. Y ojo con esto: **recuperación de
+contraseña e ingreso sin contraseña dependen del mailer compartido de Supabase**,
+que sólo entrega a miembros del team; el plan da esa tarea por terminada y en
+producción podría no estar llegando a nadie.
+
+**Semana 6 — autoservicio a premium.** Era el hueco declarado: el tier se concedía
+con `service_role` a mano. Ahora hay flujo completo free→premium iniciado por el
+dueño del aviso (migración `0054` + `listing_premiums`). Decisiones que importan:
+el downgrade **guarda los 7 botones antes de borrarlos** y los restaura al
+reactivar (la baja pasa de pérdida a pausa); el guard de doble cobro corre antes
+de tocar Stripe; y `current_period_end` se lee de `SubscriptionItem`, con un test
+que falla a propósito si alguien lo "arregla" leyéndolo de la raíz. Ciclo completo
+verificado contra la base real: alta → baja → reactivación → `past_due` → cron que
+vence. Contra Stripe real: **nada**, no hay clave.
+
+**Semana 7 — nacer una comunidad sin reprogramar.** El hueco era caro:
+`ACTIVE_COMMUNITY_SLUGS` era una **lista blanca de un solo slug**, así que una
+comunidad nueva nacía en la base y era **inalcanzable** hasta un commit +
+redeploy. Ahora es lista negra de marca (`comunidadlatina` sigue reservada a
+propósito: es la marca, decisión fechada del PLAN_MAESTRO §11.1). Nuevos
+`scripts/new-tenant.mjs` (alta end-to-end idempotente + `--delete` con doble
+confirmación) y [`docs/PLAYBOOK-TENANT.md`](PLAYBOOK-TENANT.md). Verificado
+creando `pruebatenant`, comprobando color y **aislamiento real** contra
+`dominicanos`, y borrándolo. **Sigue pidiendo código** una sola cosa: el dominio
+propio, porque `DOMAIN_TENANTS` es un mapa fijo (`middleware.ts` llama a
+`resolveTenantSlug` sin `await`).
+
+**Semana 11 — tablero de métricas.** `/admin/metricas`, gateado por el mismo
+`admin/guard.ts`, con RPC `security definer` que valida el rol **adentro**:
+`domain_admin` queda clavado a su comunidad y pedir otra **lanza 403**, no
+devuelve vacío (un cero se confunde con "sin actividad"). Las tres métricas del
+plan con su **definición visible en la pantalla**, no en un comentario. Honestidad
+que vale: **"cuánta gente entra" no es medible hoy** — no hay registro de sesiones
+y agregarlo choca con §5.4, así que se mide por actividad y **la limitación está
+escrita en la tarjeta**. Números cruzados contra recuento independiente en la
+misma transacción; prueba negativa con tokens reales (member 403, anónimo 401,
+otra comunidad 403).
+
+**Integración:** dos `<Link>` a premium que ningún frente podía poner (y uno que
+existía apuntando a Impulsar, otro producto, bajo un botón que decía "Ver qué
+incluye premium"); el copy de Ajustes que repetía la promesa falsa del borrado; y
+`listing_premiums` + `admin_metrics_overview` agregados a `database.types.ts`
+siguiendo la convención de excepciones del archivo.
+
+Gates: `typecheck` 0 · `lint` 0 errores (48 warnings preexistentes) · **1980 tests
+en 109 archivos** · `build` verde · **`check:rls` VERDE, 70 superficies**.
+`/admin/metricas` responde 200 en ~860 ms con sesión admin real y sus filtros
+también; **no hay captura de pantalla** — el navegador embebido bloquea `eval()`,
+que React necesita en dev, así que no hidrata. Se verificó por DOM y por medición
+de layout, no con los ojos.
+
+
 ## Feedback consolidado del 30/7 — 7 specs escritas + call de 85 min (✅ 2026-07-31)
 
 Fuente y criterio: **`docs/feedback/2026-07-30-feedback-consolidado.md`**. Ahí

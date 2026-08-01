@@ -81,6 +81,10 @@ export default async function PrivacidadPage() {
         <ul className={legalProse.ul}>
           <li>No pedimos tu teléfono ni tu dirección exacta al registrarte.</li>
           <li>Tu ubicación siempre se muestra aproximada — nunca la dirección exacta.</li>
+          <li>
+            Lo que nos contás al llegar (qué necesitás: vivienda, trámites, ayuda) lo ves solo
+            vos — ni otros miembros ni nuestro equipo lo pueden leer.
+          </li>
           <li>Tus mensajes se borran solos, con el tiempo.</li>
           <li>No vendemos tus datos a nadie.</li>
         </ul>
@@ -114,6 +118,11 @@ export default async function PrivacidadPage() {
           nosotros no los guardamos «por si acaso». Las conversaciones sin mensajes activos
           también se limpian con el tiempo.
         </p>
+        <p className={legalProse.p}>
+          Lo mismo aplica al resto de lo que guardamos: tus notificaciones se borran solas a los
+          60 días, y los registros internos que usamos para seguridad y soporte —nunca el
+          contenido de tus mensajes— se limpian al año. Nada queda guardado «por las dudas».
+        </p>
         <LegalCallout>
           Es una decisión de privacidad, no un descuido: menos dato guardado es menos riesgo para
           vos si algo sale mal en el camino.
@@ -121,14 +130,23 @@ export default async function PrivacidadPage() {
       </LegalSection>
 
       <LegalSection id="verificacion" title="Cómo verificamos identidad y negocios">
+        <p className={legalProse.p}>Son dos verificaciones distintas, con datos distintos:</p>
+        <ul className={legalProse.ul}>
+          <li>
+            <strong className={legalProse.strong}>Tu identidad</strong> (el tilde de tu perfil):
+            cuando esta función esté activa, subís tu documento a Stripe Identity, nuestro
+            proveedor de verificación — lo procesan ellos, y el documento nunca llega a nuestra
+            base de datos. Lo único que recibimos nosotros es un sí o un no, y la fecha.
+          </li>
+          <li>
+            <strong className={legalProse.strong}>Un negocio o profesional</strong> (licencias,
+            matrículas): consultamos el registro público oficial correspondiente y guardamos solo
+            el resultado textual y la fecha de consulta — no conservamos documentos de más.
+          </li>
+        </ul>
         <p className={legalProse.p}>
-          Para el sello de verificación consultamos registros públicos oficiales (licencias,
-          matrículas) y guardamos solo el resultado textual y la fecha de consulta — no
-          conservamos documentos personales de más.
-        </p>
-        <p className={legalProse.p}>
-          Ese sello describe lo que dice el registro a una fecha exacta; no es una garantía de
-          conducta.
+          Cualquiera de los dos sellos describe lo que dice la fuente a una fecha exacta; no es
+          una garantía de conducta.
         </p>
       </LegalSection>
 
@@ -137,8 +155,10 @@ export default async function PrivacidadPage() {
           <li>No vendemos tus datos a nadie, nunca.</li>
           <li>
             Usamos proveedores externos solo para funciones puntuales: envío de emails
-            transaccionales, procesamiento de pagos (cuando esa función esté activa) y
-            moderación de contenido. Cada uno accede solo a lo que necesita para su tarea.
+            transaccionales, procesamiento de pagos y verificación de identidad (cuando esas
+            funciones estén activas), moderación de contenido, y el asistente comunitario con
+            inteligencia artificial (tu pregunta se envía al proveedor solo cuando lo usás, para
+            generar la respuesta). Cada uno accede solo a lo que necesita para su tarea.
           </li>
           <li>Podemos compartir información si nos lo exige la ley, y solo en esa medida.</li>
         </ul>
@@ -163,7 +183,7 @@ export default async function PrivacidadPage() {
         </p>
         <p className={legalProse.p}>
           La forma más rápida de ejercer tu derecho al borrado es eliminar tu cuenta vos mismo,
-          desde tu perfil. Para cualquier otro pedido, escribinos a [correo de contacto legal —
+          desde Ajustes. Para cualquier otro pedido, escribinos a [correo de contacto legal —
           completar].
         </p>
       </LegalSection>

@@ -16,6 +16,8 @@ const COPY = {
   genericError:
     "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo en un momento.",
   reportDetailsLong: "El detalle es muy largo — el máximo son 500 caracteres.",
+  businessAccountBlocked:
+    "Tenés un negocio activo en la plataforma — antes de eliminar tu cuenta hay que dar de baja esa suscripción. Escribinos a hola@comunidadlatina.com y te ayudamos a resolverlo.",
 } as const;
 
 function firstIssuePerField(issues: z.core.$ZodIssue[]): Record<string, string> {
@@ -84,9 +86,98 @@ export async function signOutAction(): Promise<void> {
 
 // ---------------------------------------------------------------------------
 // Eliminar cuenta — minimización real (§ anti-honeypot): borra el auth user
-// vía admin y el cascade de la DB se lleva todo lo demás. El admin client acá
-// es legítimo: solo actúa sobre el usuario autenticado de la sesión actual.
+// vía admin y el cascade de la DB (0015) se lleva todo lo demás en Postgres.
+// El admin client acá es legítimo: solo actúa sobre el usuario autenticado de
+// la sesión actual.
+//
+// Storage vive FUERA de Postgres: el cascade de 0015 borra las FILAS
+// (listings, conversations, messages), pero no los archivos que esas filas
+// referenciaban en Storage — sin limpieza explícita quedan huérfanos
+// (avatar, fotos de avisos, currículums), y un archivo huérfano es una fuga
+// de datos que sobrevive a la cuenta. Por eso: 1) recolectar QUÉ hay que
+// borrar mientras todavía existe (solo lectura, no toca nada), 2) borrar el
+// usuario (la acción irreversible real), 3) recién con éxito confirmado,
+// limpiar Storage con lo recolectado — así un fallo en el paso 1 o 3 nunca
+// deja una cuenta a medio borrar ni destruye archivos de una cuenta que
+// sigue viva.
 // ---------------------------------------------------------------------------
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+type StorageCleanupPlan = ReadonlyArray<{ bucket: string; prefix: string }>;
+
+/** Buckets cuyo path empieza con `{tenant_id}/{user_id}/…` (0012, 0025, 0047). */
+const OWN_PREFIX_BUCKETS = ["avatars", "post-media", "job-cvs"] as const;
+
+/**
+ * Recolecta, de solo lectura, qué archivos de Storage hay que borrar para
+ * esta cuenta. Corre ANTES de deleteUser: si algo falla acá no se tocó nada.
+ */
+async function collectStorageCleanup(
+  admin: AdminClient,
+  userId: string,
+): Promise<StorageCleanupPlan> {
+  try {
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("tenant_id")
+      .eq("id", userId)
+      .maybeSingle();
+    if (!profile?.tenant_id) return [];
+
+    const plan: { bucket: string; prefix: string }[] = OWN_PREFIX_BUCKETS.map((bucket) => ({
+      bucket,
+      prefix: `${profile.tenant_id}/${userId}`,
+    }));
+
+    // listing-photos usa {tenant_id}/{listing_id}/… — hay que resolver los
+    // avisos propios ANTES de que el cascade de listings se los lleve.
+    const { data: listings } = await admin
+      .from("listings")
+      .select("id")
+      .eq("created_by", userId);
+    for (const listing of listings ?? []) {
+      plan.push({ bucket: "listing-photos", prefix: `${profile.tenant_id}/${listing.id}` });
+    }
+
+    return plan;
+  } catch (error) {
+    console.error(
+      "[perfil] deleteAccount: collectStorageCleanup falló (se sigue igual):",
+      error instanceof Error ? error.message : "error desconocido",
+    );
+    return [];
+  }
+}
+
+/**
+ * Ejecuta la limpieza recolectada. Corre DESPUÉS de que deleteUser confirmó
+ * éxito. Best-effort por diseño: un archivo que no se pudo borrar queda
+ * logueado para reconciliar a mano, pero NUNCA revierte ni bloquea un
+ * borrado de cuenta ya confirmado (§5.4: menos dato > archivo prolijo).
+ */
+async function runStorageCleanup(admin: AdminClient, plan: StorageCleanupPlan): Promise<void> {
+  for (const { bucket, prefix } of plan) {
+    try {
+      const { data: files, error } = await admin.storage.from(bucket).list(prefix, {
+        limit: 1000,
+      });
+      if (error || !files || files.length === 0) continue;
+      const paths = files.map((file) => `${prefix}/${file.name}`);
+      const { error: removeError } = await admin.storage.from(bucket).remove(paths);
+      if (removeError) {
+        console.error(
+          `[perfil] deleteAccount: no se pudo limpiar Storage (${bucket}/${prefix}) — reconciliar a mano:`,
+          removeError.message,
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[perfil] deleteAccount: limpieza de Storage (${bucket}) falló — reconciliar a mano:`,
+        error instanceof Error ? error.message : "error desconocido",
+      );
+    }
+  }
+}
 
 export async function deleteAccountAction(): Promise<ActionResult> {
   const supabase = await createClient();
@@ -102,11 +193,46 @@ export async function deleteAccountAction(): Promise<ActionResult> {
     return { ok: false, formError: COPY.genericError };
   }
 
+  // Precondición (0015): business_accounts.owner_id es ON DELETE RESTRICT a
+  // propósito — una cuenta con suscripción Stripe activa NO debe cascadear
+  // billing en silencio. Sin este chequeo, deleteUser fallaba más abajo con
+  // un foreign_key_violation opaco y la persona recibía "probá de nuevo",
+  // un mensaje que reintentar jamás arregla. Se distingue por plan_status:
+  // sin suscripción real (inactive/canceled) se da de baja sola, con
+  // suscripción real (active/past_due) se bloquea con una acción concreta.
+  const { data: business } = await admin
+    .from("business_accounts")
+    .select("id, plan_status")
+    .eq("owner_id", user.id)
+    .maybeSingle();
+
+  if (business) {
+    if (business.plan_status === "active" || business.plan_status === "past_due") {
+      return { ok: false, formError: COPY.businessAccountBlocked };
+    }
+    // Sin suscripción real detrás (nunca pagó o ya canceló): no hay billing
+    // que proteger — se da de baja la fila para que el borrado pueda seguir.
+    const { error: cleanupError } = await admin
+      .from("business_accounts")
+      .delete()
+      .eq("id", business.id);
+    if (cleanupError) {
+      console.error("[perfil] deleteAccount: no se pudo dar de baja business_account inactivo", {
+        code: cleanupError.code,
+      });
+      return { ok: false, formError: COPY.genericError };
+    }
+  }
+
+  const storageCleanup = await collectStorageCleanup(admin, user.id);
+
   const { error } = await admin.auth.admin.deleteUser(user.id);
   if (error) {
     console.error("[perfil] deleteUser falló", { code: error.code });
     return { ok: false, formError: COPY.genericError };
   }
+
+  await runStorageCleanup(admin, storageCleanup);
 
   await supabase.auth.signOut();
   redirect("/");

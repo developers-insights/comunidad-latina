@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { handleStoreMembershipEvent } from "@/app/(app)/marketplace/membresia/webhook-handlers";
 import { isStripeConfigured } from "@/lib/config/services";
 import { listingViewHref } from "@/lib/monetization/href";
+import { handleListingPremiumEvent } from "@/lib/monetization/premium-webhook";
 import { createNotification } from "@/lib/notifications/notify";
 import { PLAN_IDS, getStripe, type PlanId } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -135,6 +136,22 @@ export async function POST(request: Request) {
     // action que abre su Checkout. Devuelve true ⇒ el evento ya está atendido y
     // ningún otro flujo lo mira. Si devuelve false, sigue el switch de siempre.
     if (await handleStoreMembershipEvent(admin, event)) {
+      await admin
+        .from("payment_events")
+        .update({ processed: true })
+        .eq("provider", "stripe")
+        .eq("event_id", event.id);
+      return NextResponse.json({ received: true });
+    }
+
+    // Premium de una publicación (§3, 0054): se reconoce por
+    // metadata.kind='listing_premium' y lo maneja su propio módulo, junto a la
+    // lógica pura del tier. Mismo contrato que la membresía de tienda: devuelve
+    // true ⇒ el evento ya está atendido y ningún otro flujo lo mira. Es el ÚNICO
+    // camino por el que un aviso llega a tier='premium' — antes de esto el tier
+    // se concedía a mano con service_role, que no es autoservicio ni se puede
+    // dar de baja solo.
+    if (await handleListingPremiumEvent(admin, event)) {
       await admin
         .from("payment_events")
         .update({ processed: true })

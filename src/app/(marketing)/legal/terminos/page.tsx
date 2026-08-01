@@ -132,14 +132,16 @@ export default async function TerminosPage() {
 
       <LegalSection id="verificacion" title="Sobre la verificación">
         <p className={legalProse.p}>
-          Cuando algo aparece como verificado, consultamos un registro público oficial (licencias,
-          matrículas) y te mostramos textual lo que dice, con la fecha exacta en que lo
-          consultamos.
+          Hay dos sellos distintos. El de un negocio o profesional (licencias, matrículas) sale de
+          consultar un registro público oficial: te mostramos textual lo que dice, con la fecha
+          exacta en que lo consultamos. El de tu identidad personal, cuando esa función esté
+          activa, sale de subir tu documento a Stripe Identity — lo procesan ellos, nunca
+          nosotros.
         </p>
         <LegalCallout tone="warning">
-          Eso es un indicador de lo que dice el registro a esa fecha — <strong>no</strong> es una
-          garantía de que la persona o el negocio se vaya a comportar bien. La regla de oro no
-          tiene excepciones: nunca envíes dinero por adelantado.
+          Cualquiera de los dos es un indicador de lo que dice la fuente a esa fecha —{" "}
+          <strong>no</strong> es una garantía de que la persona o el negocio se vaya a comportar
+          bien. La regla de oro no tiene excepciones: nunca envíes dinero por adelantado.
         </LegalCallout>
       </LegalSection>
 
@@ -172,9 +174,19 @@ export default async function TerminosPage() {
 
       <LegalSection id="borrar-tu-cuenta" title="Borrar tu cuenta">
         <p className={legalProse.p}>
-          Podés eliminar tu cuenta cuando quieras, desde tu perfil. Se borra todo: tu perfil, tus
-          publicaciones y tus mensajes. Es una acción irreversible — no hay vuelta atrás, y si un
+          Podés eliminar tu cuenta cuando quieras, desde Ajustes. Se borra tu perfil, tus
+          mensajes, tus conversaciones y tus avisos —incluidas las fotos y los archivos que
+          subiste, como tu currículum—. Es una acción irreversible: no hay vuelta atrás, y si un
           día volvés, empezás de cero.
+        </p>
+        <p className={legalProse.p}>
+          Tus publicaciones y comentarios en la comunidad se quedan, porque le siguen sirviendo a
+          otros, pero dejan de estar a tu nombre: se muestran como de «cuenta eliminada» y ya no
+          hay forma de asociarlos con vos.
+        </p>
+        <p className={legalProse.p}>
+          Si tenés un negocio activo con suscripción paga, primero hay que dar de baja esa
+          suscripción — te lo decimos en el momento y te ayudamos a resolverlo.
         </p>
       </LegalSection>
 

@@ -2,6 +2,10 @@ import "server-only";
 
 import type Stripe from "stripe";
 import { createNotification } from "@/lib/notifications/notify";
+import {
+  mapStripeSubscriptionStatus,
+  periodEndFromSubscription,
+} from "@/lib/stripe/subscription";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { formatDate } from "@/lib/utils";
 
@@ -34,50 +38,18 @@ import { formatDate } from "@/lib/utils";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-/** Estados de Stripe que dejan la tienda prendida. */
-const ACTIVE_SUB_STATUSES: ReadonlyArray<Stripe.Subscription.Status> = [
-  "active",
-  "trialing",
-];
-
 /**
- * Traduce un `Subscription.status` de Stripe (9 valores) al CHECK de
- * `store_memberships.status` (4 valores).
+ * `mapStripeSubscriptionStatus` y `periodEndFromSubscription` VIVÍAN acá y se
+ * mudaron a `@/lib/stripe/subscription` cuando apareció la segunda suscripción
+ * del producto (el premium de una publicación, 0054). Leen la forma del objeto
+ * de Stripe, no reglas de la tienda: tenerlas duplicadas significaba que el día
+ * que Stripe vuelva a mover `current_period_end` —ya lo hizo una vez, y este
+ * repo lo pagó— habría que acordarse de arreglar dos archivos.
  *
- * `unpaid` cae en `past_due` y no en `expired` a propósito: es un cobro que
- * todavía se está reintentando. Apagar la tienda de alguien por un rebote de
- * tarjeta —cuando Stripe todavía no se dio por vencido— es un castigo que no
- * corresponde. Cuando Stripe SÍ se da por vencido, manda
- * `customer.subscription.deleted` y ahí sí se apaga.
+ * Se siguen re-exportando porque son parte de la superficie pública que este
+ * módulo ya ofrecía.
  */
-export function mapStripeSubscriptionStatus(
-  status: Stripe.Subscription.Status,
-): "active" | "past_due" | "canceled" | "expired" {
-  if (ACTIVE_SUB_STATUSES.includes(status)) return "active";
-  if (status === "past_due" || status === "unpaid") return "past_due";
-  if (status === "canceled") return "canceled";
-  // incomplete / incomplete_expired / paused: nunca llegó a haber un período
-  // pagado, así que la tienda no se muestra.
-  return "expired";
-}
-
-/**
- * Fin del período pagado, en ISO.
- *
- * ⚠️ En la API de Stripe que usa este repo (stripe-node 22.x),
- * `current_period_end` YA NO vive en la Subscription: se movió a cada
- * SubscriptionItem. Leerlo del objeto raíz —como enseñan casi todos los
- * ejemplos viejos— devuelve `undefined` y deja `current_period_end` en NULL,
- * con lo cual el cron de expiración nunca toca esa fila y la tienda queda
- * prendida para siempre. Se toma el ítem que vence más tarde.
- */
-export function periodEndFromSubscription(subscription: Stripe.Subscription): string | null {
-  const ends = (subscription.items?.data ?? [])
-    .map((item) => item.current_period_end)
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-  if (ends.length === 0) return null;
-  return new Date(Math.max(...ends) * 1000).toISOString();
-}
+export { mapStripeSubscriptionStatus, periodEndFromSubscription };
 
 function metadataString(
   metadata: Stripe.Metadata | null | undefined,

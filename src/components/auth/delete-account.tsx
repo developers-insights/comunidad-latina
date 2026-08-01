@@ -9,7 +9,7 @@ const COPY = {
   trigger: "Eliminar mi cuenta",
   title: "¿Eliminar tu cuenta?",
   description:
-    "Se borra todo: tu perfil, tus publicaciones y tus mensajes. No lo podemos deshacer. Si algún día volvés, empezás de cero — y acá siempre vas a ser bienvenido.",
+    "Se borra tu perfil, tus mensajes y tus avisos, con las fotos y los archivos que subiste. Lo que publicaste en la comunidad se queda para los demás, pero deja de estar a tu nombre. No lo podemos deshacer. Si algún día volvés, empezás de cero — y acá siempre vas a ser bienvenido.",
   confirm: "Sí, eliminar todo",
   cancel: "Mejor no",
   error:
@@ -28,7 +28,7 @@ export function DeleteAccount() {
       const result = await deleteAccountAction();
       if (result && !result.ok) {
         setOpen(false);
-        toast({ title: COPY.error, variant: "danger" });
+        toast({ title: result.formError ?? COPY.error, variant: "danger" });
       }
     });
   }

@@ -267,8 +267,12 @@ export default async function EstadisticasPage({ params }: { params: Params }) {
           <p className="text-xs leading-relaxed text-foreground-muted">
             {M.stats.lockedNote}
           </p>
+          {/* Iba a `/impulsar/…`, que es Impulsar — otro producto, de pago único.
+              El botón dice "Ver qué incluye premium" y llevaba a la pantalla
+              equivocada: quien lo tocaba terminaba mirando algo que no era lo
+              que le ofrecieron. */}
           <Link
-            href={`/impulsar/${listing.id}`}
+            href={`/negocios/presencia/aviso/${listing.id}`}
             className={cn(buttonVariants({ variant: "outline", size: "md" }), "w-full")}
           >
             {M.stats.lockedCta}

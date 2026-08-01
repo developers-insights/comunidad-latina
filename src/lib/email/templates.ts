@@ -32,8 +32,52 @@ const T = {
 
 const DEFAULT_SITE_URL = "http://localhost:3000";
 
+/**
+ * Resuelve la URL base para los links del correo — dev / preview / producción
+ * SIN pisar nada a mano por entorno.
+ *
+ * Bug real que esto arregla: `NEXT_PUBLIC_SITE_URL` puede quedar en
+ * `http://localhost:3000` incluso en un deploy real de Vercel (se copió el
+ * default de `.env.local` sin pisarlo, o preview nunca lo tuvo) — confiar
+ * ciegamente en esa env var manda un link muerto dentro del correo.
+ *
+ * Orden:
+ *  1. En Vercel (`VERCEL_ENV` existe): SIEMPRE la URL que calcula la
+ *     plataforma sola — `VERCEL_PROJECT_PRODUCTION_URL` en producción (seguí
+ *     el dominio custom más corto en cuanto haya uno atado, sin tocar
+ *     código) o `VERCEL_URL` (el host único de ESTE deploy) en
+ *     preview/development-on-Vercel. Nunca depende de que alguien haya
+ *     seteado bien `NEXT_PUBLIC_SITE_URL` a mano en el dashboard.
+ *  2. Fuera de Vercel: `NEXT_PUBLIC_SITE_URL` si está seteada (dev local con
+ *     un valor propio, o cualquier host que no sea Vercel).
+ *  3. Nada de lo anterior: localhost (dev local puro, sin `.env.local`).
+ *
+ * ⚠️ Multi-tenant: esto es un fallback GLOBAL por deploy — no distingue
+ * dominicanos.com de comunidadlatina.com si el día de mañana ambos son
+ * dominios de producción del mismo proyecto Vercel (`VERCEL_PROJECT_PRODUCTION_URL`
+ * solo puede reflejar uno). Para ese caso cada template acepta `siteUrl`
+ * explícito — el caller debería pasar el origin exacto de la request (ver
+ * `resolveOrigin()` en `src/app/(auth)/recuperar/origin.ts`, que ya arma el
+ * origin correcto a partir de `x-forwarded-host`) en vez de confiar en este
+ * default global.
+ */
+function computeSiteUrl(): string {
+  const vercelEnv = process.env.VERCEL_ENV;
+  if (vercelEnv === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  if (vercelEnv && process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+
+  return DEFAULT_SITE_URL;
+}
+
 export function getSiteUrl(): string {
-  return (process.env.NEXT_PUBLIC_SITE_URL ?? DEFAULT_SITE_URL).replace(/\/+$/, "");
+  return computeSiteUrl();
 }
 
 /** Escapa contenido user-generated antes de interpolarlo en HTML. */
@@ -146,9 +190,13 @@ export function welcomeEmail(params: {
   displayName: string;
   tenantName: string;
   brandHex: string;
+  /** Origin exacto ya resuelto por el caller (ver resolveOrigin en
+   * recuperar/origin.ts) — precisión multi-tenant. Si se omite, cae al
+   * fallback de getSiteUrl(). */
+  siteUrl?: string;
 }): { subject: string; html: string } {
   const name = escapeHtml(params.displayName);
-  const site = getSiteUrl();
+  const site = params.siteUrl?.trim().replace(/\/+$/, "") || getSiteUrl();
   const content = `
     <h1 style="margin:0 0 12px;font-family:${T.fontStack};font-size:22px;line-height:29px;font-weight:700;letter-spacing:-0.01em;color:${T.ink};">
       Bienvenido a tu comunidad, ${name}
@@ -185,10 +233,12 @@ export function leadReceivedEmail(params: {
   requesterDisplayName: string;
   tenantName: string;
   brandHex: string;
+  /** Ver nota en welcomeEmail(). */
+  siteUrl?: string;
 }): { subject: string; html: string } {
   const title = escapeHtml(params.listingTitle);
   const requester = escapeHtml(params.requesterDisplayName);
-  const site = getSiteUrl();
+  const site = params.siteUrl?.trim().replace(/\/+$/, "") || getSiteUrl();
   const content = `
     <h1 style="margin:0 0 12px;font-family:${T.fontStack};font-size:22px;line-height:29px;font-weight:700;letter-spacing:-0.01em;color:${T.ink};">
       ${requester} quiere contactarte
@@ -223,9 +273,11 @@ export function newMessageEmail(params: {
   conversationId: string;
   tenantName: string;
   brandHex: string;
+  /** Ver nota en welcomeEmail(). */
+  siteUrl?: string;
 }): { subject: string; html: string } {
   const sender = escapeHtml(params.senderDisplayName);
-  const site = getSiteUrl();
+  const site = params.siteUrl?.trim().replace(/\/+$/, "") || getSiteUrl();
   const href = `${site}/mensajes/${encodeURIComponent(params.conversationId)}`;
   const content = `
     <h1 style="margin:0 0 12px;font-family:${T.fontStack};font-size:22px;line-height:29px;font-weight:700;letter-spacing:-0.01em;color:${T.ink};">
@@ -258,10 +310,12 @@ export function applicationReceivedEmail(params: {
   applicantDisplayName: string;
   tenantName: string;
   brandHex: string;
+  /** Ver nota en welcomeEmail(). */
+  siteUrl?: string;
 }): { subject: string; html: string } {
   const title = escapeHtml(params.jobTitle);
   const applicant = escapeHtml(params.applicantDisplayName);
-  const site = getSiteUrl();
+  const site = params.siteUrl?.trim().replace(/\/+$/, "") || getSiteUrl();
   const href = `${site}/empleos/${encodeURIComponent(params.jobId)}`;
   const content = `
     <h1 style="margin:0 0 12px;font-family:${T.fontStack};font-size:22px;line-height:29px;font-weight:700;letter-spacing:-0.01em;color:${T.ink};">
@@ -283,6 +337,51 @@ export function applicationReceivedEmail(params: {
     html: baseLayout(
       { tenantName: params.tenantName, brandHex: params.brandHex },
       "Tenés una postulación nueva en tu aviso de empleo.",
+      content,
+    ),
+  };
+}
+
+// -----------------------------------------------------------------------------
+// (e) Confirmación de cuenta — envuelve un link de verificación YA armado y
+// firmado por Supabase Auth Admin API (`generateLink({ type: "signup", ... })`).
+//
+// Este template NO arma ni firma tokens — eso es responsabilidad de auth, no
+// de emails. Es del caller (fuera de este módulo) resolver `confirmUrl` antes
+// de llamar acá. Ver nota de integración completa en el retorno de esta tarea:
+// hoy `registerAction` (src/app/(auth)/actions.ts) crea el usuario con
+// `email_confirm: true` (auto-confirmado, sin este paso) — activar este
+// template requiere cambiar esa flag y mintear el link, ninguno de los dos
+// dentro de la frontera de este módulo.
+// -----------------------------------------------------------------------------
+
+export function confirmAccountEmail(params: {
+  displayName: string;
+  /** Link de confirmación absoluto, ya armado (admin.generateLink → action_link
+   * o un token_hash propio servido por una ruta /auth/confirm). */
+  confirmUrl: string;
+  tenantName: string;
+  brandHex: string;
+}): { subject: string; html: string } {
+  const name = escapeHtml(params.displayName);
+  const content = `
+    <h1 style="margin:0 0 12px;font-family:${T.fontStack};font-size:22px;line-height:29px;font-weight:700;letter-spacing:-0.01em;color:${T.ink};">
+      Confirmá tu cuenta, ${name}
+    </h1>
+    <p style="margin:0 0 20px;font-family:${T.fontStack};font-size:15px;line-height:23px;color:${T.inkSoft};">
+      Ya casi estás. Tocá el botón para confirmar tu email y activar tu cuenta
+      en ${escapeHtml(params.tenantName)}.
+    </p>
+    ${ctaButton(params.confirmUrl, "Confirmar mi cuenta", params.brandHex)}
+    <p style="margin:20px 0 0;font-family:${T.fontStack};font-size:13px;line-height:20px;color:${T.inkFaint};">
+      Si vos no pediste esto, ignorá este correo — no se activa ninguna cuenta
+      sin que toques el botón.
+    </p>`;
+  return {
+    subject: `Confirmá tu cuenta en ${params.tenantName}`,
+    html: baseLayout(
+      { tenantName: params.tenantName, brandHex: params.brandHex },
+      "Un paso más: confirmá tu email para activar tu cuenta.",
       content,
     ),
   };

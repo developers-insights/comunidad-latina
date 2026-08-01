@@ -24,6 +24,9 @@
 // set_application_share_profile (dos `security definer` que existen porque la
 // policy de su tabla autoriza FILAS y lo que hacía falta era autorizar
 // COLUMNAS; ver el encabezado de la migración).
+// EXCEPCIÓN 2026-08-01 (misma razón): 0054 — listing_premiums (autoservicio
+// free→premium de un aviso); y 0055 — la RPC admin_metrics_overview (tablero de
+// métricas, solo conteos).
 export type Json =
   | string
   | number
@@ -1250,6 +1253,82 @@ export type Database = {
           },
           {
             foreignKeyName: "listing_private_details_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listing_premiums: {
+        Row: {
+          cancel_at_period_end: boolean
+          created_at: string
+          ctas_snapshot: Json | null
+          currency: string
+          current_period_end: string | null
+          id: string
+          listing_id: string
+          owner_id: string
+          price_cents: number
+          status: string
+          stripe_checkout_session_id: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          ctas_snapshot?: Json | null
+          currency?: string
+          current_period_end?: string | null
+          id?: string
+          listing_id: string
+          owner_id: string
+          price_cents?: number
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          ctas_snapshot?: Json | null
+          currency?: string
+          current_period_end?: string | null
+          id?: string
+          listing_id?: string
+          owner_id?: string
+          price_cents?: number
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_premiums_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: true
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_premiums_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_premiums_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -2617,6 +2696,10 @@ export type Database = {
       admin_ban_user: {
         Args: { p_profile_id: string; p_reason: string }
         Returns: undefined
+      }
+      admin_metrics_overview: {
+        Args: { p_tenant_id?: string | null; p_days?: number }
+        Returns: Json
       }
       admin_reactivate_user: {
         Args: { p_profile_id: string }

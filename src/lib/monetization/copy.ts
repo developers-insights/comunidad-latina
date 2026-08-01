@@ -66,6 +66,73 @@ export const COPY = {
   },
 
   // -------------------------------------------------------------------------
+  // Suscripción premium de UNA publicación — la pantalla que COBRA
+  //
+  // Tres reglas propias, porque acá se saca la tarjeta:
+  //  1. Decir el precio y la frecuencia ANTES del botón, no después.
+  //  2. Contar qué pasa al cancelar sin que haya que preguntarlo. El miedo real
+  //     de quien paga no es el precio: es "¿pierdo mi aviso?". La respuesta es
+  //     no, y va escrita.
+  //  3. Nombrar lo de los botones de contacto. Al bajar a gratis desaparecen
+  //     (la base lo obliga) y vuelven al reactivar (0054 los guarda). Ocultarlo
+  //     y que alguien vea su teléfono borrado sería la peor sorpresa posible.
+  // -------------------------------------------------------------------------
+  premium: {
+    pageTitle: "Publicación premium",
+    /** Debajo del título. Una frase, sin adjetivos de más. */
+    pageIntro: "Más fotos, videos más largos y botones para que te contacten.",
+
+    priceSuffix: "por mes",
+    priceNote: "Se renueva solo cada mes. Cancelás cuando quieras.",
+
+    includesTitle: "Qué incluye",
+
+    /** La promesa que saca el miedo de encima, antes del botón. */
+    safetyTitle: "Si cancelás, no perdés tu aviso",
+    safetyBody:
+      "Tu publicación sigue online como gratuita: hasta 5 fotos, un video de 59 segundos y contacto por el chat. Guardamos los botones que cargaste y vuelven apenas te suscribas de nuevo.",
+
+    activateCta: "Pasar a premium",
+    reactivateCta: "Volver a premium",
+    manageCta: "Ver mis pagos",
+    manageHint: "Ahí cambiás la tarjeta, reanudás o cancelás, cuando quieras.",
+
+    // Estados que ve el dueño. Título corto, cuerpo que dice qué hacer.
+    statusActiveTitle: "Tu publicación es premium",
+    statusActiveBody: (fecha: string) => `Se renueva sola el ${fecha}.`,
+    statusActiveBodyNoDate: "Ya está activa. La próxima renovación es automática.",
+
+    statusCancelingTitle: (fecha: string) => `Premium hasta el ${fecha}`,
+    statusCancelingBody:
+      "Cancelaste la renovación. Hasta esa fecha no cambia nada. Después tu aviso vuelve a ser gratuito y guardamos tus botones.",
+
+    statusPastDueTitle: "No pudimos cobrar tu premium",
+    statusPastDueBody:
+      "Tu aviso sigue premium mientras lo intentamos de nuevo. Actualizá tu tarjeta para no perder los botones.",
+
+    statusEndedTitle: "Tu premium terminó",
+    statusEndedBody:
+      "Tu aviso sigue publicado, ahora como gratuito. Tus botones quedaron guardados: volvés a verlos apenas te suscribas.",
+
+    // Éxito y cancelación del Checkout (vuelta desde Stripe).
+    checkoutSuccess:
+      "¡Listo! Recibimos tu pago. Tu publicación pasa a premium en unos minutos.",
+    checkoutCanceled: "No se hizo ningún cargo. Cuando quieras, acá te esperamos.",
+
+    /** Feature para <ProximamentePremium> cuando no hay Stripe configurado. */
+    proximamenteFeature: "los pagos",
+
+    errors: {
+      alreadyActive:
+        "Esta publicación ya es premium. Para cambiar tu tarjeta o cancelar, entrá a “Ver mis pagos”.",
+      noPortal:
+        "Todavía no tenés pagos hechos para esta publicación, así que no hay nada que gestionar.",
+      notPublished:
+        "Tu aviso tiene que estar publicado. Apenas lo apruebe el equipo de tu comunidad, volvé por acá.",
+    },
+  },
+
+  // -------------------------------------------------------------------------
   // Botones de acción
   // -------------------------------------------------------------------------
   cta: {

@@ -111,25 +111,51 @@ const DOMAIN_TENANTS: Record<string, string> = {
 };
 
 /**
- * Comunidades ACTIVAS para el usuario final (2026-07-09).
+ * Slugs reservados de MARCA/legal — NUNCA se resuelven como comunidad pública,
+ * aunque tengan su propia fila en `tenants` y su propio dominio en
+ * `DOMAIN_TENANTS`.
  *
- * Por ahora hay UNA sola comunidad pública/navegable: `dominicanos`
- * ("Dominicanos en USA"). `comunidadlatina` es la MARCA y el panel de
- * administración — NO es una comunidad, y el cliente jamás debe verla como si
- * lo fuera. Este set "clampea" la resolución del tenant del request: cualquier
- * candidato que no esté acá cae a la comunidad por defecto. Así ni un
- * `?t=comunidadlatina`, ni una cookie `cl-tenant` vieja, ni el dominio de la
- * marca meten al usuario en una comunidad que no debe ver.
+ * Hoy es solo `comunidadlatina`: es la MARCA y el panel de administración, con
+ * una razón puntual de negocio detrás (specimen de marca registrada en curso,
+ * PLAN_MAESTRO §11.1 — "uso GENUINO, no una transacción manufacturada") — el
+ * cliente jamás debe verla como si fuera una comunidad más. Decisión original:
+ * commit `d293119` (2026-07-09).
+ *
+ * Cualquier slug que NO esté en este set se resuelve DINÁMICAMENTE contra la
+ * fila real de `tenants` (`getTenant()`, cacheada) apenas existe, sin tocar
+ * este archivo — ese es el contrato que permite nacer una comunidad nueva
+ * (`scripts/new-tenant.mjs`) sin reprogramar. Antes este set funcionaba al
+ * revés (allowlist de UN solo slug activo): eso "resolvía" bien a
+ * `comunidadlatina`, pero de yapa clampeaba a la comunidad por defecto a
+ * CUALQUIER tenant nuevo — ninguna comunidad nacida después de `dominicanos`
+ * iba a ser alcanzable ni siquiera con `?t=<slug>` sin editar este archivo y
+ * redeployar, que es exactamente el "todavía hay que reprogramar" que el
+ * playbook de nacimiento de tenant (`docs/PLAYBOOK-TENANT.md`) viene a cerrar.
+ * Sumar un slug ACÁ sigue siendo una decisión de marca/legal explícita sobre
+ * UN tenant puntual — no un paso rutinario del alta.
  *
  * NO afecta al panel de admin: /admin usa el `tenant_id` del JWT, no este
- * (src/app/admin/guard.ts). Para reactivar multi-comunidad, sumá el slug acá
- * (y su dominio en DOMAIN_TENANTS + INDEXABLE_HOSTS de robots.ts).
+ * (src/app/admin/guard.ts) — un global_admin siempre pudo administrar
+ * `comunidadlatina` aunque el público no la vea como comunidad.
+ *
+ * Dominio propio (`DOMAIN_TENANTS`) sigue siendo un paso aparte: ese mapa es
+ * un atajo de performance para resolver Host→slug en el middleware SIN pegarle
+ * a la DB (`resolveTenantSlug` es pura y sync — la llama `src/middleware.ts`
+ * sin `await`). Una comunidad nueva sin dominio propio ya funciona hoy vía
+ * `?t=<slug>` (dev/preview) o el dominio compartido de Vercel; sumar SU
+ * dominio propio ahí es el único paso de código que le queda al alta cuando
+ * además quiere un dominio custom — ver "lo que sigue obligando a tocar
+ * código" en el playbook.
  */
-export const ACTIVE_COMMUNITY_SLUGS = new Set<string>([DEFAULT_TENANT_SLUG]);
+export const RESERVED_BRAND_SLUGS = new Set<string>(["comunidadlatina"]);
 
-/** ¿Es un slug de comunidad pública/activa hoy? (single-community por ahora). */
+/**
+ * ¿Este slug puede resolver como comunidad pública (no está reservado de
+ * marca/legal)? El nombre es historia (era "¿está en el allowlist de
+ * activas?"); el contrato hoy es el inverso: todo pasa salvo lo reservado.
+ */
 export function isActiveCommunitySlug(slug: string | null | undefined): boolean {
-  return typeof slug === "string" && ACTIVE_COMMUNITY_SLUGS.has(slug);
+  return typeof slug === "string" && slug.length > 0 && !RESERVED_BRAND_SLUGS.has(slug);
 }
 
 function sanitizeSlug(value: string | null | undefined): string | null {
@@ -140,10 +166,15 @@ function sanitizeSlug(value: string | null | undefined): string | null {
 
 /**
  * Resuelve el slug del tenant a partir del request. Función PURA (la usa el
- * middleware sin tocar la DB).
+ * middleware sin tocar la DB) — por eso NO puede consultar `tenants` para
+ * decidir si un slug "existe de verdad"; esa parte la resuelve `getTenant()`
+ * más abajo (cacheada), con degradación elegante si no hay fila.
  *
- * - Producción: el dominio manda (dominicanos.com → 'dominicanos').
- * - Dev / previews: `?t=<slug>` > cookie `cl-tenant` > 'dominicanos'.
+ * - Producción: el dominio manda (dominicanos.com → 'dominicanos'). Dominios
+ *   fuera de `DOMAIN_TENANTS` (comunidad nueva sin dominio propio todavía) no
+ *   entran acá — siguen resolviendo por `?t=`/cookie más abajo.
+ * - Dev / previews / dominio sin mapear: `?t=<slug>` > cookie `cl-tenant` >
+ *   'dominicanos'.
  */
 export function resolveTenantSlug(
   host: string | null,
@@ -155,10 +186,13 @@ export function resolveTenantSlug(
   const candidate =
     fromDomain ?? sanitizeSlug(searchParamT) ?? sanitizeSlug(cookieT) ?? DEFAULT_TENANT_SLUG;
 
-  // Single-community por ahora: cualquier comunidad que no esté activa (p. ej.
-  // `comunidadlatina`, la marca) cae a la comunidad por defecto. El usuario
-  // final nunca aterriza en una comunidad que no debe ver (ver ACTIVE_COMMUNITY_SLUGS).
-  return ACTIVE_COMMUNITY_SLUGS.has(candidate) ? candidate : DEFAULT_TENANT_SLUG;
+  // Solo un slug reservado de marca/legal (RESERVED_BRAND_SLUGS) fuerza la
+  // comunidad por defecto. Cualquier otro candidato —incluida una comunidad
+  // recién nacida que todavía no tiene fila, o un slug con errores de
+  // tipeo— pasa tal cual: getTenant() lo resuelve contra la DB o degrada con
+  // elegancia (§7) si no existe. Así una comunidad nacida por
+  // scripts/new-tenant.mjs resuelve al toque, sin deploy.
+  return isActiveCommunitySlug(candidate) ? candidate : DEFAULT_TENANT_SLUG;
 }
 
 function asString(value: unknown): string | null {

@@ -363,3 +363,62 @@ export function brandThemeToStyle(hex: string): Record<string, string> {
 
   return style;
 }
+
+/** Un chequeo puntual de contraste que no llegó al piso WCAG que promete §2.3. */
+export interface BrandContrastIssue {
+  /** Qué par de tonos falló (para mostrarlo o loguearlo). */
+  check: string;
+  /** Contraste real medido (WCAG relative luminance ratio). */
+  ratio: number;
+  /** Piso exigido para ese par (4.5 = AA texto, 3 = AA UI/1.4.11). */
+  required: number;
+}
+
+export interface BrandContrastReport {
+  ok: boolean;
+  issues: BrandContrastIssue[];
+}
+
+/**
+ * Re-chequea el resultado de `buildBrandScale(hex)` contra los tres invariantes
+ * que el pipeline PROMETE (§2.3, ver docstring del módulo) — label sobre CTA
+ * ≥4.5:1, CTA contra el canvas de su tema ≥3:1 (WCAG 1.4.11), ink ≥4.5:1 — en
+ * vez de asumir que siempre los cumple.
+ *
+ * Por qué hace falta un chequeo aparte: `ensureCtaContrast(Dark)` e `inkTone`
+ * mueven lightness en un loop con una red de seguridad (`MIN_CTA_LIGHTNESS` /
+ * `MAX_CTA_LIGHTNESS`) que puede CEDER antes de cruzar el piso para un hex
+ * extremo (croma altísimo en un hue donde el clamp a gamut no deja bajar/subir
+ * más). El pipeline en sí nunca lanza — errar de ese lado es a propósito (una
+ * comunidad ya creada no puede quedar sin marca por una excepción) — así que la
+ * única forma de saber si el resultado es de verdad legible es medirlo, no
+ * asumirlo. Uso previsto: `scripts/new-tenant.mjs` llama esto ANTES de escribir
+ * el tenant y aborta si `ok` es `false` — nunca falla en silencio ni "arregla"
+ * el color por su cuenta.
+ */
+export function validateBrandContrast(hex: string): BrandContrastReport {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex.trim())) {
+    return {
+      ok: false,
+      issues: [{ check: "formato del hex (#RRGGBB)", ratio: 0, required: 0 }],
+    };
+  }
+
+  const theme = buildBrandScale(hex);
+  const pairs: Array<[string, string, string, number]> = [
+    ["CTA claro vs. su texto", theme.light.brand, theme.light.foreground, WCAG_AA],
+    ["CTA oscuro vs. su texto", theme.dark.brand, theme.dark.foreground, WCAG_AA],
+    ["CTA claro vs. fondo claro (1.4.11)", theme.light.brand, LIGHT_CANVAS, WCAG_AA_UI],
+    ["CTA oscuro vs. fondo oscuro (1.4.11)", theme.dark.brand, DARK_CANVAS, WCAG_AA_UI],
+    ["texto de marca (ink) claro vs. superficie", theme.light.ink, LIGHT_SURFACE, WCAG_AA],
+    ["texto de marca (ink) oscuro vs. fondo oscuro", theme.dark.ink, DARK_CANVAS, WCAG_AA],
+  ];
+
+  const issues: BrandContrastIssue[] = [];
+  for (const [check, fg, bg, required] of pairs) {
+    const ratio = wcagContrast(fg, bg);
+    if (ratio < required) issues.push({ check, ratio, required });
+  }
+
+  return { ok: issues.length === 0, issues };
+}

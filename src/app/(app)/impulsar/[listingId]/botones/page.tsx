@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ChatCircleDots, Sparkle } from "@phosphor-icons/react/dist/ssr";
-import { Badge, BezelCard } from "@/components/ui";
+import { Badge, BezelCard, buttonVariants } from "@/components/ui";
 import {
   MONETIZATION_COPY,
   canUseActionButtons,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/monetization";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { cn } from "@/lib/utils";
 import { EditorBotones } from "./editor-botones";
 
 export const metadata = { title: "Botones de acción" };
@@ -120,6 +121,15 @@ export default async function BotonesPage({ params }: { params: Params }) {
                 </li>
               ))}
             </ul>
+            {/* Sin este link la tarjeta enumeraba lo que se compra y no decía dónde
+                comprarlo: la persona se enteraba de que existe premium justo donde
+                no podía contratarlo. */}
+            <Link
+              href={`/negocios/presencia/aviso/${listing.id}`}
+              className={cn(buttonVariants({ variant: "primary", size: "lg" }), "w-full")}
+            >
+              {M.tier.upgradeCta}
+            </Link>
           </BezelCard>
         </div>
       )}

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { m } from "motion/react";
 import {
   Briefcase,
+  ChartLineUp,
   GlobeHemisphereWest,
   ShieldCheck,
   Storefront,
@@ -59,6 +60,16 @@ const ITEMS: NavItem[] = [
     href: "/admin/dominio",
     label: "Dominio",
     icon: <Storefront size={18} aria-hidden="true" />,
+    minRank: 2,
+  },
+  {
+    href: "/admin/metricas",
+    label: "Métricas",
+    // domain_admin+: mismo nivel que Dominio. Un moderator modera contenido;
+    // los números de cómo va la comunidad son del que la administra. El rango
+    // acá sólo decide qué se ve en el nav — quien manda es el chequeo de rol
+    // dentro de la RPC admin_metrics_overview (0055).
+    icon: <ChartLineUp size={18} aria-hidden="true" />,
     minRank: 2,
   },
   {

@@ -269,9 +269,10 @@ export default async function MarketplaceLegalPage() {
 
       <LegalSection id="control" title="Qué revisamos y qué no">
         <p className={legalProse.p}>
-          Antes de que un producto se publique, un sistema automático revisa el texto y las
-          fotos. Después, el equipo de tu comunidad revisa por muestreo y todo lo que se
-          reporta.
+          Antes de que un producto se publique, un sistema automático revisa el texto. Las fotos
+          las revisa una persona de tu comunidad antes de que el producto quede visible —
+          todavía no tenemos revisión automática de imágenes—. Después, el equipo revisa por
+          muestreo y todo lo que se reporta.
         </p>
         <p className={legalProse.p}>
           <strong className={legalProse.strong}>
