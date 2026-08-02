@@ -110,11 +110,33 @@ export async function sendConfirmationEmail(params: {
   });
 
   if (!isResendConfigured) {
-    // Dev sin Resend: sin esto la cuenta queda inaccesible en local. El enlace
-    // solo se imprime en la consola del server, jamás se devuelve al cliente.
-    console.info(
-      `[auth] Resend no configurado — enlace de confirmación (solo dev): ${confirmUrl}`,
-    );
+    // Sin Resend la cuenta quedaría inaccesible en local, así que en DEV el
+    // enlace se imprime en la consola del server.
+    //
+    // La condición es el entorno, NO `isResendConfigured` (auditoría
+    // 2026-08-02). Antes alcanzaba con que faltara la key para imprimirlo, y
+    // ese es un estado perfectamente alcanzable en producción: la clave vence,
+    // se rota mal, o el deploy sale sin ella —ya pasó: producción llegó a tener
+    // 7 de 20 variables—. En cualquiera de esos casos cada registro escribía en
+    // los logs de Vercel un `token_hash` de un solo uso que abre sesión sin
+    // contraseña. Quien lea los logs (o un drain, o el breadcrumb de consola
+    // que el SDK de Sentry captura solo) se lleva la cuenta.
+    if (process.env.NODE_ENV !== "production" && !process.env.VERCEL_ENV) {
+      console.info(
+        `[auth] Resend no configurado — enlace de confirmación (solo dev): ${confirmUrl}`,
+      );
+    } else {
+      // En prod se avisa que falta el canal, sin el token: el enlace no salió.
+      console.error(
+        "[auth] confirmación: Resend no configurado — la cuenta quedó creada SIN correo de confirmación. Revisar RESEND_API_KEY.",
+      );
+      if (isSentryConfigured) {
+        Sentry.captureException(
+          new Error("[auth] confirmación sin canal de correo (RESEND_API_KEY ausente)"),
+          { tags: { module: "auth", reason: "confirm-no-mailer" } },
+        );
+      }
+    }
     return { ok: true, skipped: true };
   }
 

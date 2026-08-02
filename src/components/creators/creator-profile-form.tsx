@@ -375,9 +375,13 @@ export function CreatorProfileForm({
               />
               <button
                 type="button"
-                aria-label={COPY.publish.steps.photos.remove}
+                aria-label={`${COPY.publish.steps.photos.remove} ${index + 1}`}
                 onClick={() => removePhoto(index)}
-                className="absolute right-1 top-1 flex size-8 items-center justify-center rounded-full bg-media-scrim text-on-media focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+                // El área táctil se lleva a 44px con un ::after y NO agrandando
+                // el botón: sobre una miniatura de ~80px un botón de 44 taparía
+                // la foto. No se usa `touch-hitbox` porque esa utility fuerza
+                // `position: relative` y acá el botón es `absolute`.
+                className="absolute right-1 top-1 flex size-8 items-center justify-center rounded-full bg-media-scrim text-on-media after:absolute after:left-1/2 after:top-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
               >
                 <X size={14} aria-hidden="true" />
               </button>

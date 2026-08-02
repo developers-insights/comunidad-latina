@@ -11,7 +11,7 @@ import {
   resendConfirmationForCredentials,
 } from "@/lib/auth/confirmation";
 import type { ActionResult } from "@/components/auth/action-result";
-import { safeNextPath } from "@/components/auth/next-param";
+import { safeInternalPath } from "@/lib/url/safe-href";
 import { resolveOrigin } from "./recuperar/origin";
 
 /** Versión del set legal (Términos/Privacidad/Normas) vigente al registrarse. */
@@ -94,7 +94,7 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
   const { displayName, email, password, needs, area } = parsed.data;
   // Open redirect: el `next` viaja en el correo, así que se sanitiza acá y no
   // en el cliente (misma función que el resto de los flujos de auth).
-  const next = safeNextPath(parsed.data.next, "/bienvenida");
+  const next = safeInternalPath(parsed.data.next, "/bienvenida");
 
   // Rate limit: 5 registros/hora por IP. La IP se usa SOLO como key en memoria
   // del limiter (expira con la ventana) — jamás se persiste ni se loguea (§11).
@@ -252,7 +252,7 @@ export async function resendConfirmationAction(
     tenantName: tenant.name,
     brandHex: tenant.brandHex,
     origin: resolveOrigin(headerStore),
-    next: safeNextPath(parsed.data.next, "/bienvenida"),
+    next: safeInternalPath(parsed.data.next, "/bienvenida"),
   });
 
   return { ok: true };

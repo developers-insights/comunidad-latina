@@ -104,6 +104,10 @@ export function PlanesPresencia({
               className={cn(
                 "flex h-11 items-center gap-2 rounded-full px-5 text-sm font-semibold",
                 "transition-colors duration-(--duration-fast)",
+                // La opción activa lleva `shadow-xs`, que pisa el anillo global
+                // de globals.css (`:where(…)`, especificidad cero). `ring-*`
+                // compone en `--tw-ring-shadow` y convive con `shadow-xs`.
+                "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
                 active
                   ? "bg-surface text-foreground shadow-xs"
                   : "text-foreground-secondary hover:text-foreground",

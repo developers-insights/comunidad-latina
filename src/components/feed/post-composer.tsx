@@ -479,6 +479,16 @@ export function PostComposer({
         toast({ title: COPY.composer.tooShort, variant: "warning" });
         return;
       }
+      if (result.code === "rate-limited") {
+        // `warning` y no `danger`: no se rompió nada, hay que esperar.
+        toast({
+          title: COPY.composer.rateLimitedTitle,
+          description: COPY.composer.rateLimitedBody,
+          variant: "warning",
+          duration: 8000,
+        });
+        return;
+      }
       toast({
         title: COPY.composer.errorTitle,
         description: COPY.composer.errorBody,
@@ -514,13 +524,24 @@ export function PostComposer({
         <CaretRight size={18} aria-hidden="true" className="shrink-0 text-foreground-muted" />
       </button>
 
-      {/* Inputs reales, ocultos: los FileList se leen SINCRÓNICAMENTE (gotcha) */}
+      {/*
+       * Inputs reales, ocultos: los FileList se leen SINCRÓNICAMENTE (gotcha).
+       *
+       * `tabIndex={-1}` + `aria-hidden`: `sr-only` recorta por clip, así que el
+       * control SIGUE siendo focusable y visible para el lector de pantalla. Sin
+       * esto, al tabular por el compositor aparecían dos paradas anunciadas como
+       * "Examinar…" sin etiqueta y sin contexto. A estos inputs se los dispara
+       * por código (`photoInputRef.current?.click()`); el control real, con su
+       * nombre, es el botón de arriba.
+       */}
       <input
         ref={photoInputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
         multiple
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
         id="post-composer-photos"
         onChange={(event) => selectPhotos(event.currentTarget)}
       />
@@ -529,6 +550,8 @@ export function PostComposer({
         type="file"
         accept="video/mp4,video/webm"
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
         id="post-composer-video"
         // `void`: la medición del archivo es asíncrona, pero el FileList se lee
         // SINCRÓNICAMENTE dentro (antes del primer await) — ver el gotcha de

@@ -280,6 +280,18 @@ export async function POST(request: Request) {
   //    dura) y cookie firmada (cortesía UX).
   let setCookie: string | null = null;
   if (user) {
+    // TECHO DURO en memoria, ANTES de la cuenta por DB (auditoría 2026-08-02).
+    // `countRecentQueries` es fail-open a propósito (un limiter caído no debe
+    // romper el producto) y `logQuery` es best-effort: si la escritura a
+    // assistant_queries falla —RLS, tabla llena, DB lenta— el contador nunca
+    // sube y el límite de 10/hora deja de existir. El resultado no es una
+    // molestia de UX: es una cuenta logueada llamando a Claude sin tope, y la
+    // factura la pagamos nosotros. Este límite no depende de que nada se
+    // persista. Sigue siendo por instancia (misma limitación documentada en
+    // lib/rate-limit), pero `max × instancias` es un techo; fail-open no.
+    if (!limit(`asistente:user:${user.id}`, USER_HOURLY_LIMIT, HOUR_MS).ok) {
+      return NextResponse.json({ error: "rate_limit" }, { status: 429 });
+    }
     const recent = await countRecentQueries(user.id);
     if (recent !== null && recent >= USER_HOURLY_LIMIT) {
       return NextResponse.json({ error: "rate_limit" }, { status: 429 });

@@ -44,18 +44,18 @@ export const COPY = {
     deliverablesTitle: "Qué se busca",
     deadlineLabel: (days: number) => (days === 1 ? "Para entregar en 1 día" : `Para entregar en ${days} días`),
     aboutBusiness: "Sobre el negocio",
-    applyCta: "Aplicar a este trabajo",
+    applyCta: "Postularme a este trabajo",
     pendingReviewOwner:
-      "Tu aviso está en revisión. Apenas lo apruebe el equipo de tu comunidad, va a aparecer en Trabajos y los creadores van a poder aplicar.",
-    ownerHint: "Sos el dueño de este aviso. Acá ves quién aplicó.",
-    alreadyApplied: "Ya aplicaste a este trabajo",
+      "Tu aviso está en revisión. Apenas lo apruebe el equipo de tu comunidad, va a aparecer en Trabajos y los creadores van a poder postularse.",
+    ownerHint: "Sos el dueño de este aviso. Acá ves quién se postuló.",
+    alreadyApplied: "Ya te postulaste a este trabajo",
     alreadyAppliedBody: "El negocio está viendo tu propuesta. Te avisamos si te elige.",
     applicationWithdrawn: "Retiraste tu propuesta para este trabajo.",
   },
 
   // -------------------------------------------------------------------------
   apply: {
-    title: "Aplicar a este trabajo",
+    title: "Postularme a este trabajo",
     intro: "Contale al negocio por qué sos la persona indicada. Sé concreto y cálido.",
     messageLabel: "Tu propuesta",
     messagePlaceholder:
@@ -70,9 +70,9 @@ export const COPY = {
     successBody: "El negocio ya puede ver tu perfil y tu propuesta. Te avisamos si te elige.",
     needProfileTitle: "Primero, tu perfil de creador",
     needProfileBody:
-      "Para aplicar necesitás un perfil de creador: es lo que ve el negocio (tu portfolio, tus reseñas y tu score). Se arma en un minuto.",
+      "Para postularte necesitás un perfil de creador: es lo que ve el negocio (tu portfolio, tus reseñas y tu score). Se arma en un minuto.",
     needProfileCta: "Crear mi perfil de creador",
-    needLogin: "Para aplicar necesitás entrar a tu cuenta.",
+    needLogin: "Para postularte necesitás entrar a tu cuenta.",
     errors: {
       messageShort: "Escribí un poco más — contale al negocio qué le ofrecés.",
       generic: GENERIC_ERROR,
@@ -82,7 +82,7 @@ export const COPY = {
   // -------------------------------------------------------------------------
   applications: {
     title: "Propuestas recibidas",
-    empty: "Todavía nadie aplicó a este trabajo. Compartilo para que llegue a más creadores.",
+    empty: "Todavía nadie se postuló a este trabajo. Compartilo para que llegue a más creadores.",
     proposedAmount: "Propone",
     completedJobs: (n: number) => (n === 1 ? "1 trabajo completado" : `${n} trabajos completados`),
     noReviews: "Sin reseñas todavía",
@@ -192,8 +192,10 @@ export const COPY = {
     reputationTitle: "Reputación",
     proposeCta: "Proponer un trabajo",
     hireHint: "Le proponés un contrato directo con pago en garantía.",
-    notFoundTitle: "Este creador no tiene perfil",
-    notFoundBody: "Puede que todavía no haya armado su perfil de creador.",
+    // Nota: acá vivían `notFoundTitle` / `notFoundBody`, que alimentaban una
+    // pantalla de "entrá a tu cuenta" en /creadores/perfil/[id]. Esa rama era
+    // código muerto —`creator_profiles_select` es pública para anon— y se
+    // retiró: cuando no hay perfil de creador, la página devuelve 404.
     // Mi perfil (crear/editar)
     myTitle: "Mi perfil de creador",
     mySubtitle: "Así te ven los negocios cuando buscan a alguien para su contenido.",

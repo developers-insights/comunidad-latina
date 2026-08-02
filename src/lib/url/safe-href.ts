@@ -72,3 +72,57 @@ export function safeExternalHref(raw: string | null | undefined): SafeHref | nul
 
   return { href: parsed.href, external: true };
 }
+
+/**
+ * DESTINO INTERNO PARA UN `?next=` QUE VIENE DE LA URL O DE UN CORREO.
+ *
+ * Mismo motor que `safeExternalHref` —resolver contra el centinela y mirar el
+ * ORIGEN resultante— pero con un contrato distinto: acá no existe "abrirlo como
+ * externo". Todo lo que no resuelva a nuestro propio sitio se descarta y se
+ * vuelve al `fallback`.
+ *
+ * POR QUÉ NO ALCANZA CLASIFICAR POR STRING (auditoría 2026-08-02, verificado
+ * en vivo): el chequeo anterior era `startsWith("/")` + rechazar `//` y `\`.
+ * Con eso, `/<TAB>/evil.com` pasaba el filtro, y `new URL()` —que borra tabs y
+ * saltos de línea ANTES de parsear, por spec WHATWG— lo convertía en
+ * `//evil.com`, o sea `https://evil.com`. El `Location:` de /callback y
+ * /confirmar salía del sitio; el señuelo perfecto para pedir la contraseña de
+ * nuevo en una pantalla clonada, justo después de un login exitoso.
+ *
+ * Se devuelve la ruta ya NORMALIZADA por el parser, no el string original: así
+ * el caller no puede reintroducir el problema al concatenar.
+ *
+ * DOS PASADAS, NO UNA (revisión 2026-08-02): chequear sólo el origen del parseo
+ * NO alcanza. El parser colapsa los dot-segments DESPUÉS de fijar el origen, así
+ * que `/..//evil.com` y `/.//evil.com` pasan el filtro (su origen es el
+ * centinela) pero salen con el pathname en `//evil.com` — protocol-relative para
+ * el SIGUIENTE parser, que es el que arma el `Location:` real. Por eso el
+ * resultado se vuelve a resolver contra el centinela antes de devolverlo: si esa
+ * segunda vuelta se va de origen, no era una ruta interna.
+ */
+export function safeInternalPath(
+  raw: string | null | undefined,
+  fallback: string,
+): string {
+  const value = (raw ?? "").trim();
+  if (!value.startsWith("/")) return fallback;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value, SENTINEL);
+  } catch {
+    return fallback;
+  }
+
+  if (parsed.origin !== SENTINEL) return fallback;
+
+  const path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  // Segunda pasada: el pathname normalizado puede haber quedado en `//host`
+  // aunque el origen del primer parseo fuera interno (ver el docstring).
+  try {
+    if (new URL(path, SENTINEL).origin !== SENTINEL) return fallback;
+  } catch {
+    return fallback;
+  }
+  return path;
+}

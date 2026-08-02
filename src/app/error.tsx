@@ -24,7 +24,10 @@ const COPY = {
   message:
     "No es tu culpa. Ya quedó registrado para que lo revisemos — probá de nuevo en unos segundos.",
   retry: "Reintentar",
-  home: "Ir al inicio",
+  // El destino es /feed, no `/`: `/` redirige al login y ofrecerle "inicio" a
+  // alguien que YA tiene sesión, para depositarlo en una pantalla de entrar,
+  // se lee como que el error también le cerró la cuenta.
+  home: "Ir al feed",
 } as const;
 
 export default function GlobalErrorBoundary({
@@ -54,7 +57,7 @@ export default function GlobalErrorBoundary({
             <Button variant="primary" size="md" onClick={() => reset()}>
               {COPY.retry}
             </Button>
-            <Link href="/" className={buttonVariants({ variant: "ghost", size: "md" })}>
+            <Link href="/feed" className={buttonVariants({ variant: "ghost", size: "md" })}>
               {COPY.home}
             </Link>
           </div>

@@ -18,7 +18,9 @@ const COPY = {
   title: "Esta página no existe — pero tu comunidad sí",
   message:
     "Puede que el link esté vencido o mal escrito. No pasa nada — volvé al inicio o seguí por acá:",
-  cta: "Volver al inicio",
+  // "Ir al feed" y no "Volver al inicio": el destino ya no es `/` (que redirige
+  // al login), y el botón tiene que nombrar el lugar al que lleva de verdad.
+  cta: "Ir al feed",
   links: [
     { href: "/propiedades", label: "Buscar vivienda", icon: Buildings },
     { href: "/guias", label: "Guías para recién llegados", icon: BookOpen },
@@ -38,7 +40,7 @@ export default function NotFound() {
           message={COPY.message}
           action={
             <Link
-              href="/"
+              href="/feed"
               className={buttonVariants({ variant: "primary", size: "md" })}
             >
               {COPY.cta}

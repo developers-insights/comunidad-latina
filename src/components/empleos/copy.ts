@@ -268,7 +268,7 @@ export const COPY = {
         "Van a ver tus respuestas, tu mensaje y tu currículum, pero no tu foto, tu nombre ni tu zona.",
       toggleLabel: "Compartir mi perfil con quien contrata",
       toggleHelp: "Se completa solo desde tu perfil. Podés cambiarlo cuando quieras.",
-      trustLabel: "Nivel de confianza",
+      trustLabel: "Trust Score",
       verified: "Identidad verificada",
       noCity: "Sin zona cargada",
       completeProfile: "Completar mi perfil",

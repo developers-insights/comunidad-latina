@@ -4,8 +4,9 @@ import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 
 /**
- * Chip honesto de campaña paga — mismo lenguaje que "Destacado" de boosts (FTC:
- * la publicidad se divulga). Se extrajo de PostCard para poder mostrarlo también
+ * Chip honesto de campaña paga — misma palabra ("Patrocinado") que el chip de
+ * los avisos impulsados de Vivienda (FTC: la publicidad se divulga, y con un
+ * solo nombre en toda la app). Se extrajo de PostCard para poder mostrarlo también
  * SOBRE la foto/el video del post (card-post-media, card-video) sin ciclo de
  * imports. SIEMPRE visible en un post promocionado, aunque tenga CTA de campaña.
  */

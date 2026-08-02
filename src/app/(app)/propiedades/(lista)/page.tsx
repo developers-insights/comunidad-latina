@@ -163,8 +163,12 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
   const hasMore = (rows ?? []).length > PAGE_SIZE;
 
   // -------------------------------------------------------------------------
-  // Boost (§7): destacados primero, SOLO en la primera página (sin cursor).
-  // HONESTO por diseño (FTC): cada uno lleva el chip "Destacado · Publicidad".
+  // Boost (§7): los avisos pagos van primero, SOLO en la primera página (sin
+  // cursor). HONESTO por diseño (FTC): cada uno lleva el chip "Patrocinado" —
+  // la misma palabra que el feed, el reel y la búsqueda, porque una divulgación
+  // que cambia de nombre según la pantalla deja de leerse como divulgación.
+  // NO puede decir "Destacado": así se llama el nivel máximo del Trust Score,
+  // que se gana por reputación, y confundirlos vende lo pago como mérito.
   // Pagar visibilidad no toca Trust Score ni verificación.
   // -------------------------------------------------------------------------
   const boostedIds = new Set<string>();
@@ -380,7 +384,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
               <div key={card.id} className="flex flex-col gap-1.5">
                 <Chip variant="brand" size="sm" className="w-fit">
                   <Megaphone size={14} weight="fill" aria-hidden="true" />
-                  Destacado · Publicidad
+                  Patrocinado
                 </Chip>
                 <ListingCard listing={card} />
               </div>

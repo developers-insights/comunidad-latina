@@ -37,7 +37,6 @@ export type Tenant = {
 
 export const TENANT_COOKIE = "cl-tenant";
 export const TENANT_SLUG_HEADER = "x-tenant-slug";
-export const TENANT_ID_HEADER = "x-tenant-id";
 export const DEFAULT_TENANT_SLUG = "dominicanos";
 
 /**
@@ -111,6 +110,19 @@ const DOMAIN_TENANTS: Record<string, string> = {
 };
 
 /**
+ * Los mismos dominios, como set, para quien necesita preguntar "¿este host es
+ * NUESTRO?" sin que le importe a qué tenant mapea.
+ *
+ * Hoy lo usa `resolveOrigin()` (src/app/(auth)/recuperar/origin.ts) para decidir
+ * si puede construir con el host del request la URL absoluta que viaja dentro de
+ * un correo de confirmación. Se exporta el set y no `DOMAIN_TENANTS` entero para
+ * que ese uso no quede atado a la forma del mapa.
+ */
+export const KNOWN_TENANT_DOMAINS: ReadonlySet<string> = new Set(
+  Object.keys(DOMAIN_TENANTS),
+);
+
+/**
  * Slugs reservados de MARCA/legal — NUNCA se resuelven como comunidad pública,
  * aunque tengan su propia fila en `tenants` y su propio dominio en
  * `DOMAIN_TENANTS`.
@@ -165,26 +177,76 @@ function sanitizeSlug(value: string | null | undefined): string | null {
 }
 
 /**
- * Resuelve el slug del tenant a partir del request. Función PURA (la usa el
- * middleware sin tocar la DB) — por eso NO puede consultar `tenants` para
- * decidir si un slug "existe de verdad"; esa parte la resuelve `getTenant()`
- * más abajo (cacheada), con degradación elegante si no hay fila.
+ * ¿Se pueden honrar las PISTAS DEL CLIENTE (`?t=` y la cookie `cl-tenant`)?
+ * Solo FUERA de producción.
  *
- * - Producción: el dominio manda (dominicanos.com → 'dominicanos'). Dominios
- *   fuera de `DOMAIN_TENANTS` (comunidad nueva sin dominio propio todavía) no
- *   entran acá — siguen resolviendo por `?t=`/cookie más abajo.
- * - Dev / previews / dominio sin mapear: `?t=<slug>` > cookie `cl-tenant` >
- *   'dominicanos'.
+ * Por qué existe esta función (auditoría 2026-08-02, reproducido en vivo):
+ * `resolveTenantSlug` decía "en producción el dominio manda", pero eso solo era
+ * cierto para un host que estuviera en `DOMAIN_TENANTS`. El host REAL de
+ * producción hoy es `comunidad-latina-sigma.vercel.app` (único dominio del
+ * proyecto en Vercel) y NO está en ese mapa — así que producción caía al
+ * `?t=`/cookie, que los escribe quien visita. O sea: la pista de desarrollo
+ * gobernaba el tenant en producción.
+ *
+ * Por qué eso era crítico y no cosmético: el Asistente atiende a visitantes
+ * ANÓNIMOS, y su búsqueda RAG (`searchChunksFts` → `match_chunks_fts`) corre con
+ * `service_role`, que saltea RLS por completo. Adentro, la RPC filtra ÚNICAMENTE
+ * por su argumento `p_tenant_id` (verificado con `pg_get_functiondef`: es
+ * SECURITY DEFINER y no revalida nada contra el JWT). Un anónimo no tiene JWT,
+ * así que abajo no hay red de contención: quien controla el slug controla qué
+ * comunidad se lee. Con `?t=<otra-comunidad>` se leían sus `rag_chunks`.
+ *
+ * El corte va acá y no en el asistente a propósito: `?t=`/cookie alimentan el
+ * tenant de TODA la app, no solo del RAG. Se arregla en el origen.
+ *
+ * TRADE-OFF, para que nadie lo reabra sin querer: en producción una comunidad
+ * SIN dominio propio deja de ser alcanzable por `?t=`; necesita su dominio en
+ * `DOMAIN_TENANTS`. Eso ya era el único paso de código que el playbook de alta
+ * (`docs/PLAYBOOK-TENANT.md`) reconoce para un dominio custom.
+ *
+ * ALCANCE REAL, medido (no asumido): Vercel corre los previews con
+ * `NODE_ENV=production`, así que el primer término ya corta y los previews
+ * TAMBIÉN quedan bloqueados. Es a propósito y no se afloja: un preview es una
+ * URL pública apuntando a la MISMA base de producción, o sea que ahí `?t=`
+ * sería el mismo agujero con otra puerta. `?t=` queda vivo sólo en local
+ * (`NODE_ENV=development`) y en los tests, que es donde de verdad hace falta.
+ */
+export function clientTenantHintsAllowed(): boolean {
+  return !(
+    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production"
+  );
+}
+
+/**
+ * Resuelve el slug del tenant a partir del request. Función PURA respecto de sus
+ * argumentos (la usa el middleware sin tocar la DB) — por eso NO puede consultar
+ * `tenants` para decidir si un slug "existe de verdad"; esa parte la resuelve
+ * `getTenant()` más abajo (cacheada), con degradación elegante si no hay fila.
+ *
+ * - Producción: manda el HOST y NADA MÁS. Host mapeado en `DOMAIN_TENANTS` →
+ *   su comunidad; cualquier otro host → la comunidad por defecto. `?t=` y la
+ *   cookie se IGNORAN (ver `clientTenantHintsAllowed`: son entrada del cliente y
+ *   el RAG del asistente las consumía con service_role).
+ * - Dev / previews: `?t=<slug>` > cookie `cl-tenant` > 'dominicanos', como
+ *   siempre — ahí sí son un ayudante de desarrollo legítimo.
+ *
+ * `allowClientHints` se puede pasar explícito para testear las dos ramas sin
+ * ensuciar `process.env`; por defecto lo decide el entorno.
  */
 export function resolveTenantSlug(
   host: string | null,
   searchParamT?: string | null,
   cookieT?: string | null,
+  allowClientHints: boolean = clientTenantHintsAllowed(),
 ): string {
   const hostname = (host ?? "").split(":")[0].toLowerCase();
   const fromDomain = DOMAIN_TENANTS[hostname];
-  const candidate =
-    fromDomain ?? sanitizeSlug(searchParamT) ?? sanitizeSlug(cookieT) ?? DEFAULT_TENANT_SLUG;
+  // El host SIEMPRE tiene prioridad; las pistas del cliente solo se miran fuera
+  // de producción, y solo si el host no dijo nada.
+  const fromClientHint = allowClientHints
+    ? (sanitizeSlug(searchParamT) ?? sanitizeSlug(cookieT))
+    : null;
+  const candidate = fromDomain ?? fromClientHint ?? DEFAULT_TENANT_SLUG;
 
   // Solo un slug reservado de marca/legal (RESERVED_BRAND_SLUGS) fuerza la
   // comunidad por defecto. Cualquier otro candidato —incluida una comunidad

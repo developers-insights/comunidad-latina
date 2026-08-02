@@ -401,9 +401,12 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
               />
               <button
                 type="button"
-                aria-label={C.removePhotoLabel}
+                aria-label={`${C.removePhotoLabel} ${index + 1}`}
                 onClick={() => removePhoto(index)}
-                className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-full bg-media-scrim text-on-media focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+                // Área táctil a 44px con ::after y no agrandando el botón: acá
+                // taparía la miniatura. `touch-hitbox` no sirve porque fuerza
+                // `position: relative` y este botón es `absolute`.
+                className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-full bg-media-scrim text-on-media after:absolute after:left-1/2 after:top-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
               >
                 <X size={13} aria-hidden="true" />
               </button>

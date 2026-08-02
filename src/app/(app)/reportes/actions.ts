@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { DAY_MS, limit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -14,7 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export type ReportTargetResult =
   | { ok: true }
-  | { ok: false; code: "unauthenticated" | "invalid" | "error" };
+  | { ok: false; code: "unauthenticated" | "invalid" | "error" | "rate-limited" };
 
 const reportTargetSchema = z.object({
   // Los kinds válidos del RPC report_scam (0014_rpcs.sql): listing | profile | message.
@@ -41,6 +42,15 @@ export async function reportTargetAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, code: "unauthenticated" };
+
+  // Mismo presupuesto y MISMA key que /escudo/reportar: 10 reportes por día y
+  // por persona, compartidos entre TODAS las superficies. Que el namespace sea
+  // el mismo es lo importante — un tope por pantalla sería un tope por cuatro,
+  // y quien quiere brigadear a alguien no elige el botón, elige la víctima.
+  // El peso real de cada reporte lo sigue decidiendo el Trust Score en la DB.
+  if (!limit(`reporte:${user.id}`, 10, DAY_MS).ok) {
+    return { ok: false, code: "rate-limited" };
+  }
 
   const { error } = await supabase.rpc("report_scam", {
     p_target_kind: parsed.data.targetKind,

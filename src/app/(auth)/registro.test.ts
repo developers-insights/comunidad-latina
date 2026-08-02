@@ -40,6 +40,11 @@ vi.mock("@/lib/tenant/resolve", () => ({
     name: "Dominicanos en Chile",
     brandHex: "#123456",
   }),
+  // `resolveOrigin()` lo consulta para decidir si el host del request es NUESTRO
+  // antes de meterlo en la URL del correo (ver origin.ts). Acá se declara el
+  // host que mockean los headers de arriba, así el alta corre por el camino
+  // legítimo. El rechazo de un host ajeno se prueba en origin.test.ts.
+  KNOWN_TENANT_DOMAINS: new Set(["comunidad.test"]),
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -126,7 +131,10 @@ describe("registerAction", () => {
     });
 
     expect(mocks.sendConfirmationEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ next: "/propiedades?zona=Ñuñoa" }),
+      // Percent-encoded: `safeInternalPath` devuelve la ruta ya normalizada por
+      // el parser de URL, que es la forma correcta para viajar en un enlace.
+      // Al volver, `searchParams.get("next")` la decodifica sola.
+      expect.objectContaining({ next: "/propiedades?zona=%C3%91u%C3%B1oa" }),
     );
   });
 

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import {
+  clientTenantHintsAllowed,
   resolveTenantSlug,
   TENANT_COOKIE,
   TENANT_SLUG_HEADER,
@@ -26,7 +27,12 @@ export async function middleware(request: NextRequest) {
   const response = await updateSession(request);
 
   // 4. En dev, ?t= persiste a cookie para no tener que repetirlo en cada URL.
-  if (tParam && tParam === slug && tParam !== cookieTenant) {
+  //    En producción NO se escribe: `resolveTenantSlug` ya la ignora ahí, así
+  //    que sería una cookie de 30 días que no hace nada — y la política de
+  //    cookies la declara "estrictamente necesaria" por su función. Una cookie
+  //    inerte no califica para esa exención, así que no ponerla es tanto lo
+  //    correcto técnicamente como lo que sostiene lo que decimos en /legal/cookies.
+  if (clientTenantHintsAllowed() && tParam && tParam === slug && tParam !== cookieTenant) {
     response.cookies.set(TENANT_COOKIE, slug, {
       path: "/",
       maxAge: 60 * 60 * 24 * 30,

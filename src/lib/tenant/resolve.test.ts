@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { MODULE_KEYS } from "@/app/admin/dominio/modules";
 import {
   resolveTenantSlug,
   isActiveCommunitySlug,
+  clientTenantHintsAllowed,
   RESERVED_BRAND_SLUGS,
   DEFAULT_TENANT_SLUG,
 } from "./resolve";
@@ -56,8 +57,11 @@ describe("resolveTenantSlug — comunidades nuevas resuelven sin tocar código",
     // Este es el caso que scripts/new-tenant.mjs necesita: un slug que recién
     // nace no está en ningún mapa hardcodeado, y aun así pasa — getTenant()
     // decide después, contra la DB, si existe de verdad.
+    //
+    // OJO: esto vale en DEV/PREVIEW (4º argumento en true). En producción `?t=`
+    // se ignora — ver el describe "producción ignora las pistas del cliente".
     expect(
-      resolveTenantSlug("comunidad-latina.vercel.app", "colombianos-miami", null),
+      resolveTenantSlug("comunidad-latina.vercel.app", "colombianos-miami", null, true),
     ).toBe("colombianos-miami");
   });
 
@@ -75,6 +79,90 @@ describe("resolveTenantSlug — comunidades nuevas resuelven sin tocar código",
     expect(isActiveCommunitySlug("colombianos-miami")).toBe(true);
     expect(isActiveCommunitySlug(null)).toBe(false);
     expect(isActiveCommunitySlug(undefined)).toBe(false);
+  });
+});
+
+/**
+ * FUGA CROSS-TENANT DEL ASISTENTE (auditoría 2026-08-02, ronda 2).
+ *
+ * Reproducida en vivo antes de arreglarla, contra la base real y simulando
+ * producción: parado en el host de producción (`comunidad-latina-sigma.vercel.app`,
+ * el ÚNICO dominio del proyecto en Vercel y que NO está en `DOMAIN_TENANTS`),
+ * agregar `?t=<otra-comunidad>` movía el tenant del request, y el Asistente
+ * —que atiende ANÓNIMOS y busca en el RAG con `service_role`, o sea con la RLS
+ * salteada— devolvía los `rag_chunks` de esa otra comunidad. La RPC
+ * `match_chunks_fts` es SECURITY DEFINER y filtra SOLO por su argumento
+ * `p_tenant_id`: no hay nada debajo que lo frene, y un anónimo no tiene JWT.
+ *
+ * El contrato que fijan estos tests: en producción el HOST es la única fuente
+ * del tenant. Si estos tests se ponen en rojo porque "hay que poder pasar ?t=
+ * en prod", la respuesta correcta es sumar el dominio de esa comunidad a
+ * `DOMAIN_TENANTS`, no aflojar esto.
+ */
+describe("producción ignora las pistas del cliente (?t= y cookie cl-tenant)", () => {
+  // `vi.stubEnv` y no asignación directa: @types/node declara NODE_ENV como
+  // read-only, y stubEnv además restaura solo con unstubAllEnvs.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("EL ATAQUE: ?t=<otra-comunidad> desde el host de producción NO mueve el tenant", () => {
+    expect(
+      resolveTenantSlug("comunidad-latina-sigma.vercel.app", "barrio-vecino", null, false),
+    ).toBe(DEFAULT_TENANT_SLUG);
+  });
+
+  it("la cookie cl-tenant tampoco mueve el tenant en producción", () => {
+    expect(
+      resolveTenantSlug("comunidad-latina-sigma.vercel.app", null, "barrio-vecino", false),
+    ).toBe(DEFAULT_TENANT_SLUG);
+  });
+
+  it("en producción el dominio mapeado sigue mandando, y ?t= no lo puede pisar", () => {
+    expect(resolveTenantSlug("dominicanos.com", null, null, false)).toBe("dominicanos");
+    // Aunque el atacante insista con el param, gana el host:
+    expect(resolveTenantSlug("dominicanos.com", "barrio-vecino", null, false)).toBe(
+      "dominicanos",
+    );
+  });
+
+  it("en dev/preview la MISMA petición sí resuelve — el ayudante de desarrollo sigue vivo", () => {
+    expect(
+      resolveTenantSlug("comunidad-latina-sigma.vercel.app", "barrio-vecino", null, true),
+    ).toBe("barrio-vecino");
+  });
+
+  it("clientTenantHintsAllowed: false en producción (por NODE_ENV o por VERCEL_ENV)", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", undefined);
+    expect(clientTenantHintsAllowed()).toBe(false);
+
+    // Vercel corre el build con NODE_ENV=production igual, pero el discriminante
+    // entre preview y producción es VERCEL_ENV: un preview NO es producción.
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("VERCEL_ENV", "production");
+    expect(clientTenantHintsAllowed()).toBe(false);
+  });
+
+  it("clientTenantHintsAllowed: true en dev y en previews de Vercel", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VERCEL_ENV", undefined);
+    expect(clientTenantHintsAllowed()).toBe(true);
+
+    vi.stubEnv("VERCEL_ENV", "preview");
+    expect(clientTenantHintsAllowed()).toBe(true);
+  });
+
+  it("por defecto (sin 4º argumento) la decisión la toma el entorno", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    expect(resolveTenantSlug("comunidad-latina-sigma.vercel.app", "barrio-vecino")).toBe(
+      DEFAULT_TENANT_SLUG,
+    );
+
+    vi.stubEnv("VERCEL_ENV", "preview");
+    expect(resolveTenantSlug("comunidad-latina-sigma.vercel.app", "barrio-vecino")).toBe(
+      "barrio-vecino",
+    );
   });
 });
 

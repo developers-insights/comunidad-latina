@@ -117,6 +117,11 @@ export const COPY = {
     legal: [
       { label: "Términos de uso", href: "/legal/terminos" },
       { label: "Privacidad", href: "/legal/privacidad" },
+      // La política de cookies tiene que ser alcanzable desde CUALQUIER página,
+      // y el pie es la única pieza que está en todas. Estaba sólo en el pie de
+      // los documentos legales, o sea que había que encontrarla para poder
+      // encontrarla.
+      { label: "Política de cookies", href: "/legal/cookies" },
       { label: "Normas de la comunidad", href: "/legal/normas" },
       { label: "Reglas del Marketplace", href: "/legal/marketplace" },
     ],

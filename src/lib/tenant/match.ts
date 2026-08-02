@@ -14,9 +14,14 @@
  *   (cross-tenant a propósito, por SEO: policy `listings_select`), pero TODA
  *   escritura RLS-scoped rebota contra el `with check`.
  *
- * En producción los dominios son registrables distintos, así que las cookies
- * de sesión nunca cruzan y la divergencia es inalcanzable. Esto protege dev,
- * previews de Vercel y cualquier tenancy futura basada en path.
+ * En producción la divergencia es inalcanzable porque `resolveTenantSlug`
+ * IGNORA `?t=` y la cookie `cl-tenant` fuera de dev/preview: el tenant sale
+ * del Host y el visitante no lo puede mover. (Antes esto se justificaba con
+ * "los dominios son registrables distintos, así que las cookies no cruzan" —
+ * era falso: el deploy real vive en un único host `.vercel.app`, y por ahí se
+ * colaba contenido de otra comunidad. El aislamiento lo da el resolver, no el
+ * registrable.) Esta comprobación sigue protegiendo dev, previews de Vercel y
+ * cualquier tenancy futura basada en path.
  */
 
 export type TenantMatchStatus =

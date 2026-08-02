@@ -40,7 +40,10 @@ const COPY = {
     business: "Negocios",
     professional: "Profesionales",
     event: "Eventos",
-    job: "Trabajos",
+    // "Empleos" y no "Trabajos": las otras cuatro filas usan el nombre del
+    // módulo tal como se ve en el menú, y "Trabajos" es como se llama la
+    // sección de gigs de Creadores — otro módulo.
+    job: "Empleos",
   } as Record<string, string>,
   reviewTitle: "Avisos esperando revisión",
   reviewEmptyTitle: "Nada en revisión",

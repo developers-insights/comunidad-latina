@@ -12,6 +12,13 @@
  *     premium sin tapar lo que la persona vino a ver — un muro que hay que
  *     esquivar para leer tus propias estadísticas es una forma cara de que
  *     alguien se vaya.
+ *  3. UNA sola palabra para la cosa que se vende: "aviso". El archivo alternaba
+ *     "aviso" y "publicación" —a veces en la misma tarjeta: el título prometía
+ *     "no perdés tu aviso" y el cuerpo hablaba de "tu publicación"—, y quien
+ *     está por pagar no tiene por qué deducir que son lo mismo. "aviso" es lo
+ *     que ya dicen el resto del módulo ("Publicar aviso", "Promocionar tu
+ *     aviso") y la ruta que lo muestra (/negocios/presencia/aviso/[id]).
+ *     "publicación" queda reservada para los posts del feed, que son otra cosa.
  */
 
 import type { ExternalCtaKind } from "./tier";
@@ -21,12 +28,12 @@ export const COPY = {
   // Gratis vs premium
   // -------------------------------------------------------------------------
   tier: {
-    freeLabel: "Publicación gratuita",
-    premiumLabel: "Publicación premium",
+    freeLabel: "Aviso gratuito",
+    premiumLabel: "Aviso premium",
     freeBadge: "Gratis",
     premiumBadge: "Premium",
 
-    comparisonTitle: "Qué incluye cada publicación",
+    comparisonTitle: "Qué incluye cada aviso",
     freeColumnTitle: "Gratis",
     premiumColumnTitle: "Premium",
 
@@ -66,7 +73,7 @@ export const COPY = {
   },
 
   // -------------------------------------------------------------------------
-  // Suscripción premium de UNA publicación — la pantalla que COBRA
+  // Suscripción premium de UN aviso — la pantalla que COBRA
   //
   // Tres reglas propias, porque acá se saca la tarjeta:
   //  1. Decir el precio y la frecuencia ANTES del botón, no después.
@@ -78,7 +85,7 @@ export const COPY = {
   //     y que alguien vea su teléfono borrado sería la peor sorpresa posible.
   // -------------------------------------------------------------------------
   premium: {
-    pageTitle: "Publicación premium",
+    pageTitle: "Aviso premium",
     /** Debajo del título. Una frase, sin adjetivos de más. */
     pageIntro: "Más fotos, videos más largos y botones para que te contacten.",
 
@@ -90,7 +97,7 @@ export const COPY = {
     /** La promesa que saca el miedo de encima, antes del botón. */
     safetyTitle: "Si cancelás, no perdés tu aviso",
     safetyBody:
-      "Tu publicación sigue online como gratuita: hasta 5 fotos, un video de 59 segundos y contacto por el chat. Guardamos los botones que cargaste y vuelven apenas te suscribas de nuevo.",
+      "Tu aviso sigue publicado como gratuito: hasta 5 fotos, un video de 59 segundos y contacto por el chat. Guardamos los botones que cargaste y vuelven apenas te suscribas de nuevo.",
 
     activateCta: "Pasar a premium",
     reactivateCta: "Volver a premium",
@@ -98,7 +105,7 @@ export const COPY = {
     manageHint: "Ahí cambiás la tarjeta, reanudás o cancelás, cuando quieras.",
 
     // Estados que ve el dueño. Título corto, cuerpo que dice qué hacer.
-    statusActiveTitle: "Tu publicación es premium",
+    statusActiveTitle: "Tu aviso es premium",
     statusActiveBody: (fecha: string) => `Se renueva sola el ${fecha}.`,
     statusActiveBodyNoDate: "Ya está activa. La próxima renovación es automática.",
 
@@ -116,7 +123,7 @@ export const COPY = {
 
     // Éxito y cancelación del Checkout (vuelta desde Stripe).
     checkoutSuccess:
-      "¡Listo! Recibimos tu pago. Tu publicación pasa a premium en unos minutos.",
+      "¡Listo! Recibimos tu pago. Tu aviso pasa a premium en unos minutos.",
     checkoutCanceled: "No se hizo ningún cargo. Cuando quieras, acá te esperamos.",
 
     /** Feature para <ProximamentePremium> cuando no hay Stripe configurado. */
@@ -124,9 +131,9 @@ export const COPY = {
 
     errors: {
       alreadyActive:
-        "Esta publicación ya es premium. Para cambiar tu tarjeta o cancelar, entrá a “Ver mis pagos”.",
+        "Este aviso ya es premium. Para cambiar tu tarjeta o cancelar, entrá a “Ver mis pagos”.",
       noPortal:
-        "Todavía no tenés pagos hechos para esta publicación, así que no hay nada que gestionar.",
+        "Todavía no tenés pagos hechos para este aviso, así que no hay nada que gestionar.",
       notPublished:
         "Tu aviso tiene que estar publicado. Apenas lo apruebe el equipo de tu comunidad, volvé por acá.",
     },
@@ -175,7 +182,7 @@ export const COPY = {
     formIntro:
       "Elegí cómo querés que te contacten. Lo que dejes vacío no se muestra.",
     formPremiumOnly:
-      "Los botones de acción son parte de la publicación premium. En tu publicación gratuita el contacto es el chat de Comunidad Latina.",
+      "Los botones de acción son parte del aviso premium. En tu aviso gratuito el contacto es el chat de Comunidad Latina.",
     formSaved: "Listo, guardamos tus botones",
     formSavedBody: "Ya aparecen en tu aviso.",
     fieldLabel: {
@@ -213,9 +220,9 @@ export const COPY = {
     notPublished:
       "El aviso tiene que estar publicado. Apenas lo apruebe el equipo de tu comunidad, volvé por acá.",
     premiumOnly:
-      "Los botones de acción vienen con la publicación premium. Mientras tanto, tu aviso se contacta por el chat.",
+      "Los botones de acción vienen con el aviso premium. Mientras tanto, tu aviso se contacta por el chat.",
     tooManyPhotos: (max: number) =>
-      `Tu publicación admite hasta ${max} ${max === 1 ? "foto" : "fotos"}. Sacá alguna o pasate a premium para subir hasta 20.`,
+      `Tu aviso admite hasta ${max} ${max === 1 ? "foto" : "fotos"}. Sacá alguna o pasate a premium para subir hasta 20.`,
     videoTooLong: (max: number) =>
       max >= 60
         ? `Tu video puede durar hasta ${Math.round(max / 60)} minutos. Recortalo un poco y volvé a intentar.`
@@ -239,8 +246,11 @@ export const COPY = {
     subtitle: "Hay dos formas, y hacen cosas distintas.",
     boostTab: "Impulso",
     campaignTab: "Campaña",
+    // "Patrocinado" y no "Destacado" (contrato 2026-07-30 §4): "Destacado" es el
+    // nivel máximo del Trust Score, que se gana por reputación. Una sola palabra
+    // para las dos cosas hacía que un espacio pago se leyera como mérito.
     boostSummary:
-      "Un pago único: tu aviso sube al principio de los resultados con la etiqueta \"Destacado\".",
+      "Un pago único: tu aviso sube al principio de los resultados con la etiqueta \"Patrocinado\".",
     campaignSummary:
       "Armás una campaña con objetivo, presupuesto y a quién querés llegar. Queda guardada y la podés revisar cuando quieras.",
     chooseTitle: "¿Qué querés hacer?",
@@ -326,8 +336,8 @@ export const COPY = {
   // -------------------------------------------------------------------------
   stats: {
     title: "Estadísticas de tu aviso",
-    subtitleFree: "Esto es lo que pasó con tu publicación.",
-    subtitlePremium: "Todo lo que pasó con tu publicación, botón por botón.",
+    subtitleFree: "Esto es lo que pasó con tu aviso.",
+    subtitlePremium: "Todo lo que pasó con tu aviso, botón por botón.",
     since: (days: number) => `Últimos ${days} días`,
 
     views: "Vistas",
@@ -377,7 +387,7 @@ export const COPY = {
     boostHint: "Que aparezca primero en los resultados.",
     campaignCta: "Crear una campaña",
     campaignHint: "Con objetivo, presupuesto y duración.",
-    viewCta: "Ver mi publicación",
+    viewCta: "Ver mi aviso",
     laterNote: "También podés hacerlo más adelante desde tu aviso.",
   },
 } as const;

@@ -33,14 +33,17 @@ import { formatDate } from "@/lib/utils";
 const COPY = {
   errorGenerico:
     "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo en un momento.",
+  // "publicación", nunca "post": es la palabra que usa el resto de la app (el
+  // feed, y el `postLabel` de la página que abre esta acción). Además "post" es
+  // inglés, y quien lee estos mensajes es una familia latina, no un dev.
   errorNoEsTuyo:
-    "Solo quien publicó el post puede promocionarlo. Si es tuyo, entrá con tu cuenta.",
+    "Esta publicación no es tuya, así que no podés promocionarla. Si es tuya, entrá con tu cuenta.",
   errorNoPublicado:
-    "El post tiene que estar publicado para promocionarlo. Apenas se apruebe, volvé por acá.",
+    "Tu publicación todavía no está en línea. Apenas el equipo de tu comunidad la apruebe, volvé por acá.",
   errorYaActiva:
-    "Este post ya tiene una campaña activa. Cuando termine, podés lanzar otra desde acá.",
+    "Esta publicación ya tiene una campaña activa. Cuando termine, podés lanzar otra desde acá.",
   errorMuchosIntentos:
-    "Empezaste varias campañas seguidas. Esperá un rato y probá de nuevo — tu post sigue publicado igual.",
+    "Empezaste varias campañas seguidas. Esperá un rato y probá de nuevo — tu publicación sigue en su lugar.",
   errorWhatsapp:
     "Revisá el WhatsApp: escribí el número completo con código de país, por ejemplo +1 305 555 0134.",
 } as const;

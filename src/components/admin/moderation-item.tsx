@@ -3,11 +3,11 @@
 import { useActionState } from "react";
 import { Check, X } from "@phosphor-icons/react/dist/ssr";
 import { Badge } from "@/components/ui";
-import { DEFAULT_LOCALE } from "@/lib/utils";
 import {
   resolveModerationItem,
   type ResolveModerationState,
 } from "@/app/admin/moderacion/actions";
+import { formatAdminDateTime } from "./format";
 import { ScoreBar } from "./score-bar";
 import { PendingButton } from "./pending-button";
 
@@ -52,28 +52,6 @@ const KIND_VARIANT: Record<string, "info" | "brand" | "warning" | "neutral"> = {
   profile: "neutral",
 };
 
-/**
- * La comunidad es de Queens, NY: fijamos la zona horaria para que el server
- * (UTC en Vercel) y el navegador del usuario formateen SIEMPRE igual. Sin esto,
- * `Intl.DateTimeFormat` usa la zona horaria del runtime — distinta entre server
- * y cliente — y produce un mismatch de hidratación (React #418).
- */
-const ADMIN_TIME_ZONE = "America/New_York";
-
-function formatWhen(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat(DEFAULT_LOCALE, {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: ADMIN_TIME_ZONE,
-    }).format(new Date(iso));
-  } catch {
-    return "";
-  }
-}
-
 const initialState: ResolveModerationState = { status: "idle" };
 
 export function ModerationItem({ item }: { item: ModerationItemData }) {
@@ -87,7 +65,7 @@ export function ModerationItem({ item }: { item: ModerationItemData }) {
         </Badge>
         <Badge variant={item.tier >= 3 ? "danger" : "neutral"}>{COPY.tier(item.tier)}</Badge>
         <span className="ml-auto text-xs tabular-nums text-foreground-muted">
-          {formatWhen(item.createdAt)}
+          {formatAdminDateTime(item.createdAt)}
         </span>
       </header>
 

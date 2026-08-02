@@ -1,4 +1,23 @@
+import { hasConsent, subscribe as subscribeConsent } from "@/lib/consent";
 import { sanitizeSearchQuery } from "./helpers";
+
+/**
+ * CONSENTIMIENTO — categoría "preferencias" (verificada en
+ * `src/lib/consent/categories.ts`, donde esta misma clave está declarada como
+ * `cl:buscar:historial:…`).
+ *
+ * Su política es `activa-por-defecto`, o sea que arranca en `true` para quien
+ * nunca vio un banner: gatear acá NO le apaga el historial a nadie de un día
+ * para el otro. Lo que hace es que el interruptor de /ajustes/privacidad pase a
+ * mandar de verdad — antes se podía apagar y el historial se seguía escribiendo
+ * igual, que es peor que no tener el control.
+ */
+const CATEGORY = "preferencias" as const;
+
+/** ¿Podemos recordar búsquedas en este teléfono, ahora mismo? */
+function canRemember(): boolean {
+  return hasConsent(CATEGORY);
+}
 
 /**
  * Historial de búsquedas — últimas 8, en `localStorage`.
@@ -93,6 +112,12 @@ export function removeFromHistory(history: readonly string[], value: string): st
 
 export function readHistory(storageKey: string): string[] {
   if (typeof window === "undefined") return [];
+  // Sin permiso NO se lee, aunque haya algo guardado de antes. Apagar el
+  // interruptor no borra el cajón —eso lo hace el botón explícito de "borrar lo
+  // de este teléfono", y borrar datos de callado al tocar un toggle sería otra
+  // sorpresa—, pero sí deja de mostrarlo. Un historial que sigue apareciendo
+  // después de decir que no es exactamente el defecto que esto viene a cerrar.
+  if (!canRemember()) return [];
   try {
     return parseHistory(window.localStorage.getItem(storageKey));
   } catch {
@@ -102,6 +127,7 @@ export function readHistory(storageKey: string): string[] {
 
 function persist(storageKey: string, history: readonly string[]): void {
   if (typeof window === "undefined") return;
+  if (!canRemember()) return;
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(history.slice(0, HISTORY_LIMIT)));
   } catch {
@@ -151,9 +177,22 @@ export function subscribeHistory(listener: () => void): () => void {
     }
   };
   window.addEventListener("storage", onStorage);
+
+  /**
+   * El interruptor de privacidad tiene que verse EN EL MOMENTO. El snapshot se
+   * cachea por `storageKey`, así que sin esto apagar "preferencias" no limpiaba
+   * la lista hasta recargar la página — y un control de privacidad que hay que
+   * recargar para que se note no se distingue de uno que no funciona.
+   */
+  const unsubscribeConsent = subscribeConsent(() => {
+    cacheKey = null;
+    for (const notify of listeners) notify();
+  });
+
   return () => {
     listeners.delete(listener);
     window.removeEventListener("storage", onStorage);
+    unsubscribeConsent();
   };
 }
 
@@ -179,6 +218,10 @@ function commitHistory(storageKey: string, next: readonly string[]): void {
 }
 
 export function addToHistory(storageKey: string, term: string): void {
+  // Con el interruptor apagado no se recuerda NADA: ni en el disco ni en
+  // memoria. Guardarlo "sólo por esta sesión" seguiría siendo recordar algo que
+  // la persona pidió que no recordáramos.
+  if (!canRemember()) return;
   commitHistory(storageKey, pushHistory(historySnapshot(storageKey), term));
 }
 

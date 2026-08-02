@@ -48,6 +48,11 @@ export const COPY = {
       "Detectamos algo que puede lastimar a otra persona, así que lo mandamos a revisión. Probá decirlo de otra forma.",
     errorTitle: "No se pudo enviar",
     errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
+    // `rate-limited` NO es una falla nuestra y "probá de nuevo" sería un mal
+    // consejo: hasta que baje el contador va a fallar igual. Nombramos la causa
+    // y damos la única acción que sirve.
+    rateLimitedTitle: "Esperá un momento",
+    rateLimitedBody: "Mandaste varios mensajes seguidos. Probá de nuevo en un rato.",
   },
   report: {
     sheetTitle: "Reportar un problema",
@@ -67,6 +72,10 @@ export const COPY = {
     successBody: "Gracias por avisar. El equipo lo revisa a la brevedad.",
     errorTitle: "No se pudo enviar el reporte",
     errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
+    // Mismo criterio que en el composer: el tope de reportes es diario y de la
+    // persona, no de la pantalla. Reintentar no lo destraba.
+    rateLimitedTitle: "Esperá un momento",
+    rateLimitedBody: "Enviaste varios reportes seguidos. Probá de nuevo en un rato.",
   },
   errors: {
     generic: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",

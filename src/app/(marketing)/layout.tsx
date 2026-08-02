@@ -21,8 +21,14 @@ export default async function MarketingLayout({ children }: { children: ReactNod
       </a>
       <header className="sticky top-0 z-40 border-b border-border-subtle bg-surface/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-4">
+          {/*
+            A /guias y no a "/": `/` redirige a `/entrar`, así que el logo
+            mandaba al login a quien llegó a una guía desde Google. Esa persona
+            todavía no tiene cuenta ni la está buscando — está leyendo. /guias
+            es el índice público de esta superficie, o sea su verdadero inicio.
+          */}
           <Link
-            href="/"
+            href="/guias"
             className="rounded-full font-display text-lg font-bold tracking-tight text-brand-ink"
           >
             {tenant.name}

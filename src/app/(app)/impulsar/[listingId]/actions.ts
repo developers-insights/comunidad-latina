@@ -139,7 +139,10 @@ export async function crearBoostCheckout(
             currency: "usd",
             unit_amount: boostMontoCentavos(boost),
             product_data: {
-              name: `Impulso ${boost.nombre} — aviso destacado en tu zona`,
+              // Solo texto: es lo que la persona lee en el Checkout de Stripe y
+              // en su comprobante. La `metadata.package` de abajo SÍ es un valor
+              // que el webhook correlaciona — por eso queda intacta.
+              name: `Impulso ${boost.nombre} — aviso patrocinado en tu zona`,
               metadata: { package: boost.id },
             },
           },

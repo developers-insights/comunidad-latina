@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { safeNextPath } from "@/components/auth/next-param";
+import { safeInternalPath } from "@/lib/url/safe-href";
 import { getTenant } from "@/lib/tenant/resolve";
 import { sendEmailInBackground } from "@/lib/email";
 import { welcomeEmail } from "@/lib/email/templates";
@@ -20,7 +20,9 @@ import { welcomeEmail } from "@/lib/email/templates";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const tokenHash = url.searchParams.get("token_hash");
-  const next = safeNextPath(url.searchParams.get("next"), "/bienvenida");
+  // Ver safe-href.ts: el filtro por string dejaba salir del sitio con un tab
+  // embebido, y acá el redirect ocurre con la sesión RECIÉN abierta.
+  const next = safeInternalPath(url.searchParams.get("next"), "/bienvenida");
 
   if (tokenHash) {
     const supabase = await createClient();

@@ -52,6 +52,10 @@ export const COPY = {
       title: "Cuentas bloqueadas",
       description: "Quiénes no pueden verte ni escribirte.",
     },
+    privacy_data: {
+      title: "Privacidad y datos",
+      description: "Qué guardamos, cómo borrarlo y cómo pedir una copia.",
+    },
     theme: {
       title: "Tema",
       description: "Claro u oscuro, como te resulte más cómodo.",

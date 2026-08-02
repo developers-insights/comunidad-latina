@@ -3,7 +3,9 @@ import Link from "next/link";
 import { getTenant } from "@/lib/tenant/resolve";
 import { JsonLd } from "@/components/marketing/json-ld";
 import {
+  LEGAL_GOVERNING_STATE,
   LegalCallout,
+  LegalContact,
   LegalHeader,
   LegalSection,
   LegalToc,
@@ -200,8 +202,12 @@ export default async function TerminosPage() {
       <LegalSection id="contacto" title="Ley aplicable y contacto">
         <p className={legalProse.p}>
           Estos Términos se rigen por las leyes de Estados Unidos
-          [y del estado de — completar]. Para cualquier consulta legal sobre estos Términos,
-          escribinos a [correo de contacto legal — completar].
+          {LEGAL_GOVERNING_STATE ? ` y del estado de ${LEGAL_GOVERNING_STATE}` : ""}. Para
+          cualquier consulta legal sobre estos Términos, escribinos por <LegalContact />.
+        </p>
+        <p className={legalProse.p}>
+          Si vivís fuera de Estados Unidos, esto no te quita los derechos que te dé la ley de tu
+          país: donde tu ley local sea más protectora que estos Términos, manda tu ley local.
         </p>
       </LegalSection>
     </article>

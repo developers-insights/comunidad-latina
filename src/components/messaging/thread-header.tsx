@@ -111,6 +111,12 @@ export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps
           description: COPY.report.successBody,
           variant: "success",
         });
+      } else if (result.code === "rate-limited") {
+        toast({
+          title: COPY.report.rateLimitedTitle,
+          description: COPY.report.rateLimitedBody,
+          variant: "warning",
+        });
       } else {
         toast({
           title: COPY.report.errorTitle,

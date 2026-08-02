@@ -86,8 +86,14 @@ export const PLANES_PRESENCIA: Record<PlanId, PlanPresencia> = {
     recomendado: false,
   },
   destacado: {
+    // El `id` es un valor PERSISTIDO (subscriptions.plan en la DB, metadata del
+    // Checkout, PLAN_IDS del webhook): NO se toca nunca. Lo que cambió es solo
+    // el `nombre` visible. Se llamaba "Destacado", la misma palabra con la que
+    // el Trust Score nombra su nivel máximo ganado por reputación — un plan de
+    // USD 29/mes no puede compartir nombre con un mérito. "Prioridad" dice
+    // exactamente lo que se compra (prioridad en el directorio) y nada más.
     id: "destacado",
-    nombre: "Destacado",
+    nombre: "Prioridad",
     descripcion: "Que te encuentren primero cuando te buscan.",
     precioMensualUsd: 29,
     precioAnualUsd: 290,
@@ -105,7 +111,7 @@ export const PLANES_PRESENCIA: Record<PlanId, PlanPresencia> = {
     precioMensualUsd: 49,
     precioAnualUsd: 490,
     features: [
-      "Todo lo del plan Destacado",
+      "Todo lo del plan Prioridad",
       "Máxima prioridad en el directorio de negocios",
       "Estadísticas completas: visitas, contactos y evolución mensual",
     ],
@@ -157,8 +163,11 @@ export interface BoostPackage {
  * Principios §7 (no negociables):
  * - El alcance es la ZONA del listing (su `area_label`/`geo_zone`, ya
  *   aproximados por §5.4) — no se recolecta geo nueva para esto.
- * - El resultado se marca SIEMPRE como "Destacado" con aclaración de que es
- *   publicidad (FTC §255: paid placement se divulga, sin excepciones).
+ * - El resultado se marca SIEMPRE como "Patrocinado" con aclaración de que es
+ *   publicidad (FTC §255: paid placement se divulga, sin excepciones). La
+ *   palabra es "Patrocinado" y no "Destacado" (contrato 2026-07-30 §4): la
+ *   segunda es el nivel máximo del Trust Score, que se GANA por reputación, y
+ *   usarla para lo pago hacía leer la publicidad como mérito.
  * - Pagar visibilidad JAMÁS altera Trust Score ni verificación.
  */
 export const BOOST_PACKAGES: Record<BoostId, BoostPackage> = {
@@ -175,7 +184,7 @@ export const BOOST_PACKAGES: Record<BoostId, BoostPackage> = {
     dias: 14,
     precioUsd: 25,
     nombre: "14 días",
-    descripcion: "Dos semanas destacado — el equilibrio que más eligen.",
+    descripcion: "Dos semanas al frente de tu zona — el equilibrio que más eligen.",
     recomendado: true,
   },
   "30d": {
@@ -202,7 +211,8 @@ export function boostMontoCentavos(boost: BoostPackage): number {
 // Espeja el Boost geolocalizado (mismos montos y duraciones), pero el sujeto
 // es un POST del feed, no un listing. Regla de alcance: lo orgánico de una
 // entidad llega SOLO a sus seguidores; una promoción activa lo lleva al feed
-// de TODA la comunidad, marcado "Publicidad" (FTC §255, igual que "Destacado").
+// de TODA la comunidad, marcado "Patrocinado" (FTC §255, la misma palabra que
+// lleva el impulso de un aviso: una sola divulgación para todo lo pago).
 // Sin Stripe configurado, la campaña corre en MODO DEMO (services.ts).
 
 export type PostPromoId = "7d" | "14d" | "30d";

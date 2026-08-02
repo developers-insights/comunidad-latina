@@ -8,8 +8,51 @@ import { BezelCard } from "@/components/ui";
  * tocar ese archivo (fuera de la propiedad de este agente).
  */
 
-/** Fecha humana única para los 3 documentos legales de este lanzamiento. */
-export const LEGAL_LAST_UPDATED = "julio de 2026";
+/** Fecha humana única para los documentos legales de este lanzamiento. */
+export const LEGAL_LAST_UPDATED = "agosto de 2026";
+
+/**
+ * ⚠️ PENDIENTE DE NEGOCIO — NO ES UNA DECISIÓN TÉCNICA.
+ *
+ * El RGPD (art. 13.1) y la CCPA exigen un canal REAL para ejercer derechos. Sin
+ * esto, el derecho de acceso, rectificación y oposición no se puede ejercer:
+ * la persona lee que puede escribirnos y no hay a dónde.
+ *
+ * Estaba escrito a mano en tres lugares distintos como
+ * "[correo de contacto legal — completar]". Se centraliza acá para que
+ * completarlo sea UNA línea y no una búsqueda por el repo — y para que quede a
+ * la vista de quien revise, en vez de escondido a mitad de una página.
+ *
+ * `null` = todavía sin definir. `<LegalContact />` lo dice explícitamente en
+ * vez de mostrar un corchete que parece un error de programación.
+ */
+export const LEGAL_CONTACT_EMAIL: string | null = null;
+
+/** Estado cuya ley rige los Términos. Mismo caso: falta decisión del cliente. */
+export const LEGAL_GOVERNING_STATE: string | null = null;
+
+/**
+ * Cómo contactarnos. Mientras no haya correo, se dice la verdad —"escribinos
+ * por la app"— en vez de mostrar un texto de relleno. Un canal que existe hoy
+ * es mejor que uno que va a existir.
+ */
+export function LegalContact() {
+  if (LEGAL_CONTACT_EMAIL) {
+    return (
+      <a
+        href={`mailto:${LEGAL_CONTACT_EMAIL}`}
+        className="font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 hover:decoration-brand-ink"
+      >
+        {LEGAL_CONTACT_EMAIL}
+      </a>
+    );
+  }
+  return (
+    <span>
+      el formulario de reportes de la app, eligiendo <em>«Otro tema»</em>
+    </span>
+  );
+}
 
 export const legalProse = {
   p: "leading-relaxed text-foreground-secondary",

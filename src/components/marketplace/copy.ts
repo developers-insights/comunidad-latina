@@ -102,7 +102,7 @@ export const COPY = {
     offVisitorCta: "Ver otras tiendas y productos",
     offOwnerTitle: "Tu tienda no se está mostrando",
     offOwnerMessage:
-      "Tus productos siguen guardados: nada se borró. Reactivá tu membresía y tu vidriera vuelve tal como estaba.",
+      "Tus productos siguen guardados: nada se borró. Reactivá tu membresía y tu tienda vuelve tal como estaba.",
     offOwnerCta: "Reactivar mi tienda",
   },
 
@@ -111,7 +111,7 @@ export const COPY = {
   // -------------------------------------------------------------------------
   membership: {
     title: "Membresía de tienda",
-    subtitle: "Tu vidriera en el Marketplace de la comunidad, por un precio fijo al mes.",
+    subtitle: "Tu tienda en el Marketplace de la comunidad, por un precio fijo al mes.",
     priceSuffix: "por mes, por tienda",
     includesTitle: "Qué incluye",
     excludesTitle: "Lo que no cobramos",

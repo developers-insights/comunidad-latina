@@ -42,6 +42,11 @@ export function TrustScoreBadge({
       aria-label={`Trust Score ${score} de 100, nivel ${config.label}. Tocá para ver cómo se calcula.`}
       className={cn(
         "group select-none transition-transform duration-(--duration-instant) ease-(--ease-spring) active:scale-[0.97]",
+        // La variante `card` lleva `shadow-xs`, que pisa el anillo global de
+        // globals.css (`:where(…)`, especificidad cero) y la dejaba sin
+        // indicador de foco. El anillo va en la base para que las dos variantes
+        // se comporten igual.
+        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
         isCard
           ? "flex w-full items-center justify-between gap-3 overflow-hidden rounded-lg border border-border-subtle bg-surface px-4 py-3 shadow-xs"
           : "touch-hitbox inline-flex items-center gap-1.5 rounded-sm",

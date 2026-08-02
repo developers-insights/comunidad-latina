@@ -18,8 +18,15 @@ export default async function AuthLayout({ children }: { children: ReactNode }) 
     <div className="relative flex min-h-dvh flex-col items-center px-4">
       <ThemeToggle className="absolute right-2 top-[max(0.5rem,env(safe-area-inset-top))] z-10" />
       <div className="flex w-full max-w-sm flex-1 flex-col justify-center py-12">
+        {/*
+          A /guias y no a "/": `/` redirige a `/entrar`, así que desde la propia
+          pantalla de entrar el logo devolvía a la pantalla de entrar — un clic
+          que no hace nada, y que en un teléfono lento parece que la app se
+          colgó. Las guías son lo único sustancioso que se puede leer sin
+          cuenta, así que son la salida honesta desde acá.
+        */}
         <Link
-          href="/"
+          href="/guias"
           className="mb-8 self-center rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           aria-label={tenant.name}
         >

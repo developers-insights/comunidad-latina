@@ -145,11 +145,20 @@ export default async function AjustesPage() {
             )}
           </Group>
 
-          <Group title={COPY.groups.privacy}>
-            <Row href="/perfil/bloqueados" icon={Prohibit} {...COPY.rows.blocked} />
-          </Group>
         </>
       )}
+
+      {/* Privacidad va FUERA del bloque con sesión: los controles de lo que la
+          app guardó en este navegador, y la política de cookies, sirven igual
+          sin cuenta — y quien todavía no se registró es justo quien más razones
+          tiene para querer mirarlos antes de dar su correo. "Cuentas
+          bloqueadas" sí necesita sesión, así que es lo único condicionado. */}
+      <Group title={COPY.groups.privacy}>
+        <Row href="/ajustes/privacidad" icon={ShieldCheck} {...COPY.rows.privacy_data} />
+        {shell.user && (
+          <Row href="/perfil/bloqueados" icon={Prohibit} {...COPY.rows.blocked} />
+        )}
+      </Group>
 
       {/* Preferencias y legales sirven con o sin sesión. La de notificaciones
           NO: sin cuenta no hay bandeja que configurar, así que sólo aparece con

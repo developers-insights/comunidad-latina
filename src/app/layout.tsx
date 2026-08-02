@@ -6,6 +6,7 @@ import { brandThemeToStyle } from "@/lib/tenant/brand-pipeline";
 import { ToastProvider } from "@/components/ui/toast";
 import { MotionProvider } from "@/components/motion/motion-provider";
 import { SplashScreen } from "@/components/experience/splash-screen";
+import { ConsentBanner } from "@/components/legal/consent-banner";
 import { DARK_THEME_COLOR, ThemeColorSync, ThemeScript } from "@/components/theme";
 import "./globals.css";
 
@@ -104,6 +105,13 @@ export default async function RootLayout({
           {/* Splash de entrada premium: overlay que se desvanece encima del
               contenido ya hidratado (no bloquea el LCP), una vez por sesión. */}
           <SplashScreen brandHex={tenant.brandHex} name={tenant.name} />
+          {/* Consentimiento: hoy NO pinta nada. Se monta igual, en la raíz,
+              porque tiene que cubrir tanto las rutas públicas como la app, y
+              porque el día que entre un trazador de analítica al registro de
+              `@/lib/consent` el banner tiene que aparecer solo — sin depender
+              de que alguien se acuerde de montarlo. Ver el comentario largo en
+              `consent-banner.tsx` para por qué hoy no se muestra. */}
+          <ConsentBanner />
           <ThemeColorSync brandHex={tenant.brandHex} />
         </MotionProvider>
       </body>

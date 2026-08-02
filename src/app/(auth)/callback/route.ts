@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { safeNextPath } from "@/components/auth/next-param";
+import { safeInternalPath } from "@/lib/url/safe-href";
 
 /**
  * Callback del magic link (PKCE, patrón @supabase/ssr):
@@ -10,7 +10,10 @@ import { safeNextPath } from "@/components/auth/next-param";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = safeNextPath(url.searchParams.get("next"));
+  // `safeInternalPath` y no `safeNextPath`: el segundo clasificaba por string y
+  // dejaba pasar `/<TAB>/evil.com`, que `new URL()` normaliza a `//evil.com` y
+  // manda el Location FUERA del sitio. Ver el comentario largo en safe-href.ts.
+  const next = safeInternalPath(url.searchParams.get("next"), "/feed");
 
   if (code) {
     const supabase = await createClient();

@@ -46,6 +46,12 @@ export function CreatorsNav({ active }: { active: CreatorsSection }) {
             className={cn(
               "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-sm font-semibold",
               "transition-colors duration-(--duration-fast)",
+              // Anillo propio: la pestaña activa lleva `shadow-xs`, y esa utility
+              // escribe `box-shadow` — le gana al anillo global de globals.css,
+              // que vive en un `:where(…)` de especificidad cero. Sin esto la
+              // pestaña seleccionada, que es justo donde cae el foco al entrar,
+              // queda sin indicador (WCAG 2.4.7).
+              "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
               isActive
                 ? "bg-surface text-foreground shadow-xs"
                 : "text-foreground-secondary hover:text-foreground",

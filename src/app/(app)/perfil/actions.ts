@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { DAY_MS, limit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ActionResult } from "@/components/auth/action-result";
@@ -16,6 +17,8 @@ const COPY = {
   genericError:
     "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo en un momento.",
   reportDetailsLong: "El detalle es muy largo — el máximo son 500 caracteres.",
+  tooManyReports:
+    "Hiciste varios reportes hoy y ya los estamos mirando. Volvé mañana si necesitás sumar otro — así el equipo llega a revisarlos bien.",
   businessAccountBlocked:
     "Tenés un negocio activo en la plataforma — antes de eliminar tu cuenta hay que dar de baja esa suscripción. Escribinos a hola@comunidadlatina.com y te ayudamos a resolverlo.",
 } as const;
@@ -268,6 +271,14 @@ export async function reportProfileAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, formError: COPY.noSession };
+
+  // Mismo presupuesto y MISMA key que /escudo/reportar y /reportes: 10 por día
+  // y por persona, compartidos entre todas las superficies de reporte. Un tope
+  // por pantalla sería un tope multiplicado por la cantidad de pantallas, y
+  // quien quiere brigadear a alguien no elige el botón, elige la víctima.
+  if (!limit(`reporte:${user.id}`, 10, DAY_MS).ok) {
+    return { ok: false, formError: COPY.tooManyReports };
+  }
 
   const { error } = await supabase.rpc("report_scam", {
     p_target_kind: "profile",

@@ -351,3 +351,46 @@ describe("PostComposer — el cuerpo no se pierde si cambiás de idea", () => {
     expect(sheetBody().value).toBe("Che, esto lo escribí como texto.");
   });
 });
+
+describe("PostComposer — el tope de publicaciones se explica como lo que es", () => {
+  /** Escribe un texto y toca Publicar; devuelve cuando la action ya corrió. */
+  async function publicarTexto() {
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.text.title));
+    fireEvent.change(await screen.findByLabelText(COPY.composer.compose.textPlaceholder), {
+      target: { value: "Otra publicación más, van muchas seguidas." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+  }
+
+  it("no le echa la culpa al sistema cuando el tope fue del volumen de la persona", async () => {
+    // El copy genérico ("algo no cargó bien de nuestro lado — no es tu culpa")
+    // sería FALSO acá: no falló nada. Y peor, no dice qué hacer.
+    createPostAction.mockResolvedValue({ ok: false, code: "rate-limited" });
+    await publicarTexto();
+
+    expect(await screen.findByText(COPY.composer.rateLimitedTitle)).toBeTruthy();
+    expect(screen.getByText(COPY.composer.rateLimitedBody)).toBeTruthy();
+    expect(screen.queryByText(COPY.composer.errorTitle)).toBeNull();
+    expect(screen.queryByText(COPY.composer.errorBody)).toBeNull();
+  });
+
+  it("le saca el miedo a que la cuenta esté en problemas", async () => {
+    // Para nuestro público, que la app frene algo se lee como "me bloquearon".
+    createPostAction.mockResolvedValue({ ok: false, code: "rate-limited" });
+    await publicarTexto();
+
+    expect(await screen.findByText(/tu cuenta está bien/i)).toBeTruthy();
+  });
+
+  it("un error REAL del servidor sí muestra el copy genérico", async () => {
+    // Contraste: el mensaje de arriba no puede haberse comido el caso honesto.
+    createPostAction.mockResolvedValue({ ok: false, code: "error" });
+    await publicarTexto();
+
+    expect(await screen.findByText(COPY.composer.errorTitle)).toBeTruthy();
+    expect(screen.queryByText(COPY.composer.rateLimitedTitle)).toBeNull();
+  });
+});

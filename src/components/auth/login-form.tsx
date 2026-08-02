@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { EnvelopeSimple, Eye, EyeSlash, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/client";
 import { resendConfirmationAction } from "@/app/(auth)/actions";
-import { safeNextPath } from "@/components/auth/next-param";
+import { safeInternalPath } from "@/lib/url/safe-href";
 import { FormError } from "@/components/auth/form-error";
 import {
   Button,
@@ -62,7 +62,13 @@ export function LoginForm({
   urlError?: string;
 }) {
   const router = useRouter();
-  const destination = safeNextPath(next);
+  // `safeInternalPath` y no la vieja `safeNextPath`: aquella clasificaba por
+  // string y dejaba pasar `/\t/evil.com`, que `new URL()` convierte en
+  // `//evil.com` (open redirect). Ésta resuelve contra un origen centinela y
+  // mira el ORIGEN resultante, que es la única fuente de verdad. `destination`
+  // termina en un `router.replace` y dentro del `emailRedirectTo` del magic
+  // link, así que tiene que ser interno sí o sí.
+  const destination = safeInternalPath(next, "/feed");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -211,7 +217,10 @@ export function LoginForm({
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? COPY.hidePassword : COPY.showPassword}
                   aria-pressed={showPassword}
-                  className="absolute right-1.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-foreground-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+                  // 32px visuales, 44px tocables: el ::after agranda el área sin
+                  // agrandar el ícono, que si crece se come el campo. Es un
+                  // control de alto tráfico y errarle mete el dedo en el input.
+                  className="absolute right-1.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-foreground-muted transition-colors after:absolute after:left-1/2 after:top-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
                 >
                   {showPassword ? (
                     <EyeSlash size={18} aria-hidden="true" />

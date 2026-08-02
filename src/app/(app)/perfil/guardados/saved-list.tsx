@@ -25,7 +25,7 @@ import type { SavedItem, SavedListingTile } from "./saved-tile";
 const COPY = {
   emptyTitle: "Todavía no guardaste nada",
   emptyMessage:
-    "Tocá el marcador en una publicación o un aviso para guardarlo acá y encontrarlo fácil cuando lo necesites.",
+    "Tocá Guardar en una publicación o un aviso para tenerlo acá y encontrarlo fácil cuando lo necesites.",
   loadMore: "Ver más",
   openPost: "Abrir la publicación",
   question: "Pregunta a la comunidad",

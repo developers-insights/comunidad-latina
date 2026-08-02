@@ -70,6 +70,13 @@ export const COPY = {
     photoErrorBody: "Probá de nuevo en un ratito con otra foto.",
     errorTitle: "No se pudo publicar",
     errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
+    // Tope de publicaciones por hora (`createPostAction`). NO puede caer en el
+    // copy de arriba: "no es tu culpa / algo falló de nuestro lado" es falso
+    // acá —no falló nada— y además no le dice a la persona qué hacer. Lo que
+    // más importa es sacarle el miedo: para nuestro público, que la app frene
+    // algo se lee como "me bloquearon la cuenta".
+    rateLimitedTitle: "Publicaste muchas cosas seguidas",
+    rateLimitedBody: "Esperá un rato y seguí publicando. Tu cuenta está bien.",
     tooShort: "Contanos un poquito más — al menos un par de palabras.",
     // Modo pregunta (menú crear-post, rediseño 2026-07-26): chip removible que
     // marca el kind='question' — el post visible en la card usa su PROPIO
@@ -236,11 +243,13 @@ export const COPY = {
       errorTitle: "No pudimos registrar tu voto",
       errorBody: "Puede ser un ratito de conexión floja — no es tu culpa. Probá de nuevo.",
     },
-    // FTC honesto: la campaña paga se divulga (igual que "Destacado" de boosts).
+    // FTC honesto: la campaña paga se divulga, igual que el impulso de un aviso.
     // "Patrocinado" y no "Publicidad" desde el contrato del 2026-07-30 (§4): es
     // la palabra que la spec pide para el contenido pago, y tiene que ser LA
-    // MISMA en el feed, en el reel y en los resultados de búsqueda — si cada
-    // superficie usa la suya, la divulgación deja de leerse como una sola cosa.
+    // MISMA en el feed, en el reel, en los resultados de búsqueda y en los
+    // avisos impulsados — si cada superficie usa la suya, la divulgación deja de
+    // leerse como una sola cosa. Tampoco puede ser "Destacado": esa palabra es
+    // el nivel máximo del Trust Score, que se gana por reputación y no se paga.
     adChip: "Patrocinado",
     /**
      * VISTA PREVIA EN LA TARJETA (spec nº3/nº6): el feed reproduce hasta 59 s;

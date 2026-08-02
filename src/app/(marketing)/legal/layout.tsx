@@ -8,6 +8,28 @@ import { COPY } from "@/components/marketing/copy";
  * documentos al pie, para que ninguno se sienta un callejón sin salida.
  * El título, la fecha y el contenido los pone cada page.tsx.
  */
+/**
+ * La lista del pie vive en `components/marketing/copy.ts`, que es de otro
+ * frente. Para no dejar la Política de Cookies inalcanzable desde los otros
+ * documentos, se agrega acá y se DEDUPLICA por href: el día que alguien la
+ * sume a `COPY.footer.legal` —que es donde corresponde, para que salga también
+ * en el pie del sitio— esto no la muestra dos veces.
+ */
+interface LegalLink {
+  label: string;
+  href: string;
+}
+
+const COOKIES_LINK: LegalLink = { label: "Política de cookies", href: "/legal/cookies" };
+
+function legalLinks(): LegalLink[] {
+  // `COPY.footer.legal` es `as const`, así que sus items son literales; el
+  // spread a `LegalLink[]` los ensancha para poder sumar el nuestro.
+  const items: LegalLink[] = COPY.footer.legal.map(({ label, href }) => ({ label, href }));
+  if (!items.some((item) => item.href === COOKIES_LINK.href)) items.push(COOKIES_LINK);
+  return items;
+}
+
 export default function LegalLayout({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12 sm:py-16">
@@ -25,7 +47,7 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
             "Privacidad" era el peor, 18px de alto, en el pie de un documento
             que se lee en el teléfono. */}
         <ul className="mt-2 flex flex-wrap gap-x-6">
-          {COPY.footer.legal.map((item) => (
+          {legalLinks().map((item) => (
             <li key={item.href}>
               <Link
                 href={item.href}

@@ -28,10 +28,10 @@ import {
   buttonVariants,
   useToast,
 } from "@/components/ui";
-import { cn } from "@/lib/utils";
+import { cn, DEFAULT_CURRENCY } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Celebration, useCelebration } from "@/components/motion";
-import { COPY } from "@/components/listings";
+import { COPY, formatListingPrice } from "@/components/listings";
 import { MONETIZATION_COPY, FREE_MAX_PHOTOS } from "@/lib/monetization";
 import { listingViewHref } from "@/lib/monetization/href";
 import { createListingDraft, finalizeListing } from "./actions";
@@ -179,6 +179,28 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
   // el cliente eligió "Negocio" y le apareció "Por mes" como si fuera una
   // propiedad (feedback 2026-07-21).
   const hasPriceFrequency = isProperty || kind === "job";
+
+  /**
+   * La frecuencia que se va a guardar. Una sola fuente para el borrador y para
+   * la vista previa: si se calculaban por separado, la vista previa podía decir
+   * una cosa y el aviso publicado otra.
+   */
+  const savedPeriod: "month" | "week" | "day" | "one_time" = hasPriceFrequency
+    ? (period as "month" | "week" | "day" | "one_time")
+    : "one_time";
+
+  /**
+   * Se arma con el MISMO helper que pinta la tarjeta ya publicada
+   * (`formatListingPrice`), no a mano. Cuando se armaba acá con
+   * `"$" + toLocaleString` pasaban dos cosas: un precio con un decimal salía
+   * "$950.9" en vez de "$950.90", y el sufijo estaba clavado en "/mes", así que
+   * quien alquilaba "por semana" o "por día" veía sólo "$200" — el número suelto
+   * se lee como el total, no como lo que se paga por semana.
+   */
+  const priceAmount = price ? Number(price) : Number.NaN;
+  const pricePreview = Number.isFinite(priceAmount)
+    ? formatListingPrice(priceAmount, DEFAULT_CURRENCY, savedPeriod)
+    : null;
 
   function validateStep(current: number): string | null {
     if (current === 0 && !kind) return C.errors.kindRequired;
@@ -697,9 +719,12 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
                 />
                 <button
                   type="button"
-                  aria-label={C.steps.photos.removeLabel}
+                  aria-label={`${C.steps.photos.removeLabel} ${index + 1}`}
                   onClick={() => removePhoto(index)}
-                  className="absolute right-1 top-1 flex size-8 items-center justify-center rounded-full bg-media-scrim text-on-media focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+                  // Área táctil a 44px con ::after y no agrandando el botón: acá
+                  // taparía la miniatura. `touch-hitbox` no sirve porque fuerza
+                  // `position: relative` y este botón es `absolute`.
+                  className="absolute right-1 top-1 flex size-8 items-center justify-center rounded-full bg-media-scrim text-on-media after:absolute after:left-1/2 after:top-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
                 >
                   <X size={14} aria-hidden="true" />
                 </button>
@@ -781,11 +806,8 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
                   {M.preview.photoCount(photos.length)}
                 </p>
               )}
-              {price && (
-                <p className="numeric text-2xl font-bold text-brand">
-                  {`$${Number(price).toLocaleString("es-US")}`}
-                  {hasPriceFrequency && period === "month" ? "/mes" : ""}
-                </p>
+              {pricePreview && (
+                <p className="numeric text-2xl font-bold text-brand">{pricePreview}</p>
               )}
               {areaLabel.trim() && (
                 <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">

@@ -27,17 +27,20 @@ const M = MONETIZATION_COPY;
 /** Copy local del módulo BOOST — no toca src/lib/i18n (compartido). */
 const COPY = {
   volver: "Volver al aviso",
-  // FTC §255: transparencia total — el impulso es publicidad y se dice.
+  // FTC §255: transparencia total — el impulso es publicidad y se dice. La
+  // etiqueta es "Patrocinado" (contrato 2026-07-30 §4) y NO "Destacado": esa
+  // palabra es el nivel máximo del Trust Score, que se gana por reputación.
+  // Compartirla hacía que un espacio pago se leyera como un mérito ganado.
   comoFunciona:
-    "El impulso es publicidad: tu aviso sube al principio de los resultados de tu zona con la etiqueta \"Destacado\", para que la gente siempre sepa que es un espacio pago. Sin trucos.",
+    "El impulso es publicidad: tu aviso sube al principio de los resultados de tu zona con la etiqueta \"Patrocinado\", para que la gente siempre sepa que es un espacio pago. Sin trucos.",
   notaHonesta:
     "Impulsar no cambia tu Trust Score, no altera los resultados del verificador del centro de seguridad y no garantiza conducta: solo mejora la visibilidad de tu aviso mientras dura. Es un pago único, sin renovación automática.",
   exito:
-    "¡Listo! Recibimos tu pago. Tu aviso queda destacado en unos minutos — te avisamos con una notificación.",
+    "¡Listo! Recibimos tu pago. En unos minutos tu aviso empieza a aparecer primero en tu zona — te avisamos con una notificación.",
   cancelado: "No se hizo ningún cargo. Tus opciones de impulso te esperan acá.",
   yaActivoTitulo: "Este aviso ya está impulsado",
   yaActivoCuerpo: (fecha: string) =>
-    `Aparece primero en tu zona, marcado como "Destacado", hasta el ${fecha}. Cuando termine, podés impulsarlo de nuevo desde acá.`,
+    `Aparece primero en tu zona, marcado como "Patrocinado", hasta el ${fecha}. Cuando termine, podés impulsarlo de nuevo desde acá.`,
   noPublicadoTitulo: "Todavía no se puede promocionar",
   noPublicadoCuerpo:
     "El aviso tiene que estar publicado para promocionarlo. Apenas lo apruebe el equipo de tu comunidad, volvé por acá.",

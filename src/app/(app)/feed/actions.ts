@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { isVisionConfigured } from "@/lib/config/services";
@@ -148,7 +148,10 @@ export type CreatePostResult =
       /** true si se publicó COMO una entidad (ofrecer promoción). */
       entity: boolean;
     }
-  | { ok: false; code: "invalid" | "unauthenticated" | "photo" | "error" }
+  | {
+      ok: false;
+      code: "invalid" | "unauthenticated" | "photo" | "error" | "rate-limited";
+    }
   /**
    * El video no cumple la política de duración (`src/lib/media/video-policy.ts`).
    * `reason` viaja para que el composer muestre el mensaje EXACTO de la spec en
@@ -313,6 +316,14 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // ya lo habría rechazado al subir; esto es la misma regla al guardar).
   if (videoPaths.some((path) => !isOwnVideoPath(path, tenant.id, user.id))) {
     return { ok: false, code: "photo" };
+  }
+
+  // Techo de publicación, ANTES de la moderación y de tocar Storage. Es el
+  // único camino del feed que gasta plata ajena por request: `moderateText`
+  // llama a OpenAI y cada foto sube bytes al bucket. 30 por hora no lo nota
+  // nadie escribiendo de verdad, y le pone piso a un script.
+  if (!limit(`post:${user.id}`, 30, HOUR_MS).ok) {
+    return { ok: false, code: "rate-limited" };
   }
 
   // ---- Moderación de texto ANTES de publicar (§8) -------------------------
@@ -532,76 +543,5 @@ export async function createCommentAction(input: {
   }
 
   revalidatePath(`/feed/${postId}`);
-  return { ok: true };
-}
-
-// ---------------------------------------------------------------------------
-// Reportar un post como estafa → RPC report_scam contra el PERFIL del autor
-// (la RPC solo acepta listing | profile | message — no existe kind 'post';
-// el post reportado viaja en p_details para el equipo de moderación).
-// ---------------------------------------------------------------------------
-
-// Espejo de REPORT_REASONS en src/components/escudo/report-reasons.ts
-// (un archivo "use server" solo puede exportar funciones async).
-const REPORT_REASON_VALUES = [
-  "Pidió dinero por adelantado",
-  "La dirección no existe",
-  "Se hace pasar por otra persona",
-  "El precio es irreal",
-  "Otro",
-] as const;
-
-const reportSchema = z.object({
-  postId: z.uuid(),
-  reason: z.enum(REPORT_REASON_VALUES),
-  details: z
-    .string()
-    .transform((value) => value.trim())
-    .pipe(z.string().max(500))
-    .optional(),
-});
-
-export type ReportPostResult =
-  | { ok: true }
-  | { ok: false; code: "invalid" | "unauthenticated" | "error" };
-
-export async function reportPostAction(input: {
-  postId: string;
-  reason: string;
-  details?: string;
-}): Promise<ReportPostResult> {
-  const parsed = reportSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, code: GENERIC_INVALID };
-  const { postId, reason, details } = parsed.data;
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, code: "unauthenticated" };
-
-  // El post visible via RLS nos da el autor real — no confiamos en el cliente.
-  const { data: post, error: postError } = await supabase
-    .from("posts")
-    .select("id, author_id")
-    .eq("id", postId)
-    .maybeSingle();
-  if (postError || !post?.author_id) return { ok: false, code: "error" };
-
-  const detailsWithContext = [`Post reportado: /feed/${postId}`, details]
-    .filter(Boolean)
-    .join(" — ");
-
-  const { error } = await supabase.rpc("report_scam", {
-    p_target_kind: "profile",
-    p_target_id: post.author_id,
-    p_reason: reason,
-    p_details: detailsWithContext,
-  });
-  if (error) {
-    console.warn("[feed] report_scam falló", { code: error.code });
-    return { ok: false, code: "error" };
-  }
-
   return { ok: true };
 }

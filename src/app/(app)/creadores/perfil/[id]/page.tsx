@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CheckCircle, MapPin, Star, UserCircle } from "@phosphor-icons/react/dist/ssr";
+import { CheckCircle, MapPin, Star } from "@phosphor-icons/react/dist/ssr";
 import { z } from "zod";
-import { Avatar, EmptyState, buttonVariants } from "@/components/ui";
+import { Avatar, buttonVariants } from "@/components/ui";
 import { IdentityBadge } from "@/components/auth/identity-badge";
 import { FollowButton } from "@/components/social/follow-button";
 import {
@@ -47,23 +47,16 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
   ]);
 
   if (!creator) {
-    if (!user) {
-      return (
-        <EmptyState
-          icon={<UserCircle />}
-          title={COPY.profile.notFoundTitle}
-          message={COPY.profile.notFoundBody}
-          action={
-            <Link
-              href={`/entrar?next=${encodeURIComponent(`/creadores/perfil/${id}`)}`}
-              className={buttonVariants({ variant: "primary", size: "md" })}
-            >
-              {COPY.profile.needLoginCta}
-            </Link>
-          }
-        />
-      );
-    }
+    /**
+     * RLS (verificado contra la base): `creator_profiles_select` es
+     * `TO anon, authenticated USING (true)`, igual que `profiles_select`. O sea
+     * que el perfil de creador se ve SIN sesión, y que no aparezca nunca fue
+     * por falta de login: es que esa persona no tiene perfil de creador.
+     *
+     * Acá había una rama que, para el visitante anónimo, ofrecía "entrá a tu
+     * cuenta" — código muerto por diseño y, cuando llegaba a verse, un desvío
+     * inútil: loguearse no iba a hacer aparecer algo que no existe.
+     */
     notFound();
   }
 
@@ -72,7 +65,9 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
   const level = toTrustLevel(trust?.level);
   const signals = buildTrustSignals(trust?.signals ?? {}, profile?.identity_verified ?? false);
 
-  // Nombres de quienes reseñaron (perfiles requieren sesión — anon degrada).
+  // Nombres de quienes reseñaron. Sólo las 3 columnas que se pintan: el nombre
+  // y la foto de quien reseñó son públicos, el resto de `profiles` no tiene por
+  // qué viajar a una página abierta (misma regla que en /perfil/[id]).
   const reviewerIds = [...new Set((reviews ?? []).map((r) => r.reviewer_id))];
   const { data: reviewers } = reviewerIds.length
     ? await supabase.from("profiles").select("id, display_name, avatar_url").in("id", reviewerIds)

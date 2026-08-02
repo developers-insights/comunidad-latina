@@ -19,8 +19,47 @@ const EMAIL_RE = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/gi;
 // que un número real filtrado.
 const PHONE_RE = /\+?\d[\d\s().-]{6,}\d/g;
 
+/**
+ * Parámetros de query que son CREDENCIALES, no datos.
+ *
+ * Antes acá solo se tapaban emails y teléfonos, y eso dejaba pasar lo peor
+ * (auditoría 2026-08-02): las dos rutas de auth llevan el secreto EN LA URL —
+ * `/confirmar?token_hash=…` (un solo uso, abre sesión sin contraseña) y
+ * `/callback?code=…` (el code PKCE). Sentry pone la URL completa en
+ * `request.url` y en los breadcrumbs de navegación/fetch, y con
+ * `tracesSampleRate: 0.1` una de cada diez confirmaciones de cuenta viajaba
+ * entera a un tercero. Un token que se puede leer en un dashboard de errores
+ * es un token entregado.
+ *
+ * Se tapa el VALOR y se conserva el nombre del parámetro: la URL sigue
+ * sirviendo para depurar ("falló /confirmar con token_hash presente") sin ser
+ * utilizable por quien la lee.
+ */
+const SENSITIVE_PARAMS = [
+  "token_hash",
+  "token",
+  "code",
+  "access_token",
+  "refresh_token",
+  "id_token",
+  "provider_token",
+  "provider_refresh_token",
+  "apikey",
+  "api_key",
+  "secret",
+  "password",
+] as const;
+
+const SENSITIVE_PARAM_RE = new RegExp(
+  `\\b(${SENSITIVE_PARAMS.join("|")})=[^&\\s"'#]+`,
+  "gi",
+);
+
 function scrubText(value: string): string {
-  return value.replace(EMAIL_RE, "[email]").replace(PHONE_RE, "[tel]");
+  return value
+    .replace(SENSITIVE_PARAM_RE, (_match, name: string) => `${name}=[redactado]`)
+    .replace(EMAIL_RE, "[email]")
+    .replace(PHONE_RE, "[tel]");
 }
 
 function scrubUnknown<T>(value: T): T {

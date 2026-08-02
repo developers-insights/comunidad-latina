@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChatCircle, UserCircle } from "@phosphor-icons/react/dist/ssr";
+import { ChatCircle } from "@phosphor-icons/react/dist/ssr";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
-import { EmptyState, buttonVariants } from "@/components/ui";
+import { buttonVariants } from "@/components/ui";
 import { TrustScoreCard } from "@/components/trust";
 import { decodeCursor } from "@/components/listings";
 import { MessageCta } from "@/components/auth/message-cta";
@@ -25,10 +25,6 @@ export const metadata = { title: "Perfil" };
 
 const COPY = {
   sendMessage: "Enviar mensaje",
-  loginTitle: "Este perfil es de la comunidad",
-  loginMessage:
-    "Entrá a tu cuenta para ver los perfiles y el Trust Score de tus vecinos.",
-  loginCta: "Entrar",
   statPosts: "Publicaciones",
   statFollowers: "Seguidores",
   statFollowing: "Siguiendo",
@@ -63,37 +59,63 @@ export default async function PerfilPublicoPage({
   // Tu propio perfil vive en /perfil (con edición y cuenta).
   if (user?.id === id) redirect("/perfil");
 
+  /**
+   * LISTA EXPLÍCITA DE COLUMNAS — no `select("*")`.
+   *
+   * Esta página es PÚBLICA (ver la nota de RLS abajo), así que todo lo que
+   * entre en este select viaja al navegador de cualquiera. `profiles` tiene 20
+   * columnas y la página usa 8; el `*` que había acá arrastraba además `role`
+   * (quién es admin), `account_status` y `suspended_until` (si la persona está
+   * sancionada, y hasta cuándo), `phone_verified`, `email_verified`,
+   * `terms_accepted_at` y `age_confirmed_at`. Nada de eso se muestra: se
+   * mandaba de puro `*`.
+   *
+   * Agregar una columna acá es publicarla. Que la lista esté escrita obliga a
+   * pensarlo.
+   *
+   * Lo mismo vale para `trust_scores`, y ahí el `*` además ROMPÍA: la migración
+   * 0059 le revocó a `anon` la columna `factors` (el desglose del motor
+   * anti-fraude, que se puede estudiar para gamear el score), y con un permiso
+   * de columna faltante Postgres tira 42501 sobre la tabla entera. Como el error
+   * no se chequea, `trust` quedaba `null` y la página mostraba score 0 y el
+   * nivel más bajo a CUALQUIER visitante sin sesión — un valor falso, no un
+   * badge ausente. En un producto anti-estafa esa es la señal que más importa.
+   */
   const [{ data: profile }, { data: trust }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", id).maybeSingle(),
-    supabase.from("trust_scores").select("*").eq("profile_id", id).maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("id, display_name, avatar_url, country_origin, area_label, bio, identity_verified, created_at")
+      .eq("id", id)
+      .maybeSingle(),
+    supabase
+      .from("trust_scores")
+      .select("score, level, signals")
+      .eq("profile_id", id)
+      .maybeSingle(),
   ]);
 
   if (!profile) {
-    // RLS: sin sesión no se ven perfiles — guiamos, nunca un error seco.
-    if (!user) {
-      return (
-        <EmptyState
-          icon={<UserCircle />}
-          title={COPY.loginTitle}
-          message={COPY.loginMessage}
-          action={
-            <Link
-              href={`/entrar?next=${encodeURIComponent(`/perfil/${id}`)}`}
-              className={buttonVariants({ variant: "primary", size: "md" })}
-            >
-              {COPY.loginCta}
-            </Link>
-          }
-        />
-      );
-    }
+    /**
+     * RLS (verificado contra la base): la policy es
+     * `profiles_select ... TO anon, authenticated USING (true)` — o sea que los
+     * perfiles SÍ se ven sin sesión. El comentario que había acá afirmaba lo
+     * contrario y por eso existía una rama que ofrecía "entrá a tu cuenta"
+     * cuando no había perfil: era código muerto, y encima mentía. Sin sesión no
+     * es la razón por la que un perfil no aparece — la razón es que no existe.
+     *
+     * Si algún día la policy pasara a exigir sesión, esta rama vuelve; hoy
+     * mandar a alguien a loguearse para ver algo que no existe es hacerle
+     * perder el viaje.
+     */
     notFound();
   }
 
   const cursor = decodeCursor(firstValue(sp.fotos) || undefined);
   const tab = parseProfileTab(firstValue(sp.t) || undefined);
 
-  // Con perfil (⇒ hay sesión por RLS): conversación previa + los contadores.
+  // Conversación previa + contadores. Ver perfil NO implica tener sesión (la
+  // policy es pública): para quien mira sin cuenta, `conversations` no devuelve
+  // nada por su propia RLS y el CTA cae solo en el de "entrar para escribir".
   const [{ data: existingConversation }, counts] = await Promise.all([
     supabase
       .from("conversations")

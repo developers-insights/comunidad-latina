@@ -52,6 +52,12 @@ export function Composer({ conversationId }: { conversationId: string }) {
           description: COPY.composer.flaggedBody,
           variant: "warning",
         });
+      } else if (result.code === "rate-limited") {
+        toast({
+          title: COPY.composer.rateLimitedTitle,
+          description: COPY.composer.rateLimitedBody,
+          variant: "warning",
+        });
       } else {
         toast({
           title: COPY.composer.errorTitle,

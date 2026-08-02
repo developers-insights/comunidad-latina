@@ -111,8 +111,28 @@ const envPattern = supabaseRemotePattern();
  *    Pexels.
  * Ningún otro recurso (Stripe, OpenAI, Sentry, fuentes) violó la política.
  *
- * - script-src: 'unsafe-inline' es requisito de Next.js (scripts inline de
- *   hidratación); js.stripe.com para Stripe.js (Checkout/Identity).
+ * - script-src: 'unsafe-inline' + js.stripe.com para Stripe.js (Checkout/Identity).
+ *
+ *   ¿SE PUEDE SACAR EL 'unsafe-inline' CON UN NONCE? (evaluado 2026-08-02
+ *   contra `node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md`,
+ *   no de memoria.) Sí, Next 16 lo soporta: el proxy genera el nonce, lo mete
+ *   en el header y en `x-nonce`, y Next se lo pega solo a sus scripts de
+ *   hidratación. O sea que el problema NO es la hidratación.
+ *
+ *   El problema es el precio: "you **must use dynamic rendering** to add
+ *   nonces" — un nonce se emite por request, y una página estática se generó
+ *   cuando no había request. Poner nonce obliga a mover la CSP de acá al proxy
+ *   y a empujar a dinámico TODA la superficie que hoy es estática, incluidas
+ *   la landing y las guías `/guias/[slug]`, que existen para posicionar. Se
+ *   cambiaría una mejora defensiva acotada (con `frame-ancestors 'none'`,
+ *   `base-uri 'self'` y `form-action 'self'` ya puestos, el 'unsafe-inline' de
+ *   script-src sólo importa si además existe una inyección de HTML) por perder
+ *   el render estático del SEO. NO se hace hoy; queda anotado acá para que la
+ *   próxima persona no tenga que volver a averiguarlo.
+ *
+ *   `style-src 'unsafe-inline'` no se puede sacar ni con nonce: el branding del
+ *   tenant se pinta como ATRIBUTO `style` en <html> (ARQUITECTURA §3) y los
+ *   nonces no aplican a atributos, sólo a elementos <style>.
  * - connect-src: Supabase (REST + Realtime wss), OpenAI (moderación/RAG),
  *   Sentry ingest, Stripe API.
  * - img-src: blob:/data: (previews de upload) + Storage de Supabase + Pexels (demo).
@@ -147,6 +167,18 @@ const securityHeaders = [
   // Nada de la app necesita ser embebida en iframes de terceros (anti-clickjacking).
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // COOP: corta la relación con quien nos abrió, así una pestaña de otro origen
+  // no conserva una referencia a nuestra ventana (XS-Leaks, tabnabbing inverso).
+  // `same-origin-allow-popups` y no `same-origin` a propósito: la variante dura
+  // también rompería un popup que ABRIÉRAMOS nosotros, y los flujos de Stripe
+  // (Checkout, Identity, 3DS) pueden usar uno. Esta variante nos aísla del
+  // opener sin tocar lo que abrimos.
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
+  // CORP a nivel global NO se pone: aplica a cómo TERCEROS embeben nuestros
+  // recursos, y `same-origin` bloquearía que WhatsApp/Facebook levanten la
+  // og:image al compartir un aviso — que es un canal de distribución real de
+  // este producto, no un detalle. Si algún día hay un recurso que de verdad no
+  // debe embeberse, va con CORP en su propia ruta, no acá.
   // Permissions mínimas: no usamos cámara/mic/geo desde el navegador.
   {
     key: "Permissions-Policy",

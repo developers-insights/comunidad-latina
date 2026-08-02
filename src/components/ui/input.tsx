@@ -14,7 +14,14 @@ export const fieldControlClass = cn(
   "aria-invalid:border-danger",
 );
 
-export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
+/**
+ * `ComponentProps<"input">` y no `InputHTMLAttributes`: la segunda NO incluye
+ * `ref`, así que cualquier consumidor que necesitara medir o enfocar el campo
+ * tenía que colgar el ref de un contenedor y buscar el input desde ahí (lo hace
+ * hoy `components/onboarding/zone-input.tsx`). En React 19 `ref` es una prop
+ * más de los componentes de función, no hace falta `forwardRef`.
+ */
+export type InputProps = React.ComponentProps<"input">;
 
 export function Input({ className, ...props }: InputProps) {
   return (

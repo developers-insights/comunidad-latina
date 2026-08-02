@@ -7,6 +7,7 @@ import {
   Prohibit,
 } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Badge, Button, Dialog, Textarea, useToast } from "@/components/ui";
+import { formatAdminDate } from "./format";
 import type { StaffRole } from "@/app/admin/guard";
 import {
   banUserAction,
@@ -63,18 +64,10 @@ const COPY = {
   reactivatedOk: "Listo — la cuenta volvió a estar activa.",
 } as const;
 
-function formatDate(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat("es", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    }).format(new Date(iso));
-  } catch {
-    return "";
-  }
-}
-
+// La fecha de fin de suspensión se ancla a la zona de la comunidad (ver
+// `./format`). Antes se formateaba con la zona del runtime: el server (UTC en
+// Vercel) escribía un día y el navegador de quien modera desde Nueva York
+// escribía el anterior.
 export function MemberRow({
   member,
   staffRole,
@@ -159,7 +152,9 @@ export function MemberRow({
             {member.accountStatus === "active" && <Badge variant="success">{COPY.active}</Badge>}
             {member.accountStatus === "suspended" && (
               <Badge variant="warning">
-                {COPY.suspendedUntil(member.suspendedUntil ? formatDate(member.suspendedUntil) : "")}
+                {COPY.suspendedUntil(
+                  member.suspendedUntil ? formatAdminDate(member.suspendedUntil) : "",
+                )}
               </Badge>
             )}
             {member.accountStatus === "banned" && <Badge variant="danger">{COPY.banned}</Badge>}

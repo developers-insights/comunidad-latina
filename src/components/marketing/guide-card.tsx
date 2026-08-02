@@ -37,6 +37,10 @@ export function GuideCard({
         "group flex h-full flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-sm",
         "transition-[box-shadow,transform] duration-(--duration-base) ease-(--ease-out-premium)",
         "hover:-translate-y-0.5 hover:shadow-md motion-reduce:hover:translate-y-0",
+        // `shadow-sm`/`hover:shadow-md` pisan el anillo global de globals.css
+        // (`:where(…)`, especificidad cero): sin esto la grilla entera de guías
+        // se recorre con teclado a ciegas.
+        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
         className,
       )}
     >

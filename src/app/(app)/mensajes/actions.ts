@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { DAY_MS, HOUR_MS, limit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications/notify";
@@ -19,7 +20,10 @@ import { isOpenAIConfigured } from "@/lib/config/services";
 
 export type ActionResult =
   | { ok: true }
-  | { ok: false; code: "flagged" | "invalid" | "unauthenticated" | "error" };
+  | {
+      ok: false;
+      code: "flagged" | "invalid" | "unauthenticated" | "error" | "rate-limited";
+    };
 
 const uuidSchema = z.string().uuid();
 
@@ -98,6 +102,14 @@ export async function sendMessageAction(input: {
     .maybeSingle();
   if (convError || !conversation) return { ok: false, code: "error" };
   if (conversation.status !== "accepted") return { ok: false, code: "invalid" };
+
+  // Techo por persona ANTES de la moderación paga y del correo de aviso. Cada
+  // mensaje llama a OpenAI y le dispara un mail a la otra persona: sin tope,
+  // una cuenta sola es a la vez una factura y un canal de hostigamiento con
+  // nuestro remitente. 120 por hora es holgado para una conversación real.
+  if (!limit(`mensaje:${user.id}`, 120, HOUR_MS).ok) {
+    return { ok: false, code: "rate-limited" };
+  }
 
   const moderation = await moderateText(body);
   if (moderation?.flagged) {
@@ -264,6 +276,12 @@ export async function reportScamAction(input: {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, code: "unauthenticated" };
+
+  // MISMA key `reporte:` que el resto de las superficies: el presupuesto de 10
+  // por día es de la persona, no de la pantalla desde la que reporta.
+  if (!limit(`reporte:${user.id}`, 10, DAY_MS).ok) {
+    return { ok: false, code: "rate-limited" };
+  }
 
   const { error } = await supabase.rpc("report_scam", {
     p_target_kind: parsed.data.targetKind,

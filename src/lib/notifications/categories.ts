@@ -124,7 +124,11 @@ export const CATEGORY_META: Record<NotificationCategory, CategoryMeta> = {
     icon: "mensajes",
   },
   trabajos: {
-    label: "Trabajos",
+    // La CLAVE `trabajos` es un valor persistido (notifications.category y las
+    // preferencias por categoría): no se toca. La etiqueta visible sí, porque
+    // decía "Trabajos" mientras la navegación principal del módulo dice
+    // "Empleos" — dos nombres para el mismo lugar.
+    label: "Empleos",
     description: "Postulaciones a tus avisos y novedades de las tuyas.",
     icon: "trabajos",
   },
@@ -139,7 +143,9 @@ export const CATEGORY_META: Record<NotificationCategory, CategoryMeta> = {
     icon: "marketplace",
   },
   propiedades: {
-    label: "Propiedades",
+    // Mismo caso que `trabajos`: la clave persistida se queda, la etiqueta pasa
+    // a "Vivienda", que es como se llama el módulo en la navegación principal.
+    label: "Vivienda",
     description: "Consultas por lo que publicaste y avisos de lo que seguís.",
     icon: "propiedades",
   },

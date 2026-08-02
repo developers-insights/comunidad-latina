@@ -6,8 +6,22 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { CATEGORY_META } from "@/lib/notifications/categories";
 import { CategoryTabs, INBOX_PANEL_ID } from "./category-tabs";
 import { COPY } from "./copy";
+
+/**
+ * Las etiquetas se leen de `CATEGORY_META` y no se escriben a mano: la CLAVE de
+ * categoría (`trabajos`, `propiedades`) es un valor persistido y por eso se
+ * asevera literal en los `href`; el TEXTO que se ve es copy y puede cambiar
+ * —pasó: "Trabajos" y "Propiedades" se alinearon con "Empleos" y "Vivienda" del
+ * menú principal—. Atar el test al literal hacía fallar tres casos que no
+ * estaban probando copy, sino tabindex, contadores y enlaces.
+ */
+const LABEL = {
+  trabajos: CATEGORY_META.trabajos.label,
+  propiedades: CATEGORY_META.propiedades.label,
+} as const;
 
 /**
  * Las pestañas en pantalla. Lo que este archivo ancla:
@@ -87,7 +101,7 @@ describe("patrón ARIA", () => {
       .getAllByRole("tab")
       .filter((tab) => tab.getAttribute("tabindex") === "0");
     expect(focusable).toHaveLength(1);
-    expect(focusable[0]).toHaveTextContent("Trabajos");
+    expect(focusable[0]).toHaveTextContent(LABEL.trabajos);
   });
 });
 
@@ -140,7 +154,7 @@ describe("contadores", () => {
 
   it("una categoría sin no leídas no dibuja contador", () => {
     mount();
-    const tab = screen.getByRole("tab", { name: /Propiedades/ });
+    const tab = screen.getByRole("tab", { name: new RegExp(LABEL.propiedades) });
     expect(tab.textContent).not.toMatch(/\d/);
   });
 
@@ -169,7 +183,8 @@ describe("la pestaña activa de 'Más'", () => {
 describe("enlaces", () => {
   it("cada pestaña conserva el filtro activo", () => {
     mount({ filter: "no-leidas" });
-    const tab = screen.getByRole("tab", { name: /Trabajos/ });
+    const tab = screen.getByRole("tab", { name: new RegExp(LABEL.trabajos) });
+    // El `c=trabajos` del href SÍ va literal: es la clave persistida.
     expect(tab).toHaveAttribute("href", "/notificaciones?c=trabajos&f=no-leidas");
   });
 

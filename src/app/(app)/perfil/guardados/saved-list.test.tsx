@@ -45,7 +45,10 @@ describe("SavedList — estado vacío", () => {
   it("explica qué es guardar y cómo hacerlo, sin decir 'no hay elementos'", () => {
     render(<SavedList items={[]} nextHref={null} />);
     expect(screen.getByText("Todavía no guardaste nada")).toBeTruthy();
-    expect(screen.getByText(/tocá el marcador/i)).toBeTruthy();
+    // Dice el nombre de la acción ("Guardar"), que es como se llama el botón en
+    // el feed y en los avisos. "El marcador" era el único lugar de la app donde
+    // ese control se nombraba así.
+    expect(screen.getByText(/tocá guardar/i)).toBeTruthy();
     expect(screen.queryByText(/no hay elementos/i)).toBeNull();
   });
 

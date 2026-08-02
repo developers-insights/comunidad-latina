@@ -41,6 +41,10 @@ const COPY = {
   needLogin: "Entrá a tu cuenta para poder reportar.",
   genericError:
     "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo.",
+  // `rate-limited` NO es una falla nuestra: la persona mandó varios reportes
+  // seguidos. Mostrarle el genérico sería mentirle sobre la causa y dejarla sin
+  // saber qué hacer — por eso el mensaje nombra el motivo y pide esperar.
+  rateLimited: "Enviaste varios reportes seguidos. Esperá un ratito y probá de nuevo.",
 } as const;
 
 /** El sheet se autocierra tras el estado de éxito — sin un segundo tap. */
@@ -137,7 +141,11 @@ function ReportSheetBody({
         return;
       }
       setErrorMessage(
-        result.code === "unauthenticated" ? COPY.needLogin : COPY.genericError,
+        result.code === "unauthenticated"
+          ? COPY.needLogin
+          : result.code === "rate-limited"
+            ? COPY.rateLimited
+            : COPY.genericError,
       );
     });
   }
