@@ -1,5 +1,119 @@
 # PROGRESS — Comunidad Latina
 
+## Refuerzo de seguridad de datos y cumplimiento (✅ 2026-08-02)
+
+Seis frentes en paralelo con fronteras de archivo duras + dos rondas de review
+adversarial. 112 archivos, +5743/−427. Commit `4115e07`.
+
+**La fuga que nadie había visto.** El asistente con IA atiende visitantes
+anónimos y consulta `rag_chunks` con `service_role` — sin RLS abajo. El único
+aislamiento era el `p_tenant_id`, que salía de `getTenant()` → Host **o `?t=` o
+cookie `cl-tenant`**. El docstring decía "en producción manda el dominio", y era
+falso: el host real (`comunidad-latina-sigma.vercel.app`) **no está en
+`DOMAIN_TENANTS`**, así que producción caía al parámetro del cliente. Reproducido
+contra la base con un tenant víctima efímero: antes devolvía su contenido
+privado, después 0 filas. El corte quedó en `resolveTenantSlug` — el origen, no
+el asistente — porque `?t=` alimenta el tenant de toda la app. **Los previews de
+Vercel también quedan bloqueados a propósito**: corren con `NODE_ENV=production`
+contra la MISMA base, o sea que ahí `?t=` sería el mismo agujero con otra puerta.
+
+**El open redirect necesitó dos intentos, y eso es lo que hay que recordar.** La
+primera pasada reemplazó el filtro por string (`/<TAB>/evil.com` lo atravesaba)
+por `safeInternalPath`, que resuelve contra un origen centinela. La ronda de
+review encontró que **tampoco alcanzaba**: el parser colapsa los dot-segments
+*después* de fijar el origen, así que `/..//evil.com` pasaba el chequeo y salía
+con el pathname en `//evil.com` — protocol-relative para el siguiente parser, que
+es el que arma el `Location:`. Ahora valida en dos pasadas. Los dos revisores lo
+encontraron por separado, con reproducción. Los 2141 tests de entonces pasaban.
+
+**Base de datos — migraciones 0056–0059, aplicadas.** `verification_checks.evidence`
+era legible por `anon` con nombre real y número de matrícula adentro. Los 4
+buckets públicos se podían listar enteros (29 objetos, incluidas fotos de avisos
+en borrador). Y el `REVOKE` por columna sobre `profiles`: **sin cuenta se podía
+sacar la lista de quiénes son los admins de cada comunidad**. Todo eso sólo para
+`anon`; `authenticated` quedó intacto porque `(app)/layout.tsx` lee
+`account_status`/`suspended_until` — es la puerta que aplica los baneos, y
+revocarla la desarmaba. Verificado con SQL, no razonado. Advisors: security
+32 → 24, performance 91 → 84.
+
+Aislamiento cross-tenant probado tabla por tabla con `set local role authenticated`
++ claims del tenant B: `messages`, `conversations`, `job_applications`,
+`user_phones`, `profiles_private`, `payment_events`, `rag_chunks`, `scam_reports`
+y `audit_log` dan **0 filas**. Lo que sí cruza es contenido `published` y perfiles
+públicos, que es una decisión de SEO ya fechada en `0004_listings.sql:70`.
+
+**Cookies: la decisión fue no poner banner, y está justificada.** El inventario se
+midió en el navegador (`document.cookie`, `localStorage`, red), no se supuso:
+**cero trazadores de analítica o publicidad**, ninguna petición a un tercero en la
+carga. Un banner con cuatro categorías vacías pediría permiso para algo que no
+ocurre y entrena a aceptar sin leer. Lo que sí quedó es la infraestructura
+(`src/lib/consent/`): el banner se dispara solo de `categoriesNeedingConsent()` y
+**aparece el día que alguien sume un trazador** — hay un test que simula esa fila.
+Rechazar y aceptar son hermanos en un `grid-cols-2`, estructural, no se puede
+desbalancear; `Escape` equivale a rechazar. Sentry queda como "necesaria": no
+escribe nada en el dispositivo, así que no activa el art. 5.3 de ePrivacy.
+
+Nueva `/legal/cookies` con el inventario completo en criollo, `/ajustes/privacidad`
+con **exportación de datos real** (derecho de acceso y portabilidad), enlace CPRA
+"Do Not Sell or Share", los 7 terceros nombrados con su transferencia a EE.UU.,
+base legal declarada, y la selfie biométrica de Stripe Identity y el uso de IA
+(Anthropic, OpenAI, Google Vision) declarados.
+
+**Defectos que iban a producción.** Con teclado **no se podía elegir zona**: el
+`onBlur` cerraba la lista a los 120 ms y el foco caía al `<body>` — bloqueaba el
+onboarding entero, y el mouse lo tapaba. `formatDate` sin `timeZone`: Vercel en
+UTC y el navegador en Nueva York mostraban **días distintos** para el mismo
+instante; el arreglo obvio además rompía las guías, que guardan `2026-07-06` sin
+hora y quedaban un día antes al pie de trámites oficiales. El sitemap aplicaba el
+filtro por tenant **sólo si** el lookup traía fila, así que ante una falla le
+entregaba a Google todas las comunidades mezcladas. `/semana` y `/día`
+desaparecían de la vista previa al publicar: $200 por semana se leía como el
+total. El enlace de confirmación **con el token** se imprimía en los logs cuando
+faltaba `RESEND_API_KEY` — condición alcanzable, prod ya tuvo 7 de 20 variables.
+
+**"Destacado" nombraba dos cosas opuestas**: el nivel máximo del Trust Score
+(mérito ganado) y la etiqueta del aviso pago. En la misma pantalla el copy promete
+*"Impulsar no cambia tu Trust Score"*, con un comentario de FTC §255 al lado. Lo
+pago pasa a **"Patrocinado"** en las cinco superficies; el nivel se queda como
+está. Ningún valor persistido tocado — los tests del webhook de Stripe son la red
+que lo prueba.
+
+**La regresión que introdujimos nosotros, y por qué el smoke test no la vio.** La
+0059 rompió el `select("*")` sobre `trust_scores` para `anon`: con un permiso de
+columna faltante Postgres tira 42501 sobre la tabla entera, el error no se
+chequeaba, y **todo perfil público mostraba Trust Score 0 a quien no tenía
+sesión** — un valor falso, no un badge ausente, en un producto anti-estafa. La
+ruta devolvía 200, así que "rutas públicas 200" pasaba en verde. Lo encontró el
+review leyendo la costura entre el frente de app y el de base. Verificado en vivo
+después del arreglo: muestra el 35 real.
+
+Gates: typecheck limpio · lint 0 errores (48 warnings preexistentes) · **2147
+tests** · build verde · secretos ausentes del bundle sobre el build final (sólo
+las dos `NEXT_PUBLIC_*`, por diseño) · headers verificados con `curl` contra el
+build de producción, no leyendo el config · 375/768/1280 sin scroll horizontal ·
+consola sin errores.
+
+**Pendiente de Manuel (no sale del código):**
+- `LEGAL_CONTACT_EMAIL` y `LEGAL_GOVERNING_STATE` en `src/components/legal/legal-prose.tsx`.
+  **Sin correo de contacto el derecho de acceso no se puede ejercer** — es lo único
+  que hoy deja el cumplimiento a medias.
+- Confirmar la zona horaria **`America/New_York`**: el público está en NY, NJ,
+  Miami, Houston, Chicago y Los Ángeles, o sea varias zonas. Alguien en Los Ángeles
+  publicando 22:00 ve su publicación fechada al día siguiente. La salida, si molesta,
+  es guardar la zona en el perfil (`options.timeZone` ya está soportado).
+- *Leaked password protection* está **desactivada** en el dashboard de Supabase Auth.
+  Es un toggle, no código.
+- Sigue pendiente el **SMTP propio** en Supabase (recuperación de contraseña).
+
+**Deuda anotada, no cerrada:** el rate limiting es in-memory por instancia (techo
+real = `max × instancias`, se resetea en cold start) — sirve para acotar gasto de
+IA, no como control anti-abuso distribuido; la migración a Upstash está
+documentada. `trust_scores.signals` sigue legible por `anon` porque 23 páginas
+públicas lo piden: se cierra cuando dejen de pedirlo donde sólo pintan `score` y
+`level`. `record_cta_click` y `record_listing_share` son ejecutables por anónimos
+(integridad de métricas, no fuga) — revocarlos rompería la telemetría de avisos
+públicos, el arreglo real es deduplicación.
+
 ## Confirmación de cuenta (✅ 2026-08-01)
 
 Se cierra el hueco que dejó la semana 4: **el registro ya no auto-confirma**.
