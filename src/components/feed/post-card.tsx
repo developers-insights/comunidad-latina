@@ -17,6 +17,7 @@ import { CardLikeProvider } from "./card-like-context";
 import { CardMediaProvider } from "./card-media-context";
 import { CardPostMedia } from "./card-post-media";
 import { PollYesNo } from "./poll-yes-no";
+import { PostCaption } from "./post-caption";
 import { PostActions } from "./post-actions";
 import { QuestionBanner } from "./question-banner";
 import { TextBanner } from "./text-banner";
@@ -194,30 +195,12 @@ export function PostCard({
       )
     : null;
 
-  const bodyText = (
-    <p
-      className={cn(
-        "whitespace-pre-wrap text-base leading-normal text-foreground",
-        !isDetail && "line-clamp-6",
-      )}
-    >
-      {post.body}
-    </p>
-  );
   const body = showAnyBanner
     ? null
     : post.body
     ? isDetail
-      ? bodyText
-      : (
-          <Link
-            href={`/feed/${post.id}`}
-            aria-label={COPY.post.openPost}
-            className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-          >
-            {bodyText}
-          </Link>
-        )
+      ? <p className="whitespace-pre-wrap text-base leading-normal text-foreground">{post.body}</p>
+      : <PostCaption text={post.body} />
     : null;
 
   const entity = post.entity;

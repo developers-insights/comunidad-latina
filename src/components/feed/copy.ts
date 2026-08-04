@@ -279,7 +279,6 @@ export const COPY = {
     unsave: "Quitar de guardados",
     saveErrorTitle: "No pudimos guardarla",
     saveErrorBody: "Puede ser un ratito de conexión floja — no es tu culpa. Probá de nuevo.",
-    openPost: "Ver publicación y comentarios",
     inReviewBanner:
       "Tu publicación está en revisión. Apenas esté aprobada, la va a ver toda la comunidad.",
     removedBanner:
