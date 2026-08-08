@@ -216,7 +216,15 @@ export function PostCard({
           : `Publicación de ${post.author.displayName}`
       }
       className={cn(
-        "overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-xs",
+        "overflow-hidden rounded-lg border bg-surface shadow-xs",
+        // Contorno DORADO de contenido patrocinado (feedback cliente Geovanny,
+        // 2026-08-05: "todo el contorno" tiene que gritar que es pago). Anillo
+        // + borde transparente (el ring no empuja layout) más un resplandor
+        // suave — el mismo lenguaje que el AdChip de card-ad-chip.tsx, nunca
+        // un fondo dorado sólido (eso apagaría el contenido de adentro).
+        isAd
+          ? "border-transparent ring-2 ring-sponsored/70 shadow-[0_0_0_1px_var(--color-sponsored),0_10px_28px_-14px_var(--color-sponsored)]"
+          : "border-border-subtle",
         className,
       )}
     >
@@ -333,6 +341,7 @@ export function PostCard({
               commentCount={post.commentCount}
               savedByViewer={post.savedByViewer}
               isDetail={isDetail}
+              immersiveBackground={showAnyBanner}
             />
           </div>
         </CardLikeProvider>

@@ -502,7 +502,7 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-display text-xl font-bold text-foreground">
-              {C.steps.text.title}
+              {C.steps.text.title(kind)}
             </h2>
             {/* Solo con preselect (?kind= del menú crear-post): el paso 0 quedó
                 salteado, así que ofrecemos volver a él sin usar "Atrás". */}
@@ -525,7 +525,7 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
               id="pub-title"
               value={title}
               maxLength={120}
-              placeholder={C.steps.text.titlePlaceholder}
+              placeholder={C.steps.text.titlePlaceholder(kind)}
               onChange={(event) => setTitle(event.target.value)}
             />
           </Field>
@@ -539,7 +539,7 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
               rows={6}
               value={description}
               maxLength={4000}
-              placeholder={C.steps.text.descriptionPlaceholder}
+              placeholder={C.steps.text.descriptionPlaceholder(kind)}
               onChange={(event) => setDescription(event.target.value)}
             />
           </Field>

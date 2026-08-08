@@ -114,7 +114,7 @@ export const SEARCH_GROUP_META: Record<SearchResultType, SearchGroupMeta> = {
     seeAllLabel: "Ver todos los profesionales",
     accentVar: "var(--accent-profesionales)",
     listHref: "/profesionales",
-    queryParam: null,
+    queryParam: "q",
   },
   eventos: {
     label: "Eventos",
@@ -128,7 +128,7 @@ export const SEARCH_GROUP_META: Record<SearchResultType, SearchGroupMeta> = {
     seeAllLabel: "Ver todos los empleos",
     accentVar: "var(--accent-empleos)",
     listHref: "/empleos",
-    queryParam: null,
+    queryParam: "q",
   },
   marketplace: {
     label: "Marketplace",

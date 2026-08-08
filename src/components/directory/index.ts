@@ -1,5 +1,4 @@
 export { ACCENT_CHIP_CLASS, ACCENT_ICON_CLASS, ACCENT_MEDIA_BG, type ModuleAccent } from "./accent";
-export { CategoryChips } from "./category-chips";
 export { COPY } from "./copy";
 export { DirectoryContactCta, type DirectoryContactCtaProps } from "./directory-contact-cta";
 export {

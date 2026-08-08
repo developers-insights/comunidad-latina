@@ -368,6 +368,96 @@ describe("CommentsSheet sobre video", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Generalización a FOTO y PREGUNTA (feedback cliente 2026-08-05: "acá [foto]
+// sale en blanco y te tapa toda la imagen… y en las preguntas también sale
+// así. No sale con modo vidrio como lo habías hecho anteriormente")
+// ---------------------------------------------------------------------------
+
+describe("CommentsSheet sobre foto y sobre banner (pregunta/texto): mismo vidrio que video", () => {
+  it.each([
+    ["photo", "foto"],
+    ["banner", "pregunta/texto"],
+  ] as const)("surface=%s (%s): media altura, vidrio, sin panel opaco", async (surface, _label) => {
+    supa.client = makeClient({ user: { id: "viewer" }, comments: ROWS, profiles: PROFILES });
+    mount(surface);
+    fireEvent.click(screen.getByText("abrir"));
+    await screen.findByText("Primer comentario");
+
+    const panel = screen.getByRole("dialog").className;
+    expect(panel).toContain("h-[46dvh]");
+    expect(panel).not.toContain("h-[88dvh]");
+    // MISMO tratamiento de contraste que video — nada de token nuevo.
+    expect(panel).toContain("bg-media-shade/72");
+    expect(panel).toContain("backdrop-blur-2xl");
+    expect(panel).not.toContain("bg-surface-raised");
+  });
+
+  it.each(["photo", "banner"] as const)(
+    "surface=%s: el velo del fondo no tapa el contenido (mismo tinte que video)",
+    async (surface) => {
+      supa.client = makeClient({ user: { id: "viewer" }, comments: ROWS, profiles: PROFILES });
+      const { container } = mount(surface);
+      fireEvent.click(screen.getByText("abrir"));
+      await screen.findByText("Primer comentario");
+
+      const scrim = container.ownerDocument.querySelector<HTMLElement>(
+        "[aria-hidden='true'].absolute.inset-0",
+      );
+      expect(scrim?.className).toContain("bg-media-shade/25");
+    },
+  );
+
+  it.each(["photo", "banner"] as const)(
+    "surface=%s: los comentarios se pintan en tinta on-media, no en burbuja clara",
+    async (surface) => {
+      supa.client = makeClient({ user: { id: "viewer" }, comments: ROWS, profiles: PROFILES });
+      mount(surface);
+      fireEvent.click(screen.getByText("abrir"));
+
+      const body = await screen.findByText("Primer comentario");
+      expect(body.className).toContain("text-on-media");
+      expect(body.parentElement?.className).not.toContain("bg-surface-subtle");
+    },
+  );
+
+  it.each(["photo", "banner"] as const)(
+    "surface=%s: SIN auto-scroll — eso sigue siendo exclusivo de video",
+    async (surface) => {
+      supa.client = makeClient({ user: { id: "viewer" }, comments: ROWS, profiles: PROFILES });
+      vi.useFakeTimers();
+      try {
+        mount(surface);
+        fireEvent.click(screen.getByText("abrir"));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(50);
+        });
+        expect(screen.getByText("Primer comentario")).toBeTruthy();
+
+        const thread = document.querySelector<HTMLElement>("[data-comments-thread]");
+        if (!thread) throw new Error("no hay hilo");
+        Object.defineProperty(thread, "scrollHeight", { value: 1200, configurable: true });
+        Object.defineProperty(thread, "clientHeight", { value: 200, configurable: true });
+        let top = 0;
+        Object.defineProperty(thread, "scrollTop", {
+          configurable: true,
+          get: () => top,
+          set: (next: number) => {
+            top = next;
+          },
+        });
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(8000);
+        });
+        expect(thread.scrollTop).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+});
+
 describe("CommentsSheet sobre video: el hilo se desplaza solo", () => {
   /** El contenedor del hilo, con un alto simulado (jsdom no hace layout). */
   function primeThread(scrollHeight = 1200, clientHeight = 200) {

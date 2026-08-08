@@ -3,6 +3,65 @@
  * Español cálido rioplatense-neutro. El copy legal del verificador (§11)
  * vive en <VerificationCard> y NO se duplica acá.
  */
+
+/** Los 5 tipos del wizard /publicar — mismo union que `Kind` en publish-form.tsx. */
+type PublishKind = "property" | "business" | "professional" | "event" | "job";
+
+/**
+ * Copy del paso "texto" del wizard, por tipo de aviso (feedback cliente,
+ * Geovanny 2026-08-05): "Contanos sobre tu aviso" quedaba igual publiques
+ * vivienda, evento o trabajo. Cada vertical tiene su propia pregunta y su
+ * propio ejemplo de título — así se siente hecho para lo que la persona
+ * realmente está publicando, no para un "aviso" genérico.
+ */
+const TEXT_STEP_BY_KIND: Record<
+  PublishKind,
+  { title: string; titlePlaceholder: string; descriptionPlaceholder: string }
+> = {
+  property: {
+    title: "Contanos sobre tu propiedad",
+    titlePlaceholder: "Ej.: Habitación luminosa en Corona",
+    descriptionPlaceholder:
+      "Contá lo importante: cómo es el lugar, qué incluye, desde cuándo está disponible…",
+  },
+  business: {
+    title: "Contanos sobre tu negocio",
+    titlePlaceholder: "Ej.: Panadería dominicana en Jackson Heights",
+    descriptionPlaceholder:
+      "Contá lo importante: qué ofrecés, tus horarios, qué te hace distinto…",
+  },
+  professional: {
+    title: "Contanos sobre tu servicio",
+    titlePlaceholder: "Ej.: Abogado de inmigración en Queens",
+    descriptionPlaceholder:
+      "Contá tu experiencia, qué servicios ofrecés y a quién ayudás…",
+  },
+  event: {
+    title: "Contanos sobre tu evento",
+    titlePlaceholder: "Ej.: Festival dominicano en Corona Park",
+    descriptionPlaceholder:
+      "Contá de qué se trata, quién puede venir y qué no puede faltar…",
+  },
+  job: {
+    title: "Contanos sobre el trabajo",
+    titlePlaceholder: "Ej.: Se busca ayudante de cocina en Queens",
+    descriptionPlaceholder:
+      "Contá las tareas, el horario y qué buscás en la persona…",
+  },
+};
+
+/** Fallback: solo se usa si `kind` todavía no se resolvió (no debería pasar en el paso 1). */
+const TEXT_STEP_FALLBACK = {
+  title: "Contanos sobre tu aviso",
+  titlePlaceholder: "Ej.: Habitación luminosa en Corona",
+  descriptionPlaceholder:
+    "Contá lo importante: qué es, qué incluye, desde cuándo está disponible…",
+};
+
+function textStepCopy(kind: PublishKind | null | undefined) {
+  return kind ? TEXT_STEP_BY_KIND[kind] : TEXT_STEP_FALLBACK;
+}
+
 export const COPY = {
   list: {
     title: "Vivienda",
@@ -131,13 +190,13 @@ export const COPY = {
         help: "Elegí el tipo de aviso. Podés publicar todos los que necesites.",
       },
       text: {
-        title: "Contanos sobre tu aviso",
+        title: (kind?: PublishKind | null) => textStepCopy(kind).title,
         titleLabel: "Título",
-        titlePlaceholder: "Ej.: Habitación luminosa en Corona",
+        titlePlaceholder: (kind?: PublishKind | null) => textStepCopy(kind).titlePlaceholder,
         titleHelp: "Corto y claro — es lo primero que se ve.",
         descriptionLabel: "Descripción",
-        descriptionPlaceholder:
-          "Contá lo importante: cómo es el lugar, qué incluye, desde cuándo está disponible…",
+        descriptionPlaceholder: (kind?: PublishKind | null) =>
+          textStepCopy(kind).descriptionPlaceholder,
         descriptionHelp: "Mientras más completa, menos preguntas repetidas.",
       },
       price: {

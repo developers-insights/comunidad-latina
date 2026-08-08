@@ -3,12 +3,15 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import {
   allPhotoUrls,
+  buildTrustSignals,
   decodeCursor,
   encodeCursor,
   firstPhotoUrl,
   formatListingPrice,
   toTrustLevel,
+  type PublisherView,
 } from "@/components/listings";
+import { COPY } from "@/components/empleos/copy";
 import {
   labelJobAnswers,
   parseJobAttrs,
@@ -20,6 +23,7 @@ import {
   toJobApplicationStatus,
   type JobApplicationStatus,
 } from "@/lib/empleos/application-status";
+import type { Tables } from "@/lib/types/database.types";
 import { timeAgo } from "@/lib/utils";
 
 /**
@@ -61,7 +65,14 @@ export type JobCardModel = {
    * píldora (feedback 2026-07-26). Vacío = aviso sin foto, el caso más común.
    */
   photos: string[];
-  publisherName: string | null;
+  /**
+   * Miembro con Trust Score resuelto en batch, publicador externo (seed sin
+   * cuenta) o null. Mismo contrato que /propiedades y /profesionales — la
+   * card decide sola qué señal de confianza mostrar (§ producto anti-estafa).
+   */
+  publisher: PublisherView;
+  /** Impulso activo (`boosts`, §7): contorno dorado + chip "Patrocinado" en la página. */
+  boosted: boolean;
 };
 
 export type JobsPage = {
@@ -69,9 +80,81 @@ export type JobsPage = {
   nextCursor: string | null;
 };
 
+// ---------------------------------------------------------------------------
+// Fila cruda de `listings` (kind='job') → JobCardModel
+// ---------------------------------------------------------------------------
+
+type JobListingRow = Pick<
+  Tables<"listings">,
+  | "id"
+  | "title"
+  | "price_amount"
+  | "price_currency"
+  | "price_period"
+  | "area_label"
+  | "attrs"
+  | "photos"
+  | "created_at"
+  | "created_by"
+  | "publisher_name"
+>;
+
+/** Solo las columnas que alimentan el badge (over-fetch §perf, mismo criterio que /negocios). */
+type PublisherProfileRow = Pick<
+  Tables<"profiles">,
+  "id" | "display_name" | "avatar_url" | "identity_verified"
+>;
+type PublisherTrustRow = Pick<Tables<"trust_scores">, "profile_id" | "score" | "level" | "signals">;
+
+const JOB_LISTING_COLUMNS =
+  "id, title, price_amount, price_currency, price_period, area_label, attrs, photos, created_at, created_by, publisher_name";
+
+/**
+ * Mapeo puro fila → card. Publicador: perfil + Trust Score si el aviso es de
+ * un miembro (`created_by`); `publisher_name` crudo si es de fuente externa
+ * (seed/API, sin cuenta detrás) — mismo patrón que /propiedades y /profesionales.
+ */
+export function toJobCardModel(
+  row: JobListingRow,
+  profileById: ReadonlyMap<string, PublisherProfileRow>,
+  trustById: ReadonlyMap<string, PublisherTrustRow>,
+  boostedIds: ReadonlySet<string>,
+): JobCardModel {
+  let publisher: PublisherView = null;
+  if (row.created_by) {
+    const profile = profileById.get(row.created_by);
+    const trust = trustById.get(row.created_by);
+    publisher = {
+      type: "member",
+      profileId: row.created_by,
+      displayName: profile?.display_name ?? row.publisher_name ?? COPY.list.communityMember,
+      avatarUrl: profile?.avatar_url ?? null,
+      score: trust?.score ?? 0,
+      level: toTrustLevel(trust?.level),
+      signals: buildTrustSignals(trust?.signals ?? {}, profile?.identity_verified ?? false),
+    };
+  } else if (row.publisher_name) {
+    publisher = { type: "external", name: row.publisher_name };
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    salaryLabel: formatListingPrice(row.price_amount, row.price_currency, row.price_period),
+    employmentType: parseJobAttrs(row.attrs).employmentType,
+    areaLabel: row.area_label,
+    photoUrl: firstPhotoUrl(row.photos),
+    photos: allPhotoUrls(row.photos),
+    publisher,
+    boosted: boostedIds.has(row.id),
+  };
+}
+
 export async function fetchJobsPage(input: {
   tenantId: string;
   employmentType?: EmploymentType | null;
+  /** Término de búsqueda (?q=) ya sanitizado por el caller (sanitizeSearchQuery). */
+  q?: string | null;
   cursor?: string | null;
 }): Promise<JobsPage> {
   const supabase = await createClient();
@@ -79,9 +162,7 @@ export async function fetchJobsPage(input: {
   // Keyset pagination (created_at, id) — mismo patrón que /marketplace.
   let query = supabase
     .from("listings")
-    .select(
-      "id, title, price_amount, price_currency, price_period, area_label, attrs, photos, created_at, created_by, publisher_name",
-    )
+    .select(JOB_LISTING_COLUMNS)
     .eq("tenant_id", input.tenantId)
     .eq("kind", "job")
     .eq("status", "published")
@@ -91,6 +172,11 @@ export async function fetchJobsPage(input: {
 
   if (input.employmentType) {
     query = query.eq("attrs->>employment_type", input.employmentType);
+  }
+  if (input.q) {
+    // Mismo índice FTS que /propiedades y /negocios (listings.search, 0004) —
+    // kind='job' está indexado (confirmado contra 0044_global_search.sql).
+    query = query.textSearch("search", input.q, { type: "websearch", config: "spanish" });
   }
 
   const cursor = decodeCursor(input.cursor || undefined);
@@ -106,36 +192,83 @@ export async function fetchJobsPage(input: {
     return { items: [], nextCursor: null };
   }
 
-  const pageRows = (rows ?? []).slice(0, PAGE_SIZE);
-  const hasMore = (rows ?? []).length > PAGE_SIZE;
+  const pageRows = (rows ?? []) as JobListingRow[];
+  const trimmedRows = pageRows.slice(0, PAGE_SIZE);
+  const hasMore = pageRows.length > PAGE_SIZE;
 
-  // Nombre de quien publica: los avisos importados traen `publisher_name`; los
-  // de la comunidad, el perfil de `created_by`. Una sola vuelta para todos.
+  // ---------------------------------------------------------------------
+  // Patrocinado (§7): mismo patrón boosted-first que /propiedades — SOLO en
+  // la primera página (sin cursor) y SOLO cuando no hay filtro activo (un
+  // resultado boosteado que no matchea jornada/búsqueda no se inyecta).
+  // ---------------------------------------------------------------------
+  const boostedIds = new Set<string>();
+  let boostedExtra: JobListingRow[] = [];
+  const sinFiltros = !input.employmentType && !input.q;
+  if (!cursor) {
+    const { data: activeBoosts } = await supabase
+      .from("boosts")
+      .select("listing_id")
+      .eq("tenant_id", input.tenantId)
+      .eq("status", "active")
+      .gt("ends_at", new Date().toISOString())
+      .order("ends_at", { ascending: false })
+      .limit(4);
+    for (const boost of activeBoosts ?? []) boostedIds.add(boost.listing_id);
+
+    // Destacados que no entraron por fecha: solo en la vista sin filtros (con
+    // filtros activos jamás se inyecta un resultado que no matchea).
+    const missingIds = [...boostedIds].filter(
+      (id) => !trimmedRows.some((row) => row.id === id),
+    );
+    if (sinFiltros && missingIds.length > 0) {
+      const { data: extra } = await supabase
+        .from("listings")
+        .select(JOB_LISTING_COLUMNS)
+        .eq("tenant_id", input.tenantId)
+        .eq("kind", "job")
+        .eq("status", "published")
+        .in("id", missingIds);
+      boostedExtra = (extra ?? []) as JobListingRow[];
+    }
+  }
+
+  // Boosted-first estable: destacados arriba, el resto en su orden natural.
+  const orderedRows: JobListingRow[] = [
+    ...boostedExtra,
+    ...trimmedRows.filter((row) => boostedIds.has(row.id)),
+    ...trimmedRows.filter((row) => !boostedIds.has(row.id)),
+  ];
+
+  // Publicador: perfil + Trust Score en batch — mismo patrón que /profesionales
+  // (una query para todos los perfiles, una para todos los trust_scores, nunca
+  // por ítem).
   const memberIds = [
     ...new Set(
-      pageRows
-        .filter((row) => !row.publisher_name && row.created_by)
-        .map((row) => row.created_by as string),
+      orderedRows.map((row) => row.created_by).filter((id): id is string => Boolean(id)),
     ),
   ];
-  const { data: profiles } = memberIds.length
-    ? await supabase.from("profiles").select("id, display_name").in("id", memberIds)
-    : { data: [] as Array<{ id: string; display_name: string }> };
-  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
+  const [{ data: profiles }, { data: trusts }] = await Promise.all([
+    memberIds.length
+      ? supabase
+          .from("profiles")
+          .select("id, display_name, avatar_url, identity_verified")
+          .in("id", memberIds)
+      : Promise.resolve({ data: [] as PublisherProfileRow[] }),
+    memberIds.length
+      ? supabase
+          .from("trust_scores")
+          .select("profile_id, score, level, signals")
+          .in("profile_id", memberIds)
+      : Promise.resolve({ data: [] as PublisherTrustRow[] }),
+  ]);
+  const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const trustById = new Map((trusts ?? []).map((t) => [t.profile_id, t]));
 
-  const items: JobCardModel[] = pageRows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    salaryLabel: formatListingPrice(row.price_amount, row.price_currency, row.price_period),
-    employmentType: parseJobAttrs(row.attrs).employmentType,
-    areaLabel: row.area_label,
-    photoUrl: firstPhotoUrl(row.photos),
-    photos: allPhotoUrls(row.photos),
-    publisherName:
-      row.publisher_name ?? (row.created_by ? (nameById.get(row.created_by) ?? null) : null),
-  }));
+  const items: JobCardModel[] = orderedRows.map((row) =>
+    toJobCardModel(row, profileById, trustById, boostedIds),
+  );
 
-  const last = pageRows.at(-1);
+  const last = trimmedRows.at(-1);
   return {
     items,
     nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id) : null,

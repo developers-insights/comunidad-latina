@@ -340,6 +340,10 @@
   --color-gold: var(--cl-gold);
   --color-gold-ink: var(--cl-gold-ink);
 
+  /* Contorno/chip de espacio PAGO (ver el comentario junto a --cl-light-sponsored). */
+  --color-sponsored: var(--cl-sponsored);
+  --color-sponsored-ink: var(--cl-sponsored-ink);
+
   /* Marca dependiente del tema (§2.8). --color-brand y --color-brand-foreground
      NO van acá: tienen que existir como custom property real porque hay call
      sites con `var(--color-brand)`. Se redefinen en :root, más abajo. */
@@ -463,6 +467,18 @@
      4.60 surface-hover · 4.98 surface-subtle · 5.24 canvas · 5.38 surface. */
   --cl-light-gold-ink: #945f0e;
 
+  /* Dorado de CONTENIDO PATROCINADO (feedback cliente Geovanny, 2026-08-05:
+     "lo que se paga tiene que tener los alrededores en amarillo/dorado...
+     todo el contorno"). Mismo tono que `gold` A PROPÓSITO —es el único dorado
+     premium de la paleta— pero un ALIAS con nombre propio, porque el rol es
+     otro: `gold` es el nivel Premium del Trust Score (una insignia que se
+     GANA); `sponsored` es el contorno/chip de un espacio PAGO (que se COMPRA).
+     Compartir el valor hoy no los vuelve el mismo concepto — el día que
+     tengan que divergir, éste es el lugar. Sin `-bg`: igual que `gold`, nunca
+     es un fondo teñido — vive en anillo/borde, ícono y texto del chip. */
+  --cl-light-sponsored: var(--cl-light-gold);
+  --cl-light-sponsored-ink: var(--cl-light-gold-ink);
+
   /* Marca light — la calcula el brand pipeline y la inyecta el ROOT layout.
      Los fallbacks resuelven al azul default cuando no hay inline style. */
   --cl-light-brand: var(--brand-light, var(--color-brand-600));
@@ -559,6 +575,8 @@
   --cl-dark-on-info: var(--color-neutral-950); /* 7.65:1 */
   --cl-dark-gold: #d2a24c;
   --cl-dark-gold-ink: var(--cl-dark-gold); /* 5.80–8.40:1: el dorado dark ya es AA */
+  --cl-dark-sponsored: var(--cl-dark-gold);
+  --cl-dark-sponsored-ink: var(--cl-dark-gold-ink);
 
   /* Marca dark — el pipeline sube ~10% de L y desatura ~12% (§2.8), y valida el
      CTA contra el canvas oscuro. Fallbacks: escalones de la escala default. */
@@ -626,6 +644,8 @@
   --cl-on-info: var(--cl-light-on-info);
   --cl-gold: var(--cl-light-gold);
   --cl-gold-ink: var(--cl-light-gold-ink);
+  --cl-sponsored: var(--cl-light-sponsored);
+  --cl-sponsored-ink: var(--cl-light-sponsored-ink);
   --cl-brand: var(--cl-light-brand);
   --cl-brand-foreground: var(--cl-light-brand-foreground);
   --cl-brand-hover: var(--cl-light-brand-hover);
@@ -759,6 +779,8 @@
   --cl-on-info: var(--cl-dark-on-info);
   --cl-gold: var(--cl-dark-gold);
   --cl-gold-ink: var(--cl-dark-gold-ink);
+  --cl-sponsored: var(--cl-dark-sponsored);
+  --cl-sponsored-ink: var(--cl-dark-sponsored-ink);
   --cl-brand: var(--cl-dark-brand);
   --cl-brand-foreground: var(--cl-dark-brand-foreground);
   --cl-brand-hover: var(--cl-dark-brand-hover);
@@ -817,6 +839,8 @@
     --cl-on-info: var(--cl-dark-on-info);
     --cl-gold: var(--cl-dark-gold);
     --cl-gold-ink: var(--cl-dark-gold-ink);
+    --cl-sponsored: var(--cl-dark-sponsored);
+    --cl-sponsored-ink: var(--cl-dark-sponsored-ink);
     --cl-brand: var(--cl-dark-brand);
     --cl-brand-foreground: var(--cl-dark-brand-foreground);
     --cl-brand-hover: var(--cl-dark-brand-hover);
@@ -899,6 +923,8 @@
     --cl-on-info: var(--cl-light-on-info);
     --cl-gold: var(--cl-light-gold);
     --cl-gold-ink: var(--cl-light-gold-ink);
+    --cl-sponsored: var(--cl-light-sponsored);
+    --cl-sponsored-ink: var(--cl-light-sponsored-ink);
     --cl-brand: var(--cl-light-brand);
     --cl-brand-foreground: var(--cl-light-brand-foreground);
     --cl-brand-hover: var(--cl-light-brand-hover);

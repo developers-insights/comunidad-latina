@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { MagicWand, SealCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { allPhotoUrls, firstPhotoUrl } from "@/components/listings";
+import { MagicWand, Megaphone, SealCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { allPhotoUrls, firstNameOf, firstPhotoUrl } from "@/components/listings";
 import {
   ModuleFilterSelect,
   ModuleFilterToggle,
@@ -11,6 +11,7 @@ import {
 } from "@/components/search";
 import {
   BezelCard,
+  Chip,
   EmptyState,
   SectionCta,
   SectionHeading,
@@ -22,8 +23,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { toTrustProps } from "@/lib/trust/signals";
 import type { Tables } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
-import { BusinessCard, type BusinessCardModel } from "../business-card";
-import type { OwnerTrust } from "../business-trust-badge";
+import { BusinessCard, type BusinessCardModel, type OwnerTrust } from "../business-card";
 import { BUSINESS_CATEGORIES, businessCategoryLabel, businessCategoryOf } from "../categories";
 import { COPY, NegociosSkeleton, SECCION } from "./list-shell";
 
@@ -80,18 +80,21 @@ const CATEGORY_OPTIONS: FilterOption[] = [
 type OwnerTrustRow = Pick<Tables<"trust_scores">, "score" | "level" | "signals">;
 
 /**
- * Trust Score del dueño → props del badge. Usa la fuente única
- * (@/lib/trust/signals): las mismas señales que ve el usuario en vivienda,
- * mensajes y profesionales. `identity_verified` viene del perfil del dueño.
+ * Trust Score del dueño → props del `PublisherTrust` canónico. Usa la fuente
+ * única (@/lib/trust/signals): las mismas señales que ve el usuario en
+ * vivienda, mensajes y profesionales. `identity_verified` viene del perfil
+ * del dueño; `ownerId` es el `profileId` que habilita "Ver el perfil de…"
+ * dentro del desglose (mismo patrón que negocios/[id]/page.tsx).
  */
 function buildOwnerTrust(
   score: OwnerTrustRow | undefined,
+  ownerId: string,
   ownerName: string,
   identityVerified: boolean,
 ): OwnerTrust | null {
   const props = toTrustProps(score ?? null, identityVerified);
   if (!props) return null;
-  return { name: ownerName, ...props };
+  return { displayName: ownerName, firstName: firstNameOf(ownerName), profileId: ownerId, ...props };
 }
 
 export default async function NegociosPage({ searchParams }: { searchParams: SearchParams }) {
@@ -122,11 +125,12 @@ async function NegociosContent({ filters }: { filters: Filters }) {
     },
   ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
 
+  const LISTING_COLUMNS =
+    "id, title, description, area_label, attrs, photos, publisher_name, created_by, published_at, created_at, store_verified";
+
   let query = supabase
     .from("listings")
-    .select(
-      "id, title, description, area_label, attrs, photos, publisher_name, created_by, published_at, created_at",
-    )
+    .select(LISTING_COLUMNS)
     .eq("tenant_id", tenant.id)
     .eq("kind", "business")
     .eq("status", "published");
@@ -149,9 +153,54 @@ async function NegociosContent({ filters }: { filters: Filters }) {
   const rows = negocios ?? [];
   const filtering = Boolean(filters.q || filters.rubro || filters.verificados);
 
+  // -------------------------------------------------------------------------
+  // Boost (§7): mismo patrón que /propiedades — los negocios con boost activo
+  // van primero, SIEMPRE con el chip "Patrocinado" (misma palabra que
+  // vivienda/feed/reel; una divulgación que cambia de nombre según la pantalla
+  // deja de leerse como divulgación). A diferencia de vivienda, negocios no
+  // pagina por cursor (trae hasta 30 de una), así que el boost corre siempre
+  // y no solo "en la primera página". Pagar visibilidad no toca Trust Score
+  // ni `store_verified`.
+  // -------------------------------------------------------------------------
+  const boostedIds = new Set<string>();
+  let boostedExtra: typeof rows = [];
+  const sinFiltros = !filters.q && !filters.rubro && !filters.verificados;
+
+  const { data: activeBoosts } = await supabase
+    .from("boosts")
+    .select("listing_id")
+    .eq("tenant_id", tenant.id)
+    .eq("status", "active")
+    .gt("ends_at", new Date().toISOString())
+    .order("ends_at", { ascending: false })
+    .limit(4);
+  for (const boost of activeBoosts ?? []) boostedIds.add(boost.listing_id);
+
+  // Destacados que no entraron en las 30 filas de la query principal: solo se
+  // inyectan en la vista SIN filtros — con filtros activos jamás se cuela un
+  // resultado que no matchea (un negocio patrocinado de otro rubro no entra).
+  const missingIds = [...boostedIds].filter((id) => !rows.some((row) => row.id === id));
+  if (sinFiltros && missingIds.length > 0) {
+    const { data: extra } = await supabase
+      .from("listings")
+      .select(LISTING_COLUMNS)
+      .eq("tenant_id", tenant.id)
+      .eq("kind", "business")
+      .eq("status", "published")
+      .in("id", missingIds);
+    boostedExtra = extra ?? [];
+  }
+
+  // Boosted-first estable: destacados arriba, el resto en su orden natural.
+  const orderedRows = [
+    ...boostedExtra,
+    ...rows.filter((row) => boostedIds.has(row.id)),
+    ...rows.filter((row) => !boostedIds.has(row.id)),
+  ];
+
   // Trust Score del dueño (si el negocio tiene dueño con score computado).
   const ownerIds = Array.from(
-    new Set(rows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
+    new Set(orderedRows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
   );
   const trustByOwner = new Map<string, OwnerTrustRow>();
   const nameByOwner = new Map<string, string>();
@@ -270,7 +319,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
         </BezelCard>
       )}
 
-      {rows.length === 0 ? (
+      {orderedRows.length === 0 ? (
         filtering ? (
           /* Buscó y no hay ⇒ mensaje de búsqueda, no el de sección vacía. Decir
              "todavía no hay negocios publicados" cuando en realidad hay pero
@@ -307,13 +356,14 @@ async function NegociosContent({ filters }: { filters: Filters }) {
         )
       ) : (
         <div className="mt-6 flex flex-col gap-4">
-          {rows.map((negocio) => {
+          {orderedRows.map((negocio) => {
             const ownerName = negocio.created_by
               ? (nameByOwner.get(negocio.created_by) ?? negocio.publisher_name ?? "")
               : "";
             const ownerTrust = negocio.created_by
               ? buildOwnerTrust(
                   trustByOwner.get(negocio.created_by),
+                  negocio.created_by,
                   ownerName,
                   verifiedByOwner.get(negocio.created_by) ?? false,
                 )
@@ -331,9 +381,32 @@ async function NegociosContent({ filters }: { filters: Filters }) {
               photos: allPhotoUrls(negocio.photos),
               ownerTrust,
               publisherName: negocio.publisher_name,
+              storeVerified: negocio.store_verified,
             };
 
-            return <BusinessCard key={negocio.id} business={business} />;
+            return boostedIds.has(business.id) ? (
+              // Contorno dorado + chip FTC — mismo patrón que /propiedades
+              // (feedback cliente Geovanny, 2026-08-05: "todo el contorno" en
+              // dorado). El anillo rodea la BusinessCard completa (su Double-
+              // Bezel queda intacto adentro); el chip flota sobre la foto,
+              // igual que el sello "Presencia verificada" que ya vive ahí.
+              <div
+                key={business.id}
+                className="relative rounded-xl ring-2 ring-sponsored/70 shadow-[0_0_0_1px_var(--color-sponsored),0_10px_28px_-14px_var(--color-sponsored)]"
+              >
+                <Chip
+                  variant="neutral"
+                  size="sm"
+                  className="absolute right-3.5 top-3.5 z-10 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
+                >
+                  <Megaphone size={14} weight="fill" aria-hidden="true" />
+                  Patrocinado
+                </Chip>
+                <BusinessCard business={business} />
+              </div>
+            ) : (
+              <BusinessCard key={business.id} business={business} />
+            );
           })}
         </div>
       )}

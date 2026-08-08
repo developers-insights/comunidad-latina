@@ -139,11 +139,16 @@ const VIDEO: PostMediaView = { kind: "video", url: "https://cdn.example.com/reel
 
 /**
  * La hoja de comentarios cambia de FORMA según lo que hay detrás (feedback
- * cliente 2026-07-27: "le bloqueó todo el video… ¿puede salir como un poquito
- * más abajo?"). Sobre video se pide la media hoja de vidrio; sobre una foto
- * estática, la de siempre — ahí el vidrio no aporta y arriesga contraste.
+ * cliente 2026-07-27 sobre video: "le bloqueó todo el video… ¿puede salir
+ * como un poquito más abajo?"; feedback cliente 2026-08-05, mismo reclamo
+ * pero sobre foto y pregunta: "acá sale en blanco y te tapa toda la
+ * imagen… no sale con modo vidrio como lo habías hecho anteriormente").
+ * Sobre video O foto se pide la media hoja de vidrio — YA NO hay excepción
+ * para la foto, las dos comparten el mismo tratamiento de contraste.
  *
- * El dato lo lee del contexto de medios de la card, no de un prop.
+ * El dato de video/foto lo lee del contexto de medios de la card; el de
+ * banner (pregunta/texto sin medios) llega por el prop `immersiveBackground`
+ * (wiring pendiente desde post-card.tsx, ver su doc en post-actions.tsx).
  */
 describe("PostActions — la forma de la hoja sale del contexto de medios", () => {
   beforeEach(() => {
@@ -154,10 +159,10 @@ describe("PostActions — la forma de la hoja sale del contexto de medios", () =
   const commentsButton = () =>
     screen.getByRole("button", { name: new RegExp(COPY.post.comments) });
 
-  function renderActions(items: PostMediaView[]) {
+  function renderActions(items: PostMediaView[], props: Partial<typeof BASE & { immersiveBackground: boolean }> = {}) {
     return render(
       <CardMediaProvider items={items}>
-        <PostActions {...BASE} />
+        <PostActions {...BASE} {...props} />
       </CardMediaProvider>,
     );
   }
@@ -172,20 +177,40 @@ describe("PostActions — la forma de la hoja sale del contexto de medios", () =
     });
   });
 
-  it("con una foto a la vista no pide superficie: se abre como siempre", () => {
+  it("con una foto a la vista TAMBIÉN abre la hoja de VIDRIO", () => {
     renderActions([PHOTO]);
     fireEvent.click(commentsButton());
     expect(state.openComments).toHaveBeenCalledWith({
       postId: BASE.postId,
       commentCount: BASE.commentCount,
+      surface: "photo",
     });
-    expect(state.openComments.mock.calls[0][0]).not.toHaveProperty("surface");
   });
 
-  it("un post de puro texto no pide superficie", () => {
+  it("un post de puro texto (sin medios, sin banner) no pide superficie", () => {
     renderActions([]);
     fireEvent.click(commentsButton());
     expect(state.openComments.mock.calls[0][0]).not.toHaveProperty("surface");
+  });
+
+  it("sin medios pero con banner inmersivo (pregunta/texto) pide vidrio", () => {
+    renderActions([], { immersiveBackground: true });
+    fireEvent.click(commentsButton());
+    expect(state.openComments).toHaveBeenCalledWith({
+      postId: BASE.postId,
+      commentCount: BASE.commentCount,
+      surface: "banner",
+    });
+  });
+
+  it("con medios, el banner no pisa al video/foto: manda el carrusel", () => {
+    renderActions([VIDEO], { immersiveBackground: true });
+    fireEvent.click(commentsButton());
+    expect(state.openComments).toHaveBeenCalledWith({
+      postId: BASE.postId,
+      commentCount: BASE.commentCount,
+      surface: "video",
+    });
   });
 
   it("fuera de una card con medios no rompe: abre la hoja de siempre", () => {
@@ -201,6 +226,9 @@ describe("PostActions — la forma de la hoja sale del contexto de medios", () =
  * veces un video, dos fotos y al final el video". Mirando el PRIMER medio, un
  * post [foto, video] abría la hoja alta y opaca justo encima del video que la
  * persona acababa de deslizar — exactamente lo que pidió arreglar dos veces.
+ * Con la generalización a foto (2026-08-05) las dos diapositivas piden vidrio,
+ * cada una con su propio valor de `surface` — lo que hay que comprobar acá es
+ * que la hoja sigue a la diapositiva ACTIVA, no que exista una excepción.
  *
  * Sin estas anclas, la decisión puede volver a congelarse en `media[0]` y nadie
  * se entera hasta que el cliente lo ve otra vez.
@@ -267,18 +295,18 @@ describe("PostCard → PostActions: la hoja sigue a la diapositiva ACTIVA", () =
   /** Con qué se abrió la hoja la ÚLTIMA vez (se abre varias por test). */
   const lastOpen = () => state.openComments.mock.calls.at(-1)?.[0];
 
-  it("[foto, video]: en la foto, hoja de siempre; deslizando al video, la de vidrio", () => {
+  it("[foto, video]: en la foto pide vidrio de FOTO; deslizando al video, vidrio de VIDEO", () => {
     const { container } = renderCard([PHOTO, VIDEO]);
 
     openComments();
-    expect(lastOpen()).not.toHaveProperty("surface");
+    expect(lastOpen()).toMatchObject({ surface: "photo" });
 
     swipeTo(container, 1);
     openComments();
     expect(lastOpen()).toMatchObject({ surface: "video" });
   });
 
-  it("[video, foto]: arranca de vidrio y al deslizar a la foto vuelve a la de siempre", () => {
+  it("[video, foto]: arranca de vidrio de VIDEO y al deslizar a la foto pasa a vidrio de FOTO", () => {
     const { container } = renderCard([VIDEO, PHOTO]);
 
     openComments();
@@ -286,14 +314,14 @@ describe("PostCard → PostActions: la hoja sigue a la diapositiva ACTIVA", () =
 
     swipeTo(container, 1);
     openComments();
-    expect(lastOpen()).not.toHaveProperty("surface");
+    expect(lastOpen()).toMatchObject({ surface: "photo" });
   });
 
   it("el video al FINAL de un carrusel largo también manda cuando se llega a él", () => {
     const { container } = renderCard([PHOTO, PHOTO, VIDEO]);
 
     openComments();
-    expect(lastOpen()).not.toHaveProperty("surface");
+    expect(lastOpen()).toMatchObject({ surface: "photo" });
 
     swipeTo(container, 2);
     openComments();
@@ -306,9 +334,9 @@ describe("PostCard → PostActions: la hoja sigue a la diapositiva ACTIVA", () =
     expect(lastOpen()).toMatchObject({ surface: "video" });
   });
 
-  it("una sola foto no la pide (ahí el vidrio no aporta)", () => {
+  it("una sola foto TAMBIÉN pide la hoja de vidrio (2026-08-05: ya no hay excepción)", () => {
     renderCard([PHOTO]);
     openComments();
-    expect(lastOpen()).not.toHaveProperty("surface");
+    expect(lastOpen()).toMatchObject({ surface: "photo" });
   });
 });

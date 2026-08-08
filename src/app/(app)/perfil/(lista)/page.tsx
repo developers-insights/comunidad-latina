@@ -192,6 +192,7 @@ export default async function PerfilPage({
             displayName: profile.display_name,
             bio: profile.bio ?? "",
             area: profile.area_label ?? "",
+            country: profile.country_origin ?? "",
           }}
         />
       </BezelCard>

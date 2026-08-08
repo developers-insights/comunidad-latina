@@ -99,6 +99,52 @@ function PollPreview() {
   );
 }
 
+/**
+ * MARCO DE LA VISTA PREVIA — "así se va a ver" tiene que verse ENTERO.
+ *
+ * El bug (feedback cliente 2026-08-05: "el fondo cortado"): el banner fija su
+ * alto con el espaciador `pt-[125%]` de TextBanner/QuestionBanner, o sea 125%
+ * de SU ANCHO. A ancho completo de la hoja eso son ~416px en un teléfono de
+ * 375 — y el área que scrollea de la hoja, con el teclado abierto (que es el
+ * estado normal MIENTRAS se escribe, justo cuando aparece la vista previa),
+ * mide ~374px menos la etiqueta y el campo de texto: ~215px. Medido en el
+ * navegador: 78px de degradado quedaban fuera del viewport, siempre por abajo.
+ * No era que el degradado no se pintara —el 4:5 sale exacto— sino que la pieza
+ * pedía más alto del que la hoja tenía para mostrarla.
+ *
+ * El arreglo invierte la dependencia: en vez de que el ALTO salga del ancho
+ * disponible, el ANCHO sale del alto disponible. La región es un contenedor de
+ * tamaño (`container-type: size`) que toma el espacio que sobra en la columna,
+ * y el marco mide `min(100%, 80cqh)` — 80% del alto de la región es
+ * exactamente el ancho cuyo 4:5 entra justo. Con lugar de sobra gana el 100% y
+ * la vista previa queda del tamaño real de la card; con el teclado arriba se
+ * achica en proporción, pero entera. `max-h-full` cierra el caso raro (texto
+ * que ni al 4:5 entra en ese ancho): lo que se recorta es el sobrante de
+ * texto, nunca el fondo — el degradado llena el marco siempre.
+ *
+ * `min-h-40` es el piso: en un teléfono chico con el teclado abierto no hay
+ * lugar para nada decente, así que la vista previa deja de encogerse y la hoja
+ * scrollea, que es un problema que la persona puede resolver.
+ */
+function PreviewFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-40 flex-1 items-center justify-center [container-type:size]">
+      <div className="max-h-full w-[min(100%,80cqh)] overflow-hidden rounded-xl border border-border-subtle">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Vista previa antes de escribir: no hay pieza todavía, solo la invitación. */
+function PreviewPlaceholder({ label }: { label: string }) {
+  return (
+    <p className="shrink-0 rounded-xl border border-border-subtle bg-surface-subtle px-5 py-10 text-center text-sm text-foreground-muted">
+      {label}
+    </p>
+  );
+}
+
 /** Interruptor accesible de verdad: `role="switch"` + `aria-checked`, 44px. */
 function PollSwitch({
   checked,
@@ -182,12 +228,28 @@ export function ComposerSheet({
   const exemptFromMedia = isQuestion || isText;
   const photos = media.filter((item) => item.kind === "photo");
   const hasVideo = media.some((item) => item.kind === "video");
+  const hasMedia = media.length > 0;
   const trimmed = body.trim();
-  // Un post kind='post' SIN medio no pasa el trigger. Acá el botón sí se apaga
-  // —el medio está a un toque, en la misma pantalla— en vez de abrir otra hoja
-  // encima de esta y pelearse dos focus traps.
-  const canPublish =
-    trimmed.length >= 2 && !isPending && (exemptFromMedia || media.length > 0);
+  /**
+   * QUÉ HABILITA PUBLICAR (feedback cliente 2026-08-05: "acá si no pongo algo
+   * no me deja publicar. Que se pueda publicar así de una").
+   *
+   * La regla real es "que haya ALGO que publicar", no "que haya texto":
+   *  · con foto o video, el pie es OPCIONAL — una foto ya es la publicación,
+   *    igual que en Instagram;
+   *  · en pregunta y texto el cuerpo ES la publicación: sin él no hay nada que
+   *    mandar, así que sigue siendo obligatorio;
+   *  · un post kind='post' SIN medio no pasa el trigger MEDIA_REQUIRED, y acá
+   *    el botón se apaga —el medio está a un toque, en la misma pantalla— en
+   *    vez de abrir otra hoja encima de esta y pelearse dos focus traps.
+   *
+   * El mínimo de 2 caracteres se mantiene SOLO para lo que sí se escribió: un
+   * pie de un carácter es casi siempre un roce sin querer, y además es la misma
+   * regla que valida el servidor (postSchema) — si el botón dejara pasar algo
+   * que la action rechaza, la persona vería un error sin entender por qué.
+   */
+  const bodyOk = trimmed.length === 0 ? !exemptFromMedia : trimmed.length >= 2;
+  const canPublish = bodyOk && !isPending && (exemptFromMedia || hasMedia);
   const bodyPlaceholder = isQuestion
     ? COPY.composer.compose.questionPlaceholder
     : isText
@@ -228,48 +290,47 @@ export function ComposerSheet({
       // botón de publicar queda flotando a media pantalla.
       bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
     >
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4 pt-3">
+      {/* `flex flex-col`: la vista previa tiene que poder CEDER alto (ver
+          PreviewFrame). Todo lo demás va `shrink-0` — el campo de texto y el
+          pie no se achican para hacerle lugar a una maqueta. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-4 pt-3">
         {isQuestion ? (
           <>
             {/* La pregunta ya se ve como va a salir: mismo componente que el
                 feed, en modo vista previa (sin toque, sin navegación). */}
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-foreground-muted">
+            <p className="mb-2 shrink-0 text-xs font-medium uppercase tracking-wider text-foreground-muted">
               {COPY.composer.compose.previewLabel}
             </p>
-            <div className="overflow-hidden rounded-xl border border-border-subtle">
-              {trimmed.length > 0 ? (
+            {trimmed.length > 0 ? (
+              <PreviewFrame>
                 <QuestionBanner
                   preview
                   postId={previewId}
                   question={body}
                   footer={pollEnabled ? <PollPreview /> : undefined}
                 />
-              ) : (
-                <p className="bg-surface-subtle px-5 py-10 text-center text-sm text-foreground-muted">
-                  {COPY.composer.compose.questionPlaceholder}
-                </p>
-              )}
-            </div>
+              </PreviewFrame>
+            ) : (
+              <PreviewPlaceholder label={COPY.composer.compose.questionPlaceholder} />
+            )}
           </>
         ) : isText ? (
           <>
             {/* Mismo principio que la pregunta: el texto ya se ve como va a
                 salir, sin encuesta debajo (kind='text' nunca la lleva). */}
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-foreground-muted">
+            <p className="mb-2 shrink-0 text-xs font-medium uppercase tracking-wider text-foreground-muted">
               {COPY.composer.compose.previewLabel}
             </p>
-            <div className="overflow-hidden rounded-xl border border-border-subtle">
-              {trimmed.length > 0 ? (
+            {trimmed.length > 0 ? (
+              <PreviewFrame>
                 <TextBanner preview postId={previewId} text={body} />
-              ) : (
-                <p className="bg-surface-subtle px-5 py-10 text-center text-sm text-foreground-muted">
-                  {COPY.composer.compose.textPlaceholder}
-                </p>
-              )}
-            </div>
+              </PreviewFrame>
+            ) : (
+              <PreviewPlaceholder label={COPY.composer.compose.textPlaceholder} />
+            )}
           </>
         ) : (
-          <>
+          <div className="shrink-0">
             {/* El medio elegido, protagonista: primero el que abre la
                 publicación, el resto en una tira debajo. */}
             {media.length > 0 && (
@@ -423,7 +484,7 @@ export function ComposerSheet({
                 </div>
               </fieldset>
             )}
-          </>
+          </div>
         )}
 
         <label htmlFor="composer-sheet-body" className="sr-only">
@@ -438,7 +499,7 @@ export function ComposerSheet({
           onChange={(event) => onBodyChange(event.target.value)}
           placeholder={bodyPlaceholder}
           className={cn(
-            "mt-3 min-h-24 w-full resize-none rounded-lg border border-border bg-surface p-3",
+            "mt-3 min-h-24 w-full shrink-0 resize-none rounded-lg border border-border bg-surface p-3",
             "text-base text-foreground placeholder:text-foreground-muted",
             "focus:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
             "disabled:opacity-60",
@@ -446,7 +507,7 @@ export function ComposerSheet({
         />
 
         {isQuestion && (
-          <div className="mt-3">
+          <div className="mt-3 shrink-0">
             <PollSwitch
               checked={pollEnabled}
               onChange={onPollChange}
@@ -457,7 +518,7 @@ export function ComposerSheet({
 
         {/* Progreso REAL de la subida del video (XHR), no una barra decorativa. */}
         {uploadPct !== null && (
-          <div className="mt-3" role="status">
+          <div className="mt-3 shrink-0" role="status">
             <p className="text-xs font-medium text-foreground-secondary">
               {COPY.composer.videoUploading(uploadPct)}
             </p>
@@ -472,7 +533,7 @@ export function ComposerSheet({
       </div>
 
       {/* Publicar SIEMPRE a la vista: el pie no scrollea con el contenido. */}
-      <div className="flex items-center gap-2 border-t border-border-subtle px-5 pt-3">
+      <div className="flex shrink-0 items-center gap-2 border-t border-border-subtle px-5 pt-3">
         <Button
           type="button"
           variant="ghost"

@@ -1,12 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { DotsThree } from "@phosphor-icons/react/dist/ssr";
+import { DotsThree, Megaphone } from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, useToast } from "@/components/ui";
 import { ReportScamButton, ReportSheet } from "@/components/trust";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
+
+/**
+ * Copy local de "Promocionar" (feedback cliente Geovanny, 2026-08-05).
+ * TODO(integración): mover a feed/copy.ts — ese archivo lo está editando
+ * otro agente en simultáneo, se declara acá para no pisarle el merge.
+ */
+const PROMOTE_LABEL = "Promocionar";
 
 export interface PostMenuProps {
   postId: string;
@@ -26,6 +34,8 @@ export function PostMenu({ postId, authorId, viewerId }: PostMenuProps) {
   const { toast } = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  // Sólo el dueño del post ve "Promocionar" — el resto ni sabe que existe.
+  const isOwnPost = Boolean(viewerId && authorId && viewerId === authorId);
 
   function openReport() {
     setMenuOpen(false);
@@ -63,6 +73,19 @@ export function PostMenu({ postId, authorId, viewerId }: PostMenuProps) {
         ariaLabel={COPY.post.menuLabel}
       >
         <div className="flex flex-col pb-4">
+          {isOwnPost && (
+            <Link
+              href={`/impulsar-post/${postId}`}
+              onClick={() => setMenuOpen(false)}
+              className={cn(
+                "flex min-h-11 w-full items-center gap-2.5 px-4 py-3 text-left text-sm font-medium",
+                "text-sponsored-ink transition-colors duration-(--duration-fast) hover:bg-surface-subtle",
+              )}
+            >
+              <Megaphone size={18} weight="fill" aria-hidden="true" className="shrink-0" />
+              {PROMOTE_LABEL}
+            </Link>
+          )}
           <ReportScamButton variant="menu-item" onReport={openReport} />
         </div>
       </BottomSheet>

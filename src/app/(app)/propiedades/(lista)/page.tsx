@@ -380,9 +380,22 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
         <div className="flex flex-col gap-4">
           {cards.map((card) =>
             boostedIds.has(card.id) ? (
-              // Chip FTC: el lugar pago SIEMPRE se marca como publicidad.
-              <div key={card.id} className="flex flex-col gap-1.5">
-                <Chip variant="brand" size="sm" className="w-fit">
+              // Contorno dorado + chip FTC (feedback cliente Geovanny,
+              // 2026-08-05: "todo el contorno" en dorado, mismo idioma que el
+              // AdChip del feed — ver card-ad-chip.tsx). El anillo rodea la
+              // ListingCard completa (su propio Double-Bezel queda intacto
+              // adentro); el chip flota sobre la foto, igual que el chip de
+              // verificación que ya vive ahí, para no competir con "todo el
+              // contorno" pidiendo además una fila propia arriba.
+              <div
+                key={card.id}
+                className="relative rounded-xl ring-2 ring-sponsored/70 shadow-[0_0_0_1px_var(--color-sponsored),0_10px_28px_-14px_var(--color-sponsored)]"
+              >
+                <Chip
+                  variant="neutral"
+                  size="sm"
+                  className="absolute right-3.5 top-3.5 z-10 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
+                >
                   <Megaphone size={14} weight="fill" aria-hidden="true" />
                   Patrocinado
                 </Chip>

@@ -331,6 +331,58 @@ describe("PostComposer — la pregunta abre su propio paso", () => {
   });
 });
 
+describe("PostComposer — una foto se publica sin escribir nada", () => {
+  /**
+   * Feedback cliente 2026-08-05: "si la persona no quiere subir ningún texto
+   * relacionado, que le deje publicar — porque acá si no pongo algo no me deja
+   * publicar. Que se pueda publicar así de una."
+   *
+   * Este test cubre el camino COMPLETO (elegir foto → hoja → Publicar), que es
+   * donde estaba el segundo freno: además del botón apagado, `submit()` cortaba
+   * en seco con `trimmed.length < 2` y el toque no hacía absolutamente nada.
+   */
+  function pickPhoto() {
+    const input = document.getElementById("post-composer-photos") as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], "feria.jpg", { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [file] } });
+  }
+
+  it("elegir una foto y tocar Publicar manda kind='post' con el cuerpo vacío", async () => {
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+    pickPhoto();
+
+    const publish = await screen.findByRole("button", {
+      name: new RegExp(COPY.composer.publish),
+    });
+    expect(publish.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(publish);
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect(sent.get("kind")).toBe("post");
+    expect(sent.get("body")).toBe("");
+    expect(sent.getAll("photos").length).toBe(1);
+  });
+
+  it("el pie sigue viajando cuando la persona sí escribe", async () => {
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+    pickPhoto();
+
+    fireEvent.change(sheetBody(), { target: { value: "Se llenó la feria." } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect(sent.get("body")).toBe("Se llenó la feria.");
+  });
+});
+
 describe("PostComposer — el cuerpo no se pierde si cambiás de idea", () => {
   it("cerrar Texto sin publicar y abrir Pregunta conserva lo ya escrito", async () => {
     // Mismo criterio que el viejo flujo "¿cómo lo mostramos?" (needsMedia,

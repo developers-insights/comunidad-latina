@@ -184,6 +184,10 @@ export const COPY = {
     emptyFilteredTitle: "Nada con esa jornada por ahora",
     emptyFilteredMessage: "Probá con la otra opción o mirá todos los empleos disponibles.",
     emptyPublishCta: "Publicar el primer empleo",
+    /** Publicador sin cuenta (seed/API) — mismo texto que /propiedades y /profesionales. */
+    externalPublisher: (name: string) => `Publicado por ${name}`,
+    /** Miembro con cuenta pero sin perfil resuelto en el batch (caso borde). */
+    communityMember: "Miembro de la comunidad",
   },
 
   // ===========================================================================

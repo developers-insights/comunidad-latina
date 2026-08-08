@@ -6,6 +6,7 @@ import { z } from "zod";
 import { DAY_MS, limit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { COUNTRY_CODES } from "@/components/auth/countries";
 import type { ActionResult } from "@/components/auth/action-result";
 
 const COPY = {
@@ -13,6 +14,7 @@ const COPY = {
   nameLong: "El nombre es muy largo — probá con una versión más corta.",
   bioLong: "La bio es muy larga — el máximo son 500 caracteres.",
   areaLong: "La zona es muy larga — con el barrio alcanza.",
+  countryInvalid: "Ese país no está en la lista — elegí uno de las opciones.",
   noSession: "Tu sesión se cerró — entrá de nuevo para continuar.",
   genericError:
     "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo en un momento.",
@@ -40,6 +42,15 @@ const updateProfileSchema = z.object({
   displayName: z.string().trim().min(2, COPY.nameShort).max(60, COPY.nameLong),
   bio: z.string().trim().max(500, COPY.bioLong),
   area: z.string().trim().max(80, COPY.areaLong),
+  // País de origen (pedido cliente: editar de dónde es la persona). Opcional
+  // — el perfil ya lo mostraba (ProfileInfoPanel) pero no se podía tocar
+  // desde acá. Vacío = "prefiere no decirlo"; si no está vacío, tiene que ser
+  // uno de los códigos reales de countries.ts (nunca lo que mande el cliente).
+  country: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || COUNTRY_CODES.includes(value), COPY.countryInvalid)
+    .optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
@@ -58,13 +69,14 @@ export async function updateProfileAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, formError: COPY.noSession };
 
-  const { displayName, bio, area } = parsed.data;
+  const { displayName, bio, area, country } = parsed.data;
   const { error } = await supabase
     .from("profiles")
     .update({
       display_name: displayName,
       bio: bio || null,
       area_label: area || null,
+      country_origin: country || null,
     })
     .eq("id", user.id);
 

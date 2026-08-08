@@ -2,6 +2,7 @@ import { Briefcase, MapPin } from "@phosphor-icons/react/dist/ssr";
 import { AccentLink, BezelCard } from "@/components/ui";
 import { DirectoryMedia } from "@/components/directory";
 import { PhotoTap } from "@/components/media/photo-tap";
+import { PublisherTrust, firstNameOf } from "@/components/listings";
 import type { JobCardModel } from "@/app/(app)/empleos/queries";
 import { EMPLOYMENT_TYPE_LABEL } from "./helpers";
 import { COPY } from "./copy";
@@ -24,6 +25,12 @@ const ACCENT = "var(--accent-empleos)";
  * DOS destinos, uno por gesto (feedback 2026-07-26): cuando el aviso SÍ trae
  * foto, tocarla abre el visor con todas; al detalle se entra por la píldora "Ver
  * empleo". Sin foto el gradiente no es tocable — no hay nada que mirar.
+ *
+ * TRUST BADGE del publicador (era la única card de las 5 sin señal de
+ * confianza, en un producto anti-estafa): mismo patrón que ListingCard y
+ * ProfessionalCard — miembro con cuenta muestra PublisherTrust ya resuelto en
+ * batch por `fetchJobsPage`; publicador externo (seed/API sin cuenta) muestra
+ * solo el nombre, sin badge que no tiene detrás con qué respaldarse.
  */
 export function JobCard({ job }: { job: JobCardModel }) {
   const typeLabel = job.employmentType ? EMPLOYMENT_TYPE_LABEL[job.employmentType] : null;
@@ -70,9 +77,23 @@ export function JobCard({ job }: { job: JobCardModel }) {
         </PhotoTap>
 
         <div className="flex flex-col gap-2.5 p-4">
-          {job.publisherName && (
-            <p className="truncate text-sm text-foreground-secondary">{job.publisherName}</p>
-          )}
+          {job.publisher?.type === "member" ? (
+            <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
+              <span className="truncate">{job.publisher.displayName}</span>
+              <PublisherTrust
+                displayName={job.publisher.displayName}
+                firstName={firstNameOf(job.publisher.displayName)}
+                score={job.publisher.score}
+                level={job.publisher.level}
+                signals={job.publisher.signals}
+                size="inline"
+              />
+            </div>
+          ) : job.publisher?.type === "external" ? (
+            <p className="truncate text-sm text-foreground-secondary">
+              {C.externalPublisher(job.publisher.name)}
+            </p>
+          ) : null}
 
           <AccentLink accent={ACCENT} href={`/empleos/${job.id}`} ariaLabel={job.title}>
             {C.viewJob}

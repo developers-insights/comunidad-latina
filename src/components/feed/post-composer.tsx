@@ -320,10 +320,19 @@ export function PostComposer({
 
   function submit() {
     const trimmed = body.trim();
-    if (trimmed.length < 2 || isPending) return;
-
     const isQuestion = composeMode === "question";
     const isText = composeMode === "text";
+    /**
+     * MISMA regla que enciende el botón en ComposerSheet, y la misma que valida
+     * el servidor: con foto o video el pie es OPCIONAL (feedback cliente
+     * 2026-08-05), y sólo pregunta y texto siguen exigiendo cuerpo — ahí el
+     * cuerpo ES la publicación. Este chequeo no es decorativo: sin él, publicar
+     * una foto sin pie salía por acá en silencio y el botón no hacía nada.
+     */
+    const needsBody = isQuestion || isText;
+    const bodyOk = trimmed.length === 0 ? !needsBody : trimmed.length >= 2;
+    if (!bodyOk || isPending) return;
+
     // Regla "todo post lleva imagen" (trigger MEDIA_REQUIRED 0023, exenta para
     // pregunta y texto): acá no hace falta reaccionar — ComposerSheet ya
     // mantiene su botón de Publicar apagado en modo `media` sin medio elegido,

@@ -1,17 +1,42 @@
 import Link from "next/link";
-import { ArrowRight, MapPin, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { ArrowRight, MapPin, SealCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { ACCENT_CHIP_CLASS, DirectoryMedia } from "@/components/directory";
-import { BezelCard, Chip, Skeleton, buttonVariants } from "@/components/ui";
+import { PublisherTrust } from "@/components/listings";
+import { Badge, BezelCard, Chip, Skeleton, buttonVariants } from "@/components/ui";
 import { PhotoTap } from "@/components/media/photo-tap";
+import type { TrustLevel, TrustSignal } from "@/components/trust";
 import { cn } from "@/lib/utils";
-import { BusinessTrustBadge, type OwnerTrust } from "./business-trust-badge";
 
 const COPY = {
   viewBusiness: "Ver negocio",
   publishedBy: "Publicado por",
+  /** Mismo término que la burbuja de venta de la sección ("Conocer Presencia
+   *  Verificada"): el badge de la card usa el nombre real de la feature, no un
+   *  genérico "Verificado" que no calzaría con lo que el dueño compró. */
+  verifiedBadge: "Presencia verificada",
   /** Tocar la foto la abre en el visor; "Ver negocio" abre el perfil. */
   openPhotos: (title: string) => `Ver fotos de ${title}`,
 } as const;
+
+/**
+ * Trust Score del dueño del negocio, en la forma que pide el componente
+ * CANÓNICO `PublisherTrust` (@/components/listings, el mismo que usan
+ * propiedades/profesionales/eventos/negocios/[id]). Antes esta card tenía su
+ * propio `BusinessTrustBadge`, que reimplementaba el mismo botón+hoja que
+ * `PublisherTrust` ya resuelve — dos componentes para un mismo patrón es
+ * exactamente el tipo de deriva que rompe "cuando una sección está bien, la
+ * hermana debe estar igual". Unificado: `business-trust-badge.tsx` se borró.
+ */
+export interface OwnerTrust {
+  /** Nombre completo — el sheet usa el nombre de pila (firstName). */
+  displayName: string;
+  firstName: string;
+  score: number;
+  level: TrustLevel;
+  signals: TrustSignal[];
+  /** SIN id no hay botón "Ver el perfil de…" dentro del desglose. */
+  profileId: string | null;
+}
 
 export interface BusinessCardModel {
   id: string;
@@ -29,6 +54,8 @@ export interface BusinessCardModel {
   ownerTrust: OwnerTrust | null;
   /** Fuente externa (seed/API) sin cuenta — solo se muestra si no hay ownerTrust. */
   publisherName: string | null;
+  /** `listings.store_verified` — espejo público de `business_accounts.verified_presence`. */
+  storeVerified: boolean;
 }
 
 /**
@@ -63,7 +90,24 @@ export function BusinessCard({ business }: { business: BusinessCardModel }) {
           label={COPY.openPhotos(business.title)}
           authorName={business.title}
         >
-          <DirectoryMedia src={business.photoUrl} accent="negocios" icon={Storefront} />
+          <DirectoryMedia
+            src={business.photoUrl}
+            accent="negocios"
+            icon={Storefront}
+            // Mismo lugar que el sello de licencia de vivienda/profesionales
+            // (overlayTopLeft, Badge success + ícono+texto — nunca solo color,
+            // §3.2): acá el sello es SealCheck + "Presencia verificada" porque
+            // `store_verified` es OTRA verificación (la del negocio, no una
+            // licencia con fecha) y usar el mismo ícono confundiría las dos.
+            overlayTopLeft={
+              business.storeVerified ? (
+                <Badge variant="success">
+                  <SealCheck size={13} weight="fill" aria-hidden="true" />
+                  {COPY.verifiedBadge}
+                </Badge>
+              ) : undefined
+            }
+          />
         </PhotoTap>
 
         <div className="flex flex-col gap-2.5 p-4">
@@ -85,7 +129,18 @@ export function BusinessCard({ business }: { business: BusinessCardModel }) {
           )}
 
           {business.ownerTrust ? (
-            <BusinessTrustBadge trust={business.ownerTrust} />
+            <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
+              <span className="truncate">{business.ownerTrust.displayName}</span>
+              <PublisherTrust
+                displayName={business.ownerTrust.displayName}
+                firstName={business.ownerTrust.firstName}
+                score={business.ownerTrust.score}
+                level={business.ownerTrust.level}
+                signals={business.ownerTrust.signals}
+                size="inline"
+                profileId={business.ownerTrust.profileId}
+              />
+            </div>
           ) : (
             business.publisherName && (
               <p className="text-sm text-foreground-muted">

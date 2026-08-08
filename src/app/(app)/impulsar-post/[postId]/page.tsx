@@ -137,7 +137,9 @@ export default async function ImpulsarPostPage({
           <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
             {COPY.postLabel}
           </p>
-          <p className="mt-1 line-clamp-3 text-sm text-foreground">{excerpt}</p>
+          <p className="mt-1 line-clamp-3 text-sm text-foreground">
+            {excerpt || "Foto o video"}
+          </p>
         </div>
       </BezelCard>
 

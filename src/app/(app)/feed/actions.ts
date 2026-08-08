@@ -58,10 +58,18 @@ const GENERIC_INVALID = "invalid" as const;
 // ---------------------------------------------------------------------------
 
 const postSchema = z.object({
+  /**
+   * El cuerpo puede venir VACÍO (feedback cliente 2026-08-05: "si la persona no
+   * quiere subir ningún texto relacionado, que le deje publicar"). El esquema
+   * ya no puede exigir un mínimo acá porque el mínimo DEPENDE de si la
+   * publicación trae medio, y eso recién se sabe después de leer las fotos y
+   * los paths de video del FormData: la regla real vive abajo, en
+   * `bodyIsPublishable`, y este pipe se queda solo con el techo de 2000.
+   */
   body: z
     .string()
     .transform((value) => value.trim())
-    .pipe(z.string().min(2).max(2000)),
+    .pipe(z.string().max(2000)),
   kind: z.enum(["post", "question", "text"]),
   /**
    * Encuesta Sí/No de una PREGUNTA (contrato 0041). Ausente = pregunta sin
@@ -112,6 +120,24 @@ function isOwnVideoPath(path: string, tenantId: string, userId: string): boolean
     VIDEO_FILENAME_RE.test(filename) &&
     !filename.includes("..")
   );
+}
+
+/**
+ * ¿ESTE CUERPO SE PUEDE PUBLICAR? La frontera real de la regla "el texto es
+ * opcional cuando hay foto o video" (feedback cliente 2026-08-05).
+ *
+ *  · Sin medio no hay publicación posible sin texto: una pregunta, un texto o
+ *    un post vacíos no son nada. Sigue el mínimo histórico de 2 caracteres.
+ *  · Con medio, el vacío es una respuesta válida —la foto ES la publicación,
+ *    igual que en Instagram— pero un cuerpo de UN carácter no: es casi siempre
+ *    un roce sin querer, y aceptarlo llenaría el feed de pies "a".
+ *
+ * `body` llega ya trimmeado por el esquema. NO se exporta: este archivo es
+ * `"use server"` y Next sólo admite exports async (serían endpoints).
+ */
+function bodyIsPublishable(body: string, hasMedia: boolean): boolean {
+  if (body.length === 0) return hasMedia;
+  return body.length >= 2;
 }
 
 /** Orden de los medios tal como los eligió el usuario ("photo" | "video"). */
@@ -288,13 +314,24 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     declaredCategory = parsed.data.videoCategory ?? DEFAULT_VIDEO_CATEGORY;
   }
 
+  const hasMedia = photos.length > 0 || videoPaths.length > 0;
+
   // ALGÚN medio obligatorio en posts (feedback cliente 2026-07-19: feed
   // visual; desde el sprint reels el video también cuenta), no en preguntas.
   // Defensa en profundidad: la UX del composer ya lo evita y el trigger
   // MEDIA_REQUIRED (0023) es la última línea; acá fallamos antes de tocar
   // storage/DB para no dejar basura ni una foto huérfana.
-  if (kind === "post" && photos.length === 0 && videoPaths.length === 0) {
+  if (kind === "post" && !hasMedia) {
     return { ok: false, code: "photo" };
+  }
+
+  // TEXTO OPCIONAL CON MEDIO (2026-08-05). Va acá y no en el esquema porque la
+  // regla depende de si hay foto o video, que recién se sabe después de leer el
+  // FormData. Sigue devolviendo `invalid` — el composer ya lo traduce a
+  // "Contanos un poquito más" — y sigue corriendo ANTES del guard, de la
+  // moderación y de Storage: un cuerpo inválido no gasta plata ajena.
+  if (!bodyIsPublishable(body, hasMedia)) {
+    return { ok: false, code: GENERIC_INVALID };
   }
 
   // Guard ANTES de moderar y ANTES de subir la foto. Sin este chequeo, la foto
@@ -329,6 +366,15 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // ---- Moderación de texto ANTES de publicar (§8) -------------------------
   const moderation = await moderateText(body);
   const tier = moderation.flagged ? TIER_HUMAN : moderationTier(moderation.score);
+  /**
+   * `moderateText("")` devuelve `skipped: true` porque no llama a nadie — pero
+   * "no había texto que moderar" NO es lo mismo que "no pudimos moderar el
+   * texto", que es lo que significa `moderation_skipped` en la cola. Desde que
+   * una foto puede ir sin pie, sin esta distinción CADA foto sin pie entraría a
+   * revisión humana con una razón que miente sobre por qué está ahí. La foto
+   * sigue teniendo su propio camino de revisión (`mediaNeedsAsyncReview`).
+   */
+  const textUnmoderated = body.length > 0 && moderation.skipped;
 
   // ---- Media: publicación instantánea + revisión asíncrona ----------------
   // Sin Vision, la foto/el video YA NO fuerzan pending_review (mataba el feed
@@ -336,7 +382,6 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // revisarse después. Con Vision configurado se mantiene el screening
   // síncrono actual. El TEXTO sigue gobernando pending_review.
   const autoApprove = devAutoApprove();
-  const hasMedia = photos.length > 0 || videoPaths.length > 0;
   const mediaNeedsAsyncReview = hasMedia && !isVisionConfigured && !autoApprove;
 
   const status: "published" | "pending_review" =
@@ -400,11 +445,11 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
 
   // ---- Cola de moderación (admin, uso permitido §6) ------------------------
   const shouldEnqueue =
-    moderation.flagged || moderation.skipped || tier > TIER_AUTO || mediaNeedsAsyncReview;
+    moderation.flagged || textUnmoderated || tier > TIER_AUTO || mediaNeedsAsyncReview;
   if (shouldEnqueue) {
     try {
       const reasons = [
-        ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
+        ...(textUnmoderated ? ["moderation_skipped"] : moderation.categories),
         // Clave histórica "photo_async_review" (el panel ya la conoce); el
         // video suma la suya propia para que el equipo sepa qué mirar.
         ...(mediaNeedsAsyncReview && photos.length > 0 ? ["photo_async_review"] : []),

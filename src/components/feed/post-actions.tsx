@@ -15,7 +15,7 @@ import { toggleSaveAction } from "@/app/(app)/feed/engagement-actions";
 import { COPY } from "./copy";
 import { useCardLike, useOptimisticLike } from "./card-like-context";
 import { useCardMedia } from "./card-media-context";
-import { useCommentsSheet } from "./comments-sheet";
+import { useCommentsSheet, type CommentsSurface } from "./comments-sheet";
 
 export interface PostActionsProps {
   postId: string;
@@ -32,6 +32,22 @@ export interface PostActionsProps {
   savedByViewer?: boolean;
   /** true en el detalle: el botón de comentarios no navega, solo informa. */
   isDetail?: boolean;
+  /**
+   * true cuando el post NO tiene medios pero se muestra sobre un banner
+   * inmersivo (pregunta o texto, campo degradado — `showAnyBanner` en
+   * post-card.tsx). Ahí la hoja de comentarios también va en modo vidrio,
+   * igual que sobre un video o una foto (feedback cliente 2026-08-05: "en
+   * las preguntas también sale así [blanco]… no sale con modo vidrio como lo
+   * habías hecho anteriormente").
+   *
+   * WIRING PENDIENTE (2026-08-05): post-card.tsx todavía NO pasa este prop
+   * — es un archivo fuera del alcance de este cambio (otro agente lo está
+   * editando en paralelo). El soporte de acá ya está listo: en cuanto
+   * post-card.tsx mande `immersiveBackground={showAnyBanner}`, las preguntas
+   * y los posts de texto abren en vidrio sin tocar nada más. Hasta entonces
+   * siguen con la hoja sólida de siempre (mismo comportamiento que hoy).
+   */
+  immersiveBackground?: boolean;
   className?: string;
 }
 
@@ -65,13 +81,23 @@ const actionClass = cn(
  * LA FORMA DE LA HOJA la decide el MEDIO QUE SE ESTÁ VIENDO, no el primero del
  * post: en un carrusel mezclado ("un video, dos fotos y al final el video") el
  * dedo ya se movió, y quien toca "comentar" está mirando la diapositiva actual.
- * Sobre un VIDEO se pide la media hoja de vidrio, que lo deja corriendo y visible
- * detrás (feedback cliente 2026-07-27, dicho dos veces en la misma call: "le
- * bloqueó todo el video", "los comentarios tienen que ser transparente el
- * fondo"). Sobre una FOTO estática el vidrio no aporta nada y arriesga contraste,
- * así que ahí se mantiene la hoja de siempre. El dato NO viaja como prop —lo
- * publica el carrusel en el contexto de medios de la card— justamente para que
- * no pueda quedar congelado ni desincronizarse del riel.
+ * Sobre un VIDEO o una FOTO se pide la media hoja de vidrio, que deja el medio
+ * visible detrás (feedback cliente 2026-07-27 sobre video, dicho dos veces en
+ * la misma call: "le bloqueó todo el video", "los comentarios tienen que ser
+ * transparente el fondo"; feedback cliente 2026-08-05, mismo reclamo pero
+ * sobre foto y pregunta: "acá sale en blanco y te tapa toda la imagen… no
+ * sale con modo vidrio como lo habías hecho anteriormente" — así que YA NO
+ * hay excepción para foto: el vidrio va sobre los dos, con el MISMO
+ * tratamiento de contraste (bg-media-shade/72 + blur) que ya probó sostener
+ * AA sobre un video claro). El dato NO viaja como prop —lo publica el
+ * carrusel en el contexto de medios de la card— justamente para que no pueda
+ * quedar congelado ni desincronizarse del riel.
+ *
+ * Sin medios (post de puro texto) la hoja sigue siendo la sólida de siempre,
+ * SALVO que el post se muestre sobre un banner inmersivo de pregunta/texto:
+ * ese caso lo señala `immersiveBackground` (ver su doc en PostActionsProps —
+ * hoy sin wiring real porque post-card.tsx, que sabe si el banner está
+ * activo, es de otro agente y está fuera de este cambio).
  */
 export function PostActions({
   postId,
@@ -82,16 +108,28 @@ export function PostActions({
   commentCount,
   savedByViewer = false,
   isDetail = false,
+  immersiveBackground = false,
   className,
 }: PostActionsProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
   const commentsSheet = useCommentsSheet();
-  // Sin contexto (acciones montadas fuera de una card con medios) no hay video
+  // Sin contexto (acciones montadas fuera de una card con medios) no hay medio
   // que tapar: la hoja de siempre es el default correcto.
   const media = useCardMedia();
-  const overVideo = media?.activeKind === "video";
+  // "image" (PostMediaKind) → "photo" (CommentsSurface): vocabularios
+  // distintos a propósito — uno describe el ARCHIVO, el otro la FORMA de la
+  // hoja. `immersiveBackground` es el único caso que no sale del carrusel
+  // (ver su doc en PostActionsProps).
+  const commentsSurface: CommentsSurface | undefined =
+    media?.activeKind === "video"
+      ? "video"
+      : media?.activeKind === "image"
+        ? "photo"
+        : immersiveBackground
+          ? "banner"
+          : undefined;
 
   // Estado compartido si hay provider; si no, propio (ambos hooks se llaman
   // siempre para respetar las reglas de hooks — el no usado es inofensivo).
@@ -208,8 +246,9 @@ export function PostActions({
             commentsSheet.open({
               postId,
               commentCount,
-              // Sobre video: media hoja de vidrio, el video sigue a la vista.
-              ...(overVideo ? { surface: "video" as const } : {}),
+              // Sobre video/foto/banner: media hoja de vidrio, el contenido
+              // sigue a la vista detrás.
+              ...(commentsSurface ? { surface: commentsSurface } : {}),
             })
           }
           aria-label={`${COPY.post.comments} (${commentCount})`}

@@ -5,9 +5,10 @@ import {
   updateProfileAction,
   type UpdateProfileInput,
 } from "@/app/(app)/perfil/actions";
+import { COUNTRY_OPTIONS } from "@/components/auth/countries";
 import { FormError } from "@/components/auth/form-error";
 import { ZoneInput } from "@/components/onboarding/zone-input";
-import { Button, Field, Input, Textarea, useToast } from "@/components/ui";
+import { Button, Field, Input, Select, Textarea, useToast } from "@/components/ui";
 
 const COPY = {
   displayName: "Tu nombre para mostrar",
@@ -16,6 +17,12 @@ const COPY = {
   bioPlaceholder: "Ej: Dominicana, 5 años en Queens. Amo cocinar.",
   area: "Tu barrio o zona",
   areaHelp: "Solo la zona — nunca tu dirección exacta.",
+  // País de origen (pedido cliente: "agregar al perfil de dónde es la
+  // persona"). Va como el resto de los campos opcionales del form: se puede
+  // dejar sin decir.
+  country: "País de origen",
+  countryHelp: "Así la comunidad sabe de dónde sos.",
+  countryEmptyOption: "Preferís no decirlo",
   submit: "Guardar cambios",
   saved: "Listo, tu perfil quedó actualizado.",
 } as const;
@@ -30,6 +37,7 @@ export function EditProfileForm({
   const [displayName, setDisplayName] = useState(initial.displayName);
   const [bio, setBio] = useState(initial.bio);
   const [area, setArea] = useState(initial.area);
+  const [country, setCountry] = useState(initial.country ?? "");
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -37,7 +45,7 @@ export function EditProfileForm({
     event.preventDefault();
     setFormError(null);
     startTransition(async () => {
-      const result = await updateProfileAction({ displayName, bio, area });
+      const result = await updateProfileAction({ displayName, bio, area, country });
       if (result.ok) {
         setFieldErrors({});
         toast({ title: COPY.saved, variant: "success" });
@@ -100,6 +108,29 @@ export function EditProfileForm({
           aria-invalid={fieldErrors.area ? true : undefined}
           aria-describedby={fieldErrors.area ? "edit-area-error" : undefined}
         />
+      </Field>
+
+      <Field
+        htmlFor="edit-country"
+        label={COPY.country}
+        help={COPY.countryHelp}
+        error={fieldErrors.country}
+        optional
+      >
+        <Select
+          id="edit-country"
+          value={country}
+          onChange={(e) => setCountry(e.target.value)}
+          aria-invalid={fieldErrors.country ? true : undefined}
+          aria-describedby={fieldErrors.country ? "edit-country-error" : undefined}
+        >
+          <option value="">{COPY.countryEmptyOption}</option>
+          {COUNTRY_OPTIONS.map((option) => (
+            <option key={option.code} value={option.code}>
+              {option.name}
+            </option>
+          ))}
+        </Select>
       </Field>
 
       <Button type="submit" loading={pending} className="self-start">

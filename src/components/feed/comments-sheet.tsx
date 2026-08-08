@@ -49,14 +49,40 @@ import type { AuthorView } from "./helpers";
 /**
  * SOBRE QUÉ se abre la hoja. Cambia la forma, no el contenido:
  *  · "default" — la hoja alta de siempre, opaca, sobre el feed.
- *  · "video"   — media hoja de VIDRIO sobre un video que sigue corriendo
- *    (feedback cliente 2026-07-27: "le bloqueó todo el video… ¿puede salir como
- *    un poquito más abajo? porque a veces la gente sigue viendo el video y está
- *    leyendo los comentarios"; "los comentarios tienen que ser transparente el
- *    fondo, no tiene que ser blanco"). Además el hilo se desplaza solo, despacio,
- *    hasta que la persona toca algo.
+ *  · "video" | "photo" | "banner" — media hoja de VIDRIO sobre contenido
+ *    visual INMERSIVO que sigue a la vista detrás: un video que sigue
+ *    corriendo, una foto, o el campo degradado de un banner de
+ *    pregunta/texto. Nace del feedback sobre video (2026-07-27: "le bloqueó
+ *    todo el video… ¿puede salir como un poquito más abajo? porque a veces
+ *    la gente sigue viendo el video y está leyendo los comentarios"; "los
+ *    comentarios tienen que ser transparente el fondo, no tiene que ser
+ *    blanco") y se generaliza a foto y pregunta con el mismo feedback
+ *    repetido (2026-08-05: "acá [foto] sale en blanco y te tapa toda la
+ *    imagen… y en las preguntas también sale así. No sale con modo vidrio
+ *    como lo habías hecho anteriormente").
+ *
+ *    LOS TRES usan el MISMO tratamiento de vidrio — bg-media-shade/72 +
+ *    blur, tinta on-media — porque el riesgo de contraste (un video o una
+ *    foto claros debajo) es igual de real en los tres, y el pedido del
+ *    cliente es justamente que se vean CONSISTENTES entre sí.
+ *
+ *    SOLO "video" además: el hilo se desplaza solo, despacio, hasta que la
+ *    persona toca algo (ver `useAutoScrollThread`) — una foto o una pregunta
+ *    ya se leyeron enteras al tocar "comentar"; no hay nada "siguiendo
+ *    corriendo" que acompañar mientras se lee.
  */
-export type CommentsSurface = "default" | "video";
+export type CommentsSurface = "default" | "video" | "photo" | "banner";
+
+/** Superficies con vidrio (glass) — todo menos la hoja alta y opaca de siempre. */
+const GLASS_SURFACES: ReadonlySet<CommentsSurface> = new Set([
+  "video",
+  "photo",
+  "banner",
+]);
+
+function isGlassSurface(surface: CommentsSurface): boolean {
+  return GLASS_SURFACES.has(surface);
+}
 
 interface OpenCommentsBase {
   /** Conteo conocido al abrir (pinta el título al instante, antes del fetch). */
@@ -99,9 +125,10 @@ interface Session {
 
 /**
  * ¿Está arriba el teclado virtual? Mide cuánto del layout viewport tapa, vía
- * `visualViewport` (la única señal fiable en móvil). Sólo lo usa la hoja SOBRE
- * VIDEO: cuando el teclado sube, la hoja se achica todavía más para que el video
- * NO desaparezca de pantalla mientras se escribe el comentario.
+ * `visualViewport` (la única señal fiable en móvil). Sólo lo usa la hoja de
+ * VIDRIO (video, foto o banner): cuando el teclado sube, la hoja se achica
+ * todavía más para que el contenido de atrás NO desaparezca de pantalla
+ * mientras se escribe el comentario.
  */
 function useKeyboardOpen(active: boolean): boolean {
   const [open, setOpen] = useState(false);
@@ -160,8 +187,8 @@ export function CommentsSheetProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ open: openSheet }), [openSheet]);
 
-  const overVideo = session?.surface === "video";
-  const keyboardOpen = useKeyboardOpen(open && overVideo);
+  const overMedia = session ? isGlassSurface(session.surface) : false;
+  const keyboardOpen = useKeyboardOpen(open && overMedia);
 
   return (
     <CommentsSheetContext.Provider value={value}>
@@ -182,15 +209,17 @@ export function CommentsSheetProvider({ children }: { children: ReactNode }) {
           // tiene que vivir donde vive la tinta, no depender de un atributo de
           // otro componente. Sin efecto en pantalla (la regla es @media print).
           "cl-print-hide",
-          overVideo &&
+          overMedia &&
             cn(
-              // MEDIA hoja: arriba sigue viéndose el video, y corriendo — abrir
-              // los comentarios no lo pausa. Con el teclado arriba se achica
-              // todavía más para que el video no desaparezca.
+              // MEDIA hoja: arriba sigue viéndose el video/foto/pregunta —
+              // abrir los comentarios no lo tapa. Con el teclado arriba se
+              // achica todavía más para que el contenido no desaparezca.
               keyboardOpen ? "h-[34dvh]" : "h-[46dvh]",
               // VIDRIO, no panel blanco: velo de media-shade + desenfoque. Con
               // 72% de tinta el texto on-media queda ≥7:1 hasta sobre un video
-              // blanco, y el movimiento del video se sigue viendo detrás.
+              // o una foto blancos, y el contenido se sigue viendo detrás —
+              // MISMO tratamiento en los tres casos (video/foto/banner), no
+              // hay token nuevo que inventar.
               "bg-media-shade/72 shadow-none backdrop-blur-2xl backdrop-saturate-150",
               "border-t border-on-media/15",
               // El handle de arrastre del BottomSheet usa bg-border, invisible
@@ -198,9 +227,10 @@ export function CommentsSheetProvider({ children }: { children: ReactNode }) {
               "[&>[aria-hidden]]:bg-on-media/40",
             ),
         )}
-        // El velo del fondo baja a un tinte: sobre un video, lo de atrás no es
-        // ruido a tapar — es justo lo que la persona está mirando.
-        scrimClassName={overVideo ? "bg-media-shade/25" : undefined}
+        // El velo del fondo baja a un tinte: sobre contenido visual inmersivo,
+        // lo de atrás no es ruido a tapar — es justo lo que la persona está
+        // mirando (video, foto o la pieza gráfica de una pregunta/texto).
+        scrimClassName={overMedia ? "bg-media-shade/25" : undefined}
         // El body toma el control del layout: header fijo + lista scrolleable +
         // composer anclado abajo. Sin esto el BottomSheet scrollea todo junto.
         bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
@@ -372,7 +402,11 @@ const AUTO_SCROLL_DELAY_MS = 1400;
  * comentarios se van moviendo solo como si fuera un scrolling").
  *
  * Reglas duras, para que ayude en vez de estorbar:
- *  · sólo sobre VIDEO — en el feed las manos ya están scrolleando;
+ *  · SOLO sobre VIDEO — no sobre foto ni banner, aunque las tres compartan el
+ *    vidrio. La razón de ser de esto es "seguir mirando mientras se lee": una
+ *    foto o la pieza de una pregunta ya se vieron/leyeron enteras al abrir la
+ *    hoja, no hay nada corriendo que acompañar; y en el feed las manos ya
+ *    están scrolleando;
  *  · con prefers-reduced-motion NO arranca nunca;
  *  · cualquier señal de que la persona tomó el control (rueda, dedo, tecla, o el
  *    foco entrando al campo de escribir) lo apaga DEFINITIVAMENTE mientras dure
@@ -456,9 +490,9 @@ function CommentsSheetBody({
   const headingId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  // Sobre video todo se pinta con la tinta de media (claro sobre el vidrio
-  // oscuro); sobre el feed, con los tokens de tema de siempre.
-  const onMedia = surface === "video";
+  // Sobre video/foto/banner todo se pinta con la tinta de media (claro sobre
+  // el vidrio oscuro); sobre el feed, con los tokens de tema de siempre.
+  const onMedia = isGlassSurface(surface);
 
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [comments, setComments] = useState<LoadedComment[]>([]);
@@ -595,7 +629,9 @@ function CommentsSheetBody({
   useAutoScrollThread(
     scrollRef,
     rootRef,
-    onMedia && !reduceMotion && status === "ready" && visibleCount > 0,
+    // SOLO video (ver docblock de useAutoScrollThread): foto y banner
+    // comparten el vidrio pero no el auto-scroll.
+    surface === "video" && !reduceMotion && status === "ready" && visibleCount > 0,
   );
 
   return (

@@ -57,7 +57,7 @@ describe("PublishForm — sin preselect (uso de siempre)", () => {
   it("arranca en el selector de tipo (paso 0), sin 'Cambiar tipo'", () => {
     mount();
     expect(screen.getByText(C.steps.kind.title)).toBeTruthy();
-    expect(screen.queryByText(C.steps.text.title)).toBeNull();
+    expect(screen.queryByText(C.steps.text.title(null))).toBeNull();
     expect(screen.queryByText("Cambiar tipo")).toBeNull();
   });
 
@@ -71,7 +71,7 @@ describe("PublishForm — sin preselect (uso de siempre)", () => {
 describe("PublishForm — con preselect (?kind= del menú crear-post)", () => {
   it("arranca directo en el paso 1, con el selector salteado", () => {
     mount("business");
-    expect(screen.getByText(C.steps.text.title)).toBeTruthy();
+    expect(screen.getByText(C.steps.text.title("business"))).toBeTruthy();
     expect(screen.queryByText(C.steps.kind.title)).toBeNull();
   });
 
@@ -85,7 +85,7 @@ describe("PublishForm — con preselect (?kind= del menú crear-post)", () => {
     fireEvent.click(screen.getByText("Cambiar tipo"));
 
     expect(screen.getByText(C.steps.kind.title)).toBeTruthy();
-    expect(screen.queryByText(C.steps.text.title)).toBeNull();
+    expect(screen.queryByText(C.steps.text.title("business"))).toBeNull();
     const businessOption = screen.getByRole("radio", { name: /Negocio/ });
     expect(businessOption.getAttribute("aria-checked")).toBe("true");
   });
@@ -93,9 +93,34 @@ describe("PublishForm — con preselect (?kind= del menú crear-post)", () => {
   it("cada kind válido preselecciona su propio paso 1 (sin volver al selector)", () => {
     for (const kind of ["property", "business", "professional", "event", "job"] as const) {
       const { unmount } = mount(kind);
-      expect(screen.getByText(C.steps.text.title)).toBeTruthy();
+      expect(screen.getByText(C.steps.text.title(kind))).toBeTruthy();
       expect(screen.queryByText(C.steps.kind.title)).toBeNull();
       unmount();
     }
+  });
+});
+
+describe("PublishForm — copy del paso texto según kind (feedback Geovanny)", () => {
+  it("vivienda: título y placeholder hablan de 'propiedad', no de 'aviso' genérico", () => {
+    mount("property");
+    expect(screen.getByText(C.steps.text.title("property"))).toBeTruthy();
+    expect(
+      screen.getByPlaceholderText(C.steps.text.titlePlaceholder("property")),
+    ).toBeTruthy();
+  });
+
+  it("evento: título y placeholder hablan de 'evento', no de 'aviso' genérico", () => {
+    mount("event");
+    expect(screen.getByText(C.steps.text.title("event"))).toBeTruthy();
+    expect(
+      screen.getByPlaceholderText(C.steps.text.titlePlaceholder("event")),
+    ).toBeTruthy();
+  });
+
+  it("los 5 tipos tienen título propio — ninguno repite el genérico 'tu aviso'", () => {
+    const kinds = ["property", "business", "professional", "event", "job"] as const;
+    const titles = kinds.map((kind) => C.steps.text.title(kind));
+    expect(new Set(titles).size).toBe(kinds.length);
+    for (const title of titles) expect(title).not.toBe("Contanos sobre tu aviso");
   });
 });

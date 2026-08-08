@@ -405,7 +405,9 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="line-clamp-2 text-sm text-foreground">{post.body}</p>
+                  <p className="line-clamp-2 text-sm text-foreground">
+                    {post.body || "Foto o video"}
+                  </p>
                   <p className="mt-1 text-xs text-foreground-muted">{post.timeAgoLabel}</p>
                 </div>
               </Link>

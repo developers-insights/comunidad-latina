@@ -1,7 +1,21 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { CaretDown, CaretRight, ClipboardText, Plus } from "@phosphor-icons/react/dist/ssr";
-import { EmptyState, SectionCta, SectionHeading, Skeleton, buttonVariants } from "@/components/ui";
+import {
+  CaretDown,
+  CaretRight,
+  ClipboardText,
+  Megaphone,
+  Plus,
+} from "@phosphor-icons/react/dist/ssr";
+import {
+  Chip,
+  EmptyState,
+  SectionCta,
+  SectionHeading,
+  Skeleton,
+  buttonVariants,
+} from "@/components/ui";
+import { ModuleSearchBar, sanitizeSearchQuery } from "@/components/search";
 import { COPY } from "@/components/empleos/copy";
 import { EmploymentTypeChips } from "@/components/empleos/employment-type-chips";
 import { EMPLOYMENT_TYPES, type EmploymentType } from "@/components/empleos/helpers";
@@ -16,6 +30,17 @@ export const metadata = { title: "Empleos" };
 
 const C = COPY.list;
 
+/**
+ * TODO(integración): el ideal es sumar `searchJobsLabel`/`searchJobsPlaceholder`
+ * a `src/lib/i18n/es/sections.ts`, siguiendo el patrón ya usado por
+ * `searchBusinessLabel`/`searchBusinessPlaceholder` (negocios) y
+ * `searchEventsLabel`/`searchEventsPlaceholder` (eventos). Ese archivo es del
+ * kit de búsqueda compartido — fuera del alcance de este frente (solo USO) —
+ * así que el copy queda acá, local, hasta que alguien con ese archivo lo mueva.
+ */
+const SEARCH_JOBS_LABEL = "Buscar empleos";
+const SEARCH_JOBS_PLACEHOLDER = "Buscá un empleo…";
+
 /** Acento + ícono 3D de la sección (los mismos del menú y de /buscar). */
 const SECCION = {
   accent: "var(--accent-empleos)",
@@ -27,6 +52,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 interface Filters {
   tipo: EmploymentType | "";
+  q: string;
   cursor: string;
 }
 
@@ -42,6 +68,7 @@ function parseFilters(sp: Record<string, string | string[] | undefined>): Filter
   const tipo = firstValue(sp.tipo).slice(0, 20);
   return {
     tipo: isEmploymentType(tipo) ? tipo : "",
+    q: sanitizeSearchQuery(firstValue(sp.q)),
     cursor: firstValue(sp.cursor).slice(0, 200),
   };
 }

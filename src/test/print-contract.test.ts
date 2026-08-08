@@ -452,6 +452,12 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-on-media"],
     cobertura: "cl-print-fill",
   },
+  // Glifo Play sobre el thumbnail de video en el índice de Impulsar — mismo
+  // patrón que posts-grid.tsx: velo bg-media-scrim con cl-print-fill.
+  "src/app/(app)/impulsar/page.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-fill",
+  },
   // Guardados del perfil: el mismo glifo Play sobre el thumbnail del video que
   // guardaste, y el mismo hook (el velo bg-media-scrim ya venía con cl-print-fill
   // puesto). Espejo de posts-grid.tsx.

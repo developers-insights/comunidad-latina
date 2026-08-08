@@ -95,12 +95,20 @@ export const COPY = {
       /**
        * El texto invita a hablar de LO QUE SE VE, no de la nada: cambia según
        * lo que la persona acaba de elegir (una foto, varias, o un video).
+       *
+       * "si querés" NO es un adorno (feedback cliente 2026-08-05: "si la
+       * persona no quiere subir ningún texto relacionado, que le deje
+       * publicar"): con foto o video el pie es OPCIONAL, y el campo tiene que
+       * decirlo antes de que alguien se quede esperando el botón. Se dice como
+       * habla una persona, no con un "(opcional)" de formulario. Este mismo
+       * texto es el <label> del campo, así que tiene que leerse bien también
+       * anunciado por un lector de pantalla.
        */
       mediaPlaceholder: (photos: number, hasVideo: boolean): string => {
-        if (hasVideo && photos === 0) return "¿Qué querés contar de este video?";
-        if (hasVideo) return "¿Qué querés contar de lo que subiste?";
-        if (photos > 1) return "¿Qué querés contar de estas fotos?";
-        return "¿Qué querés contar de esta foto?";
+        if (hasVideo && photos === 0) return "Contá algo de este video, si querés";
+        if (hasVideo) return "Contá algo de lo que subiste, si querés";
+        if (photos > 1) return "Contá algo de estas fotos, si querés";
+        return "Contá algo de esta foto, si querés";
       },
       questionTitle: "Preguntale a tu comunidad",
       questionPlaceholder: "¿Qué querés preguntar?",

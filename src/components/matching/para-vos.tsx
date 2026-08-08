@@ -87,8 +87,15 @@ export async function ParaVos({ userId }: { userId: string }) {
       {/* Sin encabezado visible (pedido 2026-07-09): el carrusel habla solo, sin
           el título "Para vos" ni la bajada. El aria-label conserva "Para vos"
           para lectores de pantalla. */}
+      {/* Feedback video-review (Geovanny, 2026-08-05): "que estas burbujas se
+          hagan notar... que tenga como un contorno por cada uno". El scroll
+          horizontal y el fondo beige ya gustaban tal cual estaban — lo que
+          faltaba era CONTORNO propio por card, para que cada una se lea como
+          una burbuja individual y no se funda con el canvas. Padding extra
+          arriba/abajo (py-1) para que el ring de foco y la sombra del bezel no
+          se corten contra el overflow del carrusel. */}
       <ul
-        className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="-mx-4 flex snap-x snap-mandatory gap-3.5 overflow-x-auto px-4 py-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label={COPY.titulo}
       >
         {result.items.map((item) => (
@@ -110,8 +117,17 @@ function MatchCard({ item, locale }: { item: MatchItem; locale: string }) {
 
   return (
     <Link href={item.href} className="group block h-full focus-visible:outline-none">
+      {/* Look "burbuja" pedido por el cliente: el BezelCard de base ya trae el
+          marco doble y la luz superior, pero su shell (`bg-bezel-shell`) es un
+          crema casi idéntico al canvas de fondo (§ ver globals.css, cream-50
+          vs cream-25) — sin contorno propio la card se leía "suelta" contra el
+          beige. `border-2 border-border-strong` dibuja ese contorno con el
+          tono más marcado de la escala neutra (funciona en los dos temas), y
+          `shadow-md` reemplaza la `shadow-bezel` (pensada para fundirse en una
+          superficie plana) por una elevación que sí separa la burbuja del
+          fondo del carrusel. */}
       <BezelCard
-        className="h-full transition-transform duration-(--duration-fast) ease-(--ease-out-premium) group-focus-visible:ring-2 group-focus-visible:ring-brand"
+        className="h-full border-2 border-border-strong shadow-md transition-transform duration-(--duration-fast) ease-(--ease-out-premium) group-focus-visible:ring-2 group-focus-visible:ring-brand"
         coreClassName="flex h-full flex-col gap-2.5 p-4"
       >
         {/* La razón del match — SIEMPRE visible, arriba de todo. */}
@@ -178,10 +194,13 @@ export function ParaVosSkeleton() {
   return (
     <div aria-hidden="true">
       <Skeleton className="h-6 w-32" />
-      <div className="-mx-4 mt-3 flex gap-3 overflow-hidden px-4 pb-2">
+      <div className="-mx-4 mt-3 flex gap-3.5 overflow-hidden px-4 py-1 pb-2">
         {[0, 1, 2].map((index) => (
-          <div key={index} className="w-[248px] shrink-0">
-            <Skeleton className="h-40 w-full rounded-xl" />
+          <div
+            key={index}
+            className="w-[248px] shrink-0 rounded-xl border-2 border-border-strong bg-surface p-1.5 shadow-md"
+          >
+            <Skeleton className="h-[152px] w-full rounded-[calc(var(--radius-xl)-6px)]" />
           </div>
         ))}
       </div>

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { EmptyState, SectionCta, SectionHeading, buttonVariants } from "@/components/ui";
+import { Megaphone } from "@phosphor-icons/react/dist/ssr";
+import { Chip, EmptyState, SectionCta, SectionHeading, buttonVariants } from "@/components/ui";
 import {
   COPY,
   EventCard,
@@ -32,6 +33,8 @@ export const metadata = { title: "Eventos" };
 const C = COPY.events;
 const MAX_EVENTS = 40;
 const MAX_PAST = 5;
+/** Tope de la franja "Patrocinados" — mismo número que /propiedades. */
+const SPONSORED_LIMIT = 4;
 
 /** Acento + ícono 3D de la sección (los mismos del menú y de /buscar). */
 const SECCION = {
@@ -137,13 +140,31 @@ async function EventosContent({ filters }: { filters: Filters }) {
   }
   if (filters.ciudad) query = query.eq("area_label", filters.ciudad);
 
-  const { data: rows, error } = await query
-    .order("attrs->>starts_at", { ascending: true, nullsFirst: false })
-    .limit(MAX_EVENTS);
+  // Boosts activos del tenant en PARALELO con el listado: `boosts` no filtra
+  // por `kind` (es agnóstica — cualquier listing se puede impulsar, /impulsar
+  // ya lo prueba), así que esta query no depende de `rows` y se solapa el
+  // round-trip en vez de encadenarlo (mismo espíritu que el resto del
+  // archivo: nunca una query después de otra si no hace falta).
+  const [{ data: rows, error }, { data: activeBoosts }] = await Promise.all([
+    query.order("attrs->>starts_at", { ascending: true, nullsFirst: false }).limit(MAX_EVENTS),
+    supabase
+      .from("boosts")
+      .select("listing_id")
+      .eq("tenant_id", tenant.id)
+      .eq("status", "active")
+      .gt("ends_at", new Date().toISOString())
+      .order("ends_at", { ascending: false })
+      .limit(SPONSORED_LIMIT),
+  ]);
 
   if (error) {
     console.warn("[directorios] query de eventos falló", { code: error.code });
   }
+
+  // Solo importa SI un listing_id está boosteado — no se distingue por `kind`
+  // acá tampoco: si un id no cae dentro de los eventos ya filtrados por
+  // tenant/kind/status arriba, simplemente nunca hace match más abajo.
+  const boostedIds = new Set((activeBoosts ?? []).map((boost) => boost.listing_id));
 
   // Organizadores con cuenta: perfil + Trust Score en batch (una query por
   // tabla, no una por evento). Regla: donde hay autor, TrustScoreBadge inline.
@@ -225,6 +246,14 @@ async function EventosContent({ filters }: { filters: Filters }) {
   const isEmpty = upcoming.length === 0 && past.length === 0;
   const filtering = Boolean(filters.q || filters.cuando || filters.entrada || filters.ciudad);
 
+  // Patrocinados: se sacan de `upcoming`/`past` — que ya son el resultado de
+  // aplicar q/entrada/ciudad (arriba) y `cuando` (recién, en splitByWhen) —
+  // así que un patrocinado que no matchea el filtro activo simplemente no
+  // está en ninguna de las dos listas y no aparece. Ver la decisión de orden
+  // completa en el comentario de `extractSponsored`.
+  const { sponsored, rest } = extractSponsored([upcoming, past], boostedIds, SPONSORED_LIMIT);
+  const [upcomingRest, pastRest] = rest;
+
   return (
     <>
       <SectionHeading
@@ -285,18 +314,45 @@ async function EventosContent({ filters }: { filters: Filters }) {
         )
       ) : (
         <div className="mt-5 flex flex-col gap-4">
-          {upcoming.map((card) => (
+          {sponsored.length > 0 && (
+            <>
+              <h2 className="text-sm font-semibold text-foreground-muted">Patrocinados</h2>
+              {sponsored.map((card) => (
+                // Mismo anillo dorado + chip que /propiedades (tokens
+                // --color-sponsored, ya AA en light/dark). El wrapper envuelve
+                // desde la página, igual que allá: el BezelCard de EventCard
+                // usa el mismo rounded-xl (28px) que este wrapper, así que el
+                // anillo calza justo alrededor sin esquina cuadrada asomando.
+                <div
+                  key={card.id}
+                  className="relative rounded-xl ring-2 ring-sponsored/70 shadow-[0_0_0_1px_var(--color-sponsored),0_10px_28px_-14px_var(--color-sponsored)]"
+                >
+                  <Chip
+                    variant="neutral"
+                    size="sm"
+                    className="absolute right-3.5 top-3.5 z-10 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
+                  >
+                    <Megaphone size={14} weight="fill" aria-hidden="true" />
+                    Patrocinado
+                  </Chip>
+                  <EventCard event={card} />
+                </div>
+              ))}
+            </>
+          )}
+
+          {upcomingRest.map((card) => (
             <EventCard key={card.id} event={card} />
           ))}
 
-          {past.length > 0 && (
+          {pastRest.length > 0 && (
             <>
-              {upcoming.length > 0 && (
+              {(sponsored.length > 0 || upcomingRest.length > 0) && (
                 <h2 className="mt-4 text-sm font-semibold text-foreground-muted">
                   {C.pastSectionTitle}
                 </h2>
               )}
-              {past.map((card) => (
+              {pastRest.map((card) => (
                 <EventCard key={card.id} event={card} />
               ))}
             </>
@@ -368,6 +424,58 @@ function cityOptions(events: readonly EventRow[], active: string): FilterOption[
       .sort((a, b) => a.localeCompare(b, "es"))
       .map((city) => ({ value: city, label: city })),
   ];
+}
+
+/**
+ * DECISIÓN DE ORDEN — patrocinados en Eventos (tarea 2026-08-05, ver
+ * `boostedIds` arriba y el bloque `sponsored`/`upcomingRest`/`pastRest`).
+ *
+ * Eventos NO es /propiedades: acá el orden cronológico (próximos primero) ES
+ * la utilidad del listado, no un detalle de implementación. "Boosted-first"
+ * absoluto pondría un evento pago de dentro de 3 meses arriba de los de esta
+ * semana — vende visibilidad a costa de romper la razón de ser de la
+ * pantalla.
+ *
+ * Elegida: (b) los patrocinados se separan en su PROPIA franja "Patrocinados"
+ * arriba de todo (mismo anillo dorado + chip que /propiedades), y el resto
+ * del listado (`upcoming`/`past`) queda 100% cronológico e intacto — como si
+ * el patrocinado no existiera para el orden de los demás.
+ *
+ * Descartadas:
+ *   (a) boosted-first DENTRO de cada grupo temporal — mismo problema acotado
+ *       al grupo: un evento pago de fin de mes seguiría saltando arriba de
+ *       uno de mañana dentro de "upcoming" (que no tiene límite de fecha).
+ *   (c) boosted-first solo en los próximos 30 días — reduce el salto pero no
+ *       lo elimina (un pago a 25 días seguiría por delante de uno de
+ *       mañana), y suma una ventana arbitraria que nadie pidió.
+ *
+ * (b) es la única que preserva el 100% de la utilidad cronológica para lo NO
+ * pagado, que es la mayoría del listado — y es honesta (FTC): lo pago vive en
+ * su propio espacio marcado, no se disfraza de "el próximo evento".
+ *
+ * Los patrocinados salen de `groups` (ya filtrados por q/entrada/ciudad/cuando
+ * más arriba) — por eso respetan los filtros activos: uno que no matchea
+ * simplemente no está en ningún grupo y nunca llega acá. `max` topea el
+ * tamaño de la franja para que no compita en volumen con el resto (mismo
+ * límite que la query de boosts, `SPONSORED_LIMIT`).
+ */
+export function extractSponsored(
+  groups: readonly EventCardModel[][],
+  boostedIds: ReadonlySet<string>,
+  max: number,
+): { sponsored: EventCardModel[]; rest: EventCardModel[][] } {
+  const seen = new Set<string>();
+  const sponsored: EventCardModel[] = [];
+  for (const group of groups) {
+    for (const card of group) {
+      if (sponsored.length < max && boostedIds.has(card.id) && !seen.has(card.id)) {
+        seen.add(card.id);
+        sponsored.push(card);
+      }
+    }
+  }
+  const rest = groups.map((group) => group.filter((card) => !seen.has(card.id)));
+  return { sponsored, rest };
 }
 
 /**

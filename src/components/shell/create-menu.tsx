@@ -7,6 +7,7 @@ import {
   CaretRight,
   Camera,
   House,
+  Megaphone,
   Question,
   ShoppingBagOpen,
   Sparkle,
@@ -41,6 +42,21 @@ import { moduleAvailability } from "./module-access";
  * "Publicá un producto" con Marketplace apagado es prometer una pantalla que no
  * existe. Los tres primeros no llevan clave — son el feed, que nunca se apaga.
  */
+
+/**
+ * Copy local del tile "Impulsar" (feedback cliente Geovanny, 2026-08-05: "en
+ * esta sección [menú de publicar] faltaría la parte donde dice Boost").
+ *
+ * TODO(integración): mover a feed/copy.ts. `COPY.composer.createMenu.tiles`
+ * es la fuente que consumen los demás tiles, pero ese archivo lo está
+ * editando otro agente en simultáneo — se declara acá para no pisarle el
+ * merge, con la misma forma `{ title, description }` que ya usan los tiles
+ * de `copy.ts`.
+ */
+const IMPULSAR_TILE_COPY = {
+  title: "Impulsar",
+  description: "Pagá para que un aviso o una publicación tuya llegue a más gente.",
+} as const;
 
 export type QuickPostKind = "photo" | "video" | "text" | "question";
 
@@ -143,6 +159,20 @@ const CREATE_MENU_TILES: CreateMenuTile[] = [
     Icon: Sparkle,
     action: { kind: "link", href: "/creadores/publicar" },
     moduleKey: "creadores",
+  },
+  {
+    key: "impulsar",
+    ...IMPULSAR_TILE_COPY,
+    // Dorado de contenido patrocinado (§ globals.css --color-sponsored): esta
+    // fila ES publicidad paga, así que se tiñe con el mismo acento que el
+    // contorno/chip que ve el resto de la comunidad — nunca uno de los
+    // acentos por módulo, que identifican una VERTICAL, no una compra.
+    accent: "var(--color-sponsored)",
+    Icon: Megaphone,
+    action: { kind: "link", href: "/impulsar" },
+    // Sin moduleKey: promocionar lo propio no es un módulo que un tenant
+    // pueda apagar (a diferencia de Marketplace o Creadores) — siempre activo,
+    // igual que las cuatro opciones rápidas de arriba.
   },
 ];
 

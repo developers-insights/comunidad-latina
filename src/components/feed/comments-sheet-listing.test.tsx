@@ -75,7 +75,11 @@ vi.mock("./comment-composer", () => ({
   ),
 }));
 
-import { CommentsSheetProvider, useCommentsSheet } from "./comments-sheet";
+import {
+  CommentsSheetProvider,
+  useCommentsSheet,
+  type CommentsSurface,
+} from "./comments-sheet";
 
 // Cliente Supabase falso: solo auth + los batches de autor (el hilo NO sale de acá).
 function makeClient(user: { id: string } | null) {
@@ -108,19 +112,22 @@ function makeClient(user: { id: string } | null) {
 const supa = vi.hoisted(() => ({ client: null as unknown }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => supa.client }));
 
-function Opener() {
+function Opener({ surface }: { surface?: CommentsSurface } = {}) {
   const { open } = useCommentsSheet();
   return (
-    <button type="button" onClick={() => open({ listingId: "l1", commentCount: 1 })}>
+    <button
+      type="button"
+      onClick={() => open({ listingId: "l1", commentCount: 1, surface })}
+    >
       abrir
     </button>
   );
 }
 
-function mount() {
+function mount(surface?: CommentsSurface) {
   return render(
     <CommentsSheetProvider>
-      <Opener />
+      <Opener surface={surface} />
     </CommentsSheetProvider>,
   );
 }
@@ -201,6 +208,21 @@ describe("CommentsSheet — modo aviso (listing)", () => {
     mount();
     fireEvent.click(screen.getByText("abrir"));
     expect(await screen.findByText("Sé la primera persona en responder")).toBeTruthy();
+  });
+
+  it("un aviso también puede abrir en modo vidrio (el tipo de surface se comparte con posts)", async () => {
+    actions.fetchListingComments.mockResolvedValue({
+      ok: true,
+      items: ITEMS,
+      nextCursor: null,
+    });
+    mount("photo");
+    fireEvent.click(screen.getByText("abrir"));
+    await screen.findByText("¿Sigue disponible?");
+
+    const panel = screen.getByRole("dialog").className;
+    expect(panel).toContain("bg-media-shade/72");
+    expect(panel).not.toContain("bg-surface-raised");
   });
 
   it("anónimo: sin composer, con CTA a entrar y volver al aviso", async () => {
