@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractSponsored } from "./page";
+import { extractSponsored } from "./sponsored";
 import type { EventCardModel } from "@/components/directory";
 
 /**

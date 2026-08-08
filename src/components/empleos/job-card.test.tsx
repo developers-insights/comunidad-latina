@@ -40,7 +40,8 @@ const BASE: JobCardModel = {
   areaLabel: "Washington Heights",
   photoUrl: null,
   photos: [],
-  publisherName: "Rosa Medina",
+  publisher: { type: "external", name: "Rosa Medina" },
+  boosted: false,
 };
 
 const CON_FOTOS: JobCardModel = {

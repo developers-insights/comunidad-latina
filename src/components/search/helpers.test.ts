@@ -151,11 +151,13 @@ describe("moduleSearchHref", () => {
     expect(moduleSearchHref("negocios", "panadería")).toBe(
       "/negocios?q=panader%C3%ADa",
     );
+    // Profesionales y empleos ganaron búsqueda propia (textSearch en Postgres):
+    // desde entonces SÍ aceptan término y el link deja de descartarlo.
+    expect(moduleSearchHref("profesionales", "abogado")).toBe("/profesionales?q=abogado");
+    expect(moduleSearchHref("empleos", "mozo")).toBe("/empleos?q=mozo");
   });
 
   it("devuelve null donde el listado NO acepta término (no se ofrece un link que lo descarta)", () => {
-    expect(moduleSearchHref("profesionales", "abogado")).toBeNull();
-    expect(moduleSearchHref("empleos", "mozo")).toBeNull();
     expect(moduleSearchHref("videos", "receta")).toBeNull();
     expect(moduleSearchHref("publicaciones", "hola")).toBeNull();
   });
