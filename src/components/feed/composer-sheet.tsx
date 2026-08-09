@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Plus, VideoCamera, X } from "@phosphor-icons/react/dist/ssr";
+import { CaretDown, Check, Plus, SealCheck, VideoCamera, X } from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { formatDuration, type VideoCategory } from "@/lib/media/video-policy";
@@ -8,6 +8,8 @@ import {
   VIDEO_CATEGORY_LABELS,
   VIDEO_CATEGORY_ORDER,
 } from "@/app/(app)/videos/copy";
+import { OriginalityFields, type DeclarationValue } from "@/components/integrity/originality-fields";
+import { licenseLabel } from "@/lib/integrity/declarations";
 import { COPY } from "./copy";
 import { QuestionBanner } from "./question-banner";
 import { TextBanner } from "./text-banner";
@@ -64,6 +66,9 @@ export interface ComposerSheetProps {
   /** Categoría de Videos Cortos elegida (0046). Sólo se usa si hay video. */
   videoCategory: VideoCategory;
   onVideoCategoryChange: (next: VideoCategory) => void;
+  /** Declaración de originalidad y licencia (0061). Sólo aplica si hay medio. */
+  declaration: DeclarationValue;
+  onDeclarationChange: (next: DeclarationValue) => void;
   /** Id estable de la sesión: fija la variante de color de la vista previa. */
   previewId: string;
   /** Progreso real de la subida del video, o null si no hay ninguna en curso. */
@@ -145,6 +150,127 @@ function PreviewPlaceholder({ label }: { label: string }) {
   );
 }
 
+/**
+ * =============================================================================
+ * DECLARACIÓN DE ORIGINALIDAD Y LICENCIAS — plegada, y sólo cuando hay archivo
+ * =============================================================================
+ *
+ * El pliego pide la declaración en todo lo que se sube. Ya está en /publicar y
+ * en /marketplace/publicar, que son formularios largos y deliberados: ahí el
+ * bloque va desplegado y no molesta a nadie. Acá el contexto es el opuesto y por
+ * eso la decisión es otra.
+ *
+ * ── POR QUÉ PLEGADA ──────────────────────────────────────────────────────────
+ * Este composer es el camino más caliente de la app y su promesa es la
+ * velocidad: elegir foto → escribir (o ni eso) → Publicar. El bloque completo
+ * son cuatro controles —casilla, selector, textarea y URL—: metidos abiertos en
+ * una hoja que con el teclado arriba mide ~215px de alto útil (ver PreviewFrame),
+ * empujan "Publicar" fuera de la pantalla y convierten tres toques en un scroll.
+ * Plegada es UN renglón, y el renglón dice lo que hay que saber para decidir si
+ * vale la pena abrirlo.
+ *
+ * Plegada NO es escondida: el resumen está siempre visible, es un `<summary>`
+ * real (foco, Enter/Espacio y estado "expandido" anunciado sin que lo
+ * implementemos), llega a 44px y muestra el estado actual. Quien no la abre no
+ * declaró nada — que es exactamente lo que el pipeline va a leer, sin fingir lo
+ * contrario.
+ *
+ * ── POR QUÉ SÓLO CON FOTO O VIDEO ────────────────────────────────────────────
+ * La declaración habla de un ARCHIVO. `createPostAction` registra
+ * `content_assets` únicamente para fotos y videos: en `question` y en `text` no
+ * hay ningún activo del que declarar nada, y mostrar el bloque igual sería pedir
+ * una afirmación sobre algo que no existe. Un control que aparece donde no
+ * significa nada enseña a ignorarlo también donde sí.
+ *
+ * ── POR QUÉ ACÁ Y NO EN OTRA HOJA ────────────────────────────────────────────
+ * Una segunda hoja encima de esta son dos trampas de foco peleándose, que es el
+ * mismo motivo por el que el aviso de "todo post lleva imagen" tampoco tiene
+ * hoja propia (ver PostComposer). Y un modal de "aceptá" se cierra sin leer:
+ * mismo argumento que ya está escrito en `lib/integrity/declarations.ts`.
+ *
+ * ⚠️ El descargo ("esto es lo que nos contás vos: no lo verificamos y no
+ * equivale a un certificado de propiedad") lo pinta `OriginalityFields` y NO se
+ * toca. La huella perceptual que calcula Content Integrity es una herramienta
+ * interna de moderación, no una prueba de propiedad intelectual, y ninguna línea
+ * de este bloque puede sugerir lo contrario.
+ */
+function DeclarationDisclosure({
+  photos,
+  hasVideo,
+  value,
+  onChange,
+  disabled,
+}: {
+  photos: number;
+  hasVideo: boolean;
+  value: DeclarationValue;
+  onChange: (next: DeclarationValue) => void;
+  disabled: boolean;
+}) {
+  const C = COPY.composer.compose.declaration;
+  // "Declaró algo" es haber tocado el tilde O haber elegido una licencia
+  // distinta del default. `desconocido` sin tilde es "todavía no dijo nada".
+  const declared = value.originalityDeclared || value.licenseKind !== "desconocido";
+
+  return (
+    <details className="group mt-3 shrink-0 rounded-lg border border-border-subtle bg-surface-subtle">
+      <summary
+        className={cn(
+          "flex min-h-11 cursor-pointer list-none items-start gap-3 p-4",
+          "[&::-webkit-details-marker]:hidden",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          "rounded-lg",
+        )}
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-foreground">
+            {C.title(photos, hasVideo)}
+          </span>
+          {/* El estado se lee por ÍCONO Y TEXTO, nunca sólo por color. */}
+          <span
+            className={cn(
+              "mt-0.5 flex items-start gap-1.5 text-xs leading-relaxed",
+              declared ? "text-foreground-secondary" : "text-foreground-muted",
+            )}
+          >
+            {declared && (
+              <SealCheck
+                size={14}
+                weight="fill"
+                aria-hidden="true"
+                className="mt-px shrink-0 text-success"
+              />
+            )}
+            {declared ? licenseLabel(value.licenseKind) : C.hint}
+          </span>
+        </span>
+        <CaretDown
+          size={16}
+          aria-hidden="true"
+          className={cn(
+            "mt-1 shrink-0 text-foreground-muted",
+            "transition-transform duration-(--duration-fast) ease-(--ease-spring)",
+            "group-open:rotate-180",
+          )}
+        />
+      </summary>
+
+      {/* `fieldset[disabled]` apaga los cuatro controles de una: mientras se
+          publica no se puede cambiar lo que ya se está mandando. */}
+      <fieldset disabled={disabled} className="m-0 border-0 p-0">
+        <OriginalityFields
+          idPrefix="composer-declaracion"
+          value={value}
+          onChange={onChange}
+          title={null}
+          intro={C.intro}
+          className="rounded-none border-0 bg-transparent px-4 pb-4 pt-0"
+        />
+      </fieldset>
+    </details>
+  );
+}
+
 /** Interruptor accesible de verdad: `role="switch"` + `aria-checked`, 44px. */
 function PollSwitch({
   checked,
@@ -216,6 +342,8 @@ export function ComposerSheet({
   onPollChange,
   videoCategory,
   onVideoCategoryChange,
+  declaration,
+  onDeclarationChange,
   previewId,
   uploadPct,
   measuringVideo = false,
@@ -514,6 +642,22 @@ export function ComposerSheet({
               disabled={isPending}
             />
           </div>
+        )}
+
+        {/* Va DESPUÉS del pie y no junto a las miniaturas: el pie es el trabajo
+            principal y meterle un bloque legal en el medio lo parte al mango.
+            Acá queda como lo último antes de Publicar —que es donde la persona
+            ya se está preguntando "¿me falta algo?"— y el propio encabezado
+            ("Sobre esta foto") lo ata al archivo sin necesidad de estar pegado a
+            él. Ver el comentario largo de DeclarationDisclosure. */}
+        {hasMedia && (
+          <DeclarationDisclosure
+            photos={photos.length}
+            hasVideo={hasVideo}
+            value={declaration}
+            onChange={onDeclarationChange}
+            disabled={isPending}
+          />
         )}
 
         {/* Progreso REAL de la subida del video (XHR), no una barra decorativa. */}

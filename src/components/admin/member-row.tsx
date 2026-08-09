@@ -62,6 +62,8 @@ const COPY = {
   suspendedOk: "Listo — la cuenta quedó suspendida.",
   bannedOk: "Listo — la cuenta quedó dada de baja.",
   reactivatedOk: "Listo — la cuenta volvió a estar activa.",
+  readOnly:
+    "Las sanciones se aplican desde la propia comunidad. Acá podés mirar, no sancionar.",
 } as const;
 
 // La fecha de fin de suspensión se ancla a la zona de la comunidad (ver
@@ -71,9 +73,20 @@ const COPY = {
 export function MemberRow({
   member,
   staffRole,
+  readOnly = false,
 }: {
   member: MemberRowData;
   staffRole: StaffRole;
+  /**
+   * Oculta las acciones de sanción.
+   *
+   * Se usa cuando un súper admin está mirando OTRA comunidad: las RPCs
+   * `admin_*` (0021) se gatean contra el tenant del JWT y no tienen rama de
+   * global_admin, así que ahí la base rechaza la sanción. Esto NO es el
+   * permiso —el permiso vive en Postgres— es no ofrecer un botón que ya
+   * sabemos que va a fallar.
+   */
+  readOnly?: boolean;
 }) {
   const { toast } = useToast();
   const [pending, setPending] = useState<PendingAction | null>(null);
@@ -166,7 +179,13 @@ export function MemberRow({
         </div>
       </div>
 
-      {!isStaffProfile && (
+      {readOnly && (
+        <p className="text-xs leading-relaxed text-foreground-muted sm:max-w-56 sm:shrink-0">
+          {COPY.readOnly}
+        </p>
+      )}
+
+      {!isStaffProfile && !readOnly && (
         <div className="flex flex-wrap gap-2 sm:shrink-0">
           {member.accountStatus === "active" && (
             <>

@@ -84,7 +84,7 @@ const OPTIONS: { value: ModuleState; label: string; hint: string }[] = [
 
 const COPY = {
   save: "Guardar módulos",
-  saved: "Listo — los cambios ya están activos para tu comunidad.",
+  saved: "Listo — los cambios ya están activos en esta comunidad.",
   legendHint: "Elegí cómo se ve esta sección",
   alwaysOn: "Siempre activo",
 } as const;
@@ -107,13 +107,23 @@ export interface ModuleTogglesProps {
   modules: Record<string, boolean>;
   /** `tenants.modules_soon` — la columna hermana con el estado "Muy pronto". */
   modulesSoon?: Record<string, boolean>;
+  /**
+   * Comunidad sobre la que se guarda. Va en el form porque un `global_admin`
+   * puede estar mirando una comunidad que no es la suya (selector del panel).
+   *
+   * Es una PROPUESTA, no una orden: la action la contrasta con `canWriteTenant`
+   * contra el rol real del JWT y rechaza lo que no corresponda. Mandar acá el
+   * id de otra comunidad desde la consola no cambia nada.
+   */
+  tenantId?: string | null;
 }
 
-export function ModuleToggles({ modules, modulesSoon = {} }: ModuleTogglesProps) {
+export function ModuleToggles({ modules, modulesSoon = {}, tenantId }: ModuleTogglesProps) {
   const [state, formAction] = useActionState(updateTenantModules, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-1">
+      {tenantId && <input type="hidden" name="tenantId" value={tenantId} />}
       <ul className="divide-y divide-border-subtle rounded-lg border border-border bg-surface shadow-xs">
         {MODULES.map((moduleDef) => {
           const current = moduleStateOf(moduleDef.key, modules, modulesSoon);

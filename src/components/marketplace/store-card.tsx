@@ -21,8 +21,17 @@ export interface StoreCardModel {
   photos?: string[];
   followerCount: number;
   initialFollowing: boolean;
-  /** Trust Score del dueño de la tienda — null si el negocio no tiene cuenta. */
-  trust: Omit<PublisherTrustProps, "size" | "className"> | null;
+  /**
+   * Trust Score del dueño de la tienda — null si el negocio no tiene cuenta.
+   *
+   * `profileId` va REQUERIDO (en `PublisherTrustProps` es opcional): acá los
+   * props se pasan con spread, así que un olvido no se vería en el JSX y la
+   * hoja del Trust Score se abriría sin "Ver perfil". Exigirlo en el tipo hace
+   * que lo agarre `tsc` en vez de nadie. Sin dueño con cuenta, `null` explícito.
+   */
+  trust: (Omit<PublisherTrustProps, "size" | "className"> & {
+    profileId: string | null;
+  }) | null;
   /** business_accounts.verified_presence (plan "Presencia Verificada"). */
   verified?: boolean;
 }

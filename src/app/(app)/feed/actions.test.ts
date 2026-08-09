@@ -28,6 +28,9 @@ const mocks = vi.hoisted(() => ({
   limit: vi.fn(),
   createAdminClient: vi.fn(),
   revalidatePath: vi.fn(),
+  registerUploadedMedia: vi.fn(),
+  notifyPostComment: vi.fn(),
+  notifyPostReaction: vi.fn(),
 }));
 
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
@@ -44,6 +47,27 @@ vi.mock("@/lib/moderation", () => ({
   moderationTier: () => 1,
   moderateText: mocks.moderateText,
   enqueueModeration: mocks.enqueueModeration,
+}));
+
+// Content Integrity vive fuera de la frontera que prueba este archivo: acá se
+// aísla en su borde (tiene sus propios tests en `src/lib/integrity/`) y por
+// default devuelve "todo limpio", que es el escenario contra el que se mide la
+// matriz de arriba. Además evita arrastrar `sharp` y `next/headers` al test.
+vi.mock("@/lib/integrity", () => ({
+  registerUploadedMedia: mocks.registerUploadedMedia,
+  normalizeDeclaration: () => ({
+    originalityDeclared: false,
+    licenseKind: "desconocido",
+    licenseStatement: null,
+    licenseUrl: null,
+  }),
+}));
+vi.mock("@/lib/integrity/source-host", () => ({
+  currentSourceHost: async (fallback: string) => fallback,
+}));
+vi.mock("./social-notifications", () => ({
+  notifyPostComment: mocks.notifyPostComment,
+  notifyPostReaction: mocks.notifyPostReaction,
 }));
 
 import { createPostAction } from "./actions";
@@ -151,6 +175,11 @@ beforeEach(() => {
   mocks.enqueueModeration.mockResolvedValue({ ok: true });
   mocks.createAdminClient.mockReturnValue({});
   mocks.limit.mockReturnValue({ ok: true });
+  mocks.registerUploadedMedia.mockResolvedValue({
+    needsHumanReview: false,
+    reasons: [],
+    assetIds: [],
+  });
 });
 
 /* ------------------- Cuerpo opcional cuando hay medio --------------------- */

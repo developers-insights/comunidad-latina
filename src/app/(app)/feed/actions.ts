@@ -21,6 +21,13 @@ import {
   moderationTier,
   TIER_AUTO,
 } from "@/lib/moderation";
+import {
+  normalizeDeclaration,
+  registerUploadedMedia,
+  type MediaItem,
+} from "@/lib/integrity";
+import { currentSourceHost } from "@/lib/integrity/source-host";
+import { notifyPostComment, notifyPostReaction } from "./social-notifications";
 
 /**
  * Server actions del módulo FEED SOCIAL.
@@ -279,6 +286,28 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     mediaOrder = []; // orden inválido → fallback fotos-primero, nunca se pierde un medio
   }
 
+  // ---- Insumos de Content Integrity ---------------------------------------
+  // Fotogramas del video muestreados por el navegador (32×32 en gris, ~4 KB).
+  // Ausentes = el video queda sin huella perceptual y va a revisión humana; eso
+  // lo decide el pipeline, no este parseo.
+  let videoFrames: unknown = null;
+  try {
+    const raw = formData.get("videoFrames");
+    if (typeof raw === "string" && raw.length > 0) videoFrames = JSON.parse(raw);
+  } catch {
+    videoFrames = null;
+  }
+
+  // Declaración de originalidad y licencia. Si el composer todavía no la manda,
+  // `normalizeDeclaration` devuelve "no declaró nada" — que NO es lo mismo que
+  // "es propio", y por eso el escaneo va a levantar su alerta de licencia.
+  const declaration = normalizeDeclaration({
+    originalityDeclared: formData.get("originalityDeclared"),
+    licenseKind: formData.get("licenseKind"),
+    licenseStatement: formData.get("licenseStatement"),
+    licenseUrl: formData.get("licenseUrl"),
+  });
+
   // ---- DECLARACIÓN Y TOPE DEL VIDEO (contrato 0046 + spec nº4) ------------
   //
   // Se resuelve ACÁ, antes del guard, de la moderación y de tocar storage: si
@@ -393,6 +422,11 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // Secuencial a propósito: son ≤4 archivos chicos y así el primer fallo corta
   // sin dejar una ráfaga de huérfanos.
   const photoPaths: string[] = [];
+  // Los bytes se guardan para Content Integrity: el SHA-256 y la huella
+  // perceptual se calculan sobre el archivo ORIGINAL, y acá es el único momento
+  // del flujo en que el servidor lo tiene en la mano (después vive en el bucket
+  // y habría que volver a bajarlo).
+  const integrityItems: MediaItem[] = [];
   for (const photo of photos) {
     const extension = PHOTO_TYPES[photo.type];
     const path = `${tenant.id}/${user.id}/post-${crypto.randomUUID()}.${extension}`;
@@ -406,6 +440,27 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
       return { ok: false, code: "photo" };
     }
     photoPaths.push(path);
+    integrityItems.push({
+      mediaKind: "imagen",
+      storageBucket: "post-media",
+      storagePath: path,
+      mimeType: photo.type,
+      originalFilename: photo.name,
+      bytes: new Uint8Array(await photo.arrayBuffer()),
+    });
+  }
+
+  // El video NO pasó por el servidor (subida directa al bucket): sus bytes se
+  // leen de storage para el SHA-256, y los fotogramas los muestreó el navegador
+  // (`sampleVideoLumaFrames`). El porqué de ese reparto —y su límite— está en
+  // `src/lib/integrity/video.ts`.
+  for (const path of videoPaths) {
+    integrityItems.push({
+      mediaKind: "video",
+      storageBucket: "post-media",
+      storagePath: path,
+      videoLumaFrames: videoFrames,
+    });
   }
 
   // posts.media en el ORDEN en que el usuario eligió los medios.
@@ -443,9 +498,27 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     return { ok: false, code: "error" };
   }
 
+  // ---- Content Integrity: huella de cada archivo (§ pliego) ----------------
+  // Corre DESPUÉS del insert porque necesita el id del post como `subject_id`.
+  // Nunca lanza y nunca deshace la publicación: lo único que puede hacer es
+  // pedir ojos humanos, y eso viaja a la cola junto con el resto de los motivos.
+  const integrity = await registerUploadedMedia({
+    tenantId: tenant.id,
+    uploaderId: user.id,
+    subjectKind: "post",
+    subjectId: created.id,
+    sourceHost: await currentSourceHost(tenant.slug),
+    declaration,
+    items: integrityItems,
+  });
+
   // ---- Cola de moderación (admin, uso permitido §6) ------------------------
   const shouldEnqueue =
-    moderation.flagged || textUnmoderated || tier > TIER_AUTO || mediaNeedsAsyncReview;
+    moderation.flagged ||
+    textUnmoderated ||
+    tier > TIER_AUTO ||
+    mediaNeedsAsyncReview ||
+    integrity.needsHumanReview;
   if (shouldEnqueue) {
     try {
       const reasons = [
@@ -454,11 +527,16 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
         // video suma la suya propia para que el equipo sepa qué mirar.
         ...(mediaNeedsAsyncReview && photos.length > 0 ? ["photo_async_review"] : []),
         ...(mediaNeedsAsyncReview && videoPaths.length > 0 ? ["video_async_review"] : []),
+        ...integrity.reasons,
       ];
       // pending_review → cola humana; publicado con media sin Vision → cola
       // humana igual (la imagen/el video necesita ojos), pero ya está visible.
+      // Una alerta de integridad —o un archivo que no se pudo analizar— también
+      // pide un humano: un duplicado exacto no lo resuelve un score de IA.
       const enqueueTier =
-        status === "pending_review" || mediaNeedsAsyncReview ? TIER_HUMAN : TIER_REVIEW;
+        status === "pending_review" || mediaNeedsAsyncReview || integrity.needsHumanReview
+          ? TIER_HUMAN
+          : TIER_REVIEW;
       const outcome = await enqueueModeration(createAdminClient(), {
         tenantId: tenant.id,
         subjectKind: "post",
@@ -570,6 +648,27 @@ export async function createCommentAction(input: {
     return { ok: false, code: "error" };
   }
 
+  // ---- Aviso al autor de la publicación (0068) -----------------------------
+  // Va DESPUÉS del insert: se avisa por un comentario que existe, nunca por un
+  // intento. El autor se lee acá y no antes porque hasta este punto no había
+  // nada que notificar. `notifyPostComment` corta solo si el autor es quien
+  // comentó, y nunca lanza: un aviso caído no puede desarmar el comentario.
+  const { data: commentedPost } = await supabase
+    .from("posts")
+    .select("author_id")
+    .eq("id", postId)
+    .maybeSingle();
+
+  if (commentedPost?.author_id) {
+    await notifyPostComment({
+      tenantId: tenant.id,
+      postId,
+      authorId: commentedPost.author_id,
+      actorId: user.id,
+      body,
+    });
+  }
+
   // Score intermedio o moderación saltada → publica pero entra a monitoreo.
   const tier = moderationTier(moderation.score);
   if (moderation.skipped || tier > TIER_AUTO) {
@@ -589,4 +688,75 @@ export async function createCommentAction(input: {
 
   revalidatePath(`/feed/${postId}`);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Aviso de "me gusta" (0068)
+// ---------------------------------------------------------------------------
+
+const reactionNotifySchema = z.object({ postId: z.uuid() });
+
+/**
+ * Avisa al autor de una publicación que a alguien le gustó.
+ *
+ * POR QUÉ ES UNA ACTION APARTE Y NO PARTE DEL "ME GUSTA": el me gusta se
+ * escribe desde el navegador con el cliente del usuario (`reactions` tiene RLS
+ * propia y el corazón es optimista, sin round-trip al servidor). Meterlo en una
+ * server action para poder notificar haría que cada tap esperara al servidor —
+ * exactamente lo que el módulo evitó a propósito. Así que el aviso viaja por su
+ * cuenta, fire-and-forget, después de que la reacción ya quedó.
+ *
+ * LO QUE IMPIDE QUE ESTO SEA UN EMISOR DE NOTIFICACIONES A PEDIDO: la reacción
+ * tiene que EXISTIR. Sin esa relectura, cualquiera podría llamar a esta action
+ * en loop y llenarle la campana a otra persona sin haber tocado nada. Se lee
+ * con el cliente del usuario (RLS aplica) y se corta si no hay fila.
+ *
+ * Devuelve siempre un booleano y jamás lanza: es telemetría social, no una
+ * operación cuyo fracaso alguien tenga que ver.
+ */
+export async function notifyPostReactionAction(input: {
+  postId: string;
+}): Promise<{ ok: boolean }> {
+  try {
+    const parsed = reactionNotifySchema.safeParse(input);
+    if (!parsed.success) return { ok: false };
+    const { postId } = parsed.data;
+
+    const guard = await requireTenantMatch();
+    if (!guard.ok) return { ok: false };
+    const { tenant, supabase, user } = guard;
+
+    // Techo generoso: notificar 120 me gusta por hora es más de lo que hace
+    // nadie con el pulgar, y le pone piso a un script.
+    if (!limit(`react-notify:${user.id}`, 120, HOUR_MS).ok) return { ok: false };
+
+    const { data: reaction } = await supabase
+      .from("reactions")
+      .select("profile_id")
+      .eq("subject_kind", "post")
+      .eq("subject_id", postId)
+      .eq("profile_id", user.id)
+      .maybeSingle();
+
+    if (!reaction) return { ok: false };
+
+    const { data: post } = await supabase
+      .from("posts")
+      .select("author_id")
+      .eq("id", postId)
+      .maybeSingle();
+
+    // Sin autor (cuenta borrada) o me gusta propio: no hay a quién avisarle.
+    if (!post?.author_id || post.author_id === user.id) return { ok: false };
+
+    await notifyPostReaction({
+      tenantId: tenant.id,
+      postId,
+      authorId: post.author_id,
+      actorId: user.id,
+    });
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
 }

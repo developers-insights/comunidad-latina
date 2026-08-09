@@ -28,6 +28,7 @@ import {
 import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 
 export const metadata = { title: "Eventos" };
 
@@ -124,7 +125,13 @@ export default async function EventosPage({ searchParams }: { searchParams: Sear
 // ---------------------------------------------------------------------------
 
 async function EventosContent({ filters }: { filters: Filters }) {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  const [tenant, supabase, viewerZone] = await Promise.all([
+    getTenant(),
+    createClient(),
+    // La zona de quien mira: la hora de un evento sin zona es el reloj del
+    // runtime, o sea la de nadie (ver `eventDateParts`).
+    getViewerTimeZone(),
+  ]);
 
   // Orden cronológico por fecha del evento (attrs.starts_at); los sin fecha
   // van al final. El volumen de eventos activos es chico — sin cursor.
@@ -210,7 +217,9 @@ async function EventosContent({ filters }: { filters: Filters }) {
       id: row.id,
       title: row.title,
       venueArea: attrs.venueArea ?? row.area_label,
-      date: attrs.startsAt ? eventDateParts(attrs.startsAt, tenant.locale) : null,
+      date: attrs.startsAt
+        ? eventDateParts(attrs.startsAt, tenant.locale, viewerZone ?? undefined)
+        : null,
       free: attrs.free,
       photoUrl: firstPhotoUrl(row.photos),
       // Todas las fotos ya resueltas: tocar la foto abre el visor con la
@@ -221,6 +230,7 @@ async function EventosContent({ filters }: { filters: Filters }) {
           ? {
               displayName: memberName,
               firstName: firstNameOf(memberName),
+              profileId: row.created_by,
               score: trust?.score ?? 0,
               level: toTrustLevel(trust?.level),
               signals: buildTrustSignals(

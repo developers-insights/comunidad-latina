@@ -2,8 +2,9 @@
 
 import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
+import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
-import { BOOST_PACKAGES, boostMontoCentavos, getStripe } from "@/lib/stripe";
+import { BOOST_PACKAGES, getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -86,6 +87,17 @@ export async function crearBoostCheckout(
     return { status: "error", message: COPY.errorMuchosIntentos };
   }
 
+  // EL PRECIO DE LA COMUNIDAD (`tenant_prices`, 0072) — la misma lectura que
+  // pintó las tarjetas en /impulsar/[listingId]. Se resuelve UNA vez y ese
+  // número entero de centavos va tanto a la fila `boosts.amount_cents` como al
+  // `unit_amount` de Stripe: el webhook compara los dos antes de activar, así
+  // que tienen que salir de la misma lectura o el impulso nunca arrancaría.
+  const precio = await getPrice(supabase, tenant.id, "boost", paquete, "unico");
+  if (!precio) {
+    console.error(`[boost] Sin precio para boost/${paquete} — tenant=${tenant.slug}`);
+    return { status: "error", message: COPY.errorGenerico };
+  }
+
   try {
     // 1. Ownership con RLS del usuario: si no es suyo, para él no existe.
     const { data: listing } = await supabase
@@ -111,8 +123,8 @@ export async function crearBoostCheckout(
         buyer_id: user.id,
         package: boost.id,
         duration_days: boost.dias,
-        amount_cents: boostMontoCentavos(boost),
-        currency: "usd",
+        amount_cents: precio.amountCents,
+        currency: precio.currency.toLowerCase(),
         status: "pending_payment",
       })
       .select("id")
@@ -125,8 +137,8 @@ export async function crearBoostCheckout(
       return { status: "error", message: COPY.errorGenerico };
     }
 
-    // 3. Checkout one-time. [EJEMPLO] §18: price_data inline; antes del
-    // go-live real, migrar a Prices del dashboard de Stripe.
+    // 3. Checkout one-time. `price_data` inline con el precio vigente de la
+    // comunidad; antes del go-live real, migrar a Prices del dashboard.
     const stripe = getStripe();
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
     const session = await stripe.checkout.sessions.create({
@@ -136,8 +148,10 @@ export async function crearBoostCheckout(
         {
           quantity: 1,
           price_data: {
-            currency: "usd",
-            unit_amount: boostMontoCentavos(boost),
+            // Moneda explícita de `tenant_prices` (Stripe la quiere minúscula),
+            // y el MISMO entero que quedó en `boosts.amount_cents`.
+            currency: precio.currency.toLowerCase(),
+            unit_amount: precio.amountCents,
             product_data: {
               // Solo texto: es lo que la persona lee en el Checkout de Stripe y
               // en su comprobante. La `metadata.package` de abajo SÍ es un valor

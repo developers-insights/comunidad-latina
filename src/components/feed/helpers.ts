@@ -303,6 +303,8 @@ export interface FeedListingModel {
     score: number;
     level: TrustLevel;
     signals: TrustSignal[];
+    /** Perfil de quien publica — la hoja del Trust Score ofrece "Ver perfil". */
+    profileId: string | null;
   } | null;
 }
 

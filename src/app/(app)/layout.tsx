@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import { getTenant } from "@/lib/tenant/resolve";
-import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/shell/header";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { getShellContext } from "@/components/shell/shell-context";
 import { CommentsSheetProvider, MediaViewerProvider } from "@/components/feed";
+import { ViewerTimeZoneProvider } from "@/components/time/viewer-time-zone";
+import { getViewerAccount } from "@/lib/time/viewer-zone";
 import { OfflineBanner } from "@/components/shell/offline-banner";
 import { TenantMismatchBanner } from "@/components/shell/tenant-mismatch-banner";
 import { AccountGate } from "@/components/shell/account-gate";
@@ -22,32 +23,44 @@ import { InstallPrompt } from "@/components/pwa/install-prompt";
  * la trata como activa).
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const [tenant, shell] = await Promise.all([getTenant(), getShellContext()]);
+  const [tenant, shell, viewer] = await Promise.all([
+    getTenant(),
+    getShellContext(),
+    /**
+     * UNA sola lectura de quien mira, para dos cosas que antes eran dos.
+     *
+     * El gate de sanciones necesitaba `account_status` y `suspended_until`; la
+     * zona horaria necesitaba `timezone`. Son tres columnas de la MISMA fila de
+     * `profiles`, y cada consulta traía además su propio `auth.getUser()`: dos
+     * viajes de más en el camino que corre en cada navegación de la app. Ahora
+     * `getViewerAccount()` las trae juntas, memoizada por request — así que las
+     * pantallas que después piden `getViewerTimeZone()` para formatear una
+     * fecha no vuelven a tocar la DB.
+     */
+    getViewerAccount(),
+  ]);
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user) {
-    const { data: sanction } = await supabase
-      .from("profiles")
-      .select("account_status, suspended_until")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (sanction?.account_status === "banned") {
-      return <AccountGate kind="banned" />;
-    }
-    if (
-      sanction?.account_status === "suspended" &&
-      (!sanction.suspended_until || new Date(sanction.suspended_until) > new Date())
-    ) {
-      return <AccountGate kind="suspended" suspendedUntil={sanction.suspended_until} />;
-    }
+  if (viewer?.accountStatus === "banned") {
+    return <AccountGate kind="banned" />;
+  }
+  if (
+    viewer?.accountStatus === "suspended" &&
+    (!viewer.suspendedUntil || new Date(viewer.suspendedUntil) > new Date())
+  ) {
+    return <AccountGate kind="suspended" suspendedUntil={viewer.suspendedUntil} />;
   }
 
   return (
-    // Overlays sociales (visor de medios + sheet de comentarios) a nivel shell:
-    // cualquier card de cualquier página los abre sin remontar nada.
+    /**
+     * La zona horaria de quien mira, a nivel shell: cualquier client component
+     * de cualquier pantalla puede pedirla con `useViewerTimeZone()` sin que se
+     * la pasen por props. Es un provider de contexto puro — no renderiza nada,
+     * no agrega un nodo al DOM y no hace ninguna consulta propia (la zona ya
+     * vino resuelta arriba). Ver `components/time/viewer-time-zone.tsx`.
+     */
+    <ViewerTimeZoneProvider preferred={viewer?.timezone ?? null}>
+    {/* Overlays sociales (visor de medios + sheet de comentarios) a nivel shell:
+        cualquier card de cualquier página los abre sin remontar nada. */}
     <MediaViewerProvider>
     <CommentsSheetProvider>
     <div className="flex min-h-dvh flex-col">
@@ -80,12 +93,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <BottomNav
         modules={tenant.modules}
         modulesSoon={tenant.modulesSoon}
-        canCreate={Boolean(user)}
+        canCreate={Boolean(viewer)}
         unread={shell.unread}
       />
       <InstallPrompt />
     </div>
     </CommentsSheetProvider>
     </MediaViewerProvider>
+    </ViewerTimeZoneProvider>
   );
 }

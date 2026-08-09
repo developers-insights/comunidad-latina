@@ -23,6 +23,9 @@ import { ProfileHeader } from "../profile-header";
 import { ShareProfileButton } from "../share-profile-button";
 import { ProfileTabSection } from "../profile-tab-section";
 import { fetchProfileCounts } from "../profile-data";
+import { fetchProfileCard, fullName } from "../profile-card";
+import { ProfileCompletion, missingProfileFields } from "../profile-completion";
+import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { memberSinceLabel, parseProfileTab, profileTabHref } from "../profile-tabs";
 
 export const metadata = { title: "Tu perfil" };
@@ -55,10 +58,13 @@ export default async function PerfilPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const [tenant, supabase, sp] = await Promise.all([
+  const [tenant, supabase, sp, viewerZone] = await Promise.all([
     getTenant(),
     createClient(),
     searchParams,
+    // La zona que la persona eligió en Ajustes (0067). Todas las fechas de esta
+    // pantalla se formatean con ella.
+    getViewerTimeZone(),
   ]);
   const {
     data: { user },
@@ -68,10 +74,30 @@ export default async function PerfilPage({
   const cursor = decodeCursor(firstValue(sp.fotos) || undefined);
   const tab = parseProfileTab(firstValue(sp.t) || undefined);
 
-  // Perfil + Trust Score + los cuatro contadores + acceso a contratos.
-  const [{ data: profile }, { data: trust }, counts, { count: contractsCount }] =
+  /**
+   * `profile_card()` Y NO `select("*")`.
+   *
+   * El `*` que había acá era el hueco que las migraciones 0062 y 0067 dejaron
+   * anotado dos veces: mientras esta línea siguiera existiendo no se podía
+   * cerrar `profiles` por GRANT de columna para `authenticated` (revocar una
+   * columna tira 42501 sobre la consulta entera), así que TODA columna nueva de
+   * `profiles` nacía legible por cualquier usuario con sesión.
+   *
+   * Además traía de vuelta al navegador `role`, `account_status`,
+   * `suspended_until`, `terms_accepted_at`… para pintar un perfil.
+   *
+   * La ficha ahora viene de `public.profile_card()`, que devuelve 20 campos
+   * elegidos y —por ser el dueño quien mira— los devuelve todos, incluida la
+   * fecha de nacimiento completa, que es lo único que el formulario de edición
+   * necesita y que NADIE más recibe jamás. Ver `../profile-card.ts`.
+   *
+   * `timezone` va aparte y con lista explícita: no es parte de la ficha pública
+   * (no se le concede a `anon` a propósito, 0067) y sólo la usa el propio
+   * usuario para formatear sus fechas.
+   */
+  const [card, { data: trust }, counts, { count: contractsCount }] =
     await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      fetchProfileCard(supabase, user.id),
       supabase
         .from("trust_scores")
         .select("score, level, signals")
@@ -89,22 +115,26 @@ export default async function PerfilPage({
     ]);
 
   // Cuenta sin perfil (edge raro) → que complete el onboarding.
-  if (!profile) redirect("/bienvenida");
+  if (!card) redirect("/bienvenida");
 
   const score = trust?.score ?? 0;
   const level = normalizeTrustLevel(trust?.level, score);
-  const signals = trustSignalsFrom(trust?.signals ?? null, profile.identity_verified);
-  const firstName = profile.display_name.split(/\s+/)[0] ?? profile.display_name;
-  const country = countryName(profile.country_origin);
-  const location = [country, profile.area_label].filter(Boolean).join(" · ") || null;
-  const memberSince = memberSinceLabel(profile.created_at, tenant.locale);
+  const signals = trustSignalsFrom(trust?.signals ?? null, card.identityVerified);
+  const firstName = card.displayName.split(/\s+/)[0] ?? card.displayName;
+  const country = countryName(card.countryOrigin);
+  const location =
+    [country, card.city, card.areaLabel].filter(Boolean).join(" · ") || null;
+  const memberSince = memberSinceLabel(card.createdAt, tenant.locale, viewerZone ?? undefined);
+  const missing = missingProfileFields(card);
 
   return (
     <div className="flex flex-col gap-8">
       <ProfileHeader
-        displayName={profile.display_name}
-        avatarUrl={profile.avatar_url}
-        identityVerified={profile.identity_verified}
+        displayName={fullName(card)}
+        username={card.username}
+        avatarUrl={card.avatarUrl}
+        coverUrl={card.coverUrl}
+        identityVerified={card.identityVerified}
         location={location}
         memberSince={memberSince}
         stats={[
@@ -129,7 +159,7 @@ export default async function PerfilPage({
               <PencilSimple size={16} aria-hidden="true" />
               {COPY.editAction}
             </Link>
-            {!profile.identity_verified && (
+            {!card.identityVerified && (
               <Link
                 href="/perfil/verificar"
                 className={cn(buttonVariants({ variant: "outline", size: "md" }), "flex-1")}
@@ -143,12 +173,17 @@ export default async function PerfilPage({
                 abra el link, o sea que compartirla mandaría a cada persona a su
                 propio perfil. Es el bug clásico de este botón. */}
             <ShareProfileButton
-              path={`/perfil/${profile.id}`}
-              displayName={profile.display_name}
+              path={`/perfil/${card.id}`}
+              displayName={card.displayName}
             />
           </div>
         }
       />
+
+      {/* Qué falta del perfil. Va DESPUÉS de la cabecera y antes del Trust
+          Score: es una invitación, no una alarma — la cuenta funciona entera
+          sin esto. Desaparece sola cuando no queda nada por completar. */}
+      <ProfileCompletion missing={missing} />
 
       {/* Trust Score — la tarjeta especial, con protagonismo visual (feedback 21/7). */}
       <section className="flex flex-col gap-2" aria-label={COPY.trustHeading}>
@@ -174,11 +209,16 @@ export default async function PerfilPage({
         isOwn
         cursor={cursor}
         info={{
-          bio: profile.bio,
+          bio: card.bio,
           country,
-          areaLabel: profile.area_label,
+          areaLabel: card.areaLabel,
           memberSince,
-          identityVerified: profile.identity_verified,
+          identityVerified: card.identityVerified,
+          lastName: card.lastName,
+          age: card.age,
+          countryResidence: card.countryResidence,
+          city: card.city,
+          languages: card.languages,
         }}
       />
 
@@ -187,12 +227,22 @@ export default async function PerfilPage({
         <h2 className="mb-4 font-display text-lg font-semibold text-foreground">
           {COPY.editHeading}
         </h2>
+        {/* Todos los campos privados llegan completos porque quien mira es el
+            DUEÑO — `app.privacy_allows()` devuelve siempre `true` para uno
+            mismo. Es la misma función la que decide que nadie más los reciba. */}
         <EditProfileForm
           initial={{
-            displayName: profile.display_name,
-            bio: profile.bio ?? "",
-            area: profile.area_label ?? "",
-            country: profile.country_origin ?? "",
+            displayName: card.displayName,
+            lastName: card.lastName ?? "",
+            username: card.username ?? "",
+            bio: card.bio ?? "",
+            area: card.areaLabel ?? "",
+            country: card.countryOrigin ?? "",
+            countryResidence: card.countryResidence ?? "",
+            city: card.city ?? "",
+            birthdate: card.birthdate ?? "",
+            languages: card.languages,
+            coverUrl: card.coverUrl,
           }}
         />
       </BezelCard>

@@ -1,4 +1,5 @@
 import type { Json } from "@/lib/types/database.types";
+import { DEFAULT_TIME_ZONE } from "@/lib/utils";
 
 /**
  * Helpers puros del módulo DIRECTORIOS (profesionales + eventos).
@@ -118,11 +119,38 @@ export interface EventDateParts {
   isPast: boolean;
 }
 
-export function eventDateParts(iso: string, locale = "es-US"): EventDateParts | null {
+/**
+ * Las tres piezas de la fecha de un evento, en la zona de QUIEN MIRA.
+ *
+ * ── POR QUÉ LA ZONA ES UN PARÁMETRO Y NO UN DEFAULT SILENCIOSO ───────────────
+ * Estos `Intl.DateTimeFormat` corrían SIN `timeZone`, o sea con el reloj del
+ * runtime: el server de Vercel en UTC y el teléfono en la zona de la persona. El
+ * mismo evento salía "16 AGO 01:00" en el HTML y "15 AGO 21:00" después de
+ * hidratar — mismatch de React (#418) y, peor, una hora de evento equivocada, que
+ * en un módulo cuyo único trabajo es decir cuándo empieza algo es el bug caro.
+ *
+ * ── LOS EVENTOS SIN HORA SE FORMATEAN EN UTC ─────────────────────────────────
+ * Misma regla que `formatDate` (lib/utils.ts): `attrs.starts_at` puede venir como
+ * un día suelto (`2026-08-15`, o su equivalente `…T00:00:00Z`), y eso no es un
+ * instante sino un día del calendario. Pasarlo por la zona del lector le restaría
+ * un día a cualquiera al oeste de Greenwich: alguien en Los Ángeles vería un
+ * evento del 15 anunciado para el 14. UTC es la única zona que devuelve el mismo
+ * día que entró.
+ */
+export function eventDateParts(
+  iso: string,
+  locale = "es-US",
+  /** Zona de quien mira. Sin elección explícita, la de la comunidad. */
+  timeZone: string = DEFAULT_TIME_ZONE,
+): EventDateParts | null {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  const day = new Intl.DateTimeFormat(locale, { day: "numeric" }).format(date);
-  const month = new Intl.DateTimeFormat(locale, { month: "short" })
+
+  const hasTime = /T\d{2}:\d{2}/.test(iso) && !/T00:00(?::00)?(?:[Z+-]|$)/.test(iso);
+  const zone = hasTime ? timeZone : "UTC";
+
+  const day = new Intl.DateTimeFormat(locale, { day: "numeric", timeZone: zone }).format(date);
+  const month = new Intl.DateTimeFormat(locale, { month: "short", timeZone: zone })
     .format(date)
     .replace(/\./g, "")
     .toUpperCase();
@@ -130,10 +158,15 @@ export function eventDateParts(iso: string, locale = "es-US"): EventDateParts | 
     weekday: "long",
     day: "numeric",
     month: "long",
+    timeZone: zone,
   }).format(date);
-  const hasTime = /T\d{2}:\d{2}/.test(iso) && !/T00:00(?::00)?(?:[Z+-]|$)/.test(iso);
   const time = hasTime
-    ? new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(date)
+    ? new Intl.DateTimeFormat(locale, {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: zone,
+      }).format(date)
     : "";
+
   return { day, month, full, time, isPast: date.getTime() < Date.now() - 6 * 60 * 60 * 1000 };
 }

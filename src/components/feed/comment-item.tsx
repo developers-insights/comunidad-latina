@@ -83,6 +83,7 @@ export function CommentItem({
               score={author.score}
               level={author.level}
               signals={author.signals}
+              profileId={author.profileId}
               size="inline"
             />
           )}

@@ -117,6 +117,7 @@ export function ProfessionalCard({ professional }: { professional: ProfessionalC
                 score={professional.publisher.score}
                 level={professional.publisher.level}
                 signals={professional.publisher.signals}
+                profileId={professional.publisher.profileId}
                 size="inline"
               />
             </div>

@@ -34,6 +34,11 @@ import { Celebration, useCelebration } from "@/components/motion";
 import { COPY, formatListingPrice } from "@/components/listings";
 import { MONETIZATION_COPY, FREE_MAX_PHOTOS } from "@/lib/monetization";
 import { listingViewHref } from "@/lib/monetization/href";
+import {
+  EMPTY_DECLARATION_VALUE,
+  OriginalityFields,
+  type DeclarationValue,
+} from "@/components/integrity/originality-fields";
 import { createListingDraft, finalizeListing } from "./actions";
 
 const C = COPY.publish;
@@ -165,6 +170,8 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
   const [areaLabel, setAreaLabel] = useState("");
   const [exactAddress, setExactAddress] = useState("");
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  // Declaración de originalidad y licencia (pliego / Content Integrity).
+  const [declaration, setDeclaration] = useState<DeclarationValue>(EMPTY_DECLARATION_VALUE);
   // Campos específicos de professional/event
   const [category, setCategory] = useState("");
   const [credentials, setCredentials] = useState("");
@@ -356,7 +363,7 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
       }
 
       // 3) Cierre: estado final según moderación/degradación elegante
-      const finalized = await finalizeListing({ listingId, photoPaths });
+      const finalized = await finalizeListing({ listingId, photoPaths, declaration });
       if (!finalized.ok) {
         setError(finalized.error);
         return;
@@ -761,6 +768,15 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
           {photos.length > 0 && (
             <p className="text-xs text-foreground-muted">{C.steps.photos.reviewNote}</p>
           )}
+
+          {/* Declaración de originalidad y licencia. Va en el paso de FOTOS, no
+              en el de vista previa: es de las fotos que habla, y acá la persona
+              todavía las tiene delante. */}
+          <OriginalityFields
+            idPrefix="aviso-declaracion"
+            value={declaration}
+            onChange={setDeclaration}
+          />
         </div>
       )}
 

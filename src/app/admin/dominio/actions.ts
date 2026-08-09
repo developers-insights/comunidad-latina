@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStaffContext, logAdminAction } from "../guard";
+import { canWriteTenant } from "../scope";
 // Helpers puros en su propio módulo: un archivo "use server" solo puede
 // exportar funciones async (ver el comentario de ./modules.ts).
 import { MODULE_KEYS, moduleStateSchema, toModuleColumns, type ModuleState } from "./modules";
@@ -163,8 +164,24 @@ export async function updateTenantModules(
 ): Promise<DomainActionState> {
   const ctx = await getStaffContext("domain_admin");
   if (!ctx) return { status: "error", message: COPY.notAllowed };
-  const { user, tenantId } = ctx;
-  if (!tenantId) return { status: "error", message: COPY.notAllowed };
+  const { user } = ctx;
+
+  /**
+   * SOBRE QUÉ COMUNIDAD SE GUARDA.
+   *
+   * El formulario puede traer un `tenantId` — lo manda el panel cuando un
+   * `global_admin` está mirando otra comunidad con el selector. Es dato del
+   * cliente, así que no se usa: se PROPONE, y `canWriteTenant` decide.
+   *
+   * Para un `domain_admin`, cualquier tenant que no sea el suyo devuelve
+   * `false` y la acción muere acá, sin fallback silencioso a su propio tenant.
+   * El fallback amable es correcto para LEER (mostrar tu comunidad en vez de
+   * un error); para ESCRIBIR sería una forma elegante de ejecutar una acción
+   * distinta de la que la persona pidió.
+   */
+  const requested = formData.get("tenantId");
+  const tenantId = typeof requested === "string" && requested ? requested : ctx.tenantId;
+  if (!canWriteTenant(ctx, tenantId)) return { status: "error", message: COPY.notAllowed };
 
   // Se recorren las claves CANÓNICAS, no las del FormData: así un cliente no
   // puede inventar módulos ni omitir uno para dejarlo en un estado ambiguo.

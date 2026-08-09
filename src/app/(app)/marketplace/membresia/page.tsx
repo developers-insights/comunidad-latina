@@ -18,12 +18,14 @@ import {
   MembershipStatusCard,
   MEMBERSHIP_EXCLUDES,
   MEMBERSHIP_INCLUDES,
-  formatMembershipPrice,
   membershipPresentation,
   type MembershipRow,
 } from "@/components/marketplace";
+import { formatCents } from "@/lib/pricing";
+import { getPrice } from "@/lib/pricing/read";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { MembershipActions } from "./membership-actions";
 
 /**
@@ -85,10 +87,19 @@ export default async function MembresiaPage({
 // ---------------------------------------------------------------------------
 
 async function MembresiaContent() {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  const [tenant, supabase, viewerZone] = await Promise.all([
+    getTenant(),
+    createClient(),
+    getViewerTimeZone(),
+  ]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // El precio de la tarjeta sale de la MISMA lectura que después cobra
+  // `activarMembresiaTienda`. Nunca lanza: sin fila configurada devuelve la
+  // constante del código y la pantalla queda igual que hoy (§7).
+  const precio = await getPrice(supabase, tenant.id, "store_membership", "estandar", "mensual");
 
   if (!user) {
     // El plan se muestra IGUAL sin sesión: alguien que está evaluando si le
@@ -96,7 +107,7 @@ async function MembresiaContent() {
     // comisión, sin tener que crear una cuenta primero para enterarse.
     return (
       <>
-        <PlanCard />
+        <PlanCard precio={precio} />
         <EmptyState
           icon={<SignIn />}
           title={C.needLoginTitle}
@@ -134,7 +145,7 @@ async function MembresiaContent() {
   if (storeRows.length === 0) {
     return (
       <>
-        <PlanCard />
+        <PlanCard precio={precio} />
         <EmptyState
           icon={<Storefront />}
           title={C.noStoresTitle}
@@ -182,7 +193,7 @@ async function MembresiaContent() {
 
   return (
     <>
-      <PlanCard />
+      <PlanCard precio={precio} />
 
       <section className="mt-6 flex flex-col gap-3">
         <h2 className="font-display text-lg font-bold text-foreground">{C.statusTitle}</h2>
@@ -196,6 +207,7 @@ async function MembresiaContent() {
               membership={entry?.row ?? null}
               storeActive={store.store_active}
               locale={tenant.locale}
+              timeZone={viewerZone ?? undefined}
             >
               <MembershipActions
                 storeId={store.id}
@@ -218,15 +230,24 @@ async function MembresiaContent() {
 // Qué se compra — precio, incluye, y (sobre todo) lo que NO cobramos
 // ---------------------------------------------------------------------------
 
-function PlanCard() {
+function PlanCard({
+  precio,
+}: {
+  /** El precio vigente ya resuelto. `null` sólo si la casilla no existiera. */
+  precio: { amountCents: number; currency: string } | null;
+}) {
   return (
     <BezelCard variant="featured" coreClassName="flex flex-col gap-5 p-6">
-      <p className="flex items-baseline gap-2">
-        <span className="numeric font-display text-4xl font-bold text-foreground">
-          {formatMembershipPrice()}
-        </span>
-        <span className="text-sm text-foreground-secondary">{C.priceSuffix}</span>
-      </p>
+      {precio && (
+        <p className="flex items-baseline gap-2">
+          <span className="numeric font-display text-4xl font-bold text-foreground">
+            {formatCents(precio.amountCents, precio.currency)}
+          </span>
+          {/* "por mes" pegado al número: sin la frecuencia, un precio mensual
+              se lee como el total y esa confusión ya pasó una vez en este repo. */}
+          <span className="text-sm text-foreground-secondary">{C.priceSuffix}</span>
+        </p>
+      )}
 
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">

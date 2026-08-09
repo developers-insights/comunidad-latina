@@ -1,8 +1,10 @@
 import { MagnifyingGlass, UsersThree } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState } from "@/components/ui";
+import { CommunitySwitcher } from "@/components/admin/community-switcher";
 import { MemberRow, type MemberRowData } from "@/components/admin/member-row";
 import { getTenant } from "@/lib/tenant/resolve";
 import { requireStaff } from "../guard";
+import { COMMUNITY_PARAM, firstParam, resolveAdminScope } from "../scope";
 
 export const metadata = { title: "Miembros" };
 
@@ -12,9 +14,20 @@ export const metadata = { title: "Miembros" };
  * acciones de sanción (suspender/dar de baja/reactivar) a un tap.
  *
  * Lectura con el cliente del staff: profiles es de lectura pública (§0003,
- * `using (true)`) así que no hace falta el admin client acá — solo se filtra
- * SIEMPRE por el tenant del JWT, nunca por el Host header (mismo patrón que
- * /admin/dominio).
+ * `using (true)`) así que no hace falta el admin client acá.
+ *
+ * DE QUÉ COMUNIDAD SON ESTOS MIEMBROS. Para todo el mundo, la del JWT. Para un
+ * `global_admin`, la que eligió en el selector — resuelta en el servidor por
+ * `resolveAdminScope`, que ignora el parámetro de la URL si el rol no da (ver
+ * `src/app/admin/scope.ts`). El Host header no participa nunca de esta
+ * decisión: es cosmético acá.
+ *
+ * OJO CON LAS SANCIONES EN UNA COMUNIDAD AJENA. Las RPCs `admin_*` (0021) se
+ * gatean contra `app.current_tenant_id()`, o sea el tenant del JWT, y NO tienen
+ * rama de global_admin. Así que un súper admin mirando otra comunidad puede
+ * VER, pero suspender o dar de baja se lo rechaza la base. Se avisa en pantalla
+ * en vez de dejar que descubra el error apretando el botón. Cambiar eso es una
+ * migración, y las migraciones no son de este panel.
  */
 
 const COPY = {
@@ -35,14 +48,18 @@ const PAGE_SIZE = 40;
 export default async function MiembrosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { supabase, tenantId: jwtTenantId, role: staffRole } = await requireStaff("moderator");
+  const ctx = await requireStaff("moderator");
+  const { supabase, tenantId: jwtTenantId, role: staffRole } = ctx;
   const tenant = await getTenant();
-  // El tenant REAL del staff es el del JWT (el Host header es cosmético acá).
-  const tenantId = jwtTenantId ?? tenant.id;
-  const { q } = await searchParams;
-  const query = (q ?? "").trim().slice(0, 120);
+  const sp = await searchParams;
+
+  const scope = await resolveAdminScope(ctx, firstParam(sp[COMMUNITY_PARAM]));
+  // Sin selector (o sin comunidad resuelta) manda el JWT. El fallback al tenant
+  // del Host es el de siempre, para el staff que todavía no tiene el claim.
+  const tenantId = scope.tenantId ?? jwtTenantId ?? tenant.id;
+  const query = (firstParam(sp.q) ?? "").trim().slice(0, 120);
 
   let profilesQuery = supabase
     .from("profiles")
@@ -107,7 +124,20 @@ export default async function MiembrosPage({
         )}
       </header>
 
+      {scope.canSwitch && (
+        <CommunitySwitcher
+          basePath="/admin/miembros"
+          communities={scope.communities}
+          activeTenantId={scope.tenantId}
+          isForeign={scope.isForeign}
+          keep={{ q: query || undefined }}
+        />
+      )}
+
       <form method="GET" className="flex gap-2">
+        {scope.canSwitch && scope.tenantId && (
+          <input type="hidden" name={COMMUNITY_PARAM} value={scope.tenantId} />
+        )}
         <label htmlFor="miembros-q" className="sr-only">
           {COPY.searchLabel}
         </label>
@@ -143,7 +173,12 @@ export default async function MiembrosPage({
       ) : (
         <div className="flex flex-col gap-3">
           {members.map((member) => (
-            <MemberRow key={member.id} member={member} staffRole={staffRole} />
+            <MemberRow
+              key={member.id}
+              member={member}
+              staffRole={staffRole}
+              readOnly={scope.isForeign}
+            />
           ))}
         </div>
       )}

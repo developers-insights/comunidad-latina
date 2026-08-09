@@ -3,7 +3,16 @@ import type Stripe from "stripe";
 import { handleStoreMembershipEvent } from "@/app/(app)/marketplace/membresia/webhook-handlers";
 import { isStripeConfigured } from "@/lib/config/services";
 import { listingViewHref } from "@/lib/monetization/href";
+import {
+  diagnosticoDeCobro,
+  metadataString,
+  motivoDeDiscrepancia,
+  pactadoFromMetadata,
+  pactadoFromRow,
+} from "@/lib/monetization/pactado";
 import { handleListingPremiumEvent } from "@/lib/monetization/premium-webhook";
+import { handleChargebackEvent } from "@/lib/monetization/reembolso";
+import { handleInvoicePaidEvent } from "@/lib/monetization/renovacion";
 import { createNotification } from "@/lib/notifications/notify";
 import { PLAN_IDS, getStripe, type PlanId } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -39,14 +48,6 @@ const ACTIVE_SUB_STATUSES: ReadonlyArray<Stripe.Subscription.Status> = [
   "active",
   "trialing",
 ];
-
-function metadataString(
-  metadata: Stripe.Metadata | null | undefined,
-  key: string,
-): string | null {
-  const value = metadata?.[key];
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
 
 /**
  * `plan` de la metadata validado contra el allow-list de PlanId. Un valor
@@ -160,6 +161,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true });
     }
 
+    // RENOVACIONES (`invoice.paid`): el cobro mensual de los TRES productos por
+    // suscripción, que hasta acá no pasaba por ninguna verificación porque el
+    // estado viajaba sólo en `customer.subscription.*`, que no trae plata.
+    //
+    // ⚠️ ESTE HANDLER OBSERVA, NO DECIDE: correlaciona la factura con nuestra
+    // fila, registra el ciclo y avisa si el monto se corrió del pactado — pero no
+    // escribe nada y nunca lanza. El porqué de esa asimetría con el alta (una
+    // renovación se cobra al precio de la suscripción EN STRIPE, y rechazarla
+    // sería apagarle el servicio a alguien que pagó) está entero en
+    // `lib/monetization/renovacion.ts`. Va DESPUÉS de los otros dos porque ellos
+    // no miran facturas y devuelven false enseguida.
+    if (await handleInvoicePaidEvent(admin, event)) {
+      await admin
+        .from("payment_events")
+        .update({ processed: true })
+        .eq("provider", "stripe")
+        .eq("event_id", event.id);
+      return NextResponse.json({ received: true });
+    }
+
+    // LA PLATA QUE VUELVE (`charge.refunded`, `charge.dispute.created`): hasta
+    // acá se devolvía el dinero y el beneficio seguía encendido —el tablero de
+    // ingresos (0074) ya descontaba el reembolso, la aplicación no revocaba
+    // nada—. REVOCA UN SOLO CASO, el inequívoco: el reembolso TOTAL de un pago
+    // único (impulso, campaña). Un parcial, una disputa y cualquier reembolso de
+    // suscripción alertan y no tocan nada; el porqué de cada uno está entero en
+    // `lib/monetization/reembolso.ts`. Va acá abajo por lo mismo que
+    // renovaciones: los tres handlers de arriba no miran cobros y devuelven
+    // false enseguida.
+    if (await handleChargebackEvent(admin, event)) {
+      await admin
+        .from("payment_events")
+        .update({ processed: true })
+        .eq("provider", "stripe")
+        .eq("event_id", event.id);
+      return NextResponse.json({ received: true });
+    }
+
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
@@ -186,35 +225,9 @@ export async function POST(request: Request) {
           break;
         }
 
-        const businessAccountId = metadataString(
-          session.metadata,
-          "business_account_id",
-        );
-        const plan = metadataPlan(session.metadata);
-        if (!businessAccountId || !plan) {
-          console.warn(
-            `[pagos:webhook] checkout.session.completed ${event.id} sin metadata válida de business_account/plan — se ignora.`,
-          );
-          break;
-        }
-        const { error } = await admin
-          .from("business_accounts")
-          .update({
-            plan,
-            plan_status: "active",
-            stripe_customer_id:
-              typeof session.customer === "string"
-                ? session.customer
-                : (session.customer?.id ?? null),
-            stripe_subscription_id:
-              typeof session.subscription === "string"
-                ? session.subscription
-                : (session.subscription?.id ?? null),
-            verified_presence: true,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", businessAccountId);
-        if (error) throw new Error(`update business_accounts: ${error.code}`);
+        // Presencia Verificada (§7): suscripción con metadata.business_account_id.
+        // `unpaid` (métodos async) espera al async_payment_succeeded de abajo.
+        await activateVerifiedPresence(admin, session, event.id);
         break;
       }
 
@@ -225,6 +238,13 @@ export async function POST(request: Request) {
         if (boostId) await activateBoost(admin, boostId, session);
         const postPromotionId = metadataString(session.metadata, "post_promotion_id");
         if (postPromotionId) await activatePostPromotion(admin, postPromotionId, session);
+        // Presencia también entra por acá, y ANTES no: exigirle `paid` al
+        // completed sin atender este evento dejaría la presencia sin encender
+        // nunca tras un pago diferido real. El arreglo no puede cambiar
+        // "concede sin cobrar" por "cobra sin conceder".
+        if (!boostId && !postPromotionId) {
+          await activateVerifiedPresence(admin, session, event.id);
+        }
         break;
       }
 
@@ -243,22 +263,16 @@ export async function POST(request: Request) {
 
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
-        const activa = ACTIVE_SUB_STATUSES.includes(subscription.status);
-        const plan = metadataPlan(subscription.metadata);
-        const { error } = await admin
-          .from("business_accounts")
-          .update({
-            ...(plan ? { plan } : {}),
-            plan_status: subscription.status,
-            verified_presence: activa,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_subscription_id", subscription.id);
-        if (error) throw new Error(`update business_accounts: ${error.code}`);
+        await syncPresenciaFromSubscription(admin, subscription, event.id);
         break;
       }
 
       case "customer.subscription.deleted": {
+        // NO lleva la correlación de `.updated` a propósito: esta rama sólo QUITA
+        // (plan 'none', presencia apagada). Toda verificación de más acá es una
+        // forma nueva de NO apagar algo que dejó de pagarse, y la metadata no
+        // puede conceder nada por este camino. La fila la sigue eligiendo el id
+        // de la suscripción, que es de Stripe y no se falsifica desde metadata.
         const subscription = event.data.object as Stripe.Subscription;
         const { error } = await admin
           .from("business_accounts")
@@ -314,6 +328,255 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 // compras que SÍ se cobran— emitía el comprobante "¡Tu impulso ya está
 // activo!" con href null, que la bandeja pinta como un botón muerto.
 
+/** El customer de una Session, venga como id o como objeto expandido. */
+function customerId(
+  customer: string | { id: string } | null | undefined,
+): string | null {
+  if (typeof customer === "string") return customer;
+  return customer?.id ?? null;
+}
+
+/**
+ * Enciende Presencia Verificada (§7) tras un pago CONFIRMADO.
+ *
+ * ESTE ERA EL ÚNICO PUNTO DE COBRO QUE NO VERIFICABA NADA. Los otros cuatro
+ * productos (boost, campaña de post, premium de aviso, membresía de tienda) ya
+ * exigían pago y monto; presencia escribía `plan_status='active'` y
+ * `verified_presence=true` con sólo mirar que la metadata trajera una cuenta y
+ * un plan. Consecuencia concreta: un `checkout.session.completed` con
+ * `payment_status: 'unpaid'` —lo NORMAL en métodos de pago asíncronos— entregaba
+ * la presencia sin que hubiera entrado un centavo.
+ *
+ * CORRELACIÓN OBLIGATORIA (fiscal R3), en este orden y por este motivo:
+ *   (0) PLATA ADENTRO: `payment_status === 'paid'`. Cualquier otro valor
+ *       (`unpaid`, `no_payment_required`) espera al async_payment_succeeded.
+ *   (a) LA CUENTA existe, es DE ESTE TENANT y su dueño es el `owner_id` de la
+ *       metadata. Sin lo primero, una metadata que apunte a la cuenta de otra
+ *       comunidad enciende presencia cruzada; sin lo segundo, una que apunte a
+ *       la cuenta de OTRO VECINO del mismo tenant enciende la presencia ajena.
+ *       Es la misma exigencia que hace `premium-webhook.ts` sobre el aviso.
+ *   (b) QUIEN PAGÓ es el customer ya vinculado a esa cuenta, cuando la cuenta ya
+ *       tiene uno. En la primera compra todavía no hay con qué comparar (lo
+ *       escribe este mismo webhook) — y ESE hueco es justamente el que tapa el
+ *       `owner_id` de (a), que sí está desde el primer peso.
+ *   (c) EL MONTO **Y LA MONEDA** contra lo PACTADO al abrir el Checkout
+ *       (`metadata.price_cents`/`price_currency`, que escribe
+ *       `iniciarSuscripcion`), NO contra una constante ni contra `tenant_prices`:
+ *       si alguien edita el precio de la comunidad entre el Checkout y el
+ *       evento, releer la tabla acá rechazaría un cobro legítimo. Ver
+ *       `lib/monetization/pactado.ts`.
+ *
+ * Discrepancia → log de ALERTA con session, cuenta, lo cobrado y la metadata
+ * cruda, y NO se concede, SIN throw: reintentar no arregla una discrepancia de
+ * monto, y el payload ya quedó en `payment_events` para reconciliar. Lanzar
+ * dejaría a Stripe reintentando un evento que nunca va a poder aplicarse.
+ */
+async function activateVerifiedPresence(
+  admin: AdminClient,
+  session: Stripe.Checkout.Session,
+  eventId: string,
+): Promise<void> {
+  const businessAccountId = metadataString(session.metadata, "business_account_id");
+  const tenantId = metadataString(session.metadata, "tenant_id");
+  const ownerId = metadataString(session.metadata, "owner_id");
+  const plan = metadataPlan(session.metadata);
+  if (!businessAccountId || !plan || !tenantId || !ownerId) {
+    // `owner_id` se exige SIEMPRE, sin camino de gracia para Sessions viejas.
+    //
+    // SESSIONS ANTERIORES AL DEPLOY: `iniciarSuscripcion` es el ÚNICO lugar que
+    // abre estos Checkouts, así que las únicas sin `owner_id` son las emitidas
+    // antes de este cambio — y una Checkout Session de Stripe expira a las 24 h,
+    // de modo que la ventana en la que podría llegar un `completed` sin el campo
+    // se cierra sola. Tolerarlas con un segundo camino "para los viejos" sería
+    // dejar abierta, para siempre, exactamente la verificación que se está
+    // agregando: basta con omitir el campo para saltearla. Y el rechazo no es
+    // silencio: queda este log y el payload íntegro en `payment_events`, que es
+    // todo lo que hace falta para conceder a mano o devolver la plata.
+    console.warn(
+      `[pagos:webhook] ${eventId} (session ${session.id}) sin metadata válida de business_account/plan/tenant/owner — NO se concede. ${diagnosticoDeCobro(session)}. Si trae plata adentro, reconciliar a mano en el Dashboard.`,
+    );
+    return;
+  }
+
+  // (0) Sin plata adentro no se entrega. Es el camino normal del pago diferido,
+  // no una anomalía: warn, no error.
+  if (session.payment_status !== "paid") {
+    console.warn(
+      `[pagos:webhook] presencia: la session ${session.id} (cuenta ${businessAccountId}) llegó con payment_status="${session.payment_status}" — NO se concede todavía; se espera checkout.session.async_payment_succeeded.`,
+    );
+    return;
+  }
+
+  // (a) La cuenta tiene que existir, ser de este tenant y ser DE QUIEN COMPRÓ.
+  const { data: account, error: accountError } = await admin
+    .from("business_accounts")
+    .select("id, tenant_id, owner_id, stripe_customer_id")
+    .eq("id", businessAccountId)
+    .maybeSingle();
+  if (accountError) throw new Error(`select business_accounts: ${accountError.code}`);
+  if (!account || account.tenant_id !== tenantId || account.owner_id !== ownerId) {
+    console.error(
+      `[pagos:webhook] ALERTA presencia: la session ${session.id} pagó por la cuenta ${businessAccountId}, que no existe, no es del tenant ${tenantId} (tenant real: ${account?.tenant_id ?? "—"}) o cambió de dueño (dueño real: ${account?.owner_id ?? "—"} ≠ metadata ${ownerId}) — NO se concede. ${diagnosticoDeCobro(session)}. Revisar refund en el Dashboard.`,
+    );
+    return;
+  }
+
+  // (b) Quien pagó, contra el customer ya vinculado a la cuenta.
+  const cobradoA = customerId(session.customer);
+  if (account.stripe_customer_id && cobradoA && account.stripe_customer_id !== cobradoA) {
+    console.error(
+      `[pagos:webhook] ALERTA presencia: la session ${session.id} la pagó ${cobradoA}, pero la cuenta ${businessAccountId} (dueño ${account.owner_id}) está vinculada a ${account.stripe_customer_id} — NO se concede. ${diagnosticoDeCobro(session)}.`,
+    );
+    return;
+  }
+
+  // (c) El monto Y la moneda, contra lo pactado en la Session.
+  const pactado = pactadoFromMetadata(session.metadata);
+  if (!pactado) {
+    console.error(
+      `[pagos:webhook] ALERTA presencia: la session ${session.id} (cuenta ${businessAccountId}) no trae un precio pactado legible en metadata — NO se concede. ${diagnosticoDeCobro(session)}. Reconciliar a mano en el Dashboard.`,
+    );
+    return;
+  }
+  const discrepancia = motivoDeDiscrepancia(session, pactado);
+  if (discrepancia) {
+    console.error(
+      `[pagos:webhook] ALERTA presencia: la session ${session.id} (cuenta ${businessAccountId}) ${discrepancia} — NO se concede. ${diagnosticoDeCobro(session)}.`,
+    );
+    return;
+  }
+
+  const { error } = await admin
+    .from("business_accounts")
+    .update({
+      plan,
+      plan_status: "active",
+      stripe_customer_id: cobradoA,
+      stripe_subscription_id:
+        typeof session.subscription === "string"
+          ? session.subscription
+          : (session.subscription?.id ?? null),
+      verified_presence: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", businessAccountId);
+  if (error) throw new Error(`update business_accounts: ${error.code}`);
+}
+
+/**
+ * Sincroniza el estado de Presencia Verificada desde `customer.subscription.updated`.
+ *
+ * ESTA RAMA ERA LA ÚLTIMA DONDE LA METADATA CONCEDÍA NIVEL. Escribía
+ * `plan: metadata.plan` filtrando SÓLO por `stripe_subscription_id`, sin exigir
+ * que la suscripción fuera de presencia ni cruzar el dueño: quien pudiera editar
+ * la metadata de una suscripción en el Dashboard de Stripe se ascendía de
+ * `basico` a `pro` sin pagar la diferencia. Es el mismo patrón que ya se cerró en
+ * los otros tres productos; sólo el vector (Dashboard, no internet) era menor.
+ *
+ * QUÉ CAMBIA, EN TRES REGLAS:
+ *
+ *  (0) SÓLO PRESENCIA. Presencia NUNCA escribe `kind` en su metadata (lo escriben
+ *      la membresía de tienda y el premium de aviso, y sus handlers ya cortaron
+ *      antes de llegar acá). Una suscripción con `kind` cualquiera no es
+ *      presencia y no puede tocar `business_accounts`.
+ *
+ *  (a) LA FILA LA ELIGE EL ID DE LA SUSCRIPCIÓN, NUNCA LA METADATA — igual que en
+ *      `premium-webhook.ts` y en la membresía. Y se LEE antes de escribir, que es
+ *      lo que permite las dos reglas siguientes; el `update` a ciegas de antes no
+ *      tenía contra qué comparar nada.
+ *
+ *  (b) EL SNAPSHOT TIENE QUE SEGUIR DESCRIBIENDO ESTA FILA. `tenant_id`,
+ *      `business_account_id` y `owner_id` los escribió `iniciarSuscripcion` en
+ *      `subscription_data.metadata` al abrir el Checkout. Si alguno viene y NO
+ *      coincide con la fila, la suscripción quedó apuntando a otra comunidad o a
+ *      otro dueño: no se escribe NADA (ni siquiera el estado, que aplicado a la
+ *      fila equivocada es tan dañino como conceder) y queda la alerta. Los campos
+ *      que NO vienen no bloquean: una suscripción anterior a que se agregara
+ *      `owner_id` vive para siempre y seguiría mandando eventos legítimos —a
+ *      diferencia de una Checkout Session, que expira a las 24 h y por eso allá
+ *      sí se exige sin camino de gracia.
+ *
+ *  (c) EL PLAN NO SE TOMA DE LA METADATA. NUNCA, ni cuando todo lo demás coincide:
+ *      la metadata de una suscripción es editable desde el Dashboard, así que
+ *      corroborar la identidad no protege el nivel —el atacante edita `plan` y
+ *      deja el resto intacto—. El plan lo fija el ALTA (`activateVerifiedPresence`,
+ *      contra el precio pactado en la Session) y lo baja `.deleted`, que son los
+ *      dos únicos caminos donde hay plata verificada de por medio. Un cambio de
+ *      plan en la app abre un Checkout NUEVO y vuelve a pasar por el alta, así
+ *      que esta rama no necesita conceder nunca. Es exactamente lo que ya hacen
+ *      `syncFromSubscription` de la tienda y del premium: mueven estado, no nivel.
+ *      Si la metadata dice un plan distinto al de la fila, eso ES la señal de que
+ *      alguien la tocó: se alerta y se sincroniza sólo el estado.
+ *
+ * Ante discrepancia: no se escribe, log diagnosticable y 200 SIN throw. Un 500
+ * pondría a Stripe reintentando tres días algo que ningún reintento arregla.
+ */
+async function syncPresenciaFromSubscription(
+  admin: AdminClient,
+  subscription: Stripe.Subscription,
+  eventId: string,
+): Promise<void> {
+  // (0) ¿Es de presencia?
+  const kind = metadataString(subscription.metadata, "kind");
+  if (kind) {
+    console.warn(
+      `[pagos:webhook] ${eventId}: la suscripción ${subscription.id} trae kind="${kind}" — no es Presencia Verificada y no se toca business_accounts.`,
+    );
+    return;
+  }
+
+  // (a) La fila, por id de suscripción.
+  const { data: account, error: selectError } = await admin
+    .from("business_accounts")
+    .select("id, tenant_id, owner_id, plan")
+    .eq("stripe_subscription_id", subscription.id)
+    .maybeSingle();
+  if (selectError) throw new Error(`select business_accounts: ${selectError.code}`);
+  if (!account) {
+    // No es nuestra, o el evento llegó antes que el alta. Sin throw: reintentar
+    // no la va a hacer aparecer.
+    console.warn(
+      `[pagos:webhook] ${eventId}: la suscripción ${subscription.id} no tiene cuenta de negocio asociada — se ignora.`,
+    );
+    return;
+  }
+
+  // (b) El snapshot contra la fila.
+  const cuentaMeta = metadataString(subscription.metadata, "business_account_id");
+  const tenantMeta = metadataString(subscription.metadata, "tenant_id");
+  const ownerMeta = metadataString(subscription.metadata, "owner_id");
+  const cruzado =
+    (cuentaMeta !== null && cuentaMeta !== account.id) ||
+    (tenantMeta !== null && tenantMeta !== account.tenant_id) ||
+    (ownerMeta !== null && ownerMeta !== account.owner_id);
+  if (cruzado) {
+    console.error(
+      `[pagos:webhook] ALERTA presencia: la suscripción ${subscription.id} dice cuenta=${cuentaMeta} tenant=${tenantMeta} owner=${ownerMeta}, pero la fila que le corresponde es ${account.id} (tenant=${account.tenant_id} owner=${account.owner_id}) — NO se escribe nada. Reconciliar a mano en el Dashboard.`,
+    );
+    return;
+  }
+
+  // (c) El plan de la metadata NO se escribe; si difiere, es señal de que alguien
+  // la editó y merece quedar registrado.
+  const planMeta = metadataPlan(subscription.metadata);
+  if (planMeta && planMeta !== account.plan) {
+    console.error(
+      `[pagos:webhook] ALERTA presencia: la metadata de la suscripción ${subscription.id} dice plan="${planMeta}" y la cuenta ${account.id} tiene "${account.plan}" — se sincroniza el ESTADO, el plan NO se toca (sólo lo concede un Checkout cobrado). Verificar en el Dashboard si el cambio fue intencional.`,
+    );
+  }
+
+  const activa = ACTIVE_SUB_STATUSES.includes(subscription.status);
+  const { error } = await admin
+    .from("business_accounts")
+    .update({
+      plan_status: subscription.status,
+      verified_presence: activa,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", account.id);
+  if (error) throw new Error(`update business_accounts: ${error.code}`);
+}
+
 /**
  * Activa un boost pagado (§7): status active + ventana [now, now + días].
  * Idempotente: si ya está activo (retry de Stripe), no hace nada.
@@ -323,9 +586,17 @@ type AdminClient = ReturnType<typeof createAdminClient>;
  * async_payment_succeeded tardío NO re-activa un boost que un admin canceló o
  * que ya expiró), (b) la session del evento sea EXACTAMENTE la vinculada en
  * crearBoostCheckout (una session vieja de un retry de checkout no activa), y
- * (c) el monto cobrado coincida con el del boost. Discrepancia → log de
- * alerta + NO activar (sin throw: reintentar no lo arregla; el payload queda
- * en payment_events para reconciliar a mano).
+ * (c) el monto **Y LA MONEDA** cobrados coincidan con los del boost.
+ * Discrepancia → log de alerta + NO activar (sin throw: reintentar no lo
+ * arregla; el payload queda en payment_events para reconciliar a mano).
+ *
+ * LA MONEDA NO ES UN ADORNO. Comparar sólo `amount_total` contra `amount_cents`
+ * es comparar dos enteros sin unidad: 1000 ARS y 1000 usd dan el mismo número y
+ * no son el mismo cobro. Hoy los dos lados los escribe nuestro propio código
+ * desde la MISMA lectura de precio, así que no es explotable — pero es
+ * exactamente el agujero que ya se cerró en presencia y en el premium de un
+ * aviso, y dejarlo abierto acá era esperar a que un tercer camino de escritura
+ * lo volviera real.
  */
 async function activateBoost(
   admin: AdminClient,
@@ -335,7 +606,7 @@ async function activateBoost(
   const { data: boost, error: selectError } = await admin
     .from("boosts")
     .select(
-      "id, tenant_id, listing_id, buyer_id, duration_days, status, amount_cents, stripe_checkout_session_id, listings(kind)",
+      "id, tenant_id, listing_id, buyer_id, duration_days, status, amount_cents, currency, stripe_checkout_session_id, listings(kind)",
     )
     .eq("id", boostId)
     .maybeSingle();
@@ -357,9 +628,32 @@ async function activateBoost(
     );
     return;
   }
-  if (session.amount_total !== boost.amount_cents) {
+
+  // (c) MONTO Y MONEDA, contra lo que quedó escrito en la fila al abrir el
+  // Checkout (ver `pactadoFromRow`). La comparación en sí la hace
+  // `motivoDeDiscrepancia`, la MISMA que usan presencia y el premium: la regla
+  // vive en un solo lugar.
+  const pactado = pactadoFromRow(boost);
+  if (!pactado) {
     console.error(
-      `[pagos:webhook] ALERTA boost ${boostId}: amount_total ${session.amount_total ?? "null"} ≠ esperado ${boost.amount_cents} — NO se activa.`,
+      `[pagos:webhook] ALERTA boost ${boostId}: la fila no tiene un precio legible (amount_cents=${boost.amount_cents}, currency="${boost.currency}") — NO se activa. ${diagnosticoDeCobro(session)}. Reconciliar a mano en el Dashboard.`,
+    );
+    return;
+  }
+  // Un impulso es un pago ÚNICO: `amount_total` y `currency` vienen siempre.
+  // Que falte alguno no es "nada que comparar" (que es lo que asume
+  // `motivoDeDiscrepancia`, pensada también para suscripciones), es un cobro
+  // que no se puede verificar — y lo que no se verifica no se entrega.
+  if (typeof session.amount_total !== "number" || typeof session.currency !== "string") {
+    console.error(
+      `[pagos:webhook] ALERTA boost ${boostId}: la session ${session.id} no trae monto y moneda verificables — NO se activa. ${diagnosticoDeCobro(session)}.`,
+    );
+    return;
+  }
+  const discrepancia = motivoDeDiscrepancia(session, pactado);
+  if (discrepancia) {
+    console.error(
+      `[pagos:webhook] ALERTA boost ${boostId}: ${discrepancia} — NO se activa. ${diagnosticoDeCobro(session)}.`,
     );
     return;
   }
@@ -404,11 +698,12 @@ async function activateBoost(
 /**
  * Activa una campaña de post pagada (feedback cliente 2026-07-19): status
  * active + ventana [now, now + días]. Misma disciplina de correlación que
- * activateBoost (fiscal R3): antes de activar exige que (a) la campaña siga
- * `pending_payment`, (b) la session del evento sea EXACTAMENTE la vinculada al
- * crearla, y (c) el monto cobrado coincida. Discrepancia → log de alerta + NO
- * activar (sin throw: reintentar no lo arregla; queda en payment_events para
- * reconciliar a mano). Idempotente: si ya está activa (retry), no hace nada.
+ * activateBoost (fiscal R3), incluida la MONEDA: antes de activar exige que (a)
+ * la campaña siga `pending_payment`, (b) la session del evento sea EXACTAMENTE
+ * la vinculada al crearla, y (c) el monto Y la moneda cobrados coincidan.
+ * Discrepancia → log de alerta + NO activar (sin throw: reintentar no lo
+ * arregla; queda en payment_events para reconciliar a mano). Idempotente: si ya
+ * está activa (retry), no hace nada.
  */
 async function activatePostPromotion(
   admin: AdminClient,
@@ -418,7 +713,7 @@ async function activatePostPromotion(
   const { data: promo, error: selectError } = await admin
     .from("post_promotions")
     .select(
-      "id, tenant_id, post_id, buyer_id, duration_days, status, amount_cents, stripe_checkout_session_id",
+      "id, tenant_id, post_id, buyer_id, duration_days, status, amount_cents, currency, stripe_checkout_session_id",
     )
     .eq("id", promotionId)
     .maybeSingle();
@@ -443,9 +738,25 @@ async function activatePostPromotion(
     );
     return;
   }
-  if (session.amount_total !== promo.amount_cents) {
+
+  // (c) MONTO Y MONEDA — mismo criterio y misma regla compartida que el boost.
+  const pactado = pactadoFromRow(promo);
+  if (!pactado) {
     console.error(
-      `[pagos:webhook] ALERTA post_promotion ${promotionId}: amount_total ${session.amount_total ?? "null"} ≠ esperado ${promo.amount_cents} — NO se activa.`,
+      `[pagos:webhook] ALERTA post_promotion ${promotionId}: la fila no tiene un precio legible (amount_cents=${promo.amount_cents}, currency="${promo.currency}") — NO se activa. ${diagnosticoDeCobro(session)}. Reconciliar a mano en el Dashboard.`,
+    );
+    return;
+  }
+  if (typeof session.amount_total !== "number" || typeof session.currency !== "string") {
+    console.error(
+      `[pagos:webhook] ALERTA post_promotion ${promotionId}: la session ${session.id} no trae monto y moneda verificables — NO se activa. ${diagnosticoDeCobro(session)}.`,
+    );
+    return;
+  }
+  const discrepancia = motivoDeDiscrepancia(session, pactado);
+  if (discrepancia) {
+    console.error(
+      `[pagos:webhook] ALERTA post_promotion ${promotionId}: ${discrepancia} — NO se activa. ${diagnosticoDeCobro(session)}.`,
     );
     return;
   }

@@ -34,7 +34,8 @@ import {
 import { fetchViewerSavedListingIds } from "@/app/(app)/feed/queries";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { cn, formatDate } from "@/lib/utils";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
+import { cn } from "@/lib/utils";
 
 const C = COPY.professionals;
 
@@ -116,6 +117,13 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
     fetchViewerSavedListingIds(supabase, user?.id ?? null, [listing.id]),
   ]);
 
+  /**
+   * `verification_checks.checked_at` es `timestamptz` (0005), o sea un INSTANTE:
+   * el momento en que se consultó el registro oficial. Formatearlo en la zona
+   * fija de la comunidad fecha la verificación un día antes para quien mira
+   * desde la costa oeste. Va con el reloj de quien lee.
+   */
+  const formatDate = await getViewerFormatDate();
   const check = checks?.[0];
   const verification: VerificationView | null = check
     ? {

@@ -219,6 +219,7 @@ export function FeedListingCard({ listing }: { listing: FeedListingModel }) {
                   score={listing.publisherTrust.score}
                   level={listing.publisherTrust.level}
                   signals={listing.publisherTrust.signals}
+                  profileId={listing.publisherTrust.profileId}
                   size="inline"
                 />
               </div>
@@ -284,6 +285,7 @@ export function FeedListingCard({ listing }: { listing: FeedListingModel }) {
                       score={listing.publisherTrust.score}
                       level={listing.publisherTrust.level}
                       signals={listing.publisherTrust.signals}
+                      profileId={listing.publisherTrust.profileId}
                       size="inline"
                     />
                   </div>

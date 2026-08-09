@@ -121,6 +121,10 @@ function boostSession(overrides: Record<string, unknown> = {}) {
     id: "cs_test_boost_1",
     payment_status: "paid",
     amount_total: 1000,
+    // Stripe devuelve la moneda en minúsculas. `boosts.currency` es NOT NULL
+    // (0016) y la escribe la action con el mismo `precio.currency` que le manda
+    // a Stripe, así que en un cobro legítimo los dos lados coinciden.
+    currency: "usd",
     metadata: { boost_id: "boost-1", tenant_id: "tenant-1" },
     ...overrides,
   };
@@ -142,8 +146,42 @@ const BOOST_ROW = {
   duration_days: 7,
   status: "pending_payment",
   amount_cents: 1000,
+  currency: "usd",
   stripe_checkout_session_id: "cs_test_boost_1",
   listings: { kind: "property" },
+};
+
+/* --- Campaña de post: mismo producto de al lado, misma disciplina ---------- */
+
+function promoSession(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "cs_test_promo_1",
+    payment_status: "paid",
+    amount_total: 2000,
+    currency: "usd",
+    metadata: { post_promotion_id: "promo-1", tenant_id: "tenant-1" },
+    ...overrides,
+  };
+}
+
+function promoEvent(sessionOverrides: Record<string, unknown> = {}) {
+  return {
+    id: "evt_promo_1",
+    type: "checkout.session.completed",
+    data: { object: promoSession(sessionOverrides) },
+  };
+}
+
+const PROMO_ROW = {
+  id: "promo-1",
+  tenant_id: "tenant-1",
+  post_id: "post-1",
+  buyer_id: "buyer-1",
+  duration_days: 7,
+  status: "pending_payment",
+  amount_cents: 2000,
+  currency: "usd",
+  stripe_checkout_session_id: "cs_test_promo_1",
 };
 
 function makeRequest(rawBody: string, signature: string | null) {
@@ -349,5 +387,155 @@ describe("webhook stripe — happy path", () => {
     expect(res.status).toBe(200);
     // Pago async pendiente: se espera a async_payment_succeeded, no se activa aún.
     expect(touched(stub, "boosts", "update")).toBe(false);
+  });
+});
+
+/* ======================================================================== */
+/* 5. LA MONEDA DEL COBRO — impulso y campaña de post                       */
+/* ======================================================================== */
+
+/**
+ * Los dos productos one-time comparaban `amount_total` contra `amount_cents` y
+ * NO la moneda, aunque las dos tablas la guardan. 1500 ARS y 1500 USD dan el
+ * mismo entero y no son el mismo cobro: es el mismo agujero que ya se cerró en
+ * presencia y en el premium de un aviso.
+ *
+ * LOS CAMINOS FELICES VAN PRIMERO Y MANDAN. El riesgo de este arreglo es
+ * simétrico: pasarse de estricto empieza a rechazar cobros legítimos, que de
+ * cara al usuario es peor que el agujero. Estos cinco primeros casos se
+ * escribieron y se corrieron contra el código SIN arreglar, en verde, antes de
+ * tocar una línea de `route.ts`.
+ */
+describe("webhook stripe — la moneda del cobro (fiscal R3)", () => {
+  it("camino feliz: el impulso cobrado en la misma moneda de la fila se activa", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+    });
+
+    const res = await POST(validRequestFor(boostEvent()));
+
+    expect(res.status).toBe(200);
+    expect(touched(stub, "boosts", "update")).toBe(true);
+  });
+
+  it("camino feliz: la campaña de post cobrada en la misma moneda se activa", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      post_promotions: { select: { data: PROMO_ROW, error: null }, update: { error: null } },
+    });
+
+    const res = await POST(validRequestFor(promoEvent()));
+
+    expect(res.status).toBe(200);
+    expect(touched(stub, "post_promotions", "update")).toBe(true);
+    expect(mocks.createNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("camino feliz: una comunidad que cobra en ARS activa igual (no hay moneda privilegiada)", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      boosts: {
+        select: {
+          data: { ...BOOST_ROW, amount_cents: 4_500_000, currency: "ars" },
+          error: null,
+        },
+        update: { error: null },
+      },
+    });
+
+    const res = await POST(
+      validRequestFor(boostEvent({ amount_total: 4_500_000, currency: "ars" })),
+    );
+
+    expect(res.status).toBe(200);
+    expect(touched(stub, "boosts", "update")).toBe(true);
+  });
+
+  it("camino feliz: la comparación normaliza mayúsculas de los dos lados", async () => {
+    // `boosts.currency` viene con default 'usd' minúscula, pero `tenant_prices`
+    // la guarda en MAYÚSCULAS y una fila vieja o migrada puede tenerla así. Que
+    // el case decida si se entrega lo comprado sería absurdo.
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      boosts: {
+        select: { data: { ...BOOST_ROW, currency: "USD" }, error: null },
+        update: { error: null },
+      },
+    });
+
+    const res = await POST(validRequestFor(boostEvent({ currency: "usd" })));
+
+    expect(res.status).toBe(200);
+    expect(touched(stub, "boosts", "update")).toBe(true);
+  });
+
+  it("camino feliz: la campaña de post también normaliza mayúsculas", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      post_promotions: {
+        select: { data: { ...PROMO_ROW, currency: "EUR" }, error: null },
+        update: { error: null },
+      },
+    });
+
+    const res = await POST(validRequestFor(promoEvent({ currency: "eur" })));
+
+    expect(res.status).toBe(200);
+    expect(touched(stub, "post_promotions", "update")).toBe(true);
+  });
+
+  it("NO activa el impulso cobrado en otra moneda con el mismo entero (1000 ARS ≠ 1000 usd)", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+    });
+
+    const res = await POST(validRequestFor(boostEvent({ currency: "ars" })));
+
+    // Sin throw: 200 para que Stripe no reintente algo que no se arregla solo.
+    expect(res.status).toBe(200);
+    expect(touched(stub, "boosts", "update")).toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("NO activa la campaña de post cobrada en otra moneda con el mismo entero", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      post_promotions: { select: { data: PROMO_ROW, error: null }, update: { error: null } },
+    });
+
+    const res = await POST(validRequestFor(promoEvent({ currency: "ars" })));
+
+    expect(res.status).toBe(200);
+    expect(touched(stub, "post_promotions", "update")).toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("NO activa si la session no trae moneda: un pago one-time sin moneda es inverificable", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+    });
+
+    const res = await POST(validRequestFor(boostEvent({ currency: null })));
+
+    expect(res.status).toBe(200);
+    expect(touched(stub, "boosts", "update")).toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("el log de rechazo por moneda alcanza para reconciliar: session, cobrado y esperado", async () => {
+    useAdmin({
+      payment_events: { insert: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+    });
+
+    await POST(validRequestFor(boostEvent({ currency: "ars" })));
+
+    const mensaje = errorSpy.mock.calls.flat().join(" ");
+    expect(mensaje).toContain("boost-1");
+    expect(mensaje).toContain("ars"); // lo cobrado
+    expect(mensaje).toContain("usd"); // lo esperado
   });
 });

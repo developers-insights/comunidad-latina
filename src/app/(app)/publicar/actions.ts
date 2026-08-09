@@ -6,6 +6,21 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { isVisionConfigured } from "@/lib/config/services";
 import { MONETIZATION_COPY, checkPhotoCount } from "@/lib/monetization";
+import {
+  TIER_AUTO,
+  TIER_HUMAN,
+  TIER_REVIEW,
+  enqueueModeration,
+  moderateText,
+  moderationTier,
+} from "@/lib/moderation";
+import {
+  declarationSchema,
+  normalizeDeclaration,
+  registerUploadedMedia,
+  type DeclarationInput,
+} from "@/lib/integrity";
+import { currentSourceHost } from "@/lib/integrity/source-host";
 
 /**
  * Server actions de /publicar.
@@ -16,10 +31,19 @@ import { MONETIZATION_COPY, checkPhotoCount } from "@/lib/monetization";
  *     moderación). Devuelve el listingId para poder subir fotos: la RLS de
  *     storage exige path {tenant_id}/{listing_id}/… con listing propio.
  *  2. El cliente sube las fotos al bucket listing-photos con su propia sesión.
- *  3. finalizeListing → setea photos y pasa a 'pending_review'.
+ *  3. finalizeListing → setea photos, modera el texto y pasa a 'pending_review',
+ *     encolando el aviso en `moderation_queue` (mismo patrón que
+ *     marketplace/publicar y feed).
  *     Degradación §5.6: imagen sin Vision configurado JAMÁS se publica sola.
  *     Solo en dev, MODERATION_DEV_AUTO_APPROVE==='true' aprueba al toque
  *     (promoción vía cliente admin = acto de moderación server-side).
+ *
+ * POR QUÉ EL ENCOLADO NO ES OPCIONAL (arreglo 2026-08-08):
+ * dejar el aviso en `pending_review` es sólo la MITAD de la regla de oro
+ * ("NUNCA publicar imagen sin moderar", §7). /admin/moderacion lee la COLA, no
+ * la tabla `listings` — así que un aviso que no se encola no se publica pero
+ * TAMPOCO se modera: se queda esperando a un humano que nunca lo va a ver.
+ * El flujo de productos ya lo hacía bien; este no encolaba nada.
  *
  * DESVÍO DOCUMENTADO respecto del brief del módulo: "sin fotos → published"
  * no es posible con JWT de usuario — la policy listings_insert/update solo
@@ -184,6 +208,13 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
 const finalizeSchema = z.object({
   listingId: z.uuid(),
   photoPaths: z.array(z.string().min(1).max(300)).max(100),
+  /**
+   * Declaración de originalidad y licencia del formulario (pliego / 0061). Es
+   * opcional en el borde: un cliente viejo que no la mande NO puede romper una
+   * publicación — se lee como "no declaró nada", que es la lectura conservadora
+   * y la que hace que el escaneo levante su alerta de licencia.
+   */
+  declaration: declarationSchema.nullish(),
 });
 
 export type FinalizeResult =
@@ -198,12 +229,14 @@ export type FinalizeResult =
 export async function finalizeListing(rawInput: {
   listingId: string;
   photoPaths: string[];
+  declaration?: DeclarationInput | null;
 }): Promise<FinalizeResult> {
   const parsed = finalizeSchema.safeParse(rawInput);
   if (!parsed.success) {
     return { ok: false, error: GENERIC_ERROR };
   }
   const { listingId, photoPaths } = parsed.data;
+  const declaration = normalizeDeclaration(rawInput.declaration);
 
   const guard = await requireTenantMatch();
   if (!guard.ok) {
@@ -234,9 +267,11 @@ export async function finalizeListing(rawInput: {
   // lo exige) y sólo el flujo de pago lo mueve — así que preguntar acá es
   // preguntarle al único que sabe la verdad.
   // -------------------------------------------------------------------------
+  // Además del tier se traen título y descripción: son el insumo de la
+  // moderación de texto y viajan en el round-trip que esta lectura ya hacía.
   const { data: current } = await supabase
     .from("listings")
-    .select("tier")
+    .select("tier, title, description")
     .eq("id", listingId)
     .eq("tenant_id", tenant.id)
     .eq("created_by", user.id)
@@ -246,6 +281,30 @@ export async function finalizeListing(rawInput: {
   if (!photoCheck.ok) {
     return { ok: false, error: MONETIZATION_COPY.errors.tooManyPhotos(photoCheck.max) };
   }
+
+  // ---- Moderación de texto ANTES de decidir el status (§8) -----------------
+  const moderation = await moderateText(
+    `${current?.title ?? ""}\n${current?.description ?? ""}`,
+  );
+  const textTier = moderation.flagged ? TIER_HUMAN : moderationTier(moderation.score);
+
+  // ---- Content Integrity: huella de cada foto (§ pliego) -------------------
+  // Las fotos las subió el navegador DIRECTO al bucket, así que el servidor las
+  // lee de ahí para hashearlas. Corre ANTES de decidir el status: si el análisis
+  // encontró un duplicado —o si no pudo correr— el aviso no se publica solo.
+  const integrity = await registerUploadedMedia({
+    tenantId: tenant.id,
+    uploaderId: user.id,
+    subjectKind: "listing",
+    subjectId: listingId,
+    sourceHost: await currentSourceHost(tenant.slug),
+    declaration,
+    items: photoPaths.map((path) => ({
+      mediaKind: "imagen" as const,
+      storageBucket: "listing-photos",
+      storagePath: path,
+    })),
+  });
 
   // La RLS de UPDATE garantiza que solo el dueño puede tocar la fila.
   const { data: updated, error: updateError } = await supabase
@@ -262,7 +321,6 @@ export async function finalizeListing(rawInput: {
     return { ok: false, error: GENERIC_ERROR };
   }
 
-  const hasPhotos = photoPaths.length > 0;
   // Auto-aprobación SOLO fuera de producción: aunque la env var se filtre a
   // un deploy productivo, este branch es estructuralmente imposible ahí
   // (§5.6: imagen sin moderar NUNCA se publica en prod).
@@ -273,37 +331,83 @@ export async function finalizeListing(rawInput: {
 
   const kind = updated.kind;
 
-  if (hasPhotos && !isVisionConfigured && !devAutoApprove) {
-    // §5.6: imagen sin moderar NUNCA se publica. Queda en revisión.
-    return { ok: true, status: "pending_review", kind };
-  }
+  // §5.6: una imagen sin Vision es una imagen sin moderar → la mira un humano.
+  const photoNeedsReview = photoPaths.length > 0 && !isVisionConfigured && !devAutoApprove;
 
-  if (!devAutoApprove) {
-    // Sin auto-aprobación dev, todo pasa por moderación (contrato de RLS).
-    return { ok: true, status: "pending_review", kind };
-  }
+  // La auto-aprobación dev NO es un pase libre: sigue respetando el veredicto
+  // de la IA sobre el texto (mismo criterio que finalizeProduct) y, desde
+  // Content Integrity, también el de las huellas. Un duplicado exacto o un
+  // archivo que no se pudo analizar NO se publica solo ni siquiera en dev: es
+  // justo el caso que el pliego pide que mire una persona.
+  const wantsPublish =
+    devAutoApprove &&
+    !moderation.flagged &&
+    textTier <= TIER_AUTO &&
+    !photoNeedsReview &&
+    !integrity.needsHumanReview;
 
-  // Auto-aprobación DEV: acto de moderación server-side (uso permitido del
-  // cliente admin, ARQUITECTURA §6) tras verificar ownership arriba.
-  try {
-    const admin = createAdminClient();
-    const { error: publishError } = await admin
-      .from("listings")
-      .update({ status: "published", published_at: new Date().toISOString() })
-      .eq("id", listingId)
-      .eq("tenant_id", tenant.id)
-      .eq("created_by", user.id);
-    if (publishError) {
-      console.warn("[vivienda] auto-aprobación dev falló", {
-        listingId,
-        code: publishError.code,
-      });
-      return { ok: true, status: "pending_review", kind };
+  let finalStatus: "published" | "pending_review" = "pending_review";
+
+  if (wantsPublish) {
+    // Auto-aprobación DEV: acto de moderación server-side (uso permitido del
+    // cliente admin, ARQUITECTURA §6) tras verificar ownership arriba.
+    try {
+      const admin = createAdminClient();
+      const { error: publishError } = await admin
+        .from("listings")
+        .update({ status: "published", published_at: new Date().toISOString() })
+        .eq("id", listingId)
+        .eq("tenant_id", tenant.id)
+        .eq("created_by", user.id);
+      if (publishError) {
+        console.warn("[vivienda] auto-aprobación dev falló", {
+          listingId,
+          code: publishError.code,
+        });
+      } else {
+        finalStatus = "published";
+      }
+    } catch {
+      // Admin no configurado — el aviso queda en revisión, nunca rompemos.
     }
-  } catch {
-    // Admin no configurado — el aviso queda en revisión, nunca rompemos.
-    return { ok: true, status: "pending_review", kind };
   }
 
-  return { ok: true, status: "published", kind };
+  // ---- Cola de moderación (§8/§12) ------------------------------------------
+  // Sin esto el aviso queda en `pending_review` y NADIE lo ve: /admin/moderacion
+  // lista la cola, no los listings. Mismo patrón que marketplace/publicar.
+  if (finalStatus === "pending_review") {
+    const shouldEnqueue =
+      moderation.flagged ||
+      moderation.skipped ||
+      textTier > TIER_AUTO ||
+      photoNeedsReview ||
+      integrity.needsHumanReview;
+    if (shouldEnqueue) {
+      try {
+        const reasons = [
+          ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
+          ...(photoNeedsReview ? ["photo_pending_review"] : []),
+          ...integrity.reasons,
+        ];
+        const outcome = await enqueueModeration(createAdminClient(), {
+          tenantId: tenant.id,
+          subjectKind: "listing",
+          subjectId: listingId,
+          aiScore: moderation.skipped ? null : moderation.score,
+          reasons,
+          tier:
+            moderation.flagged || photoNeedsReview || integrity.needsHumanReview
+              ? TIER_HUMAN
+              : TIER_REVIEW,
+        });
+        if (!outcome.ok) {
+          console.warn("[vivienda] no se pudo encolar moderación del aviso", { listingId });
+        }
+      } catch {
+        console.warn("[vivienda] admin client no disponible para encolar moderación");
+      }
+    }
+  }
+
+  return { ok: true, status: finalStatus, kind };
 }

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { requireTenantMatch } from "@/lib/tenant/guard";
-import { formatDate } from "@/lib/utils";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 
 /**
  * Verificador de profesionales (Escudo §3.3) — DETERMINÍSTICO:
@@ -114,7 +114,8 @@ export async function verificarLicenciaAction(
         license,
         registry: check.registry,
         registryUrl: check.registry_url,
-        date: formatDate(check.checked_at, { style: "long" }),
+        // `checked_at` es un instante: se fecha con el reloj de quien consulta.
+        date: (await getViewerFormatDate())(check.checked_at, { style: "long" }),
       };
     }
     // Resultado fuera del contrato conocido: jamás adivinar.

@@ -12,6 +12,7 @@ import {
   useConsent,
   type LocalEntry,
 } from "@/lib/consent";
+import { useFormatDate } from "@/components/time/viewer-time-zone";
 import { ConsentPreferences } from "./consent-preferences";
 import { CONSENT_COPY as COPY } from "./consent-copy";
 
@@ -29,6 +30,10 @@ import { CONSENT_COPY as COPY } from "./consent-copy";
 export function PrivacyControls() {
   const { record, revoke } = useConsent();
   const { toast } = useToast();
+  // La fecha de la decisión es un instante, no un día calendario: va con el
+  // reloj de quien mira. Con la zona por usuario (0067), alguien en Los Ángeles
+  // que decidió a las 22:00 veía acá el día siguiente.
+  const formatDate = useFormatDate();
   const [showPreferences, setShowPreferences] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -69,7 +74,9 @@ export function PrivacyControls() {
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-foreground-secondary">
           {record
-            ? COPY.settings.decision.savedOn(formatDate(record.decidedAt))
+            ? COPY.settings.decision.savedOn(
+                formatDate(record.decidedAt, { style: "long" }),
+              )
             : COPY.settings.decision.never}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
@@ -187,16 +194,6 @@ function useLocalData(): LocalEntry[] {
   }, []);
 
   return entries;
-}
-
-/** Fecha en el formato que usa el resto de la app (es-US, zona de Nueva York). */
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-US", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "America/New_York",
-  });
 }
 
 function formatSize(bytes: number): string {

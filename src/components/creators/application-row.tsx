@@ -122,6 +122,7 @@ export function ApplicationRow({ application, creator, gigTitle, gigBudgetCents 
           score={creator.score}
           level={creator.level}
           signals={creator.signals}
+          profileId={creator.profileId}
           size="inline"
         />
       </div>

@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { LockKey } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { formatDate } from "@/lib/utils";
+import { getViewerFormatDate, getViewerTimeZone } from "@/lib/time/viewer-zone";
+import { DEFAULT_LOCALE, DEFAULT_TIME_ZONE } from "@/lib/utils";
 import { Banner } from "@/components/ui";
 import { AcceptBanner } from "@/components/messaging/accept-banner";
 import { Composer } from "@/components/messaging/composer";
@@ -108,7 +109,25 @@ export default async function HiloPage({
 
   const messages = (messagesData ?? []) as MessageRow[];
   const trust = toTrustProps(trustRow, other?.identity_verified ?? false);
-  const timeFormat = new Intl.DateTimeFormat("es-US", { timeStyle: "short" });
+
+  /**
+   * LA HORA DE UN MENSAJE ES LA HORA DE QUIEN LO LEE.
+   *
+   * Este `Intl.DateTimeFormat` corría sin `timeZone`: el server pintaba la hora
+   * en UTC y el navegador la reescribía al hidratar. En un chat eso se ve —
+   * "20:14" saltando a "16:14" delante de la persona— y encima el separador de
+   * día ("hoy" / "ayer") se calculaba con OTRO reloj que las burbujas, así que
+   * un mensaje de las 22:30 en Los Ángeles podía aparecer bajo el día siguiente.
+   * Un solo huso para las dos cosas y el hilo vuelve a ser coherente.
+   */
+  const [viewerZone, formatDate] = await Promise.all([
+    getViewerTimeZone(),
+    getViewerFormatDate(),
+  ]);
+  const timeFormat = new Intl.DateTimeFormat(DEFAULT_LOCALE, {
+    timeStyle: "short",
+    timeZone: viewerZone ?? DEFAULT_TIME_ZONE,
+  });
 
   const isAccepted = conversation.status === "accepted";
   const isPending = conversation.status === "pending";

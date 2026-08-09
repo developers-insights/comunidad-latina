@@ -1,6 +1,6 @@
 import { CheckCircle, EyeSlash, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { Badge, BezelCard } from "@/components/ui";
-import { formatDate } from "@/lib/utils";
+import { DEFAULT_LOCALE, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 import {
@@ -36,6 +36,13 @@ export interface MembershipStatusCardProps {
   /** `listings.store_active` — lo que la comunidad realmente ve. */
   storeActive: boolean;
   locale?: string;
+  /**
+   * Zona de quien mira. `current_period_end` es un `timestamptz`: una renovación
+   * a las 21:00 en Los Ángeles se anunciaba para el día siguiente con la zona
+   * fija de la comunidad, y esa fecha es la que la persona compara con su
+   * resumen de tarjeta.
+   */
+  timeZone?: string;
   className?: string;
   /** Botonera (client component) — la arma la página. */
   children?: React.ReactNode;
@@ -45,7 +52,8 @@ export function MembershipStatusCard({
   storeName,
   membership,
   storeActive,
-  locale = "es-US",
+  locale = DEFAULT_LOCALE,
+  timeZone,
   className,
   children,
 }: MembershipStatusCardProps) {
@@ -57,7 +65,7 @@ export function MembershipStatusCard({
   // "se renueva el 30/8" en una membresía cancelada sería una mentira cortés.
   const dateLine = (() => {
     if (!periodEnd) return null;
-    const label = formatDate(periodEnd, { locale, style: "long" });
+    const label = formatDate(periodEnd, { locale, style: "long", timeZone });
     if (!label) return null;
     if (view.view === "active") return COPY.membership.renewsOn(label);
     if (view.view === "past_due") return COPY.membership.endsOn(label);

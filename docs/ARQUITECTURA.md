@@ -16,7 +16,9 @@
 | Motion | `motion` (framer-motion v12) + CSS transitions con los motion tokens |
 | PWA | `@serwist/next` (service worker en `src/app/sw.ts`) |
 | Email | Resend (degradado hoy) |
-| Moderación | OpenAI omni-moderation (activo) + Google Vision (degradado) |
+| Moderación | OpenAI omni-moderation, **solo texto** (activo) + Google Vision, imagen (degradado) |
+| Asistente Comunitario (RAG) | **Anthropic (Claude)** — no OpenAI |
+| Content Integrity | SHA-256 + huella perceptual en `bit(N)` con índice HNSW `bit_hamming_ops` (pgvector 0.8.2) |
 | Tests | Vitest + Testing Library |
 | Variantes de componentes | `class-variance-authority` + `clsx` + `tailwind-merge` (helper `cn()` en `src/lib/utils.ts`) |
 | Color science (brand pipeline) | `culori` |
@@ -72,7 +74,7 @@ src/
 
 ## 3. Multi-tenancy (cómo fluye el tenant)
 
-1. **Middleware** (`src/middleware.ts`): lee `Host` header → resuelve tenant vía RPC `get_tenant_by_domain` (con cache en memoria + fallback). En dev: query `?t=<slug>` o cookie `cl-tenant`, default `dominicanos`. Inyecta `x-tenant-slug` + `x-tenant-id` como request headers y refresca la sesión de Supabase (patrón `@supabase/ssr`).
+1. **Middleware** (`src/middleware.ts`, async): lee `Host` header → resuelve tenant vía RPC `public.resolve_tenant_domain` (`src/lib/tenant/domain-lookup.ts`, timeout 1,5 s), y la regla pura de `domain-routing.ts` decide entre servir / redirigir 308 al dominio canónico / 404 (desconocido, `suspended`, `archived`) / 503 (base caída y host no conocido). Cache en memoria: 300 s positiva, 60 s negativa, *stale-on-error* 24 h. `DOMAIN_TENANTS` sobrevive **solo como respaldo** cuando la base no responde — ya no es la fuente de verdad. En dev: query `?t=<slug>` o cookie `cl-tenant`, default `dominicanos`. Inyecta `x-tenant-slug` + `x-tenant-id` como request headers y refresca la sesión de Supabase (patrón `@supabase/ssr`).
 2. **Server Components / actions**: helper `getTenant()` en `lib/tenant/resolve.ts` lee los headers y devuelve `{ id, slug, name, brandHex, theme, modules, locale, currency }`.
 3. **Branding**: el root layout llama `getTenant()` y pinta las CSS variables de marca (`--color-brand-*`) generadas por `brand-pipeline.ts` como inline style en `<html>` — el resto de los tokens es fijo (Capa 1/2 del design system).
 4. **RLS es la frontera real**: el `tenant_id` del JWT (`app_metadata.tenant_id`) gobierna toda lectura/escritura autenticada. El filtro `.eq('tenant_id', …)` en queries de contenido público es por corrección de UX, no la barrera de seguridad.
@@ -119,7 +121,7 @@ src/
 ## 9. Seguridad app-layer
 
 - Validación Zod en toda server action / route handler.
-- `api/cron/*` exige header `Authorization: Bearer ${CRON_SECRET}`.
+- **No existen rutas `api/cron/*`.** Las purgas periódicas (TTL de mensajes, códigos SMS, retención) corren como jobs `pg_cron` dentro de Postgres — ver `0013_cron_ttl.sql` y `0069_retencion_de_lo_nuevo.sql`. `CRON_SECRET` hoy se usa para otra cosa: el HMAC del hash anónimo del Asistente. Si alguna vez se agrega una ruta de cron HTTP, ahí sí exige `Authorization: Bearer ${CRON_SECRET}`.
 - Webhook Stripe: firma verificada con SDK sobre body crudo, idempotencia por `event.id` (tabla `payment_events`), respuesta 2xx <200ms (procesar async).
 - Jamás exponer `service_role`/`sk_` al cliente. Nada de secretos en `NEXT_PUBLIC_*`.
 - Sanitizar todo contenido user-generated al render (no `dangerouslySetInnerHTML` sin sanitizar; markdown de guías con render seguro).

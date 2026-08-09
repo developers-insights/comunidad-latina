@@ -8,13 +8,42 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { COUNTRY_CODES } from "@/components/auth/countries";
 import type { ActionResult } from "@/components/auth/action-result";
+import {
+  isUsernameTakenError,
+  normalizeUsername,
+  usernameProblem,
+} from "@/lib/profile/username";
+import {
+  LANGUAGE_CODES,
+  LANGUAGES_MAX,
+  RESIDENCE_COUNTRY_CODES,
+} from "@/lib/profile/catalogs";
+import { PRIVACY_LEVELS, normalizePrivacy } from "@/lib/profile/privacy";
+import { MIN_AGE, ageFromBirthdate } from "@/lib/profile/age";
+import { isKnownTimeZone } from "@/lib/time/timezone";
 
 const COPY = {
   nameShort: "Contanos cómo te llamás (al menos 2 letras).",
   nameLong: "El nombre es muy largo — probá con una versión más corta.",
+  lastNameLong: "El apellido es muy largo — probá con una versión más corta.",
   bioLong: "La bio es muy larga — el máximo son 500 caracteres.",
   areaLong: "La zona es muy larga — con el barrio alcanza.",
   countryInvalid: "Ese país no está en la lista — elegí uno de las opciones.",
+  usernameEmpty: "Elegí tu nombre de usuario.",
+  usernameShort: "Necesita al menos 3 caracteres.",
+  usernameLong: "El máximo son 30 caracteres.",
+  usernameFormat: "Solo letras sin acento, números, punto y guion bajo.",
+  usernameEdges: "No puede empezar ni terminar con punto o guion bajo.",
+  usernameTaken: "Ese nombre de usuario ya está en uso en esta comunidad. Probá con otro.",
+  cityLong: "El nombre de la ciudad es muy largo.",
+  birthdateInvalid: "Revisá tu fecha de nacimiento.",
+  birthdateFuture: "Esa fecha todavía no llegó.",
+  birthdateTooYoung: "Para tener cuenta hay que tener 18 años o más.",
+  languagesTooMany: `Elegí hasta ${LANGUAGES_MAX} idiomas.`,
+  languageInvalid: "Ese idioma no está en la lista.",
+  timeZoneInvalid: "Elegí una zona de la lista.",
+  coverInvalid: "Esa imagen no se pudo usar. Probá con otra foto.",
+  privacySaved: "Listo, tus controles de privacidad quedaron guardados.",
   noSession: "Tu sesión se cerró — entrá de nuevo para continuar.",
   genericError:
     "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo en un momento.",
@@ -38,8 +67,71 @@ function firstIssuePerField(issues: z.core.$ZodIssue[]): Record<string, string> 
 // Editar perfil propio (RLS: solo el dueño puede tocar su fila).
 // ---------------------------------------------------------------------------
 
+/**
+ * ⚠️ `ageFromBirthdate` y `MIN_AGE` viven en `@/lib/profile/age` y NO acá.
+ * Este módulo es `"use server"`: todo lo que exporte tiene que ser una función
+ * async, y un helper puro exportado desde acá rompe la build entera con
+ * "Server Actions must be async functions" — un error que `tsc` no ve.
+ * Lo cuida `src/app/admin/use-server-exports.test.ts`.
+ */
+const birthdateSchema = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), COPY.birthdateInvalid)
+  .superRefine((value, ctx) => {
+    if (value === "") return;
+    const age = ageFromBirthdate(value);
+    if (age === null) {
+      ctx.addIssue({ code: "custom", message: COPY.birthdateInvalid });
+      return;
+    }
+    if (age < 0) {
+      ctx.addIssue({ code: "custom", message: COPY.birthdateFuture });
+      return;
+    }
+    /**
+     * El CHECK de la base (`profiles_private_birthdate_sane`) sólo ataja el
+     * dedazo grosero: no puede evaluar `current_date` porque un CHECK tiene que
+     * ser inmutable. La edad mínima se valida ACÁ, y con la misma regla que el
+     * checkbox del alta — una cuenta que atestiguó tener 18 y después carga una
+     * fecha que dice 15 no puede quedar en ese estado inconsistente.
+     */
+    if (age < MIN_AGE) ctx.addIssue({ code: "custom", message: COPY.birthdateTooYoung });
+    if (age > 120) ctx.addIssue({ code: "custom", message: COPY.birthdateInvalid });
+  });
+
+/**
+ * Editar el perfil propio.
+ *
+ * ── DOS TABLAS, UNA PANTALLA ─────────────────────────────────────────────────
+ * Lo público (`profiles`: nombre, handle, bio, zona, país de origen, portada) y
+ * lo privado (`profiles_private`: apellido, fecha de nacimiento, país de
+ * residencia, ciudad, idiomas). El reparto no es de comodidad: `profiles` es
+ * pública por diseño y RLS filtra FILAS, no columnas — cualquier cosa que se
+ * ponga ahí queda legible por cualquier autenticado, elija lo que elija la
+ * persona en sus controles de privacidad (ver la nota larga de 0062).
+ *
+ * Las dos escrituras corren con el cliente de SERVIDOR (cookies del usuario), o
+ * sea con RLS puesta: nadie puede editar el perfil de otro aunque mande otro id,
+ * porque no hay id que mandar — se toma de la sesión.
+ */
 const updateProfileSchema = z.object({
   displayName: z.string().trim().min(2, COPY.nameShort).max(60, COPY.nameLong),
+  lastName: z.string().trim().max(60, COPY.lastNameLong).optional(),
+  username: z.string().superRefine((value, ctx) => {
+    const problem = usernameProblem(value);
+    if (!problem) return;
+    ctx.addIssue({
+      code: "custom",
+      message: {
+        vacio: COPY.usernameEmpty,
+        corto: COPY.usernameShort,
+        largo: COPY.usernameLong,
+        formato: COPY.usernameFormat,
+        bordes: COPY.usernameEdges,
+      }[problem],
+    });
+  }),
   bio: z.string().trim().max(500, COPY.bioLong),
   area: z.string().trim().max(80, COPY.areaLong),
   // País de origen (pedido cliente: editar de dónde es la persona). Opcional
@@ -51,6 +143,29 @@ const updateProfileSchema = z.object({
     .trim()
     .refine((value) => value === "" || COUNTRY_CODES.includes(value), COPY.countryInvalid)
     .optional(),
+  countryResidence: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === "" || RESIDENCE_COUNTRY_CODES.includes(value),
+      COPY.countryInvalid,
+    )
+    .optional(),
+  city: z.string().trim().max(80, COPY.cityLong).optional(),
+  birthdate: birthdateSchema.optional(),
+  languages: z
+    .array(z.string())
+    .max(LANGUAGES_MAX, COPY.languagesTooMany)
+    .refine((list) => list.every((code) => LANGUAGE_CODES.includes(code)), COPY.languageInvalid)
+    .optional(),
+  /**
+   * Ruta de la portada DENTRO del bucket `avatars` — la sube el navegador
+   * directo (mismo patrón que el CV y el video del composer). Acá sólo se
+   * guarda la referencia, y se valida que el prefijo sea el de esta persona:
+   * la policy `avatars_insert` (0012) ya impide escribir en la carpeta de otro,
+   * pero nada impediría GUARDAR en el perfil propio la ruta de la foto ajena.
+   */
+  coverPath: z.string().trim().max(300).optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
@@ -69,23 +184,261 @@ export async function updateProfileAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, formError: COPY.noSession };
 
-  const { displayName, bio, area, country } = parsed.data;
+  const {
+    displayName,
+    lastName,
+    bio,
+    area,
+    country,
+    countryResidence,
+    city,
+    birthdate,
+    languages,
+    coverPath,
+  } = parsed.data;
+  const username = normalizeUsername(parsed.data.username);
+
+  // Hace falta el tenant para la fila de `profiles_private` y para validar el
+  // prefijo de la portada. Sale del propio perfil, no de nada que mande el cliente.
+  const { data: current, error: currentError } = await supabase
+    .from("profiles")
+    .select("tenant_id, cover_url")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (currentError || !current) {
+    console.error("[perfil] no se pudo leer el perfil propio", { code: currentError?.code });
+    return { ok: false, formError: COPY.genericError };
+  }
+
+  let coverUrl: string | null | undefined;
+  if (coverPath !== undefined) {
+    if (coverPath === "") {
+      coverUrl = null; // Quitar la portada.
+    } else {
+      // La ruta canónica del bucket es `{tenant_id}/{user_id}/…` (0012). Una
+      // ruta que no arranque así es la carpeta de otra persona.
+      const expectedPrefix = `${current.tenant_id}/${user.id}/`;
+      if (!coverPath.startsWith(expectedPrefix) || coverPath.includes("..")) {
+        return { ok: false, fieldErrors: { coverPath: COPY.coverInvalid } };
+      }
+      coverUrl = supabase.storage.from("avatars").getPublicUrl(coverPath).data.publicUrl;
+    }
+  }
+
   const { error } = await supabase
     .from("profiles")
     .update({
       display_name: displayName,
+      username,
       bio: bio || null,
       area_label: area || null,
       country_origin: country || null,
+      ...(coverUrl !== undefined ? { cover_url: coverUrl } : {}),
     })
     .eq("id", user.id);
 
   if (error) {
+    if (isUsernameTakenError(error)) {
+      return { ok: false, fieldErrors: { username: COPY.usernameTaken } };
+    }
     console.error("[perfil] update falló", { code: error.code });
     return { ok: false, formError: COPY.genericError };
   }
 
+  /**
+   * Lo privado va en su propia tabla y su propio upsert. Se escribe SIEMPRE que
+   * el formulario haya mandado alguno de estos campos, aunque vengan vacíos:
+   * vaciar la ciudad tiene que borrarla, no dejarla como estaba. Por eso el
+   * `?? null` y no un `if (city)`.
+   */
+  const touchesPrivate =
+    lastName !== undefined ||
+    countryResidence !== undefined ||
+    city !== undefined ||
+    birthdate !== undefined ||
+    languages !== undefined;
+
+  if (touchesPrivate) {
+    const { error: privateError } = await supabase.from("profiles_private").upsert(
+      {
+        profile_id: user.id,
+        tenant_id: current.tenant_id,
+        ...(lastName !== undefined ? { last_name: lastName || null } : {}),
+        ...(countryResidence !== undefined
+          ? { country_residence: countryResidence || null }
+          : {}),
+        ...(city !== undefined ? { city: city || null } : {}),
+        ...(birthdate !== undefined ? { birthdate: birthdate || null } : {}),
+        ...(languages !== undefined ? { languages } : {}),
+      },
+      { onConflict: "profile_id" },
+    );
+
+    if (privateError) {
+      console.error("[perfil] update de profiles_private falló", {
+        code: privateError.code,
+      });
+      return { ok: false, formError: COPY.genericError };
+    }
+  }
+
   revalidatePath("/perfil");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Portada: el navegador la sube DIRECTO al bucket, igual que el CV (0047) y el
+// video del composer. Esta action sólo entrega el prefijo que la policy va a
+// exigir — el archivo nunca pasa por la server action, que serializaría 3 MB en
+// memoria del server y no daría progreso a quien sube desde datos móviles.
+// ---------------------------------------------------------------------------
+
+export type PrepareCoverUploadResult =
+  | { ok: true; tenantId: string; userId: string }
+  | { ok: false; code: "unauthenticated" | "error" };
+
+export async function prepareCoverUploadAction(): Promise<PrepareCoverUploadResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, code: "unauthenticated" };
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("tenant_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (error || !data) return { ok: false, code: "error" };
+
+  // El prefijo lo entrega el SERVIDOR y la policy `avatars_insert` (0012) lo
+  // vuelve a validar contra el JWT: el navegador no puede escribir en la carpeta
+  // de otra persona aunque arme el path a mano.
+  return { ok: true, tenantId: data.tenant_id, userId: user.id };
+}
+
+// ---------------------------------------------------------------------------
+// Controles de privacidad del perfil (0063). Upsert sobre `profile_privacy`,
+// cuya RLS es solo-dueño: el `profile_id` sale de la sesión, nunca del cliente.
+// ---------------------------------------------------------------------------
+
+/**
+ * Las ocho claves escritas a mano y no derivadas de `PRIVACY_KEYS` con un
+ * `fromEntries`: derivarlas obliga a un `as` para recuperar el tipo, y un `as`
+ * en el borde de validación anula justo lo que el borde existe para hacer. Que
+ * la lista quede sincronizada con la tabla lo cuida `privacy.test.ts`.
+ */
+const level = z.enum(PRIVACY_LEVELS);
+const privacySchema = z.object({
+  show_last_name: level,
+  show_birthdate: level,
+  show_location: level,
+  show_languages: level,
+  show_country_origin: level,
+  show_bio: level,
+  show_followers: level,
+  show_posts: level,
+});
+
+export type UpdatePrivacyInput = z.infer<typeof privacySchema>;
+
+export async function updateProfilePrivacyAction(
+  input: UpdatePrivacyInput,
+): Promise<ActionResult> {
+  const parsed = privacySchema.safeParse(input);
+  if (!parsed.success) {
+    // Un nivel fuera de los tres válidos no es algo que la UI pueda producir:
+    // es un cliente manipulado. Se cierra sin dar pistas de qué campo falló.
+    return { ok: false, formError: COPY.genericError };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, formError: COPY.noSession };
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("tenant_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError || !profile) {
+    console.error("[perfil] privacidad: no se pudo leer el tenant", {
+      code: profileError?.code,
+    });
+    return { ok: false, formError: COPY.genericError };
+  }
+
+  // `normalizePrivacy` completa lo que falte con los defaults conservadores:
+  // una fila a medias sería una fila con columnas en su DEFAULT de tabla, que
+  // por suerte coinciden — pero depender de esa coincidencia es frágil.
+  const settings = normalizePrivacy(parsed.data);
+
+  const { error } = await supabase.from("profile_privacy").upsert(
+    { profile_id: user.id, tenant_id: profile.tenant_id, ...settings },
+    { onConflict: "profile_id" },
+  );
+
+  if (error) {
+    console.error("[perfil] privacidad: upsert falló", { code: error.code });
+    return { ok: false, formError: COPY.genericError };
+  }
+
+  // El perfil público se arma con `profile_card()`, que lee esta tabla: sin
+  // revalidar, la persona guardaría el cambio y seguiría viendo el perfil viejo.
+  revalidatePath("/perfil");
+  revalidatePath("/ajustes/privacidad");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Zona horaria (0067). Escribe `profiles.timezone`; el valor se valida contra el
+// catálogo ANTES de mandarlo, para que el trigger de la base nunca tenga que
+// levantar `ZONA_HORARIA_INVALIDA` — que llegaría al cliente como error crudo.
+// ---------------------------------------------------------------------------
+
+const timeZoneSchema = z.object({
+  timeZone: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || isKnownTimeZone(value), COPY.timeZoneInvalid),
+});
+
+export type UpdateTimeZoneInput = z.infer<typeof timeZoneSchema>;
+
+export async function updateTimeZoneAction(
+  input: UpdateTimeZoneInput,
+): Promise<ActionResult> {
+  const parsed = timeZoneSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: firstIssuePerField(parsed.error.issues) };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, formError: COPY.noSession };
+
+  const { error } = await supabase
+    .from("profiles")
+    // Vacío = "volver a que la app la deduzca del navegador". Es un estado
+    // legítimo y por eso la columna es nullable (0067), no un default disfrazado.
+    .update({ timezone: parsed.data.timeZone || null })
+    .eq("id", user.id);
+
+  if (error) {
+    console.error("[perfil] zona horaria: update falló", { code: error.code });
+    return { ok: false, formError: COPY.genericError };
+  }
+
+  // Cambiar de zona cambia CÓMO SE LEE cada fecha de la app, no sólo la de esta
+  // pantalla. Se invalida el layout entero.
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 

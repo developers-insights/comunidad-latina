@@ -101,13 +101,43 @@ export const DEFAULT_TENANTS: Record<string, Tenant> = {
   },
 };
 
-/** Dominios de producción → slug. El middleware matchea contra esto sin tocar la DB. */
+/**
+ * RESPALDO de dominios → slug. **Ya no es la fuente de verdad.**
+ *
+ * Desde la migración 0060 el mapeo host→tenant vive en `public.tenant_domains`
+ * y lo resuelve el RPC `public.resolve_tenant_domain(host)`, que el proxy llama
+ * en cada request (con caché en memoria: ver `./domain-lookup`). Dar de alta un
+ * dominio dejó de ser un commit — es una fila.
+ *
+ * Este mapa sobrevive con UN solo trabajo: sostener los dominios de producción
+ * cuando la base NO CONTESTA. Se consulta únicamente en la rama `unavailable`
+ * de `decideTenantRouting` (`./domain-routing`) — nunca cuando la base contestó,
+ * porque si no suspender un dominio desde el panel no apagaría nada y el
+ * `status` de 0060 sería decorativo.
+ *
+ * Corolario: NO hay que agregar acá los dominios nuevos. Un dominio dado de
+ * alta hoy queda cubierto por el caché rancio de 24h de `./domain-lookup`, que
+ * es un respaldo mejor porque conoce lo que se creó después del último deploy.
+ * Estas cuatro entradas quedan porque son los dominios que ya estaban en
+ * producción antes de 0060 y no cuesta nada tenerlos escritos.
+ */
 const DOMAIN_TENANTS: Record<string, string> = {
   "dominicanos.com": "dominicanos",
   "www.dominicanos.com": "dominicanos",
   "comunidadlatina.com": "comunidadlatina",
   "www.comunidadlatina.com": "comunidadlatina",
 };
+
+/**
+ * El slug de respaldo para un host, o `null` si el mapa no lo conoce.
+ *
+ * Se exporta en vez de exportar `DOMAIN_TENANTS` entero para que quien lo use
+ * no quede atado a la forma del mapa (mismo criterio que
+ * `KNOWN_TENANT_DOMAINS`). Espera un host YA normalizado.
+ */
+export function domainFallbackSlug(hostname: string): string | null {
+  return DOMAIN_TENANTS[hostname] ?? null;
+}
 
 /**
  * Los mismos dominios, como set, para quien necesita preguntar "¿este host es
@@ -150,14 +180,13 @@ export const KNOWN_TENANT_DOMAINS: ReadonlySet<string> = new Set(
  * (src/app/admin/guard.ts) — un global_admin siempre pudo administrar
  * `comunidadlatina` aunque el público no la vea como comunidad.
  *
- * Dominio propio (`DOMAIN_TENANTS`) sigue siendo un paso aparte: ese mapa es
- * un atajo de performance para resolver Host→slug en el middleware SIN pegarle
- * a la DB (`resolveTenantSlug` es pura y sync — la llama `src/middleware.ts`
- * sin `await`). Una comunidad nueva sin dominio propio ya funciona hoy vía
- * `?t=<slug>` (dev/preview) o el dominio compartido de Vercel; sumar SU
- * dominio propio ahí es el único paso de código que le queda al alta cuando
- * además quiere un dominio custom — ver "lo que sigue obligando a tocar
- * código" en el playbook.
+ * El dominio propio ya NO es un paso de código: desde la migración 0060 vive en
+ * `public.tenant_domains` y lo resuelve el proxy contra la base
+ * (`./domain-lookup` + `./domain-routing`). Este set sigue mandando por encima
+ * de lo que diga la base — un slug reservado nunca se sirve como comunidad
+ * pública, tampoco si alguien le carga un dominio (`clampToPublicCommunity` en
+ * `./domain-routing`). Sumar un slug ACÁ sigue siendo una decisión de
+ * marca/legal explícita sobre UN tenant puntual, no un paso rutinario del alta.
  */
 export const RESERVED_BRAND_SLUGS = new Set<string>(["comunidadlatina"]);
 
@@ -200,9 +229,10 @@ function sanitizeSlug(value: string | null | undefined): string | null {
  * tenant de TODA la app, no solo del RAG. Se arregla en el origen.
  *
  * TRADE-OFF, para que nadie lo reabra sin querer: en producción una comunidad
- * SIN dominio propio deja de ser alcanzable por `?t=`; necesita su dominio en
- * `DOMAIN_TENANTS`. Eso ya era el único paso de código que el playbook de alta
- * (`docs/PLAYBOOK-TENANT.md`) reconoce para un dominio custom.
+ * SIN dominio propio no es alcanzable por `?t=`; necesita SU dominio. Desde la
+ * migración 0060 eso es una fila en `public.tenant_domains` (la escribe
+ * `scripts/new-tenant.mjs --domain=…`), no una línea de código: el paso de
+ * deploy que este trade-off costaba ya no existe.
  *
  * ALCANCE REAL, medido (no asumido): Vercel corre los previews con
  * `NODE_ENV=production`, así que el primer término ya corta y los previews
@@ -218,13 +248,18 @@ export function clientTenantHintsAllowed(): boolean {
 }
 
 /**
- * Resuelve el slug del tenant a partir del request. Función PURA respecto de sus
- * argumentos (la usa el middleware sin tocar la DB) — por eso NO puede consultar
- * `tenants` para decidir si un slug "existe de verdad"; esa parte la resuelve
- * `getTenant()` más abajo (cacheada), con degradación elegante si no hay fila.
+ * Resuelve el slug del tenant a partir del request, SIN tocar la base. Función
+ * pura respecto de sus argumentos.
  *
- * - Producción: manda el HOST y NADA MÁS. Host mapeado en `DOMAIN_TENANTS` →
- *   su comunidad; cualquier otro host → la comunidad por defecto. `?t=` y la
+ * DESDE 0060 ESTE YA NO ES EL CAMINO PRINCIPAL. El proxy resuelve el host
+ * contra `public.tenant_domains` (`./domain-lookup`), y esta función quedó como
+ * la rama de RESPALDO que `./domain-routing` usa cuando la base no contestó o
+ * cuando el host es de la plataforma (localhost, previews, el deploy
+ * compartido) — es decir, exactamente donde el mapa hardcodeado y las pistas de
+ * dev siguen siendo lo correcto.
+ *
+ * - Producción: manda el HOST y NADA MÁS. Host en el respaldo `DOMAIN_TENANTS`
+ *   → su comunidad; cualquier otro host → la comunidad por defecto. `?t=` y la
  *   cookie se IGNORAN (ver `clientTenantHintsAllowed`: son entrada del cliente y
  *   el RAG del asistente las consumía con service_role).
  * - Dev / previews: `?t=<slug>` > cookie `cl-tenant` > 'dominicanos', como

@@ -9,9 +9,11 @@ import {
   type ScamReportData,
 } from "@/components/admin/scam-report-item";
 import { ModuleToggles } from "@/components/admin/module-toggles";
+import { CommunitySwitcher } from "@/components/admin/community-switcher";
 import { getTenant } from "@/lib/tenant/resolve";
 import { formatMoney } from "@/lib/utils";
 import { requireStaff } from "../guard";
+import { COMMUNITY_PARAM, firstParam, resolveAdminScope } from "../scope";
 
 export const metadata = { title: "Dominio" };
 
@@ -22,6 +24,19 @@ export const metadata = { title: "Dominio" };
  * Todas las lecturas y las resoluciones de avisos/reportes van con el cliente
  * del usuario staff (RLS gobierna). El único path privilegiado es el update de
  * tenants.modules (ver dominio/actions.ts).
+ *
+ * SELECTOR DE COMUNIDAD (súper admin). El tenant sale de `resolveAdminScope`,
+ * que para cualquier rol que no sea `global_admin` devuelve el del JWT e ignora
+ * la URL. Mirando OTRA comunidad, esta pantalla queda en dos velocidades:
+ *
+ *  · Los números, la cola de revisión, los reportes y los módulos: SÍ. Las
+ *    policies de SELECT de `listings`/`scam_reports`/`tenants` tienen rama
+ *    `app.is_global_admin()`, y el guardado de módulos va por admin client con
+ *    `canWriteTenant` de por medio.
+ *  · Resolver un aviso o un reporte: NO. Las policies de UPDATE de esas dos
+ *    tablas exigen `tenant_id = app.current_tenant_id()` y no tienen rama de
+ *    global_admin. La base rechaza el cambio, así que los botones no se
+ *    ofrecen y la pantalla lo dice. Habilitarlo sería una migración.
  */
 
 const COPY = {
@@ -65,11 +80,18 @@ const COPY = {
 
 const LISTING_KINDS = ["property", "business", "professional", "event", "job"] as const;
 
-export default async function DominioPage() {
-  const { supabase, tenantId: jwtTenantId } = await requireStaff("domain_admin");
+export default async function DominioPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const ctx = await requireStaff("domain_admin");
+  const { supabase, tenantId: jwtTenantId } = ctx;
   const tenant = await getTenant();
-  // El tenant REAL del admin es el del JWT (el Host header es cosmético acá).
-  const tenantId = jwtTenantId ?? tenant.id;
+  const scope = await resolveAdminScope(ctx, firstParam((await searchParams)[COMMUNITY_PARAM]));
+  // El tenant REAL del admin es el del JWT (el Host header es cosmético acá);
+  // el súper admin puede estar mirando otro, resuelto en el servidor.
+  const tenantId = scope.tenantId ?? jwtTenantId ?? tenant.id;
 
   // Módulos de MI tenant (el del JWT) — no del tenant del Host header. Las dos
   // columnas hermanas viajan en el MISMO select: se leen siempre juntas y una
@@ -238,9 +260,20 @@ export default async function DominioPage() {
     <div className="flex flex-col gap-8">
       <section aria-labelledby="dominio-stats">
         <h2 id="dominio-stats" className="font-display text-2xl font-bold text-foreground">
-          {COPY.title}
+          {scope.isForeign && scope.tenantName ? scope.tenantName : COPY.title}
         </h2>
         <p className="mt-1 text-sm text-foreground-secondary">{COPY.statsIntro}</p>
+
+        {scope.canSwitch && (
+          <div className="mt-4">
+            <CommunitySwitcher
+              basePath="/admin/dominio"
+              communities={scope.communities}
+              activeTenantId={scope.tenantId}
+              isForeign={scope.isForeign}
+            />
+          </div>
+        )}
 
         <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
           {stats.map((stat) => (
@@ -287,7 +320,9 @@ export default async function DominioPage() {
             className="py-8"
           />
         ) : (
-          reviewItems.map((listing) => <ListingReviewItem key={listing.id} listing={listing} />)
+          reviewItems.map((listing) => (
+            <ListingReviewItem key={listing.id} listing={listing} readOnly={scope.isForeign} />
+          ))
         )}
       </section>
 
@@ -303,7 +338,9 @@ export default async function DominioPage() {
             className="py-8"
           />
         ) : (
-          reportItems.map((report) => <ScamReportItem key={report.id} report={report} />)
+          reportItems.map((report) => (
+            <ScamReportItem key={report.id} report={report} readOnly={scope.isForeign} />
+          ))
         )}
       </section>
 
@@ -317,7 +354,7 @@ export default async function DominioPage() {
             {COPY.modulesUnavailable}
           </p>
         )}
-        <ModuleToggles modules={modules} modulesSoon={modulesSoon} />
+        <ModuleToggles modules={modules} modulesSoon={modulesSoon} tenantId={tenantId} />
       </section>
     </div>
   );

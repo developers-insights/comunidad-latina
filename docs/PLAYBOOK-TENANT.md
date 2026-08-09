@@ -79,21 +79,31 @@ Esto es trabajo real, fuera del alcance de un script — son pasos operativos en
 | **Registrar el dominio** (si la comunidad quiere uno propio) | El registrador que uses (GoDaddy, Namecheap, etc.) | Solo hace falta si NO vas a usar el dominio compartido de Vercel |
 | **Apuntar el DNS** | Panel del registrador | Un registro `CNAME` (o `A`, según lo que pida Vercel) apuntando a Vercel |
 | **Agregar el dominio en Vercel** | [vercel.com](https://vercel.com) → equipo **insights3** (InsightsApps) → proyecto **comunidad-latina** → pestaña **Settings → Domains** → "Add" | Vercel valida el DNS automáticamente y emite el certificado SSL |
-| **Sumar UNA línea de código** (solo si el dominio es propio) | `DOMAIN_TENANTS` en `src/lib/tenant/resolve.ts` | Ver nota abajo — es el único paso de código que le queda al alta, y solo aplica si hay dominio propio |
+| **Dar de alta el dominio** (solo si el dominio es propio) | `node scripts/new-tenant.mjs --domain-for=<slug> --domain=<host>` | Escribe en la base. **Ya no hace falta ni commit ni deploy** — ver nota abajo |
 | **Plantillas de correo** (bienvenida, recuperar contraseña, etc.) | Resend — hoy estas plantillas son genéricas para toda la plataforma, no por tenant | Si la comunidad necesita su propio remitente/estilo de correo, es trabajo de diseño de copy, no de este script |
 | **Variables de entorno en producción** | Vercel → mismo proyecto → **Settings → Environment Variables**, o `node scripts/vercel-env-sync.mjs` | Ver checklist §4 — una comunidad puede nacer "muda" (sin emails, sin moderación de imagen) si producción no tiene las claves que sí están en tu `.env.local` |
 
-### Nota sobre el dominio propio y `DOMAIN_TENANTS`
+### Nota sobre el dominio propio
 
-El middleware (la pieza que decide "qué comunidad sos" en cada visita) resuelve el dominio **sin consultar la base de datos**, por velocidad — es un mapa fijo en código (`DOMAIN_TENANTS`, en `src/lib/tenant/resolve.ts`). Por eso:
+El middleware (la pieza que decide "qué comunidad sos" en cada visita) resuelve el dominio **consultando la base de datos** (`public.resolve_tenant_domain`), con caché en memoria para no pegarle en cada visita. Por eso:
 
 - **Sin dominio propio**, la comunidad nueva ya es 100% alcanzable hoy, sin tocar nada: `https://comunidad-latina-sigma.vercel.app/?t=colombianos-miami` (o `?t=colombianos-miami` en cualquier preview/local).
-- **Con dominio propio**, además de los tres pasos de arriba (registrar, DNS, Vercel), hace falta sumar una línea a `DOMAIN_TENANTS`:
-  ```ts
-  "colombianosmiami.com": "colombianos-miami",
-  "www.colombianosmiami.com": "colombianos-miami",
+- **Con dominio propio**, además de los tres pasos de arriba (registrar, DNS, Vercel), alcanza con:
+  ```bash
+  node scripts/new-tenant.mjs --domain-for=colombianos-miami --domain=colombianosmiami.com
   ```
-  y desplegar. Es la única parte de "nacer una comunidad" que sigue pidiendo un commit — está documentado así de específico en el código (`src/lib/tenant/resolve.ts`, comentario de `DOMAIN_TENANTS`) para que quien lo toque entienda por qué existe.
+  El comando es idempotente, nunca le roba un dominio a otra comunidad, y acepta `--alias` (dominio secundario que redirige al canónico), `--status=active|suspended|archived` y `--notes="…"`. **No hace falta commit ni deploy.**
+
+**Tiempos que conviene saber**, porque la caché no es instantánea:
+
+| Cambio | Cuánto tarda en verse |
+|---|---|
+| Dominio recién dado de alta | hasta **1 minuto** |
+| Dominio apagado, archivado o movido a otra comunidad | hasta **5 minutos** |
+
+El mapa fijo `DOMAIN_TENANTS` (en `src/lib/tenant/resolve.ts`) sigue existiendo, pero **solo como respaldo**: se consulta únicamente si la base no responde. Ya no es la fuente de verdad y no hay que editarlo para dar de alta un dominio.
+
+**El host de la plataforma no va en la base.** `comunidad-latina-sigma.vercel.app`, `localhost` y los previews de Vercel se reconocen solos. Si algún día se suma otro host de plataforma, se agrega con la variable de entorno `TENANT_PLATFORM_HOSTS` — tampoco requiere commit.
 
 ### Trampa de los dos remotes de Git (leer antes de tocar `git push`)
 

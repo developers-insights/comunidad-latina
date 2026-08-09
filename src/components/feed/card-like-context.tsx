@@ -9,6 +9,7 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { notifyPostReactionAction } from "@/app/(app)/feed/actions";
 
 /**
  * Motor de "me gusta" optimista de UN post + contexto para COMPARTIR ese estado
@@ -82,6 +83,13 @@ export function useOptimisticLike({
         if (error && error.code !== "23505") {
           setLiked(false);
           setCount((current) => Math.max(0, current - 1));
+        } else {
+          // Aviso al autor (0068). Va DESPUÉS de que la reacción quedó guardada
+          // y no bloquea nada: la action re-verifica que la reacción exista, no
+          // se auto-notifica y agrupa, así que veinte me gusta son una sola fila.
+          void notifyPostReactionAction({ postId }).catch(() => {
+            // Un aviso que no salió no puede desarmar un me gusta que sí.
+          });
         }
       } else {
         const { error } = await supabase

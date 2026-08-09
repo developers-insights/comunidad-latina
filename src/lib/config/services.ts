@@ -40,6 +40,68 @@ export const isSupabaseConfigured = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 );
 
+// ---------------------------------------------------------------------------
+// Entrar con Google / Apple
+// ---------------------------------------------------------------------------
+/**
+ * El proveedor se habilita en el DASHBOARD de Supabase (Authentication →
+ * Providers), no acá: el intercambio del token pasa entero por el Auth server y
+ * nuestra app nunca ve el client secret. Pero la app igual necesita saber si el
+ * proveedor existe, y no hay forma de preguntárselo a Supabase desde el server
+ * sin la Management API.
+ *
+ * Entonces estas dos variables son un ESPEJO declarativo de lo que hay en el
+ * dashboard, con un solo trabajo: decidir si el botón se dibuja. Sin ellas el
+ * botón no aparece — que es la degradación correcta. Un botón "Entrar con
+ * Google" contra un proveedor apagado lleva a una pantalla de error de Supabase
+ * con jerga en inglés, que es exactamente lo que §7 prohíbe.
+ *
+ * No llevan `NEXT_PUBLIC_`: el client id de OAuth no es secreto, pero tampoco
+ * hace falta en el bundle — la página de login es un server component y baja el
+ * booleano como prop.
+ */
+export const isGoogleAuthConfigured = Boolean(process.env.AUTH_GOOGLE_CLIENT_ID);
+
+export const isAppleAuthConfigured = Boolean(process.env.AUTH_APPLE_CLIENT_ID);
+
+// ---------------------------------------------------------------------------
+// Teléfono y códigos por SMS
+// ---------------------------------------------------------------------------
+/**
+ * ⚠️ GATE LEGAL, NO UN FLAG DE FEATURE. APAGADO POR DEFECTO.
+ *
+ * La migración 0030 lo dejó escrito y 0066 lo repitió: `user_phones` es un mapa
+ * teléfono↔identidad, subpoenable, y NO se recolectan números reales hasta que
+ * haya firma legal. El flujo completo está construido y probado; lo único que
+ * falta es la decisión, y esa decisión no la toma un deploy.
+ *
+ * Por eso el default es apagado y la comparación es contra el string `"true"`
+ * exacto: `Boolean(process.env.X)` prendería la recolección de teléfonos con un
+ * `PHONE_VERIFICATION_ENABLED=false` mal escrito, y ese error de dedo no puede
+ * costar una recolección de datos personales sin cobertura.
+ */
+export const isPhoneVerificationEnabled =
+  process.env.PHONE_VERIFICATION_ENABLED === "true";
+
+/**
+ * ¿Hay un proveedor de SMS de verdad detrás?
+ *
+ * Decisión comercial pendiente: hoy es SIEMPRE false y el código se entrega por
+ * el log del servidor (ver lib/phone/sms.ts). El flag existe para que enchufar
+ * un proveedor sea agregar una variable, no tocar el flujo.
+ */
+export const isSmsConfigured = Boolean(process.env.SMS_PROVIDER_API_KEY);
+
+/**
+ * Sal del servidor para el hash de los códigos: `sha256(código + pepper)`.
+ *
+ * Vive FUERA de la base a propósito (0066): así un backup completo de Postgres
+ * tampoco alcanza para verificar el teléfono de nadie. Sin pepper el flujo se
+ * niega a emitir códigos — un hash sin sal es una tabla arcoíris de seis
+ * dígitos, o sea nada.
+ */
+export const isPhonePepperConfigured = Boolean(process.env.PHONE_CODE_PEPPER);
+
 /**
  * Supabase es la única dependencia SIN degradación posible: sin DB no hay app.
  * Llamar al inicializar clientes; el mensaje le dice al dev exactamente qué falta.

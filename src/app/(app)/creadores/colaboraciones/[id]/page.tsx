@@ -14,6 +14,7 @@ import {
   type ContractRole,
   type ContractStatus,
 } from "@/components/creators";
+import { formatJobCode } from "@/lib/creators/job-code";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { formatDate } from "@/lib/utils";
@@ -53,7 +54,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   const { data: contract } = await supabase
     .from("gig_contracts")
     .select(
-      "id, tenant_id, code, gig_id, client_id, creator_id, title, scope, delivery_days, amount_cents, currency, fee_pct, platform_fee_cents, creator_net_cents, status, payment_mode, accepted_at, funded_at, delivered_at, released_at, canceled_at, rejected_at, created_at",
+      "id, tenant_id, code, code_legacy, gig_id, client_id, creator_id, title, scope, delivery_days, amount_cents, currency, fee_pct, platform_fee_cents, creator_net_cents, status, payment_mode, accepted_at, funded_at, delivered_at, released_at, canceled_at, rejected_at, created_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -105,7 +106,11 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
 
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <span className="numeric text-sm font-semibold text-foreground-muted">{contract.code}</span>
+          {/* Con el código anterior al lado: es el que figura en los
+              recibos ya emitidos (0065). */}
+          <span className="numeric text-sm font-semibold text-foreground-muted">
+            {formatJobCode({ code: contract.code, code_legacy: contract.code_legacy })}
+          </span>
           <ContractStatusBadge status={status} />
           <span className="ml-auto text-xs font-medium text-foreground-muted">
             {role === "client" ? COPY.contract.role.client : COPY.contract.role.creator}

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate } from "@/lib/utils";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { Banner } from "@/components/ui";
 import { BackLink } from "@/components/escudo/back-link";
 import {
@@ -98,6 +98,11 @@ async function getConversationOptions(): Promise<{
       }
     }
   }
+
+  // El selector nombra la conversación por su día ("Conversación del 6 de
+  // julio"): con la zona fija, un hilo abierto a las 22:00 en Los Ángeles se
+  // ofrecía con la fecha del día siguiente y no se reconocía.
+  const formatDate = await getViewerFormatDate();
 
   const options: ConversationOption[] = conversations.map((row) => {
     const other = row.created_by === user.id ? row.counterpart : row.creator;

@@ -10,9 +10,11 @@ import {
   ProximamentePremium,
   useToast,
 } from "@/components/ui";
+import { formatCents } from "@/lib/pricing";
 import type { Intervalo, PlanId, PlanPresencia } from "@/lib/stripe";
-import { cn, formatMoney } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { iniciarSuscripcion } from "./actions";
+import type { PreciosPresencia } from "./precios";
 
 /** Copy local del módulo PAGOS — no toca src/lib/i18n (compartido). */
 const COPY = {
@@ -30,17 +32,27 @@ const COPY = {
   proximamenteFeature: "los pagos",
 } as const;
 
-/** Precio efectivo por mes (anual prorrateado) — espejo client-safe del helper server. */
-function precioPorMes(plan: PlanPresencia, intervalo: Intervalo): number {
-  if (intervalo === "mensual") return plan.precioMensualUsd;
-  return Math.round((plan.precioAnualUsd / 12) * 100) / 100;
+/**
+ * Centavos por mes a partir del precio VIGENTE, para mostrar.
+ *
+ * El plan anual se cobra de una vez; este número es sólo la forma de comparar
+ * los dos intervalos en la misma unidad, y por eso viaja SIEMPRE con la palabra
+ * "por mes" al lado y con el total anual escrito debajo. La división redondea
+ * una sola vez y nunca sale de acá: lo que se cobra es `amountCents` entero,
+ * sin pasar por este cálculo.
+ */
+function centavosPorMes(amountCents: number, intervalo: Intervalo): number {
+  return intervalo === "mensual" ? amountCents : Math.round(amountCents / 12);
 }
 
 export function PlanesPresencia({
   planes,
+  precios,
   stripeConfigured,
 }: {
   planes: PlanPresencia[];
+  /** Los 6 precios vigentes de la comunidad — la misma lectura que cobra. */
+  precios: PreciosPresencia;
   stripeConfigured: boolean;
 }) {
   const { toast } = useToast();
@@ -125,7 +137,8 @@ export function PlanesPresencia({
       {/* Comparativa honesta: 3 planes, features acumulativas explícitas */}
       <div className="mt-6 flex flex-col gap-5">
         {planes.map((plan) => {
-          const mensualEfectivo = precioPorMes(plan, intervalo);
+          const precio = precios[plan.id]?.[intervalo] ?? null;
+          const precioAnual = precios[plan.id]?.anual ?? null;
           return (
             <BezelCard
               key={plan.id}
@@ -149,21 +162,31 @@ export function PlanesPresencia({
                 )}
               </div>
 
-              <div>
-                <p className="flex items-baseline gap-1.5">
-                  <span className="numeric font-display text-4xl font-bold text-foreground">
-                    {formatMoney(mensualEfectivo)}
-                  </span>
-                  <span className="text-sm text-foreground-secondary">
-                    {COPY.porMes}
-                  </span>
-                </p>
-                {intervalo === "anual" && (
-                  <p className="numeric mt-1 text-xs text-foreground-muted">
-                    {COPY.facturadoAnual(formatMoney(plan.precioAnualUsd))}
+              {precio && (
+                <div>
+                  <p className="flex items-baseline gap-1.5">
+                    <span className="numeric font-display text-4xl font-bold text-foreground">
+                      {formatCents(
+                        centavosPorMes(precio.amountCents, intervalo),
+                        precio.currency,
+                      )}
+                    </span>
+                    <span className="text-sm text-foreground-secondary">
+                      {COPY.porMes}
+                    </span>
                   </p>
-                )}
-              </div>
+                  {/* Con el anual elegido, el TOTAL que se cobra va escrito, no
+                      deducido: el número grande de arriba es un prorrateo y sin
+                      esta línea se leería como si fuera lo que se debita. */}
+                  {intervalo === "anual" && precioAnual && (
+                    <p className="numeric mt-1 text-xs text-foreground-muted">
+                      {COPY.facturadoAnual(
+                        formatCents(precioAnual.amountCents, precioAnual.currency),
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
 
               <ul className="flex flex-col gap-2.5">
                 {plan.features.map((feature) => (

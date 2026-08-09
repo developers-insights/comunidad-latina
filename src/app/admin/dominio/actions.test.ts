@@ -292,3 +292,77 @@ describe("updateTenantModules", () => {
     expect(mocks.revalidateTag).toHaveBeenCalledWith("tenants", "max");
   });
 });
+
+/* ------------- updateTenantModules · selector de comunidad (0060+) ---------- */
+
+/**
+ * Desde que el panel tiene selector de comunidad, el formulario puede traer un
+ * `tenantId`. Es dato del cliente: estos tests fijan que sea una PROPUESTA que
+ * `canWriteTenant` acepta o rechaza, y nunca una orden.
+ */
+describe("updateTenantModules · comunidad del formulario", () => {
+  const OTHER_TENANT = "44444444-4444-4444-8444-444444444444";
+
+  function modulesFormFor(tenantId: string): FormData {
+    const fd = modulesForm({ feed: "on" });
+    fd.set("tenantId", tenantId);
+    return fd;
+  }
+
+  it("un domain_admin que manda OTRO tenant es rechazado, no redirigido al suyo", async () => {
+    useStaff("domain_admin", TENANT_ID);
+    mocks.createAdminClient.mockReturnValue(createAdminStub().client);
+
+    const state = await updateTenantModules(IDLE, modulesFormFor(OTHER_TENANT));
+
+    expect(state.status).toBe("error");
+    // Lo importante: no se escribió NADA. Ni en el tenant ajeno ni en el propio
+    // — un fallback silencioso ejecutaría una acción distinta de la pedida.
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
+    expect(mocks.logAdminAction).not.toHaveBeenCalled();
+  });
+
+  it("un domain_admin que manda su propio tenant sí guarda", async () => {
+    useStaff("domain_admin", TENANT_ID);
+    mocks.createAdminClient.mockReturnValue(createAdminStub().client);
+
+    const state = await updateTenantModules(IDLE, modulesFormFor(TENANT_ID));
+
+    expect(state.status).toBe("success");
+    expect(mocks.logAdminAction).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: TENANT_ID }),
+    );
+  });
+
+  it("un global_admin sí puede guardar los módulos de otra comunidad", async () => {
+    useStaff("global_admin", TENANT_ID);
+    const admin = createAdminStub();
+    mocks.createAdminClient.mockReturnValue(admin.client);
+
+    const state = await updateTenantModules(IDLE, modulesFormFor(OTHER_TENANT));
+
+    expect(state.status).toBe("success");
+    expect(mocks.logAdminAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "tenant.modules_updated",
+        tenantId: OTHER_TENANT,
+        subjectId: OTHER_TENANT,
+      }),
+    );
+  });
+
+  it("un `tenantId` con basura no escribe nada, ni siquiera en la comunidad propia", async () => {
+    useStaff("global_admin", TENANT_ID);
+    mocks.createAdminClient.mockReturnValue(createAdminStub().client);
+
+    const fd = modulesForm({ feed: "on" });
+    fd.set("tenantId", "todas");
+
+    const state = await updateTenantModules(IDLE, fd);
+
+    // `canWriteTenant` exige forma de uuid, así que "todas" no llega nunca a un
+    // `.eq('id', …)`: la action rechaza en vez de escribir a ciegas.
+    expect(state.status).toBe("error");
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+});

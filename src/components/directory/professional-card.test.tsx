@@ -150,6 +150,36 @@ describe("ProfessionalCard: quién publica", () => {
     expect(screen.getByText("María Peralta")).toBeTruthy();
   });
 
+  it('el desglose del Trust Score ofrece "Ver perfil" de quien publica', () => {
+    // Esta card montaba el badge SIN pasar `profileId`, así que la hoja se
+    // abría sin salida: se veía el score de la persona y no había forma de ir
+    // a mirar quién es. El dato ya venía en el modelo — sólo no se pasaba.
+    render(
+      <ProfessionalCard
+        professional={{
+          ...BASE,
+          publisher: {
+            type: "member",
+            profileId: "22222222-2222-4222-8222-222222222222",
+            displayName: "María Peralta",
+            avatarUrl: null,
+            score: 72,
+            level: "confiable",
+            signals: [],
+          },
+        }}
+      />,
+    );
+
+    // Se llega por el badge: tocar la card nunca navega afuera.
+    fireEvent.click(screen.getByRole("button", { name: /trust score/i }));
+
+    const link = screen.getByRole("link", { name: /ver el perfil de maría/i });
+    expect(link.getAttribute("href")).toBe(
+      "/perfil/22222222-2222-4222-8222-222222222222",
+    );
+  });
+
   it("fuente externa: se atribuye por nombre, sin Trust Score", () => {
     render(
       <ProfessionalCard

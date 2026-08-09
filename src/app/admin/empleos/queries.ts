@@ -49,6 +49,19 @@ export interface AdminJobRow {
   /** true cuando el aviso lo sembró/importó la plataforma (`created_by is null`). */
   isPlatformJob: boolean;
   createdAtLabel: string;
+  /**
+   * Cuántas postulaciones entraron. SIEMPRE un número.
+   *
+   * Era `number | null` porque `job_application_tally` (0042) se gateaba contra
+   * el tenant del JWT y devolvía vacío cuando un súper admin miraba otra
+   * comunidad. La 0075 le dio a la RPC su rama `app.is_global_admin()`, así que
+   * ya cuenta en toda la plataforma y ese "no sé" dejó de existir.
+   *
+   * El otro camino por el que podría faltar —que la RPC falle— NO produce un
+   * `null`: `fetchAdminJobs` lanza y la pantalla entera muestra su estado de
+   * error. Es a propósito: un conteo caído que degradara a cero diría "sin
+   * postulaciones" sobre un aviso con gente esperando respuesta.
+   */
   applications: number;
   pending: number;
 }
@@ -106,7 +119,10 @@ export async function fetchAdminJobs(
    * cuántas siguen sin respuesta. `job_application_tally` devuelve ese agregado
    * (job_id, total, pending) sin divulgar nada: ni applicant_id, ni message, ni
    * answers. Es `security definer` con gate explícito a domain_admin/global_admin
-   * y al tenant del JWT en las dos tablas.
+   * y al tenant del JWT — salvo para el súper admin, que desde 0075 cuenta en
+   * cualquier comunidad (el join aviso↔postulación sigue exigiendo el mismo
+   * tenant en las dos tablas, así que un número nunca mezcla dos comunidades).
+   * Por eso ya no hace falta pedirla condicionalmente: siempre puede responder.
    */
   const [{ data: tallyRows, error: tallyError }, { data: profiles }] = await Promise.all([
     // La RPC es de 0042 y todavía no está en los tipos generados — cast acotado

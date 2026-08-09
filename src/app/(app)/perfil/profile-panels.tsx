@@ -1,16 +1,20 @@
 import Link from "next/link";
 import {
+  Cake,
   CalendarBlank,
   Camera,
   ChatCircleDots,
   Globe,
+  Lock,
   MapPin,
   SealCheck,
   Star,
+  Translate,
   UsersThree,
   VideoCamera,
 } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, BezelCard, EmptyState } from "@/components/ui";
+import { languageLabels, residenceCountryLabel } from "@/lib/profile/catalogs";
 import type { PersonRow, ReviewRow } from "./profile-data";
 
 /**
@@ -36,11 +40,23 @@ const COPY = {
   infoHeading: "Información",
   infoFrom: "De",
   infoLives: "Vive en",
+  infoZone: "Su zona",
+  infoAge: "Edad",
+  infoAgeValue: (years: number) => `${years} años`,
+  infoLanguages: "Habla",
   infoMemberSince: "Miembro desde",
   infoVerified: "Identidad verificada",
   infoVerifiedYes: "Sí, verificada",
   infoBioEmpty: "Todavía no escribió una presentación.",
   infoBioEmptyOwn: "Contale a la comunidad quién sos: se edita desde «Editar perfil».",
+
+  /* Pestañas cerradas por privacidad. */
+  postsClosedTitle: "Sus publicaciones son privadas",
+  postsClosedBody:
+    "Eligió que sus publicaciones no se listen en su perfil. Si te sigue o lo seguís, puede cambiar.",
+  followersClosedTitle: "Su lista es privada",
+  followersClosedBody:
+    "Eligió no mostrar a quién sigue ni quién lo sigue. Los contadores de arriba sí son públicos.",
 
   reviewsEmptyTitle: "Todavía no hay reseñas",
   reviewsEmptyBody:
@@ -70,19 +86,37 @@ export interface ProfileInfoPanelProps {
   memberSince: string | null;
   identityVerified: boolean;
   isOwn: boolean;
+  /**
+   * Apellido — llega sólo si la privacidad lo permite, y esta pestaña NO lo
+   * dibuja a propósito: ya está en el `h1` de la cabecera, junto al nombre.
+   * Repetirlo acá sería la misma persona dos veces en la misma pantalla.
+   * Está en el tipo para que se vea que la pantalla lo recibe y decide.
+   */
+  lastName?: string | null;
+  /** Edad EN AÑOS. La fecha exacta no sale de la base ni para esta pantalla. */
+  age?: number | null;
+  countryResidence?: string | null;
+  city?: string | null;
+  languages?: readonly string[];
 }
 
 /**
  * Pestaña "Información".
  *
+ * ── TODO LO QUE LLEGA ACÁ YA PASÓ POR LA MATRIZ DE PRIVACIDAD ────────────────
+ * Antes esta pestaña mostraba exclusivamente columnas de `public.profiles` y la
+ * regla era "si querés sumar un dato, pasá por esa puerta primero". Ahora la
+ * puerta es `public.profile_card()` (0063), que es mejor: los campos privados
+ * (apellido, edad, ciudad, idiomas) llegan en `null` cuando la configuración de
+ * la persona no los permite, decidido ADENTRO de la base. Este componente no
+ * decide nada sobre privacidad — sólo omite las filas vacías.
+ *
  * ── LO QUE NO ESTÁ, NO ESTÁ POR DISEÑO ───────────────────────────────────────
- * No hay dirección, ni teléfono, ni correo, ni documento, ni fecha de
- * nacimiento. No es que no existan en la base: el teléfono y la fecha de
- * nacimiento viven en `profiles_phone` (0030) con RLS SOLO-DUEÑO y ni siquiera
- * son consultables desde acá, y el resto nunca se guardó. Esta pestaña muestra
- * exclusivamente columnas de `public.profiles`, que es la tabla pensada para
- * ser pública. Si algún día alguien quiere sumar un dato acá, tiene que pasar
- * por esa puerta primero.
+ * No hay dirección, ni teléfono, ni correo, ni documento, ni la fecha de
+ * nacimiento COMPLETA. La edad sí, en años: un cumpleaños exacto + nombre +
+ * ciudad es el kit de suplantación de identidad, y la edad sola no lo es. La
+ * fecha entera sólo la ve su dueño, y eso lo garantiza `profile_card`, no esta
+ * pantalla.
  */
 export function ProfileInfoPanel({
   bio,
@@ -91,10 +125,34 @@ export function ProfileInfoPanel({
   memberSince,
   identityVerified,
   isOwn,
+  age,
+  countryResidence,
+  city,
+  languages,
 }: ProfileInfoPanelProps) {
+  // "Vive en" combina ciudad y país de residencia: son un solo bloque de
+  // privacidad (`show_location`), así que o llegan los dos o no llega ninguno.
+  const livesIn = [city, residenceCountryLabel(countryResidence)]
+    .filter(Boolean)
+    .join(", ");
+  const spoken = languageLabels(languages);
+
   const rows = [
     country && { icon: <Globe size={18} />, label: COPY.infoFrom, value: country },
-    areaLabel && { icon: <MapPin size={18} />, label: COPY.infoLives, value: areaLabel },
+    livesIn && { icon: <MapPin size={18} />, label: COPY.infoLives, value: livesIn },
+    // La zona declarada es OTRA cosa que la ciudad de residencia: es el barrio
+    // que la persona eligió mostrar (§5.4), y no lo cubre `show_location`.
+    areaLabel && { icon: <MapPin size={18} />, label: COPY.infoZone, value: areaLabel },
+    typeof age === "number" && {
+      icon: <Cake size={18} />,
+      label: COPY.infoAge,
+      value: COPY.infoAgeValue(age),
+    },
+    spoken.length > 0 && {
+      icon: <Translate size={18} />,
+      label: COPY.infoLanguages,
+      value: spoken.join(" · "),
+    },
     memberSince && {
       icon: <CalendarBlank size={18} />,
       label: COPY.infoMemberSince,
@@ -245,6 +303,32 @@ export function ProfilePeoplePanel({ people, direction, isOwn }: ProfilePeoplePa
         <p className="px-2 text-xs text-foreground-muted">{COPY.followingOnlyPeople}</p>
       )}
     </div>
+  );
+}
+
+/* ──────────────────────── Cerrado por privacidad ──────────────────────── */
+
+/**
+ * Lo que se ve cuando la persona eligió no mostrar ese bloque.
+ *
+ * ── SE DICE, NO SE ESCONDE ───────────────────────────────────────────────────
+ * La tentación es hacer desaparecer la pestaña. No: quien mira ya vio el
+ * contador arriba y esperaría encontrar la lista; una pestaña que se esfuma
+ * parece un error de la app. Y esconder la decisión también la vuelve
+ * sospechosa. Se cuenta como lo que es —una elección de esa persona— y se
+ * explica cómo cambia (siguiéndola), que es la única acción que existe.
+ *
+ * Lo que NO se dice es cuánto hay del otro lado: "12 publicaciones privadas"
+ * sería filtrar exactamente el dato que la persona cerró.
+ */
+export function ProfileClosedPanel({ kind }: { kind: "posts" | "followers" }) {
+  const posts = kind === "posts";
+  return (
+    <EmptyState
+      icon={<Lock />}
+      title={posts ? COPY.postsClosedTitle : COPY.followersClosedTitle}
+      message={posts ? COPY.postsClosedBody : COPY.followersClosedBody}
+    />
   );
 }
 

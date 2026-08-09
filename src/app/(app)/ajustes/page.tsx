@@ -5,6 +5,7 @@ import {
   BookmarkSimple,
   CaretRight,
   ChatCircle,
+  DeviceMobile,
   FileText,
   PencilSimple,
   Prohibit,
@@ -21,9 +22,11 @@ import { PREFS_COPY } from "@/components/notifications";
 import { DeleteAccount } from "@/components/auth/delete-account";
 import { getShellContext } from "@/components/shell/shell-context";
 import { createClient } from "@/lib/supabase/server";
+import { isPhoneVerificationEnabled } from "@/lib/config/services";
 import { cn } from "@/lib/utils";
 import { signOutAction } from "../perfil/actions";
 import { ThemeRow } from "./theme-row";
+import { TimeZoneRow } from "./time-zone-row";
 import { COPY } from "./copy";
 
 export const metadata = { title: COPY.title };
@@ -56,13 +59,19 @@ export default async function AjustesPage() {
   } = await supabase.auth.getUser();
 
   let identityVerified = false;
+  let timeZone: string | null = null;
+  let phoneVerified = false;
   if (user) {
+    // Lista explícita: `profiles` es pública y un `*` acá traería rol, estado de
+    // cuenta y sanciones para pintar tres filas de ajustes.
     const { data } = await supabase
       .from("profiles")
-      .select("identity_verified")
+      .select("identity_verified, timezone, phone_verified")
       .eq("id", user.id)
       .maybeSingle();
     identityVerified = Boolean(data?.identity_verified);
+    timeZone = data?.timezone ?? null;
+    phoneVerified = Boolean(data?.phone_verified);
   }
 
   const unreadBadge = shell.unread > 0 ? (shell.unread > 9 ? "9+" : String(shell.unread)) : null;
@@ -143,6 +152,22 @@ export default async function AjustesPage() {
             ) : (
               <Row href="/perfil/verificar" icon={ShieldCheck} {...COPY.rows.verify} />
             )}
+            {/* La fila del teléfono sólo existe con el gate legal abierto
+                (PHONE_VERIFICATION_ENABLED). La ruta también devuelve 404 por su
+                cuenta: ofrecer un enlace a algo que no se puede usar es peor que
+                no ofrecerlo. Ver el comentario de ajustes/telefono/page.tsx. */}
+            {isPhoneVerificationEnabled && (
+              <Row
+                href="/ajustes/telefono"
+                icon={DeviceMobile}
+                title={phoneVerified ? "Tu teléfono" : "Verificá tu teléfono"}
+                description={
+                  phoneVerified
+                    ? "Ya está verificado. Podés cambiarlo o borrarlo."
+                    : "Sumá una capa de confianza a tu cuenta."
+                }
+              />
+            )}
           </Group>
 
         </>
@@ -162,7 +187,8 @@ export default async function AjustesPage() {
 
       {/* Preferencias y legales sirven con o sin sesión. La de notificaciones
           NO: sin cuenta no hay bandeja que configurar, así que sólo aparece con
-          sesión (arriba de Tema, que es lo único que sirve anónimo). */}
+          sesión (arriba de Tema, que es lo único que sirve anónimo). La zona
+          horaria tampoco: se guarda en el perfil, y sin perfil no hay dónde. */}
       <Group title={COPY.groups.preferences}>
         {shell.user && (
           <Row
@@ -171,6 +197,7 @@ export default async function AjustesPage() {
             {...PREFS_COPY.row}
           />
         )}
+        {shell.user && <TimeZoneRow initial={timeZone} />}
         <ThemeRow />
       </Group>
 

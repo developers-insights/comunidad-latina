@@ -61,6 +61,9 @@ export { DemoSeal } from "./demo-seal";
 export { ContractStepper, ContractStatusBadge } from "./contract-stepper";
 export { ContractBreakdown as ContractBreakdownCard } from "./contract-breakdown";
 export { CreatorRequirementsCard } from "./requirements-card";
+/** Elegibilidad configurable por tenant (0064) — panel + solicitud + términos. */
+export { CreatorEligibilityChecklist } from "./eligibility-checklist";
+export { JobCodeSearch } from "./job-code-search";
 export { SocialAudience } from "./social-audience";
 export { GigListSkeleton, CreatorListSkeleton, ContractsListSkeleton } from "./skeletons";
 

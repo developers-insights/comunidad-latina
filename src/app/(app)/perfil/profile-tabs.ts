@@ -1,3 +1,4 @@
+import { DEFAULT_TIME_ZONE } from "@/lib/utils";
 import type { PostTile } from "./post-tiles";
 
 /**
@@ -65,9 +66,24 @@ export function filterTilesByKind(tiles: PostTile[], kind: "image" | "video"): P
  * Mes y año, NUNCA el día: la fecha exacta de alta es un dato de la cuenta y
  * §9 prohíbe exponer datos personales finos en el perfil público. El mes ya
  * comunica lo único que importa acá — la antigüedad como señal de confianza.
+ *
+ * ⚠️ LA ZONA NO ES OPCIONAL AUNQUE SEA UN MES. Este formateo no tenía ninguna,
+ * o sea que usaba el reloj del RUNTIME: el server de Vercel corre en UTC y el
+ * teléfono de la persona en su huso, así que alguien que se registró el 1 de
+ * marzo a las 02:00 UTC salía "marzo" en el servidor y "febrero" en el
+ * navegador de Nueva York. Mismatch de hidratación y, encima, un mes falso. Se
+ * usa la zona de quien MIRA, con la de la comunidad como piso.
  */
-export function memberSinceLabel(createdAt: string, locale: string): string | null {
+export function memberSinceLabel(
+  createdAt: string,
+  locale: string,
+  timeZone: string = DEFAULT_TIME_ZONE,
+): string | null {
   const date = new Date(createdAt);
   if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(locale, {
+    month: "long",
+    year: "numeric",
+    timeZone,
+  }).format(date);
 }

@@ -86,6 +86,7 @@ export function JobCard({ job }: { job: JobCardModel }) {
                 score={job.publisher.score}
                 level={job.publisher.level}
                 signals={job.publisher.signals}
+                profileId={job.publisher.profileId}
                 size="inline"
               />
             </div>

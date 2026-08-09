@@ -36,11 +36,24 @@ const COPY = {
     profile: "Perfil",
     message: "Mensaje",
   } as Record<string, string>,
+  readOnly: "Se resuelve desde la propia comunidad.",
 } as const;
 
 const initialState: DomainActionState = { status: "idle" };
 
-export function ScamReportItem({ report }: { report: ScamReportData }) {
+export function ScamReportItem({
+  report,
+  readOnly = false,
+}: {
+  report: ScamReportData;
+  /**
+   * Oculta Confirmar/Descartar. Igual que en el listado de avisos: la policy
+   * `scam_reports_update` (0005) exige el tenant del JWT y no tiene rama de
+   * global_admin, así que un súper admin mirando otra comunidad puede leer el
+   * reporte pero no resolverlo. Lo decide la base; acá sólo no se ofrece.
+   */
+  readOnly?: boolean;
+}) {
   const [state, formAction] = useActionState(resolveScamReport, initialState);
 
   return (
@@ -70,6 +83,9 @@ export function ScamReportItem({ report }: { report: ScamReportData }) {
         </p>
       )}
 
+      {readOnly ? (
+        <p className="mt-4 text-right text-xs text-foreground-muted">{COPY.readOnly}</p>
+      ) : (
       <form action={formAction} className="mt-4">
         <input type="hidden" name="reportId" value={report.id} />
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -84,6 +100,7 @@ export function ScamReportItem({ report }: { report: ScamReportData }) {
         </div>
         <p className="mt-2 text-right text-xs text-foreground-muted">{COPY.upholdHint}</p>
       </form>
+      )}
     </article>
   );
 }

@@ -5,12 +5,18 @@ import Link from "next/link";
 import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { registerAction, type RegisterInput } from "@/app/(auth)/actions";
 import { FormError } from "@/components/auth/form-error";
+import { suggestUsername } from "@/lib/profile/username";
+import { UsernameInput } from "@/components/auth/username-input";
 import { Button, Field, Input } from "@/components/ui";
 
 const COPY = {
-  displayName: "Tu nombre para mostrar",
-  displayNameHelp: "Así te va a ver la comunidad. Puede ser solo tu nombre de pila.",
-  displayNamePlaceholder: "Rosa Martínez",
+  displayName: "Nombre",
+  displayNamePlaceholder: "Rosa",
+  lastName: "Apellido",
+  lastNamePlaceholder: "Martínez",
+  nameHelp: "Tu apellido no se muestra: lo decidís vos después, en tu perfil.",
+  username: "Tu nombre de usuario",
+  usernameHelp: "Así te encuentran y te mencionan. Se puede cambiar después.",
   email: "Tu email",
   emailPlaceholder: "nombre@ejemplo.com",
   password: "Creá una contraseña",
@@ -71,7 +77,24 @@ export function RegisterForm({
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
 
+  /**
+   * El handle se propone a partir del nombre y el apellido MIENTRAS la persona
+   * no lo haya tocado. Sugerir en vez de generar: el campo llega escrito —que es
+   * lo que hace que no quede vacío— pero se ve, se puede borrar y es la persona
+   * la que lo acepta. En cuanto escribe algo propio, la sugerencia deja de
+   * pisarle el texto para siempre (`usernameTouched`).
+   */
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
+  const [usernameTouched, setUsernameTouched] = useState(false);
+
   const consentComplete = ageConfirmed && termsAccepted;
+
+  function retitleUsername(nextFirst: string, nextLast: string) {
+    if (usernameTouched) return;
+    setUsername(suggestUsername(`${nextFirst} ${nextLast}`.trim()));
+  }
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,7 +112,9 @@ export function RegisterForm({
 
     const form = new FormData(event.currentTarget);
     const input = {
-      displayName: String(form.get("displayName") ?? ""),
+      displayName: firstName,
+      lastName,
+      username,
       email: String(form.get("email") ?? ""),
       password: String(form.get("password") ?? ""),
       ageConfirmed,
@@ -104,8 +129,10 @@ export function RegisterForm({
         onSuccess(input.email.trim());
         return;
       }
-      setFieldErrors(result.fieldErrors ?? {});
+      const errors = result.fieldErrors ?? {};
+      setFieldErrors(errors);
       setFormError(result.formError ?? null);
+      focusFirstInvalid(errors);
     });
   }
 
@@ -119,20 +146,79 @@ export function RegisterForm({
     <form method="post" onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
       <FormError>{formError}</FormError>
 
+      {/* Nombre y apellido en la misma fila: son un solo gesto mental y en
+          columnas separadas se leen como un solo paso, no como dos campos más.
+          Dos columnas ya desde 375px — con etiquetas de una palabra, entran. */}
+      <div className="grid grid-cols-2 gap-3">
+        <Field
+          htmlFor="register-name"
+          label={COPY.displayName}
+          error={fieldErrors.displayName}
+        >
+          <Input
+            id="register-name"
+            name="displayName"
+            type="text"
+            autoComplete="given-name"
+            placeholder={COPY.displayNamePlaceholder}
+            value={firstName}
+            onChange={(e) => {
+              setFirstName(e.target.value);
+              retitleUsername(e.target.value, lastName);
+            }}
+            aria-invalid={fieldErrors.displayName ? true : undefined}
+            aria-describedby={fieldErrors.displayName ? "register-name-error" : undefined}
+          />
+        </Field>
+
+        <Field
+          htmlFor="register-lastname"
+          label={COPY.lastName}
+          error={fieldErrors.lastName}
+        >
+          <Input
+            id="register-lastname"
+            name="lastName"
+            type="text"
+            autoComplete="family-name"
+            placeholder={COPY.lastNamePlaceholder}
+            value={lastName}
+            onChange={(e) => {
+              setLastName(e.target.value);
+              retitleUsername(firstName, e.target.value);
+            }}
+            aria-invalid={fieldErrors.lastName ? true : undefined}
+            aria-describedby={fieldErrors.lastName ? "register-lastname-error" : undefined}
+          />
+        </Field>
+      </div>
+
+      {/* La promesa sobre el apellido va acá, bajo los dos campos, y no dentro
+          de uno: es lo primero que alguien se pregunta al ver que le piden el
+          apellido, y responderlo en el momento evita el abandono. */}
+      {!fieldErrors.displayName && !fieldErrors.lastName && (
+        <p className="-mt-2 text-sm text-foreground-muted">{COPY.nameHelp}</p>
+      )}
+
       <Field
-        htmlFor="register-name"
-        label={COPY.displayName}
-        help={COPY.displayNameHelp}
-        error={fieldErrors.displayName}
+        htmlFor="register-username"
+        label={COPY.username}
+        help={COPY.usernameHelp}
+        error={fieldErrors.username}
       >
-        <Input
-          id="register-name"
-          name="displayName"
-          type="text"
-          autoComplete="name"
-          placeholder={COPY.displayNamePlaceholder}
-          aria-invalid={fieldErrors.displayName ? true : undefined}
-          aria-describedby={fieldErrors.displayName ? "register-name-error" : undefined}
+        <UsernameInput
+          id="register-username"
+          name="username"
+          value={username}
+          onChange={(next) => {
+            setUsernameTouched(true);
+            setUsername(next);
+            if (fieldErrors.username) setFieldErrors((prev) => omit(prev, "username"));
+          }}
+          invalid={Boolean(fieldErrors.username)}
+          describedBy={
+            fieldErrors.username ? "register-username-error" : "register-username-help"
+          }
         />
       </Field>
 
@@ -252,6 +338,33 @@ export function RegisterForm({
       )}
     </form>
   );
+}
+
+/** El id del control de cada campo, para poder enfocarlo cuando falla. */
+const FIELD_CONTROL_ID: Record<string, string> = {
+  displayName: "register-name",
+  lastName: "register-lastname",
+  username: "register-username",
+  email: "register-email",
+  password: "register-password",
+};
+
+/**
+ * Enfoca el primer campo con error, en el ORDEN DEL FORMULARIO.
+ *
+ * El caso que esto arregla es concreto: el handle ya tomado sólo se descubre en
+ * el servidor, y el error aparece a media pantalla de scroll. Sin esto, quien
+ * usa lector de pantalla no se entera de que hubo un error —el foco sigue en el
+ * botón— y quien mira tiene que buscar dónde está el subrayado rojo.
+ */
+function focusFirstInvalid(errors: Record<string, string>): void {
+  for (const field of Object.keys(FIELD_CONTROL_ID)) {
+    if (!errors[field]) continue;
+    const control = document.getElementById(FIELD_CONTROL_ID[field]);
+    control?.focus();
+    control?.scrollIntoView({ block: "center", behavior: "smooth" });
+    return;
+  }
 }
 
 /** Quita una clave de un mapa de errores sin mutar el original. */

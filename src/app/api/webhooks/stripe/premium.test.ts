@@ -129,6 +129,7 @@ function checkoutEvent(sessionOverrides: Record<string, unknown> = {}) {
         id: "cs_test_premium_1",
         payment_status: "paid",
         amount_total: 900,
+        currency: "usd",
         customer: "cus_1",
         subscription: "sub_premium_1",
         metadata: {
@@ -136,6 +137,11 @@ function checkoutEvent(sessionOverrides: Record<string, unknown> = {}) {
           tenant_id: TENANT,
           listing_id: LISTING,
           owner_id: OWNER,
+          // Lo PACTADO al abrir el Checkout: lo escribe `activarPremiumAviso`
+          // con el precio que leyó de `tenant_prices`. Es contra ESTE número
+          // que el webhook verifica, no contra la constante del código.
+          price_cents: "900",
+          price_currency: "USD",
         },
         ...sessionOverrides,
       },
@@ -301,6 +307,159 @@ describe("premium — correlación (fiscal R3)", () => {
   });
 });
 
+/* ------------- 2 bis. El precio LO PONE LA COMUNIDAD (0072/0073) ---------- */
+
+/**
+ * EL BUG QUE ESTOS TESTS FIJAN
+ * En el alta la fila de `listing_premiums` todavía no existe —la crea este mismo
+ * webhook—, así que el "precio esperado" salía siempre de la constante del
+ * código (900). Con una comunidad cobrando USD 15 el Checkout cobraba 1500, la
+ * verificación esperaba 900 y el premium NO se concedía: plata cobrada, aviso
+ * sin premium. Ahora se compara contra lo que se pactó al abrir el Checkout, que
+ * viaja firmado en la metadata de la Session.
+ */
+describe("premium — precio por comunidad", () => {
+  /**
+   * Todo lo que necesita el alta feliz, sin fila previa. El prefijo `use` no es
+   * capricho: `react-hooks/rules-of-hooks` toma cualquier llamada a `useAdmin`
+   * desde una función nombrada sin ese prefijo como un hook mal ubicado.
+   */
+  function useAltaLimpia() {
+    return useAdmin({
+      payment_events: { insert: { error: null } },
+      listings: { select: { data: LISTING_ROW, error: null } },
+      listing_premiums: { select: { data: null, error: null }, upsert: { error: null } },
+    });
+  }
+
+  /** Todo lo que console.error escribió, aplanado, para poder buscar dentro. */
+  function loggedErrors() {
+    return errorSpy.mock.calls.map((call: unknown[]) => call.join(" ")).join("\n");
+  }
+
+  it("un alta al precio EDITADO por la comunidad (USD 15) concede el premium", async () => {
+    const stub = useAltaLimpia();
+
+    const res = await POST(
+      signedRequest(
+        checkoutEvent({
+          amount_total: 1_500,
+          currency: "usd",
+          metadata: {
+            kind: "listing_premium",
+            tenant_id: TENANT,
+            listing_id: LISTING,
+            owner_id: OWNER,
+            price_cents: "1500",
+            price_currency: "USD",
+          },
+        }),
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    const upserts = callsTo(stub, "listing_premiums", "upsert");
+    expect(upserts).toHaveLength(1);
+    // Y lo cobrado queda escrito en la fila: la pantalla del dueño no puede
+    // mostrar el default de la columna cuando se pagaron USD 15.
+    expect(upserts[0].args[0]).toMatchObject({
+      status: "active",
+      price_cents: 1_500,
+      currency: "usd",
+    });
+    expect(mocks.createNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("NO concede si el monto cobrado no es el PACTADO en esa Session", async () => {
+    const stub = useAltaLimpia();
+
+    // Se pactaron 900 y se cobraron 1500: puede ser un Checkout manipulado o un
+    // evento cruzado. En cualquier caso no se concede.
+    const res = await POST(signedRequest(checkoutEvent({ amount_total: 1_500 })));
+
+    expect(res.status).toBe(200);
+    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(loggedErrors()).toContain("1500");
+  });
+
+  it("sin precio pactado en la metadata NO concede, y deja rastro diagnosticable", async () => {
+    const stub = useAltaLimpia();
+
+    const res = await POST(
+      signedRequest(
+        checkoutEvent({
+          amount_total: 1_500,
+          metadata: {
+            kind: "listing_premium",
+            tenant_id: TENANT,
+            listing_id: LISTING,
+            owner_id: OWNER,
+          },
+        }),
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    // Nada de fallar en silencio: con el log + el payload que quedó en
+    // `payment_events` se puede reconciliar sin abrir el Dashboard a ciegas.
+    const logged = loggedErrors();
+    expect(logged).toContain("cs_test_premium_1");
+    expect(logged).toContain(LISTING);
+    expect(logged).toContain("1500");
+  });
+
+  it("una metadata de precio que no parsea tampoco concede", async () => {
+    const stub = useAltaLimpia();
+
+    const res = await POST(
+      signedRequest(
+        checkoutEvent({
+          metadata: {
+            kind: "listing_premium",
+            tenant_id: TENANT,
+            listing_id: LISTING,
+            owner_id: OWNER,
+            price_cents: "gratis",
+            price_currency: "USD",
+          },
+        }),
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("NO concede si la MONEDA cobrada no es la pactada, aunque el número coincida", async () => {
+    const stub = useAltaLimpia();
+
+    // 1500 ARS y 1500 USD dan el mismo entero de centavos y no son el mismo
+    // cobro: comparar sólo centavos entre monedas distintas no verifica nada.
+    const res = await POST(
+      signedRequest(
+        checkoutEvent({
+          amount_total: 1_500,
+          currency: "ars",
+          metadata: {
+            kind: "listing_premium",
+            tenant_id: TENANT,
+            listing_id: LISTING,
+            owner_id: OWNER,
+            price_cents: "1500",
+            price_currency: "USD",
+          },
+        }),
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(loggedErrors()).toContain("ars");
+  });
+});
+
 /* ------------------------------ 3. Idempotencia --------------------------- */
 
 describe("premium — idempotencia", () => {
@@ -337,6 +496,105 @@ describe("premium — idempotencia", () => {
 
     expect(res.status).toBe(200);
     expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(1);
+  });
+});
+
+/* ------------- 5. bis. Session ya vinculada a OTRO aviso ------------------ */
+
+describe("premium — una session no puede encender dos avisos", () => {
+  /**
+   * `listing_premiums_checkout_session_uniq` y `..._subscription_uniq` (0054)
+   * rebotan cuando la session/suscripción del evento YA está en la fila de otro
+   * aviso. El upsert va con `onConflict: listing_id`, así que ese choque NO lo
+   * resuelve solo: vuelve como 23505.
+   *
+   * La decisión: no conceder + log + 200. Dejarlo lanzar daba un 500 y Stripe
+   * reintentaba tres días un evento que nunca iba a poder aplicarse.
+   */
+  it("un 23505 del índice de checkout session NO se concede, pero responde 200 (no reintentar)", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      listings: { select: { data: LISTING_ROW, error: null } },
+      listing_premiums: {
+        select: { data: null, error: null },
+        upsert: {
+          error: {
+            code: "23505",
+            message: "duplicate key value violates unique constraint",
+            details:
+              'Key (stripe_checkout_session_id)=(cs_test_premium_1) already exists in listing_premiums_checkout_session_uniq.',
+          },
+        },
+      },
+    });
+
+    const res = await POST(signedRequest(checkoutEvent()));
+
+    // 200: reintentar no lo arregla, la session va a seguir vinculada al otro aviso.
+    expect(res.status).toBe(200);
+    // Y sobre todo: NO se concedió un segundo premium con un solo pago.
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+    expect(callsTo(stub, "audit_log", "insert")).toHaveLength(0);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("un 23505 del índice de suscripción se trata igual", async () => {
+    useAdmin({
+      payment_events: { insert: { error: null } },
+      listings: { select: { data: LISTING_ROW, error: null } },
+      listing_premiums: {
+        select: { data: null, error: null },
+        upsert: {
+          error: {
+            code: "23505",
+            message: "duplicate key value violates unique constraint",
+            details: "Key already exists in listing_premiums_subscription_uniq.",
+          },
+        },
+      },
+    });
+
+    const res = await POST(signedRequest(checkoutEvent()));
+
+    expect(res.status).toBe(200);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
+
+  it("cualquier OTRO error de escritura sigue dando 500 para que Stripe reintente", async () => {
+    // Un fallo transitorio SÍ se arregla reintentando: eso no se traga.
+    useAdmin({
+      payment_events: { insert: { error: null } },
+      listings: { select: { data: LISTING_ROW, error: null } },
+      listing_premiums: {
+        select: { data: null, error: null },
+        upsert: { error: { code: "57014", message: "canceling statement due to timeout" } },
+      },
+    });
+
+    const res = await POST(signedRequest(checkoutEvent()));
+
+    expect(res.status).toBe(500);
+  });
+
+  it("un 23505 que NO es de esos dos índices tampoco se traga", async () => {
+    useAdmin({
+      payment_events: { insert: { error: null } },
+      listings: { select: { data: LISTING_ROW, error: null } },
+      listing_premiums: {
+        select: { data: null, error: null },
+        upsert: {
+          error: {
+            code: "23505",
+            message: "duplicate key value violates unique constraint",
+            details: "Key (id)=(...) already exists in listing_premiums_pkey.",
+          },
+        },
+      },
+    });
+
+    const res = await POST(signedRequest(checkoutEvent()));
+
+    expect(res.status).toBe(500);
   });
 });
 
@@ -445,14 +703,19 @@ describe("premium — aislamiento de los otros productos", () => {
   it("un evento de membresía de tienda NO lo toma el flujo de premium", async () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
+      // La tienda es un `listing kind='business'`, y la membresía ahora exige lo
+      // mismo que el premium sobre el aviso: que exista, sea del tenant y del
+      // dueño de la metadata. Sin esta fila el test pasaría por el motivo
+      // equivocado (la membresía rechazaría por correlación, no por aislamiento).
+      listings: { select: { data: LISTING_ROW, error: null } },
       store_memberships: { select: { data: null, error: null }, upsert: { error: null } },
       listing_premiums: { upsert: { error: null }, update: { data: null, error: null } },
     });
 
     // Metadata y monto REALES de una tienda (USD 10, `store_id` en vez de
-    // `listing_id`): si se le manda el fixture de premium con otro `kind`, la
-    // membresía lo rechaza por correlación y el test pasaría por el motivo
-    // equivocado.
+    // `listing_id`, y el precio pactado que escribe `activarMembresiaTienda`):
+    // si se le manda el fixture de premium con otro `kind`, la membresía lo
+    // rechaza por correlación y el test pasaría por el motivo equivocado.
     await POST(
       signedRequest(
         checkoutEvent({
@@ -462,6 +725,8 @@ describe("premium — aislamiento de los otros productos", () => {
             tenant_id: TENANT,
             store_id: LISTING,
             owner_id: OWNER,
+            price_cents: "1000",
+            price_currency: "USD",
           },
         }),
       ),

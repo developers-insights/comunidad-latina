@@ -15,7 +15,8 @@ import {
 import { CommentItem } from "@/components/feed/comment-item";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { formatDate, timeAgo } from "@/lib/utils";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
+import { timeAgo } from "@/lib/utils";
 import {
   POST_COLUMNS,
   authorViewOf,
@@ -134,6 +135,10 @@ export default async function PostDetailPage({
   const promoEndsAt = promoResult.data?.ends_at ?? null;
   const isPromoted = Boolean(promoEndsAt);
   const isAuthor = Boolean(viewerId && post.author_id === viewerId);
+
+  // "Tu campaña llega hasta el …": es plata, y el día que se lee tiene que ser
+  // el día del reloj de quien la pagó, no el de la costa este por decreto.
+  const formatDate = await getViewerFormatDate();
 
   const postModel = toPostCardModel(post, authors, likedIds, now, {
     entity,

@@ -9,11 +9,16 @@ import { cn } from "@/lib/utils";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { CreateMenu, type QuickPostKind } from "@/components/shell/create-menu";
 import { readVideoDurationSeconds } from "@/lib/media/measure-video";
+import { sampleVideoLumaFrames } from "@/lib/media/video-frames";
 import {
   DEFAULT_VIDEO_CATEGORY,
   checkVideoDuration,
   type VideoCategory,
 } from "@/lib/media/video-policy";
+import {
+  EMPTY_DECLARATION_VALUE,
+  type DeclarationValue,
+} from "@/components/integrity/originality-fields";
 import {
   createPostAction,
   prepareMediaUploadAction,
@@ -112,6 +117,14 @@ export function PostComposer({
   /** Categoría de Videos Cortos (0046). Opcional: arranca en el default. */
   const [videoCategory, setVideoCategory] = useState<VideoCategory>(
     DEFAULT_VIDEO_CATEGORY,
+  );
+  /**
+   * Declaración de originalidad y licencia (0061). Arranca vacía y vacía NO
+   * significa "es propio" — significa "no dijo nada", que es lo que el pipeline
+   * de Content Integrity va a leer si la persona no abre el bloque.
+   */
+  const [declaration, setDeclaration] = useState<DeclarationValue>(
+    EMPTY_DECLARATION_VALUE,
   );
   /** Midiendo la duración del archivo recién elegido (antes de subir nada). */
   const [measuringVideo, setMeasuringVideo] = useState(false);
@@ -301,6 +314,9 @@ export function PostComposer({
     setComposeMode(null);
     setPollEnabled(false);
     setVideoCategory(DEFAULT_VIDEO_CATEGORY);
+    // La declaración es de ESTA publicación: arrastrarla a la siguiente pondría
+    // una afirmación en boca de alguien que no la hizo sobre otras fotos.
+    setDeclaration(EMPTY_DECLARATION_VALUE);
     setMedia((current) => {
       for (const item of current) URL.revokeObjectURL(item.preview);
       return [];
@@ -341,6 +357,20 @@ export function PostComposer({
     startTransition(async () => {
       // ---- 1) Video primero: subida directa al bucket con progreso ---------
       let videoPath: string | null = null;
+      /**
+       * Fotogramas para la huella perceptual del video (Content Integrity).
+       *
+       * Se muestrean ACÁ y no en el servidor porque el video se sube DIRECTO al
+       * bucket: el servidor nunca lo tiene abierto, y sacarle fotogramas allá
+       * pediría ffmpeg (~70 MB de binario nativo) en una función serverless. El
+       * navegador ya tiene el decodificador y le sale gratis.
+       *
+       * Son 4 matrices de 32×32 en gris: ~4 KB en el FormData, nada al lado del
+       * video. Si el muestreo falla (códec raro, archivo corrupto) vuelve vacío
+       * y el pipeline lo lee como "no se pudo analizar" → revisión humana. Nunca
+       * frena la publicación.
+       */
+      let videoFrames: number[][] = [];
       if (video) {
         const prepared = await prepareMediaUploadAction();
         if (!prepared.ok) {
@@ -368,7 +398,14 @@ export function PostComposer({
         const extension = VIDEO_TYPES[video.file.type];
         videoPath = `${prepared.tenantId}/${prepared.userId}/video-${crypto.randomUUID()}.${extension}`;
         setUploadPct(0);
-        const uploaded = await uploadVideoWithProgress(video.file, videoPath, setUploadPct);
+        // El muestreo va en paralelo con la subida: son dos trabajos
+        // independientes sobre el mismo archivo y encadenarlos le sumaría un
+        // par de segundos a la espera por nada.
+        const [uploaded, frames] = await Promise.all([
+          uploadVideoWithProgress(video.file, videoPath, setUploadPct),
+          sampleVideoLumaFrames(video.file),
+        ]);
+        videoFrames = frames;
         setUploadPct(null);
         if (!uploaded) {
           toast({
@@ -399,11 +436,34 @@ export function PostComposer({
           formData.set("durationSeconds", String(video.durationSeconds));
         }
         formData.set("videoCategory", videoCategory);
+        // Sólo si hay algo que mandar: un array vacío y la ausencia del campo
+        // significan lo mismo para el servidor ("no se pudo analizar"), y así
+        // no viaja un `"[]"` que aparenta ser un análisis hecho.
+        if (videoFrames.length > 0) {
+          formData.set("videoFrames", JSON.stringify(videoFrames));
+        }
       }
       formData.set(
         "mediaOrder",
         JSON.stringify(media.map((item) => (item.kind === "photo" ? "photo" : "video"))),
       );
+
+      /**
+       * DECLARACIÓN DE ORIGINALIDAD Y LICENCIA (0061) — sólo si hay archivo.
+       *
+       * `content_assets` existe por archivo, así que en una pregunta o un texto
+       * no hay nada que declarar y mandar los campos igual sería adjuntar una
+       * afirmación sobre un activo inexistente. Cuando sí hay, viajan los cuatro
+       * incluso vacíos: la ausencia total y "no aclaró" se leen igual en el
+       * servidor (`normalizeDeclaration`), pero mandarlos deja el registro
+       * explícito de que se preguntó.
+       */
+      if (media.length > 0) {
+        formData.set("originalityDeclared", String(declaration.originalityDeclared));
+        formData.set("licenseKind", declaration.licenseKind);
+        formData.set("licenseStatement", declaration.licenseStatement);
+        formData.set("licenseUrl", declaration.licenseUrl);
+      }
 
       const result = await createPostAction(formData);
 
@@ -593,6 +653,8 @@ export function PostComposer({
         onPollChange={setPollEnabled}
         videoCategory={videoCategory}
         onVideoCategoryChange={setVideoCategory}
+        declaration={declaration}
+        onDeclarationChange={setDeclaration}
         previewId={previewId}
         uploadPct={uploadPct}
         measuringVideo={measuringVideo}

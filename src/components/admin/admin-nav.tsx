@@ -8,6 +8,7 @@ import {
   ChartLineUp,
   GlobeHemisphereWest,
   ShieldCheck,
+  Star,
   Storefront,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
@@ -54,6 +55,15 @@ const ITEMS: NavItem[] = [
     // domain_admin+: no es moderación de contenido, es operar una sección de la
     // comunidad — y su detalle muestra datos de personas (ver admin/empleos).
     icon: <Briefcase size={18} aria-hidden="true" />,
+    minRank: 2,
+  },
+  {
+    href: "/admin/creadores",
+    label: "Creadores",
+    // domain_admin+: define quién puede COBRAR en la comunidad. No es
+    // moderación de contenido; es una decisión de negocio con plata detrás, y
+    // la RLS de creator_eligibility_config (0064) exige el mismo rango.
+    icon: <Star size={18} aria-hidden="true" />,
     minRank: 2,
   },
   {

@@ -22,19 +22,23 @@ export const DEFAULT_CURRENCY = "USD";
  * Eso rompe dos cosas a la vez — un mismatch de hidratación (React #418) y una
  * fecha que le miente a la persona.
  *
- * ⚠️ SUPUESTO DE PRODUCTO, NO UNA VERDAD TÉCNICA — A CONFIRMAR
- * -----------------------------------------------------------
+ * ES EL PISO, YA NO EL TECHO (2026-08-08)
+ * ---------------------------------------
  * El público está repartido por varias ciudades de EE.UU. (NY, NJ, Miami,
- * Houston, Chicago, Los Ángeles), o sea VARIAS zonas horarias. Elegir una es
- * elegir a quién se le muestra la hora correcta. Va `America/New_York` porque
- * es donde está el núcleo de la comunidad y porque era la que ya había elegido
- * el panel admin — no porque sea neutral.
+ * Houston, Chicago, Los Ángeles), o sea VARIAS zonas horarias. Elegir una sola
+ * era elegir a quién se le muestra la hora correcta: alguien en Los Ángeles
+ * publicando a las 22:00 veía su publicación fechada AL DÍA SIGUIENTE.
  *
- * Lo que esto NO rompe: las fechas quedan estables y coherentes para todos. Lo
- * que sí implica: alguien en Los Ángeles publicando 22:00 hora local ve su
- * publicación fechada al día siguiente. Si eso pesa, la salida NO es volver a
- * la zona del runtime (eso reintroduce el bug) sino guardar la zona en el
- * perfil y pasarla por `options.timeZone`, que ya está soportado abajo.
+ * Eso ya tiene salida — la que este mismo comentario anticipaba: la zona vive en
+ * `profiles.timezone` (migración 0067) y baja por `options.timeZone`. Quien
+ * mira formatea en SU zona:
+ *   · servidor  → `getViewerTimeZone()` (lib/time/viewer-zone.ts)
+ *   · cliente   → `useViewerTimeZone()` (components/time/viewer-time-zone.tsx)
+ *
+ * `DEFAULT_TIME_ZONE` queda como lo que siempre debió ser: el valor para quien
+ * no eligió nada y para quien mira sin cuenta. Lo que NO es salida —ni antes ni
+ * ahora— es dejar el formateo sin zona: eso devuelve el reloj del runtime y
+ * reintroduce el bug de hidratación.
  */
 export const DEFAULT_TIME_ZONE = "America/New_York";
 
@@ -61,7 +65,11 @@ export interface FormatDateOptions {
   /** short: 5/3/26 · medium: 5 mar 2026 · long: 5 de marzo de 2026 */
   style?: "short" | "medium" | "long";
   withTime?: boolean;
-  /** Zona explícita. Por default, la de la comunidad (`DEFAULT_TIME_ZONE`). */
+  /**
+   * Zona del INSTANTE. Por default, la de la comunidad (`DEFAULT_TIME_ZONE`).
+   * Se ignora para fechas sin hora (`YYYY-MM-DD`), que siempre salen en UTC —
+   * ver el comentario largo de `formatDate`.
+   */
   timeZone?: string;
 }
 
@@ -84,8 +92,16 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
  *
  * Por eso una fecha sin hora se formatea en UTC —que es la única zona donde
  * vuelve a salir el mismo día que entró— y un instante completo se formatea en
- * la zona de la comunidad. Quien pasa `timeZone` explícito manda por encima de
- * las dos reglas.
+ * la zona de quien mira (o en la de la comunidad, si no eligió ninguna).
+ *
+ * ⚠️ EL `timeZone` EXPLÍCITO NO PISA LA REGLA DE LAS FECHAS SIN HORA. Antes sí,
+ * y con la zona por usuario (0067) eso se volvió una trampa: pasar la zona del
+ * lector a un `checked_at: "2026-07-06"` le restaría un día a alguien en Los
+ * Ángeles y la app publicaría un dato falso al pie de un trámite oficial. Una
+ * fecha sin hora no es un instante, así que NINGUNA zona de lector le aplica —
+ * no hay hora que reubicar. Quien de verdad necesita otra zona para un día
+ * calendario no está formateando una fecha: está haciendo aritmética, y eso no
+ * vive acá.
  */
 export function formatDate(date: Date | string | number, options: FormatDateOptions = {}): string {
   const { locale = DEFAULT_LOCALE, style = "medium", withTime = false } = options;
@@ -93,7 +109,7 @@ export function formatDate(date: Date | string | number, options: FormatDateOpti
   if (Number.isNaN(value.getTime())) return "";
 
   const isDateOnly = typeof date === "string" && DATE_ONLY.test(date.trim());
-  const timeZone = options.timeZone ?? (isDateOnly ? "UTC" : DEFAULT_TIME_ZONE);
+  const timeZone = isDateOnly ? "UTC" : (options.timeZone ?? DEFAULT_TIME_ZONE);
 
   return new Intl.DateTimeFormat(locale, {
     dateStyle: style,

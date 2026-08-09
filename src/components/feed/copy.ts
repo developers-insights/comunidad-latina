@@ -144,6 +144,34 @@ export const COPY = {
         if (hasVideo) parts.push("1 video");
         return parts.join(" · ");
       },
+
+      /**
+       * DECLARACIÓN DE ORIGINALIDAD Y LICENCIAS, plegada (requisito del pliego).
+       *
+       * El encabezado nombra LO QUE LA PERSONA ACABA DE SUBIR, no "el material":
+       * en un composer donde la foto está a diez píxeles de distancia, decirle
+       * "material" a esa foto la vuelve un trámite ajeno. Mismo criterio que
+       * `mediaPlaceholder`, que ya cambia según lo elegido.
+       *
+       * La línea de abajo dice DOS cosas y en este orden: que es opcional
+       * (primero, porque es lo que decide si vale la pena abrirlo) y para qué
+       * sirve. Sin eso, un renglón nuevo entre la foto y Publicar se lee como un
+       * requisito más, y la respuesta a un requisito que no se entiende es
+       * marcarlo sin leer — que es exactamente lo que hace que una declaración
+       * no valga nada.
+       */
+      declaration: {
+        title: (photos: number, hasVideo: boolean): string => {
+          if (hasVideo && photos > 0) return "Sobre lo que subiste";
+          if (hasVideo) return "Sobre este video";
+          if (photos > 1) return "Sobre estas fotos";
+          return "Sobre esta foto";
+        },
+        /** Cerrado y sin declarar: por qué abrirlo, y que se puede no abrirlo. */
+        hint: "Opcional. Nos ayuda a resolver rápido si alguien lo reclama como suyo.",
+        /** Abierto: la salida digna se dice adentro, no solo en el selector. */
+        intro: "Nada de esto es obligatorio: podés publicar igual.",
+      },
     },
 
     /**

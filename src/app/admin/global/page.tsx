@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge, BezelCard } from "@/components/ui";
 import { CreateTenantForm } from "@/components/admin/create-tenant-form";
 import { BroadcastForm, type BroadcastTenantOption } from "@/components/admin/broadcast-form";
@@ -23,7 +24,10 @@ const COPY = {
     members: "Miembros",
     listings: "Avisos",
     status: "Estado",
+    open: "Ver",
   },
+  openContent: "Ver contenido",
+  openDomains: "Ver dominios",
   statusLabel: {
     active: "Activa",
     paused: "Pausada",
@@ -41,7 +45,7 @@ export default async function GlobalPage() {
       .from("tenants")
       .select("id, name, slug, status, created_at")
       .order("created_at", { ascending: true }),
-    supabase.from("tenant_domains").select("tenant_id, domain, is_primary"),
+    supabase.from("tenant_domains").select("tenant_id, domain, is_primary, status"),
   ]);
 
   const tenantRows = tenants ?? [];
@@ -69,8 +73,15 @@ export default async function GlobalPage() {
   );
   const statsById = new Map(stats.map((s) => [s.id, s]));
 
+  /**
+   * Solo dominios ACTIVOS. Un dominio suspendido o archivado no resuelve
+   * (migración 0060), así que mostrarlo acá como "el dominio de esta comunidad"
+   * sería afirmar que el sitio está en el aire cuando no lo está. Si no queda
+   * ninguno activo, la celda dice "—" y el detalle está en Dominios.
+   */
   const primaryDomain = new Map<string, string>();
   for (const row of domains ?? []) {
+    if (row.status !== "active") continue;
     if (row.is_primary || !primaryDomain.has(row.tenant_id)) {
       primaryDomain.set(row.tenant_id, row.domain);
     }
@@ -112,6 +123,9 @@ export default async function GlobalPage() {
                   <th scope="col" className="px-4 py-2.5 font-medium">
                     {COPY.table.status}
                   </th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium">
+                    {COPY.table.open}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
@@ -138,6 +152,24 @@ export default async function GlobalPage() {
                         <Badge variant={tenant.status === "active" ? "success" : "neutral"}>
                           {COPY.statusLabel[tenant.status] ?? tenant.status}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        {/* Los conteos de esta tabla ahora tienen a dónde llevar:
+                            el listado navegable y la gestión del dominio. */}
+                        <div className="flex justify-end gap-1">
+                          <Link
+                            href={`/admin/global/contenido?comunidad=${tenant.id}`}
+                            className="flex min-h-11 items-center rounded-md px-2.5 text-xs font-medium text-foreground-secondary transition-colors duration-(--duration-fast) hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+                          >
+                            {COPY.openContent}
+                          </Link>
+                          <Link
+                            href="/admin/global/dominios"
+                            className="flex min-h-11 items-center rounded-md px-2.5 text-xs font-medium text-foreground-secondary transition-colors duration-(--duration-fast) hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+                          >
+                            {COPY.openDomains}
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );

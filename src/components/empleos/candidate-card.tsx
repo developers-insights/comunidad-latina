@@ -199,6 +199,10 @@ export function CandidateCard({ candidate, trustSignals }: CandidateCardProps) {
                 score={profile.trust.score}
                 level={toTrustLevel(profile.trust.level)}
                 signals={trustSignals}
+                // Regla 1 de esta tarjeta: sin consentimiento el id ya vino
+                // null desde el server (`fetchJobCandidates`), así que esto se
+                // apaga solo — no hace falta un segundo candado acá.
+                profileId={candidate.applicantId}
                 size="inline"
               />
             )}

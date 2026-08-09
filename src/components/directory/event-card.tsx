@@ -14,6 +14,8 @@ export interface EventPublisherTrust {
   score: number;
   level: TrustLevel;
   signals: TrustSignal[];
+  /** Perfil del organizador — la hoja del Trust Score lo usa para "Ver perfil". */
+  profileId: string;
 }
 
 export interface EventCardModel {
@@ -103,6 +105,7 @@ export function EventCard({ event }: { event: EventCardModel }) {
                 score={event.publisherTrust.score}
                 level={event.publisherTrust.level}
                 signals={event.publisherTrust.signals}
+                profileId={event.publisherTrust.profileId}
                 size="inline"
               />
             </div>

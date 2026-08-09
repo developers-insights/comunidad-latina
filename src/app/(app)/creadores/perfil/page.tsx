@@ -79,12 +79,24 @@ export default async function MiPerfilCreadorPage() {
         {/* Acceso directo a las colaboraciones propias desde el perfil (pedido del
             cliente: que cada quien vea lo suyo desde su perfil). La vista destino
             ya filtra por la sesión y respeta RLS — no expone lo de terceros. */}
-        <Link
-          href="/creadores/colaboraciones"
-          className={buttonVariants({ variant: "secondary", size: "sm" })}
-        >
-          {COPY.contractsList.title}
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {/* La solicitud vive en su propia pantalla porque ahí se explica, uno
+              por uno, qué requisito falta y cuánto (los umbrales los fija cada
+              comunidad desde el panel — 0064). Desde acá se llega, si no, nadie
+              la encontraría. */}
+          <Link
+            href="/creadores/solicitud"
+            className={buttonVariants({ variant: "primary", size: "sm" })}
+          >
+            Quiero recibir trabajos
+          </Link>
+          <Link
+            href="/creadores/colaboraciones"
+            className={buttonVariants({ variant: "secondary", size: "sm" })}
+          >
+            {COPY.contractsList.title}
+          </Link>
+        </div>
       </header>
 
       {/* Arriba del formulario a propósito: es lo primero que alguien quiere

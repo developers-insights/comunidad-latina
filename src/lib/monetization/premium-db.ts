@@ -38,6 +38,10 @@ export interface ListingPremiumUpsert {
   listing_id: string;
   owner_id: string;
   status: string;
+  /** Lo que se cobró de verdad (CHECK `> 0` en 0054), no el default de la columna. */
+  price_cents: number;
+  /** ISO 4217 en MINÚSCULAS, como la guarda la columna (default 'usd'). */
+  currency: string;
   cancel_at_period_end: boolean;
   stripe_subscription_id: string | null;
   stripe_customer_id: string | null;
@@ -59,6 +63,20 @@ export interface ListingPremiumOwnerRef {
   tenant_id: string;
   owner_id: string;
   listing_id: string;
+}
+
+/**
+ * El error de PostgREST tal como lo necesita quien llama.
+ *
+ * `message`/`details` no son adorno: `code` sola no distingue CUÁL unique índice
+ * rebotó, y `listing_premiums` tiene tres (listing_id, subscription, checkout
+ * session). El handler decide muy distinto según cuál sea — ver
+ * `activateFromCheckout`.
+ */
+export interface DbError {
+  code?: string;
+  message?: string;
+  details?: string;
 }
 
 const TABLE = "listing_premiums";
@@ -96,7 +114,7 @@ export async function selectPremiumByListing(
 export async function upsertPremium(
   admin: unknown,
   values: ListingPremiumUpsert,
-): Promise<{ error: { code?: string } | null }> {
+): Promise<{ error: DbError | null }> {
   const { error } = await untyped(admin)
     .from(TABLE)
     .upsert(values, { onConflict: "listing_id" });

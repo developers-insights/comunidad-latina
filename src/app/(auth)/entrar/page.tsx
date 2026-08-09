@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getAuthUserId } from "@/lib/supabase/server";
 import { safeInternalPath } from "@/lib/url/safe-href";
 import { LoginForm } from "@/components/auth/login-form";
+import { availableOAuthProviders } from "../oauth-actions";
 
 export const metadata = { title: "Entrar" };
 
@@ -24,5 +25,10 @@ export default async function EntrarPage({
   const userId = await getAuthUserId();
   if (userId) redirect(next);
 
-  return <LoginForm next={next} urlError={error} />;
+  // Los proveedores se resuelven en el SERVIDOR: el flag sale de env vars que no
+  // están en el bundle del cliente. Sin credenciales el array viene vacío y el
+  // bloque de botones no se dibuja (degradación elegante, §7).
+  const providers = await availableOAuthProviders();
+
+  return <LoginForm next={next} urlError={error} oauthProviders={providers} />;
 }

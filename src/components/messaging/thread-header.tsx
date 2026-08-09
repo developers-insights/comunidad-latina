@@ -9,11 +9,10 @@ import { Avatar, BottomSheet, Button, Dialog, Textarea } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import {
   ReportScamButton,
-  TrustScoreBadge,
-  TrustScoreSheet,
   type TrustLevel,
   type TrustSignal,
 } from "@/components/trust";
+import { PublisherTrust } from "@/components/listings";
 import { reportScamAction } from "@/app/(app)/mensajes/actions";
 import { blockUserAction } from "@/app/(app)/perfil/actions";
 import { COPY } from "./copy";
@@ -61,7 +60,6 @@ export interface ThreadHeaderProps {
 export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps) {
   const { toast } = useToast();
   const router = useRouter();
-  const [trustOpen, setTrustOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
@@ -145,11 +143,19 @@ export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps
         </p>
         <div className="flex min-w-0 items-center gap-2">
           {trust && (
-            <TrustScoreBadge
+            // Antes acá vivían un TrustScoreBadge y un TrustScoreSheet
+            // armados a mano, y por eso esta pantalla se quedó sin "Ver
+            // perfil": la hoja se construía aparte de la gramática común.
+            // PublisherTrust ES esa gramática — badge, desglose y salida al
+            // perfil, en un solo lugar.
+            <PublisherTrust
+              displayName={otherProfile.displayName}
+              firstName={firstName}
               score={trust.score}
               level={trust.level}
+              signals={trust.signals}
+              profileId={otherProfile.id}
               size="inline"
-              onClick={() => setTrustOpen(true)}
             />
           )}
           {listing &&
@@ -176,17 +182,6 @@ export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps
       >
         <DotsThree size={26} weight="bold" aria-hidden="true" />
       </button>
-
-      {trust && (
-        <TrustScoreSheet
-          open={trustOpen}
-          onClose={() => setTrustOpen(false)}
-          name={firstName}
-          score={trust.score}
-          level={trust.level}
-          signals={trust.signals}
-        />
-      )}
 
       {/* Menú "⋯" — Reportar estafa SIEMPRE primera opción (§3.3) */}
       <BottomSheet

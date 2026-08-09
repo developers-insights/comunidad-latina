@@ -3,10 +3,12 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Megaphone, SealCheck } from "@phosphor-icons/react/dist/ssr";
 import { Banner, BezelCard } from "@/components/ui";
 import { isStripeConfigured } from "@/lib/config/services";
-import { POST_PROMO_IDS, POST_PROMO_PACKAGES } from "@/lib/stripe";
+import { findPrice, type ResolvedPrice } from "@/lib/pricing";
+import { getTenantPrices } from "@/lib/pricing/read";
+import { POST_PROMO_IDS, POST_PROMO_PACKAGES, type PostPromoId } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { formatDate } from "@/lib/utils";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { OpcionesCampana } from "./opciones-campana";
 
 export const metadata = { title: "Promocionar tu publicación" };
@@ -50,7 +52,12 @@ export default async function ImpulsarPostPage({
   const [{ postId }, { estado }] = await Promise.all([params, searchParams]);
   if (!UUID_RE.test(postId)) notFound();
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  // "Tu campaña llega hasta el …": fecha de plata, con el reloj de quien paga.
+  const [tenant, supabase, formatDate] = await Promise.all([
+    getTenant(),
+    createClient(),
+    getViewerFormatDate(),
+  ]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -97,6 +104,16 @@ export default async function ImpulsarPostPage({
 
   const excerpt =
     post.body.length > EXCERPT_MAX ? `${post.body.slice(0, EXCERPT_MAX)}…` : post.body;
+
+  // Precios vigentes de la campaña en ESTA comunidad. Misma lectura que la que
+  // después usa `crearCampanaPost`; sin fila configurada caen a las constantes
+  // del código y la pantalla se ve exactamente igual que hoy (§7).
+  const preciosResueltos = await getTenantPrices(supabase, tenant.id);
+  const preciosPromo: Partial<Record<PostPromoId, ResolvedPrice>> = {};
+  for (const id of POST_PROMO_IDS) {
+    const precio = findPrice(preciosResueltos, "post_promo", id, "unico");
+    if (precio) preciosPromo[id] = precio;
+  }
 
   return (
     <div className="flex flex-col gap-5 pb-8">
@@ -177,6 +194,7 @@ export default async function ImpulsarPostPage({
           <OpcionesCampana
             postId={post.id}
             paquetes={POST_PROMO_IDS.map((id) => POST_PROMO_PACKAGES[id])}
+            precios={preciosPromo}
             zones={zones}
             stripeConfigured={isStripeConfigured}
           />

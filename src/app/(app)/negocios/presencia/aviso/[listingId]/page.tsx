@@ -9,15 +9,13 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { Badge, Banner, BezelCard } from "@/components/ui";
 import { MONETIZATION_COPY, parseListingTier } from "@/lib/monetization";
-import {
-  PREMIUM_LISTING_PRICE_USD,
-  premiumPresentation,
-  type PremiumTone,
-} from "@/lib/monetization/premium";
+import { premiumPresentation, type PremiumTone } from "@/lib/monetization/premium";
 import { selectPremiumByListing } from "@/lib/monetization/premium-db";
+import { formatCents } from "@/lib/pricing";
+import { getPrice } from "@/lib/pricing/read";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { formatDate, formatMoney } from "@/lib/utils";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { PremiumActions } from "./premium-actions";
 
 export const metadata = { title: "Publicación premium" };
@@ -69,6 +67,12 @@ export default async function PremiumAvisoPage({
   }
 
   const { data: premium } = await selectPremiumByListing(supabase, listingId, user.id);
+  // El precio que se muestra sale de la MISMA lectura que después cobra
+  // `activarPremiumAviso` (mismo tenant, mismo producto). Nunca lanza: sin fila
+  // configurada devuelve la constante del código.
+  const precio = await getPrice(supabase, tenant.id, "listing_premium", "estandar", "mensual");
+  // "Premium hasta el …": el vencimiento se lee con el reloj de quien lo paga.
+  const formatDate = await getViewerFormatDate();
   const presentation = premiumPresentation(premium, (iso) =>
     formatDate(new Date(iso), { style: "long" }),
   );
@@ -135,17 +139,19 @@ export default async function PremiumAvisoPage({
           </h2>
         </div>
 
-        <div>
-          <p className="flex items-baseline gap-1.5">
-            <span className="numeric font-display text-4xl font-bold text-foreground">
-              {formatMoney(PREMIUM_LISTING_PRICE_USD)}
-            </span>
-            <span className="text-sm text-foreground-secondary">
-              {M.premium.priceSuffix}
-            </span>
-          </p>
-          <p className="mt-1 text-xs text-foreground-muted">{M.premium.priceNote}</p>
-        </div>
+        {precio && (
+          <div>
+            <p className="flex items-baseline gap-1.5">
+              <span className="numeric font-display text-4xl font-bold text-foreground">
+                {formatCents(precio.amountCents, precio.currency)}
+              </span>
+              <span className="text-sm text-foreground-secondary">
+                {M.premium.priceSuffix}
+              </span>
+            </p>
+            <p className="mt-1 text-xs text-foreground-muted">{M.premium.priceNote}</p>
+          </div>
+        )}
 
         <ul className="flex flex-col gap-2.5">
           {M.tier.premiumPoints.map((point) => (

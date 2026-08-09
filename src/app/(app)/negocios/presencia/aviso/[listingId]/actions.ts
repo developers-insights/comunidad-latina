@@ -4,13 +4,12 @@ import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
 import { MONETIZATION_COPY } from "@/lib/monetization";
 import {
-  PREMIUM_LISTING_CURRENCY,
-  PREMIUM_LISTING_PRICE_CENTS,
   parsePremiumStatus,
   statusKeepsListingPremium,
 } from "@/lib/monetization/premium";
 import { selectPremiumByListing } from "@/lib/monetization/premium-db";
 import { LISTING_PREMIUM_KIND } from "@/lib/monetization/premium-webhook";
+import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
 import { requireTenantMatch } from "@/lib/tenant/guard";
@@ -125,6 +124,18 @@ export async function activarPremiumAviso(input: unknown): Promise<PremiumResult
     return { status: "error", message: COPY.errors.tooManyTries };
   }
 
+  // EL PRECIO DE LA COMUNIDAD (`tenant_prices`, 0072). Es la misma lectura que
+  // usa la pantalla de esta ruta para mostrar el monto, así que lo que la
+  // persona leyó y lo que Stripe cobra salen de la misma fila. Sin fila
+  // configurada cae a la constante de siempre y no cambia nada.
+  const precio = await getPrice(supabase, tenant.id, "listing_premium", "estandar", "mensual");
+  if (!precio) {
+    console.error(
+      `[monetizacion:premium] Sin precio para listing_premium — tenant=${tenant.slug}`,
+    );
+    return { status: "error", message: COPY.errors.generic };
+  }
+
   try {
     const stripe = getStripe();
     const base = siteUrl();
@@ -133,6 +144,12 @@ export async function activarPremiumAviso(input: unknown): Promise<PremiumResult
       listing_id: listingId,
       owner_id: user.id,
       kind: LISTING_PREMIUM_KIND,
+      // Lo que se decidió cobrar, en centavos. El webhook lo necesita para
+      // verificar el monto: `listing_premiums` todavía no tiene fila en el alta
+      // (la crea él), así que sin este dato tendría que adivinar con la
+      // constante del código y rechazaría cualquier precio configurado.
+      price_cents: String(precio.amountCents),
+      price_currency: precio.currency,
     };
 
     const session = await stripe.checkout.sessions.create({
@@ -143,12 +160,13 @@ export async function activarPremiumAviso(input: unknown): Promise<PremiumResult
       line_items: [
         {
           quantity: 1,
-          // [EJEMPLO §18] price_data inline con el monto de la spec. Antes del
-          // go-live real hay que migrar a un Price del dashboard de Stripe —
-          // está en la lista de pasos manuales del handoff.
+          // `price_data` inline con el precio vigente de la comunidad. Antes
+          // del go-live real hay que migrar a un Price del dashboard de Stripe
+          // — está en la lista de pasos manuales del handoff.
           price_data: {
-            currency: PREMIUM_LISTING_CURRENCY,
-            unit_amount: PREMIUM_LISTING_PRICE_CENTS,
+            // Moneda explícita de la fila; Stripe la quiere en minúsculas.
+            currency: precio.currency.toLowerCase(),
+            unit_amount: precio.amountCents,
             recurring: { interval: "month" },
             product_data: {
               name: `Publicación premium — ${listing.title}`,

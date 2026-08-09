@@ -1,6 +1,12 @@
 import "server-only";
 
 import type Stripe from "stripe";
+import {
+  diagnosticoDeCobro,
+  metadataString,
+  motivoDeDiscrepancia,
+  pactadoFromMetadata,
+} from "@/lib/monetization/pactado";
 import { createNotification } from "@/lib/notifications/notify";
 import {
   mapStripeSubscriptionStatus,
@@ -51,13 +57,12 @@ type AdminClient = ReturnType<typeof createAdminClient>;
  */
 export { mapStripeSubscriptionStatus, periodEndFromSubscription };
 
-function metadataString(
-  metadata: Stripe.Metadata | null | undefined,
-  key: string,
-): string | null {
-  const value = metadata?.[key];
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
+/*
+ * `metadataString` VIVÍA acá, copiada. Ahora sale de `@/lib/monetization/pactado`
+ * junto a las tres funciones que deciden si un cobro se acepta: la regla de qué
+ * es "lo pactado" ya la comparten cinco productos y cada copia local era una
+ * oportunidad más de que divergieran.
+ */
 
 function customerId(
   customer: string | { id: string } | null | undefined,
@@ -87,6 +92,14 @@ export function isStoreMembershipEvent(
  * y venció vuelve a `active` en la MISMA fila, sin duplicar historial. Es
  * idempotente por construcción — un reintento de Stripe reescribe los mismos
  * valores y el trigger del espejo no hace nada porque el estado no cambió.
+ *
+ * CORRELACIÓN OBLIGATORIA (fiscal R3), en dos partes y en este orden:
+ *   (a) LA TIENDA existe, es de este tenant y sigue siendo del `owner_id` que
+ *       compró (abajo).
+ *   (b) EL MONTO Y LA MONEDA cobrados son los PACTADOS al abrir la Session.
+ * Es la MISMA disciplina que `premium-webhook.ts` sobre el aviso y que
+ * `activateVerifiedPresence` sobre la cuenta de negocio. Discrepancia → log de
+ * ALERTA y NO se concede, SIN throw.
  */
 async function activateFromCheckout(
   admin: AdminClient,
@@ -103,19 +116,73 @@ async function activateFromCheckout(
     return;
   }
 
-  // CORRELACIÓN (misma disciplina que activateBoost, fiscal R3): el monto
-  // cobrado tiene que ser el de una membresía. Si no coincide, NO se activa y
-  // queda el payload en payment_events para reconciliar a mano — reintentar no
-  // arregla una discrepancia de monto.
-  const { data: priced } = await admin
-    .from("store_memberships")
-    .select("price_cents")
-    .eq("store_id", storeId)
+  // (a) LA TIENDA TIENE QUE EXISTIR Y SER DE QUIEN COMPRÓ.
+  //
+  // POR QUÉ, SI YA LO VALIDÓ LA ACTION
+  // `activarMembresiaTienda` exige `created_by = user.id` antes de abrir la
+  // Session, y la metadata vuelve firmada por Stripe: por ese camino no hay
+  // ataque. Lo que esto cubre es el HUECO DE TIEMPO — el `upsert` iba a ciegas
+  // sobre `store_id`, así que una tienda borrada o transferida entre el checkout
+  // y el webhook (minutos, o días con un pago diferido) le concedía la membresía
+  // al DUEÑO VIEJO: la fila se escribe con el `owner_id` de la metadata, no con
+  // el dueño real. Es defensa en profundidad, la misma que ya tienen los otros
+  // dos productos por suscripción; el día que un segundo camino abra estos
+  // Checkouts, el chequeo ya está puesto.
+  //
+  // POR QUÉ NO SE VERIFICA TAMBIÉN `kind='business'`
+  // Deliberado. La tienda es un `listing kind='business'` y la action lo exige,
+  // pero un `kind` distinto no sería plata mal cobrada: sería un dato raro. Cada
+  // condición de más es una forma más de RECHAZAR UN PAGO LEGÍTIMO, que de cara
+  // al usuario es peor que el hueco. Se verifican las tres que importan y que
+  // hacen los otros dos productos: existe, tenant, dueño.
+  const { data: store, error: storeError } = await admin
+    .from("listings")
+    .select("id, tenant_id, created_by")
+    .eq("id", storeId)
     .maybeSingle();
-  const expectedCents = priced?.price_cents ?? 1_000;
-  if (typeof session.amount_total === "number" && session.amount_total !== expectedCents) {
+  // Un fallo de LECTURA no es "la tienda no existe": lanza para que el reintento
+  // de Stripe lo reprocese. Tragarlo sería no conceder algo ya pagado.
+  if (storeError) throw new Error(`select listings: ${storeError.code}`);
+  if (!store || store.tenant_id !== tenantId || store.created_by !== ownerId) {
     console.error(
-      `[marketplace:membresia:webhook] ALERTA: amount_total ${session.amount_total} ≠ esperado ${expectedCents} para la tienda — NO se activa.`,
+      `[marketplace:membresia:webhook] ALERTA: la session ${session.id} pagó por la tienda ${storeId}, que no existe, no es del tenant ${tenantId} (tenant real: ${
+        store?.tenant_id ?? "—"
+      }) o cambió de dueño (dueño real: ${
+        store?.created_by ?? "—"
+      } ≠ metadata ${ownerId}) — NO se activa. ${diagnosticoDeCobro(session)}. Revisar refund en el Dashboard.`,
+    );
+    return;
+  }
+
+  // (b) CORRELACIÓN (misma disciplina que activateBoost y que el premium de un
+  // aviso, fiscal R3): el monto Y LA MONEDA cobrados tienen que ser los
+  // PACTADOS al abrir esta Session. Si no coinciden, NO se activa y queda el
+  // payload en payment_events para reconciliar a mano — reintentar no arregla
+  // una discrepancia de monto.
+  //
+  // POR QUÉ YA NO HAY RESPALDO A `MEMBERSHIP_PRICE_CENTS`
+  // Ese respaldo ERA el bug que se arregló en el premium, replicado acá: con una
+  // comunidad cobrando USD 25, el Checkout cobraba 2500, este handler comparaba
+  // contra la constante 1000 y no activaba nunca — plata cobrada, tienda
+  // apagada. Y al revés, conceder igual cuando no hay precio legible, sería
+  // peor: un Checkout manipulado pagaría un centavo y encendería la tienda. Sin
+  // precio pactado no se concede, y el log de abajo deja el rastro para
+  // reconciliar. (Ver `lib/monetization/pactado.ts` para el porqué completo de
+  // verificar contra la metadata y no contra `tenant_prices`.)
+  const pactado = pactadoFromMetadata(session.metadata);
+  if (!pactado) {
+    console.error(
+      `[marketplace:membresia:webhook] ALERTA: la session ${session.id} (tienda ${storeId}) no trae un precio pactado legible en metadata — NO se activa. ${diagnosticoDeCobro(session)}. Reconciliar a mano en el Dashboard.`,
+    );
+    return;
+  }
+
+  // Monto Y MONEDA (ver `motivoDeDiscrepancia`): 1500 ARS y 1500 USD dan el
+  // mismo entero y no son el mismo cobro.
+  const discrepancia = motivoDeDiscrepancia(session, pactado);
+  if (discrepancia) {
+    console.error(
+      `[marketplace:membresia:webhook] ALERTA: la session ${session.id} (tienda ${storeId}) ${discrepancia} — NO se activa. ${diagnosticoDeCobro(session)}.`,
     );
     return;
   }
@@ -131,6 +198,11 @@ async function activateFromCheckout(
       store_id: storeId,
       owner_id: ownerId,
       status: "active",
+      // Lo que efectivamente se cobró queda ESCRITO en la fila. Sin esto, una
+      // reactivación con un precio distinto al de la spec se comparaba contra
+      // el default de la columna (1000) y se rechazaba sola.
+      price_cents: pactado.cents,
+      currency: pactado.currency,
       stripe_subscription_id: subscriptionId,
       stripe_customer_id: customerId(session.customer),
       updated_at: new Date().toISOString(),

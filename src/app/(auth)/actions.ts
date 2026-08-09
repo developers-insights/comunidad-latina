@@ -12,6 +12,11 @@ import {
 } from "@/lib/auth/confirmation";
 import type { ActionResult } from "@/components/auth/action-result";
 import { safeInternalPath } from "@/lib/url/safe-href";
+import {
+  isUsernameTakenError,
+  normalizeUsername,
+  usernameProblem,
+} from "@/lib/profile/username";
 import { resolveOrigin } from "./recuperar/origin";
 
 /** Versión del set legal (Términos/Privacidad/Normas) vigente al registrarse. */
@@ -21,6 +26,16 @@ const COPY = {
   emailInvalid: "Ese email no parece completo — revisalo y probá de nuevo.",
   nameShort: "Contanos cómo te llamás (al menos 2 letras).",
   nameLong: "El nombre es muy largo — probá con una versión más corta.",
+  lastNameShort: "Escribí tu apellido (al menos 2 letras).",
+  lastNameLong: "El apellido es muy largo — probá con una versión más corta.",
+  // Errores del nombre de usuario, uno por problema concreto. "Nombre de
+  // usuario inválido" obliga a adivinar cuál de las cinco reglas se rompió.
+  usernameEmpty: "Elegí tu nombre de usuario.",
+  usernameShort: "Necesita al menos 3 caracteres.",
+  usernameLong: "El máximo son 30 caracteres.",
+  usernameFormat: "Solo letras sin acento, números, punto y guion bajo.",
+  usernameEdges: "No puede empezar ni terminar con punto o guion bajo.",
+  usernameTaken: "Ese nombre de usuario ya está en uso en esta comunidad. Probá con otro.",
   passwordShort: "La contraseña necesita al menos 8 caracteres.",
   passwordLong: "La contraseña es demasiado larga.",
   emailTaken: "Ya existe una cuenta con este email. Probá entrar directamente.",
@@ -49,12 +64,73 @@ const needsSchema = z
   .min(1, COPY.needsMin)
   .max(5);
 
+/**
+ * El nombre de usuario, validado con las MISMAS reglas que la base (0062).
+ *
+ * La unicidad no se puede validar acá: es por tenant y sólo la resuelve el
+ * índice `profiles_username_tenant_uniq`. El insert la descubre y devuelve
+ * `23505`, que es el único momento en que la respuesta es verdad.
+ */
+const usernameSchema = z.string().superRefine((value, ctx) => {
+  const problem = usernameProblem(value);
+  if (!problem) return;
+  const message = {
+    vacio: COPY.usernameEmpty,
+    corto: COPY.usernameShort,
+    largo: COPY.usernameLong,
+    formato: COPY.usernameFormat,
+    bordes: COPY.usernameEdges,
+  }[problem];
+  ctx.addIssue({ code: "custom", message });
+});
+
+/**
+ * ── QUÉ SE PIDE EN EL ALTA Y QUÉ NO (decisión, 2026-08-08) ───────────────────
+ *
+ * El pliego pide siete campos nuevos. El onboarding de hoy se completa en menos
+ * de 60 segundos y ESO es un activo del producto: un formulario de doce campos
+ * antes de ver nada convierte peor que cualquier campo que se pueda pedir
+ * después. Así que el alta crece exactamente DOS campos, y sólo estos dos:
+ *
+ *   · APELLIDO — se escribe en el mismo gesto que el nombre, al lado, sin
+ *     pensar nada nuevo. Y es privado por default (vive en `profiles_private`
+ *     con `show_last_name: 'privado'`), así que pedirlo no expone a nadie.
+ *   · NOMBRE DE USUARIO — es identidad pública y permanente. Es el ÚNICO campo
+ *     que no se puede diferir: si no se elige en el alta, o se genera solo (y
+ *     queda para siempre un handle que nadie eligió) o el perfil vive sin
+ *     handle. Lo mismo hacen Instagram y Twitter, y por lo mismo.
+ *
+ * Lo que se completa DESPUÉS, desde el perfil:
+ *   · FECHA DE NACIMIENTO — hoy el alta pide la atestación "18 años o más", que
+ *     es el mínimo dato que resuelve el requisito legal. Pedir la fecha exacta
+ *     en el alta sería recolectar el dato más sensible del perfil (§11 lo tenía
+ *     escrito: «solo la atestación 18+, jamás la fecha de nacimiento») en el
+ *     momento de menor confianza. Se pide cuando de verdad hace falta: al
+ *     activarse como creador, que es donde el gate de edad de 0064 la usa.
+ *   · PAÍS DE RESIDENCIA, CIUDAD, IDIOMAS — son datos de descubrimiento, no de
+ *     identidad: sirven para que te encuentren, y nadie te encuentra el primer
+ *     día. Piden pensar (tres desplegables) y no habilitan nada en el alta.
+ *   · PAÍS DE ORIGEN — ya se hereda del país foco de la comunidad y es editable
+ *     desde el perfil. Preguntarlo agregaría un paso al wizard para confirmar,
+ *     nueve de cada diez veces, lo que la app ya sabía.
+ *   · FOTO DE PORTADA — una subida de archivo en el alta es la fricción más
+ *     cara que existe en un teléfono con datos móviles.
+ *
+ * El perfil muestra qué falta y lo pide ahí, con la cuenta ya creada y la
+ * persona ya adentro (ver `<ProfileCompletion>`).
+ */
 const registerSchema = z.object({
   displayName: z
     .string()
     .trim()
     .min(2, COPY.nameShort)
     .max(60, COPY.nameLong),
+  lastName: z
+    .string()
+    .trim()
+    .min(2, COPY.lastNameShort)
+    .max(60, COPY.lastNameLong),
+  username: usernameSchema,
   email: z
     .string()
     .trim()
@@ -91,7 +167,10 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
   if (!parsed.success) {
     return { ok: false, fieldErrors: firstIssuePerField(parsed.error.issues) };
   }
-  const { displayName, email, password, needs, area } = parsed.data;
+  const { displayName, lastName, email, password, needs, area } = parsed.data;
+  // Se normaliza acá con la MISMA función que espeja al trigger de la base, para
+  // que lo que se compara contra el índice único sea lo mismo que se guarda.
+  const username = normalizeUsername(parsed.data.username);
   // Open redirect: el `next` viaja en el correo, así que se sanitiza acá y no
   // en el cliente (misma función que el resto de los flujos de auth).
   const next = safeInternalPath(parsed.data.next, "/bienvenida");
@@ -165,6 +244,7 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
     id: created.user.id,
     tenant_id: tenant.id,
     display_name: displayName,
+    username,
     role: "member",
     age_confirmed_at: consentedAt,
     terms_accepted_at: consentedAt,
@@ -176,24 +256,50 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
   if (profileError) {
     // Sin fila de perfil el usuario queda huérfano — limpiamos y avisamos.
     await admin.auth.admin.deleteUser(created.user.id).catch(() => undefined);
+
+    /**
+     * EL HANDLE YA TOMADO NO ES UN ERROR DEL SISTEMA. La unicidad es POR TENANT
+     * (`profiles_username_tenant_uniq`, 0062): el mismo handle puede existir en
+     * otra comunidad sin problema, y acá lo único que pasó es que alguien de
+     * ESTA llegó primero. Se devuelve como error DEL CAMPO para que el
+     * formulario lo marque donde está el problema — un "algo salió mal" genérico
+     * mandaría a la persona a reintentar el mismo handle para siempre.
+     */
+    if (isUsernameTakenError(profileError)) {
+      return { ok: false, fieldErrors: { username: COPY.usernameTaken } };
+    }
+
     console.error("[auth] registro: insert de profile falló", {
       code: profileError.code,
     });
     return { ok: false, formError: COPY.genericError };
   }
 
-  if (needs && needs.length > 0) {
-    // Dato sensible (§11): vive en profiles_private, que solo lee su dueño.
-    // Si falla, la cuenta igual sirve — se pierde la personalización, no el alta.
-    const { error: privateError } = await admin.from("profiles_private").upsert(
-      { profile_id: created.user.id, tenant_id: tenant.id, needs },
-      { onConflict: "profile_id" },
-    );
-    if (privateError) {
-      console.error("[auth] registro: upsert de profiles_private falló", {
-        code: privateError.code,
-      });
-    }
+  /**
+   * Datos sensibles (§11): viven en `profiles_private`, que sólo lee su dueño.
+   * El apellido va acá y NO en `profiles` porque `profiles` es pública por
+   * diseño y RLS filtra filas, no columnas: en `profiles` el apellido sería
+   * legible por cualquier autenticado sin importar lo que la persona elija en
+   * sus controles de privacidad (ver la nota de 0062).
+   *
+   * Sigue siendo best-effort a propósito: si esta escritura falla, la cuenta ya
+   * existe y sirve. Tirar abajo un alta completa —usuario, perfil, consentimiento
+   * y correo— porque no se pudo guardar el apellido sería cambiar una pérdida
+   * chica y reparable desde «Editar perfil» por una pérdida total.
+   */
+  const { error: privateError } = await admin.from("profiles_private").upsert(
+    {
+      profile_id: created.user.id,
+      tenant_id: tenant.id,
+      last_name: lastName,
+      ...(needs && needs.length > 0 ? { needs } : {}),
+    },
+    { onConflict: "profile_id" },
+  );
+  if (privateError) {
+    console.error("[auth] registro: upsert de profiles_private falló", {
+      code: privateError.code,
+    });
   }
 
   // Correo de confirmación. Ya no hay login inmediato: la sesión la crea

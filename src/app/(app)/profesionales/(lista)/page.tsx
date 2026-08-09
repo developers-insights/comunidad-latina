@@ -37,7 +37,8 @@ import {
 import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { cn, formatDate } from "@/lib/utils";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
+import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Profesionales" };
 
@@ -229,6 +230,13 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
   // Sólo el check MÁS RECIENTE por sujeto decide (viene ordenado checked_at desc).
   // Un found_active viejo NO debe pisar a un expired/mismatch posterior: mostramos
   // el sello únicamente si ese último check es found_active.
+  /**
+   * `verification_checks.checked_at` es `timestamptz` (0005), o sea un INSTANTE:
+   * el momento en que se consultó el registro oficial. Formatearlo en la zona
+   * fija de la comunidad fecha la verificación un día antes para quien mira
+   * desde la costa oeste. Va con el reloj de quien lee.
+   */
+  const formatDate = await getViewerFormatDate();
   const verificationByListing = new Map<string, VerificationView>();
   const latestCheckSeen = new Set<string>();
   for (const check of checksResult.data ?? []) {

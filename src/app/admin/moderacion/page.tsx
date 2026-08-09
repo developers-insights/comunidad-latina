@@ -1,4 +1,5 @@
-import { ShieldCheck } from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
+import { Fingerprint, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState } from "@/components/ui";
 import { ModerationItem, type ModerationItemData } from "@/components/admin/moderation-item";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -25,6 +26,7 @@ const COPY = {
   emptyMessage: "No hay nada pendiente de revisar. Buen trabajo del equipo.",
   pendingLabel: (n: number) =>
     n === 1 ? "1 caso pendiente" : `${n} casos pendientes`,
+  integrityLink: "Integridad de contenido",
 } as const;
 
 const EXCERPT_MAX = 280;
@@ -165,6 +167,15 @@ export default async function ModeracionPage() {
             {COPY.pendingLabel(viewItems.length)}
           </p>
         )}
+        {/* Content Integrity vive en su propia cola: la decisión ahí es de
+            AUTORÍA y licencia, no de si el contenido es aceptable. */}
+        <Link
+          href="/admin/moderacion/integridad"
+          className="mt-2 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-brand-ink underline underline-offset-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+        >
+          <Fingerprint size={16} aria-hidden="true" />
+          {COPY.integrityLink}
+        </Link>
       </header>
 
       {viewItems.length === 0 ? (

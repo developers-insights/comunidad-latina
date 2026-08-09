@@ -10,8 +10,8 @@ import {
   ProximamentePremium,
   useToast,
 } from "@/components/ui";
+import { formatCents, type ResolvedPrice } from "@/lib/pricing";
 import type { BoostId, BoostPackage } from "@/lib/stripe";
-import { formatMoney } from "@/lib/utils";
 import { crearBoostCheckout } from "./actions";
 
 /** Copy local del módulo BOOST — no toca src/lib/i18n (compartido). */
@@ -28,10 +28,18 @@ const COPY = {
 export function OpcionesBoost({
   listingId,
   paquetes,
+  precios,
   stripeConfigured,
 }: {
   listingId: string;
   paquetes: BoostPackage[];
+  /**
+   * Precio vigente de cada paquete en esta comunidad. Sale de la misma lectura
+   * (`getTenantPrices`) que después usa `crearBoostCheckout` para cobrar: si la
+   * tarjeta y el Checkout leyeran por separado, un cambio de precio a mitad de
+   * camino dejaría a alguien pagando un número que nunca vio.
+   */
+  precios: Partial<Record<BoostId, ResolvedPrice>>;
   stripeConfigured: boolean;
 }) {
   const { toast } = useToast();
@@ -71,7 +79,9 @@ export function OpcionesBoost({
 
   return (
     <div className="flex flex-col gap-4">
-      {paquetes.map((paquete) => (
+      {paquetes.map((paquete) => {
+        const precio = precios[paquete.id] ?? null;
+        return (
         <BezelCard
           key={paquete.id}
           variant={paquete.recomendado ? "featured" : "default"}
@@ -94,12 +104,16 @@ export function OpcionesBoost({
             )}
           </div>
 
-          <p className="flex items-baseline gap-1.5">
-            <span className="numeric font-display text-3xl font-bold text-foreground">
-              {formatMoney(paquete.precioUsd)}
-            </span>
-            <span className="text-sm text-foreground-secondary">{COPY.pagoUnico}</span>
-          </p>
+          {precio && (
+            <p className="flex items-baseline gap-1.5">
+              <span className="numeric font-display text-3xl font-bold text-foreground">
+                {formatCents(precio.amountCents, precio.currency)}
+              </span>
+              {/* "pago único" va pegado al número y nunca se pierde: es lo que
+                  distingue un total de una tarifa por período. */}
+              <span className="text-sm text-foreground-secondary">{COPY.pagoUnico}</span>
+            </p>
+          )}
 
           <Button
             variant={paquete.recomendado ? "primary" : "outline"}
@@ -111,7 +125,8 @@ export function OpcionesBoost({
             {COPY.elegir(paquete.nombre)}
           </Button>
         </BezelCard>
-      ))}
+        );
+      })}
 
       {/* Stripe sin configurar (HOY) → estado premium, nunca un error crudo */}
       <BottomSheet

@@ -18,7 +18,11 @@ export interface ProfileStat {
 
 export interface ProfileHeaderProps {
   displayName: string;
+  /** El handle, sin arroba. `null` cuando todavía no eligió uno. */
+  username?: string | null;
   avatarUrl: string | null;
+  /** Foto de portada (banner). `null` = la cabecera va sin banner, como antes. */
+  coverUrl?: string | null;
   identityVerified: boolean;
   /** Línea de ubicación ya armada: "Rep. Dominicana · Queens" (o solo la zona). */
   location: string | null;
@@ -42,7 +46,9 @@ export interface ProfileHeaderProps {
  */
 export function ProfileHeader({
   displayName,
+  username,
   avatarUrl,
+  coverUrl,
   identityVerified,
   location,
   memberSince,
@@ -54,18 +60,53 @@ export function ProfileHeader({
     <header className="flex flex-col gap-4">
       {headerRight && <div className="-mt-2 flex justify-end">{headerRight}</div>}
 
-      <div className="flex flex-col items-center gap-3 text-center">
-        <Avatar
-          size="xl"
-          src={avatarUrl}
-          name={displayName}
-          badge={identityVerified ? <IdentityBadge /> : undefined}
-        />
+      {/* Portada. El alto se reserva con `aspect-[3/1]` ANTES de que la imagen
+          llegue: sin eso, el avatar y los contadores saltan hacia abajo cuando
+          carga (CLS). Sin portada no se dibuja nada — un rectángulo gris vacío
+          es peor que la cabecera de siempre. */}
+      {coverUrl && (
+        <div className="rounded-2xl bg-surface-subtle p-1.5 ring-1 ring-border-subtle">
+          <div className="relative aspect-[3/1] w-full overflow-hidden rounded-[calc(1rem-0.375rem)] bg-surface">
+            {/*
+              `<img>` y no `next/image`: la URL sale del bucket público de
+              Supabase, cuyo host cambia por tenant y habría que declararlo uno
+              por uno en la config. El CDN de Storage ya la sirve, y el alto lo
+              reserva el `aspect-[3/1]` de arriba, que es lo que evita el salto
+              de layout.
+            */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={coverUrl} alt="" className="size-full object-cover" />
+          </div>
+        </div>
+      )}
+
+      <div
+        className={
+          coverUrl
+            ? // Con portada, el avatar monta sobre el borde inferior del banner:
+              // es la gramática que cualquiera reconoce de una red social.
+              "-mt-12 flex flex-col items-center gap-3 text-center"
+            : "flex flex-col items-center gap-3 text-center"
+        }
+      >
+        <span className={coverUrl ? "rounded-full ring-4 ring-background" : undefined}>
+          <Avatar
+            size="xl"
+            src={avatarUrl}
+            name={displayName}
+            badge={identityVerified ? <IdentityBadge /> : undefined}
+          />
+        </span>
 
         <div className="flex flex-col items-center gap-0.5">
           <h1 className="font-display text-xl font-bold text-foreground">
             {displayName}
           </h1>
+          {/* El handle debajo del nombre y en tono secundario: es la dirección,
+              no la identidad. La arroba va acá y no en la columna. */}
+          {username && (
+            <p className="text-sm text-foreground-muted">@{username}</p>
+          )}
           {location && (
             <p className="flex items-center justify-center gap-1 text-sm text-foreground-secondary">
               <MapPin size={14} aria-hidden="true" />

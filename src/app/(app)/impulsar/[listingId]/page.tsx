@@ -12,10 +12,13 @@ import { Banner, BezelCard, NavTabs } from "@/components/ui";
 import { isStripeConfigured } from "@/lib/config/services";
 import { MONETIZATION_COPY } from "@/lib/monetization";
 import { listingViewHref } from "@/lib/monetization/href";
-import { BOOST_IDS, BOOST_PACKAGES } from "@/lib/stripe";
+import { findPrice, type ResolvedPrice } from "@/lib/pricing";
+import { getTenantPrices } from "@/lib/pricing/read";
+import { BOOST_IDS, BOOST_PACKAGES, type BoostId } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { cn, formatDate } from "@/lib/utils";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
+import { cn } from "@/lib/utils";
 import { FormularioCampana, type CampaignDraft } from "./formulario-campana";
 import { OpcionesBoost } from "./opciones-boost";
 
@@ -90,7 +93,13 @@ export default async function PromocionarPage({
   if (!UUID_RE.test(listingId)) notFound();
   const modo = parseModo(modoRaw);
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  // "Tu aviso aparece primero hasta el …": es una fecha de plata, y se lee con
+  // el reloj de quien la pagó.
+  const [tenant, supabase, formatDate] = await Promise.all([
+    getTenant(),
+    createClient(),
+    getViewerFormatDate(),
+  ]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -150,6 +159,16 @@ export default async function PromocionarPage({
 
   const isPublished = listing.status === "published";
   const backHref = listingViewHref(listing.kind, listing.id);
+
+  // Precios vigentes del impulso en ESTA comunidad. Misma lectura que la que
+  // después cobra `crearBoostCheckout`; sin fila configurada, `getTenantPrices`
+  // devuelve las constantes de siempre y la pantalla no cambia (§7).
+  const preciosResueltos = await getTenantPrices(supabase, tenant.id);
+  const preciosBoost: Partial<Record<BoostId, ResolvedPrice>> = {};
+  for (const id of BOOST_IDS) {
+    const precio = findPrice(preciosResueltos, "boost", id, "unico");
+    if (precio) preciosBoost[id] = precio;
+  }
 
   return (
     <div className="flex flex-col gap-5 pb-8">
@@ -255,6 +274,7 @@ export default async function PromocionarPage({
                 <OpcionesBoost
                   listingId={listing.id}
                   paquetes={BOOST_IDS.map((id) => BOOST_PACKAGES[id])}
+                  precios={preciosBoost}
                   stripeConfigured={isStripeConfigured}
                 />
               </>

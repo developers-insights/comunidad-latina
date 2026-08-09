@@ -8,16 +8,26 @@ import { describe, expect, it } from "vitest";
  * async.
  *
  * Exportar de ahí un helper puro (aunque sea una función de 4 líneas sin I/O)
- * hace que Next tire "Server Actions must be async functions" y **rompe la ruta
- * entera en runtime**. No lo agarra `tsc`, no lo agarra vitest importando el
- * módulo: solo se ve al renderizar la página en el browser. Pasó de verdad con
- * `toModuleColumns` en dominio/actions.ts (2026-07-27) — de ahí este test.
+ * hace que Next tire "Server Actions must be async functions" y **rompe el build
+ * entero**. No lo agarra `tsc`, no lo agarra vitest importando el módulo: solo se
+ * ve al correr `npm run build` o al renderizar la página.
  *
  * Los tipos (`export type` / `export interface`) sí se pueden exportar: se
  * borran al compilar, nunca llegan al runtime.
+ *
+ * ## Por qué este archivo vive en `src/test/` y barre TODO `src/`
+ *
+ * Antes había una guarda igual pero acotada a `src/app/admin/`, nacida de un
+ * caso real (`toModuleColumns` en `dominio/actions.ts`, 2026-07-27). El alcance
+ * angosto se pagó: el 2026-08-08 el mismo bug volvió en
+ * `src/app/(app)/perfil/actions.ts` (`export function ageFromBirthdate`) y rompió
+ * el build — exactamente lo que la guarda existía para prevenir, en un directorio
+ * que no miraba. Una guarda que cubre una sola carpeta le enseña al equipo que el
+ * problema es de esa carpeta, y no lo es: es de cualquier módulo `"use server"`
+ * del repo.
  */
 
-const ADMIN_DIR = fileURLToPath(new URL(".", import.meta.url));
+const SRC_DIR = fileURLToPath(new URL("..", import.meta.url));
 
 function collectFiles(dir: string): string[] {
   const found: string[] = [];
@@ -32,15 +42,22 @@ function collectFiles(dir: string): string[] {
   return found;
 }
 
-/** Archivos del panel admin que declaran "use server" en la primera línea útil. */
-const serverModules = collectFiles(ADMIN_DIR)
+/** Todo módulo de `src/` que declara "use server" en la primera línea útil. */
+const serverModules = collectFiles(SRC_DIR)
   .filter((file) => !file.endsWith(".test.ts") && !file.endsWith(".test.tsx"))
   .map((file) => ({ file, source: readFileSync(file, "utf8") }))
   .filter(({ source }) => /^\s*["']use server["'];/m.test(source));
 
-describe('módulos "use server" del panel admin', () => {
+describe('módulos "use server" de todo src/', () => {
   it("hay al menos uno que revisar (si no, el test se volvió decorativo)", () => {
     expect(serverModules.length).toBeGreaterThan(0);
+  });
+
+  it("cubre módulos fuera de src/app/admin (si no, volvimos al alcance angosto)", () => {
+    const fueraDeAdmin = serverModules.filter(
+      ({ file }) => !file.includes(join("app", "admin")),
+    );
+    expect(fueraDeAdmin.length).toBeGreaterThan(0);
   });
 
   it.each(serverModules.map(({ file }) => file))(

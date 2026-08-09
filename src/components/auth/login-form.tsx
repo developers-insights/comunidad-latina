@@ -8,6 +8,8 @@ import { createClient } from "@/lib/supabase/client";
 import { resendConfirmationAction } from "@/app/(auth)/actions";
 import { safeInternalPath } from "@/lib/url/safe-href";
 import { FormError } from "@/components/auth/form-error";
+import { OAuthButtons } from "@/components/auth/oauth-buttons";
+import type { OAuthProvider } from "@/lib/auth/oauth-providers";
 import {
   Button,
   Field,
@@ -49,17 +51,38 @@ const COPY = {
     "Ese enlace de confirmación venció o ya se usó. Entrá con tu email y contraseña y te mandamos uno nuevo.",
   notConfirmed:
     "Te falta confirmar tu cuenta. Te acabamos de mandar el enlace de nuevo — revisá tu correo (y el no deseado).",
+  // El callback devuelve estos dos cuando el alta por Google/Apple no pudo
+  // completarse. Se cuentan con nombre y con salida, nunca como "algo falló":
+  // la persona hizo todo bien y no tiene forma de adivinar qué pasó.
+  otherCommunity:
+    "Esa cuenta pertenece a otra comunidad. Entrá desde el sitio de esa comunidad, o creá una cuenta nueva acá con otro correo.",
+  provisionFailed:
+    "No pudimos terminar de crear tu cuenta. No se guardó nada — probá de nuevo en un momento, o sumate con tu email.",
+  providerFailed:
+    "Ese servicio no pudo confirmarnos quién sos. Probá de nuevo, o entrá con tu email y contraseña.",
   noAccount: "¿Primera vez por acá?",
   goRegister: "Sumate a tu comunidad",
 } as const;
 
+/** Los errores que llegan por `?error=` en la URL, con su copy. */
+const URL_ERRORS: Record<string, string> = {
+  enlace: COPY.linkExpired,
+  confirmacion: COPY.confirmExpired,
+  otra_comunidad: COPY.otherCommunity,
+  alta: COPY.provisionFailed,
+  proveedor: COPY.providerFailed,
+};
+
 export function LoginForm({
   next,
   urlError,
+  oauthProviders = [],
 }: {
   next?: string;
   /** Código de error que llega por query (?error=enlace del callback). */
   urlError?: string;
+  /** Proveedores con credenciales. Vacío = no se dibuja el bloque. */
+  oauthProviders?: readonly OAuthProvider[];
 }) {
   const router = useRouter();
   // `safeInternalPath` y no la vieja `safeNextPath`: aquella clasificaba por
@@ -76,11 +99,7 @@ export function LoginForm({
   const [pending, setPending] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
   const [error, setError] = useState<string | null>(
-    urlError === "enlace"
-      ? COPY.linkExpired
-      : urlError === "confirmacion"
-        ? COPY.confirmExpired
-        : null,
+    (urlError && URL_ERRORS[urlError]) ?? null,
   );
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -282,6 +301,11 @@ export function LoginForm({
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Google y Apple DEBAJO del formulario, no arriba: quien ya tiene cuenta
+          con contraseña —el caso mayoritario en una app que arrancó sin OAuth—
+          no tiene que saltear nada para llegar a lo suyo. */}
+      <OAuthButtons providers={oauthProviders} next={destination} />
 
       <p className="text-center text-sm text-foreground-secondary">
         {COPY.noAccount}{" "}

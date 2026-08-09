@@ -2,7 +2,9 @@ import Link from "next/link";
 import { ArrowSquareOut, DownloadSimple, FileText } from "@phosphor-icons/react/dist/ssr";
 import { buttonVariants } from "@/components/ui";
 import { PrivacyControls } from "@/components/legal/privacy-controls";
+import { ProfilePrivacyForm } from "@/components/legal/profile-privacy-form";
 import { CONSENT_COPY as COPY } from "@/components/legal/consent-copy";
+import { normalizePrivacy } from "@/lib/profile/privacy";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +31,32 @@ export default async function PrivacidadAjustesPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  /**
+   * Los controles del PERFIL (quién ve tu apellido, tu edad, dónde vivís…) se
+   * suman a esta pantalla en vez de tener casa propia: son la misma pregunta
+   * —"¿qué se sabe de mí?"— y partirlos en dos rutas hace que la mitad de la
+   * gente encuentre una sola.
+   *
+   * LA AUSENCIA DE FILA SIGNIFICA LOS DEFAULTS (0063): no se siembra una fila
+   * por registro, para que nadie quede expuesto por una fila que no se llegó a
+   * crear. `normalizePrivacy(null)` devuelve exactamente esos defaults.
+   *
+   * La consulta corre con el cliente de servidor, o sea con RLS: la policy de
+   * `profile_privacy` es solo-dueño, así que ni siquiera es consultable qué
+   * configuró otra persona.
+   */
+  let privacy = null;
+  if (user) {
+    const { data } = await supabase
+      .from("profile_privacy")
+      .select(
+        "show_last_name, show_birthdate, show_location, show_languages, show_country_origin, show_bio, show_followers, show_posts",
+      )
+      .eq("profile_id", user.id)
+      .maybeSingle();
+    privacy = data;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <header>
@@ -37,6 +65,12 @@ export default async function PrivacidadAjustesPage() {
         </h1>
         <p className="mt-1 text-sm text-foreground-secondary">{COPY.settings.subtitle}</p>
       </header>
+
+      {/* Los controles del perfil van PRIMEROS: son los que la gente viene a
+          buscar. Lo de las cookies y el almacenamiento del navegador es
+          importante y sirve sin cuenta, pero no es lo que alguien tiene en la
+          cabeza cuando entra a "Privacidad" desde su perfil. */}
+      {user && <ProfilePrivacyForm initial={normalizePrivacy(privacy)} />}
 
       <PrivacyControls />
 

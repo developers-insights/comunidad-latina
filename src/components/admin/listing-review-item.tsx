@@ -47,13 +47,26 @@ const COPY = {
     event: "Evento",
     job: "Trabajo",
   } as Record<string, string>,
+  readOnly: "Se resuelve desde la propia comunidad.",
 } as const;
 
 const initialState: DomainActionState = { status: "idle" };
 
-export function ListingReviewItem({ listing }: { listing: ListingReviewData }) {
+export function ListingReviewItem({
+  listing,
+  readOnly = false,
+}: {
+  listing: ListingReviewData;
+  /**
+   * Oculta Aprobar/Rechazar. Se usa cuando un súper admin mira OTRA comunidad:
+   * la policy `listings_update` (0004) exige `tenant_id = current_tenant_id()`
+   * y no tiene rama de global_admin, así que la base rechazaría el cambio. El
+   * permiso sigue estando en Postgres; esto es no ofrecer lo que va a fallar.
+   */
+  readOnly?: boolean;
+}) {
   const [state, formAction] = useActionState(resolveListingReview, initialState);
-  const detailHref = DETAIL_ROUTE[listing.kind]?.(listing.id) ?? null;
+  const detailHref = readOnly ? null : (DETAIL_ROUTE[listing.kind]?.(listing.id) ?? null);
 
   return (
     <article className="rounded-lg border border-border bg-surface p-4 shadow-xs">
@@ -94,6 +107,10 @@ export function ListingReviewItem({ listing }: { listing: ListingReviewData }) {
             {COPY.open}
           </Link>
         )}
+        {readOnly && (
+          <span className="ml-auto text-xs text-foreground-muted">{COPY.readOnly}</span>
+        )}
+        {!readOnly && (
         <form action={formAction} className="ml-auto flex gap-2">
           <input type="hidden" name="listingId" value={listing.id} />
           <PendingButton
@@ -118,6 +135,7 @@ export function ListingReviewItem({ listing }: { listing: ListingReviewData }) {
             {COPY.approve}
           </PendingButton>
         </form>
+        )}
       </div>
     </article>
   );

@@ -67,7 +67,9 @@ vi.mock("@/lib/auth/confirmation", () => ({
 import { registerAction } from "./actions";
 
 const VALID = {
-  displayName: "Rosa Martínez",
+  displayName: "Rosa",
+  lastName: "Martínez",
+  username: "rosa.martinez",
   email: "Rosa@Ejemplo.com ",
   password: "una-contrasena",
   ageConfirmed: true,
@@ -171,5 +173,118 @@ describe("registerAction", () => {
 
     expect(await registerAction({ ...VALID })).toEqual({ ok: true });
     expect(mocks.deleteUser).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ── LOS CAMPOS QUE SUMÓ EL PLIEGO ───────────────────────────────────────────
+ * El alta creció exactamente dos campos: apellido y nombre de usuario. El resto
+ * (fecha de nacimiento, país de residencia, ciudad, idiomas, portada) se
+ * completa después desde el perfil — la justificación está en el comentario de
+ * `registerSchema`. Estos tests fijan las dos decisiones que importan:
+ *
+ *   · el APELLIDO va a `profiles_private` y NUNCA a `profiles` — si alguien lo
+ *     mueve "para simplificar", queda legible por cualquier autenticado sin
+ *     importar los controles de privacidad, porque RLS filtra filas y no
+ *     columnas;
+ *   · el HANDLE es único POR TENANT, no global.
+ */
+describe("registerAction — apellido y nombre de usuario", () => {
+  it("el apellido va a profiles_private, nunca a profiles", async () => {
+    await registerAction({ ...VALID });
+
+    const [table, row] = mocks.insert.mock.calls[0];
+    expect(table).toBe("profiles");
+    expect(row).not.toHaveProperty("last_name");
+
+    const [privateTable, privateRow] = mocks.upsert.mock.calls[0];
+    expect(privateTable).toBe("profiles_private");
+    expect(privateRow).toMatchObject({ profile_id: "user-1", last_name: "Martínez" });
+  });
+
+  it("el handle se guarda normalizado (minúsculas y sin espacios)", async () => {
+    await registerAction({ ...VALID, username: "  Rosa.Martinez  " });
+
+    const [, row] = mocks.insert.mock.calls[0];
+    expect(row).toMatchObject({ username: "rosa.martinez" });
+  });
+
+  it("rechaza un handle con formato inválido sin tocar la base", async () => {
+    const result = await registerAction({ ...VALID, username: "rosa martinez" });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.fieldErrors?.username).toBeTruthy();
+    expect(mocks.createUser).not.toHaveBeenCalled();
+  });
+
+  it("rechaza un handle que empieza con punto", async () => {
+    const result = await registerAction({ ...VALID, username: ".rosa" });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.fieldErrors?.username).toContain("punto");
+  });
+
+  /**
+   * EL CASO CENTRAL: handle duplicado DENTRO del tenant.
+   *
+   * La unicidad la aplica `profiles_username_tenant_uniq` (0062) y llega como
+   * `23505` con el nombre del índice en el detalle. Tiene que volver como error
+   * DEL CAMPO —no como "algo salió mal"— o la persona reintenta el mismo handle
+   * para siempre. Y el usuario de auth se borra: sin fila de perfil quedaría
+   * huérfano.
+   */
+  it("handle ya tomado en ESTE tenant → error en el campo, y no queda usuario huérfano", async () => {
+    mocks.insert.mockResolvedValue({
+      error: {
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "profiles_username_tenant_uniq"',
+        details: "Key (tenant_id, username)=(tenant-1, rosa.martinez) already exists.",
+      },
+    });
+
+    const result = await registerAction({ ...VALID });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.fieldErrors?.username).toContain("ya está en uso");
+    // No es un error de sistema: no se ensucia el log con algo que es de uso normal.
+    expect(mocks.deleteUser).toHaveBeenCalledWith("user-1");
+    expect(mocks.sendConfirmationEmail).not.toHaveBeenCalled();
+  });
+
+  /**
+   * EL MISMO handle en OTRO tenant SÍ se acepta. Con el índice global que tenía
+   * 0030 esto era imposible y el producto white-label quedaba roto: la misma
+   * persona no podía estar en dominicanos.com y en comunidadlatina.com.
+   *
+   * Acá se prueba lo que la APP hace con esa realidad: el insert del otro tenant
+   * no choca (la base no devuelve 23505 porque el par (tenant_id, username) es
+   * distinto) y el alta sale bien con el mismo handle.
+   */
+  it("el MISMO handle en otro tenant se acepta", async () => {
+    // La base no devuelve conflicto: el índice es (tenant_id, username).
+    mocks.insert.mockResolvedValue({ error: null });
+
+    const result = await registerAction({ ...VALID });
+
+    expect(result).toEqual({ ok: true });
+    const [, row] = mocks.insert.mock.calls[0];
+    expect(row).toMatchObject({ username: "rosa.martinez", tenant_id: "tenant-1" });
+  });
+
+  it("un 23505 que NO es del handle no se disfraza de handle tomado", async () => {
+    mocks.insert.mockResolvedValue({
+      error: {
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "profiles_pkey"',
+        details: "Key (id)=(user-1) already exists.",
+      },
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await registerAction({ ...VALID });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.fieldErrors?.username).toBeUndefined();
+    expect(result.ok === false && result.formError).toBeTruthy();
   });
 });

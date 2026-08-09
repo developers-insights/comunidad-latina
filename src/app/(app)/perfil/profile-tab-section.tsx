@@ -9,6 +9,7 @@ import {
   type ProfileCounts,
 } from "./profile-data";
 import {
+  ProfileClosedPanel,
   ProfileInfoPanel,
   ProfileMediaEmpty,
   ProfilePeoplePanel,
@@ -57,13 +58,31 @@ export interface ProfileTabSectionProps {
   isOwn: boolean;
   /** Cursor keyset de la grilla (`?fotos=`), ya decodificado. */
   cursor: { createdAt: string; id: string } | null;
-  /** Datos de la pestaña "Información" — ya los tiene la página. */
+  /**
+   * Lo que la MATRIZ DE PRIVACIDAD dejó pasar, decidido por `profile_card()`
+   * dentro de la base (0063). Por default `true`: el perfil propio y cualquier
+   * pantalla que todavía no los pase se comportan como antes.
+   *
+   * ⚠️ Esto NO es la privacidad — es su reflejo en la UI. Las publicaciones y la
+   * lista de seguidores se consultan con el cliente de servidor y sus propias
+   * policies; acá se evita ofrecer una pestaña cuyo contenido la persona eligió
+   * no mostrar. Cerrar de verdad esas dos consultas es trabajo de RLS, no de un
+   * `if` en un componente.
+   */
+  canSeePosts?: boolean;
+  canSeeFollowers?: boolean;
+  /** Datos de la pestaña "Información" — ya los tiene la página, ya filtrados. */
   info: {
     bio: string | null;
     country: string | null;
     areaLabel: string | null;
     memberSince: string | null;
     identityVerified: boolean;
+    lastName?: string | null;
+    age?: number | null;
+    countryResidence?: string | null;
+    city?: string | null;
+    languages?: readonly string[];
   };
 }
 
@@ -76,6 +95,8 @@ export async function ProfileTabSection({
   counts,
   isOwn,
   cursor,
+  canSeePosts = true,
+  canSeeFollowers = true,
   info,
 }: ProfileTabSectionProps) {
   /**
@@ -123,6 +144,7 @@ export async function ProfileTabSection({
 
       case "seguidores":
       case "siguiendo": {
+        if (!canSeeFollowers) return <ProfileClosedPanel kind="followers" />;
         const direction = tab === "seguidores" ? "followers" : "following";
         return (
           <ProfilePeoplePanel
@@ -135,6 +157,7 @@ export async function ProfileTabSection({
 
       case "fotos":
       case "videos": {
+        if (!canSeePosts) return <ProfileClosedPanel kind="posts" />;
         const kind = tab === "fotos" ? "image" : "video";
         const page = await fetchAuthorPostTiles(supabase, {
           tenantId,
@@ -163,6 +186,7 @@ export async function ProfileTabSection({
       }
 
       default: {
+        if (!canSeePosts) return <ProfileClosedPanel kind="posts" />;
         const page = await fetchAuthorPostTiles(supabase, {
           tenantId,
           authorId: profileId,

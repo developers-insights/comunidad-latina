@@ -20,6 +20,11 @@
  *     [--locale=es] [--currency=USD] [--admin-password=...] \
  *     [--modules=feed,propiedades,negocios] [--no-seed-post] [--dry-run]
  *
+ * Administrar dominios de una comunidad YA existente (alta, alias, suspensión):
+ *   node scripts/new-tenant.mjs --domain-for=colombianos-miami --domain=colombianosmiami.com
+ *   node scripts/new-tenant.mjs --domain-for=colombianos-miami --domain=cmiami.com --alias
+ *   node scripts/new-tenant.mjs --domain-for=colombianos-miami --domain=viejo.com --status=suspended
+ *
  * Borrar una comunidad de prueba (irreversible, requiere las dos flags):
  *   node scripts/new-tenant.mjs --delete=pruebatenant --yes-i-am-sure
  *
@@ -90,6 +95,10 @@ Uso:
     [--domain=<host>] [--city="<Ciudad, ST>"] [--country=<XX>] \\
     [--locale=es] [--currency=USD] [--admin-password=<pwd>] \\
     [--modules=feed,propiedades,...] [--no-seed-post] [--dry-run]
+
+  Dominios de una comunidad existente (alta / alias / suspender / archivar):
+  node scripts/new-tenant.mjs --domain-for=<slug> --domain=<host> \\
+    [--alias] [--status=active|suspended|archived] [--notes="<motivo>"]
 
   node scripts/new-tenant.mjs --delete=<slug> --yes-i-am-sure
 
@@ -268,7 +277,7 @@ function validateCreateArgs(a) {
   const adminName = typeof a['admin-name'] === 'string' ? a['admin-name'].trim() : '';
   if (!adminName) problems.push('--admin-name es obligatorio: nombre del admin inicial.');
 
-  const domain = typeof a.domain === 'string' && a.domain.trim() ? a.domain.trim().toLowerCase() : null;
+  const domain = normalizeDomain(a.domain) || null;
   if (domain && !HOSTNAME_RE.test(domain))
     problems.push(`--domain="${domain}" no parece un hostname válido (p. ej. colombianosmiami.com).`);
 
@@ -338,6 +347,152 @@ async function findUserByEmail(supabase, email) {
 
 function generatePassword() {
   return crypto.randomBytes(18).toString('base64url'); // 24 chars, bien arriba del mínimo de 12
+}
+
+// ---------------------------------------------------------------------------
+// Dominios (migración 0060) — la parte que dejó de exigir un deploy
+// ---------------------------------------------------------------------------
+// Antes de 0060 este script escribía la fila en `tenant_domains` y a
+// continuación avisaba que eso NO alcanzaba: había que sumar el host a mano al
+// mapa `DOMAIN_TENANTS` de src/lib/tenant/resolve.ts y desplegar. Ese paso ya
+// no existe: el proxy resuelve el Host contra `public.resolve_tenant_domain()`
+// en cada request, así que la fila que se escribe acá ES el alta.
+
+const DOMAIN_STATUSES = ['active', 'suspended', 'archived'];
+
+/**
+ * Espejo de `app.normalize_tenant_domain()` (0060) y de `normalizeHost()` en
+ * src/lib/tenant/domain-lookup.ts: minúsculas, sin espacios, sin puerto, sin
+ * punto final. Hace falta acá porque el script BUSCA por `domain` antes de
+ * escribir — y el trigger normaliza recién al escribir, así que una búsqueda
+ * sin normalizar no encontraría la fila que ya existe.
+ */
+function normalizeDomain(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/:[0-9]+$/, '')
+    .replace(/\.$/, '');
+}
+
+/**
+ * Da de alta (o actualiza) un dominio de un tenant. Idempotente.
+ *
+ * Dos cuidados que la base sola no cubre:
+ *  1. Nunca se le roba un dominio a otro tenant. `upsert onConflict: 'domain'`
+ *     lo movería en silencio si el host ya fuera de otra comunidad — un typo
+ *     en `--domain-for` apagaría un sitio vivo. Se chequea antes y se aborta.
+ *  2. Un solo primario por tenant lo garantiza el índice parcial único
+ *     `tenant_domains_primary_uniq`. Si este va a ser el canónico, primero hay
+ *     que bajar al anterior, o el insert rebota contra el índice.
+ */
+async function upsertTenantDomain(supabase, tenant, { domain, isPrimary, status, notes }) {
+  const { data: existing, error: selErr } = await supabase
+    .from('tenant_domains')
+    .select('tenant_id, domain, is_primary, status')
+    .eq('domain', domain)
+    .maybeSingle();
+  if (selErr) die(`buscando el dominio ${domain}`, selErr.message);
+
+  if (existing && existing.tenant_id !== tenant.id) {
+    die(
+      `El dominio "${domain}" ya está asignado a OTRA comunidad.`,
+      `Este script nunca reasigna un dominio vivo (sería apagar el sitio de alguien por un typo).\n` +
+        `Si de verdad hay que moverlo, primero archivalo en su comunidad actual:\n` +
+        `  node scripts/new-tenant.mjs --domain-for=<slug-actual> --domain=${domain} --status=archived`,
+    );
+  }
+
+  if (isPrimary) {
+    const { error } = await supabase
+      .from('tenant_domains')
+      .update({ is_primary: false })
+      .eq('tenant_id', tenant.id)
+      .eq('is_primary', true)
+      .neq('domain', domain);
+    if (error) die(`bajando el canónico anterior de ${tenant.slug}`, error.message);
+  }
+
+  const row = { tenant_id: tenant.id, domain, is_primary: isPrimary, status };
+  if (notes) row.notes = notes;
+
+  const { error } = await supabase.from('tenant_domains').upsert(row, { onConflict: 'domain' });
+  if (error) die(`guardando el dominio ${domain}`, error.message);
+
+  // Un dominio apagado NUNCA queda como canónico: el índice parcial único
+  // `tenant_domains_primary_uniq` no mira el status, así que un primario
+  // suspendido seguiría bloqueando al canónico nuevo.
+  const rol = status === 'active' ? (isPrimary ? 'canónico' : 'alias') : `apagado (${status})`;
+  log(existing ? 'update' : 'create', `${domain} → ${tenant.slug} · ${rol}`);
+  return { created: !existing };
+}
+
+/** Lo que queda a mano después de escribir la fila. Ya NO incluye tocar código. */
+function printDomainNextSteps(domain, status) {
+  if (status !== 'active') {
+    console.log(
+      `\n  "${domain}" quedó en "${status}": deja de resolver en cuanto expire la caché ` +
+        `del proxy (hasta 5 min). No hay nada que desplegar.\n`,
+    );
+    return;
+  }
+  console.log(`
+  Pasos que quedan a mano (paneles de terceros, no código):
+    1. DNS: apuntá ${domain} a Vercel (CNAME/A, según lo que pida el panel).
+    2. Vercel → equipo insights3 → proyecto comunidad-latina → Settings → Domains → Add.
+       Vercel valida el DNS y emite el certificado.
+
+  Lo que YA NO hace falta: ninguna edición de código, ningún commit, ningún deploy.
+  El proxy resuelve el Host contra tenant_domains en cada request. Un dominio
+  recién dado de alta puede tardar hasta 1 minuto en resolver (caché negativa
+  del proxy); uno recién apagado, hasta 5 minutos.
+`);
+}
+
+// ---------------------------------------------------------------------------
+// Modo --domain-for: administrar dominios de una comunidad ya existente
+// ---------------------------------------------------------------------------
+async function runDomain(slug, a) {
+  const domain = normalizeDomain(a.domain);
+  if (!domain) {
+    die('Falta --domain.', `Uso:\n  node scripts/new-tenant.mjs --domain-for=${slug} --domain=<host> [--alias] [--status=active|suspended|archived]`);
+  }
+  if (!HOSTNAME_RE.test(domain)) {
+    die(`--domain="${domain}" no parece un hostname válido (p. ej. colombianosmiami.com).`);
+  }
+
+  const status = typeof a.status === 'string' && a.status.trim() ? a.status.trim().toLowerCase() : 'active';
+  if (!DOMAIN_STATUSES.includes(status)) {
+    die(`--status="${status}" inválido.`, `Válidos: ${DOMAIN_STATUSES.join(', ')}.`);
+  }
+  const isPrimary = !a.alias && status === 'active';
+  const notes = typeof a.notes === 'string' && a.notes.trim() ? a.notes.trim() : null;
+
+  const supabase = getSupabaseAdmin();
+  const { data: tenant, error } = await supabase
+    .from('tenants')
+    .select('id, slug, name')
+    .eq('slug', slug)
+    .maybeSingle();
+  if (error) die(`buscando la comunidad "${slug}"`, error.message);
+  if (!tenant) {
+    die(
+      `No existe ninguna comunidad con slug "${slug}".`,
+      `Creala primero (ver --help) o revisá el slug — un typo acá dejaría el dominio colgando de la nada.`,
+    );
+  }
+
+  if (RESERVED_BRAND_SLUGS.includes(tenant.slug)) {
+    warn(
+      `"${tenant.slug}" es un slug reservado de marca/legal: el proxy nunca lo sirve como comunidad ` +
+        `pública, así que este dominio va a existir en la base pero no va a mostrar la comunidad. ` +
+        `Ver RESERVED_BRAND_SLUGS en src/lib/tenant/resolve.ts.`,
+    );
+  }
+
+  section(`Dominio de "${tenant.name}" (${tenant.slug})…`);
+  await upsertTenantDomain(supabase, tenant, { domain, isPrimary, status, notes });
+  printDomainNextSteps(domain, status);
 }
 
 // ---------------------------------------------------------------------------
@@ -421,17 +576,14 @@ async function runCreate(input) {
   }
 
   // --- 3. Dominio propio (opcional, idempotente) -----------------------------
+  // Desde 0060 esta fila ES el alta: el proxy resuelve el Host contra
+  // tenant_domains en cada request, así que no queda ningún paso de código.
   if (input.domain) {
-    const { error } = await supabase
-      .from('tenant_domains')
-      .upsert({ tenant_id: tenantId, domain: input.domain, is_primary: true }, { onConflict: 'domain', ignoreDuplicates: true });
-    if (error) die(`asociando el dominio ${input.domain}`, error.message);
-    log('ok', `dominio ${input.domain} → ${input.slug} (tenant_domains)`);
-    warn(
-      `un dominio propio en tenant_domains NO alcanza para que el Host resuelva en producción: ` +
-        `"${input.domain}" también necesita una línea en DOMAIN_TENANTS (src/lib/tenant/resolve.ts) ` +
-        `+ redeploy, además de DNS y alta en Vercel. Mientras tanto la comunidad ya es alcanzable ` +
-        `vía ?t=${input.slug} en cualquier dominio compartido. Ver docs/PLAYBOOK-TENANT.md.`,
+    section('2b. Dominio propio…');
+    await upsertTenantDomain(
+      supabase,
+      { id: tenantId, slug: input.slug, name: input.name },
+      { domain: input.domain, isPrimary: true, status: 'active', notes: null },
     );
   }
 
@@ -520,7 +672,7 @@ async function runCreate(input) {
   console.log(`\n✔ "${input.name}" está viva (tenant_id ${tenantId}).\n`);
   console.log(`  Verificar en dev/preview:  http://localhost:3000/?t=${input.slug}`);
   if (input.domain) {
-    console.log(`  Dominio asociado en DB:    ${input.domain} (falta DNS + Vercel + DOMAIN_TENANTS — ver playbook)`);
+    console.log(`  Dominio canónico en DB:    ${input.domain} (active, is_primary)`);
   }
   if (generatedPassword) {
     console.log(`\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
@@ -530,6 +682,7 @@ async function runCreate(input) {
     console.log(`  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   }
   console.log(`\n  Checklist de verificación completa: docs/PLAYBOOK-TENANT.md\n`);
+  if (input.domain) printDomainNextSteps(input.domain, 'active');
 }
 
 // ---------------------------------------------------------------------------
@@ -540,6 +693,11 @@ async function main() {
 
   if (typeof args.delete === 'string' && args.delete.trim()) {
     await runDelete(args.delete.trim().toLowerCase());
+    return;
+  }
+
+  if (typeof args['domain-for'] === 'string' && args['domain-for'].trim()) {
+    await runDomain(args['domain-for'].trim().toLowerCase(), args);
     return;
   }
 

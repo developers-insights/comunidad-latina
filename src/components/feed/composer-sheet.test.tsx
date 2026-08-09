@@ -67,6 +67,7 @@ vi.mock("motion/react", () => {
 });
 
 import { ComposerSheet, type ComposerMediaItem, type ComposerSheetProps } from "./composer-sheet";
+import { EMPTY_DECLARATION_VALUE } from "@/components/integrity/originality-fields";
 import { COPY } from "./copy";
 
 const PHOTO: ComposerMediaItem = { id: "m1", kind: "photo", preview: "blob:foto" };
@@ -94,6 +95,8 @@ function mount(overrides: Partial<ComposerSheetProps> = {}) {
     onPollChange: vi.fn(),
     videoCategory: "otros",
     onVideoCategoryChange: vi.fn(),
+    declaration: EMPTY_DECLARATION_VALUE,
+    onDeclarationChange: vi.fn(),
     previewId: "preview-1",
     uploadPct: null,
     measuringVideo: false,
@@ -229,5 +232,103 @@ describe("ComposerSheet — la vista previa entra entera en la hoja", () => {
     mount({ mode: "text", body: "" });
     expect(previewFrame()).toBeNull();
     expect(screen.getAllByText(COPY.composer.compose.textPlaceholder).length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * DECLARACIÓN DE ORIGINALIDAD (pliego + 0061). Lo que se ancla acá no es cómo
+ * se ve: es que exista donde tiene que existir, que NO exista donde no
+ * significa nada, y que plegada siga siendo alcanzable y legible.
+ */
+describe("ComposerSheet — declaración de originalidad", () => {
+  const C = COPY.composer.compose.declaration;
+
+  function disclosure(): HTMLDetailsElement | null {
+    return document.querySelector<HTMLDetailsElement>("details");
+  }
+
+  it("aparece con una foto, y nombra la foto (no 'el material')", () => {
+    mount({ mode: "media", media: [PHOTO] });
+    expect(screen.getByText(C.title(1, false))).toBeTruthy();
+    expect(C.title(1, false)).toBe("Sobre esta foto");
+  });
+
+  it("aparece con un video y lo nombra video", () => {
+    mount({ mode: "media", media: [VIDEO] });
+    expect(screen.getByText(C.title(0, true))).toBeTruthy();
+  });
+
+  it("NO aparece sin archivo: en modo media sin medio no hay nada que declarar", () => {
+    mount({ mode: "media", media: [] });
+    expect(disclosure()).toBeNull();
+  });
+
+  it("NO aparece en una pregunta: no se registra ningún content_asset", () => {
+    mount({ mode: "question", body: "¿A qué hora abre la feria?" });
+    expect(disclosure()).toBeNull();
+  });
+
+  it("NO aparece en un texto, por lo mismo", () => {
+    mount({ mode: "text", body: "Abrió la panadería nueva." });
+    expect(disclosure()).toBeNull();
+  });
+
+  it("arranca PLEGADA: el composer rápido no se convierte en un formulario", () => {
+    mount({ mode: "media", media: [PHOTO] });
+    expect(disclosure()?.open).toBe(false);
+  });
+
+  it("plegada ya dice que es opcional y para qué sirve", () => {
+    mount({ mode: "media", media: [PHOTO] });
+    expect(screen.getByText(C.hint)).toBeTruthy();
+    expect(C.hint.startsWith("Opcional")).toBe(true);
+  });
+
+  it("abrirla muestra los cuatro controles reales", () => {
+    mount({ mode: "media", media: [PHOTO] });
+    const details = disclosure();
+    expect(details).not.toBeNull();
+    details!.open = true;
+    expect(screen.getByRole("checkbox")).toBeTruthy();
+    expect(screen.getByRole("combobox")).toBeTruthy();
+  });
+
+  it("marcar la casilla propaga la declaración hacia arriba, no la guarda sola", () => {
+    const props = mount({ mode: "media", media: [PHOTO] });
+    disclosure()!.open = true;
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(props.onDeclarationChange).toHaveBeenCalledWith(
+      expect.objectContaining({ originalityDeclared: true, licenseKind: "propio" }),
+    );
+  });
+
+  it("ya declarada, el renglón plegado muestra QUÉ se declaró", () => {
+    mount({
+      mode: "media",
+      media: [PHOTO],
+      declaration: {
+        originalityDeclared: true,
+        licenseKind: "con_permiso",
+        licenseStatement: "",
+        licenseUrl: "",
+      },
+    });
+    // Se busca DENTRO del renglón plegado: el mismo texto existe además como
+    // <option> del selector, que está en el DOM aunque el bloque esté cerrado.
+    const summary = document.querySelector("summary");
+    expect(summary?.textContent).toContain("Tengo permiso de quien lo hizo");
+    expect(summary?.textContent).not.toContain(C.hint);
+  });
+
+  it("el descargo que NO se puede suavizar viaja con el bloque", () => {
+    mount({ mode: "media", media: [PHOTO] });
+    disclosure()!.open = true;
+    expect(screen.getByText(/no lo verificamos/)).toBeTruthy();
+    expect(screen.getByText(/no equivale a un certificado de propiedad/)).toBeTruthy();
+  });
+
+  it("declarar no es requisito para publicar: el botón sigue encendido", () => {
+    mount({ mode: "media", media: [PHOTO], body: "" });
+    expect(publishButton().disabled).toBe(false);
   });
 });

@@ -19,6 +19,8 @@ import { ProfileHeader } from "../profile-header";
 import { ShareProfileButton } from "../share-profile-button";
 import { ProfileTabSection } from "../profile-tab-section";
 import { fetchProfileCounts } from "../profile-data";
+import { fetchProfileCard, fullName } from "../profile-card";
+import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { memberSinceLabel, parseProfileTab, profileTabHref } from "../profile-tabs";
 
 export const metadata = { title: "Perfil" };
@@ -47,10 +49,14 @@ export default async function PerfilPublicoPage({
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
 
-  const [tenant, supabase, sp] = await Promise.all([
+  const [tenant, supabase, sp, viewerZone] = await Promise.all([
     getTenant(),
     createClient(),
     searchParams,
+    // "Miembro desde" se formatea con el reloj de QUIEN MIRA, no con el de la
+    // comunidad: alguien en Los Ángeles viendo un alta del 1 de marzo a las
+    // 02:00 UTC tiene que leer "febrero", que es cuando pasó para él.
+    getViewerTimeZone(),
   ]);
   const {
     data: { user },
@@ -60,33 +66,29 @@ export default async function PerfilPublicoPage({
   if (user?.id === id) redirect("/perfil");
 
   /**
-   * LISTA EXPLÍCITA DE COLUMNAS — no `select("*")`.
+   * `profile_card()` Y NO UNA LECTURA DE `profiles`.
    *
-   * Esta página es PÚBLICA (ver la nota de RLS abajo), así que todo lo que
-   * entre en este select viaja al navegador de cualquiera. `profiles` tiene 20
-   * columnas y la página usa 8; el `*` que había acá arrastraba además `role`
-   * (quién es admin), `account_status` y `suspended_until` (si la persona está
-   * sancionada, y hasta cuándo), `phone_verified`, `email_verified`,
-   * `terms_accepted_at` y `age_confirmed_at`. Nada de eso se muestra: se
-   * mandaba de puro `*`.
+   * Acá había una lista explícita de columnas, que ya era mucho mejor que el
+   * `select("*")` que la precedió (ese arrastraba `role`, `account_status`,
+   * `suspended_until`, `phone_verified`, `terms_accepted_at`… al navegador de
+   * cualquiera). Pero seguía teniendo el agujero de fondo: `bio` y
+   * `country_origin` viajaban SIN pasar por los controles de privacidad, porque
+   * la policy de `profiles` es `using(true)` y RLS filtra filas, no columnas. La
+   * persona podía poner su presentación en "solo yo" y esta consulta la
+   * publicaba igual.
    *
-   * Agregar una columna acá es publicarla. Que la lista esté escrita obliga a
-   * pensarlo.
+   * `public.profile_card()` (0063) es SECURITY DEFINER y aplica la matriz
+   * ADENTRO de la base: lo que la configuración no permite vuelve NULL desde el
+   * servidor. Ver el comentario largo de `../profile-card.ts`.
    *
-   * Lo mismo vale para `trust_scores`, y ahí el `*` además ROMPÍA: la migración
-   * 0059 le revocó a `anon` la columna `factors` (el desglose del motor
-   * anti-fraude, que se puede estudiar para gamear el score), y con un permiso
-   * de columna faltante Postgres tira 42501 sobre la tabla entera. Como el error
-   * no se chequea, `trust` quedaba `null` y la página mostraba score 0 y el
-   * nivel más bajo a CUALQUIER visitante sin sesión — un valor falso, no un
-   * badge ausente. En un producto anti-estafa esa es la señal que más importa.
+   * Lo de `trust_scores` sigue igual y sigue importando: el `*` que hubo ahí
+   * ROMPÍA, porque 0059 le revocó a `anon` la columna `factors` y un permiso de
+   * columna faltante tira 42501 sobre la tabla entera. Como el error no se
+   * chequea, `trust` quedaba `null` y la página mostraba score 0 y el nivel más
+   * bajo a CUALQUIER visitante sin sesión — un valor falso, no un badge ausente.
    */
-  const [{ data: profile }, { data: trust }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, display_name, avatar_url, country_origin, area_label, bio, identity_verified, created_at")
-      .eq("id", id)
-      .maybeSingle(),
+  const [card, { data: trust }] = await Promise.all([
+    fetchProfileCard(supabase, id),
     supabase
       .from("trust_scores")
       .select("score, level, signals")
@@ -94,18 +96,17 @@ export default async function PerfilPublicoPage({
       .maybeSingle(),
   ]);
 
-  if (!profile) {
+  if (!card) {
     /**
+     * Sin ficha = el perfil no existe, o la cuenta está dada de baja (la propia
+     * `profile_card` devuelve cero filas cuando `account_status = 'banned'`, así
+     * que esta pantalla ya no necesita acordarse de chequearlo).
+     *
      * RLS (verificado contra la base): la policy es
      * `profiles_select ... TO anon, authenticated USING (true)` — o sea que los
-     * perfiles SÍ se ven sin sesión. El comentario que había acá afirmaba lo
-     * contrario y por eso existía una rama que ofrecía "entrá a tu cuenta"
-     * cuando no había perfil: era código muerto, y encima mentía. Sin sesión no
-     * es la razón por la que un perfil no aparece — la razón es que no existe.
-     *
-     * Si algún día la policy pasara a exigir sesión, esta rama vuelve; hoy
-     * mandar a alguien a loguearse para ver algo que no existe es hacerle
-     * perder el viaje.
+     * perfiles SÍ se ven sin sesión, y por eso acá no hay ninguna rama que
+     * ofrezca "entrá a tu cuenta". Sin sesión no es la razón por la que un
+     * perfil no aparece; la razón es que no está.
      */
     notFound();
   }
@@ -130,19 +131,29 @@ export default async function PerfilPublicoPage({
 
   const score = trust?.score ?? 0;
   const level = normalizeTrustLevel(trust?.level, score);
-  const signals = trustSignalsFrom(trust?.signals ?? null, profile.identity_verified);
-  const firstName = profile.display_name.split(/\s+/)[0] ?? profile.display_name;
-  const country = countryName(profile.country_origin);
-  const location = [country, profile.area_label].filter(Boolean).join(" · ") || null;
+  const signals = trustSignalsFrom(trust?.signals ?? null, card.identityVerified);
+  const firstName = card.displayName.split(/\s+/)[0] ?? card.displayName;
+  const country = countryName(card.countryOrigin);
+  // La ubicación de la cabecera combina lo que la privacidad DEJÓ pasar: si el
+  // bloque "dónde vivís" está cerrado, `city` viene null y la línea se arma sola
+  // con lo que queda, sin huecos ni marcas de censura.
+  const location =
+    [country, card.city, card.areaLabel].filter(Boolean).join(" · ") || null;
   const base = `/perfil/${id}`;
-  const memberSince = memberSinceLabel(profile.created_at, tenant.locale);
+  const memberSince = memberSinceLabel(card.createdAt, tenant.locale, viewerZone ?? undefined);
 
   return (
     <div className="flex flex-col gap-6">
       <ProfileHeader
-        displayName={profile.display_name}
-        avatarUrl={profile.avatar_url}
-        identityVerified={profile.identity_verified}
+        // `fullName` suma el apellido SOLO si la privacidad lo dejó pasar; si
+        // no, sale el nombre solo, sin puntos suspensivos que delaten que hay
+        // algo tapado (un indicador de "acá hay un apellido oculto" también es
+        // información).
+        displayName={fullName(card)}
+        username={card.username}
+        avatarUrl={card.avatarUrl}
+        coverUrl={card.coverUrl}
+        identityVerified={card.identityVerified}
         location={location}
         memberSince={memberSince}
         stats={[
@@ -159,7 +170,7 @@ export default async function PerfilPublicoPage({
           },
         ]}
         // Menú ⋯ con "Reportar como estafa" SIEMPRE primero (§3.3 / §4.c).
-        headerRight={<ProfileActionsMenu profileId={profile.id} />}
+        headerRight={<ProfileActionsMenu profileId={card.id} />}
         // 1 CTA primario por pantalla: hilo real si ya hay conversación; si no,
         // estado honesto (el contacto perfil→perfil llega con el módulo social).
         // "Compartir" va al lado como secundario, nunca compitiendo con él.
@@ -176,7 +187,7 @@ export default async function PerfilPublicoPage({
             ) : (
               <MessageCta firstName={firstName} />
             )}
-            <ShareProfileButton path={base} displayName={profile.display_name} />
+            <ShareProfileButton path={base} displayName={card.displayName} />
           </>
         }
       />
@@ -190,9 +201,12 @@ export default async function PerfilPublicoPage({
         heading={COPY.trustHeading(firstName)}
       />
 
-      {profile.bio && (
+      {/* La bio ya viene filtrada por la matriz: si está cerrada, `card.bio` es
+          null y este bloque no existe — no hay un "presentación oculta" que
+          contarle a nadie. */}
+      {card.bio && (
         <p className="text-center text-sm leading-relaxed text-foreground-secondary">
-          {profile.bio}
+          {card.bio}
         </p>
       )}
 
@@ -206,12 +220,22 @@ export default async function PerfilPublicoPage({
         counts={counts}
         isOwn={false}
         cursor={cursor}
+        // Los dos permisos salen de `profile_card`, o sea de la base: las
+        // pestañas de publicaciones y de seguidores muestran un estado cerrado
+        // en vez de la lista cuando la persona así lo eligió.
+        canSeePosts={card.canSeePosts}
+        canSeeFollowers={card.canSeeFollowers}
         info={{
-          bio: profile.bio,
+          bio: card.bio,
           country,
-          areaLabel: profile.area_label,
+          areaLabel: card.areaLabel,
           memberSince,
-          identityVerified: profile.identity_verified,
+          identityVerified: card.identityVerified,
+          lastName: card.lastName,
+          age: card.age,
+          countryResidence: card.countryResidence,
+          city: card.city,
+          languages: card.languages,
         }}
       />
     </div>

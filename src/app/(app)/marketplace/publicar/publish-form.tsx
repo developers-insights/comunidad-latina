@@ -22,6 +22,11 @@ import {
   PRODUCT_CONDITIONS,
   isProductCondition,
 } from "@/components/marketplace";
+import {
+  EMPTY_DECLARATION_VALUE,
+  OriginalityFields,
+  type DeclarationValue,
+} from "@/components/integrity/originality-fields";
 import { createProductDraft, finalizeProduct } from "./actions";
 
 const C = COPY.publish;
@@ -91,6 +96,8 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
   const [category, setCategory] = useState("");
   const [condition, setCondition] = useState("");
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  // Declaración de originalidad y licencia (pliego / Content Integrity).
+  const [declaration, setDeclaration] = useState<DeclarationValue>(EMPTY_DECLARATION_VALUE);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -146,6 +153,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
     setCategory("");
     setCondition("");
     setPhotos([]);
+    setDeclaration(EMPTY_DECLARATION_VALUE);
     setDraftId(null);
     setDone(null);
     setError(null);
@@ -199,7 +207,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
       }
 
       // 3) Cierre: estado final según moderación/degradación elegante
-      const finalized = await finalizeProduct({ listingId, photoPaths });
+      const finalized = await finalizeProduct({ listingId, photoPaths, declaration });
       if (!finalized.ok) {
         setError(finalized.error);
         return;
@@ -442,6 +450,15 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
 
         {photos.length > 0 && <p className="text-xs text-foreground-muted">{C.reviewNote}</p>}
       </div>
+
+      {/* Declaración de originalidad y licencia. Va PEGADA a las fotos porque
+          es de las fotos que habla — no al final, junto al botón, donde se lee
+          como letra chica. */}
+      <OriginalityFields
+        idPrefix="producto-declaracion"
+        value={declaration}
+        onChange={setDeclaration}
+      />
 
       {/* REGLAS DEL MARKETPLACE (§7). Van ANTES del botón y con el enlace a la
           vista, no en un tilde que se marca sin leer: quien publica un producto

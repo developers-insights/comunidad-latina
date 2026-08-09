@@ -2,7 +2,10 @@ import { SealCheck } from "@phosphor-icons/react/dist/ssr";
 import { Banner } from "@/components/ui";
 import { isStripeConfigured } from "@/lib/config/services";
 import { PLAN_IDS, PLANES_PRESENCIA } from "@/lib/stripe";
+import { createClient } from "@/lib/supabase/server";
+import { getTenant } from "@/lib/tenant/resolve";
 import { PlanesPresencia } from "./planes-presencia";
+import { leerPreciosPresencia } from "./precios";
 
 export const metadata = { title: "Presencia Verificada" };
 
@@ -23,6 +26,13 @@ export default async function PresenciaPage({
   searchParams: Promise<{ estado?: string }>;
 }) {
   const { estado } = await searchParams;
+
+  // Los precios que se muestran salen de la MISMA lectura que después usa el
+  // Checkout (`iniciarSuscripcion` llama a `getPrice` con este mismo tenant).
+  // Si esto fallara, `getTenantPrices` ya cae a las constantes del código: la
+  // pantalla nunca queda sin precio (§7).
+  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  const precios = await leerPreciosPresencia(supabase, tenant.id);
 
   return (
     <>
@@ -48,6 +58,7 @@ export default async function PresenciaPage({
 
       <PlanesPresencia
         planes={PLAN_IDS.map((id) => PLANES_PRESENCIA[id])}
+        precios={precios}
         stripeConfigured={isStripeConfigured}
       />
     </>

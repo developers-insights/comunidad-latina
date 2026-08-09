@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Megaphone, Star, Users, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
 import { Badge, BezelCard, Button, Field, Input, useToast } from "@/components/ui";
+import { formatCents, type ResolvedPrice } from "@/lib/pricing";
 import type { PostPromoId, PostPromoPackage } from "@/lib/stripe";
-import { cn, formatMoney } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { crearCampanaPost } from "./actions";
 
 /** Copy local del módulo — no toca src/lib/i18n (compartido). */
@@ -54,11 +55,18 @@ const WHATSAPP_RE = /^\+?\d{8,15}$/;
 export function OpcionesCampana({
   postId,
   paquetes,
+  precios,
   zones,
   stripeConfigured,
 }: {
   postId: string;
   paquetes: PostPromoPackage[];
+  /**
+   * Precio vigente de cada paquete en esta comunidad — la misma lectura que
+   * después usa `crearCampanaPost`, tanto para cobrar como para dejar asentado
+   * el monto de una campaña en modo demostración.
+   */
+  precios: Partial<Record<PostPromoId, ResolvedPrice>>;
   zones: string[];
   stripeConfigured: boolean;
 }) {
@@ -236,7 +244,9 @@ export function OpcionesCampana({
           </div>
         )}
 
-        {paquetes.map((paquete) => (
+        {paquetes.map((paquete) => {
+          const precio = precios[paquete.id] ?? null;
+          return (
           <BezelCard
             key={paquete.id}
             variant={paquete.recomendado ? "featured" : "default"}
@@ -259,12 +269,16 @@ export function OpcionesCampana({
               )}
             </div>
 
-            <p className="flex items-baseline gap-1.5">
-              <span className="numeric font-display text-3xl font-bold text-foreground">
-                {formatMoney(paquete.precioUsd)}
-              </span>
-              <span className="text-sm text-foreground-secondary">{COPY.pagoUnico}</span>
-            </p>
+            {precio && (
+              <p className="flex items-baseline gap-1.5">
+                <span className="numeric font-display text-3xl font-bold text-foreground">
+                  {formatCents(precio.amountCents, precio.currency)}
+                </span>
+                {/* "pago único" nunca se separa del número: es lo que impide
+                    leer un total como si fuera una tarifa por período. */}
+                <span className="text-sm text-foreground-secondary">{COPY.pagoUnico}</span>
+              </p>
+            )}
 
             <Button
               variant={paquete.recomendado ? "primary" : "outline"}
@@ -279,7 +293,8 @@ export function OpcionesCampana({
                 : COPY.activateDemo(paquete.nombre)}
             </Button>
           </BezelCard>
-        ))}
+          );
+        })}
       </section>
     </div>
   );

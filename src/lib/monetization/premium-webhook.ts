@@ -9,12 +9,13 @@ import {
 } from "@/lib/stripe/subscription";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { formatDate } from "@/lib/utils";
-import { PREMIUM_LISTING_PRICE_CENTS } from "./premium";
 import {
-  selectPremiumByListing,
-  updatePremiumBySubscription,
-  upsertPremium,
-} from "./premium-db";
+  diagnosticoDeCobro,
+  metadataString,
+  motivoDeDiscrepancia,
+  pactadoFromMetadata,
+} from "./pactado";
+import { updatePremiumBySubscription, upsertPremium } from "./premium-db";
 
 /**
  * =============================================================================
@@ -55,14 +56,6 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 /** Marca de este flujo en la metadata. Distinta de `store_membership` (0048). */
 export const LISTING_PREMIUM_KIND = "listing_premium";
 
-function metadataString(
-  metadata: Stripe.Metadata | null | undefined,
-  key: string,
-): string | null {
-  const value = metadata?.[key];
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
 function customerId(
   customer: string | { id: string } | null | undefined,
 ): string | null {
@@ -80,6 +73,13 @@ export function isListingPremiumEvent(
   return metadataString(metadata, "kind") === LISTING_PREMIUM_KIND;
 }
 
+/*
+ * `pactadoFromMetadata` VIVÍA acá y se mudó a `./pactado` cuando el segundo
+ * producto necesitó la misma regla (Presencia Verificada, en el route handler).
+ * Ahí está el porqué completo de comparar contra la metadata y no contra
+ * `tenant_prices` ni contra una constante del código.
+ */
+
 /* -------------------------------------------------------------------------- */
 /* Alta: checkout.session.completed                                           */
 /* -------------------------------------------------------------------------- */
@@ -92,7 +92,10 @@ export function isListingPremiumEvent(
  *   (a) el aviso EXISTA, sea de ese tenant y su dueño sea el `owner_id` de la
  *       metadata — si el aviso se borró entre el checkout y el webhook, hay
  *       plata cobrada sin sujeto y eso se reconcilia a mano, no se inventa;
- *   (b) el monto cobrado coincida con el precio esperado.
+ *   (b) el monto Y LA MONEDA cobrados coincidan con lo PACTADO al abrir el
+ *       Checkout (`metadata.price_cents` / `metadata.price_currency`, ver
+ *       `pactadoFromMetadata`) — no con una constante del código, que es lo que
+ *       rompía el alta de cualquier comunidad con precio propio.
  * Discrepancia → log de ALERTA y NO se concede, SIN throw: reintentar no arregla
  * una discrepancia de monto, y el payload queda en `payment_events` para
  * reconciliar. Lanzar dejaría a Stripe reintentando un evento que nunca va a
@@ -127,13 +130,23 @@ async function activateFromCheckout(
     return;
   }
 
-  // (b) El monto. `price_cents` de la fila manda si ya hubo una suscripción con
-  // otro precio (un "precio fundador", el día que exista); si no, el de la spec.
-  const { data: priced } = await selectPremiumByListing(admin, listingId);
-  const expectedCents = priced?.price_cents ?? PREMIUM_LISTING_PRICE_CENTS;
-  if (typeof session.amount_total === "number" && session.amount_total !== expectedCents) {
+  // (b) EL MONTO, contra LO PACTADO (ver `pactadoFromMetadata`).
+  const pactado = pactadoFromMetadata(session.metadata);
+  if (!pactado) {
+    // Rastro diagnosticable, no silencio: con esto y el payload que quedó en
+    // `payment_events` se sabe qué se cobró, a quién y por qué no se concedió.
     console.error(
-      `[monetizacion:premium:webhook] ALERTA: amount_total ${session.amount_total} ≠ esperado ${expectedCents} — NO se concede premium.`,
+      `[monetizacion:premium:webhook] ALERTA: la session ${session.id} (aviso ${listingId}) no trae un precio pactado legible en metadata — NO se concede premium. ${diagnosticoDeCobro(session)}. Reconciliar a mano en el Dashboard.`,
+    );
+    return;
+  }
+
+  // Monto Y MONEDA (ver `motivoDeDiscrepancia`): 1500 ARS y 1500 USD dan el
+  // mismo entero y no son el mismo cobro.
+  const discrepancia = motivoDeDiscrepancia(session, pactado);
+  if (discrepancia) {
+    console.error(
+      `[monetizacion:premium:webhook] ALERTA: la session ${session.id} (aviso ${listingId}) ${discrepancia} — NO se concede premium. ${diagnosticoDeCobro(session)}.`,
     );
     return;
   }
@@ -148,6 +161,12 @@ async function activateFromCheckout(
     listing_id: listingId,
     owner_id: ownerId,
     status: "active",
+    // Lo que efectivamente se cobró queda ESCRITO en la fila: la pantalla del
+    // dueño muestra ese número y la reconciliación no depende de ir a buscar la
+    // Session a Stripe. Sin esto, un aviso pagado a USD 15 mostraría el default
+    // de la columna (900).
+    price_cents: pactado.cents,
+    currency: pactado.currency,
     // Una reactivación empieza limpia: si la fila venía de una cancelación
     // programada, dejar el flag en true mostraría "premium hasta el ..." sobre
     // una suscripción nueva que sí se renueva.
@@ -157,7 +176,42 @@ async function activateFromCheckout(
     stripe_checkout_session_id: session.id,
     updated_at: new Date().toISOString(),
   });
-  if (error) throw new Error(`upsert listing_premiums: ${error.code}`);
+  if (error) {
+    // CHOQUE CONTRA OTRO ÍNDICE UNIQUE, no contra `listing_id`.
+    //
+    // El upsert resuelve `listing_id` por sí solo (`onConflict`), pero la tabla
+    // tiene otros dos uniques parciales (0054): `stripe_checkout_session_id` y
+    // `stripe_subscription_id`. Los dos significan lo mismo: ESA session (o esa
+    // suscripción) YA está vinculada a OTRO aviso. Es decir, un solo pago
+    // intentando encender un segundo premium — exactamente lo que esos índices
+    // existen para frenar.
+    //
+    // POR QUÉ SE TRAGA Y NO SE DEJA REVENTAR
+    // Reintentar no lo arregla: la session va a seguir vinculada al otro aviso
+    // en el reintento número mil. Dejar que lance daba un 500, y con `processed`
+    // en false Stripe reintenta durante tres días un evento que NUNCA va a poder
+    // aplicarse; de paso el premium tampoco se concedía y el ruido tapaba fallas
+    // reales. Conceder igual no es opción: sería el doble premium con un pago.
+    // Queda entonces la misma salida que una discrepancia de monto: no conceder,
+    // log de ALERTA con todo lo necesario para reconciliar, y 200.
+    //
+    // SÓLO ESTE CASO SE TRAGA. Cualquier otro error de escritura sigue lanzando,
+    // porque un fallo transitorio SÍ se arregla con el reintento de Stripe.
+    const detalle = `${error.message ?? ""} ${error.details ?? ""}`;
+    const esSessionYaUsada =
+      error.code === "23505" &&
+      /checkout_session_uniq|listing_premiums_subscription_uniq/.test(detalle);
+    if (!esSessionYaUsada) throw new Error(`upsert listing_premiums: ${error.code}`);
+
+    console.error(
+      `[monetizacion:premium:webhook] ALERTA: la session ${session.id} (aviso ${listingId}, suscripción ${
+        subscriptionId ?? "—"
+      }) ya está vinculada a OTRO premium — NO se concede, para no dar dos premium con un pago. ${diagnosticoDeCobro(
+        session,
+      )}. Reconciliar a mano en el Dashboard.`,
+    );
+    return;
+  }
 
   // `current_period_end` llega en el evento de la suscripción, no acá: la
   // Session no lo trae. El cron no toca filas con NULL, así que la ventana entre

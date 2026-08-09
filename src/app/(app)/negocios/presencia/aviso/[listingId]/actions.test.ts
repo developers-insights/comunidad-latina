@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   getStripe: vi.fn(),
   selectPremiumByListing: vi.fn(),
   limit: vi.fn(() => ({ ok: true })),
+  getPrice: vi.fn(),
 }));
 
 // Sin clave: exactamente el estado de producción hoy.
@@ -35,6 +36,9 @@ vi.mock("@/lib/monetization/premium-db", () => ({
   selectPremiumByListing: mocks.selectPremiumByListing,
 }));
 vi.mock("@/lib/rate-limit", () => ({ limit: mocks.limit, HOUR_MS: 3_600_000 }));
+// El precio ahora sale de `tenant_prices` (0072). Se mockea la lectura, no la
+// tabla: lo que importa acá es que la action NO decida un monto por su cuenta.
+vi.mock("@/lib/pricing/read", () => ({ getPrice: mocks.getPrice }));
 
 import { MONETIZATION_COPY } from "@/lib/monetization";
 import { abrirPortalPremiumAviso, activarPremiumAviso } from "./actions";
@@ -67,6 +71,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.limit.mockReturnValue({ ok: true });
   mocks.selectPremiumByListing.mockResolvedValue({ data: null, error: null });
+  mocks.getPrice.mockResolvedValue({
+    amountCents: 900,
+    currency: "USD",
+    source: "fallback",
+  });
   vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });

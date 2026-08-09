@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { availableOAuthProviders } from "../oauth-actions";
 import { RegistroClient } from "./registro-client";
 
 export const metadata = { title: "Sumate" };
@@ -12,5 +13,9 @@ export default async function RegistroPage() {
   } = await supabase.auth.getUser();
   if (user) redirect("/feed");
 
-  return <RegistroClient />;
+  // Sin credenciales el array viene vacío y el bloque de Google/Apple no se
+  // dibuja: la pantalla queda igual a como estaba (§7).
+  const oauthProviders = await availableOAuthProviders();
+
+  return <RegistroClient oauthProviders={oauthProviders} />;
 }

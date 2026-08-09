@@ -172,6 +172,10 @@ export default async function ProductoDetallePage({ params }: { params: Params }
           score: trustScore?.score ?? 0,
           level: toTrustLevel(trustScore?.level),
           signals: buildTrustSignals(trustScore?.signals ?? {}, profile?.identity_verified ?? false),
+          // El badge que se ve en la tarjeta de tienda ES el del dueño, así que
+          // "Ver perfil" lleva a esa persona. Sin consulta extra: `created_by`
+          // ya vino en el select de la tienda.
+          profileId: store.created_by,
         };
       }
 
@@ -218,6 +222,7 @@ export default async function ProductoDetallePage({ params }: { params: Params }
         score: trustScore?.score ?? 0,
         level: toTrustLevel(trustScore?.level),
         signals: buildTrustSignals(trustScore?.signals ?? {}, profile?.identity_verified ?? false),
+        profileId: product.created_by,
       },
     };
     seller = { kind: "private", name: displayName };
@@ -331,15 +336,10 @@ export default async function ProductoDetallePage({ params }: { params: Params }
               <p className="truncate font-display text-base font-bold text-foreground">
                 {privateSeller.displayName}
               </p>
-              {/* `profileId` va suelto y no adentro de `privateSeller.trust`:
-                  ese objeto está tipado como el `trust` de StoreCardModel y
-                  sumarle un campo lo desalinearía de la tarjeta de tienda, que
-                  no tiene una persona detrás. */}
-              <PublisherTrust
-                {...privateSeller.trust}
-                size="inline"
-                profileId={product.created_by}
-              />
+              {/* `profileId` viaja DENTRO de `privateSeller.trust`: desde que
+                  el `trust` de StoreCardModel lo exige, el tipo garantiza que
+                  esté — antes iba suelto acá justamente porque no lo exigía. */}
+              <PublisherTrust {...privateSeller.trust} size="inline" />
               <p className="mt-1 flex items-center gap-1.5 text-xs text-foreground-muted">
                 <User size={13} aria-hidden="true" className="shrink-0" />
                 {COPY.detail.privateSellerNote}

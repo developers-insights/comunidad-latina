@@ -2,11 +2,8 @@
 
 import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
-import {
-  getStripe,
-  montoCentavos,
-  PLANES_PRESENCIA,
-} from "@/lib/stripe";
+import { getPrice } from "@/lib/pricing/read";
+import { getStripe, PLANES_PRESENCIA } from "@/lib/stripe";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getTenant } from "@/lib/tenant/resolve";
 
@@ -72,6 +69,19 @@ export async function iniciarSuscripcion(
 
   const plan = PLANES_PRESENCIA[planId];
 
+  // EL PRECIO DE LA COMUNIDAD, no el del código. Misma lectura que la que ya
+  // pintó la tarjeta en `/negocios/presencia` (ver ./precios.ts), así que el
+  // número que la persona vio y el que se le cobra son la misma fila. Sin fila
+  // configurada, `getPrice` cae a la constante de siempre — este cambio no
+  // mueve un centavo hasta que alguien edite un precio en el panel.
+  const precio = await getPrice(supabase, tenant.id, "presencia", planId, intervalo);
+  if (!precio) {
+    console.error(
+      `[pagos] Sin precio para presencia/${planId}/${intervalo} — tenant=${tenant.slug}`,
+    );
+    return { status: "error", message: COPY.errorGenerico };
+  }
+
   try {
     // Cuenta de negocio del dueño en este tenant (RLS aplica: solo la propia).
     const { data: existing } = await supabase
@@ -113,8 +123,21 @@ export async function iniciarSuscripcion(
     const metadata = {
       tenant_id: tenant.id,
       business_account_id: businessAccountId,
+      // QUIÉN compró. Presencia era el único de los cinco productos que no lo
+      // mandaba, y por eso el webhook sólo podía verificar pertenencia de forma
+      // indirecta —contra el customer ya vinculado a la cuenta—, que en la
+      // PRIMERA compra todavía no existe: justo el camino más común quedaba sin
+      // correlacionar. Con esto, `activateVerifiedPresence` exige
+      // `business_accounts.owner_id === metadata.owner_id` desde el primer peso.
+      owner_id: user.id,
       plan: plan.id,
       intervalo,
+      // Lo que se decidió cobrar, para poder reconciliar un cobro viejo contra
+      // el precio que regía en ese momento (el historial de precios vive en
+      // `tenant_price_history`, pero el comprobante de Stripe también tiene que
+      // poder explicarse solo).
+      price_cents: String(precio.amountCents),
+      price_currency: precio.currency,
     };
 
     const session = await stripe.checkout.sessions.create({
@@ -126,11 +149,15 @@ export async function iniciarSuscripcion(
       line_items: [
         {
           quantity: 1,
-          // [EJEMPLO] §18: price_data inline con los montos de PLANES_PRESENCIA.
-          // Antes del go-live real, migrar a Prices del dashboard de Stripe.
+          // `price_data` inline con el precio VIGENTE de esta comunidad
+          // (`tenant_prices`, 0072). Antes del go-live real, migrar a Prices
+          // del dashboard de Stripe.
           price_data: {
-            currency: "usd",
-            unit_amount: montoCentavos(plan, intervalo),
+            // La moneda viaja explícita desde la fila: `tenant_prices.currency`
+            // es NOT NULL y ISO 4217 en mayúsculas; Stripe la quiere en
+            // minúsculas y esa es la única transformación que se le hace.
+            currency: precio.currency.toLowerCase(),
+            unit_amount: precio.amountCents,
             recurring: { interval: intervalo === "anual" ? "year" : "month" },
             product_data: {
               name: `Presencia Verificada — Plan ${plan.nombre}`,

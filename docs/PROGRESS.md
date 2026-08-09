@@ -1,5 +1,149 @@
 # PROGRESS — Comunidad Latina
 
+## Cierre del pliego contractual: white label, Content Integrity y pagos (✅ 2026-08-09)
+
+Quince frentes en paralelo con fronteras de archivo duras, sobre el pliego de las
+cuatro fases. **25 migraciones (`0060`–`0084`)**, 2249 → **2911 tests**, los cuatro
+gates verdes y `check:rls` en 79 superficies.
+
+**El alta de un dominio ya no pide un commit.** `DOMAIN_TENANTS` era un mapa
+hardcodeado en `resolve.ts`: sumar un dominio exigía commit + deploy, lo que
+incumplía de frente la cláusula "agregar otro dominio sin reconstruir el código".
+Ahora el middleware resuelve contra `resolve_tenant_domain` (0060) con caché en
+memoria — 300 s positiva, **60 s negativa** (el caso que importa es "acabo de dar
+de alta el dominio, ¿ya anda?"), y *stale-on-error* de 24 h que es mejor respaldo
+que el mapa viejo porque cubre dominios creados después del último deploy. El
+mapa sobrevive **sólo** para cuando la base no responde: si se consultara también
+con la base viva, suspender un dominio desde el panel no apagaría nada. Un alias
+redirige 308 al canónico; desconocido, `suspended` y `archived` dan el mismo 404
+porque el RPC los devuelve indistinguibles a propósito y el copy no puede filtrar
+lo que el RPC se cuida de no contar.
+
+**La red de contención que casi no está.** `isPlatformHost()` reconoce loopback,
+`*.localhost`, `*.vercel.app` y `*.vercel.sh`. Producción vive hoy en
+`comunidad-latina-sigma.vercel.app`, que no está ni tiene por qué estar en
+`tenant_domains`: sin esa lista, el cambio bajaba el sitio entero.
+
+**Content Integrity, módulo nuevo completo** (0061). SHA-256 sobre los bytes
+reales del servidor, huella perceptual con DCT/pHash escrito a mano, y para video
+cuatro fotogramas muestreados en el navegador (el video nunca pasa por el
+servidor). Búsqueda de similares con tipo `bit(N)` + índice HNSW `bit_hamming_ops`
+de pgvector, que ya estaba instalado. El módulo está partido a propósito:
+**duplicado exacto por sha256** (btree, determinístico, el que importa
+legalmente) y **similar por huella** (HNSW, aproximado) — un miss de HNSW es "una
+alerta que no se levantó", nunca una acusación falsa. El matching **no cruza
+comunidades**: mostrarle a un moderador de un dominio contenido de otro es una
+fuga, por útil que suene. Audio no se implementó: pide Chromaprint o ffmpeg, 70+
+MB de binario nativo en una función serverless, y hoy no hay medio con audio
+propio contra el cual comparar. La columna y la rama del RPC ya existen.
+
+**Lo que se pagó dos veces y hay que recordar: una función en el schema `app` no
+es llamable desde la app.** PostgREST sólo expone `public` y `graphql_public`.
+0061 y 0068 pusieron ahí `scan_content_asset` y `emit_social_notification` como
+virtud (no generan advisory de definer alcanzable), y la capa de aplicación
+terminó manteniendo un **espejo en TypeScript** de la regla de "qué es un
+duplicado". 0066 repitió el patrón con las funciones de SMS, y ahí el espejo no
+podía expresar `attempts = attempts + 1` en una sentencia: el contador de
+intentos tenía una ventana de carrera. Las migraciones 0070 y 0071 existen sólo
+para arreglar eso con envoltorios en `public`, `SECURITY INVOKER` y `EXECUTE`
+sólo para `service_role`. Los dos espejos se borraron.
+
+**Precios por comunidad, con el Checkout cableado de verdad** (0072–0074, 0078).
+14 casillas por tenant, centavos enteros, moneda explícita, historial append-only
+escrito por trigger — no por la aplicación, porque un historial que depende de
+que alguien se acuerde de anotarlo deja de serlo. Dos tablas y no una con
+`valid_from`/`valid_to`: `unique (tenant_id, product, variant, billing_interval)`
+hace que dos precios vigentes del mismo producto sean **imposibles por esquema**,
+no improbables por query. Ausencia de fila = constante del código, así que
+aplicar el cambio no movió un centavo hasta que alguien edite un precio.
+
+**El bloqueante de plata que encontró el cableado.** El webhook del Aviso Premium
+comparaba el monto cobrado contra la constante del código. En el alta la fila de
+`listing_premiums` todavía no existe (la crea el propio webhook), así que una
+comunidad con el premium a USD 15 hacía: Stripe cobra 1500, el webhook ve
+`1500 ≠ 900` y **no concede** — plata cobrada, aviso sin premium. Se arregló
+comparando contra `metadata.price_cents` de la Session, que es lo pactado y es
+inmune a que alguien edite el precio entre el checkout y el evento. De ahí salió
+`lib/monetization/pactado.ts`, compartido, porque la tercera copia de una regla
+es la que nadie se acuerda de arreglar.
+
+**Y el que era peor: `presencia` no verificaba nada.** Ni monto, ni moneda, ni
+`payment_status`. Un `checkout.session.completed` con `payment_status: "unpaid"`
+—lo que pasa con métodos asíncronos— activaba la presencia igual: **entregar sin
+cobrar**. Exigirle `paid` obligó a atender también
+`checkout.session.async_payment_succeeded`, porque si no el arreglo cambiaba un
+agujero por otro: toda transferencia real habría dejado la presencia apagada para
+siempre. Hoy los cinco productos exigen pago confirmado y comparan monto **y**
+moneda: 1500 ARS y 1500 USD dan el mismo entero y no son el mismo cobro.
+
+**Reembolsos y disputas** (`lib/monetization/reembolso.ts`). Sólo el reembolso
+**total de un pago único** revoca (boost y campaña): es el único caso inequívoco.
+El parcial no revoca porque no existe umbral que no sea política de negocio
+disfrazada de código. Las suscripciones nunca revocan acá — un reembolso no es
+una baja, el evento no dice qué ciclo se devolvió, y quien apaga es
+`subscription.deleted`, que es donde Stripe pone la decisión después de
+reintentar. Y **una disputa alerta pero no apaga**, por una razón concreta: no
+atendemos `dispute.closed`, así que revocar en `created` sería una puerta de una
+sola dirección — si el comercio gana, nada volvería a encender lo apagado.
+
+**La auditoría de seguridad encontró un bloqueante real y se arregló.**
+`profile_card` (0063) es `SECURITY DEFINER` con EXECUTE para `anon` y su select
+era `where p.id = p_profile_id`, **sin condición de tenant** — y al ser definer,
+el join a `profiles_private` ignoraba su propia política solo-dueño. Reproducido:
+un miembro de `dominicanos` leyó apellido, ciudad, país de residencia y edad de
+un perfil de `comunidadlatina`. No filtraba nada todavía porque los defaults son
+`privado`/`seguidores` y no hay ninguna fila en `profile_privacy` — se activaba
+el día que alguien eligiera "público", cuya expectativa razonable es publicarse
+en *su* comunidad, no en todos los dominios white-label. 0079 exige mismo-tenant
+para los cinco campos de `profiles_private`, con control positivo verificado.
+
+**Efecto secundario que conviene que alguien confirme:** `anon` no tiene tenant,
+así que para un visitante sin sesión el nivel `publico` de esos cinco campos pasa
+a comportarse como "sólo mi comunidad". Es criterio de producto, no de seguridad.
+
+**El schema `app` estaba abierto a `anon`**: 72 funciones ejecutables, incluida
+`creator_activation_eligible` —un oráculo que delata `phone_verified`, umbral de
+trust, edad derivada de `birthdate` y restricciones activas de cualquier perfil,
+cross-tenant— y `next_gig_code()`, que **muta estado** sin autenticación. No era
+explotable (PostgREST no expone el schema, `PGRST106`), pero quedaba a un
+envoltorio de volverse real. Bajó a 8 funciones (0081/0083). Dos cosas que
+salieron de ahí y valen como aprendizaje: **revocar `usage` sobre el schema
+habría roto el sitio público**, porque 9 policies de RLS que aplican a `anon`
+llaman a `app.*` y las expresiones de una policy corren con los privilegios de
+quien consulta; y `alter default privileges` **no puede** hacer que una función
+nazca cerrada, porque `pg_default_acl` es aditivo sobre `acldefault()`. La regla
+quedó escrita: toda migración que agregue una función en `app` termina con
+`revoke execute … from public, anon`.
+
+**Prueba técnica multidominio ejecutada** (`docs/entrega/prueba-multidominio.md`),
+criterio de aprobación de Fase 1 §2 y Fase 4 §8: **15 de 17 puntos PASAN**, con
+comando y resultado literal por cada uno. Los 2 que no tienen una sola causa —13
+tablas se leen entre comunidades: contenido `published` y fichas públicas con
+`using(true)`— que está documentada y justificada por SEO desde `0004`, `0003` y
+`0056`, y **no se amplió** con esta entrega. Es decisión del cliente: cerrarlo
+empujando el tenant a la sesión de Postgres, o aceptarlo por escrito.
+
+**Entrega documental** en `docs/entrega/`: manual del Super Admin, manual del
+admin local, diagrama de arquitectura, APIs, alta de un dominio nuevo, servicios
+y costos, y el documento de **dónde se enchufan** las monetizaciones futuras
+(lives, regalos, monedas, wallet, PPV) que la Fase 3 §9 exige como prueba de que
+la arquitectura quedó preparada.
+
+### Lo que queda abierto, sin maquillar
+
+- **Un upgrade de plan de presencia deja la suscripción vieja viva** y cobrando
+  (`negocios/presencia/actions.ts:143`). Doble cobro silencioso. Es preexistente y
+  hoy no puede morder porque no hay clave de Stripe — pero es el pendiente más
+  caro y va antes de apuntar a claves live.
+- `charge.dispute.closed` no se atiende: si la disputa se pierde, el beneficio
+  sigue encendido. Es la contracara de haber decidido no revocar en `created`.
+- No hay dónde marcar "en disputa": la única marca es el log y `payment_events`.
+- Nada de pagos se probó contra Stripe real. Las claves siguen vacías; todo está
+  verificado con fixtures firmados. Sigue vigente la firma humana senior.
+- Rate limiting sigue in-memory por instancia. Sentry, Vision y SMTP siguen
+  bloqueados por credencial. El teléfono está construido y **apagado por gate
+  legal** (`user_phones` es un mapa teléfono↔identidad, subpoenable).
+
 ## Refuerzo de seguridad de datos y cumplimiento (✅ 2026-08-02)
 
 Seis frentes en paralelo con fronteras de archivo duras + dos rondas de review

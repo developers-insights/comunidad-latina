@@ -4,17 +4,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
 import { createNotification } from "@/lib/notifications/notify";
+import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
-import {
-  POST_PROMO_PACKAGES,
-  getStripe,
-  postPromoMontoCentavos,
-} from "@/lib/stripe";
+import { POST_PROMO_PACKAGES, getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/types/database.types";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getTenant } from "@/lib/tenant/resolve";
-import { formatDate } from "@/lib/utils";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 
 /**
  * Campaña paga de un post (feedback cliente 2026-07-19) — espejo de boosts
@@ -128,6 +125,18 @@ export async function crearCampanaPost(
     return { status: "error", message: COPY.errorMuchosIntentos };
   }
 
+  // EL PRECIO DE LA COMUNIDAD (`tenant_prices`, 0072) — la misma lectura que
+  // pintó las tarjetas en /impulsar-post/[postId]. Se resuelve UNA vez y sirve
+  // para los DOS caminos: el modo demo (que no cobra pero deja asentado cuánto
+  // habría costado) y el Checkout real, donde `post_promotions.amount_cents` y
+  // el `unit_amount` de Stripe tienen que coincidir o el webhook no activa.
+  const precio = await getPrice(supabase, tenant.id, "post_promo", paquete, "unico");
+  if (!precio) {
+    console.error(`[post-promo] Sin precio para post_promo/${paquete} — tenant=${tenant.slug}`);
+    return { status: "error", message: COPY.errorGenerico };
+  }
+  const currency = precio.currency.toLowerCase();
+
   const audienceJson = audience as unknown as Json;
 
   try {
@@ -176,8 +185,8 @@ export async function crearCampanaPost(
           buyer_id: user.id,
           package: promo.id,
           duration_days: promo.dias,
-          amount_cents: postPromoMontoCentavos(promo),
-          currency: "usd",
+          amount_cents: precio.amountCents,
+          currency,
           audience: audienceJson,
           cta_whatsapp: ctaWhatsapp,
           status: "active",
@@ -206,7 +215,11 @@ export async function crearCampanaPost(
         // pedí hace diez segundos".
         ignorePrefs: true,
         title: "¡Tu campaña ya está activa!",
-        body: `Tu publicación llega a toda la comunidad hasta el ${formatDate(endsAt, { style: "long" })}. (Modo demostración)`,
+        // El aviso es para QUIEN acaba de activar la campaña (`profileId:
+        // user.id`), así que la fecha va con su reloj. Queda congelada en el
+        // texto de la notificación: si después cambia de zona, este aviso viejo
+        // sigue diciendo lo que decía — y eso es correcto, era el día que leyó.
+        body: `Tu publicación llega a toda la comunidad hasta el ${(await getViewerFormatDate())(endsAt, { style: "long" })}. (Modo demostración)`,
         href: `/feed/${post.id}`,
       });
       await admin.from("audit_log").insert({
@@ -230,8 +243,8 @@ export async function crearCampanaPost(
         buyer_id: user.id,
         package: promo.id,
         duration_days: promo.dias,
-        amount_cents: postPromoMontoCentavos(promo),
-        currency: "usd",
+        amount_cents: precio.amountCents,
+        currency,
         audience: audienceJson,
         cta_whatsapp: ctaWhatsapp,
         status: "pending_payment",
@@ -246,7 +259,8 @@ export async function crearCampanaPost(
       return { status: "error", message: COPY.errorGenerico };
     }
 
-    // 4. Checkout one-time. [EJEMPLO] §18: price_data inline (mismo patrón boost).
+    // 4. Checkout one-time con el precio vigente de la comunidad (mismo patrón
+    //    que el boost: el mismo entero que quedó en la fila viaja a Stripe).
     const stripe = getStripe();
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
     const session = await stripe.checkout.sessions.create({
@@ -256,8 +270,9 @@ export async function crearCampanaPost(
         {
           quantity: 1,
           price_data: {
-            currency: "usd",
-            unit_amount: postPromoMontoCentavos(promo),
+            // Moneda explícita de `tenant_prices`, en minúsculas para Stripe.
+            currency,
+            unit_amount: precio.amountCents,
             product_data: {
               name: `Promoción ${promo.nombre} — tu publicación llega a toda la comunidad`,
               metadata: { package: promo.id },

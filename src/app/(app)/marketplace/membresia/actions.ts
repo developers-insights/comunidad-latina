@@ -2,13 +2,10 @@
 
 import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
+import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
 import { requireTenantMatch } from "@/lib/tenant/guard";
-import {
-  MEMBERSHIP_CURRENCY,
-  MEMBERSHIP_PRICE_CENTS,
-} from "@/components/marketplace/membership";
 import { COPY } from "@/components/marketplace/copy";
 
 /**
@@ -105,6 +102,16 @@ export async function activarMembresiaTienda(input: unknown): Promise<MembresiaR
     return { status: "error", message: COPY.membership.errors.generic };
   }
 
+  // EL PRECIO DE LA COMUNIDAD (`tenant_prices`, 0072). Es la misma lectura que
+  // usa `/marketplace/membresia` para mostrar el monto en la tarjeta del plan.
+  const precio = await getPrice(supabase, tenant.id, "store_membership", "estandar", "mensual");
+  if (!precio) {
+    console.error(
+      `[marketplace:membresia] Sin precio para store_membership — tenant=${tenant.slug}`,
+    );
+    return { status: "error", message: COPY.membership.errors.generic };
+  }
+
   try {
     // Si ya hubo una membresía, se reusa su customer de Stripe para que el
     // historial de facturación del negocio no se parta en dos.
@@ -121,6 +128,12 @@ export async function activarMembresiaTienda(input: unknown): Promise<MembresiaR
       store_id: storeId,
       owner_id: user.id,
       kind: "store_membership",
+      // Lo que se decidió cobrar. El webhook lo usa para verificar el monto:
+      // en el ALTA todavía no hay fila de `store_memberships` (la crea él), así
+      // que sin este dato tendría que adivinar con la constante del código y
+      // rechazaría cualquier precio que la comunidad haya configurado.
+      price_cents: String(precio.amountCents),
+      price_currency: precio.currency,
     };
 
     const session = await stripe.checkout.sessions.create({
@@ -131,13 +144,14 @@ export async function activarMembresiaTienda(input: unknown): Promise<MembresiaR
       line_items: [
         {
           quantity: 1,
-          // [EJEMPLO] §18: price_data inline con el monto de la spec. Antes del
-          // go-live real, migrar a un Price del dashboard de Stripe — y ahí
+          // `price_data` inline con el precio vigente de esta comunidad. Antes
+          // del go-live real, migrar a un Price del dashboard de Stripe — y ahí
           // vive también el "precio fundador", que hoy está FUERA DE ALCANCE
           // por ser una decisión comercial todavía no tomada.
           price_data: {
-            currency: MEMBERSHIP_CURRENCY,
-            unit_amount: MEMBERSHIP_PRICE_CENTS,
+            // Moneda explícita de la fila; Stripe la quiere en minúsculas.
+            currency: precio.currency.toLowerCase(),
+            unit_amount: precio.amountCents,
             recurring: { interval: "month" },
             product_data: {
               name: `Membresía de tienda — ${store.title}`,

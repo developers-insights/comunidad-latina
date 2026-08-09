@@ -181,15 +181,21 @@ export async function saveListingCtasAction(
   // teléfono, tocaba Guardar y recibía un error genérico, siempre.
   // `save_listing_ctas` (0053) revalida tenant + dueño + source adentro, y el
   // CHECK listings_cta_premium_only sigue rigiendo: en tier free rebota igual.
+  // `?? undefined` y no `?? null`: los 7 parámetros de save_listing_ctas tienen
+  // DEFAULT NULL en SQL, así que los tipos generados los declaran opcionales
+  // (`string | undefined`). Omitir el argumento y pasarlo en null terminan en
+  // exactamente el mismo NULL del lado de Postgres, así que el borrado de un
+  // CTA no permitido —que es lo que hace `patch[column] = null` más arriba—
+  // sigue funcionando igual.
   const { error } = await supabase.rpc("save_listing_ctas", {
     p_listing_id: listing.id,
-    p_phone: patch.cta_phone ?? null,
-    p_whatsapp: patch.cta_whatsapp ?? null,
-    p_website: patch.cta_website ?? null,
-    p_purchase_url: patch.cta_purchase_url ?? null,
-    p_tickets_url: patch.cta_tickets_url ?? null,
-    p_booking_url: patch.cta_booking_url ?? null,
-    p_address: patch.cta_address ?? null,
+    p_phone: patch.cta_phone ?? undefined,
+    p_whatsapp: patch.cta_whatsapp ?? undefined,
+    p_website: patch.cta_website ?? undefined,
+    p_purchase_url: patch.cta_purchase_url ?? undefined,
+    p_tickets_url: patch.cta_tickets_url ?? undefined,
+    p_booking_url: patch.cta_booking_url ?? undefined,
+    p_address: patch.cta_address ?? undefined,
   });
 
   if (error) {

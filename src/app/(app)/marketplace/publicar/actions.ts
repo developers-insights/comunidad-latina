@@ -13,6 +13,13 @@ import {
   moderateText,
   moderationTier,
 } from "@/lib/moderation";
+import {
+  declarationSchema,
+  normalizeDeclaration,
+  registerUploadedMedia,
+  type DeclarationInput,
+} from "@/lib/integrity";
+import { currentSourceHost } from "@/lib/integrity/source-host";
 import { productDraftSchema, type DraftInput } from "./schema";
 
 /**
@@ -134,6 +141,8 @@ export async function createProductDraft(rawInput: DraftInput): Promise<CreateDr
 const finalizeSchema = z.object({
   listingId: z.uuid(),
   photoPaths: z.array(z.string().min(1).max(300)).max(4),
+  /** Declaración de originalidad y licencia (pliego / 0061). Opcional al borde. */
+  declaration: declarationSchema.nullish(),
 });
 
 export type FinalizeResult =
@@ -149,12 +158,14 @@ function devAutoApprove(): boolean {
 export async function finalizeProduct(rawInput: {
   listingId: string;
   photoPaths: string[];
+  declaration?: DeclarationInput | null;
 }): Promise<FinalizeResult> {
   const parsed = finalizeSchema.safeParse(rawInput);
   if (!parsed.success) {
     return { ok: false, error: GENERIC_ERROR };
   }
   const { listingId, photoPaths } = parsed.data;
+  const declaration = normalizeDeclaration(rawInput.declaration);
 
   const guard = await requireTenantMatch();
   if (!guard.ok) {
@@ -200,11 +211,34 @@ export async function finalizeProduct(rawInput: {
   const moderation = await moderateText(`${current.title}\n${current.description ?? ""}`);
   const tier = moderation.flagged ? TIER_HUMAN : moderationTier(moderation.score);
 
+  // ---- Content Integrity: huella de cada foto (§ pliego) -------------------
+  // Mismo camino que /publicar: las fotos ya están en el bucket, el servidor las
+  // lee de ahí para el SHA-256 y la huella perceptual, y el resultado decide —
+  // junto con la IA de texto— si esto puede publicarse solo.
+  const integrity = await registerUploadedMedia({
+    tenantId: tenant.id,
+    uploaderId: user.id,
+    subjectKind: "listing",
+    subjectId: listingId,
+    sourceHost: await currentSourceHost(tenant.slug),
+    declaration,
+    items: photoPaths.map((path) => ({
+      mediaKind: "imagen" as const,
+      storageBucket: "listing-photos",
+      storagePath: path,
+    })),
+  });
+
   // ---- Fotos: sin Vision, una imagen JAMÁS se publica sola (§5.6) ----------
   const autoApprove = devAutoApprove();
   const photoNeedsReview = photoPaths.length > 0 && !isVisionConfigured && !autoApprove;
 
-  const wantsPublish = autoApprove && !moderation.flagged && tier <= TIER_AUTO && !photoNeedsReview;
+  const wantsPublish =
+    autoApprove &&
+    !moderation.flagged &&
+    tier <= TIER_AUTO &&
+    !photoNeedsReview &&
+    !integrity.needsHumanReview;
 
   // La RLS de UPDATE del dueño NUNCA permite status=published (anti
   // bait-and-switch post-verificación) — solo draft/pending_review/paused/
@@ -264,12 +298,17 @@ export async function finalizeProduct(rawInput: {
   // /admin/moderacion en vez de quedar huérfano.
   if (finalStatus === "pending_review") {
     const shouldEnqueue =
-      moderation.flagged || moderation.skipped || tier > TIER_AUTO || photoNeedsReview;
+      moderation.flagged ||
+      moderation.skipped ||
+      tier > TIER_AUTO ||
+      photoNeedsReview ||
+      integrity.needsHumanReview;
     if (shouldEnqueue) {
       try {
         const reasons = [
           ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
           ...(photoNeedsReview ? ["photo_pending_review"] : []),
+          ...integrity.reasons,
         ];
         const outcome = await enqueueModeration(createAdminClient(), {
           tenantId: tenant.id,
@@ -277,7 +316,10 @@ export async function finalizeProduct(rawInput: {
           subjectId: listingId,
           aiScore: moderation.skipped ? null : moderation.score,
           reasons,
-          tier: moderation.flagged || photoNeedsReview ? TIER_HUMAN : TIER_REVIEW,
+          tier:
+            moderation.flagged || photoNeedsReview || integrity.needsHumanReview
+              ? TIER_HUMAN
+              : TIER_REVIEW,
         });
         if (!outcome.ok) {
           console.warn("[marketplace] no se pudo encolar moderación del producto", {

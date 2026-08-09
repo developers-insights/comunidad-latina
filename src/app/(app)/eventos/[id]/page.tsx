@@ -34,6 +34,7 @@ import {
 } from "@/components/directory";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { cn, timeAgo } from "@/lib/utils";
 
 const C = COPY.events;
@@ -54,7 +55,13 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  const [tenant, supabase, viewerZone] = await Promise.all([
+    getTenant(),
+    createClient(),
+    // La hora del evento se cuenta con el reloj de quien lo lee, no con el del
+    // server (ver `eventDateParts`).
+    getViewerTimeZone(),
+  ]);
 
   const { data: listing } = await supabase
     .from("listings")
@@ -202,7 +209,9 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   }
 
   const attrs = parseEventAttrs(listing.attrs);
-  const date = attrs.startsAt ? eventDateParts(attrs.startsAt, tenant.locale) : null;
+  const date = attrs.startsAt
+    ? eventDateParts(attrs.startsAt, tenant.locale, viewerZone ?? undefined)
+    : null;
   const venue = attrs.venueArea ?? listing.area_label;
   const isOwner = Boolean(user && listing.created_by === user.id);
 

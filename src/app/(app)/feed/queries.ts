@@ -25,7 +25,8 @@ import {
   type PostMediaView,
   type PostPollView,
 } from "@/components/feed";
-import { formatDate, timeAgo } from "@/lib/utils";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
+import { timeAgo } from "@/lib/utils";
 
 /**
  * Lecturas compartidas del módulo FEED (server-only). Siempre con el cliente
@@ -489,6 +490,10 @@ export async function fetchListingExtras(
     fetchAuthorViews(supabase, publisherIds),
   ]);
 
+  // `checked_at` es `timestamptz`: el instante en que se consultó el registro
+  // oficial. Con la zona fija, la banda de verificación fechaba un día antes a
+  // quien mira desde la costa oeste.
+  const formatDate = await getViewerFormatDate();
   const verificationByListing = new Map<string, VerificationView>();
   for (const check of checksResult.data ?? []) {
     if (check.subject_id && !verificationByListing.has(check.subject_id)) {
@@ -567,6 +572,9 @@ export function toFeedListingModel(
           score: author.score,
           level: author.level,
           signals: author.signals,
+          // Ya venía en el AuthorView del batch (fetchAuthorViews): esto no
+          // agrega ni una consulta, sólo deja de tirar el dato.
+          profileId: author.profileId,
         }
       : null,
   };

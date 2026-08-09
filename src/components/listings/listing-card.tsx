@@ -135,6 +135,7 @@ export function ListingCard({ listing }: { listing: ListingCardModel }) {
                 score={listing.publisher.score}
                 level={listing.publisher.level}
                 signals={listing.publisher.signals}
+                profileId={listing.publisher.profileId}
                 size="inline"
               />
             </div>
