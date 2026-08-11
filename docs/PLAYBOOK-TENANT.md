@@ -85,25 +85,31 @@ Esto es trabajo real, fuera del alcance de un script — son pasos operativos en
 
 ### Nota sobre el dominio propio
 
-El middleware (la pieza que decide "qué comunidad sos" en cada visita) resuelve el dominio **consultando la base de datos** (`public.resolve_tenant_domain`), con caché en memoria para no pegarle en cada visita. Por eso:
+El middleware (la pieza que decide "qué comunidad sos" en cada visita) resuelve el dominio **consultando la base de datos** — la tabla `public.tenant_domains` vía el RPC `public.resolve_tenant_domain`, con caché en memoria para no pegarle en cada visita. Por eso:
 
 - **Sin dominio propio**, la comunidad nueva ya es 100% alcanzable hoy, sin tocar nada: `https://comunidad-latina-sigma.vercel.app/?t=colombianos-miami` (o `?t=colombianos-miami` en cualquier preview/local).
-- **Con dominio propio**, además de los tres pasos de arriba (registrar, DNS, Vercel), alcanza con:
+- **Con dominio propio**, además de los tres pasos de arriba (registrar, DNS, Vercel), alcanza con un comando:
   ```bash
   node scripts/new-tenant.mjs --domain-for=colombianos-miami --domain=colombianosmiami.com
   ```
-  El comando es idempotente, nunca le roba un dominio a otra comunidad, y acepta `--alias` (dominio secundario que redirige al canónico), `--status=active|suspended|archived` y `--notes="…"`. **No hace falta commit ni deploy.**
+  Es idempotente, nunca le roba un dominio a otra comunidad, y acepta `--alias` (dominio secundario que redirige al canónico), `--status=active|suspended|archived` y `--notes="…"`. **No hace falta commit ni deploy.**
 
 **Tiempos que conviene saber**, porque la caché no es instantánea:
 
 | Cambio | Cuánto tarda en verse |
 |---|---|
-| Dominio recién dado de alta | hasta **1 minuto** |
-| Dominio apagado, archivado o movido a otra comunidad | hasta **5 minutos** |
+| Dominio recién dado de alta | hasta **1 minuto** (caché negativa de 60 s) |
+| Dominio apagado, archivado o movido a otra comunidad | hasta **5 minutos** (caché positiva de 300 s) |
+
+**Qué pasa con un dominio que no resuelve:**
+
+- **Desconocido, `suspended` o `archived`** → una **página 404 propia**, no la comunidad por defecto. Servirle el contenido de otra comunidad al dominio de un cliente apagado sería peor que un error honesto.
+- **Base caída y ningún respaldo conoce el host** → **503 con `Retry-After`**, tampoco la comunidad por defecto.
+- **Alias** → si el host que entra no es el canónico, el proxy redirige con **308 al primario**, preservando path y query.
 
 El mapa fijo `DOMAIN_TENANTS` (en `src/lib/tenant/resolve.ts`) sigue existiendo, pero **solo como respaldo**: se consulta únicamente si la base no responde. Ya no es la fuente de verdad y no hay que editarlo para dar de alta un dominio.
 
-**El host de la plataforma no va en la base.** `comunidad-latina-sigma.vercel.app`, `localhost` y los previews de Vercel se reconocen solos. Si algún día se suma otro host de plataforma, se agrega con la variable de entorno `TENANT_PLATFORM_HOSTS` — tampoco requiere commit.
+**El host de la plataforma no va en la base.** `comunidad-latina-sigma.vercel.app`, `localhost` y los previews de Vercel se reconocen solos. Si algún día el deploy vive en otro host de plataforma, se agrega con la variable de entorno `TENANT_PLATFORM_HOSTS` — tampoco requiere commit.
 
 ### Trampa de los dos remotes de Git (leer antes de tocar `git push`)
 
@@ -137,7 +143,7 @@ Checklist después de correr el script (o después de agregar el dominio en Verc
 | **Los datos están aislados** | Con el admin nuevo logueado, andá a `/admin/global` (si tiene rol suficiente) o simplemente mirá el feed de `dominicanos`/`comunidadlatina` | El contenido de las otras comunidades NO aparece mezclado con el de la nueva, y viceversa |
 | **RLS sigue firme** | `npm run check:rls` | Termina en verde (exit 0) — si algo rompió el aislamiento por tenant, este comando lo grita |
 | **Variables de entorno de producción** (si vas a mostrarle esto a un usuario real) | `node scripts/vercel-env-sync.mjs` | Revisá la sección "❌ FALTAN en Vercel" — si falta `RESEND_API_KEY`, la comunidad nueva no va a poder mandar ni un email; si falta `GOOGLE_VISION_API_KEY`, las fotos quedan todas en revisión manual. Ninguna de las dos rompe la app (degradación elegante), pero sí la dejan "muda" a medias sin que se note a simple vista |
-| **Dominio propio resuelve** (solo si sumaste uno) | Abrí el dominio directo, sin `?t=` | Mismo resultado que la fila de arriba — si no, revisá DNS (puede tardar) y que sumaste la línea a `DOMAIN_TENANTS` (§3) |
+| **Dominio propio resuelve** (solo si sumaste uno) | Abrí el dominio directo, sin `?t=` | Mismo resultado que la fila de arriba. Si ves un 404 "acá todavía no hay una comunidad", esperá 1 minuto (caché negativa) y reintentá; si sigue igual, revisá DNS y que hayas corrido `--domain-for` (§3). Si el dominio es un alias, lo correcto es que te redirija al canónico |
 
 ### Cómo se prueba sin comprometerse
 
