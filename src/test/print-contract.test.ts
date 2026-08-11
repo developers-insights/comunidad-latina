@@ -531,6 +531,24 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-on-surface-inverse"],
     cobertura: "cl-print-hide",
   },
+  // Campana del header (nueva): el número del badge de sin-leer se apoya en
+  // `bg-danger`, así que su tinta clara necesita relleno impreso o queda en
+  // 1.00:1. NO es "control": el badge vive dentro de un <Link> (un <a>), no de
+  // un <button> — la campana entera abre `/notificaciones` con un toque, no
+  // hay un botón separado que envuelva sólo el número. Tampoco es "nav": el
+  // header del shell no es un `<nav>`. Lo que sí es, literalmente, es
+  // `<header>` — y es el header STICKY del shell autenticado
+  // (`components/shell/header.tsx`), que vive ANTES de `<main>` en
+  // `(app)/layout.tsx`, así que cae bajo `header:not(main header)` del bloque
+  // print: el header entero desaparece en papel, campana incluida.
+  "src/components/notifications/notification-bell.tsx": {
+    inks: ["text-on-danger"],
+    cobertura: "header",
+    prueba: {
+      archivo: "src/components/shell/header.tsx",
+      contiene: ["<header"],
+    },
+  },
   "src/components/onboarding/onboarding-wizard.tsx": {
     inks: ["text-brand-foreground"],
     cobertura: "control",
