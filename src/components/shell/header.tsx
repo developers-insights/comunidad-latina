@@ -4,6 +4,7 @@ import { ChatCircle } from "@phosphor-icons/react/dist/ssr";
 import type { Tenant } from "@/lib/tenant/resolve";
 import { Avatar } from "@/components/ui";
 import { HeaderActions } from "@/components/shell/header-actions";
+import { NotificationBell } from "@/components/notifications";
 import { getShellContext } from "@/components/shell/shell-context";
 import { t } from "@/lib/i18n";
 
@@ -81,6 +82,8 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
         </Link>
 
         <HeaderActions />
+
+        <NotificationBell />
 
         {/* Mensajes: bajó del menú lateral y subió acá porque es adonde apunta
             CADA CTA de contacto de la app (la tarjeta de un negocio, la de una
