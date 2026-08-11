@@ -248,6 +248,34 @@ const nextConfig: NextConfig = {
       "@phosphor-icons/react",
       "@phosphor-icons/react/dist/ssr",
     ],
+    /**
+     * LÍMITE DE BODY DE LAS SERVER ACTIONS — el techo real de una publicación
+     * con fotos, y por qué NO alcanza el default.
+     *
+     * Next pone 1 MB por defecto (docs serverActions.md §bodySizeLimit) sobre
+     * el body HTTP CRUDO, boundaries y headers de multipart incluidos. Las
+     * fotos del composer del feed viajan dentro del FormData de
+     * `createPostAction` (a diferencia del video, que se sube DIRECTO al
+     * bucket justamente para esquivar este límite — ver `prepareMediaUpload
+     * Action` en src/app/(app)/feed/actions.ts). Con 1 MB, DOS fotos de
+     * teléfono ya rebotan a nivel runtime, antes de que la action llegue a
+     * correr y a devolver su código de error `photo`: la persona ve un fallo
+     * genérico, no el mensaje de la app.
+     *
+     * 10 MB = presupuesto de las 10 fotos que admite el composer, horneadas a
+     * JPEG q0.85 / 1600px de lado largo (~300-700 KB cada una → ~7 MB en el
+     * peor caso realista) más margen para el overhead de multipart.
+     *
+     * ⚠️ CONTRAPARTIDA: el body se parsea ANTES del guard de sesión y del
+     * rate limit, así que esto también agranda lo que un cliente anónimo
+     * puede empujar por request. Es el precio de subir fotos por action.
+     * ARREGLO DE FONDO (deuda): llevar las fotos al mismo camino que el
+     * video —subida directa a post-media con la policy 0025— y devolver este
+     * límite a algo chico.
+     */
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
   },
 };
 
