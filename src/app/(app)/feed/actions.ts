@@ -105,7 +105,7 @@ const PHOTO_TYPES: Record<string, string> = {
   "image/webp": "webp",
 };
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
-const MAX_PHOTOS = 4;
+const MAX_PHOTOS = 10;
 const MAX_VIDEOS = 1;
 
 /**
@@ -246,7 +246,8 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // ignora (no se confía en el cliente ni para esto).
   const pollKind = kind === "question" ? (parsed.data.pollKind ?? null) : null;
 
-  // Fotos: hasta 4 por publicación (sprint reels 2026-07-21). Se acepta el
+  // Fotos: hasta MAX_PHOTOS por publicación (10 desde el composer premium
+  // 2026-08-11; eran 4 en el sprint reels 2026-07-21). Se acepta el
   // campo legado `photo` (singular) por si un cliente viejo sigue en vuelo.
   const photoEntries = [...formData.getAll("photos"), formData.get("photo")];
   const photos = photoEntries.filter(
