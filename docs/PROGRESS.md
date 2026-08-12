@@ -1,5 +1,57 @@
 # PROGRESS — Comunidad Latina
 
+## Auditoría del contrato completo + feedback en video y módulo Comunidad (✅ 2026-08-12, tarde)
+
+Origen: el pliego de las 4 fases, un Loom de 4:40 de Nacho recorriendo la app, y
+tres pedidos nuevos por WhatsApp. Todo auditado contra el código y desplegado.
+
+**Estado del contrato:** auditado fase por fase en
+[`ESTADO_CONTRATO_4_FASES.md`](ESTADO_CONTRATO_4_FASES.md), distinguiendo
+implementado / parcial / no existe / no contemplado / bloqueado por plata.
+
+**Seguridad — lo más grave, cerrado (0091):** la lectura cruzaba entre
+comunidades. 14 policies de SELECT sin filtro de tenant dejaban que un miembro
+de una comunidad leyera el padrón de la otra, con `role`, `account_status` y
+`suspended_until` incluidos. Era el único hallazgo que hacía fallar a la vez el
+veredicto de seguridad y el de aislamiento multidominio.
+La trampa que había que desarmar primero: `resolve_tenant_domain()` era
+SECURITY INVOKER y se apoyaba en que `tenant_domains` fuera legible por `anon`.
+Cerrar la tabla sin convertir la función habría dejado al middleware sin
+resolver el host en toda visita sin sesión — no se caía una pantalla, se caía la
+plataforma. También se cerraron los 5 buckets de Storage, que no tenían ni
+límite de tamaño ni filtro de tipo.
+
+**Del video de Nacho:** buscador propio en Empleos (era el único módulo sin uno,
+y la query siempre lo soportó: faltaba el campo) · los avisos recomendados
+bajaron al sexto lugar del feed · los tabs de texto pasaron a íconos circulares
+con nombre debajo · y la marca dejó de decir "Dominicanos" en el preview — la
+causa no era branding sino ruteo: los hosts `*.vercel.app` se saltean la tabla
+de dominios a propósito y caían en un tenant por defecto fijo en código, que
+ahora se configura con `DEFAULT_TENANT_SLUG`.
+
+**Del pliego:** boost con alcance local/nacional/global (antes sólo duración) ·
+reseñas y horarios de negocios (ninguna tabla los guardaba) · tipo de propiedad
+y operación · editar y eliminar publicaciones · y el rescate de las ~8.800
+líneas de etiquetar personas, música y editor de fotos que llevaban semanas sin
+mergear.
+
+**Módulo Comunidad (0096), pedido nuevo:** perdido y encontrado por zona,
+recursos de ayuda (clínicas sin seguro, bancos de comida, consulados) y las
+guías reusadas tal cual. La regla que mandó sobre el modelo: la procedencia de
+cada recurso es NOT NULL desde el insert y la nota de origen va arriba del
+contenido, no al pie — la sección le da información sensible a gente vulnerable
+y nunca puede parecer asesoramiento nuestro.
+
+**Dos bugs que nadie buscaba:** las columnas del reparto 20/80 multiplicaban en
+`integer` y desbordaban al volver la comisión configurable hasta 50 % · y borrar
+una publicación con promoción paga destruía el registro del pago por cascada
+(ahora se bloquea, y falla cerrado si la consulta no responde).
+
+**Verificado:** 3569 tests · `tsc` limpio · build de producción · gate de RLS
+verde con 91 superficies · migraciones 0089–0096 aplicadas y probadas antes con
+`ROLLBACK` contra la base real · deploy `success` · **ninguna rama colgando**
+(sólo `main`, local y remoto).
+
 ## Content Integrity fase 2 + desbloqueo del Creator Marketplace (✅ 2026-08-12)
 
 Origen: pliego de Nacho del 11/8 (texto de WhatsApp) + nota de voz de 4:13 con
