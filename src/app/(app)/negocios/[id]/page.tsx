@@ -1,14 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
-import {
-  Clock,
-  MapPin,
-  SealCheck,
-  Star,
-  Storefront,
-} from "@phosphor-icons/react/dist/ssr";
-import { Avatar, Badge, Banner, BezelCard, Chip } from "@/components/ui";
+import { MapPin, PencilSimple, SealCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
+import { Avatar, Badge, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui";
 import {
   DetailTopBar,
   ListingActions,
@@ -21,6 +15,14 @@ import {
 import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
 import { ACCENT_CHIP_CLASS, DirectoryDetailHero, FollowRow } from "@/components/directory";
+import { HorarioSeccion } from "@/components/negocios";
+import {
+  ResenaForm,
+  ResenasLista,
+  ResumenPuntajeCard,
+  fetchResenasDeAviso,
+} from "@/components/resenas";
+import { puedeOfrecerseElFormulario } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn, timeAgo } from "@/lib/utils";
@@ -49,10 +51,14 @@ import { BUSINESS_PROFILE_COPY as C } from "./copy";
  *   · publicaciones  → posts.entity_listing_id — lo que vuelve "perfil" a una
  *                      ficha: el negocio tiene voz, no sólo datos
  *
- * LO QUE NO EXISTE Y SE DICE ASÍ (ver copy.ts): horarios de atención y reseñas
- * de negocios. Ninguna tabla del esquema los guarda. Se muestran como secciones
- * con un vacío honesto en vez de omitirlas —que las esconde— o de rellenarlas
- * con datos falsos.
+ *   · horarios       → listing_hours + listing_hours_slots (0093)
+ *   · reseñas        → listing_reviews + listing_review_stats (0093)
+ *
+ * HORARIOS Y RESEÑAS YA EXISTEN (migración 0093). Hasta esa migración ninguna
+ * tabla del esquema los guardaba y las dos secciones se mostraban con un vacío
+ * honesto. Ese vacío NO se fue: sigue siendo lo que se muestra cuando el negocio
+ * todavía no cargó horarios o cuando nadie escribió una reseña. Lo único que
+ * cambió es que ahora puede dejar de estar vacío.
  */
 
 type Params = Promise<{ id: string }>;
@@ -123,7 +129,7 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
 
   // Seguidores + publicaciones del negocio + guardado: independientes, en
   // paralelo. Ninguna es bloqueante — si alguna falla, la sección cae a vacío.
-  const [{ count: followerCount }, myFollowResult, postsResult, initialSaved] =
+  const [{ count: followerCount }, myFollowResult, postsResult, initialSaved, resenas] =
     await Promise.all([
       listing.created_by
         ? supabase
@@ -152,6 +158,9 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
         .order("created_at", { ascending: false })
         .limit(4),
       fetchListingSaved(supabase, tenant.id, listing.id, user?.id),
+      // Reseñas: resumen + página + si administro este aviso. Tolerante a
+      // errores por dentro — si algo falla, la sección cae a vacío como el resto.
+      fetchResenasDeAviso(supabase, listing.id, user?.id ?? null),
     ]);
 
   const posts = (postsResult.data ?? []).map((post) => {
@@ -357,11 +366,23 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
         )}
       </section>
 
-      {/* HORARIOS — la sección existe porque el cliente la pidió; el contenido
-          no, porque ninguna tabla lo guarda. Se dice, no se inventa. */}
+      {/* HORARIOS (0093). `HorarioSeccion` resuelve sola el caso "todavía no
+          cargó nada" con el mismo vacío honesto de siempre — acá no se decide
+          nada sobre el contenido, sólo dónde va la sección. */}
       <section className="mt-6">
         <SectionTitle>{C.hoursTitle}</SectionTitle>
-        <SectionEmpty icon={<Clock size={20} />}>{C.hoursEmpty}</SectionEmpty>
+        <HorarioSeccion client={supabase} listingId={listing.id} />
+        {/* El editor sólo lo ve quien administra el negocio. Va acá abajo, junto
+            al hueco, que es donde el dueño se da cuenta de que falta. */}
+        {resenas.administraElAviso && (
+          <Link
+            href={`/negocios/${listing.id}/horario`}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-3")}
+          >
+            <PencilSimple size={16} aria-hidden="true" />
+            Editar mis horarios
+          </Link>
+        )}
       </section>
 
       {ownerCard && (
@@ -414,12 +435,29 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
         )}
       </section>
 
-      {/* RESEÑAS — misma decisión que horarios: la sección se muestra vacía y
-          honesta. La única tabla de reseñas del esquema es `gig_reviews`, que
-          es de Colaboraciones y no tiene nada que ver con un negocio. */}
+      {/* RESEÑAS (0093). El formulario se ofrece SOLO a quien la base va a
+          dejar escribir: sin sesión no aparece, y al dueño ni a su equipo
+          tampoco — a ellos les toca responder, que es otra cosa. */}
       <section className="mt-6">
         <SectionTitle>{C.reviewsTitle}</SectionTitle>
-        <SectionEmpty icon={<Star size={20} />}>{C.reviewsEmpty}</SectionEmpty>
+        <div className="flex flex-col gap-3">
+          <ResumenPuntajeCard resumen={resenas.resumen} reparto={resenas.reparto} />
+
+          {puedeOfrecerseElFormulario({
+            usuarioId: user?.id ?? null,
+            publicadoPor: listing.created_by,
+            administraElAviso: resenas.administraElAviso,
+            estadoDelAviso: listing.status,
+          }) && <ResenaForm listingId={listing.id} resenaPropia={resenas.propia} />}
+
+          <ResenasLista
+            listingId={listing.id}
+            resenas={resenas.resenas}
+            puedeResponder={resenas.administraElAviso}
+            hayCuenta={Boolean(user)}
+            puedeEscribir={Boolean(user) && !resenas.administraElAviso && !isOwner}
+          />
+        </div>
       </section>
     </div>
   );

@@ -17,6 +17,12 @@ import {
   SectionHeading,
   buttonVariants,
 } from "@/components/ui";
+import { ImpulsosDeOtrasComunidades } from "@/components/boosts";
+import {
+  recordBoostImpressions,
+  resolveViewerGeo,
+  selectOwnBoosts,
+} from "@/lib/boosts/select";
 import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -162,19 +168,21 @@ async function NegociosContent({ filters }: { filters: Filters }) {
   // y no solo "en la primera página". Pagar visibilidad no toca Trust Score
   // ni `store_verified`.
   // -------------------------------------------------------------------------
-  const boostedIds = new Set<string>();
+  //
+  // ALCANCE GEOGRÁFICO (0092): un impulso `local` sólo ocupa lugar para quien
+  // está en su zona; `nacional` y `global`, para toda la comunidad. Negocios no
+  // tiene filtro de zona, así que la zona del espectador sale de su perfil.
   let boostedExtra: typeof rows = [];
   const sinFiltros = !filters.q && !filters.rubro && !filters.verificados;
 
-  const { data: activeBoosts } = await supabase
-    .from("boosts")
-    .select("listing_id")
-    .eq("tenant_id", tenant.id)
-    .eq("status", "active")
-    .gt("ends_at", new Date().toISOString())
-    .order("ends_at", { ascending: false })
-    .limit(4);
-  for (const boost of activeBoosts ?? []) boostedIds.add(boost.listing_id);
+  const viewer = await resolveViewerGeo(supabase, {
+    tenantId: tenant.id,
+    userId: user?.id ?? null,
+  });
+  const placement = await selectOwnBoosts(supabase, { tenantId: tenant.id, viewer });
+  const boostedIds = placement.listingIds;
+  // Se sirvieron: se cuentan (0092). Best-effort y ruidoso ante la falla.
+  await recordBoostImpressions(placement.boostIds);
 
   // Destacados que no entraron en las 30 filas de la query principal: solo se
   // inyectan en la vista SIN filtros — con filtros activos jamás se cuela un
@@ -318,6 +326,11 @@ async function NegociosContent({ filters }: { filters: Filters }) {
           </Link>
         </BezelCard>
       )}
+
+      {/* Impulsos con alcance nacional/global comprados en OTRAS comunidades
+          (0092). Sólo sin filtros: la publicidad no desplaza lo que se buscó.
+          Si no hay ninguno, el componente no renderiza nada. */}
+      {!filtering && <ImpulsosDeOtrasComunidades className="mt-6" kind="business" />}
 
       {orderedRows.length === 0 ? (
         filtering ? (

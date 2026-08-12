@@ -145,6 +145,13 @@ async function cobrar(options: {
   rows: PriceRow[] | null;
   tenantId?: string;
   paquete?: "7d" | "14d" | "30d";
+  /**
+   * Alcance geográfico (0092). Por defecto `local`, cuyo recargo de respaldo es
+   * CERO: así los casos que ya existían siguen comparando exactamente el precio
+   * de la duración, que es lo que estaban probando. Los casos del recargo lo
+   * pasan explícito.
+   */
+  alcance?: "local" | "nacional" | "global";
 }) {
   const tenantId = options.tenantId ?? "tenant-1";
   const supabase = userSupabase(options.rows, tenantId);
@@ -163,6 +170,7 @@ async function cobrar(options: {
   const result = await crearBoostCheckout({
     listingId: LISTING,
     paquete: options.paquete ?? "14d",
+    alcance: options.alcance ?? "local",
   });
 
   // La ÚLTIMA llamada: un mismo test puede cobrar dos veces (dos comunidades).
@@ -269,5 +277,101 @@ describe("crearBoostCheckout — de dónde sale el monto", () => {
     const { stripe } = await cobrar({ rows: [apagada] });
 
     expect(stripe?.unit_amount).toBe(boostMontoCentavos(BOOST_PACKAGES["14d"]));
+  });
+});
+
+/**
+ * =============================================================================
+ * EL ALCANCE GEOGRÁFICO CAMBIA LO QUE SE COBRA — y lo que se guarda (0092)
+ * =============================================================================
+ *
+ * El impulso pasó a cobrarse con DOS filas de `tenant_prices` sumadas: la
+ * duración y el recargo del alcance. Lo que estos casos protegen es que la suma
+ * sea una sola —`combineBoostPrice`— y que el objetivo del alcance lo ponga el
+ * SERVIDOR, nunca el formulario.
+ */
+describe("crearBoostCheckout — el alcance geográfico (0092)", () => {
+  it("el recargo del alcance se SUMA al precio de la duración", async () => {
+    const { fila, stripe } = await cobrar({
+      rows: [
+        priceRow("boost", "14d", "unico", 2_500),
+        priceRow("boost_scope", "global", "unico", 4_000),
+      ],
+      alcance: "global",
+    });
+
+    expect(stripe?.unit_amount).toBe(6_500);
+    expect(fila?.amount_cents).toBe(6_500);
+    expect(fila?.scope).toBe("global");
+  });
+
+  it("tres alcances, tres precios distintos para la MISMA duración", async () => {
+    const rows = [
+      priceRow("boost", "14d", "unico", 2_500),
+      priceRow("boost_scope", "local", "unico", 0),
+      priceRow("boost_scope", "nacional", "unico", 1_500),
+      priceRow("boost_scope", "global", "unico", 4_000),
+    ];
+
+    const local = await cobrar({ rows, alcance: "local" });
+    const nacional = await cobrar({ rows, alcance: "nacional" });
+    const global = await cobrar({ rows, alcance: "global" });
+
+    expect(local.stripe?.unit_amount).toBe(2_500);
+    expect(nacional.stripe?.unit_amount).toBe(4_000);
+    expect(global.stripe?.unit_amount).toBe(6_500);
+  });
+
+  it("el objetivo lo pone el servidor: la zona sale del AVISO, no del request", async () => {
+    const { fila } = await cobrar({
+      rows: [priceRow("boost", "14d", "unico", 2_500)],
+      alcance: "local",
+    });
+
+    // "Doral" es el `area_label` del aviso mockeado. No hay forma de pedir otra.
+    expect(fila?.scope_area).toBe("Doral");
+    expect(fila?.scope_country).toBeNull();
+  });
+
+  it("un impulso global no guarda objetivo: llega a todos", async () => {
+    const { fila } = await cobrar({
+      rows: [priceRow("boost", "14d", "unico", 2_500)],
+      alcance: "global",
+    });
+
+    expect(fila?.scope_area).toBeNull();
+    expect(fila?.scope_country).toBeNull();
+  });
+
+  it("sin recargo configurado se cobra sólo la duración — nunca un total inventado", async () => {
+    const { stripe } = await cobrar({
+      rows: [priceRow("boost", "14d", "unico", 2_500)],
+      alcance: "nacional",
+    });
+
+    // El respaldo del código para `nacional` son USD 15; el mock de la RPC
+    // pública devuelve vacío, así que rige la constante y el total es 2500+1500.
+    expect(stripe?.unit_amount).toBe(4_000);
+  });
+
+  it("un recargo en OTRA moneda no se convierte al vuelo: se cobra la duración", async () => {
+    const { stripe } = await cobrar({
+      rows: [
+        priceRow("boost", "14d", "unico", 2_500, "USD"),
+        priceRow("boost_scope", "global", "unico", 4_000, "EUR"),
+      ],
+      alcance: "global",
+    });
+
+    expect(stripe?.unit_amount).toBe(2_500);
+    expect(stripe?.currency).toBe("usd");
+  });
+
+  it("sin alcance en el input no se cobra nada: no se adivina cuál quiso", async () => {
+    mocks.getTenant.mockResolvedValue({ id: "tenant-1", slug: "comunidadlatina" });
+    const result = await crearBoostCheckout({ listingId: LISTING, paquete: "14d" });
+
+    expect(result).toMatchObject({ status: "error" });
+    expect(mocks.sessionsCreate).not.toHaveBeenCalled();
   });
 });

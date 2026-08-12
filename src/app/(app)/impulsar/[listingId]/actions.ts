@@ -1,6 +1,9 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { BOOST_SCOPES, BOOST_SCOPE_COPY, type BoostScope } from "@/lib/boosts";
+import { combineBoostPrice } from "@/lib/boosts/price";
 import { isStripeConfigured } from "@/lib/config/services";
 import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
@@ -8,6 +11,7 @@ import { BOOST_PACKAGES, getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getTenant } from "@/lib/tenant/resolve";
+import type { Database } from "@/lib/types/database.types";
 
 /** Copy de errores del módulo — cálido, sin jerga técnica. */
 const COPY = {
@@ -19,6 +23,11 @@ const COPY = {
     "El aviso tiene que estar publicado para impulsarlo. Apenas se apruebe, volvé por acá.",
   errorMuchosIntentos:
     "Empezaste varios impulsos seguidos. Esperá un rato y probá de nuevo — tu aviso sigue publicado igual.",
+  // El alcance "Tu zona" necesita una zona. Si el aviso no la tiene cargada no
+  // se inventa ninguna ni se lo degrada en silencio a un alcance más grande
+  // (que además sería más caro): se le dice qué falta y dónde arreglarlo.
+  errorSinZona:
+    "Para impulsar solo en tu zona, el aviso necesita tener su zona cargada. Editá el aviso y agregala, o elegí un alcance más amplio.",
 } as const;
 
 /** Rate limit (fiscal R3): cada intento crea una fila + una Checkout Session. */
@@ -27,6 +36,13 @@ const BOOST_HOURLY_LIMIT = 5;
 const boostSchema = z.object({
   listingId: z.uuid(),
   paquete: z.enum(["7d", "14d", "30d"]),
+  /**
+   * Alcance geográfico (0092). NO tiene default a propósito: el alcance cambia
+   * lo que se cobra y a quién le llega el aviso, así que asumir uno sería
+   * cobrarle a alguien por algo que no eligió. Si no viene, el parseo falla y
+   * la pantalla vuelve a pedirlo.
+   */
+  alcance: z.enum(BOOST_SCOPES),
 });
 
 export type CrearBoostCheckoutResult =
@@ -57,14 +73,16 @@ export async function crearBoostCheckout(
   if (!parsed.success) {
     return { status: "error", message: COPY.errorGenerico };
   }
-  const { listingId, paquete } = parsed.data;
+  const { listingId, paquete, alcance } = parsed.data;
   const tenant = await getTenant();
   const boost = BOOST_PACKAGES[paquete];
 
   if (!isStripeConfigured) {
     // Degradación elegante §5.6 — se registra el interés para medir demanda.
+    // El alcance se registra también: saber cuál se elige cuando todavía no se
+    // puede pagar es exactamente la señal que sirve para fijar el precio real.
     console.info(
-      `[boost] Intento de impulso con Stripe sin configurar — tenant=${tenant.slug} paquete=${paquete}`,
+      `[boost] Intento de impulso con Stripe sin configurar — tenant=${tenant.slug} paquete=${paquete} alcance=${alcance}`,
     );
     return { status: "no_configurado" };
   }
@@ -92,10 +110,27 @@ export async function crearBoostCheckout(
   // número entero de centavos va tanto a la fila `boosts.amount_cents` como al
   // `unit_amount` de Stripe: el webhook compara los dos antes de activar, así
   // que tienen que salir de la misma lectura o el impulso nunca arrancaría.
-  const precio = await getPrice(supabase, tenant.id, "boost", paquete, "unico");
-  if (!precio) {
+  //
+  // El total del impulso son DOS filas de `tenant_prices` sumadas: la duración
+  // y el recargo por alcance (0092). La suma la hace `combineBoostPrice`, que
+  // es la MISMA función que usó la pantalla para pintar el número — si cada
+  // punta sumara por su cuenta, cobraríamos algo que nadie vio.
+  const [precioDuracion, precioAlcance] = await Promise.all([
+    getPrice(supabase, tenant.id, "boost", paquete, "unico"),
+    getPrice(supabase, tenant.id, "boost_scope", alcance, "unico"),
+  ]);
+  if (!precioDuracion) {
     console.error(`[boost] Sin precio para boost/${paquete} — tenant=${tenant.slug}`);
     return { status: "error", message: COPY.errorGenerico };
+  }
+  const precio = combineBoostPrice(precioDuracion, precioAlcance);
+  if (precio.currencyMismatch) {
+    // El recargo quedó configurado en otra moneda que la duración. Se cobra
+    // sólo la duración (nunca se convierte al vuelo) y se grita en el log: es
+    // un error del panel de precios que alguien tiene que ir a arreglar.
+    console.error(
+      `[boost] El recargo de alcance '${alcance}' está en ${precioAlcance?.currency} y la duración en ${precioDuracion.currency} — se cobra sólo la duración. tenant=${tenant.slug}`,
+    );
   }
 
   try {
@@ -113,6 +148,21 @@ export async function crearBoostCheckout(
       return { status: "error", message: COPY.errorNoPublicado };
     }
 
+    // 1b. EL OBJETIVO DEL ALCANCE — lo pone el SERVIDOR, nunca el formulario.
+    //
+    // La zona sale del aviso (`listings.area_label`, ya leído arriba con la RLS
+    // del usuario) y el país de la comunidad (`tenants.country_focus`, resuelta
+    // desde el Host). Si el objetivo viajara en el request, cualquiera podría
+    // comprar el alcance barato apuntando a la zona más poblada de otra
+    // comunidad — el precio del alcance dejaría de tener sentido.
+    const objetivo = await resolverObjetivo(supabase, alcance, {
+      tenantId: tenant.id,
+      areaLabel: listing.area_label,
+    });
+    if (!objetivo.ok) {
+      return { status: "error", message: objetivo.message };
+    }
+
     // 2. Boost pending_payment vía admin — GATEADO: ownership verificado arriba.
     const admin = createAdminClient();
     const { data: created, error: insertError } = await admin
@@ -126,6 +176,9 @@ export async function crearBoostCheckout(
         amount_cents: precio.amountCents,
         currency: precio.currency.toLowerCase(),
         status: "pending_payment",
+        scope: alcance,
+        scope_area: objetivo.area,
+        scope_country: objetivo.country,
       })
       .select("id")
       .single();
@@ -156,8 +209,12 @@ export async function crearBoostCheckout(
               // Solo texto: es lo que la persona lee en el Checkout de Stripe y
               // en su comprobante. La `metadata.package` de abajo SÍ es un valor
               // que el webhook correlaciona — por eso queda intacta.
-              name: `Impulso ${boost.nombre} — aviso patrocinado en tu zona`,
-              metadata: { package: boost.id },
+              //
+              // El alcance entra en el nombre porque es la mitad de lo que se
+              // está pagando: un comprobante que dice sólo "Impulso 14 días" no
+              // explica por qué salió más caro que el de la semana pasada.
+              name: `Impulso ${boost.nombre} · ${BOOST_SCOPE_COPY[alcance].label} — aviso patrocinado`,
+              metadata: { package: boost.id, scope: alcance },
             },
           },
         },
@@ -221,4 +278,59 @@ export async function crearBoostCheckout(
     );
     return { status: "error", message: COPY.errorGenerico };
   }
+}
+
+/**
+ * A QUÉ APUNTA EL ALCANCE — resuelto en el servidor, con datos del servidor.
+ *
+ * `local` apunta a la zona del propio aviso; `nacional`, al país de la
+ * comunidad; `global` no apunta a nada porque llega a todas. Ninguno de los dos
+ * datos llega por el request: la zona sale de la fila del aviso (leída con la
+ * RLS del dueño) y el país de `tenants`, resuelto desde el Host.
+ *
+ * Por qué no se acepta el objetivo por parámetro: el precio del alcance depende
+ * de qué tan grande es. Si el comprador pudiera elegir a qué zona apunta su
+ * boost "local", compraría el escalón barato apuntado al barrio más poblado de
+ * otra comunidad — y el precio dejaría de medir lo que mide.
+ */
+async function resolverObjetivo(
+  supabase: SupabaseClient<Database>,
+  alcance: BoostScope,
+  contexto: { tenantId: string; areaLabel: string | null },
+): Promise<
+  | { ok: true; area: string | null; country: string | null }
+  | { ok: false; message: string }
+> {
+  if (alcance === "global") {
+    return { ok: true, area: null, country: null };
+  }
+
+  if (alcance === "local") {
+    const zona = contexto.areaLabel?.trim();
+    // Sin zona no hay alcance local. No se degrada a `nacional` en silencio:
+    // sería cobrarle a alguien un escalón más caro que el que eligió.
+    if (!zona) return { ok: false, message: COPY.errorSinZona };
+    return { ok: true, area: zona.slice(0, 80), country: null };
+  }
+
+  const { data: tenantRow, error } = await supabase
+    .from("tenants")
+    .select("country_focus")
+    .eq("id", contexto.tenantId)
+    .maybeSingle();
+
+  if (error) {
+    // El país no se pudo leer. Se sigue con `null`, que la 0092 acepta y
+    // significa "el país de la comunidad que lo vendió": el impulso funciona
+    // completo puertas adentro y sólo se pierde la salida a las comunidades
+    // hermanas. Se registra para que no pase desapercibido.
+    console.warn(
+      `[boost] No se pudo leer el país de la comunidad ${contexto.tenantId} — el impulso nacional no saldrá a las comunidades hermanas`,
+      { code: error.code },
+    );
+    return { ok: true, area: null, country: null };
+  }
+
+  const pais = tenantRow?.country_focus?.trim();
+  return { ok: true, area: null, country: pais ? pais.slice(0, 60).toUpperCase() : null };
 }

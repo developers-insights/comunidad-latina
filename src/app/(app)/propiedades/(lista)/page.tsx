@@ -26,7 +26,21 @@ import {
   type PublisherView,
   type VerificationView,
 } from "@/components/listings";
+import { ImpulsosDeOtrasComunidades } from "@/components/boosts";
+import {
+  recordBoostImpressions,
+  resolveViewerGeo,
+  selectOwnBoosts,
+} from "@/lib/boosts/select";
 import { t } from "@/lib/i18n";
+import {
+  PROPERTY_OPERATION_ATTR,
+  PROPERTY_TYPE_ATTR,
+  normalizePropertyOperation,
+  normalizePropertyType,
+  type PropertyOperation,
+  type PropertyType,
+} from "@/lib/propiedades/tipos";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
@@ -50,6 +64,10 @@ interface Filters {
   precio: number | null;
   hab: number | null;
   zona: string;
+  /** `null` = sin filtrar por tipo (se ven todos, incluidos los que no declaran). */
+  tipo: PropertyType | null;
+  /** `null` = sin filtrar por operación (se ven alquiler, venta y no declarados). */
+  operacion: PropertyOperation | null;
   cursor: string;
 }
 
@@ -65,6 +83,11 @@ function parseFilters(sp: Record<string, string | string[] | undefined>): Filter
     precio: Number.isFinite(precioRaw) && precioRaw > 0 ? precioRaw : null,
     hab: Number.isFinite(habRaw) && habRaw >= 1 && habRaw <= 10 ? habRaw : null,
     zona: firstValue(sp.zona).slice(0, 80),
+    // Los normalizadores devuelven null ante cualquier cosa que no esté en el
+    // catálogo, así que un `?tipo=<script>` de la URL no llega a la query: se
+    // lee como "sin filtro" y la lista sale completa, no vacía ni rota.
+    tipo: normalizePropertyType(firstValue(sp.tipo)),
+    operacion: normalizePropertyOperation(firstValue(sp.operacion)),
     cursor: firstValue(sp.cursor),
   };
 }
@@ -144,6 +167,21 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
   if (filters.hab !== null) {
     query = query.gte("attrs->bedrooms", filters.hab);
   }
+  // `attrs->>` (TEXTO) y no `attrs->` (jsonb): estos dos son cadenas, y con
+  // `->` habría que comparar contra `"casa"` con comillas incluidas. Mismo
+  // patrón que negocios/profesionales/empleos.
+  //
+  // RETROCOMPATIBILIDAD: un aviso viejo no tiene la clave, así que `attrs->>…`
+  // es NULL y `eq` no lo devuelve. Eso es correcto —quien pide "venta" no está
+  // pidiendo "avisos que quizá sean venta"— y es inofensivo, porque el filtro
+  // sólo se agrega cuando la persona lo eligió. Sin filtro no hay condición y
+  // los avisos viejos siguen apareciendo enteros.
+  if (filters.tipo !== null) {
+    query = query.eq(`attrs->>${PROPERTY_TYPE_ATTR}`, filters.tipo);
+  }
+  if (filters.operacion !== null) {
+    query = query.eq(`attrs->>${PROPERTY_OPERATION_ATTR}`, filters.operacion);
+  }
   if (filters.zona) {
     query = query.eq("area_label", filters.zona);
   }
@@ -172,20 +210,32 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
   // que se gana por reputación, y confundirlos vende lo pago como mérito.
   // Pagar visibilidad no toca Trust Score ni verificación.
   // -------------------------------------------------------------------------
-  const boostedIds = new Set<string>();
+  //
+  // ALCANCE GEOGRÁFICO (0092): el lugar pago dejó de aplicarle a todo el mundo.
+  // Un impulso `local` sólo ocupa lugar para quien está en su zona —la que
+  // declaró en el perfil, o la que está filtrando ahora mismo, que pesa más—;
+  // `nacional` y `global` le aplican a toda la comunidad. La regla vive UNA vez
+  // en `src/lib/boosts`, no cuatro copiada en cada listado.
+  let boostedIds = new Set<string>();
   let boostedExtra: typeof pageRows = [];
   const sinFiltros =
-    !filters.q && filters.precio === null && filters.hab === null && !filters.zona;
+    !filters.q &&
+    filters.precio === null &&
+    filters.hab === null &&
+    filters.tipo === null &&
+    filters.operacion === null &&
+    !filters.zona;
   if (!cursor) {
-    const { data: activeBoosts } = await supabase
-      .from("boosts")
-      .select("listing_id")
-      .eq("tenant_id", tenant.id)
-      .eq("status", "active")
-      .gt("ends_at", new Date().toISOString())
-      .order("ends_at", { ascending: false })
-      .limit(4);
-    for (const boost of activeBoosts ?? []) boostedIds.add(boost.listing_id);
+    const viewer = await resolveViewerGeo(supabase, {
+      tenantId: tenant.id,
+      profileArea: userArea,
+      zoneFilter: filters.zona || null,
+    });
+    const placement = await selectOwnBoosts(supabase, { tenantId: tenant.id, viewer });
+    boostedIds = placement.listingIds;
+    // Se sirvieron: se cuentan (0092). Best-effort y ruidoso ante la falla —
+    // una métrica no puede tirar un listado, pero tampoco puede callarse.
+    await recordBoostImpressions(placement.boostIds);
 
     // Destacados que no entraron por fecha: solo en la vista sin filtros
     // (con filtros activos jamás se inyecta un resultado que no matchea).
@@ -339,6 +389,8 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
   if (filters.q) nextParams.set("q", filters.q);
   if (filters.precio !== null) nextParams.set("precio", String(filters.precio));
   if (filters.hab !== null) nextParams.set("hab", String(filters.hab));
+  if (filters.tipo !== null) nextParams.set("tipo", filters.tipo);
+  if (filters.operacion !== null) nextParams.set("operacion", filters.operacion);
   if (filters.zona) nextParams.set("zona", filters.zona);
   if (hasMore && lastRow) nextParams.set("cursor", encodeCursor(lastRow.created_at, lastRow.id));
 
@@ -368,6 +420,12 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
       <Bubble tone="tray" shape="tile" size="none" className="mb-5 mt-4 p-3">
         <ListingFilters zones={zones} />
       </Bubble>
+
+      {/* Impulsos con alcance nacional/global comprados en OTRAS comunidades
+          (0092). Va sólo en la primera página y sin filtros activos: es
+          publicidad, y la publicidad no puede desplazar a lo que alguien
+          buscó. Si no hay ninguno, el componente no renderiza nada. */}
+      {!cursor && sinFiltros && <ImpulsosDeOtrasComunidades kind="property" />}
 
       {cards.length === 0 ? (
         <EmptyState
@@ -451,10 +509,15 @@ function PageSkeleton() {
       />
       <Bubble tone="tray" shape="tile" size="none" className="mb-5 mt-4 flex flex-col gap-3 p-3">
         <Skeleton className="h-11 w-full rounded-md" />
+        {/* Misma grilla que <ListingFilters/>: 5 selectores, el de zona a dos
+            celdas. Si la silueta no coincidiera con el control real, la
+            bandeja saltaría al hidratar (CLS) justo debajo del buscador. */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Skeleton className="h-11 rounded-md" />
           <Skeleton className="h-11 rounded-md" />
-          <Skeleton className="col-span-2 h-11 rounded-md sm:col-span-1" />
+          <Skeleton className="h-11 rounded-md" />
+          <Skeleton className="h-11 rounded-md" />
+          <Skeleton className="col-span-2 h-11 rounded-md" />
         </div>
       </Bubble>
       <ListingListSkeleton />

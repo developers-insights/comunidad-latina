@@ -5,6 +5,7 @@ import {
   PLANES_PRESENCIA,
   POST_PROMO_PACKAGES,
   boostMontoCentavos,
+  boostScopeMontoCentavos,
   montoCentavos,
   postPromoMontoCentavos,
 } from "@/lib/stripe";
@@ -44,7 +45,7 @@ export interface FallbackPrice {
 const FALLBACK_CURRENCY = "USD";
 
 /**
- * Mapa `producto:variante:intervalo` → monto. Cubre las 14 casillas de
+ * Mapa `producto:variante:intervalo` → monto. Cubre las 17 casillas de
  * `PRICE_SLOTS`; hay un test que falla si alguna queda sin respaldo.
  */
 export const FALLBACK_PRICES: ReadonlyMap<string, FallbackPrice> = new Map([
@@ -91,6 +92,23 @@ export const FALLBACK_PRICES: ReadonlyMap<string, FallbackPrice> = new Map([
   [
     slotKey({ product: "boost", variant: "30d", interval: "unico" }),
     { amountCents: boostMontoCentavos(BOOST_PACKAGES["30d"]), currency: FALLBACK_CURRENCY },
+  ],
+
+  // Alcance del impulso (0092) — BOOST_SCOPE_SURCHARGES_USD. Es un RECARGO que
+  // se suma al de la duración, no un precio alternativo: el total lo arma
+  // `combineBoostPrice` en src/lib/boosts/price.ts, y esa misma función es la
+  // que usa el Checkout para cobrar.
+  [
+    slotKey({ product: "boost_scope", variant: "local", interval: "unico" }),
+    { amountCents: boostScopeMontoCentavos("local"), currency: FALLBACK_CURRENCY },
+  ],
+  [
+    slotKey({ product: "boost_scope", variant: "nacional", interval: "unico" }),
+    { amountCents: boostScopeMontoCentavos("nacional"), currency: FALLBACK_CURRENCY },
+  ],
+  [
+    slotKey({ product: "boost_scope", variant: "global", interval: "unico" }),
+    { amountCents: boostScopeMontoCentavos("global"), currency: FALLBACK_CURRENCY },
   ],
 
   // Campaña de una publicación — POST_PROMO_PACKAGES.

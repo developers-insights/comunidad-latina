@@ -4,6 +4,10 @@ import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MagnifyingGlass, X } from "@phosphor-icons/react/dist/ssr";
 import { Input, Select } from "@/components/ui";
+import {
+  PROPERTY_OPERATION_OPTIONS,
+  PROPERTY_TYPE_OPTIONS,
+} from "@/lib/propiedades/tipos";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 
@@ -30,7 +34,9 @@ export function ListingFilters({ zones, className }: ListingFiltersProps) {
   const precio = searchParams.get("precio") ?? "";
   const hab = searchParams.get("hab") ?? "";
   const zona = searchParams.get("zona") ?? "";
-  const hasFilters = Boolean(precio || hab || zona || searchParams.get("q"));
+  const tipo = searchParams.get("tipo") ?? "";
+  const operacion = searchParams.get("operacion") ?? "";
+  const hasFilters = Boolean(precio || hab || zona || tipo || operacion || searchParams.get("q"));
 
   function apply(next: Record<string, string>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -74,12 +80,47 @@ export function ListingFilters({ zones, className }: ListingFiltersProps) {
         />
       </form>
 
-      {/* Mobile-first: precio + habitaciones (labels cortos) comparten una fila
-          de 2 columnas; la zona (labels largos, p. ej. "Flushing Meadows Corona
-          Park, Queens") va a todo el ancho abajo para no truncar. En sm+ vuelven
-          las 3 columnas. min-w-0 deja que cada grid item se encoja y el <select>
-          recorte su texto en vez de desbordar el ancho. */}
+      {/* Mobile-first: los labels cortos comparten filas de 2 columnas; la zona
+          (labels largos, p. ej. "Flushing Meadows Corona Park, Queens") ocupa
+          dos celdas para no truncar. En sm+ son 3 columnas y la zona sigue
+          tomando dos. min-w-0 deja que cada grid item se encoja y el <select>
+          recorte su texto en vez de desbordar el ancho.
+
+          El ORDEN no es casual: operación primero porque es el filtro que más
+          descarta —quien busca alquiler no quiere ver ventas— y tipo justo
+          después. Precio, habitaciones y zona quedan como afinado. */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Select
+          aria-label={COPY.list.filterOperationLabel}
+          value={operacion}
+          onChange={(event) => apply({ operacion: event.target.value })}
+          className="min-w-0"
+        >
+          {/* La opción vacía dice "Alquiler y venta", no "Todas": deja claro que
+              sin filtro se ven las dos cosas — incluidos los avisos publicados
+              antes de que este campo existiera, que no declaran ninguna. */}
+          <option value="">{COPY.list.filterOperationAny}</option>
+          {PROPERTY_OPERATION_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+
+        <Select
+          aria-label={COPY.list.filterTypeLabel}
+          value={tipo}
+          onChange={(event) => apply({ tipo: event.target.value })}
+          className="min-w-0"
+        >
+          <option value="">{COPY.list.filterTypeAny}</option>
+          {PROPERTY_TYPE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+
         <Select
           aria-label={COPY.list.filterPriceLabel}
           value={precio}
@@ -110,7 +151,7 @@ export function ListingFilters({ zones, className }: ListingFiltersProps) {
           aria-label={COPY.list.filterZoneLabel}
           value={zona}
           onChange={(event) => apply({ zona: event.target.value })}
-          className="col-span-2 min-w-0 sm:col-span-1"
+          className="col-span-2 min-w-0"
         >
           <option value="">{COPY.list.filterZoneAny}</option>
           {zones.map((label) => (

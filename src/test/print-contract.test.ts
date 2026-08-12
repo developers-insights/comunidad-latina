@@ -516,6 +516,15 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",
   },
+  // Píldora "Cerrado / Abierto / Las 24 horas" del editor de horarios (0093):
+  // el portador es un <label> de un radio `sr-only`, no un <button>, así que el
+  // @media print no lo alcanza y sin hook queda blanco sobre blanco. Lleva
+  // `cl-print-hide` propio — un selector de formulario tampoco significa nada
+  // impreso en papel.
+  "src/components/negocios/horario-editor.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
   // Pestañas de /notificaciones (2026-07-30): el contador de la pestaña activa
   // es la MISMA tinta que el badge de /ajustes, con el mismo problema y la misma
   // salida. El hook va en el contenedor de toda la tira, no en el número: una

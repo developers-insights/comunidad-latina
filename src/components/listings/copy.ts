@@ -75,6 +75,12 @@ export const COPY = {
     filterBedroomsAny: "Todas",
     filterZoneLabel: "Zona",
     filterZoneAny: "Todas las zonas",
+    filterTypeLabel: "Tipo de propiedad",
+    filterTypeAny: "Todos los tipos",
+    filterOperationLabel: "Operación",
+    // "Alquiler y venta" y no "Todas": dice qué se está viendo, en vez de dejar
+    // que alguien suponga que sin elegir nada la lista está incompleta.
+    filterOperationAny: "Alquiler y venta",
     clearFilters: "Limpiar filtros",
     verifiedChip: (date: string) => `Licencia activa al ${date}`,
     externalPublisher: (name: string) => `Publicado por ${name}`,
@@ -207,6 +213,14 @@ export const COPY = {
         bedroomsLabel: "Habitaciones",
         bathroomsLabel: "Baños",
         sqftLabel: "Superficie (ft²)",
+        // Operación y tipo van ARRIBA del precio: la operación cambia qué
+        // significa el número (por mes vs. una sola vez), así que preguntarla
+        // después obligaría a releer el precio ya cargado.
+        operationLabel: "¿La alquilás o la vendés?",
+        operationHelp: "Cambia cómo se muestra el precio y ayuda a que te encuentren.",
+        typeLabel: "Tipo de propiedad",
+        typePlaceholder: "Elegí el tipo…",
+        typeHelp: "Si no encaja en ninguno, elegí “Otro” y contalo en la descripción.",
       },
       zone: {
         title: "¿En qué zona está?",
@@ -241,6 +255,8 @@ export const COPY = {
       titleShort: "El título necesita al menos 8 caracteres.",
       descriptionShort: "Contanos un poco más — al menos un par de frases.",
       priceRequired: "Poné un precio (puede ser aproximado).",
+      operationRequired: "Decinos si la propiedad se alquila o se vende.",
+      typeRequired: "Elegí qué tipo de propiedad estás publicando.",
       zoneShort: "Decinos el barrio o la zona.",
       uploadFailed:
         "No pudimos subir las fotos — revisá tu conexión e intentá de nuevo.",

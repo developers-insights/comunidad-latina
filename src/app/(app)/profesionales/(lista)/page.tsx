@@ -34,8 +34,14 @@ import {
   sanitizeSearchQuery,
   type FilterOption,
 } from "@/components/search";
+import { ImpulsosDeOtrasComunidades } from "@/components/boosts";
+import {
+  recordBoostImpressions,
+  resolveViewerGeo,
+  selectOwnBoosts,
+} from "@/lib/boosts/select";
 import { t } from "@/lib/i18n";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { cn } from "@/lib/utils";
@@ -156,19 +162,22 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
   // respeta los filtros activos (rubro/búsqueda): `boostedExtra` sólo se
   // inyecta cuando NO hay ningún filtro puesto.
   // -------------------------------------------------------------------------
-  const boostedIds = new Set<string>();
+  //
+  // ALCANCE GEOGRÁFICO (0092): un impulso `local` sólo ocupa lugar para quien
+  // está en su zona; `nacional` y `global`, para toda la comunidad. La regla
+  // vive UNA vez en `src/lib/boosts`, no copiada en cada listado.
+  let boostedIds = new Set<string>();
   let boostedExtra: typeof pageRows = [];
   const sinFiltros = !filters.q && !filters.rubro;
   if (!cursor) {
-    const { data: activeBoosts } = await supabase
-      .from("boosts")
-      .select("listing_id")
-      .eq("tenant_id", tenant.id)
-      .eq("status", "active")
-      .gt("ends_at", new Date().toISOString())
-      .order("ends_at", { ascending: false })
-      .limit(4);
-    for (const boost of activeBoosts ?? []) boostedIds.add(boost.listing_id);
+    const viewer = await resolveViewerGeo(supabase, {
+      tenantId: tenant.id,
+      userId: await getAuthUserId(),
+    });
+    const placement = await selectOwnBoosts(supabase, { tenantId: tenant.id, viewer });
+    boostedIds = placement.listingIds;
+    // Se sirvieron: se cuentan (0092). Best-effort y ruidoso ante la falla.
+    await recordBoostImpressions(placement.boostIds);
 
     // Destacados que no entraron por fecha: solo en la vista sin filtros
     // (con filtros activos jamás se inyecta un resultado que no matchea).
@@ -326,6 +335,11 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
           options={CATEGORY_OPTIONS}
         />
       </div>
+
+      {/* Impulsos con alcance nacional/global comprados en OTRAS comunidades
+          (0092). Sólo en la primera página y sin filtros: la publicidad no
+          desplaza lo que alguien buscó. Sin resultados no renderiza nada. */}
+      {!cursor && sinFiltros && <ImpulsosDeOtrasComunidades kind="professional" />}
 
       {cards.length === 0 ? (
         filtering ? (

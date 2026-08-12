@@ -5,10 +5,13 @@ import {
   Bathtub,
   Bed,
   ChartBar,
+  House,
+  Key,
   MapPin,
   RocketLaunch,
   Ruler,
   Storefront,
+  Tag,
 } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui";
 
@@ -33,6 +36,11 @@ import {
 import { fetchViewerSavedListingIds } from "@/app/(app)/feed/queries";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import {
+  PROPERTY_OPERATION_LABEL,
+  PROPERTY_TYPE_LABEL,
+  readPropertyFacts,
+} from "@/lib/propiedades/tipos";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { cn } from "@/lib/utils";
 
@@ -199,6 +207,11 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
   }
 
   const attrs = parsePropertyAttrs(listing.attrs);
+  // Tipo y operación. Los avisos publicados antes de esta feature no los
+  // declaran y salen en null: ahí NO se muestra nada. Un aviso viejo no dice
+  // "Alquiler" porque nunca lo dijo, y tampoco dice "sin especificar", que
+  // sería señalar una falta que no es de quien publicó.
+  const facts = readPropertyFacts(listing.attrs);
   const priceLabel = formatListingPrice(
     listing.price_amount,
     listing.price_currency,
@@ -240,8 +253,28 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
         <p className="numeric mt-1 text-3xl font-bold text-brand">{priceLabel}</p>
       )}
 
-      {(attrs.bedrooms !== null || attrs.bathrooms !== null || attrs.sqft !== null) && (
+      {/* Operación y tipo ABREN la fila de características, pegados al precio:
+          es donde el ojo ya está y es lo que le da sentido al número ("$1.350"
+          no significa lo mismo en un alquiler que en una venta).
+
+          La operación va en `brand` y el tipo en neutro, la misma jerarquía que
+          tienen como decisión: primero si se alquila o se vende, después qué
+          es. Cada chip lleva su ícono Y su texto — el color nunca es el único
+          que distingue una operación de la otra. */}
+      {(facts.operation !== null ||
+        facts.type !== null ||
+        attrs.bedrooms !== null ||
+        attrs.bathrooms !== null ||
+        attrs.sqft !== null) && (
         <div className="mt-3 flex flex-wrap gap-2">
+          {facts.operation !== null && (
+            <Chip variant="brand" icon={facts.operation === "venta" ? <Tag /> : <Key />}>
+              {PROPERTY_OPERATION_LABEL[facts.operation]}
+            </Chip>
+          )}
+          {facts.type !== null && (
+            <Chip icon={<House />}>{PROPERTY_TYPE_LABEL[facts.type]}</Chip>
+          )}
           {attrs.bedrooms !== null && (
             <Chip icon={<Bed />}>{COPY.detail.bedrooms(attrs.bedrooms)}</Chip>
           )}

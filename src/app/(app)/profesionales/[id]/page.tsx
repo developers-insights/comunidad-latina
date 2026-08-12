@@ -32,6 +32,17 @@ import {
 // Los guardados (tabla `saves`, polimórfica) los lee el módulo FEED, que es su
 // dueño: así la query vive una sola vez y no se duplica por vertical.
 import { fetchViewerSavedListingIds } from "@/app/(app)/feed/queries";
+// RESEÑAS (0093): `listing_reviews` es de avisos, no de negocios, así que
+// Profesionales monta exactamente los mismos componentes que Negocios. La query
+// vive una sola vez en `components/resenas` por la misma razón que los guardados
+// viven en FEED: si se copia, se desincroniza.
+import {
+  ResenaForm,
+  ResenasLista,
+  ResumenPuntajeCard,
+  fetchResenasDeAviso,
+} from "@/components/resenas";
+import { RESENAS_COPY, puedeOfrecerseElFormulario } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
@@ -85,6 +96,7 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
     { count: followerCount },
     myFollowResult,
     savedListingIds,
+    resenas,
   ] = await Promise.all([
     supabase
       .from("verification_checks")
@@ -115,6 +127,7 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
       : Promise.resolve({ data: null }),
     // Guardado del viewer para este aviso (sin sesión resuelve vacío al instante).
     fetchViewerSavedListingIds(supabase, user?.id ?? null, [listing.id]),
+    fetchResenasDeAviso(supabase, listing.id, user?.id ?? null),
   ]);
 
   /**
@@ -346,6 +359,34 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
           </Link>
         </div>
       )}
+
+      {/* RESEÑAS (0093) — las mismas reglas que en Negocios: no se reseña el
+          aviso propio, una por persona, y el profesional puede responder.
+          Va después de las acciones y antes del CTA fijo: es lo último que se
+          lee antes de decidir si contactar. */}
+      <section className="mt-6">
+        <h2 className="mb-2 text-sm font-semibold text-foreground-secondary">
+          {RESENAS_COPY.titulo}
+        </h2>
+        <div className="flex flex-col gap-3">
+          <ResumenPuntajeCard resumen={resenas.resumen} reparto={resenas.reparto} />
+
+          {puedeOfrecerseElFormulario({
+            usuarioId: user?.id ?? null,
+            publicadoPor: listing.created_by,
+            administraElAviso: resenas.administraElAviso,
+            estadoDelAviso: listing.status,
+          }) && <ResenaForm listingId={listing.id} resenaPropia={resenas.propia} />}
+
+          <ResenasLista
+            listingId={listing.id}
+            resenas={resenas.resenas}
+            puedeResponder={resenas.administraElAviso}
+            hayCuenta={Boolean(user)}
+            puedeEscribir={Boolean(user) && !resenas.administraElAviso && !isOwner}
+          />
+        </div>
+      </section>
 
       {/* Contacto protegido — mismo RPC request_contact que vivienda (§9.2) */}
       <DirectoryContactCta

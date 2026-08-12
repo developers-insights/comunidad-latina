@@ -21,6 +21,13 @@ import {
   type DeclarationInput,
 } from "@/lib/integrity";
 import { currentSourceHost } from "@/lib/integrity/source-host";
+import {
+  PROPERTY_OPERATIONS,
+  PROPERTY_OPERATION_ATTR,
+  PROPERTY_TYPES,
+  PROPERTY_TYPE_ATTR,
+  resolvePricePeriod,
+} from "@/lib/propiedades/tipos";
 
 /**
  * Server actions de /publicar.
@@ -62,6 +69,36 @@ const PROFESSIONAL_CATEGORIES = [
   "otro",
 ] as const;
 
+const COPY = {
+  invalid: "Revisá los datos del aviso — hay algo incompleto.",
+  propertyTypeRequired: "Elegí qué tipo de propiedad estás publicando.",
+  operationRequired: "Decinos si la propiedad se alquila o se vende.",
+  /**
+   * Contradicción, no dato faltante: "en venta" y "por mes" no pueden ser
+   * ciertos a la vez, y elegir cuál gana sería inventar lo que la persona quiso
+   * decir. El formulario hace inalcanzable este estado (al elegir Venta se
+   * oculta la frecuencia), así que sólo aparece con un payload armado a mano.
+   */
+  saleWithFrequency:
+    "Una venta lleva un precio único. Si el precio es por mes, semana o día, la operación es alquiler.",
+  needsAuth: "Para publicar necesitás entrar a tu cuenta.",
+  tooManyToday:
+    "Ya creaste varios avisos hoy. Para cuidar la calidad del directorio, esperá hasta mañana para publicar otro.",
+  genericError:
+    "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo en un ratito.",
+} as const;
+
+/**
+ * Mensajes del esquema que SÍ se le muestran a la persona tal cual. El resto
+ * de los issues de zod son internos ("precio requerido", "fecha inválida") y
+ * se resumen en `COPY.invalid`: nombran campos y formatos, no dicen qué hacer.
+ */
+const USER_FACING_ISSUES = new Set<string>([
+  COPY.propertyTypeRequired,
+  COPY.operationRequired,
+  COPY.saleWithFrequency,
+]);
+
 const draftSchema = z
   .object({
     kind: z.enum(KINDS),
@@ -69,6 +106,11 @@ const draftSchema = z
     description: z.string().trim().min(30).max(4000),
     priceAmount: z.number().positive().max(1_000_000).nullish(),
     pricePeriod: z.enum(PERIODS).nullish(),
+    // Vivienda: QUÉ es y QUÉ se ofrece. Van a `attrs` (JSONB libre) igual que
+    // bedrooms/sqft — sin migración. El catálogo y las reglas de coherencia
+    // viven en @/lib/propiedades/tipos, que también usan el form y el listado.
+    propertyType: z.enum(PROPERTY_TYPES).nullish(),
+    operation: z.enum(PROPERTY_OPERATIONS).nullish(),
     bedrooms: z.number().int().min(0).max(20).nullish(),
     bathrooms: z.number().int().min(0).max(20).nullish(),
     sqft: z.number().int().min(1).max(100_000).nullish(),
@@ -88,6 +130,29 @@ const draftSchema = z
     if (value.kind === "property" && (value.priceAmount === null || value.priceAmount === undefined)) {
       ctx.addIssue({ code: "custom", path: ["priceAmount"], message: "precio requerido" });
     }
+    if (value.kind === "property") {
+      if (!value.propertyType) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["propertyType"],
+          message: COPY.propertyTypeRequired,
+        });
+      }
+      if (!value.operation) {
+        ctx.addIssue({ code: "custom", path: ["operation"], message: COPY.operationRequired });
+      }
+      // Coherencia operación ↔ período: la regla completa (y su porqué) está
+      // en resolvePricePeriod. Se valida ACÁ, en el borde, para que la fila que
+      // llega a la base ya no pueda decir "en venta, $2.000 por mes".
+      const coherence = resolvePricePeriod(value.operation ?? null, value.pricePeriod ?? null);
+      if (!coherence.ok) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["pricePeriod"],
+          message: COPY.saleWithFrequency,
+        });
+      }
+    }
     if (value.kind === "professional" && !value.category) {
       ctx.addIssue({ code: "custom", path: ["category"], message: "rubro requerido" });
     }
@@ -102,21 +167,18 @@ export type CreateDraftResult =
   | { ok: true; listingId: string }
   | { ok: false; error: string; needsAuth?: boolean };
 
-const COPY = {
-  invalid: "Revisá los datos del aviso — hay algo incompleto.",
-  needsAuth: "Para publicar necesitás entrar a tu cuenta.",
-  tooManyToday:
-    "Ya creaste varios avisos hoy. Para cuidar la calidad del directorio, esperá hasta mañana para publicar otro.",
-  genericError:
-    "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo en un ratito.",
-} as const;
-
 const GENERIC_ERROR = COPY.genericError;
 
 export async function createListingDraft(rawInput: DraftInput): Promise<CreateDraftResult> {
   const parsed = draftSchema.safeParse(rawInput);
   if (!parsed.success) {
-    return { ok: false, error: COPY.invalid };
+    // Si el esquema tiene algo concreto y accionable para decir, se dice: un
+    // "revisá los datos" genérico frente a una contradicción precio/operación
+    // deja a la persona buscando a ciegas qué corregir.
+    const explicit = parsed.error.issues.find((issue) =>
+      USER_FACING_ISSUES.has(issue.message),
+    );
+    return { ok: false, error: explicit?.message ?? COPY.invalid };
   }
   const input = parsed.data;
 
@@ -139,6 +201,11 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
 
   const attrs: Record<string, string | number> = {};
   if (input.kind === "property") {
+    // Sólo se escribe lo declarado: una clave ausente significa "no declarado",
+    // y ésa es la lectura que hace readPropertyFacts. Escribir un valor vacío o
+    // un default convertiría un silencio en una afirmación.
+    if (input.propertyType) attrs[PROPERTY_TYPE_ATTR] = input.propertyType;
+    if (input.operation) attrs[PROPERTY_OPERATION_ATTR] = input.operation;
     if (input.bedrooms !== null && input.bedrooms !== undefined) attrs.bedrooms = input.bedrooms;
     if (input.bathrooms !== null && input.bathrooms !== undefined) attrs.bathrooms = input.bathrooms;
     if (input.sqft !== null && input.sqft !== undefined) attrs.sqft = input.sqft;
@@ -155,6 +222,26 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
     attrs.venue_area = input.areaLabel;
   }
 
+  // -------------------------------------------------------------------------
+  // Período de precio: la operación manda sobre la frecuencia.
+  //
+  // El default histórico ("month" cuando hay precio y no se eligió período) se
+  // conserva para todo lo que no es vivienda. En vivienda, `resolvePricePeriod`
+  // lo corrige: una VENTA se guarda como `one_time` aunque el payload traiga
+  // otra cosa, así el precio nunca se muestra con un "/mes" que nadie quiso.
+  // El caso contradictorio ya lo frenó el esquema; acá sólo queda el defensivo.
+  // -------------------------------------------------------------------------
+  let pricePeriod: "month" | "week" | "day" | "one_time" | null = input.priceAmount
+    ? (input.pricePeriod ?? "month")
+    : null;
+  if (input.kind === "property") {
+    const coherence = resolvePricePeriod(input.operation ?? null, pricePeriod);
+    if (!coherence.ok) {
+      return { ok: false, error: COPY.saleWithFrequency };
+    }
+    pricePeriod = coherence.period;
+  }
+
   const { data: created, error } = await supabase
     .from("listings")
     .insert({
@@ -164,7 +251,7 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
       description: input.description,
       price_amount: input.priceAmount ?? null,
       price_currency: tenant.currency,
-      price_period: input.priceAmount ? (input.pricePeriod ?? "month") : null,
+      price_period: pricePeriod,
       attrs,
       area_label: input.areaLabel,
       status: "draft",

@@ -321,6 +321,42 @@ export type Database = {
           },
         ]
       }
+      boost_impressions: {
+        Row: {
+          boost_id: string
+          impressions: number
+          seen_on: string
+          tenant_id: string
+        }
+        Insert: {
+          boost_id: string
+          impressions?: number
+          seen_on?: string
+          tenant_id: string
+        }
+        Update: {
+          boost_id?: string
+          impressions?: number
+          seen_on?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boost_impressions_boost_id_fkey"
+            columns: ["boost_id"]
+            isOneToOne: false
+            referencedRelation: "boosts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boost_impressions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boosts: {
         Row: {
           amount_cents: number
@@ -332,6 +368,9 @@ export type Database = {
           id: string
           listing_id: string
           package: string
+          scope: string
+          scope_area: string | null
+          scope_country: string | null
           starts_at: string | null
           status: string
           stripe_checkout_session_id: string | null
@@ -348,6 +387,9 @@ export type Database = {
           id?: string
           listing_id: string
           package: string
+          scope?: string
+          scope_area?: string | null
+          scope_country?: string | null
           starts_at?: string | null
           status?: string
           stripe_checkout_session_id?: string | null
@@ -364,6 +406,9 @@ export type Database = {
           id?: string
           listing_id?: string
           package?: string
+          scope?: string
+          scope_area?: string | null
+          scope_country?: string | null
           starts_at?: string | null
           status?: string
           stripe_checkout_session_id?: string | null
@@ -4672,6 +4717,10 @@ export type Database = {
           viewer_is_follower: boolean
           viewer_is_owner: boolean
         }[]
+      }
+      record_boost_impressions: {
+        Args: { p_boost_ids: string[] }
+        Returns: number
       }
       record_cta_click: {
         Args: { p_cta_kind: string; p_listing_id: string }

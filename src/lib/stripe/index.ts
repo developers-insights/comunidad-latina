@@ -205,6 +205,35 @@ export function boostMontoCentavos(boost: BoostPackage): number {
   return boost.precioUsd * 100;
 }
 
+/**
+ * [EJEMPLO §18] RECARGO POR ALCANCE GEOGRÁFICO (migración 0092).
+ *
+ * El impulso se cobra con DOS números que se suman: la duración (arriba) y el
+ * alcance (acá). Los dos son configurables por comunidad en `tenant_prices`;
+ * estas constantes son el respaldo cuando la comunidad no tocó la casilla, y la
+ * semilla de la 0092 las copia fila por fila (hay un test que lo verifica).
+ *
+ * POR QUÉ 'local' CUESTA CERO Y EXISTE IGUAL
+ *   Porque el alcance más chico es un escalón real, no la ausencia de compra:
+ *   quien impulsa su aviso para su barrio está comprando el impulso completo,
+ *   sólo que dirigido. Que la casilla exista con valor 0 le da a cada comunidad
+ *   la palanca de cobrarlo si quiere, sin que nadie tenga que tocar código.
+ *
+ * Los saltos son deliberadamente grandes (0 → 15 → 40): el alcance es lo único
+ * que cambia entre las tres opciones, así que si la diferencia de precio fuera
+ * chica la decisión se tomaría al azar. La cifra real la fija cada comunidad.
+ */
+export const BOOST_SCOPE_SURCHARGES_USD: Record<"local" | "nacional" | "global", number> = {
+  local: 0,
+  nacional: 15,
+  global: 40,
+};
+
+/** Recargo del alcance en centavos, para `unit_amount` de Stripe. */
+export function boostScopeMontoCentavos(scope: "local" | "nacional" | "global"): number {
+  return BOOST_SCOPE_SURCHARGES_USD[scope] * 100;
+}
+
 // ---------------------------------------------------------------------------
 // Promoción de post (feedback cliente 2026-07-19) — pago ONE-TIME
 // ---------------------------------------------------------------------------

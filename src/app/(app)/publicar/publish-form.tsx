@@ -9,11 +9,13 @@ import {
   Eye,
   House,
   ImageSquare,
+  Key,
   MapPin,
   Megaphone,
   PencilSimple,
   RocketLaunch,
   Storefront,
+  Tag,
   Wrench,
   X,
 } from "@phosphor-icons/react/dist/ssr";
@@ -39,6 +41,15 @@ import {
   OriginalityFields,
   type DeclarationValue,
 } from "@/components/integrity/originality-fields";
+import {
+  PROPERTY_OPERATION_OPTIONS,
+  PROPERTY_TYPE_OPTIONS,
+  normalizePropertyOperation,
+  normalizePropertyType,
+  propertyOperationLabel,
+  propertyTypeLabel,
+  type PropertyOperation,
+} from "@/lib/propiedades/tipos";
 import { createListingDraft, finalizeListing } from "./actions";
 
 const C = COPY.publish;
@@ -164,6 +175,11 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [period, setPeriod] = useState("month");
+  // Vivienda: sin valor inicial A PROPÓSITO. "Alquiler" es lo más frecuente,
+  // pero preseleccionarlo pondría en boca de quien publica algo que todavía no
+  // dijo — y el que vende tendría que darse cuenta de destildarlo.
+  const [operation, setOperation] = useState<PropertyOperation | "">("");
+  const [propertyType, setPropertyType] = useState("");
   const [bedrooms, setBedrooms] = useState("");
   const [bathrooms, setBathrooms] = useState("");
   const [sqft, setSqft] = useState("");
@@ -181,11 +197,19 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
   const [draftId, setDraftId] = useState<string | null>(null);
 
   const isProperty = kind === "property";
+  /**
+   * Una VENTA no tiene frecuencia: el precio es uno solo. Al elegir "Venta" el
+   * selector de frecuencia desaparece en vez de quedar ahí ofreciendo "por mes"
+   * para una casa que se vende — que es exactamente la contradicción que el
+   * servidor rechaza. Mientras la operación no se eligió se muestra la vista de
+   * alquiler, que es el caso mayoritario del vertical.
+   */
+  const isSale = isProperty && operation === "venta";
   // La frecuencia (por mes/semana/día) es lenguaje de alquileres y sueldos.
   // Para negocio/profesional/evento se oculta y el precio queda como único —
   // el cliente eligió "Negocio" y le apareció "Por mes" como si fuera una
   // propiedad (feedback 2026-07-21).
-  const hasPriceFrequency = isProperty || kind === "job";
+  const hasPriceFrequency = (isProperty && !isSale) || kind === "job";
 
   /**
    * La frecuencia que se va a guardar. Una sola fuente para el borrador y para
@@ -216,6 +240,10 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
       if (description.trim().length < 30) return C.errors.descriptionShort;
     }
     if (current === 2 && isProperty) {
+      // El orden de los chequeos sigue al orden visual del paso: el primer
+      // error que se muestra es siempre el del campo que está más arriba.
+      if (!operation) return C.errors.operationRequired;
+      if (!propertyType) return C.errors.typeRequired;
       const amount = Number(price);
       if (!Number.isFinite(amount) || amount <= 0) return C.errors.priceRequired;
     }
@@ -291,6 +319,8 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
     setDescription("");
     setPrice("");
     setPeriod("month");
+    setOperation("");
+    setPropertyType("");
     setBedrooms("");
     setBathrooms("");
     setSqft("");
@@ -325,6 +355,11 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
               ? (period as "month" | "week" | "day" | "one_time")
               : "one_time"
             : null,
+          // Los normalizadores devuelven el valor tipado o null: el estado del
+          // form es `string`, así que ésta es la única frontera donde puede
+          // colarse algo que no está en el catálogo.
+          propertyType: isProperty ? normalizePropertyType(propertyType) : null,
+          operation: isProperty ? normalizePropertyOperation(operation) : null,
           bedrooms: isProperty && bedrooms ? Number(bedrooms) : null,
           bathrooms: isProperty && bathrooms ? Number(bathrooms) : null,
           sqft: isProperty && sqft ? Number(sqft) : null,
@@ -556,6 +591,86 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
       {step === 2 && (
         <div className="flex flex-col gap-4">
           <h2 className="font-display text-xl font-bold text-foreground">{C.steps.price.title}</h2>
+
+          {isProperty && (
+            <>
+              {/* Operación: radios NATIVOS dentro de un fieldset. Se ven como
+                  dos tarjetas, pero por debajo es el control estándar — así las
+                  flechas del teclado recorren las opciones, el lector de
+                  pantalla anuncia "1 de 2" y el grupo tiene un nombre real, sin
+                  reimplementar nada de eso a mano con aria-checked. */}
+              <fieldset className="flex flex-col gap-2">
+                <legend className="mb-1.5 text-sm font-semibold text-foreground">
+                  {C.steps.price.operationLabel}
+                </legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {PROPERTY_OPERATION_OPTIONS.map((option) => {
+                    const OptionIcon = option.value === "venta" ? Tag : Key;
+                    const selected = operation === option.value;
+                    return (
+                      <div key={option.value} className="relative">
+                        <input
+                          type="radio"
+                          id={`pub-operation-${option.value}`}
+                          name="pub-operation"
+                          value={option.value}
+                          checked={selected}
+                          onChange={() => setOperation(option.value)}
+                          className="peer sr-only"
+                        />
+                        <label
+                          htmlFor={`pub-operation-${option.value}`}
+                          className={cn(
+                            "flex min-h-16 cursor-pointer flex-col justify-center gap-0.5 rounded-lg border p-3",
+                            "transition-[border-color,background-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
+                            "active:scale-[0.98] peer-focus-visible:ring-[3px] peer-focus-visible:ring-focus-ring",
+                            selected
+                              ? "border-brand bg-brand-tint text-brand-ink"
+                              : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
+                          )}
+                        >
+                          <span className="flex items-center gap-1.5 text-sm font-semibold">
+                            <OptionIcon
+                              size={18}
+                              weight={selected ? "fill" : "regular"}
+                              aria-hidden="true"
+                            />
+                            {option.label}
+                          </span>
+                          <span className="text-xs leading-snug text-foreground-muted">
+                            {option.hint}
+                          </span>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-sm text-foreground-muted">{C.steps.price.operationHelp}</p>
+              </fieldset>
+
+              <Field
+                htmlFor="pub-property-type"
+                label={C.steps.price.typeLabel}
+                help={C.steps.price.typeHelp}
+              >
+                <Select
+                  id="pub-property-type"
+                  value={propertyType}
+                  onChange={(event) => setPropertyType(event.target.value)}
+                >
+                  <option value="" disabled>
+                    {C.steps.price.typePlaceholder}
+                  </option>
+                  {PROPERTY_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </>
+          )}
+
           <div className={cn("grid gap-3", hasPriceFrequency ? "grid-cols-2" : "grid-cols-1")}>
             <Field htmlFor="pub-price" label={C.steps.price.priceLabel} optional={!isProperty}>
               <Input
@@ -820,6 +935,20 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
                 // (src/test/print-contract.test.ts). Acá se lee siempre.
                 <p className="text-xs text-foreground-muted">
                   {M.preview.photoCount(photos.length)}
+                </p>
+              )}
+              {/* Operación y tipo, juntos y arriba del precio: es el orden en
+                  que se leen en el aviso publicado, así "así te va a quedar"
+                  no miente por omisión. */}
+              {isProperty && (operation || propertyType) && (
+                <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-semibold text-foreground-secondary">
+                  {operation && <span>{propertyOperationLabel(operation)}</span>}
+                  {operation && propertyType && (
+                    <span aria-hidden="true" className="text-foreground-muted">
+                      ·
+                    </span>
+                  )}
+                  {propertyType && <span>{propertyTypeLabel(propertyType)}</span>}
                 </p>
               )}
               {pricePreview && (

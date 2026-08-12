@@ -51,9 +51,9 @@ export type { ResolvedPrice } from "./catalog";
 const SELECT = "id, product, variant, billing_interval, amount_cents, currency, active, updated_at";
 
 /**
- * Los 14 precios vigentes de una comunidad, ya resueltos.
+ * Los 17 precios vigentes de una comunidad, ya resueltos.
  *
- * Nunca lanza y nunca devuelve una lista incompleta: siempre son las 14
+ * Nunca lanza y nunca devuelve una lista incompleta: siempre son las 17
  * casillas, con `source` diciendo de dónde salió cada número.
  */
 export async function getTenantPrices(

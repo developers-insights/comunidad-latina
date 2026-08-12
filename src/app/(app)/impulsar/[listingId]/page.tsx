@@ -9,6 +9,8 @@ import {
   SlidersHorizontal,
 } from "@phosphor-icons/react/dist/ssr";
 import { Banner, BezelCard, NavTabs } from "@/components/ui";
+import { BOOST_SCOPE_COPY, BOOST_SCOPE_IDS, normalizeBoostScope } from "@/lib/boosts";
+import type { BoostScopeSurcharges } from "@/lib/boosts/price";
 import { isStripeConfigured } from "@/lib/config/services";
 import { MONETIZATION_COPY } from "@/lib/monetization";
 import { listingViewHref } from "@/lib/monetization/href";
@@ -35,15 +37,17 @@ const COPY = {
   // palabra es el nivel máximo del Trust Score, que se gana por reputación.
   // Compartirla hacía que un espacio pago se leyera como un mérito ganado.
   comoFunciona:
-    "El impulso es publicidad: tu aviso sube al principio de los resultados de tu zona con la etiqueta \"Patrocinado\", para que la gente siempre sepa que es un espacio pago. Sin trucos.",
+    "El impulso es publicidad: tu aviso sube al principio de los resultados con la etiqueta \"Patrocinado\", para que la gente siempre sepa que es un espacio pago. Vos elegís hasta dónde llega y cuántos días dura. Sin trucos.",
   notaHonesta:
     "Impulsar no cambia tu Trust Score, no altera los resultados del verificador del centro de seguridad y no garantiza conducta: solo mejora la visibilidad de tu aviso mientras dura. Es un pago único, sin renovación automática.",
   exito:
-    "¡Listo! Recibimos tu pago. En unos minutos tu aviso empieza a aparecer primero en tu zona — te avisamos con una notificación.",
+    "¡Listo! Recibimos tu pago. En unos minutos tu aviso empieza a aparecer primero en el alcance que elegiste — te avisamos con una notificación.",
   cancelado: "No se hizo ningún cargo. Tus opciones de impulso te esperan acá.",
   yaActivoTitulo: "Este aviso ya está impulsado",
-  yaActivoCuerpo: (fecha: string) =>
-    `Aparece primero en tu zona, marcado como "Patrocinado", hasta el ${fecha}. Cuando termine, podés impulsarlo de nuevo desde acá.`,
+  // El alcance del impulso ACTIVO se lee de su fila y se dice tal cual: quien
+  // pagó "Tu zona" no puede leer que su aviso llega a toda la comunidad.
+  yaActivoCuerpo: (fecha: string, alcance: string) =>
+    `${alcance} Va marcado como "Patrocinado" hasta el ${fecha}. Cuando termine, podés impulsarlo de nuevo desde acá.`,
   noPublicadoTitulo: "Todavía no se puede promocionar",
   noPublicadoCuerpo:
     "El aviso tiene que estar publicado para promocionarlo. Apenas lo apruebe el equipo de tu comunidad, volvé por acá.",
@@ -119,10 +123,10 @@ export default async function PromocionarPage({
   // Boost activo vigente + campaña del aviso (si las hay) — estado honesto en
   // vez de doble venta. `campaigns` es PRIVADA (dueño + admins), así que este
   // select ya lo limita la RLS a lo que es suyo.
-  const [{ data: boostActivo }, { data: campaignRow }] = await Promise.all([
+  const [{ data: boostActivo }, { data: campaignRow }, { data: comunidad }] = await Promise.all([
     supabase
       .from("boosts")
-      .select("ends_at")
+      .select("ends_at, scope")
       .eq("listing_id", listing.id)
       .eq("status", "active")
       .gt("ends_at", new Date().toISOString())
@@ -138,6 +142,11 @@ export default async function PromocionarPage({
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // El país de la comunidad, sólo para NOMBRAR el alcance nacional en la
+    // pantalla ("Todo el país · DO"). El objetivo real que se guarda lo vuelve a
+    // resolver la server action desde el servidor: esto es texto, no un dato de
+    // negocio que viaje de vuelta.
+    supabase.from("tenants").select("country_focus").eq("id", tenant.id).maybeSingle(),
   ]);
 
   const campaign: CampaignDraft | null = campaignRow
@@ -168,6 +177,16 @@ export default async function PromocionarPage({
   for (const id of BOOST_IDS) {
     const precio = findPrice(preciosResueltos, "boost", id, "unico");
     if (precio) preciosBoost[id] = precio;
+  }
+  // El recargo por alcance (0092) sale de la MISMA lectura. La pantalla suma
+  // duración + alcance con `combineBoostPrice`, exactamente la función que
+  // después usa `crearBoostCheckout` para cobrar.
+  const recargosAlcance: BoostScopeSurcharges = {};
+  for (const scope of BOOST_SCOPE_IDS) {
+    const recargo = findPrice(preciosResueltos, "boost_scope", scope, "unico");
+    if (recargo) {
+      recargosAlcance[scope] = { amountCents: recargo.amountCents, currency: recargo.currency };
+    }
   }
 
   return (
@@ -263,6 +282,7 @@ export default async function PromocionarPage({
                 <p className="max-w-[42ch] text-sm text-foreground-secondary">
                   {COPY.yaActivoCuerpo(
                     formatDate(boostActivo.ends_at, { locale: tenant.locale, style: "long" }),
+                    BOOST_SCOPE_COPY[normalizeBoostScope(boostActivo.scope)].hint,
                   )}
                 </p>
               </BezelCard>
@@ -275,6 +295,9 @@ export default async function PromocionarPage({
                   listingId={listing.id}
                   paquetes={BOOST_IDS.map((id) => BOOST_PACKAGES[id])}
                   precios={preciosBoost}
+                  recargosAlcance={recargosAlcance}
+                  zonaDelAviso={listing.area_label}
+                  paisDeLaComunidad={comunidad?.country_focus ?? null}
                   stripeConfigured={isStripeConfigured}
                 />
               </>

@@ -24,6 +24,7 @@ import { JobListSkeleton } from "@/components/empleos/job-skeletons";
 import { t } from "@/lib/i18n";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
+import { ImpulsosDeOtrasComunidades } from "@/components/boosts";
 import { fetchJobsPage } from "../queries";
 
 export const metadata = { title: "Empleos" };
@@ -149,6 +150,11 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
       />
 
       <EmploymentTypeChips className="mb-5" />
+
+      {/* Impulsos con alcance nacional/global comprados en OTRAS comunidades
+          (0092). Sólo en la primera página y sin filtros: la publicidad no
+          desplaza lo que alguien buscó. Sin resultados no renderiza nada. */}
+      {!filters.cursor && !hayFiltro && <ImpulsosDeOtrasComunidades className="mb-4" kind="job" />}
 
       {items.length === 0 ? (
         <EmptyState

@@ -19,6 +19,7 @@ export const PRICE_PRODUCTS = [
   "presencia",
   "listing_premium",
   "boost",
+  "boost_scope",
   "post_promo",
   "store_membership",
 ] as const;
@@ -46,11 +47,15 @@ export interface PriceSlot {
 }
 
 /**
- * Las 14 casillas, en el orden en que se muestran.
+ * Las 17 casillas, en el orden en que se muestran.
  *
  * El orden importa: primero lo recurrente (la suscripción del negocio, que es
  * el ingreso previsible), después lo puntual. Dentro de cada producto, del más
  * barato al más caro, que es como se lee una lista de precios.
+ *
+ * El impulso ocupa DOS bloques y no uno: la duración y el alcance geográfico
+ * (0092). Se cobran sumados, y por eso se configuran uno al lado del otro —
+ * quien fija el precio necesita ver los dos números que va a pagar la gente.
  */
 export const PRICE_SLOTS: readonly PriceSlot[] = [
   { product: "presencia", variant: "basico", interval: "mensual", label: "Básico · por mes" },
@@ -63,6 +68,12 @@ export const PRICE_SLOTS: readonly PriceSlot[] = [
   { product: "boost", variant: "7d", interval: "unico", label: "7 días" },
   { product: "boost", variant: "14d", interval: "unico", label: "14 días" },
   { product: "boost", variant: "30d", interval: "unico", label: "30 días" },
+
+  // Alcance del impulso (0092): RECARGO que se SUMA al precio de la duración.
+  // Van del alcance más chico al más grande, que es el orden en que se decide.
+  { product: "boost_scope", variant: "local", interval: "unico", label: "Tu zona" },
+  { product: "boost_scope", variant: "nacional", interval: "unico", label: "Todo el país" },
+  { product: "boost_scope", variant: "global", interval: "unico", label: "Todas las comunidades" },
 
   { product: "post_promo", variant: "7d", interval: "unico", label: "7 días" },
   { product: "post_promo", variant: "14d", interval: "unico", label: "14 días" },
@@ -95,8 +106,14 @@ export const PRODUCT_COPY: Record<PriceProduct, { label: string; blurb: string }
       "La suscripción del negocio en el directorio. El precio anual son diez mensualidades: dos meses gratis.",
   },
   boost: {
-    label: "Impulso de un aviso",
-    blurb: "Pago único. Pone un aviso al frente de su zona por unos días, marcado como publicidad.",
+    label: "Impulso de un aviso · duración",
+    blurb:
+      "Pago único. Pone un aviso al frente de los resultados por unos días, marcado como publicidad. Lo que se cobra es esto MÁS el recargo por alcance de abajo.",
+  },
+  boost_scope: {
+    label: "Impulso de un aviso · alcance",
+    blurb:
+      "Recargo que se suma a la duración según hasta dónde llega el aviso: su zona, todo el país, o todas las comunidades de la plataforma. En cero, el alcance no encarece el impulso.",
   },
   post_promo: {
     label: "Campaña de una publicación",
@@ -117,6 +134,7 @@ export const PRODUCT_COPY: Record<PriceProduct, { label: string; blurb: string }
 export const PRODUCT_ORDER: readonly PriceProduct[] = [
   "presencia",
   "boost",
+  "boost_scope",
   "post_promo",
   "store_membership",
   "listing_premium",
@@ -208,7 +226,7 @@ export function resolvePrices(
 
     return {
       ...slot,
-      // `base` siempre existe: `defaults.ts` cubre las 14 casillas y hay un test
+      // `base` siempre existe: `defaults.ts` cubre las 17 casillas y hay un test
       // que lo prueba. El `?? 0` es la red por si alguien suma una casilla acá
       // y se olvida del default — y en ese caso el cero es visible y ruidoso,
       // no un cobro silencioso.

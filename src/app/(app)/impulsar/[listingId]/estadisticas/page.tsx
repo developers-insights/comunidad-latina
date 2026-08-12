@@ -8,11 +8,14 @@ import {
   Eye,
   Heart,
   LockKey,
+  Megaphone,
   ShareNetwork,
   Sparkle,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
 import { Badge, BezelCard, buttonVariants } from "@/components/ui";
+import { BOOST_SCOPE_COPY, normalizeBoostScope } from "@/lib/boosts";
+import { fetchBoostImpressions } from "@/lib/boosts/select";
 import { MONETIZATION_COPY, parseListingTier } from "@/lib/monetization";
 import { STATS_WINDOW_DAYS, fetchListingStats } from "@/lib/monetization/stats";
 import { createClient } from "@/lib/supabase/server";
@@ -23,6 +26,16 @@ export const metadata = { title: "Estadísticas de tu aviso" };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const M = MONETIZATION_COPY;
+
+/** Copy local de las impresiones del impulso (0092). */
+const COPY = {
+  impresionesTitulo: "Veces que se mostró tu impulso",
+  impresionesAyuda:
+    "Cada vez que tu aviso ocupó el lugar pago en un listado. No es lo mismo que las vistas: ahí se cuenta a quien lo abrió.",
+  impresionesAlcance: (alcance: string) => `Alcance vigente: ${alcance.toLowerCase()}.`,
+  impresionesSinDato:
+    "No pudimos traer este número ahora mismo. Volvé a entrar en un rato — tu impulso sigue corriendo igual.",
+} as const;
 
 type Params = Promise<{ listingId: string }>;
 
@@ -73,6 +86,40 @@ export default async function EstadisticasPage({ params }: { params: Params }) {
     commentCount: listing.comment_count,
     viewCount: listing.view_count,
   });
+
+  // -------------------------------------------------------------------------
+  // IMPRESIONES DEL IMPULSO (0092) — la métrica que faltaba justo donde se
+  // decide si el impulso valió la pena.
+  //
+  // Va acá y no en `fetchListingStats` porque no es una estadística DEL AVISO:
+  // es de lo que se COMPRÓ. Un aviso sin impulso no tiene impresiones que
+  // mostrar, y un cero en esa tarjeta se leería como "no te vio nadie" cuando
+  // en realidad nunca se pagó nada.
+  //
+  // Y no es lo mismo que "Vistas": vistas son personas-día que ABRIERON el
+  // aviso; una impresión es que el lugar pago se MOSTRÓ. Por eso la tarjeta
+  // lleva su línea de ayuda: dos números sobre lo mismo, sin explicación, se
+  // leen como un error.
+  const { data: boostsDelAviso } = await supabase
+    .from("boosts")
+    .select("id, scope, status, ends_at")
+    .eq("listing_id", listing.id)
+    .order("created_at", { ascending: false })
+    .limit(12);
+  const boostRows = boostsDelAviso ?? [];
+  const impresiones =
+    boostRows.length > 0
+      ? await fetchBoostImpressions(
+          supabase,
+          boostRows.map((row) => row.id),
+        )
+      : null;
+  // El alcance del impulso vigente, si hay uno — es lo que da sentido al
+  // número: 300 impresiones con alcance "Tu zona" y con "Todas las
+  // comunidades" no significan lo mismo.
+  const boostVigente = boostRows.find(
+    (row) => row.status === "active" && row.ends_at !== null && new Date(row.ends_at) > new Date(),
+  );
 
   const hasAnything =
     stats.basic.views +
@@ -152,6 +199,44 @@ export default async function EstadisticasPage({ params }: { params: Params }) {
             label="Guardados"
             value={stats.basic.saves}
           />
+        </section>
+      )}
+
+      {/* IMPRESIONES DEL IMPULSO — sólo si hubo impulso. No está detrás del
+          muro premium: quien pagó el impulso ya pagó, y esconderle el
+          resultado de su compra detrás de OTRA compra sería cobrar dos veces
+          por el mismo dato. */}
+      {boostRows.length > 0 && (
+        <section className="flex flex-col gap-2.5">
+          <h2 className="font-display text-lg font-bold text-foreground">
+            {COPY.impresionesTitulo}
+          </h2>
+          <BezelCard coreClassName="flex items-center gap-4 p-4">
+            <span className="shrink-0 text-sponsored-ink" aria-hidden="true">
+              <Megaphone size={28} weight="fill" />
+            </span>
+            <div className="min-w-0">
+              {impresiones === null ? (
+                /* `null` es "no se pudo leer", no "cero". Un cero acá sería una
+                   afirmación falsa sobre lo que alguien pagó. */
+                <p className="text-sm text-foreground-secondary">{COPY.impresionesSinDato}</p>
+              ) : (
+                <>
+                  <p className="numeric font-display text-2xl font-bold text-foreground">
+                    {impresiones.toLocaleString("es-US")}
+                  </p>
+                  <p className="text-xs text-foreground-secondary">
+                    {COPY.impresionesAyuda}
+                    {boostVigente
+                      ? ` ${COPY.impresionesAlcance(
+                          BOOST_SCOPE_COPY[normalizeBoostScope(boostVigente.scope)].label,
+                        )}`
+                      : ""}
+                  </p>
+                </>
+              )}
+            </div>
+          </BezelCard>
         </section>
       )}
 

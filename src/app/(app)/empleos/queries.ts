@@ -1,6 +1,11 @@
 import "server-only";
 
-import { createClient } from "@/lib/supabase/server";
+import {
+  recordBoostImpressions,
+  resolveViewerGeo,
+  selectOwnBoosts,
+} from "@/lib/boosts/select";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import {
   allPhotoUrls,
   buildTrustSignals,
@@ -201,19 +206,22 @@ export async function fetchJobsPage(input: {
   // la primera página (sin cursor) y SOLO cuando no hay filtro activo (un
   // resultado boosteado que no matchea jornada/búsqueda no se inyecta).
   // ---------------------------------------------------------------------
-  const boostedIds = new Set<string>();
+  //
+  // ALCANCE GEOGRÁFICO (0092): un impulso `local` sólo ocupa lugar para quien
+  // está en su zona; `nacional` y `global`, para toda la comunidad. La regla
+  // vive UNA vez en `src/lib/boosts`, no copiada en cada listado.
+  let boostedIds = new Set<string>();
   let boostedExtra: JobListingRow[] = [];
   const sinFiltros = !input.employmentType && !input.q;
   if (!cursor) {
-    const { data: activeBoosts } = await supabase
-      .from("boosts")
-      .select("listing_id")
-      .eq("tenant_id", input.tenantId)
-      .eq("status", "active")
-      .gt("ends_at", new Date().toISOString())
-      .order("ends_at", { ascending: false })
-      .limit(4);
-    for (const boost of activeBoosts ?? []) boostedIds.add(boost.listing_id);
+    const viewer = await resolveViewerGeo(supabase, {
+      tenantId: input.tenantId,
+      userId: await getAuthUserId(),
+    });
+    const placement = await selectOwnBoosts(supabase, { tenantId: input.tenantId, viewer });
+    boostedIds = placement.listingIds;
+    // Se sirvieron: se cuentan (0092). Best-effort y ruidoso ante la falla.
+    await recordBoostImpressions(placement.boostIds);
 
     // Destacados que no entraron por fecha: solo en la vista sin filtros (con
     // filtros activos jamás se inyecta un resultado que no matchea).
