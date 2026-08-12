@@ -103,6 +103,8 @@ export const sections = {
   searchEventsPlaceholder: "Buscar un evento, un lugar…",
   searchBusinessLabel: "Buscar negocios",
   searchBusinessPlaceholder: "Buscar un negocio o un rubro…",
+  searchJobsLabel: "Buscar empleos",
+  searchJobsPlaceholder: "Buscar un puesto, un rubro…",
   searchGigsLabel: "Buscar trabajos para creadores",
   searchGigsPlaceholder: "Buscar un trabajo…",
 
