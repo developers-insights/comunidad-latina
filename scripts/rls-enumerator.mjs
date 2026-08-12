@@ -64,6 +64,31 @@ const GLOBAL_TABLES_BY_DESIGN = {
  *    policy floja duele más de todo el proyecto.
  */
 const STORAGE_BUCKETS = ['avatars', 'listing-photos', 'tenant-assets', 'post-media', 'job-cvs'];
+
+/**
+ * Tablas que NO son de Comunidad Latina.
+ *
+ * Esta base de Supabase está COMPARTIDA con otro producto (caughtcode), que
+ * tiene sus propias tablas en el mismo schema `public`. No son nuestras: no
+ * podemos agregarles `tenant_id` ni escribirles policies, y auditarlas acá no
+ * mide nada de este proyecto.
+ *
+ * Antes de este filtro el gate salía ROJO con 17 problemas ajenos, siempre los
+ * mismos. Un gate que está permanentemente en rojo por ruido que nadie puede
+ * arreglar deja de leerse — y el día que aparece un problema NUESTRO se pierde
+ * entre los otros diecisiete. Eso es peor que no tener gate.
+ *
+ * Se excluyen por sufijo y no por lista fija a propósito: el otro producto
+ * sigue creando tablas, y una lista a mano se desactualiza sola. Si algún día
+ * Comunidad Latina tuviera una tabla terminada en `_caughtcode`, este filtro la
+ * dejaría sin auditar — por eso el nombre del sufijo es el del otro producto y
+ * no algo genérico como `_externo`.
+ */
+const OTRO_PRODUCTO_SUFIJO = '_caughtcode';
+
+function esDeOtroProducto(tableName) {
+  return tableName.endsWith(OTRO_PRODUCTO_SUFIJO);
+}
 const CMDS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'];
 const SUFFIX_BY_CMD = { SELECT: 'select', INSERT: 'insert', UPDATE: 'update', DELETE: 'delete' };
 
@@ -180,6 +205,9 @@ async function main() {
 
     for (const t of tables) {
       const name = t.table_name;
+      // Las tablas del otro producto de esta base compartida no se auditan:
+      // ver el comentario de OTRO_PRODUCTO_SUFIJO.
+      if (esDeOtroProducto(name)) continue;
       const hasTenantId = tenantTables.has(name);
       const isWhitelisted = Object.hasOwn(GLOBAL_TABLES_BY_DESIGN, name);
 
