@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { CaretDown, Check, Plus, SealCheck, VideoCamera, X } from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { formatDuration, type VideoCategory } from "@/lib/media/video-policy";
+import { getPhotoFilter } from "@/lib/media/photo-filters";
 import {
   VIDEO_CATEGORY_LABELS,
   VIDEO_CATEGORY_ORDER,
@@ -13,6 +15,12 @@ import { licenseLabel } from "@/lib/integrity/declarations";
 import { COPY } from "./copy";
 import { QuestionBanner } from "./question-banner";
 import { TextBanner } from "./text-banner";
+import {
+  DEFAULT_PHOTO_EDIT,
+  PhotoCaptionOverlay,
+  PhotoEditor,
+  type PhotoEdit,
+} from "./photo-editor";
 
 /**
  * PASO DE TEXTO del composer rápido (feedback cliente 2026-07-27).
@@ -33,7 +41,9 @@ import { TextBanner } from "./text-banner";
  *
  * Es presentacional a propósito: el estado (texto, archivos, subida) vive en
  * PostComposer, que es quien publica. Así no hay dos fuentes de verdad ni un
- * FileList viajando entre componentes.
+ * FileList viajando entre componentes. ÚNICA excepción: QUÉ FOTO se está
+ * editando ahora mismo (`editingPhotoId`) — es puramente de esta hoja (nunca
+ * viaja a ningún lado), así que vive acá.
  */
 
 const MAX_LENGTH = 2000;
@@ -47,6 +57,8 @@ export interface ComposerMediaItem {
   preview: string;
   /** Duración medida del video, en segundos (sólo en `kind: "video"`). */
   durationSeconds?: number;
+  /** Edición de filtro + texto (sólo en `kind: "photo"`). Sin tocar el editor, queda `undefined` (= sin filtro, sin texto). */
+  edit?: PhotoEdit;
 }
 
 export interface ComposerSheetProps {
@@ -61,6 +73,10 @@ export interface ComposerSheetProps {
   onAddPhotos: () => void;
   onAddVideo: () => void;
   onRemoveMedia: (id: string) => void;
+  /** Cupo máximo de fotos (hoy 10) — sólo para el contador "3 de 10". */
+  maxPhotos: number;
+  /** Se llama cuando se confirma la edición de una foto ("Listo" en el editor). */
+  onSavePhotoEdit: (id: string, edit: PhotoEdit) => void;
   pollEnabled: boolean;
   onPollChange: (next: boolean) => void;
   /** Categoría de Videos Cortos elegida (0046). Sólo se usa si hay video. */
@@ -75,8 +91,27 @@ export interface ComposerSheetProps {
   uploadPct: number | null;
   /** Leyendo la duración del archivo recién elegido (antes de subir nada). */
   measuringVideo?: boolean;
+  /**
+   * Horneado de fotos en curso al publicar (recompresión + filtro/texto,
+   * SIEMPRE que hay al menos una foto — ver `bake-photo.ts`). `null` = no hay
+   * horneado corriendo; con valor, `done` sube foto a foto, nunca es un
+   * número mudo.
+   */
+  bakingProgress?: { done: number; total: number } | null;
   isPending: boolean;
   onPublish: () => void;
+  /**
+   * RANURAS PARA OTROS DOS FRENTES (contrato, no un extra). "Etiquetar
+   * personas" y "Agregar música" son features de OTROS equipos que se enchufan
+   * acá sin tocar este archivo: el frente de etiquetado monta `tagSlot`, el de
+   * música monta `musicSlot`. Se renderizan como filas de acción entre el área
+   * de medios y el campo de pie, con el mismo lenguaje visual que el resto de
+   * las filas de la hoja. Si vienen `undefined` (el frente todavía no existe)
+   * no se renderiza NI EL SEPARADOR — el composer padre es quien decide cuándo
+   * y con qué llenarlas.
+   */
+  tagSlot?: React.ReactNode;
+  musicSlot?: React.ReactNode;
 }
 
 /**
@@ -326,6 +361,15 @@ function PollSwitch({
   );
 }
 
+/** Botón-pastilla con borde punteado — mismo lenguaje visual en toda la hoja. */
+const dashedTileClass = cn(
+  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-dashed border-border",
+  "px-4 text-sm font-medium text-foreground-secondary",
+  "transition-colors duration-(--duration-fast) hover:border-brand hover:bg-surface-subtle",
+  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+  "disabled:pointer-events-none disabled:opacity-45",
+);
+
 export function ComposerSheet({
   open,
   onClose,
@@ -338,6 +382,8 @@ export function ComposerSheet({
   onAddPhotos,
   onAddVideo,
   onRemoveMedia,
+  maxPhotos,
+  onSavePhotoEdit,
   pollEnabled,
   onPollChange,
   videoCategory,
@@ -347,8 +393,11 @@ export function ComposerSheet({
   previewId,
   uploadPct,
   measuringVideo = false,
+  bakingProgress = null,
   isPending,
   onPublish,
+  tagSlot,
+  musicSlot,
 }: ComposerSheetProps) {
   const isQuestion = mode === "question";
   const isText = mode === "text";
@@ -358,6 +407,26 @@ export function ComposerSheet({
   const hasVideo = media.some((item) => item.kind === "video");
   const hasMedia = media.length > 0;
   const trimmed = body.trim();
+
+  /** Qué foto se está editando ahora (id) — puramente de esta hoja, ver docblock. */
+  const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
+  const editingPhoto = photos.find((item) => item.id === editingPhotoId) ?? null;
+
+  /**
+   * Escape / click en el velo / arrastre hacia abajo del `BottomSheet`
+   * comparten este único `onClose`: con el editor de foto abierto, el primer
+   * paso hacia atrás es salir del editor, NUNCA cerrar toda la composición
+   * (perder el pie ya escrito y el resto de las fotos por una foto que se
+   * estaba mirando de más).
+   */
+  function handleSheetClose() {
+    if (editingPhoto) {
+      setEditingPhotoId(null);
+      return;
+    }
+    onClose();
+  }
+
   /**
    * QUÉ HABILITA PUBLICAR (feedback cliente 2026-08-05: "acá si no pongo algo
    * no me deja publicar. Que se pueda publicar así de una").
@@ -384,26 +453,20 @@ export function ComposerSheet({
       ? COPY.composer.compose.textPlaceholder
       : COPY.composer.compose.mediaPlaceholder(photos.length, hasVideo);
 
-  const addTileClass = cn(
-    "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full border border-dashed border-border",
-    "px-3 text-sm font-medium text-foreground-secondary",
-    "transition-colors duration-(--duration-fast) hover:border-brand hover:bg-surface-subtle",
-    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-    "disabled:pointer-events-none disabled:opacity-45",
-  );
-
   return (
     <BottomSheet
       open={open}
-      onClose={onClose}
+      onClose={handleSheetClose}
       size="tall"
       keyboardAware
       title={
-        isQuestion
-          ? COPY.composer.compose.questionTitle
-          : isText
-            ? COPY.composer.compose.textTitle
-            : COPY.composer.compose.mediaTitle
+        editingPhoto
+          ? COPY.composer.photoEditor.title
+          : isQuestion
+            ? COPY.composer.compose.questionTitle
+            : isText
+              ? COPY.composer.compose.textTitle
+              : COPY.composer.compose.mediaTitle
       }
       // EN PAPEL NO EXISTE: es la hoja donde se COMPONE una publicación, un
       // overlay modal sobre toda la página. Además escribe tinta `on-media`
@@ -418,292 +481,357 @@ export function ComposerSheet({
       // botón de publicar queda flotando a media pantalla.
       bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
     >
-      {/* `flex flex-col`: la vista previa tiene que poder CEDER alto (ver
-          PreviewFrame). Todo lo demás va `shrink-0` — el campo de texto y el
-          pie no se achican para hacerle lugar a una maqueta. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-4 pt-3">
-        {isQuestion ? (
-          <>
-            {/* La pregunta ya se ve como va a salir: mismo componente que el
-                feed, en modo vista previa (sin toque, sin navegación). */}
-            <p className="mb-2 shrink-0 text-xs font-medium uppercase tracking-wider text-foreground-muted">
-              {COPY.composer.compose.previewLabel}
-            </p>
-            {trimmed.length > 0 ? (
-              <PreviewFrame>
-                <QuestionBanner
-                  preview
-                  postId={previewId}
-                  question={body}
-                  footer={pollEnabled ? <PollPreview /> : undefined}
-                />
-              </PreviewFrame>
-            ) : (
-              <PreviewPlaceholder label={COPY.composer.compose.questionPlaceholder} />
-            )}
-          </>
-        ) : isText ? (
-          <>
-            {/* Mismo principio que la pregunta: el texto ya se ve como va a
-                salir, sin encuesta debajo (kind='text' nunca la lleva). */}
-            <p className="mb-2 shrink-0 text-xs font-medium uppercase tracking-wider text-foreground-muted">
-              {COPY.composer.compose.previewLabel}
-            </p>
-            {trimmed.length > 0 ? (
-              <PreviewFrame>
-                <TextBanner preview postId={previewId} text={body} />
-              </PreviewFrame>
-            ) : (
-              <PreviewPlaceholder label={COPY.composer.compose.textPlaceholder} />
-            )}
-          </>
-        ) : (
-          <div className="shrink-0">
-            {/* El medio elegido, protagonista: primero el que abre la
-                publicación, el resto en una tira debajo. */}
-            {media.length > 0 && (
-              // `items-start`: sin esto el stretch del flex estira las
-              // miniaturas chicas al alto de la primera y les rompe el cuadrado.
-              <ul className="flex items-start gap-2 overflow-x-auto pb-1">
-                {media.map((item, index) => (
-                  <li
-                    key={item.id}
-                    className={cn(
-                      "relative shrink-0 overflow-hidden rounded-xl bg-surface-subtle",
-                      index === 0 ? "aspect-[4/5] w-40" : "aspect-square w-20",
-                    )}
-                  >
-                    {item.kind === "photo" ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- preview local (blob:)
-                      <img
-                        src={item.preview}
-                        alt=""
-                        className="absolute inset-0 size-full object-cover"
-                      />
-                    ) : (
-                      <>
-                        <video
-                          src={item.preview}
-                          muted
-                          playsInline
-                          preload="metadata"
-                          className="absolute inset-0 size-full object-cover"
-                        />
-                        {/* La DURACIÓN medida, no la palabra "Video": es el
-                            dato que importa cuando el tope son 90 s, y ya lo
-                            tenemos —se midió antes de aceptar el archivo. */}
-                        <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-full bg-media-scrim px-2 py-0.5 text-xs font-semibold text-on-media">
-                          <VideoCamera size={12} weight="fill" aria-hidden="true" />
-                          {formatDuration(item.durationSeconds) ?? COPY.composer.videoChip}
-                        </span>
-                      </>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onRemoveMedia(item.id)}
-                      disabled={isPending}
-                      aria-label={
-                        item.kind === "photo"
-                          ? `${COPY.composer.removePhoto} ${index + 1}`
-                          : COPY.composer.removeVideo
-                      }
-                      // Área táctil de 44px con el círculo visible de 36: en una
-                      // miniatura de 80px un botón de 44 se come media foto, pero
-                      // el dedo necesita los 44 igual. Se separan las dos cosas.
-                      className={cn(
-                        "absolute right-0 top-0 flex size-11 items-center justify-center rounded-full",
-                        "transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.92]",
-                        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-on-media/60",
-                      )}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="flex size-9 items-center justify-center rounded-full bg-media-scrim text-on-media"
-                      >
-                        <X size={15} />
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <div className="mt-2 flex items-center gap-2">
-              {canAddPhoto && (
-                <button
-                  type="button"
-                  onClick={onAddPhotos}
-                  disabled={isPending}
-                  className={addTileClass}
-                >
-                  <Plus size={15} aria-hidden="true" />
-                  {COPY.composer.addMorePhotos}
-                </button>
-              )}
-              {canAddVideo && (
-                <button
-                  type="button"
-                  onClick={onAddVideo}
-                  disabled={isPending}
-                  className={addTileClass}
-                >
-                  <VideoCamera size={15} aria-hidden="true" />
-                  {COPY.composer.addVideo}
-                </button>
-              )}
-            </div>
-            {media.length > 0 && (
-              <p className="mt-2 text-xs text-foreground-muted">
-                {COPY.composer.compose.mediaCount(photos.length, hasVideo)}
-              </p>
-            )}
-
-            {/* Midiendo el archivo recién elegido: es una espera corta pero
-                REAL (el navegador baja la cabecera del contenedor), y sin aviso
-                parecería que el botón no hizo nada. */}
-            {measuringVideo && (
-              <p role="status" className="mt-2 text-xs font-medium text-foreground-secondary">
-                {COPY.composer.videoMeasuring}
-              </p>
-            )}
-
-            {/* CATEGORÍA DE VIDEOS CORTOS (0046). Sólo aparece cuando hay un
-                video: en una publicación de fotos no significa nada, y la base
-                la rechaza sin video. Radios reales (no botones con aria): dentro
-                de una hoja con trampa de foco, las flechas del teclado tienen
-                que moverse entre opciones sin que lo implementemos a mano. */}
-            {hasVideo && (
-              <fieldset className="mt-4" disabled={isPending}>
-                <legend className="text-sm font-semibold text-foreground">
-                  {COPY.composer.compose.videoCategoryLabel}
-                </legend>
-                <p className="mt-0.5 text-xs text-foreground-secondary">
-                  {COPY.composer.compose.videoCategoryHint}
+      {editingPhoto ? (
+        <PhotoEditor
+          key={editingPhoto.id}
+          preview={editingPhoto.preview}
+          edit={editingPhoto.edit ?? DEFAULT_PHOTO_EDIT}
+          onCancel={() => setEditingPhotoId(null)}
+          onSave={(edit) => {
+            onSavePhotoEdit(editingPhoto.id, edit);
+            setEditingPhotoId(null);
+          }}
+        />
+      ) : (
+        <>
+          {/* `flex flex-col`: la vista previa tiene que poder CEDER alto (ver
+              PreviewFrame). Todo lo demás va `shrink-0` — el campo de texto y el
+              pie no se achican para hacerle lugar a una maqueta. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-4 pt-3">
+            {isQuestion ? (
+              <>
+                {/* La pregunta ya se ve como va a salir: mismo componente que el
+                    feed, en modo vista previa (sin toque, sin navegación). */}
+                <p className="mb-2 shrink-0 text-xs font-medium uppercase tracking-wider text-foreground-muted">
+                  {COPY.composer.compose.previewLabel}
                 </p>
-                <div className="mt-2.5 flex flex-wrap gap-2">
-                  {VIDEO_CATEGORY_ORDER.map((category) => (
-                    <label key={category} className="cursor-pointer">
-                      <input
-                        type="radio"
-                        name="composer-video-category"
-                        value={category}
-                        checked={videoCategory === category}
-                        onChange={() => onVideoCategoryChange(category)}
-                        className="peer sr-only"
-                      />
-                      <span
+                {trimmed.length > 0 ? (
+                  <PreviewFrame>
+                    <QuestionBanner
+                      preview
+                      postId={previewId}
+                      question={body}
+                      footer={pollEnabled ? <PollPreview /> : undefined}
+                    />
+                  </PreviewFrame>
+                ) : (
+                  <PreviewPlaceholder label={COPY.composer.compose.questionPlaceholder} />
+                )}
+              </>
+            ) : isText ? (
+              <>
+                {/* Mismo principio que la pregunta: el texto ya se ve como va a
+                    salir, sin encuesta debajo (kind='text' nunca la lleva). */}
+                <p className="mb-2 shrink-0 text-xs font-medium uppercase tracking-wider text-foreground-muted">
+                  {COPY.composer.compose.previewLabel}
+                </p>
+                {trimmed.length > 0 ? (
+                  <PreviewFrame>
+                    <TextBanner preview postId={previewId} text={body} />
+                  </PreviewFrame>
+                ) : (
+                  <PreviewPlaceholder label={COPY.composer.compose.textPlaceholder} />
+                )}
+              </>
+            ) : (
+              <div className="shrink-0">
+                {/* El medio elegido, protagonista: primero el que abre la
+                    publicación, el resto en una tira debajo, y el tile "+" al
+                    final — es lo que la gente busca para sumar otra foto
+                    (antes sólo existía el botón textual de abajo). */}
+                {(media.length > 0 || canAddPhoto) && (
+                  <ul className="flex items-start gap-2 overflow-x-auto scrollbar-none pb-1">
+                    {media.map((item, index) => (
+                      <li
+                        key={item.id}
                         className={cn(
-                          "inline-flex min-h-11 items-center rounded-full border px-4 text-sm font-medium",
-                          "border-border bg-surface text-foreground-secondary",
-                          "transition-colors duration-(--duration-fast)",
-                          "hover:bg-surface-hover",
-                          // El estado seleccionado se lee por relleno Y por
-                          // peso, no sólo por color.
-                          "peer-checked:border-brand peer-checked:bg-brand-tint",
-                          "peer-checked:font-semibold peer-checked:text-brand-ink",
-                          "peer-focus-visible:outline-none peer-focus-visible:ring-[3px] peer-focus-visible:ring-focus-ring",
-                          "peer-disabled:opacity-45",
+                          "relative shrink-0 overflow-hidden rounded-xl bg-surface-subtle",
+                          index === 0 ? "aspect-[4/5] w-40" : "aspect-square w-20",
                         )}
                       >
-                        {VIDEO_CATEGORY_LABELS[category]}
-                      </span>
-                    </label>
-                  ))}
+                        {item.kind === "photo" ? (
+                          // Toda la miniatura es el disparador del editor —el
+                          // botón de "Quitar" va ENCIMA, aparte, para que un
+                          // toque en la esquina no abra el editor de una foto
+                          // que se acaba de borrar.
+                          <button
+                            type="button"
+                            onClick={() => setEditingPhotoId(item.id)}
+                            disabled={isPending}
+                            aria-label={`${COPY.composer.editPhoto} ${index + 1}`}
+                            className={cn(
+                              "absolute inset-0 size-full",
+                              "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring",
+                              "disabled:pointer-events-none",
+                            )}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element -- preview local (blob:) */}
+                            <img
+                              src={item.preview}
+                              alt=""
+                              style={{ filter: getPhotoFilter(item.edit?.filterId).css || undefined }}
+                              className="absolute inset-0 size-full object-cover"
+                            />
+                            {item.edit?.captionText.trim() && (
+                              <PhotoCaptionOverlay
+                                text={item.edit.captionText}
+                                position={item.edit.captionPosition}
+                                background={item.edit.captionBackground}
+                                className="py-1"
+                                textClassName={index === 0 ? "text-xs" : "text-[9px] leading-tight"}
+                              />
+                            )}
+                          </button>
+                        ) : (
+                          <>
+                            <video
+                              src={item.preview}
+                              muted
+                              playsInline
+                              preload="metadata"
+                              className="absolute inset-0 size-full object-cover"
+                            />
+                            {/* La DURACIÓN medida, no la palabra "Video": es el
+                                dato que importa cuando el tope son 90 s, y ya lo
+                                tenemos —se midió antes de aceptar el archivo. */}
+                            <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-full bg-media-scrim px-2 py-0.5 text-xs font-semibold text-on-media">
+                              <VideoCamera size={12} weight="fill" aria-hidden="true" />
+                              {formatDuration(item.durationSeconds) ?? COPY.composer.videoChip}
+                            </span>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => onRemoveMedia(item.id)}
+                          disabled={isPending}
+                          aria-label={
+                            item.kind === "photo"
+                              ? `${COPY.composer.removePhoto} ${index + 1}`
+                              : COPY.composer.removeVideo
+                          }
+                          // Área táctil de 44px con el círculo visible de 36: en una
+                          // miniatura de 80px un botón de 44 se come media foto, pero
+                          // el dedo necesita los 44 igual. Se separan las dos cosas.
+                          className={cn(
+                            "absolute right-0 top-0 flex size-11 items-center justify-center rounded-full",
+                            "transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.92]",
+                            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-on-media/60",
+                          )}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="flex size-9 items-center justify-center rounded-full bg-media-scrim text-on-media"
+                          >
+                            <X size={15} />
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+
+                    {canAddPhoto && (
+                      <li className="shrink-0">
+                        <button
+                          type="button"
+                          onClick={onAddPhotos}
+                          disabled={isPending}
+                          aria-label={COPY.composer.addPhotoTile}
+                          className={cn(
+                            "flex aspect-square w-20 items-center justify-center rounded-xl border border-dashed border-border",
+                            "text-foreground-secondary transition-colors duration-(--duration-fast)",
+                            "hover:border-brand hover:bg-surface-subtle",
+                            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+                            "disabled:pointer-events-none disabled:opacity-45",
+                          )}
+                        >
+                          <Plus size={22} aria-hidden="true" />
+                        </button>
+                      </li>
+                    )}
+                  </ul>
+                )}
+
+                {canAddVideo && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <button type="button" onClick={onAddVideo} disabled={isPending} className={dashedTileClass}>
+                      <VideoCamera size={15} aria-hidden="true" />
+                      {COPY.composer.addVideo}
+                    </button>
+                  </div>
+                )}
+
+                {/* Cupo discreto — "3 de 10 fotos"; se suma "1 video" si hay. */}
+                {media.length > 0 && (
+                  <p className="mt-2 text-xs text-foreground-muted">
+                    {COPY.composer.compose.mediaCount(photos.length, hasVideo, maxPhotos)}
+                  </p>
+                )}
+
+                {/* Midiendo el archivo recién elegido: es una espera corta pero
+                    REAL (el navegador baja la cabecera del contenedor), y sin aviso
+                    parecería que el botón no hizo nada. */}
+                {measuringVideo && (
+                  <p role="status" className="mt-2 text-xs font-medium text-foreground-secondary">
+                    {COPY.composer.videoMeasuring}
+                  </p>
+                )}
+
+                {/* Horneado al publicar: recomprimir 10 fotos tarda un ratito
+                    real — esto es lo que evita que el botón se sienta colgado. */}
+                {bakingProgress && (
+                  <p role="status" className="mt-2 text-xs font-medium text-foreground-secondary">
+                    {COPY.composer.bakingPhotos(bakingProgress.done, bakingProgress.total)}
+                  </p>
+                )}
+
+                {/* CATEGORÍA DE VIDEOS CORTOS (0046). Sólo aparece cuando hay un
+                    video: en una publicación de fotos no significa nada, y la base
+                    la rechaza sin video. Radios reales (no botones con aria): dentro
+                    de una hoja con trampa de foco, las flechas del teclado tienen
+                    que moverse entre opciones sin que lo implementemos a mano. */}
+                {hasVideo && (
+                  <fieldset className="mt-4" disabled={isPending}>
+                    <legend className="text-sm font-semibold text-foreground">
+                      {COPY.composer.compose.videoCategoryLabel}
+                    </legend>
+                    <p className="mt-0.5 text-xs text-foreground-secondary">
+                      {COPY.composer.compose.videoCategoryHint}
+                    </p>
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      {VIDEO_CATEGORY_ORDER.map((category) => (
+                        <label key={category} className="cursor-pointer">
+                          <input
+                            type="radio"
+                            name="composer-video-category"
+                            value={category}
+                            checked={videoCategory === category}
+                            onChange={() => onVideoCategoryChange(category)}
+                            className="peer sr-only"
+                          />
+                          <span
+                            className={cn(
+                              "inline-flex min-h-11 items-center rounded-full border px-4 text-sm font-medium",
+                              "border-border bg-surface text-foreground-secondary",
+                              "transition-colors duration-(--duration-fast)",
+                              "hover:bg-surface-hover",
+                              // El estado seleccionado se lee por relleno Y por
+                              // peso, no sólo por color.
+                              "peer-checked:border-brand peer-checked:bg-brand-tint",
+                              "peer-checked:font-semibold peer-checked:text-brand-ink",
+                              "peer-focus-visible:outline-none peer-focus-visible:ring-[3px] peer-focus-visible:ring-focus-ring",
+                              "peer-disabled:opacity-45",
+                            )}
+                          >
+                            {VIDEO_CATEGORY_LABELS[category]}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
+              </div>
+            )}
+
+            {/* RANURAS de "Etiquetar personas" y "Agregar música" — ver el
+                docblock de ComposerSheetProps. Ni el separador se pinta si
+                los dos vienen `undefined`. */}
+            {(tagSlot || musicSlot) && (
+              <div className="mt-3 flex shrink-0 flex-col gap-2 border-t border-border-subtle pt-3">
+                {tagSlot}
+                {musicSlot}
+              </div>
+            )}
+
+            <label htmlFor="composer-sheet-body" className="sr-only">
+              {bodyPlaceholder}
+            </label>
+            <textarea
+              id="composer-sheet-body"
+              rows={3}
+              maxLength={MAX_LENGTH}
+              value={body}
+              disabled={isPending}
+              onChange={(event) => onBodyChange(event.target.value)}
+              placeholder={bodyPlaceholder}
+              className={cn(
+                "mt-3 min-h-24 w-full shrink-0 resize-none rounded-lg border border-border bg-surface p-3",
+                "text-base text-foreground placeholder:text-foreground-muted",
+                "focus:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+                "disabled:opacity-60",
+              )}
+            />
+
+            {isQuestion && (
+              <div className="mt-3 shrink-0">
+                <PollSwitch
+                  checked={pollEnabled}
+                  onChange={onPollChange}
+                  disabled={isPending}
+                />
+              </div>
+            )}
+
+            {/* Va DESPUÉS del pie y no junto a las miniaturas: el pie es el trabajo
+                principal y meterle un bloque legal en el medio lo parte al mango.
+                Acá queda como lo último antes de Publicar —que es donde la persona
+                ya se está preguntando "¿me falta algo?"— y el propio encabezado
+                ("Sobre esta foto") lo ata al archivo sin necesidad de estar pegado a
+                él. Ver el comentario largo de DeclarationDisclosure. */}
+            {hasMedia && (
+              <DeclarationDisclosure
+                photos={photos.length}
+                hasVideo={hasVideo}
+                value={declaration}
+                onChange={onDeclarationChange}
+                disabled={isPending}
+              />
+            )}
+
+            {/* Progreso REAL de la subida del video (XHR), no una barra decorativa. */}
+            {uploadPct !== null && (
+              <div className="mt-3 shrink-0" role="status">
+                <p className="text-xs font-medium text-foreground-secondary">
+                  {COPY.composer.videoUploading(uploadPct)}
+                </p>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-subtle">
+                  <div
+                    className="h-full rounded-full bg-brand transition-[width] duration-(--duration-fast)"
+                    style={{ width: `${uploadPct}%` }}
+                  />
                 </div>
-              </fieldset>
+              </div>
             )}
           </div>
-        )}
 
-        <label htmlFor="composer-sheet-body" className="sr-only">
-          {bodyPlaceholder}
-        </label>
-        <textarea
-          id="composer-sheet-body"
-          rows={3}
-          maxLength={MAX_LENGTH}
-          value={body}
-          disabled={isPending}
-          onChange={(event) => onBodyChange(event.target.value)}
-          placeholder={bodyPlaceholder}
-          className={cn(
-            "mt-3 min-h-24 w-full shrink-0 resize-none rounded-lg border border-border bg-surface p-3",
-            "text-base text-foreground placeholder:text-foreground-muted",
-            "focus:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-            "disabled:opacity-60",
-          )}
-        />
-
-        {isQuestion && (
-          <div className="mt-3 shrink-0">
-            <PollSwitch
-              checked={pollEnabled}
-              onChange={onPollChange}
+          {/* Publicar SIEMPRE a la vista: el pie no scrollea con el contenido. */}
+          <div className="flex shrink-0 items-center gap-2 border-t border-border-subtle px-5 pt-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="min-h-11"
+              onClick={onClose}
               disabled={isPending}
-            />
+            >
+              {COPY.composer.compose.close}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              className="ml-auto"
+              onClick={onPublish}
+              disabled={!canPublish}
+              loading={isPending}
+            >
+              {isPending
+                ? COPY.composer.publishing
+                : isQuestion
+                  ? COPY.composer.compose.publishQuestion
+                  : COPY.composer.publish}
+            </Button>
           </div>
-        )}
-
-        {/* Va DESPUÉS del pie y no junto a las miniaturas: el pie es el trabajo
-            principal y meterle un bloque legal en el medio lo parte al mango.
-            Acá queda como lo último antes de Publicar —que es donde la persona
-            ya se está preguntando "¿me falta algo?"— y el propio encabezado
-            ("Sobre esta foto") lo ata al archivo sin necesidad de estar pegado a
-            él. Ver el comentario largo de DeclarationDisclosure. */}
-        {hasMedia && (
-          <DeclarationDisclosure
-            photos={photos.length}
-            hasVideo={hasVideo}
-            value={declaration}
-            onChange={onDeclarationChange}
-            disabled={isPending}
-          />
-        )}
-
-        {/* Progreso REAL de la subida del video (XHR), no una barra decorativa. */}
-        {uploadPct !== null && (
-          <div className="mt-3 shrink-0" role="status">
-            <p className="text-xs font-medium text-foreground-secondary">
-              {COPY.composer.videoUploading(uploadPct)}
-            </p>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-subtle">
-              <div
-                className="h-full rounded-full bg-brand transition-[width] duration-(--duration-fast)"
-                style={{ width: `${uploadPct}%` }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Publicar SIEMPRE a la vista: el pie no scrollea con el contenido. */}
-      <div className="flex shrink-0 items-center gap-2 border-t border-border-subtle px-5 pt-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="min-h-11"
-          onClick={onClose}
-          disabled={isPending}
-        >
-          {COPY.composer.compose.close}
-        </Button>
-        <Button
-          type="button"
-          variant="primary"
-          size="md"
-          className="ml-auto"
-          onClick={onPublish}
-          disabled={!canPublish}
-          loading={isPending}
-        >
-          {isPending
-            ? COPY.composer.publishing
-            : isQuestion
-              ? COPY.composer.compose.publishQuestion
-              : COPY.composer.publish}
-        </Button>
-      </div>
+        </>
+      )}
     </BottomSheet>
   );
 }

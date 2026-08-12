@@ -1,5 +1,7 @@
 import type { TrustLevel, TrustSignal } from "@/components/trust";
 import type { ListingCardModel } from "@/components/listings";
+import type { TaggedProfile } from "@/lib/social/post-tags";
+import type { MusicTrackView } from "@/lib/media/audio-track";
 import { playbackCapSeconds } from "@/lib/media/video-policy";
 
 /**
@@ -204,6 +206,35 @@ export interface PostCardModel {
    * ninguno o cuando el post no está promocionado.
    */
   ctaWhatsapp: string | null;
+  /**
+   * Personas etiquetadas en la publicación (`post_tags`, 0089). SIEMPRE
+   * presente — vacío cuando no hay ninguna, nunca `undefined`: la card la
+   * consume sin defensas y un opcional acá se convertiría en un `?? []`
+   * repetido en cada superficie que arme un post.
+   *
+   * La lectura NO viaja en `POST_COLUMNS`: `post_tags` es una tabla aparte y se
+   * resuelve en batch con `fetchPostTags` (una query por página, no una por
+   * post), igual que los autores y las encuestas.
+   */
+  taggedPeople: TaggedProfile[];
+  /**
+   * Pista asociada a la publicación (`post_music`, 0090). `null` = la
+   * publicación no tiene música — es el caso normal, así que NO es opcional:
+   * mismo criterio que `taggedPeople`, la card la consume sin `?? null`
+   * repetido en cada superficie que arme un post.
+   *
+   * `post_music` es tabla aparte (una fila por post, PK `post_id`) y se
+   * resuelve en batch con `fetchPostMusic` — una query por página, no una por
+   * post — igual que las encuestas y los etiquetados.
+   */
+  music: PostMusicView | null;
+}
+
+/** Pista + recorte de UNA publicación, ya resuelta para el navegador. */
+export interface PostMusicView {
+  track: MusicTrackView;
+  /** Segundo de la pista completa desde el que arranca el recorte publicado. */
+  startSeconds: number;
 }
 
 // ---------------------------------------------------------------------------

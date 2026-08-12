@@ -22,6 +22,7 @@ import {
   fetchEntityViews,
   fetchFollowedListingIds,
   fetchListingExtras,
+  fetchPostMusic,
   fetchPostPolls,
   fetchViewerLikes,
   fetchViewerSaves,
@@ -31,6 +32,7 @@ import {
   type ListingRow,
   type PostRow,
 } from "./queries";
+import { fetchPostTags } from "@/lib/social/post-tags";
 
 /**
  * Módulo FLUIDEZ — paginación del feed como server action.
@@ -263,28 +265,46 @@ async function loadParaTiPage({
     .filter((entry) => (entry.row as PostRow).kind === "question")
     .map((entry) => entry.id);
 
-  const [authors, likedIds, savedIds, pollByPostId, listingExtras, entityById] =
-    await Promise.all([
-      fetchAuthorViews(
-        supabase,
-        visiblePosts
-          .map((entry) => (entry.row as PostRow).author_id)
-          .filter((id): id is string => Boolean(id)),
-      ),
-      fetchViewerLikes(
-        supabase,
-        viewerId,
-        visiblePosts.map((entry) => entry.id),
-      ),
-      fetchViewerSaves(
-        supabase,
-        viewerId,
-        visiblePosts.map((entry) => entry.id),
-      ),
-      fetchPostPolls(supabase, viewerId, questionPostIds),
-      fetchListingExtras(supabase, tenantId, visibleListings, locale),
-      fetchEntityViews(supabase, entityListingIds),
-    ]);
+  const [
+    authors,
+    likedIds,
+    savedIds,
+    pollByPostId,
+    listingExtras,
+    entityById,
+    tagsByPostId,
+    musicByPostId,
+  ] = await Promise.all([
+    fetchAuthorViews(
+      supabase,
+      visiblePosts
+        .map((entry) => (entry.row as PostRow).author_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+    fetchViewerLikes(
+      supabase,
+      viewerId,
+      visiblePosts.map((entry) => entry.id),
+    ),
+    fetchViewerSaves(
+      supabase,
+      viewerId,
+      visiblePosts.map((entry) => entry.id),
+    ),
+    fetchPostPolls(supabase, viewerId, questionPostIds),
+    fetchListingExtras(supabase, tenantId, visibleListings, locale),
+    fetchEntityViews(supabase, entityListingIds),
+    // Etiquetados de TODA la página en UNA query (no una por post).
+    fetchPostTags(
+      supabase,
+      visiblePosts.map((entry) => entry.id),
+    ),
+    // Música de TODA la página en UNA query (no una por post).
+    fetchPostMusic(
+      supabase,
+      visiblePosts.map((entry) => entry.id),
+    ),
+  ]);
 
   const items: FeedItem[] = pageEntries.map((entry) => {
     if (entry.type === "post") {
@@ -301,6 +321,8 @@ async function loadParaTiPage({
           savedByViewer: savedIds.has(postRow.id),
           poll: pollByPostId.get(postRow.id) ?? null,
           ctaWhatsapp: promotions.whatsappByPostId.get(postRow.id) ?? null,
+          taggedPeople: tagsByPostId.get(postRow.id) ?? [],
+          music: musicByPostId.get(postRow.id) ?? null,
         }),
       };
     }

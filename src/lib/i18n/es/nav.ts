@@ -38,6 +38,11 @@ export const nav = {
   moduleMarketplace: "Marketplace",
   moduleCreadores: "Influencers",
   moduleEscudo: "Escudo",
+  // Octava sección de /buscar (pedido Manuel, 2026-08-11): pagar para que un
+  // aviso o una publicación llegue a más gente. No es una vertical de
+  // contenido como las de arriba — ver el comentario de `BOOST_MODULE` en
+  // ./shell/modules.ts.
+  moduleBoost: "Boost",
   /**
    * Etiqueta del módulo que se ve pero todavía no abre (`tenants.modules_soon`).
    * Va PEGADA a la cápsula, no escondida detrás del toque: la persona se entera

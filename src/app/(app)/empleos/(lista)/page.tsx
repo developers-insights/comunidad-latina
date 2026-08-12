@@ -4,11 +4,9 @@ import {
   CaretDown,
   CaretRight,
   ClipboardText,
-  Megaphone,
   Plus,
 } from "@phosphor-icons/react/dist/ssr";
 import {
-  Chip,
   EmptyState,
   SectionCta,
   SectionHeading,
@@ -142,7 +140,10 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
       {/* Empleos era la única sección sin buscador propio: Vivienda, Eventos,
           Negocios, Profesionales, Marketplace e Influencers ya tenían el suyo.
           La query de `fetchJobsPage` siempre aceptó `q` (FTS sobre
-          `listings.search`, migración 0004) — lo que faltaba era el campo. */}
+          `listings.search`, migración 0004) — lo que faltaba era el campo.
+
+          Va ARRIBA de los chips de jornada, mismo orden que /eventos y
+          /negocios: se busca DENTRO de lo que ya está filtrado por `tipo`. */}
       <ModuleSearchBar
         label={t("sections", "searchJobsLabel")}
         placeholder={t("sections", "searchJobsPlaceholder")}

@@ -264,6 +264,8 @@ describe("PostCard → PostActions: la hoja sigue a la diapositiva ACTIVA", () =
     entity: null,
     isPromoted: false,
     ctaWhatsapp: null,
+    taggedPeople: [],
+    music: null,
   };
 
   function renderCard(media: PostMediaView[]) {

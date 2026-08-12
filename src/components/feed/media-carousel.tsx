@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { CardVideo } from "./card-video";
 import { CAROUSEL_COPY } from "./carousel-copy";
 import { COPY } from "./copy";
-import type { PostMediaView, VideoScopeProp } from "./helpers";
+import type { PostMediaView, PostMusicView, VideoScopeProp } from "./helpers";
 
 /**
  * CARRUSEL de medios de un post (feedback cliente 2026-07-27: "tú ves en
@@ -97,6 +97,12 @@ export interface MediaCarouselProps {
   onVideoTap?: (index: number) => void;
   /** Clases extra de la fila de puntitos (p. ej. subirla sobre el CTA de campaña). */
   dotsClassName?: string;
+  /**
+   * Pista asociada al POST (0090), no a un medio en particular: si alguna
+   * diapositiva es un video, baja hasta CardVideo para que la reproduzca
+   * sincronizada. Ausente en un carrusel sin música.
+   */
+  music?: PostMusicView | null;
 }
 
 export function MediaCarousel({
@@ -111,6 +117,7 @@ export function MediaCarousel({
   onPhotoDoubleTap,
   onVideoTap,
   dotsClassName,
+  music = null,
 }: MediaCarouselProps) {
   const reduce = usePrefersReducedMotion();
   const trackRef = useRef<HTMLDivElement>(null);
@@ -241,6 +248,7 @@ export function MediaCarousel({
                   viewCount={viewCount}
                   active={active}
                   onTap={onVideoTap ? () => onVideoTap(slideIndex) : undefined}
+                  music={music}
                 />
               ) : (
                 <>

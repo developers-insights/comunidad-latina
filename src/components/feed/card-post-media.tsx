@@ -4,17 +4,20 @@ import { useState } from "react";
 import { Heart } from "@phosphor-icons/react/dist/ssr";
 import { usePrefersReducedMotion } from "@/components/motion";
 import { cn } from "@/lib/utils";
+import { attributionLine } from "@/lib/media/audio-track";
 import { AdChip } from "./card-ad-chip";
 import { BoostCta } from "./boost-cta";
 import { useCardLike } from "./card-like-context";
 import { useCardMedia } from "./card-media-context";
 import { MediaCarousel } from "./media-carousel";
 import { useMediaViewer } from "./media-viewer";
+import { MusicBadge } from "./music-badge";
 import {
   isPaidAdvertising,
   videoOpensReel,
   viewerPlaybackCapFor,
   type PostEntityView,
+  type PostMusicView,
   type VideoScopeProp,
 } from "./helpers";
 import styles from "./card-post-media.module.css";
@@ -40,6 +43,8 @@ export interface CardPostMediaProps {
   viewCount?: number;
   /** WhatsApp de la campaña, si la entidad lo publicó (CTA de post promocionado). */
   ctaWhatsapp?: string | null;
+  /** Pista asociada a la publicación (0090). null = sin música → sin badge. */
+  music?: PostMusicView | null;
 }
 
 /**
@@ -74,6 +79,7 @@ export function CardPostMedia({
   videoScope,
   viewCount = 0,
   ctaWhatsapp = null,
+  music = null,
 }: CardPostMediaProps) {
   const reduce = usePrefersReducedMotion();
   const viewer = useMediaViewer();
@@ -152,6 +158,10 @@ export function CardPostMedia({
         // Con campaña paga, la barra del CTA ocupa el borde inferior: los
         // puntitos suben para no quedar debajo.
         dotsClassName={showBoostCta ? "bottom-[3.75rem]" : undefined}
+        // La pista, para que el video de ESTE post (si lo hay) la reproduzca
+        // sincronizada. Es la misma para todas las diapositivas: la música es
+        // del POST, no de un medio en particular (post_music, PK post_id).
+        music={music}
       />
 
       {/* Divulgación honesta (FTC): el chip acompaña a TODO espacio pago, no
@@ -160,6 +170,27 @@ export function CardPostMedia({
       {isAd && (
         <div className="absolute right-2.5 top-2.5 z-[3]">
           <AdChip />
+        </div>
+      )}
+
+      {/* Insignia de música (0090): sobre CUALQUIER medio (foto o video), no
+          por diapositiva — la pista es del post entero. Abajo a la izquierda,
+          simétrica al AdChip (arriba a la derecha). Con CTA de campaña activo
+          la barra de BoostCta ocupa todo el borde inferior: la insignia sube
+          exactamente lo mismo que ya suben los puntitos del carrusel
+          (`dotsClassName` arriba) — mismo valor, misma regla, no una nueva. */}
+      {music && (
+        <div
+          className={cn(
+            "pointer-events-none absolute left-2.5 z-[3]",
+            showBoostCta ? "bottom-[3.75rem]" : "bottom-3",
+          )}
+        >
+          <MusicBadge
+            title={music.track.title}
+            artist={music.track.artist}
+            attribution={attributionLine(music.track)}
+          />
         </div>
       )}
 

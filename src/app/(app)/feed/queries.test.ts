@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { toPostCardModel, type PostRow } from "./queries";
-import type { AuthorView } from "@/components/feed";
+import { describe, expect, it, vi } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchPostMusic, toPostCardModel, type PostRow } from "./queries";
+import type { AuthorView, PostMusicView } from "@/components/feed";
 
 /**
  * Mapeo fila → PostCardModel. Lo que se fija acá es el CONTRATO que consumen las
@@ -89,5 +90,111 @@ describe("toPostCardModel", () => {
     expect(model.commentCount).toBe(2);
     expect(model.media.map((item) => item.kind)).toEqual(["image", "video"]);
     expect(model.photoUrl).toContain("foto.jpg");
+  });
+
+  it("sin extras.music: la publicación no tiene música (null, no undefined)", () => {
+    const model = toPostCardModel(makeRow(), authors, new Set(), NOW);
+    expect(model.music).toBeNull();
+  });
+
+  it("con extras.music: se mapea tal cual (0090)", () => {
+    const music: PostMusicView = {
+      startSeconds: 12,
+      track: {
+        id: "track-1",
+        title: "Cumbia del barrio",
+        artist: "Los del Sur",
+        durationSeconds: 180,
+        previewUrl: "https://cdn.example.com/track.mp3",
+        licenseKind: "cc0",
+        attributionRequired: false,
+        attributionText: null,
+        category: "tropical",
+      },
+    };
+    const model = toPostCardModel(makeRow(), authors, new Set(), NOW, { music });
+    expect(model.music).toEqual(music);
+  });
+});
+
+/* ------------------------------ fetchPostMusic ------------------------------ */
+
+type QueryResult = { data?: unknown; error?: unknown };
+
+/** Builder falso, encadenable y thenable — mismo patrón que post-tags.test.ts. */
+function createStub(result: QueryResult) {
+  const returnBuilder = () => builder;
+  const builder = {
+    select: returnBuilder,
+    in: returnBuilder,
+    then: (resolve: (v: QueryResult) => unknown, reject: (e: unknown) => unknown) =>
+      Promise.resolve(result).then(resolve, reject),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+  const from = vi.fn(() => builder);
+  return { client: { from } as unknown as SupabaseClient, from };
+}
+
+const TRACK_ROW = {
+  id: "track-1",
+  title: "Cumbia del barrio",
+  artist: "Los del Sur",
+  duration_seconds: 180,
+  storage_path: "global/cumbia.mp3",
+  license_kind: "cc_by",
+  attribution_required: true,
+  attribution_text: "Cumbia del barrio — Los del Sur (CC BY 4.0)",
+  category: "tropical",
+};
+
+describe("fetchPostMusic", () => {
+  it("agrupa por post y embebe la pista ya resuelta", async () => {
+    const stub = createStub({
+      data: [{ post_id: "post-1", start_seconds: 12, music_tracks: TRACK_ROW }],
+    });
+
+    const byPost = await fetchPostMusic(stub.client, ["post-1"]);
+    const music = byPost.get("post-1");
+
+    expect(music?.startSeconds).toBe(12);
+    expect(music?.track.title).toBe("Cumbia del barrio");
+    expect(music?.track.licenseKind).toBe("cc_by");
+    expect(music?.track.attributionText).toBe(
+      "Cumbia del barrio — Los del Sur (CC BY 4.0)",
+    );
+  });
+
+  it("sin ids no consulta nada", async () => {
+    const stub = createStub({ data: [] });
+    expect((await fetchPostMusic(stub.client, [])).size).toBe(0);
+    expect(stub.from).not.toHaveBeenCalled();
+  });
+
+  it("sin la migración aplicada devuelve vacío en vez de romper el feed", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const stub = createStub({ error: { code: "42P01" } });
+    expect((await fetchPostMusic(stub.client, ["post-1"])).size).toBe(0);
+  });
+
+  it("ignora la fila cuya pista se borró a mitad de la lectura", async () => {
+    const stub = createStub({
+      data: [{ post_id: "post-1", start_seconds: 0, music_tracks: null }],
+    });
+    expect((await fetchPostMusic(stub.client, ["post-1"])).size).toBe(0);
+  });
+
+  it("license_kind/category desconocidos caen al valor más conservador", async () => {
+    const stub = createStub({
+      data: [
+        {
+          post_id: "post-1",
+          start_seconds: 0,
+          music_tracks: { ...TRACK_ROW, license_kind: "algo-nuevo", category: "algo-nuevo" },
+        },
+      ],
+    });
+    const music = (await fetchPostMusic(stub.client, ["post-1"])).get("post-1");
+    expect(music?.track.licenseKind).toBe("licensed");
+    expect(music?.track.category).toBe("general");
   });
 });

@@ -91,6 +91,8 @@ function mount(overrides: Partial<ComposerSheetProps> = {}) {
     onAddPhotos: vi.fn(),
     onAddVideo: vi.fn(),
     onRemoveMedia: vi.fn(),
+    maxPhotos: 10,
+    onSavePhotoEdit: vi.fn(),
     pollEnabled: false,
     onPollChange: vi.fn(),
     videoCategory: "otros",
@@ -100,6 +102,7 @@ function mount(overrides: Partial<ComposerSheetProps> = {}) {
     previewId: "preview-1",
     uploadPct: null,
     measuringVideo: false,
+    bakingProgress: null,
     isPending: false,
     onPublish: vi.fn(),
     ...overrides,
@@ -330,5 +333,132 @@ describe("ComposerSheet — declaración de originalidad", () => {
   it("declarar no es requisito para publicar: el botón sigue encendido", () => {
     mount({ mode: "media", media: [PHOTO], body: "" });
     expect(publishButton().disabled).toBe(false);
+  });
+});
+
+describe("ComposerSheet — el tile '+' de la grilla (composer premium 2026-08-11)", () => {
+  it("aparece cuando se puede sumar otra foto, incluso sin ninguna todavía", () => {
+    mount({ mode: "media", media: [], canAddPhoto: true });
+    expect(screen.getByRole("button", { name: COPY.composer.addPhotoTile })).toBeTruthy();
+  });
+
+  it("desaparece al llegar al tope (canAddPhoto=false)", () => {
+    mount({ mode: "media", media: [PHOTO], canAddPhoto: false });
+    expect(screen.queryByRole("button", { name: COPY.composer.addPhotoTile })).toBeNull();
+  });
+
+  it("tocarlo dispara el mismo selector que el resto del composer", () => {
+    const props = mount({ mode: "media", media: [PHOTO], canAddPhoto: true });
+    fireEvent.click(screen.getByRole("button", { name: COPY.composer.addPhotoTile }));
+    expect(props.onAddPhotos).toHaveBeenCalledTimes(1);
+  });
+
+  it("el botón textual viejo ('Sumar otra foto') ya no existe: el tile lo reemplaza", () => {
+    mount({ mode: "media", media: [PHOTO], canAddPhoto: true });
+    expect(screen.queryByRole("button", { name: COPY.composer.addMorePhotos })).toBeNull();
+  });
+
+  it("el contador muestra 'x de N fotos' con el cupo real", () => {
+    mount({ mode: "media", media: [PHOTO], maxPhotos: 10 });
+    expect(screen.getByText("1 de 10 fotos")).toBeTruthy();
+  });
+});
+
+describe("ComposerSheet — editor de foto (filtro + texto encima)", () => {
+  it("tocar una miniatura abre el editor con Filtros y Listo/Cancelar", () => {
+    mount({ mode: "media", media: [PHOTO] });
+    fireEvent.click(screen.getByRole("button", { name: `${COPY.composer.editPhoto} 1` }));
+
+    expect(screen.getByText(COPY.composer.photoEditor.filtersLabel)).toBeTruthy();
+    expect(screen.getByRole("button", { name: COPY.composer.photoEditor.done })).toBeTruthy();
+    expect(screen.getByRole("button", { name: COPY.composer.photoEditor.cancel })).toBeTruthy();
+  });
+
+  it("elegir un filtro y tocar Listo guarda la edición en el id correcto", () => {
+    const props = mount({ mode: "media", media: [PHOTO] });
+    fireEvent.click(screen.getByRole("button", { name: `${COPY.composer.editPhoto} 1` }));
+
+    // "Vintage" es uno de los presets — sus miniaturas se repiten (grilla +
+    // editor), por eso se toma la del editor por posición dentro del panel.
+    fireEvent.click(screen.getByText("Vintage"));
+    fireEvent.click(screen.getByRole("button", { name: COPY.composer.photoEditor.done }));
+
+    expect(props.onSavePhotoEdit).toHaveBeenCalledTimes(1);
+    const [id, edit] = vi.mocked(props.onSavePhotoEdit).mock.calls[0];
+    expect(id).toBe(PHOTO.id);
+    expect(edit.filterId).toBe("vintage");
+  });
+
+  it("escribir un texto y tocar Listo lo guarda recortado (trim)", () => {
+    const props = mount({ mode: "media", media: [PHOTO] });
+    fireEvent.click(screen.getByRole("button", { name: `${COPY.composer.editPhoto} 1` }));
+
+    fireEvent.click(screen.getByRole("button", { name: COPY.composer.photoEditor.textButton }));
+    fireEvent.change(screen.getByLabelText(COPY.composer.photoEditor.textareaLabel), {
+      target: { value: "  Casa en venta  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: COPY.composer.photoEditor.done }));
+
+    const [, edit] = vi.mocked(props.onSavePhotoEdit).mock.calls[0];
+    expect(edit.captionText).toBe("Casa en venta");
+  });
+
+  it("Cancelar NO guarda nada", () => {
+    const props = mount({ mode: "media", media: [PHOTO] });
+    fireEvent.click(screen.getByRole("button", { name: `${COPY.composer.editPhoto} 1` }));
+    fireEvent.click(screen.getByRole("button", { name: COPY.composer.photoEditor.cancel }));
+
+    expect(props.onSavePhotoEdit).not.toHaveBeenCalled();
+    // Volvió a la grilla normal: Publicar está de nuevo a la vista.
+    expect(screen.getByRole("button", { name: COPY.composer.publish })).toBeTruthy();
+  });
+
+  it("una foto con texto guardado lo muestra encima de la miniatura de la grilla", () => {
+    const edited: ComposerMediaItem = {
+      ...PHOTO,
+      edit: { filterId: "original", captionText: "Se vende", captionPosition: "bottom", captionBackground: "solid" },
+    };
+    mount({ mode: "media", media: [edited] });
+    expect(screen.getByText("Se vende")).toBeTruthy();
+  });
+});
+
+describe("ComposerSheet — ranuras de etiquetado y música (contrato para otros frentes)", () => {
+  it("sin pasar ninguna de las dos, no se renderiza nada (ni el separador)", () => {
+    mount({ mode: "media", media: [PHOTO] });
+    expect(document.querySelector('[class*="border-t"][class*="pt-3"].flex.flex-col')).toBeNull();
+  });
+
+  it("con tagSlot, se renderiza esa fila", () => {
+    mount({ mode: "media", media: [PHOTO], tagSlot: <div>Etiquetar a alguien</div> });
+    expect(screen.getByText("Etiquetar a alguien")).toBeTruthy();
+  });
+
+  it("con musicSlot, se renderiza esa fila", () => {
+    mount({ mode: "media", media: [PHOTO], musicSlot: <div>Elegir una canción</div> });
+    expect(screen.getByText("Elegir una canción")).toBeTruthy();
+  });
+
+  it("las dos ranuras conviven sin pisarse", () => {
+    mount({
+      mode: "media",
+      media: [PHOTO],
+      tagSlot: <div>Etiquetar a alguien</div>,
+      musicSlot: <div>Elegir una canción</div>,
+    });
+    expect(screen.getByText("Etiquetar a alguien")).toBeTruthy();
+    expect(screen.getByText("Elegir una canción")).toBeTruthy();
+  });
+});
+
+describe("ComposerSheet — horneado de fotos al publicar", () => {
+  it("muestra el progreso cuando bakingProgress no es null", () => {
+    mount({ mode: "media", media: [PHOTO], bakingProgress: { done: 2, total: 5 } });
+    expect(screen.getByText(COPY.composer.bakingPhotos(2, 5))).toBeTruthy();
+  });
+
+  it("no muestra nada mientras bakingProgress es null", () => {
+    mount({ mode: "media", media: [PHOTO], bakingProgress: null });
+    expect(screen.queryByText(/Preparando tus fotos/)).toBeNull();
   });
 });

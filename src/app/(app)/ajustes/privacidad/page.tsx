@@ -7,6 +7,8 @@ import { CONSENT_COPY as COPY } from "@/components/legal/consent-copy";
 import { normalizePrivacy } from "@/lib/profile/privacy";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
+import { TagPolicyRow } from "./tag-policy-row";
+import { readTagPolicy } from "./tag-policy";
 
 export const metadata = { title: COPY.settings.title };
 
@@ -57,6 +59,10 @@ export default async function PrivacidadAjustesPage() {
     privacy = data;
   }
 
+  // Sin sesión no hay a quién etiquetar ni preferencia que leer — la fila no
+  // se dibuja en vez de ofrecer un control que rebota a /entrar al tocarlo.
+  const tagPolicy = user ? await readTagPolicy(supabase, user.id) : null;
+
   return (
     <div className="flex flex-col gap-6">
       <header>
@@ -73,6 +79,8 @@ export default async function PrivacidadAjustesPage() {
       {user && <ProfilePrivacyForm initial={normalizePrivacy(privacy)} />}
 
       <PrivacyControls />
+
+      {tagPolicy && <TagPolicyRow initialPolicy={tagPolicy} />}
 
       <section className="rounded-xl border border-border-subtle bg-surface p-4">
         <h2 className="font-display text-base font-bold text-foreground">

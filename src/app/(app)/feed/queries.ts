@@ -23,10 +23,19 @@ import {
   type PostCardModel,
   type PostEntityView,
   type PostMediaView,
+  type PostMusicView,
   type PostPollView,
 } from "@/components/feed";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { timeAgo } from "@/lib/utils";
+import type { TaggedProfile } from "@/lib/social/post-tags";
+import {
+  MUSIC_CATEGORIES,
+  MUSIC_LICENSE_KINDS,
+  musicTrackUrl,
+  type MusicCategory,
+  type MusicLicenseKind,
+} from "@/lib/media/audio-track";
 
 /**
  * Lecturas compartidas del módulo FEED (server-only). Siempre con el cliente
@@ -307,6 +316,95 @@ export async function fetchPostPolls(
       yes: row.poll_yes_count ?? 0,
       no: row.poll_no_count ?? 0,
       myVote: voteByPostId.get(row.id) ?? null,
+    });
+  }
+  return byPostId;
+}
+
+// ---------------------------------------------------------------------------
+// Música asociada a una publicación (contrato 0090)
+// ---------------------------------------------------------------------------
+
+/** Fila cruda de `post_music` con su pista embebida, tal como la sirve PostgREST. */
+interface PostMusicRow {
+  post_id: string;
+  start_seconds: number;
+  music_tracks: {
+    id: string;
+    title: string;
+    artist: string;
+    duration_seconds: number;
+    storage_path: string;
+    license_kind: string;
+    attribution_required: boolean;
+    attribution_text: string | null;
+    category: string;
+  } | null;
+}
+
+function musicLicenseKindOf(raw: string): MusicLicenseKind {
+  return (MUSIC_LICENSE_KINDS as readonly string[]).includes(raw)
+    ? (raw as MusicLicenseKind)
+    : "licensed"; // valor desconocido → el más restrictivo, nunca un pass libre.
+}
+
+function musicCategoryOf(raw: string): MusicCategory {
+  return (MUSIC_CATEGORIES as readonly string[]).includes(raw)
+    ? (raw as MusicCategory)
+    : "general";
+}
+
+/**
+ * Música de una tanda de posts, en UNA query con la pista ya embebida (join a
+ * `music_tracks`). Mismo patrón que `fetchPostPolls`/`fetchPostTags`: query
+ * APARTE de `POST_COLUMNS` —`post_music` es tabla propia, sólo existe la fila
+ * cuando hay música— y schema abierto porque la 0090 todavía no está en
+ * `database.types.ts` (al regenerarlo, sacar el cast).
+ *
+ * NUNCA LANZA. Sin la migración aplicada, o si la query falla por lo que sea,
+ * ninguna publicación pinta su badge de música y el resto del feed sigue
+ * exactamente igual — un feed roto es mucho peor que una publicación sin
+ * pista.
+ */
+export async function fetchPostMusic(
+  supabase: Supabase,
+  postIds: string[],
+): Promise<Map<string, PostMusicView>> {
+  const byPostId = new Map<string, PostMusicView>();
+  const ids = [...new Set(postIds.filter(Boolean))];
+  if (ids.length === 0) return byPostId;
+
+  const open = supabase as unknown as SupabaseClient;
+  const { data, error } = await open
+    .from("post_music")
+    .select(
+      "post_id, start_seconds, music_tracks(id, title, artist, duration_seconds, storage_path, license_kind, attribution_required, attribution_text, category)",
+    )
+    .in("post_id", ids);
+
+  if (error) {
+    console.warn("[feed] query de música falló", { code: error.code });
+    return byPostId;
+  }
+
+  for (const row of (data ?? []) as unknown as PostMusicRow[]) {
+    const track = row.music_tracks;
+    // FK `on delete restrict`: en teoría no debería faltar. No lo asumimos —
+    // una fila sin pista embebida no se pinta, no rompe la lectura.
+    if (!track) continue;
+    byPostId.set(row.post_id, {
+      startSeconds: row.start_seconds,
+      track: {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        durationSeconds: track.duration_seconds,
+        previewUrl: musicTrackUrl(track.storage_path),
+        licenseKind: musicLicenseKindOf(track.license_kind),
+        attributionRequired: track.attribution_required,
+        attributionText: track.attribution_text,
+        category: musicCategoryOf(track.category),
+      },
     });
   }
   return byPostId;
@@ -594,6 +692,10 @@ export function toPostCardModel(
     poll?: PostPollView | null;
     /** WhatsApp de la campaña activa de ESTE post, si ofrece uno. */
     ctaWhatsapp?: string | null;
+    /** Etiquetados de ESTE post (fetchPostTags, en batch). Ausente → ninguno. */
+    taggedPeople?: TaggedProfile[];
+    /** Música de ESTE post (fetchPostMusic, en batch). Ausente → sin música. */
+    music?: PostMusicView | null;
   },
 ): PostCardModel {
   // Bucket post-media (0025): fotos y videos conviven en el array `media`;
@@ -622,6 +724,14 @@ export function toPostCardModel(
     poll: extras?.poll ?? null,
     entity: extras?.entity ?? null,
     isPromoted: extras?.isPromoted ?? false,
+    // Vacío y no `undefined`: el modelo promete un array siempre (ver
+    // PostCardModel). Una superficie que todavía no consulta `post_tags`
+    // muestra un post sin etiquetas, que es la verdad hasta que lo pida.
+    taggedPeople: extras?.taggedPeople ?? [],
+    // `null` y no `undefined`: mismo criterio que taggedPeople. Una superficie
+    // que todavía no consulta `post_music` muestra un post sin música, que es
+    // la verdad hasta que lo pida.
+    music: extras?.music ?? null,
     // Columnas de video (0046). Se mapean SIEMPRE, en todas las superficies:
     // son las que dejan que la tarjeta sepa que un video es publicitario aunque
     // su campaña ya no esté vigente. `?? false` / `?? true` espejan los defaults

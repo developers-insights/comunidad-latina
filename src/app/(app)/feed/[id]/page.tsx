@@ -24,12 +24,14 @@ import {
   fetchAuthorViews,
   fetchBlockedIds,
   fetchEntityViews,
+  fetchPostMusic,
   fetchPostPolls,
   fetchViewerLikes,
   fetchViewerSaves,
   toPostCardModel,
   type PostRow,
 } from "../queries";
+import { fetchTagsForPost } from "@/lib/social/post-tags";
 
 export const metadata = { title: "Publicación" };
 
@@ -99,7 +101,17 @@ export default async function PostDetailPage({
   ].filter((value): value is string => Boolean(value));
 
   const now = new Date();
-  const [authors, likedIds, savedIds, pollByPostId, entityById, promoResult, promotions] =
+  const [
+    authors,
+    likedIds,
+    savedIds,
+    pollByPostId,
+    entityById,
+    promoResult,
+    promotions,
+    tagged,
+    musicByPostId,
+  ] =
     await Promise.all([
       fetchAuthorViews(supabase, authorIds),
       fetchViewerLikes(supabase, viewerId, [post.id]),
@@ -127,6 +139,11 @@ export default async function PostDetailPage({
       // en database.types.ts y el helper ya resuelve el cast + el respaldo si la
       // columna todavía no existe. Query chica (single-community) y en paralelo.
       fetchActivePromotions(supabase, tenant.id),
+      // Etiquetados de ESTA publicación (0089).
+      fetchTagsForPost(supabase, post.id),
+      // Música de ESTA publicación (0090). Batch de un solo id, mismo helper
+      // que usa el feed — una sola fuente de verdad para el mapeo.
+      fetchPostMusic(supabase, [post.id]),
     ]);
 
   const entity = post.entity_listing_id
@@ -148,6 +165,8 @@ export default async function PostDetailPage({
     ctaWhatsapp: isPromoted
       ? (promotions.whatsappByPostId.get(post.id) ?? null)
       : null,
+    taggedPeople: tagged,
+    music: musicByPostId.get(post.id) ?? null,
   });
   const isPublished = post.status === "published";
 

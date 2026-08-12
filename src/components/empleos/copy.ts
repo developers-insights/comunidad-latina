@@ -176,6 +176,12 @@ export const COPY = {
     /** Área de foto tocable: abre el visor, nunca el detalle (feedback 2026-07-26). */
     openPhotos: (title: string) => `Ver fotos de ${title}`,
     viewJob: "Ver empleo",
+    /**
+     * Aviso impulsado (`boosts`, §7). MISMA palabra que el resto de la app
+     * ("Patrocinado", contrato del 2026-07-30 §4): la publicidad se divulga
+     * siempre y con un solo nombre, en el feed y en cada listado.
+     */
+    adChip: "Patrocinado",
     loadMore: "Ver más empleos",
     loadingLabel: "Cargando empleos…",
     emptyTitle: "Todavía no hay empleos publicados",

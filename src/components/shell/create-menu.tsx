@@ -44,8 +44,10 @@ import { moduleAvailability } from "./module-access";
  */
 
 /**
- * Copy local del tile "Impulsar" (feedback cliente Geovanny, 2026-08-05: "en
- * esta sección [menú de publicar] faltaría la parte donde dice Boost").
+ * Copy local del tile "Boost" (feedback cliente Geovanny, 2026-08-05: "en
+ * esta sección [menú de publicar] faltaría la parte donde dice Boost"; pedido
+ * Manuel 2026-08-11: el tile pasa a llamarse Boost, igual que la octava
+ * sección de /buscar — un solo nombre para la misma compra en toda la app).
  *
  * TODO(integración): mover a feed/copy.ts. `COPY.composer.createMenu.tiles`
  * es la fuente que consumen los demás tiles, pero ese archivo lo está
@@ -54,8 +56,8 @@ import { moduleAvailability } from "./module-access";
  * de `copy.ts`.
  */
 const IMPULSAR_TILE_COPY = {
-  title: "Impulsar",
-  description: "Pagá para que un aviso o una publicación tuya llegue a más gente.",
+  title: "Boost",
+  description: "Pagá para que tu aviso o tu publicación lleguen a más gente.",
 } as const;
 
 export type QuickPostKind = "photo" | "video" | "text" | "question";

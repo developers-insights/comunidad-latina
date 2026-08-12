@@ -6,7 +6,7 @@ import { CardMediaProvider } from "./card-media-context";
 import { CardPostMedia } from "./card-post-media";
 import { NO_REEL_SCOPE } from "./card-video";
 import { MediaViewerProvider } from "./media-viewer";
-import type { PostMediaView, VideoScopeProp } from "./helpers";
+import type { PostMediaView, PostMusicView, VideoScopeProp } from "./helpers";
 
 /**
  * El CARRUSEL de la card (feedback cliente 2026-07-27: "tres punticos… puede ser
@@ -67,6 +67,11 @@ function renderMedia(
   videoScope: VideoScopeProp = "para-ti",
   /** Columnas de publicidad (0038 campaña vigente + 0046 video publicitario). */
   ad: { isPromoted?: boolean; isPaidAd?: boolean; videoType?: string | null } = {},
+  /** Música (0090) y entidad — para probar el badge y su colisión con BoostCta. */
+  extra: {
+    music?: PostMusicView | null;
+    entity?: { id: string; title: string; kind: string } | null;
+  } = {},
 ) {
   return render(
     <MediaViewerProvider>
@@ -77,13 +82,29 @@ function renderMedia(
           isPromoted={ad.isPromoted ?? false}
           isPaidAd={ad.isPaidAd ?? false}
           videoType={ad.videoType ?? null}
-          entity={null}
+          entity={extra.entity ?? null}
           videoScope={videoScope}
+          music={extra.music ?? null}
         />
       </CardMediaProvider>
     </MediaViewerProvider>,
   );
 }
+
+const MUSIC: PostMusicView = {
+  startSeconds: 20,
+  track: {
+    id: "track-1",
+    title: "Cumbia del barrio",
+    artist: "Los del Sur",
+    durationSeconds: 180,
+    previewUrl: "https://cdn.example.com/track.mp3",
+    licenseKind: "cc0",
+    attributionRequired: false,
+    attributionText: null,
+    category: "tropical",
+  },
+};
 
 /** El riel scrolleable (marcado con data-carousel-track para los tests). */
 function track(container: HTMLElement): HTMLElement | null {
@@ -327,5 +348,49 @@ describe("CardPostMedia: un anuncio nunca te tira al reel", () => {
 
     expect(nav.push).toHaveBeenCalledWith(`/videos?start=${POST_ID}&scope=para-ti`);
     expect(screen.queryByText("Patrocinado")).toBeNull();
+  });
+});
+
+/**
+ * INSIGNIA DE MÚSICA (0090). Presentacional (MusicBadge es Server Component,
+ * sin estado propio): acá se cubre que aparezca/desaparezca según `music`, que
+ * sobreviva a fotos Y a videos (la pista es del post, no de una diapositiva), y
+ * que suba cuando el CTA de campaña le ocupa el borde inferior — misma regla
+ * que ya usan los puntitos del carrusel (`dotsClassName`), no una nueva.
+ */
+describe("CardPostMedia: insignia de música", () => {
+  it("sin música no pinta nada", () => {
+    renderMedia([PHOTO(1)]);
+    expect(screen.queryByText(/Cumbia del barrio/)).toBeNull();
+  });
+
+  it("con música, muestra título y artista sobre una FOTO", () => {
+    renderMedia([PHOTO(1)], "para-ti", {}, { music: MUSIC });
+    expect(screen.getByText(/Cumbia del barrio/)).toBeTruthy();
+    expect(screen.getByText(/Los del Sur/)).toBeTruthy();
+  });
+
+  it("con música, también se pinta sobre un VIDEO (la pista es del post)", () => {
+    renderMedia([VIDEO(1)], "para-ti", {}, { music: MUSIC });
+    expect(screen.getByText(/Cumbia del barrio/)).toBeTruthy();
+  });
+
+  it("sin campaña activa, la insignia queda en su posición base", () => {
+    const { container } = renderMedia([PHOTO(1)], "para-ti", {}, { music: MUSIC });
+    const badgeWrap = screen.getByText(/Cumbia del barrio/).closest("div.absolute");
+    expect(badgeWrap?.className).toContain("bottom-3");
+    expect(badgeWrap?.className).not.toContain("bottom-[3.75rem]");
+    void container;
+  });
+
+  it("con BoostCta (campaña + entidad) la insignia sube, igual que los puntitos", () => {
+    renderMedia(
+      [PHOTO(1)],
+      "para-ti",
+      { isPromoted: true },
+      { music: MUSIC, entity: { id: "e1", title: "Almacén Doña Rosa", kind: "business" } },
+    );
+    const badgeWrap = screen.getByText(/Cumbia del barrio/).closest("div.absolute");
+    expect(badgeWrap?.className).toContain("bottom-[3.75rem]");
   });
 });

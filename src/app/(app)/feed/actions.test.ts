@@ -71,6 +71,11 @@ vi.mock("./social-notifications", () => ({
 }));
 
 import { createPostAction } from "./actions";
+import {
+  MAX_PHOTOS,
+  MAX_PHOTO_BYTES,
+  MAX_TOTAL_PHOTO_BYTES,
+} from "@/lib/media/post-media-limits";
 
 /* -------------------------------- Fixtures -------------------------------- */
 
@@ -143,6 +148,11 @@ function photo(name = "foto.jpg"): File {
   return new File([new Uint8Array([1, 2, 3, 4])], name, { type: "image/jpeg" });
 }
 
+/** Foto de un peso concreto — para probar los techos, no el contenido. */
+function photoOf(bytes: number, name = "pesada.jpg"): File {
+  return new File([new Uint8Array(bytes)], name, { type: "image/jpeg" });
+}
+
 /** FormData como la arma el composer. `body` siempre viaja, aunque esté vacío. */
 function postForm(input: {
   body: string;
@@ -179,6 +189,109 @@ beforeEach(() => {
     needsHumanReview: false,
     reasons: [],
     assetIds: [],
+  });
+});
+
+/* ------------------- Cupo y peso de las fotos (2026-08-11) ---------------- */
+
+describe("createPostAction — el cupo de fotos es el MISMO que el del composer", () => {
+  it("publica las 10 fotos que el composer deja elegir", async () => {
+    // EL BUG: el composer subió su tope a 10 y esta action se quedó en 4, así
+    // que una publicación normal de 5 fotos rebotaba con `photo` sin que nadie
+    // pudiera decir por qué. Ahora el número sale de un solo lugar.
+    const stub = useGuardOk();
+
+    const photos = Array.from({ length: MAX_PHOTOS }, (_, index) =>
+      photo(`foto-${index}.jpg`),
+    );
+    const result = await createPostAction(postForm({ body: "", photos }));
+
+    expect(result).toMatchObject({ ok: true, status: "published" });
+    expect(stub.uploads.length).toBe(MAX_PHOTOS);
+    expect((insertedPost(stub)?.media as string[]).length).toBe(MAX_PHOTOS);
+  });
+
+  it("la foto número 11 sí se rechaza", async () => {
+    const stub = useGuardOk();
+
+    const photos = Array.from({ length: MAX_PHOTOS + 1 }, (_, index) =>
+      photo(`foto-${index}.jpg`),
+    );
+    const result = await createPostAction(postForm({ body: "", photos }));
+
+    expect(result).toEqual({ ok: false, code: "photo" });
+    expect(stub.uploads.length).toBe(0);
+  });
+
+  it("respeta el orden elegido con las 10 fotos y el video", async () => {
+    // `mediaOrderSchema` tiene su propio techo: si se quedaba en 4+1 mientras
+    // el cupo era 10, el orden de una publicación llena se descartaba en
+    // silencio y las fotos salían en otro orden del que la persona eligió.
+    const stub = useGuardOk();
+
+    const photos = Array.from({ length: MAX_PHOTOS }, (_, index) =>
+      photo(`foto-${index}.jpg`),
+    );
+    const data = postForm({
+      body: "",
+      photos,
+      videoPaths: [`${TENANT_ID}/${USER_ID}/video-abc.mp4`],
+    });
+    data.set(
+      "mediaOrder",
+      JSON.stringify(["video", ...Array.from({ length: MAX_PHOTOS }, () => "photo")]),
+    );
+
+    const result = await createPostAction(data);
+
+    expect(result).toMatchObject({ ok: true });
+    const media = insertedPost(stub)?.media as string[];
+    expect(media.length).toBe(MAX_PHOTOS + 1);
+    expect(media[0]).toContain("video-abc.mp4");
+  });
+});
+
+describe("createPostAction — el peso que el servidor acepta entra en el body", () => {
+  it("rechaza una foto por encima del techo por archivo", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({ body: "", photos: [photoOf(MAX_PHOTO_BYTES + 1)] }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "photo" });
+    expect(stub.uploads.length).toBe(0);
+  });
+
+  it("rechaza el CONJUNTO aunque cada foto entre sola", async () => {
+    // Sin este techo el servidor bendecía payloads que el propio
+    // `bodySizeLimit` corta antes de llegar: una validación que aprueba lo
+    // imposible no es una validación.
+    const stub = useGuardOk();
+
+    const each = Math.floor(MAX_TOTAL_PHOTO_BYTES / MAX_PHOTOS) + 1024;
+    const photos = Array.from({ length: MAX_PHOTOS }, (_, index) =>
+      photoOf(each, `foto-${index}.jpg`),
+    );
+    const result = await createPostAction(postForm({ body: "", photos }));
+
+    expect(result).toEqual({ ok: false, code: "photo" });
+    expect(stub.uploads.length).toBe(0);
+    // Corta ANTES del guard: un payload gigante no gasta ni moderación ni bucket.
+    expect(mocks.requireTenantMatch).not.toHaveBeenCalled();
+  });
+
+  it("una publicación de 10 fotos horneadas de verdad sí pasa", async () => {
+    const stub = useGuardOk();
+
+    // ~800 KB por foto es el peor caso realista de `bakePhoto` (1600 px, q0.85).
+    const photos = Array.from({ length: MAX_PHOTOS }, (_, index) =>
+      photoOf(800 * 1024, `foto-${index}.jpg`),
+    );
+    const result = await createPostAction(postForm({ body: "", photos }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(stub.uploads.length).toBe(MAX_PHOTOS);
   });
 });
 

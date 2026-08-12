@@ -278,6 +278,8 @@ const BASE_POST: PostCardModel = {
   entity: null,
   isPromoted: false,
   ctaWhatsapp: null,
+  taggedPeople: [],
+  music: null,
 };
 
 function renderCard(post: Partial<PostCardModel>) {

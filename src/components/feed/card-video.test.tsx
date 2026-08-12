@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { CardVideo } from "./card-video";
 import { CardLikeProvider } from "./card-like-context";
+import type { PostMusicView } from "./helpers";
 
 /**
  * Gramática táctil del video en el feed (§5 + feedback 2026-07-26): un toque
@@ -192,7 +193,7 @@ describe("CardVideo: píldora de vistas", () => {
  * cargar la metadata— para poder testear la regla, que es lo que importa: la
  * tarjeta reproduce 59 s, y lo dice cuando hay más video del que muestra.
  */
-function stubMediaClock(node: HTMLVideoElement, duration: number) {
+function stubMediaClock(node: HTMLMediaElement, duration: number) {
   let time = 0;
   Object.defineProperty(node, "duration", { configurable: true, value: duration });
   Object.defineProperty(node, "currentTime", {
@@ -260,5 +261,150 @@ describe("CardVideo: la tarjeta muestra 59 s, no el video entero", () => {
     fireEvent.loadedMetadata(node);
 
     expect(screen.queryByText("Vista previa")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MÚSICA ASOCIADA (contrato 0090): el árbitro es resolveAudioMix (audio-mix.ts,
+// ya testeado ahí); acá se cubre que la card lo APLIQUE de verdad al DOM — el
+// <audio> hermano, el silencio por defecto, que la música gane al tocar
+// sonido, que nunca suenen los dos a la vez, y que el recorte haga loop.
+// ---------------------------------------------------------------------------
+
+const MUSIC: PostMusicView = {
+  startSeconds: 20,
+  track: {
+    id: "track-1",
+    title: "Cumbia del barrio",
+    artist: "Los del Sur",
+    durationSeconds: 180,
+    previewUrl: "https://cdn.example.com/track.mp3",
+    licenseKind: "cc0",
+    attributionRequired: false,
+    attributionText: null,
+    category: "tropical",
+  },
+};
+
+function renderWithMusic({
+  music = MUSIC,
+  active = true,
+}: { music?: PostMusicView | null; active?: boolean } = {}) {
+  return render(
+    <CardLikeProvider
+      postId={POST_ID}
+      tenantId="tenant-1"
+      viewerId="viewer-1"
+      initialLiked={false}
+      initialCount={3}
+    >
+      <CardVideo
+        src="https://cdn.example.com/clip.mp4"
+        postId={POST_ID}
+        scope="negocios"
+        music={music}
+        active={active}
+      />
+    </CardLikeProvider>,
+  );
+}
+
+function audioNode(): HTMLAudioElement | null {
+  return document.querySelector("audio");
+}
+
+describe("CardVideo: música asociada a la publicación (0090)", () => {
+  it("sin música no monta un <audio> (el video se comporta como siempre)", () => {
+    renderWithMusic({ music: null });
+    expect(audioNode()).toBeNull();
+  });
+
+  it("con música, monta un <audio> hermano del video, silencioso por defecto", () => {
+    renderWithMusic();
+    const audio = audioNode();
+    expect(audio).toBeTruthy();
+    expect(audio?.muted).toBe(true);
+    // Silencio por defecto SIEMPRE: tampoco suena el video sin gesto.
+    expect((videoNode() as HTMLVideoElement).muted).toBe(true);
+  });
+
+  it("el <audio> carga bajo demanda (preload=none): un feed con música no baja 40 mp3", () => {
+    renderWithMusic();
+    expect(audioNode()?.getAttribute("preload")).toBe("none");
+  });
+
+  it("tocar el botón de sonido hace ganar a la MÚSICA — el video queda mudo", () => {
+    renderWithMusic();
+    fireEvent.click(screen.getByRole("button", { name: "Activar el sonido" }));
+
+    expect((videoNode() as HTMLVideoElement).muted).toBe(true);
+    expect((audioNode() as HTMLAudioElement).muted).toBe(false);
+  });
+
+  it("tocar de nuevo vuelve al silencio — nunca los dos audios sonando juntos", () => {
+    renderWithMusic();
+    const tapSound = () =>
+      screen.getByRole("button", { name: /silenciar el video|activar el sonido/i });
+    fireEvent.click(tapSound());
+    fireEvent.click(tapSound());
+
+    expect((audioNode() as HTMLAudioElement).muted).toBe(true);
+  });
+
+  it("sin música, el botón de sonido sigue activando el audio del VIDEO (regla 3, sin cambios)", () => {
+    renderWithMusic({ music: null });
+    fireEvent.click(screen.getByRole("button", { name: "Activar el sonido" }));
+
+    expect((videoNode() as HTMLVideoElement).muted).toBe(false);
+  });
+
+  it("el audio arranca en el segundo elegido del recorte (post_music.start_seconds)", () => {
+    renderWithMusic();
+    const audio = audioNode() as HTMLAudioElement;
+    const clock = stubMediaClock(audio, 180);
+    fireEvent.loadedMetadata(audio);
+
+    expect(clock.now()).toBe(20);
+  });
+
+  it("el recorte hace loop al llegar a su fin (30 s desde el arranque, MUSIC_CLIP_SECONDS)", () => {
+    renderWithMusic();
+    const audio = audioNode() as HTMLAudioElement;
+    const clock = stubMediaClock(audio, 180);
+    fireEvent.loadedMetadata(audio); // arranca en el segundo 20
+
+    clock.seek(20 + 29);
+    fireEvent.timeUpdate(audio);
+    expect(clock.now()).toBe(49); // todavía dentro del recorte
+
+    clock.seek(20 + 30); // fin exacto del recorte de 30 s
+    fireEvent.timeUpdate(audio);
+    expect(clock.now()).toBe(20); // vuelve al arranque del recorte, no al 0 del archivo
+  });
+
+  it("la música se pausa cuando la card deja de ser el medio activo del carrusel", () => {
+    const { rerender } = renderWithMusic({ active: true });
+    const audio = audioNode() as HTMLAudioElement;
+    const pause = vi.spyOn(audio, "pause");
+
+    rerender(
+      <CardLikeProvider
+        postId={POST_ID}
+        tenantId="tenant-1"
+        viewerId="viewer-1"
+        initialLiked={false}
+        initialCount={3}
+      >
+        <CardVideo
+          src="https://cdn.example.com/clip.mp4"
+          postId={POST_ID}
+          scope="negocios"
+          music={MUSIC}
+          active={false}
+        />
+      </CardLikeProvider>,
+    );
+
+    expect(pause).toHaveBeenCalled();
   });
 });
