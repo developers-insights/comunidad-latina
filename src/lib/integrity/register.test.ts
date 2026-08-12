@@ -30,7 +30,7 @@ vi.mock("./scan", () => ({
   DEFAULT_MAX_DISTANCE: 10,
 }));
 
-import { INTEGRITY_REASONS, registerUploadedMedia } from "./register";
+import { INTEGRITY_REASONS, registerUploadedMedia, type MediaItem } from "./register";
 
 const TENANT = "11111111-1111-4111-8111-111111111111";
 const USER = "99999999-9999-4999-8999-999999999999";
@@ -72,7 +72,7 @@ const PHOTO_ITEM = {
   storagePath: `${TENANT}/listing/foto.webp`,
 };
 
-function input(items = [PHOTO_ITEM]) {
+function input(items: MediaItem[] = [PHOTO_ITEM]) {
   return {
     tenantId: TENANT,
     uploaderId: USER,
@@ -130,7 +130,10 @@ describe("camino feliz", () => {
       license_kind: "desconocido",
       originality_declared: false,
     });
-    expect(mocks.scanContentAsset).toHaveBeenCalledWith(stub.client, ASSET, 10);
+    // Sin umbrales: los pone la comunidad desde la base (0086 + 0088). Que acá
+    // viaje un objeto vacío ES la aserción — un número significaría que la app
+    // volvió a tener su propia definición de "esto es un duplicado".
+    expect(mocks.scanContentAsset).toHaveBeenCalledWith(stub.client, ASSET, {});
   });
 });
 
@@ -228,5 +231,106 @@ describe("alertas del escaneo → motivos para la cola", () => {
     expect(result.needsHumanReview).toBe(true);
     expect(result.reasons).toContain(INTEGRITY_REASONS.duplicate);
     expect(result.reasons).toContain(INTEGRITY_REASONS.missingLicense);
+  });
+});
+
+/**
+ * =============================================================================
+ * PROCEDENCIA DEL ARCHIVO Y HUELLA DE AUDIO
+ * =============================================================================
+ *
+ * Dos capas que se sumaron después de la 0061 y que comparten una propiedad con
+ * el resto del pipeline: ninguna decide si algo se publica, las dos sólo dicen
+ * "esto lo mira una persona".
+ *
+ * La de procedencia es la que más fácil se malinterpreta, así que se prueba
+ * explícitamente lo que NO hace: encontrar la firma de TikTok en los metadatos
+ * de un archivo no afirma nada sobre derechos de autor — dice de dónde salió el
+ * ARCHIVO, que es un dato técnico. Por eso levanta revisión humana y no un
+ * bloqueo automático.
+ */
+describe("procedencia del archivo → revisión humana, nunca bloqueo automático", () => {
+  /** MP4 mínimo con la firma de la plataforma plantada en `udta`. */
+  function mp4ConFirma(firma: string): Uint8Array {
+    const ftyp = [
+      0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, // size + 'ftyp'
+      0x69, 0x73, 0x6f, 0x6d, // major_brand 'isom'
+      0, 0, 2, 0, // minor_version
+      0x69, 0x73, 0x6f, 0x6d, 0x6d, 0x70, 0x34, 0x32, // compatible brands
+    ];
+    const u32be = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+    const box = (type: string, payload: number[]) => [
+      ...u32be(8 + payload.length),
+      ...[...type].map((c) => c.charCodeAt(0)),
+      ...payload,
+    ];
+    // El texto va dentro de un box `free` anidado en `udta`, que es donde las
+    // apps de edición dejan su firma de verdad — no suelto en el udta.
+    const moov = box("moov", box("udta", box("free", [...Buffer.from(firma, "latin1")])));
+    return new Uint8Array([...ftyp, ...moov]);
+  }
+
+  const VIDEO_ITEM = {
+    mediaKind: "video" as const,
+    storageBucket: "post-media",
+    storagePath: `${TENANT}/user/video.mp4`,
+  };
+
+  it("un video con firma de TikTok en los metadatos va a revisión con su motivo", async () => {
+    mocks.hashStorageObject.mockResolvedValue({
+      ok: true,
+      sha256: "b".repeat(64),
+      byteSize: 4242,
+      bytes: mp4ConFirma("TikTok"),
+    });
+    const stub = createAdminStub({ "content_assets.insert": { data: { id: ASSET }, error: null } });
+    mocks.createAdminClient.mockReturnValue(stub.client);
+
+    const result = await registerUploadedMedia(input([VIDEO_ITEM]));
+
+    expect(result.reasons).toContain(INTEGRITY_REASONS.platformSource);
+    expect(result.needsHumanReview).toBe(true);
+    // Lo que NO pasa: el asset se registró igual. Detectar procedencia no
+    // cancela la publicación, la manda a que la mire alguien.
+    expect(result.assetIds).toEqual([ASSET]);
+  });
+
+  it("un video sin firmas no levanta el motivo de procedencia", async () => {
+    mocks.hashStorageObject.mockResolvedValue({
+      ok: true,
+      sha256: "c".repeat(64),
+      byteSize: 4242,
+      bytes: mp4ConFirma("una nota cualquiera"),
+    });
+    const stub = createAdminStub({ "content_assets.insert": { data: { id: ASSET }, error: null } });
+    mocks.createAdminClient.mockReturnValue(stub.client);
+
+    const result = await registerUploadedMedia(input([VIDEO_ITEM]));
+
+    expect(result.reasons).not.toContain(INTEGRITY_REASONS.platformSource);
+  });
+
+  it("los bytes del video se conservan al leer de storage — si no, no hay metadatos que leer", async () => {
+    const stub = createAdminStub({ "content_assets.insert": { data: { id: ASSET }, error: null } });
+    mocks.createAdminClient.mockReturnValue(stub.client);
+
+    await registerUploadedMedia(input([VIDEO_ITEM]));
+
+    expect(mocks.hashStorageObject).toHaveBeenCalledWith(
+      expect.anything(),
+      "post-media",
+      expect.any(String),
+      expect.objectContaining({ keepBytes: true }),
+    );
+  });
+
+  it("un audio inválido del cliente deja la columna en NULL, que significa «no se analizó»", async () => {
+    const stub = createAdminStub({ "content_assets.insert": { data: { id: ASSET }, error: null } });
+    mocks.createAdminClient.mockReturnValue(stub.client);
+
+    await registerUploadedMedia(input([{ ...VIDEO_ITEM, audioPcm: "no soy base64 válido" }]));
+
+    const row = stub.writes["content_assets.insert"]?.[0] as Record<string, unknown>;
+    expect(row.audio_phash).toBeNull();
   });
 });

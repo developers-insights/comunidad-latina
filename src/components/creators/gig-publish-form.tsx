@@ -3,7 +3,14 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle, ImageSquare, X } from "@phosphor-icons/react/dist/ssr";
+import {
+  Buildings,
+  CheckCircle,
+  ImageSquare,
+  Laptop,
+  ArrowsLeftRight,
+  X,
+} from "@phosphor-icons/react/dist/ssr";
 import {
   BezelCard,
   Button,
@@ -18,11 +25,47 @@ import { Celebration, useCelebration } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { createGigDraft, finalizeGig } from "@/app/(app)/creadores/actions";
+import {
+  WORK_MODES,
+  WORK_MODE_HELP,
+  WORK_MODE_LABEL,
+  requiresArea,
+  type WorkMode,
+} from "@/lib/creators/work-mode";
 import { PHOTO_MAX_COUNT, selectPhotos } from "./helpers";
 import { COPY } from "./copy";
 
 const MAX_PHOTOS = PHOTO_MAX_COUNT;
 const TOTAL_STEPS = 4;
+
+/**
+ * COPY DE LA MODALIDAD — local a este archivo a propósito.
+ *
+ * `./copy.ts` es el copy compartido del módulo y lo están tocando otros frentes
+ * en paralelo; un solo dueño por archivo. Las ETIQUETAS de las modalidades no
+ * viven acá sino en `lib/creators/work-mode.ts`, que es lo que también va a leer
+ * la lista de trabajos: si el chip del directorio dijera "Remoto" y el selector
+ * "A distancia", parecerían dos cosas distintas.
+ */
+const MODE_COPY = {
+  legend: "¿Cómo se hace el trabajo?",
+  help: "Así quien aplique sabe de entrada si tiene que moverse.",
+  error: "Elegí cómo se hace el trabajo.",
+  remoteNote: "Al ser a distancia no hace falta la zona.",
+} as const;
+
+const MODE_ICON: Record<WorkMode, typeof Laptop> = {
+  remoto: Laptop,
+  presencial: Buildings,
+  hibrido: ArrowsLeftRight,
+};
+
+/** Tarjeta táctil de 44px, misma gramática que el form de Empleos. */
+const TAP_CARD = cn(
+  "flex min-h-11 flex-col items-center justify-center gap-1 rounded-md border px-3 py-3 text-center",
+  "transition-[border-color,background-color,transform,color] duration-(--duration-fast) ease-(--ease-spring)",
+  "active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+);
 
 interface PhotoItem {
   file: File;
@@ -70,8 +113,14 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
   const [deliverables, setDeliverables] = useState("");
   const [budget, setBudget] = useState("");
   const [deadlineDays, setDeadlineDays] = useState("");
+  const [workMode, setWorkMode] = useState<WorkMode | null>(null);
   const [areaLabel, setAreaLabel] = useState("");
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+
+  // La zona sólo se pide cuando hay que estar en algún lado. La regla vive en
+  // `requiresArea` y no en un `!== "remoto"` acá: el servidor valida con esa
+  // MISMA función (creadores/actions.ts), así que no pueden desincronizarse.
+  const areaRequired = requiresArea(workMode);
 
   function validateStep(current: number): string | null {
     if (current === 0) {
@@ -82,7 +131,12 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
       const amount = Number(budget);
       if (!Number.isFinite(amount) || amount <= 0) return C.errors.amountRequired;
     }
-    if (current === 2 && areaLabel.trim().length < 3) return C.errors.areaShort;
+    if (current === 2) {
+      // Se exige elegir: un aviso sin modalidad es exactamente la ambigüedad que
+      // esta pantalla vino a resolver ("¿tengo que ir o no?").
+      if (!workMode) return MODE_COPY.error;
+      if (areaRequired && areaLabel.trim().length < 3) return C.errors.areaShort;
+    }
     return null;
   }
 
@@ -135,7 +189,10 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
           budget: Number(budget),
           deliverables: deliverables.trim() || null,
           deadlineDays: deadlineDays ? Number(deadlineDays) : null,
-          areaLabel: areaLabel.trim(),
+          workMode,
+          // A distancia no se manda zona aunque haya quedado texto escrito de un
+          // paso anterior: se guardaría un lugar que el trabajo no tiene.
+          areaLabel: areaRequired ? areaLabel.trim() : null,
         });
         if (!result.ok) {
           if (result.needsAuth) {
@@ -317,15 +374,65 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
       {step === 2 && (
         <div className="flex flex-col gap-4">
           <h2 className="font-display text-xl font-bold text-foreground">{C.steps.where.title}</h2>
-          <Field htmlFor="gig-area" label={C.steps.where.areaLabel} help={C.steps.where.areaHelp}>
-            <Input
-              id="gig-area"
-              value={areaLabel}
-              maxLength={80}
-              placeholder={C.steps.where.areaPlaceholder}
-              onChange={(event) => setAreaLabel(event.target.value)}
-            />
-          </Field>
+
+          {/* Modalidad. `fieldset`/`legend` de verdad: el lector de pantalla
+              anuncia la pregunta antes de cada opción, cosa que un <p> con
+              pinta de título no hace. El estado seleccionado no se comunica
+              sólo por color — lleva ícono relleno y `aria-checked`. */}
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1.5 text-sm font-semibold text-foreground">
+              {MODE_COPY.legend}
+            </legend>
+            <div role="radiogroup" aria-label={MODE_COPY.legend} className="grid grid-cols-3 gap-2">
+              {WORK_MODES.map((mode) => {
+                const selected = workMode === mode;
+                const Icon = MODE_ICON[mode];
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => {
+                      setWorkMode(mode);
+                      setError(null);
+                    }}
+                    className={cn(
+                      TAP_CARD,
+                      selected
+                        ? "border-brand bg-brand-tint text-brand-ink"
+                        : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
+                    )}
+                  >
+                    <Icon size={20} weight={selected ? "fill" : "regular"} aria-hidden="true" />
+                    <span className="text-sm font-semibold">{WORK_MODE_LABEL[mode]}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-sm text-foreground-muted">
+              {workMode ? WORK_MODE_HELP[workMode] : MODE_COPY.help}
+            </p>
+          </fieldset>
+
+          {/* La zona aparece sólo cuando el trabajo pasa en algún lado. No se
+              deshabilita ni se tacha: un campo que no aplica se va, y en su
+              lugar queda dicho por qué. */}
+          {areaRequired ? (
+            <Field htmlFor="gig-area" label={C.steps.where.areaLabel} help={C.steps.where.areaHelp}>
+              <Input
+                id="gig-area"
+                value={areaLabel}
+                maxLength={80}
+                placeholder={C.steps.where.areaPlaceholder}
+                onChange={(event) => setAreaLabel(event.target.value)}
+              />
+            </Field>
+          ) : (
+            <p className="rounded-lg border border-dashed border-border bg-surface-subtle px-4 py-3 text-sm text-foreground-muted">
+              {MODE_COPY.remoteNote}
+            </p>
+          )}
         </div>
       )}
 

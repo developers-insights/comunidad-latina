@@ -3,10 +3,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database, TablesInsert } from "@/lib/types/database.types";
+import { audioPhashFromClientSamples } from "./audio";
 import { EMPTY_DECLARATION, type ContentDeclaration } from "./declarations";
 import { sha256Hex, toByteaLiteral } from "./hash";
 import { imagePhash } from "./image";
-import { scanContentAsset, DEFAULT_MAX_DISTANCE } from "./scan";
+import { analyzeProvenanceBytes } from "./provenance";
+import { scanContentAsset } from "./scan";
+import { getIntegritySettings } from "./settings";
 import { hashStorageObject } from "./storage";
 import { videoPhashFromLumaFrames } from "./video";
 
@@ -111,6 +114,15 @@ export interface MediaItem {
    * "video"` — ver el docblock de `./video.ts` para el porqué y su límite.
    */
   videoLumaFrames?: unknown;
+  /**
+   * PCM mono en base64 (Int16) que el navegador extrajo con la Web Audio API
+   * (`src/lib/media/audio-samples.ts`). Análogo exacto de `videoLumaFrames`, y
+   * con la misma advertencia: un cliente modificado puede falsearlo. Aplica a
+   * `mediaKind: "audio"` y también a `"video"`, porque un video con pista de
+   * audio tiene DOS huellas y la 0061 contempla que dos assets matcheen por
+   * audio sin matchear por imagen.
+   */
+  audioPcm?: unknown;
 }
 
 export interface RegisterUploadedMediaInput {
@@ -122,7 +134,18 @@ export interface RegisterUploadedMediaInput {
   sourceHost: string;
   declaration?: ContentDeclaration;
   items: MediaItem[];
+  /**
+   * Override EXPLÍCITO del umbral de la huella de imagen. Sin esto, los tres
+   * umbrales salen de la config de la comunidad (0086 + 0088). No es un default:
+   * es la salida de emergencia para tests y reprocesos.
+   */
   maxDistance?: number;
+  /**
+   * El contenido se va a licenciar, vender o usar en una campaña. Cambia el
+   * nivel de exigencia: el pliego pide que nada llegue a estado comercial sin
+   * que lo mire una persona.
+   */
+  commercialIntent?: boolean;
 }
 
 /**
@@ -143,6 +166,18 @@ export const INTEGRITY_REASONS = {
   similar: "integrity_coincidencia_similar",
   /** Se cargó sin declarar originalidad ni licencia. */
   missingLicense: "integrity_sin_declaracion",
+  /**
+   * Se va a licenciar o vender y esta comunidad exige revisión humana para eso.
+   * No es una sospecha sobre el archivo: es el nivel de exigencia más alto que
+   * pide el pliego para el contenido comercial.
+   */
+  commercialReview: "integrity_revision_comercial",
+  /**
+   * Los metadatos del archivo dicen que salió de otra plataforma (TikTok,
+   * CapCut, Instagram…). NO afirma nada sobre derechos: dice de dónde viene el
+   * ARCHIVO, que es un dato técnico y verificable. Quien modera decide.
+   */
+  platformSource: "integrity_procedencia_plataforma",
 } as const;
 
 export interface IntegrityCheck {
@@ -162,7 +197,17 @@ const CLEAN: IntegrityCheck = { needsHumanReview: false, reasons: [], assetIds: 
 
 /** Resultado de registrar UN archivo. */
 type SingleOutcome =
-  | { ok: true; assetId: string; fingerprinted: boolean }
+  | {
+      ok: true;
+      assetId: string;
+      fingerprinted: boolean;
+      /**
+       * Motivos que surgen del ARCHIVO en sí, no del escaneo contra la base:
+       * hoy, la procedencia detectada en sus metadatos. Viajan aparte porque un
+       * archivo puede registrarse bien y aun así merecer una mirada humana.
+       */
+      extraReasons?: string[];
+    }
   | { ok: false; reason: string };
 
 /**
@@ -188,9 +233,39 @@ export async function registerUploadedMedia(
   const declaration = input.declaration ?? EMPTY_DECLARATION;
   const sourceDomainId = await resolveSourceDomainId(admin, input.tenantId, input.sourceHost);
 
+  /**
+   * LOS UMBRALES LOS DECIDE LA BASE, NO ESTE ARCHIVO.
+   *
+   * Desde la 0086 cada comunidad calibra sus umbrales, y desde la 0088 hay uno
+   * por algoritmo (imagen son 64 bits; video y audio, 256). `scan_content_asset`
+   * los lee de `content_integrity_settings` cuando no se le pasa ninguno, que es
+   * el camino normal: mandar un número desde acá volvería a partir en dos la
+   * definición de "esto es un duplicado", que es exactamente lo que el docblock
+   * de `./scan.ts` pide no hacer.
+   *
+   * `input.maxDistance` sobrevive como override EXPLÍCITO del umbral de imagen
+   * —lo usan los tests y un eventual reproceso—, nunca como valor por defecto.
+   */
+  const thresholds = input.maxDistance === undefined ? {} : { image: input.maxDistance };
+
+  /**
+   * La config sí se lee para una decisión que es de la app y no del matching:
+   * si esta comunidad exige ojos humanos sobre todo lo que se va a licenciar o
+   * vender, el contenido marcado como comercial no se aprueba solo aunque el
+   * escaneo salga limpio.
+   */
+  const settings = await getIntegritySettings(admin);
+  const comercialExigeRevision =
+    input.commercialIntent === true && settings.revisionHumanaObligatoriaComercial;
+
   const reasons = new Set<string>();
   const assetIds: string[] = [];
   let needsHumanReview = false;
+
+  if (comercialExigeRevision) {
+    needsHumanReview = true;
+    reasons.add(INTEGRITY_REASONS.commercialReview);
+  }
 
   for (const item of input.items) {
     // El try envuelve CADA archivo y no el lote entero: una foto que explota no
@@ -218,12 +293,15 @@ export async function registerUploadedMedia(
       needsHumanReview = true;
       reasons.add(INTEGRITY_REASONS.notFingerprinted);
     }
+    for (const extra of outcome.extraReasons ?? []) {
+      needsHumanReview = true;
+      reasons.add(extra);
+    }
 
-    const scan = await scanContentAsset(
-      admin,
-      outcome.assetId,
-      input.maxDistance ?? DEFAULT_MAX_DISTANCE,
-    ).catch(() => ({ ok: false as const, error: "excepción" }));
+    const scan = await scanContentAsset(admin, outcome.assetId, thresholds).catch(() => ({
+      ok: false as const,
+      error: "excepción",
+    }));
 
     if (!scan.ok) {
       needsHumanReview = true;
@@ -264,8 +342,15 @@ async function registerOne(
     // El navegador lo subió directo al bucket: se lee de ahí, con tope.
     const read = await hashStorageObject(admin, item.storageBucket, item.storagePath, {
       maxBytes: MAX_INLINE_BYTES,
-      // Los bytes completos sólo hacen falta para la huella de imagen.
-      keepBytes: item.mediaKind === "imagen",
+      /**
+       * Los bytes completos hacen falta para la huella de imagen y —desde que
+       * existe `./provenance.ts`— también para leer los metadatos del contenedor
+       * de un video, que es donde TikTok, CapCut y compañía dejan su firma. Sin
+       * esto, la detección de procedencia sólo funcionaría en los videos que ya
+       * llegan como File en el FormData, que son la minoría: los videos suben
+       * directo al bucket desde el navegador.
+       */
+      keepBytes: item.mediaKind === "imagen" || item.mediaKind === "video",
     });
     if (!read.ok) {
       console.warn("[integrity] no se pudo leer el archivo para su huella", {
@@ -288,16 +373,40 @@ async function registerOne(
   // --- 2. Huella perceptual según el medio ----------------------------------
   let phash: string | null = null;
   let videoPhash: string | null = null;
+  let audioPhash: string | null = null;
 
   if (item.mediaKind === "imagen" && bytes) {
     phash = await imagePhash(bytes);
   } else if (item.mediaKind === "video") {
     videoPhash = videoPhashFromLumaFrames(item.videoLumaFrames);
   }
-  // audio: ver `./audio.ts` — no hay extractor, la columna queda NULL y eso
-  // significa "no se analizó", nunca "no coincide".
 
-  const fingerprinted = phash !== null || videoPhash !== null;
+  /**
+   * La huella de audio corre para audio Y para video: un video con pista de
+   * audio tiene las dos, y son independientes — alguien que recorta la imagen
+   * pero deja el sonido intacto matchea por acá y no por la otra. La columna en
+   * NULL sigue significando "no se analizó", nunca "no coincide".
+   */
+  if (item.mediaKind === "audio" || item.mediaKind === "video") {
+    audioPhash = audioPhashFromClientSamples(item.audioPcm);
+  }
+
+  const fingerprinted = phash !== null || videoPhash !== null || audioPhash !== null;
+
+  // --- 2b. Procedencia del archivo (de dónde salió, no de quién es) ----------
+  const extraReasons: string[] = [];
+  if (bytes && (item.mediaKind === "imagen" || item.mediaKind === "video")) {
+    const provenance = analyzeProvenanceBytes(bytes, item.mimeType ?? "");
+    if (provenance.verdict !== "sin_indicios") {
+      extraReasons.push(INTEGRITY_REASONS.platformSource);
+      console.info("[integrity] procedencia detectada en el archivo", {
+        verdict: provenance.verdict,
+        // Sólo la plataforma y el campo: el string crudo puede tener datos del
+        // archivo de la persona y esto va a los logs.
+        platforms: [...new Set(provenance.signals.map((s) => s.platform))],
+      });
+    }
+  }
 
   // --- 3. La fila de procedencia --------------------------------------------
   const row: TablesInsert<"content_assets"> = {
@@ -314,6 +423,7 @@ async function registerOne(
     sha256: toByteaLiteral(sha256),
     phash,
     video_phash: videoPhash,
+    audio_phash: audioPhash,
     source_host: input.sourceHost,
     source_domain_id: sourceDomainId,
     originality_declared: declaration.originalityDeclared,
@@ -322,9 +432,20 @@ async function registerOne(
     license_url: declaration.licenseUrl,
   };
 
+  /**
+   * `commercial_intent` llega con la 0086 y `database.types.ts` se regenera
+   * aparte, así que todavía no figura en los tipos generados. El cast es por el
+   * TIPO, no por el contrato: la columna existe en la base y tiene su default.
+   * Mismo patrón que `./scan.ts` con `scan_content_asset` desde la 0070.
+   */
+  const rowConIntencion = {
+    ...row,
+    commercial_intent: input.commercialIntent === true,
+  } as TablesInsert<"content_assets">;
+
   const { data, error } = await admin
     .from("content_assets")
-    .insert(row)
+    .insert(rowConIntencion)
     .select("id")
     .single();
 
@@ -333,7 +454,12 @@ async function registerOne(
     return { ok: false, reason: INTEGRITY_REASONS.failed };
   }
 
-  return { ok: true, assetId: data.id, fingerprinted };
+  return {
+    ok: true,
+    assetId: data.id,
+    fingerprinted,
+    extraReasons: extraReasons.length > 0 ? extraReasons : undefined,
+  };
 }
 
 /**

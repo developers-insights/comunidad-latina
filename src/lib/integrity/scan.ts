@@ -36,6 +36,26 @@ import type { Database } from "@/lib/types/database.types";
  */
 export const DEFAULT_MAX_DISTANCE = 10;
 
+/**
+ * Desde la 0088 el umbral ya no es uno solo: la huella de imagen son 64 bits y
+ * las de video y audio son 256, así que un mismo número no puede servir para
+ * las tres (10 sobre 256 apaga el detector de audio en silencio; 32 sobre 64 es
+ * ruido puro). Los tres umbrales viven en `content_integrity_settings` por
+ * comunidad y la función SQL los aplica sola.
+ *
+ * Por eso lo normal es NO pasar ninguno: `undefined` significa "usá los de esta
+ * comunidad", que es la respuesta correcta salvo que quien llama tenga un
+ * motivo explícito para pisarlos (un reproceso, un test).
+ */
+export interface ScanThresholds {
+  /** Sólo la huella de IMAGEN (64 bits). Es lo que `DEFAULT_MAX_DISTANCE` fue siempre. */
+  image?: number;
+  /** Huella de video (256 bits). */
+  video?: number;
+  /** Huella de audio (256 bits). */
+  audio?: number;
+}
+
 export type ScanOutcome =
   | {
       ok: true;
@@ -54,7 +74,7 @@ export type ScanOutcome =
 export async function scanContentAsset(
   admin: SupabaseClient<Database>,
   assetId: string,
-  maxDistance: number = DEFAULT_MAX_DISTANCE,
+  thresholds: ScanThresholds = {},
 ): Promise<ScanOutcome> {
   try {
     // `scan_content_asset` llegó con la 0070 y `database.types.ts` se regenera
@@ -63,9 +83,14 @@ export async function scanContentAsset(
     // es de `service_role`, que es justo el cliente que llega acá. Mismo patrón
     // que `engagement-actions.ts` usa con las columnas recién migradas.
     const open = admin as unknown as SupabaseClient;
+    // `null` en cada umbral = "usá el de la comunidad". No se manda un número
+    // por las dudas: eso volvería a poner en la app una decisión que la 0088
+    // puso, a propósito, en un solo lugar.
     const { error } = await open.rpc("scan_content_asset", {
       p_asset_id: assetId,
-      p_max_distance: maxDistance,
+      p_max_distance: thresholds.image ?? null,
+      p_max_distance_video: thresholds.video ?? null,
+      p_max_distance_audio: thresholds.audio ?? null,
     });
 
     if (error) {

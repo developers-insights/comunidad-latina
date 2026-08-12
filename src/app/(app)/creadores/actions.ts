@@ -1,7 +1,10 @@
 "use server";
 
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { DAY_MS, HOUR_MS, limit } from "@/lib/rate-limit";
+import { getCreatorCommission } from "@/lib/creators/commission";
+import { WORK_MODES, normalizeWorkMode, requiresArea } from "@/lib/creators/work-mode";
 import { isVisionConfigured } from "@/lib/config/services";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
@@ -56,17 +59,32 @@ const GENERIC_ERROR = COPY.apply.errors.generic;
 
 const GIG_CATEGORIES = ["video", "foto", "campaña", "social", "diseño", "otro"] as const;
 
-const gigDraftSchema = z.object({
-  title: z.string().trim().min(8).max(120),
-  description: z.string().trim().min(30).max(4000),
-  category: z.enum(GIG_CATEGORIES).nullish(),
-  budget: z.number().positive().max(1_000_000),
-  deliverables: z.string().trim().max(500).nullish(),
-  // "Urgente" ya no es un campo propio: se DERIVA de deadlineDays ≤ 7 al leer el
-  // aviso (ver isUrgentDeadline en creators/helpers.ts). No lo persistimos.
-  deadlineDays: z.number().int().min(1).max(365).nullish(),
-  areaLabel: z.string().trim().min(3).max(80),
-});
+const gigDraftSchema = z
+  .object({
+    title: z.string().trim().min(8).max(120),
+    description: z.string().trim().min(30).max(4000),
+    category: z.enum(GIG_CATEGORIES).nullish(),
+    budget: z.number().positive().max(1_000_000),
+    deliverables: z.string().trim().max(500).nullish(),
+    // "Urgente" ya no es un campo propio: se DERIVA de deadlineDays ≤ 7 al leer el
+    // aviso (ver isUrgentDeadline en creators/helpers.ts). No lo persistimos.
+    deadlineDays: z.number().int().min(1).max(365).nullish(),
+    // Modalidad (0087). Nullish porque el aviso puede no declararla — la columna
+    // es nullable a propósito y NULL significa "no se declaró".
+    workMode: z.enum(WORK_MODES).nullish(),
+    // Deja de ser obligatoria en el esquema base: para un trabajo a distancia no
+    // hay zona que pedir. La exigencia condicional va en el refine de abajo.
+    areaLabel: z.string().trim().max(80).nullish(),
+  })
+  // La MISMA regla que el formulario aplica en el cliente, acá también: el aviso
+  // del form es cortesía, el servidor es la frontera. Un POST a mano que mande
+  // work_mode='presencial' sin zona rebota igual.
+  .refine(
+    (value) =>
+      !requiresArea(normalizeWorkMode(value.workMode)) ||
+      (value.areaLabel?.trim().length ?? 0) >= 3,
+    { path: ["areaLabel"] },
+  );
 
 export type GigDraftInput = z.input<typeof gigDraftSchema>;
 
@@ -101,7 +119,12 @@ export async function createGigDraft(rawInput: GigDraftInput): Promise<CreateGig
     attrs.deadline_days = input.deadlineDays;
   }
 
-  const { data: created, error } = await supabase
+  // `work_mode` llega con la 0087 y `database.types.ts` se regenera aparte, así
+  // que todavía no figura en los tipos: el cast es por el TIPO generado, no por
+  // el contrato — la columna existe en la base con su CHECK. Mismo patrón que
+  // usa `lib/integrity/scan.ts` con las funciones recién migradas.
+  const open = supabase as unknown as SupabaseClient;
+  const { data: created, error } = await open
     .from("listings")
     .insert({
       tenant_id: tenant.id,
@@ -112,11 +135,15 @@ export async function createGigDraft(rawInput: GigDraftInput): Promise<CreateGig
       price_currency: tenant.currency,
       price_period: "one_time",
       attrs,
-      area_label: input.areaLabel,
+      // Trabajo a distancia = sin zona. Se guarda NULL y no el string vacío: la
+      // ausencia del dato tiene que poder distinguirse de "escribió nada".
+      area_label: input.areaLabel?.trim() || null,
+      work_mode: normalizeWorkMode(input.workMode),
       status: "draft",
       created_by: user.id,
     })
     .select("id")
+    .returns<{ id: string }[]>()
     .single();
 
   if (error || !created) {
@@ -586,9 +613,20 @@ export async function proposeContract(
     }
   }
 
+  // La comisión de ESTA comunidad (0087), leída con el cliente DEL USUARIO: la
+  // función de la base deriva el tenant de `app.current_tenant_id()` (el JWT), y
+  // el cliente admin no lleva JWT — con él siempre daría el default. Nunca falla:
+  // sin configuración devuelve 20, que es lo que la app cobraba hardcodeado.
+  //
+  // Se copia al contrato y ahí queda CONGELADA: si mañana la comunidad cambia la
+  // comisión, este contrato se sigue liberando con la que las dos partes vieron
+  // (lo enforcea el trigger gig_contracts_fee_pct_congelado).
+  const feePct = await getCreatorCommission(supabase);
+
   // INSERT gateado con ADMIN (gig_contracts INSERT=false para authenticated).
-  // status='proposed', payment_mode='demo', fee_pct=20, code y currency por
-  // DEFAULT. Jamás tocamos stripe_* ni las columnas generadas (fee/net).
+  // status='proposed', payment_mode='demo', code y currency por DEFAULT. Jamás
+  // tocamos stripe_* ni las columnas generadas (fee/net), que las calcula la
+  // base a partir de amount_cents y fee_pct.
   const admin = createAdminClient();
   const { data: created, error } = await admin
     .from("gig_contracts")
@@ -602,6 +640,7 @@ export async function proposeContract(
       scope: input.scope,
       delivery_days: input.deliveryDays,
       amount_cents: input.amountCents,
+      fee_pct: feePct,
     })
     .select("id, code")
     .single();

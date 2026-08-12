@@ -299,6 +299,23 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     videoFrames = null;
   }
 
+  /**
+   * PCM mono de la pista de audio (base64 de Int16, 8 kHz). Mismo reparto que
+   * los fotogramas y con la misma advertencia: lo extrae el navegador, así que
+   * un cliente modificado puede falsearlo. No abre un agujero de autoría — el
+   * SHA-256 lo calcula siempre el servidor leyendo el archivo real del bucket.
+   *
+   * El tope de tamaño no es una defensa criptográfica sino de memoria: 120 s a
+   * 8 kHz en base64 son ~2,6 MB, y cualquier cosa mucho mayor que eso no es la
+   * pista de audio de un video corto sino alguien probando qué aguanta.
+   */
+  const MAX_AUDIO_PCM_CHARS = 4_000_000;
+  let videoAudioPcm: unknown = null;
+  const rawAudio = formData.get("videoAudioPcm");
+  if (typeof rawAudio === "string" && rawAudio.length > 0) {
+    videoAudioPcm = rawAudio.length <= MAX_AUDIO_PCM_CHARS ? rawAudio : null;
+  }
+
   // Declaración de originalidad y licencia. Si el composer todavía no la manda,
   // `normalizeDeclaration` devuelve "no declaró nada" — que NO es lo mismo que
   // "es propio", y por eso el escaneo va a levantar su alerta de licencia.
@@ -461,6 +478,7 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
       storageBucket: "post-media",
       storagePath: path,
       videoLumaFrames: videoFrames,
+      audioPcm: videoAudioPcm,
     });
   }
 

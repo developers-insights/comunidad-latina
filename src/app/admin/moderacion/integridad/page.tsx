@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Fingerprint } from "@phosphor-icons/react/dist/ssr";
+import { ArrowLeft, Fingerprint, Scales } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState } from "@/components/ui";
 import { byteaToHex, shortHash } from "@/lib/integrity/hash";
 import { requireStaff } from "../../guard";
@@ -38,6 +38,8 @@ const COPY = {
   emptyMessage:
     "Ningún archivo quedó marcado. Cuando el análisis encuentre una coincidencia, aparece acá.",
   backToQueue: "Volver a la cola de moderación",
+  disputesLink: "Reclamos de autoría",
+  disputesHint: "Cuando alguien dice que un contenido es suyo, el caso se resuelve acá al lado.",
   openLabel: (n: number) => (n === 1 ? "1 caso abierto" : `${n} casos abiertos`),
   crossTenantNote:
     "El análisis sólo compara contenido de esta comunidad: nunca se cruzan dominios.",
@@ -198,6 +200,17 @@ export default async function IntegridadPage() {
         </h2>
         <p className="mt-1 text-sm text-foreground-secondary">{COPY.intro}</p>
         <p className="mt-1 text-xs text-foreground-muted">{COPY.crossTenantNote}</p>
+        {/* Las dos colas son hermanas y se miran juntas: una nace del análisis
+            automático, la otra de una persona que reclama. Sin este link, a la
+            de reclamos sólo se llegaba escribiendo la URL a mano. */}
+        <Link
+          href="/admin/moderacion/integridad/disputas"
+          className="mt-2 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors duration-(--duration-fast) hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+        >
+          <Scales size={16} aria-hidden="true" />
+          {COPY.disputesLink}
+        </Link>
+        <p className="mt-0.5 text-xs text-foreground-muted">{COPY.disputesHint}</p>
         {viewAlerts.length > 0 && (
           <p className="mt-2 text-xs font-medium tabular-nums text-foreground-muted">
             {COPY.openLabel(viewAlerts.length)}
