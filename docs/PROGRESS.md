@@ -1,5 +1,65 @@
 # PROGRESS — Comunidad Latina
 
+## Content Integrity fase 2 + desbloqueo del Creator Marketplace (✅ 2026-08-12)
+
+Origen: pliego de Nacho del 11/8 (texto de WhatsApp) + nota de voz de 4:13 con
+los requisitos del Creator Marketplace. Ambos analizados contra el código, punto
+por punto, en [`docs/CONTENT_INTEGRITY.md`](CONTENT_INTEGRITY.md) y
+[`docs/CREATOR_MARKETPLACE_ESTADO.md`](CREATOR_MARKETPLACE_ESTADO.md) — los dos
+distinguen implementado / parcial / no existe / no contemplado a propósito, sin
+colapsar los estados.
+
+**Migraciones 0086–0088** (aplicadas a producción el 12/8):
+- `0086` umbrales de integridad por comunidad · disputas de contenido · estado
+  `apto_comercial` con revisor humano obligatorio por CHECK · puente
+  reportes↔integridad · penalización de integridad para el Trust Score
+  (calculada, **sin enganchar** al motor: eso va en su propia migración para no
+  mover scores vigentes).
+- `0087` `listings.work_mode` (remoto/presencial/mixto) · `creator_commission_config`
+  por comunidad · trigger que **congela** `fee_pct` de un contrato ya creado.
+- `0088` umbral **por algoritmo**: antes un solo número servía para huellas de 64
+  bits (imagen) y de 256 (video/audio), lo que apagaba el detector de audio en
+  silencio.
+
+**App:**
+- Huella perceptual de **audio** de 256 bits (Haitsma-Kalker), sin dependencias.
+  Calibrada midiendo: mismo audio con otro volumen/formato/ruido leve ≤23 bits;
+  audios distintos ≥117. Corte en 32. Extracción client-side con Web Audio,
+  con la misma advertencia honesta que ya tiene el video.
+- **Detector de procedencia** por metadatos del contenedor (TikTok, CapCut,
+  Instagram, Meta y 8 más). Dice de dónde salió el ARCHIVO; nunca afirma nada
+  sobre derechos, y levanta revisión humana, jamás bloqueo automático.
+- Flujo de **reclamo de copyright** + panel de disputas. Abrir una disputa
+  **congela**, no elimina: si fuera punitivo, tres reclamos falsos borrarían a un
+  competidor. Cuota diaria en la BASE, porque el rate-limit de la app no cubre el
+  INSERT directo de PostgREST.
+- **Cola de aprobación de creadores**: la RPC existía desde la 0032 y ninguna
+  pantalla la llamaba — las solicitudes quedaban trabadas para siempre.
+- `profiles.email_verified` **nunca se escribía** y el gate de creador lo exige:
+  el requisito era imposible de cumplir. Ahora se sincroniza al confirmar.
+
+**Bug de producción encontrado en el camino:** las columnas generadas del reparto
+20/80 (`0024`) multiplicaban en `integer`. Con la comisión fija en 20 % no se
+notaba; al volverla configurable hasta 50 %, un contrato del monto máximo
+desbordaba `int4` y el alta habría fallado con *integer out of range*. La `0087`
+las recrea en `bigint` sin cambiar la semántica de redondeo.
+
+**Verificación:** 3065 tests · `tsc --noEmit` limpio · build de producción OK ·
+las tres migraciones probadas contra la base real dentro de una transacción con
+`ROLLBACK` antes de aplicarlas de verdad · auditoría de seguridad sin hallazgos
+bloqueantes (los tres no bloqueantes quedaron cerrados: los umbrales pasan a ser
+sólo de `domain_admin`/`global_admin`, se agregó cuota diaria de reclamos y se
+cerró un oráculo de existencia cross-tenant en el trigger de disputas).
+
+**Queda pendiente y es de producto, no de código:**
+1. El botón "reclamar este contenido" en el feed. El flujo funciona pero se entra
+   por URL directa: la pantalla necesita el id interno del archivo y ese dato no
+   se expone en las tarjetas a propósito. Conectarlo pide una consulta acotada
+   nueva (sólo tipo de archivo y fecha), no abrir el id.
+2. Pantalla de admin para editar la comisión (hoy se cambia por SQL).
+3. Enganchar `integrity_penalty_for_user` al motor de Trust Score.
+4. Regenerar `database.types.ts` (varias columnas nuevas entran por cast).
+
 ## Cierre del pliego contractual: white label, Content Integrity y pagos (✅ 2026-08-09)
 
 Quince frentes en paralelo con fronteras de archivo duras, sobre el pliego de las
