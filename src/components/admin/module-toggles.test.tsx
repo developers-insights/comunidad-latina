@@ -167,8 +167,8 @@ describe("<ModuleToggles />", () => {
   it("el copy explica los tres estados sin jerga técnica", () => {
     render(<ModuleToggles modules={{}} />);
 
-    // 10 módulos administrables − los 2 que no se pueden apagar = 8 con las tres opciones.
-    expect(screen.getAllByLabelText("Muy pronto")).toHaveLength(8);
+    // 11 módulos administrables − los 2 que no se pueden apagar = 9 con las tres opciones.
+    expect(screen.getAllByLabelText("Muy pronto")).toHaveLength(9);
     expect(screen.getAllByTitle("Se ve, pero todavía no se entra").length).toBeGreaterThan(0);
     expect(screen.getAllByTitle("No aparece en la app").length).toBeGreaterThan(0);
   });

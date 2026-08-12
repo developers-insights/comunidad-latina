@@ -146,6 +146,7 @@ const MODULE_KEYS = [
   'marketplace',
   'creadores',
   'videos',
+  'comunidad',
 ];
 
 /** Los dos tenants reales de producción — el modo --delete los rechaza siempre. */

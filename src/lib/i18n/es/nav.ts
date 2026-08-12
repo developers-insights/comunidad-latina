@@ -37,6 +37,7 @@ export const nav = {
   moduleEmpleos: "Empleos",
   moduleMarketplace: "Marketplace",
   moduleCreadores: "Influencers",
+  moduleComunidad: "Comunidad",
   moduleEscudo: "Escudo",
   // Octava sección de /buscar (pedido Manuel, 2026-08-11): pagar para que un
   // aviso o una publicación llegue a más gente. No es una vertical de

@@ -93,6 +93,7 @@ const MODULE_KEYS = [
   'marketplace',
   'creadores',
   'videos',
+  'comunidad',
 ];
 
 /**

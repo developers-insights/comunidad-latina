@@ -26,11 +26,13 @@ describe("isModuleActive", () => {
 });
 
 describe("MODULES", () => {
-  // 9 = 7 visibles + Videos (reels, sprint 2026-07-21) + Empleos (feedback
-  // 2026-07-24). Escudo sigue oculto por pedido del cliente (2026-07-20).
+  // 10 = 7 visibles + Videos (reels, sprint 2026-07-21) + Empleos (feedback
+  // 2026-07-24) + Comunidad (pedido del cliente 2026-08-12: perdido y
+  // encontrado, clínicas, bancos de comida, consulados). Escudo sigue oculto
+  // por pedido del cliente (2026-07-20).
   it("son los módulos visibles de la plataforma, sin href repetido", () => {
-    expect(MODULES).toHaveLength(9);
-    expect(new Set(MODULES.map((m) => m.href)).size).toBe(9);
+    expect(MODULES).toHaveLength(10);
+    expect(new Set(MODULES.map((m) => m.href)).size).toBe(10);
   });
 
   it("Empleos figura en el menú con su acento propio", () => {
@@ -134,11 +136,12 @@ describe("BROWSE_MODULES (categorías de /buscar)", () => {
     expect(BROWSE_MODULES).toHaveLength(MODULES.length - 2 + 1);
   });
 
-  it("son exactamente las ocho secciones: las siete de listado más Boost", () => {
+  it("son exactamente las nueve secciones: las ocho de listado más Boost", () => {
     // Las mismas siete que llevan la burbuja "Publicá tu…", más Boost — si
     // alguien agrega un módulo nuevo, tiene que decidir a conciencia si va a
     // los dos lados (MODULES y/o BROWSE_MODULES).
     expect(BROWSE_MODULES.map((m) => m.href).sort()).toEqual([
+      "/comunidad",
       "/creadores",
       "/empleos",
       "/eventos",

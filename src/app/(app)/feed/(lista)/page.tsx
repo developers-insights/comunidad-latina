@@ -6,11 +6,14 @@ import { decodeCursor } from "@/components/listings";
 import {
   COPY,
   FeedSkeleton,
-  FeedTabs,
   PostComposer,
   parseTab,
   type FeedTabId,
 } from "@/components/feed";
+// Por ruta y NO por el barril: `FeedModules` lee `next/headers`, y
+// `@/components/feed` lo importa un client component que reventaría al
+// bundlear código de servidor.
+import { FeedModules } from "@/components/feed/feed-modules";
 import { FeedList } from "@/components/feed/feed-list";
 import { PullToRefresh } from "@/components/feed/pull-to-refresh";
 import { ParaVos, ParaVosSkeleton } from "@/components/matching";
@@ -59,7 +62,7 @@ export default async function FeedPage({ searchParams }: { searchParams: SearchP
         <FeedAlert />
       </Suspense>
 
-      <FeedTabs active={tab} />
+      <FeedModules active={tab} />
 
       <Suspense key={`${tab}|${cursorRaw}`} fallback={<ContentSkeleton tab={tab} />}>
         <FeedContent tab={tab} cursorRaw={cursorRaw} />

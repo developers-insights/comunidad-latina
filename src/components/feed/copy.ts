@@ -12,13 +12,40 @@ export const COPY = {
     subtitleDefault: "Lo que está pasando en tu comunidad",
   },
 
-  tabs: {
-    paraTi: "Para ti",
-    propiedades: "Propiedades",
-    negocios: "Negocios",
-    profesionales: "Profesionales",
-    eventos: "Eventos",
-    ariaLabel: "Secciones del feed",
+  /**
+   * FILA DE MÓDULOS que encabeza el feed (pedido del cliente 2026-08-12: los
+   * tabs de texto pasaron a ser círculos con el ícono del módulo y el nombre
+   * debajo). Los nombres de cada círculo NO viven acá: salen del registro de
+   * módulos (shell/modules.ts), que es el mismo que nombra el menú y /buscar —
+   * si "Vivienda" cambiara de nombre, tiene que cambiar en los tres lugares a
+   * la vez o deja de ser el mismo lugar.
+   *
+   * Lo que sí vive acá son los nombres de la NAVEGACIÓN en sí, que sólo existen
+   * en esta pantalla.
+   */
+  modules: {
+    ariaLabel: "Módulos de tu comunidad",
+    /**
+     * Los dos grupos de la fila. Es la diferencia que el hairline dibuja para
+     * quien ve, dicha en palabras para quien escucha: los primeros círculos
+     * cambian lo que se ve ACÁ; los de después te llevan a otra sección.
+     */
+    filtersLabel: "Filtrar el feed",
+    sectionsLabel: "Otras secciones",
+    /**
+     * El feed sin filtrar.
+     *
+     * Se llamó "Comunidad" un rato, por la palabra que el cliente anotó en la
+     * captura — hasta que "Comunidad" pasó a ser un MÓDULO propio (perdido y
+     * encontrado, clínicas, consulados). Dos círculos vecinos con el mismo
+     * nombre y destinos distintos es peor que un nombre imperfecto: quien
+     * busque el consulado va a tocar el que filtra el feed y no va a entender
+     * por qué no encuentra nada.
+     *
+     * "Todo" nombra exactamente lo que hace —el feed SIN filtrar, al lado de
+     * "Vivienda" y "Eventos", que sí filtran— y no compite con ningún módulo.
+     */
+    paraTi: "Todo",
   },
 
   composer: {

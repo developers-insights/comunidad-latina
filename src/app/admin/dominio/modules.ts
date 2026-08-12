@@ -37,7 +37,8 @@ export type ModuleKey =
   | "mensajes"
   | "marketplace"
   | "creadores"
-  | "videos";
+  | "videos"
+  | "comunidad";
 
 export const MODULE_KEYS = [
   "feed",
@@ -50,6 +51,7 @@ export const MODULE_KEYS = [
   "marketplace",
   "creadores",
   "videos",
+  "comunidad",
 ] as const satisfies readonly ModuleKey[];
 
 /**

@@ -74,6 +74,11 @@ const MODULES: { key: string; label: string; hint: string; fijo?: string }[] = [
   { key: "marketplace", label: "Marketplace", hint: "Productos de las tiendas de la comunidad" },
   { key: "creadores", label: "Creadores", hint: "Trabajos, contratos y portfolios de creadores" },
   { key: "videos", label: "Videos", hint: "Videos cortos de la comunidad" },
+  {
+    key: "comunidad",
+    label: "Comunidad",
+    hint: "Perdido y encontrado, clínicas, bancos de comida y consulados",
+  },
 ];
 
 const OPTIONS: { value: ModuleState; label: string; hint: string }[] = [

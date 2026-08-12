@@ -50,6 +50,7 @@ const ALL_KEYS = [
   "marketplace",
   "creadores",
   "videos",
+  "comunidad",
 ] as const;
 
 interface UpdateCall {
@@ -184,7 +185,7 @@ describe("updateTenantModules", () => {
     expect(payload.modules.marketplace).toBe(false);
     expect(payload.modules_soon.marketplace).toBe(true);
     expect(payload.modules_soon.creadores).toBe(false);
-    // Las 9 claves canónicas viajan siempre: nada queda en estado ambiguo.
+    // Las 10 claves canónicas viajan siempre: nada queda en estado ambiguo.
     expect(Object.keys(payload.modules).sort()).toEqual([...ALL_KEYS].sort());
     expect(Object.keys(payload.modules_soon).sort()).toEqual([...ALL_KEYS].sort());
   });

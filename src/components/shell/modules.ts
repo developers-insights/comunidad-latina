@@ -9,6 +9,7 @@ import {
   Briefcase,
   Buildings,
   CalendarBlank,
+  HandHeart,
   HouseSimple,
   Megaphone,
   Play,
@@ -153,6 +154,24 @@ export const MODULES: ModuleItem[] = [
     label: t("nav", "moduleCreadores"),
     icon: Sparkle,
     palette: accentPalette("var(--accent-creadores)"),
+  },
+  // Comunidad: la sección de información y ayuda mutua — perdido y encontrado,
+  // clínicas sin seguro, bancos de comida, consulados, y las guías que antes
+  // sólo vivían en marketing. Va ÚLTIMA a propósito: es la que menos se usa a
+  // diario y la que más importa el día que se necesita, así que no compite con
+  // las verticales de todos los días pero está siempre a la vista.
+  //
+  // Lleva `moduleKey` aunque la clave todavía no exista en `tenants.modules`
+  // (sin la clave, `moduleAvailability` devuelve "active" y la sección se ve
+  // igual). Está para que el panel pueda ponerla en "Muy pronto": sin ficha,
+  // `ModuleGate` responde 404 en vez de la pantalla que avisa que abre pronto.
+  {
+    href: "/comunidad",
+    moduleKey: "comunidad",
+    image: "/icons/menu/comunidad.webp",
+    label: t("nav", "moduleComunidad"),
+    icon: HandHeart,
+    palette: accentPalette("var(--accent-comunidad)"),
   },
   // Escudo oculto por ahora (pedido cliente 2026-07-20): la feature entera
   // está apagada — sin entry point acá, y la ruta directa también 404.

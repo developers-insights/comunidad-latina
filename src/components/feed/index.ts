@@ -12,7 +12,22 @@ export {
   type ViewerMediaItem,
 } from "./media-viewer";
 export { FeedListingCard } from "./feed-listing-card";
-export { FeedTabs } from "./feed-tabs";
+/**
+ * `FeedModules` (el envoltorio de servidor de la fila) NO se re-exporta acá a
+ * propósito: lee el tenant con `next/headers` y este barril lo importan
+ * componentes de cliente (p. ej. app/(app)/videos/video-reels.tsx), que
+ * reventarían al bundlear código de servidor. Se importa por ruta —
+ * "@/components/feed/feed-modules"— igual que `FeedList` y `PullToRefresh`.
+ */
+export {
+  ModuleCircles,
+  moduleCircles,
+  feedTabHref,
+  ringSpring,
+  type ModuleCircle,
+  type ModuleCircleGroups,
+  type ModuleCirclesProps,
+} from "./module-circles";
 export { GuideCard } from "./guide-card";
 export { PollYesNo, type PollTone, type PollYesNoProps } from "./poll-yes-no";
 export {
