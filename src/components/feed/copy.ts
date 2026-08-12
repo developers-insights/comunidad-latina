@@ -1,4 +1,5 @@
 import { SHORT_VIDEO_LIMIT_MESSAGE } from "@/lib/media/video-policy";
+import { MAX_PHOTOS } from "@/lib/media/post-media-limits";
 
 /**
  * Copy del módulo FEED SOCIAL — español cálido, directo, sin jerga (§5 del
@@ -24,12 +25,21 @@ export const COPY = {
     addPhoto: "Agregar foto",
     addPhotos: "Agregar fotos",
     addMorePhotos: "Sumar otra foto",
+    /** Tile "+" de la grilla (composer premium 2026-08-11): mismo cupo, ahora visible. */
+    addPhotoTile: "Agregar foto",
     changePhoto: "Cambiar foto",
     removePhoto: "Quitar foto",
+    /** Botón sobre la miniatura: abre el editor de filtro y texto de esa foto. */
+    editPhoto: "Editar foto",
     photoTooBig: "Esa foto es muy pesada — probá con una de menos de 5 MB.",
     photoWrongType: "Solo podemos subir fotos (JPG, PNG o WebP).",
-    /** Hasta 4 fotos por publicación (sprint reels 2026-07-21). */
-    photoLimit: "Podés subir hasta 4 fotos por publicación.",
+    /**
+     * Cupo por publicación. El número sale de `MAX_PHOTOS` y no de la mano: el
+     * aviso y el tope real no pueden decir cosas distintas.
+     */
+    photoLimit: `Podés subir hasta ${MAX_PHOTOS} fotos por publicación.`,
+    /** Contador discreto bajo la grilla: "3 de 10 fotos". */
+    photoCount: (count: number, max: number): string => `${count} de ${max} fotos`,
     // Algún medio sigue siendo obligatorio (feed visual, no periódico): si
     // aprietan Publicar sin foto NI video, este aviso cálido los lleva al
     // recuadro en vez de un botón muerto.
@@ -59,6 +69,37 @@ export const COPY = {
     videoUnknownDurationBody:
       "Probá con otro archivo MP4 o WebM. Necesitamos saber cuánto dura para publicarlo.",
     videoMeasuring: "Revisando el video…",
+    /**
+     * HORNEADO (composer premium 2026-08-11): recomprimir + quemar filtro y
+     * texto pasa SIEMPRE que se publica una foto, la haya tocado alguien en
+     * el editor o no — es lo que mantiene liviana una publicación de 10.
+     * `done` empieza en 0 y sube: no es una espera muda, se ve avanzar.
+     */
+    bakingPhotos: (done: number, total: number): string =>
+      `Preparando tus fotos… ${done} de ${total}`,
+    /**
+     * DEMASIADO PARA UNA SOLA PUBLICACIÓN. Con 10 fotos permitidas, un conjunto
+     * puede pasarse de lo que entra en un envío — y si no lo avisamos ANTES, el
+     * servidor corta el request y no se ve nada, o se ve un error que no
+     * significa nada. Se dice en el idioma de la persona: "pesan mucho juntas"
+     * y "sacá algunas", nunca megabytes ni límites de nada. El segundo renglón
+     * existe para que no sienta que pierde las fotos que sacó.
+     */
+    photosTooHeavyTitle: "Estas fotos pesan mucho juntas",
+    photosTooHeavyBody:
+      "Sacá algunas y publicá de nuevo. Las que saques las podés compartir en otra publicación.",
+    /**
+     * UNA foto que no se pudo aliviar (el navegador no pudo procesarla y quedó
+     * tal cual salió de la cámara). Es un problema de ESA foto, así que el
+     * mensaje no puede decir "sacá algunas": lo que hay que hacer es cambiarla.
+     */
+    photoCantShrinkTitle: "Hay una foto que no pudimos preparar",
+    photoCantShrinkBody:
+      "Tu navegador no pudo achicarla. Quitala de la publicación o probá con otra foto.",
+    /** El filtro/texto no se pudo aplicar en este navegador: se publicó igual, sin avisar con silencio. */
+    bakeFallbackTitle: "Alguna foto se publicó sin editar",
+    bakeFallbackBody:
+      "No pudimos aplicarle el filtro o el texto en este navegador, así que salió tal cual — igual se publicó bien.",
     publish: "Publicar",
     publishing: "Publicando…",
     successTitle: "¡Publicado!",
@@ -137,10 +178,14 @@ export const COPY = {
       pollHint: "Tu comunidad responde con un toque y vas viendo los votos.",
       close: "Cerrar",
       publishQuestion: "Publicar pregunta",
-      /** Cupo de fotos y video, visible mientras se arma la publicación. */
-      mediaCount: (photos: number, hasVideo: boolean): string => {
+      /**
+       * Cupo de fotos y video, visible mientras se arma la publicación.
+       * `maxPhotos` viaja para que el "3 de 10" no quede huérfano del tope
+       * real (composer premium 2026-08-11, `MAX_PHOTOS` subió a 10).
+       */
+      mediaCount: (photos: number, hasVideo: boolean, maxPhotos: number): string => {
         const parts: string[] = [];
-        if (photos > 0) parts.push(photos === 1 ? "1 foto" : `${photos} fotos`);
+        if (photos > 0) parts.push(`${photos} de ${maxPhotos} fotos`);
         if (hasVideo) parts.push("1 video");
         return parts.join(" · ");
       },
@@ -172,6 +217,33 @@ export const COPY = {
         /** Abierto: la salida digna se dice adentro, no solo en el selector. */
         intro: "Nada de esto es obligatorio: podés publicar igual.",
       },
+    },
+
+    /**
+     * EDITOR DE FOTO (composer premium 2026-08-11, pedido de Manuel: filtros
+     * + "algún subtítulo a la imagen o algo así como un título"). Se abre al
+     * tocar una miniatura ya elegida — filtro y texto se quedan quemados en
+     * la foto recién al publicar (`bake-photo.ts`); acá sólo se eligen.
+     */
+    photoEditor: {
+      title: "Editar foto",
+      filtersLabel: "Filtros",
+      /** Botón que abre el panel de texto (todavía sin nada escrito). */
+      textButton: "Texto",
+      /** Mismo botón, una vez que ya hay una frase cargada. */
+      textButtonActive: "Editar texto",
+      textareaLabel: "Escribí algo sobre la foto",
+      textareaPlaceholder: "Un título corto, si querés",
+      positionLabel: "Dónde va",
+      positionTop: "Arriba",
+      positionCenter: "Centro",
+      positionBottom: "Abajo",
+      backgroundLabel: "Fondo del texto",
+      backgroundSolid: "Con fondo",
+      backgroundNone: "Sin fondo",
+      removeText: "Quitar texto",
+      cancel: "Cancelar",
+      done: "Listo",
     },
 
     /**

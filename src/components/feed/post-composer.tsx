@@ -24,11 +24,23 @@ import {
   createPostAction,
   prepareMediaUploadAction,
 } from "@/app/(app)/feed/actions";
+import { bakePhoto } from "@/lib/media/bake-photo";
+import { getPhotoFilter } from "@/lib/media/photo-filters";
+/**
+ * CUPO Y PESO DE LAS FOTOS: importados, nunca escritos acá. Este archivo tenía
+ * su propio `MAX_PHOTOS = 10` mientras la server action seguía en 4 — publicar
+ * con fotos estaba roto y ningún test lo veía, porque cada lado se probaba
+ * contra su propio número.
+ */
+import {
+  MAX_PHOTOS,
+  MAX_PICKED_PHOTO_BYTES,
+  checkPhotoPayload,
+} from "@/lib/media/post-media-limits";
 import { ComposerSheet, type ComposerMode } from "./composer-sheet";
+import { DEFAULT_PHOTO_EDIT, type PhotoEdit } from "./photo-editor";
 import { COPY } from "./copy";
 
-const MAX_PHOTOS = 4;
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 60 * 1024 * 1024;
 const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const VIDEO_TYPES: Record<string, string> = {
@@ -60,6 +72,13 @@ interface PickedMedia {
    * que este valor es el contrato entre lo que se subió y lo que se dice.
    */
   durationSeconds?: number;
+  /**
+   * Filtro + texto elegidos en el editor (sólo `kind: "photo"`). Arranca en
+   * `DEFAULT_PHOTO_EDIT` (sin filtro, sin texto) apenas se elige la foto —
+   * así el horneado al publicar siempre tiene algo que leer, se haya abierto
+   * el editor o no.
+   */
+  edit?: PhotoEdit;
 }
 
 export interface PostComposerProps {
@@ -129,6 +148,10 @@ export function PostComposer({
   );
   /** Midiendo la duración del archivo recién elegido (antes de subir nada). */
   const [measuringVideo, setMeasuringVideo] = useState(false);
+  /** Horneado de fotos en curso al publicar (null = no hay ninguno corriendo). */
+  const [bakingProgress, setBakingProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
   const [isPending, startTransition] = useTransition();
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -181,7 +204,7 @@ export function PostComposer({
 
   /**
    * Lee el FileList VIVO del input de fotos de forma SÍNCRONA (gotcha de
-   * arriba) y agrega hasta completar el cupo de 4, validando tipo y peso.
+   * arriba) y agrega hasta completar el cupo de {@link MAX_PHOTOS}, validando tipo y peso.
    * Elegido al menos un archivo, se abre la hoja de texto: la foto y su pie
    * pasan a ser un solo paso.
    */
@@ -205,7 +228,7 @@ export function PostComposer({
         rejectedType = true;
         continue;
       }
-      if (file.size > MAX_PHOTO_BYTES) {
+      if (file.size > MAX_PICKED_PHOTO_BYTES) {
         rejectedSize = true;
         continue;
       }
@@ -214,6 +237,9 @@ export function PostComposer({
         kind: "photo",
         file,
         preview: URL.createObjectURL(file),
+        // Sin filtro, sin texto — pero YA presente: el horneado de abajo lee
+        // este objeto para CADA foto al publicar, la haya editado o no.
+        edit: { ...DEFAULT_PHOTO_EDIT },
       });
       photoCount += 1;
     }
@@ -304,6 +330,13 @@ export function PostComposer({
     });
   }
 
+  /** "Listo" en el editor de foto (`PhotoEditor`): guarda filtro + texto elegidos. */
+  function savePhotoEdit(id: string, edit: PhotoEdit) {
+    setMedia((current) =>
+      current.map((item) => (item.id === id ? { ...item, edit } : item)),
+    );
+  }
+
   /** Abre la hoja de texto cerrando cualquier otra que estuviera arriba. */
   function openCompose(mode: ComposerMode) {
     setMenuOpen(false);
@@ -318,6 +351,7 @@ export function PostComposer({
     // La declaración es de ESTA publicación: arrastrarla a la siguiente pondría
     // una afirmación en boca de alguien que no la hizo sobre otras fotos.
     setDeclaration(EMPTY_DECLARATION_VALUE);
+    setBakingProgress(null);
     setMedia((current) => {
       for (const item of current) URL.revokeObjectURL(item.preview);
       return [];
@@ -426,14 +460,124 @@ export function PostComposer({
         }
       }
 
-      // ---- 2) Fotos + paths por la server action ---------------------------
+      // ---- 2) Hornear cada foto: filtro + texto quemados, SIEMPRE recomprimida
+      // -----------------------------------------------------------------------
+      // `bakePhoto` corre para TODAS las fotos, no sólo las que pasaron por el
+      // editor: es la única forma de garantizar que una publicación de 10 nunca
+      // pese 10 × 5 MB (ver el docblock de bake-photo.ts). Secuencial y no en
+      // paralelo a propósito — así `bakingProgress` avanza foto a foto de verdad
+      // y no le exigimos al hilo principal dibujar 10 canvases a la vez.
+      const photoItems = media.filter(
+        (item): item is PickedMedia & { kind: "photo" } => item.kind === "photo",
+      );
+      let bakeFallbackCount = 0;
+      const bakedByPhotoId = new Map<string, File>();
+      if (photoItems.length > 0) {
+        setBakingProgress({ done: 0, total: photoItems.length });
+        for (const [index, item] of photoItems.entries()) {
+          const edit = item.edit ?? DEFAULT_PHOTO_EDIT;
+          const filter = getPhotoFilter(edit.filterId);
+          const captionText = edit.captionText.trim();
+          const caption = captionText
+            ? {
+                text: captionText,
+                position: edit.captionPosition,
+                background: edit.captionBackground,
+              }
+            : null;
+
+          let fellBack = false;
+          let baked = await bakePhoto(item.file, {
+            filterCss: filter.css,
+            caption,
+            onFallback: () => {
+              fellBack = true;
+            },
+          });
+
+          // SEGUNDO INTENTO, SIN FILTRO. El fallback de `bakePhoto` devuelve el
+          // archivo ORIGINAL — que puede pesar los 5 MB enteros y hacer morir
+          // el envío. La causa más común es un navegador sin `ctx.filter`, y
+          // ahí lo único imposible es el EFECTO: recomprimir se puede igual.
+          // Perder el filtro es aceptable; mandar crudo, no. Si tampoco esto
+          // sale (no se pudo decodificar la imagen), queda el original y la
+          // guarda de peso de abajo lo dice con todas las letras.
+          if (fellBack && filter.css) {
+            baked = await bakePhoto(item.file, {
+              filterCss: "",
+              caption,
+              onFallback: () => {},
+            });
+          }
+          if (fellBack) bakeFallbackCount += 1;
+
+          bakedByPhotoId.set(item.id, baked);
+          setBakingProgress({ done: index + 1, total: photoItems.length });
+        }
+        setBakingProgress(null);
+      }
+
+      // ---- GUARDA DE PESO, ANTES de llamar a la action ---------------------
+      // El body de una server action tiene techo (`serverActions.bodySizeLimit`
+      // en next.config.ts). Pasarse no devuelve un error nuestro: Next corta el
+      // request y la persona se queda mirando un botón que no hizo nada. Acá se
+      // mide lo que REALMENTE se va a mandar —las fotos ya horneadas— con la
+      // MISMA función que corre el servidor. Esto es cortesía para que el aviso
+      // sea legible; la frontera sigue siendo `createPostAction`.
+      const payload = checkPhotoPayload(
+        photoItems.map((item) => (bakedByPhotoId.get(item.id) ?? item.file).size),
+      );
+      if (!payload.ok) {
+        setBakingProgress(null);
+        toast(
+          payload.reason === "photo"
+            ? {
+                title: COPY.composer.photoCantShrinkTitle,
+                description: COPY.composer.photoCantShrinkBody,
+                variant: "warning",
+                duration: 9000,
+              }
+            : payload.reason === "count"
+              ? { title: COPY.composer.photoLimit, variant: "warning" }
+              : {
+                  title: COPY.composer.photosTooHeavyTitle,
+                  description: COPY.composer.photosTooHeavyBody,
+                  variant: "warning",
+                  duration: 9000,
+                },
+        );
+        // El video ya subido queda huérfano si lo había: se limpia igual que en
+        // cualquier otro corte (best-effort, la policy delete lo permite).
+        if (videoPath) {
+          try {
+            await createClient().storage.from("post-media").remove([videoPath]);
+          } catch {
+            // sin drama: el archivo queda en el prefijo propio, no es visible
+          }
+        }
+        return;
+      }
+
+      if (bakeFallbackCount > 0) {
+        // Decorativo, nunca bloqueante: la publicación sigue con la foto tal
+        // cual se eligió — se avisa, no se frena nada.
+        toast({
+          title: COPY.composer.bakeFallbackTitle,
+          description: COPY.composer.bakeFallbackBody,
+          variant: "info",
+        });
+      }
+
+      // ---- 3) Fotos (ya horneadas) + paths por la server action ------------
       const formData = new FormData();
       formData.set("body", trimmed);
       formData.set("kind", isQuestion ? "question" : isText ? "text" : "post");
       // Solo una pregunta puede llevar encuesta; el server lo re-valida igual.
       if (isQuestion && pollEnabled) formData.set("pollKind", "yes_no");
       for (const item of media) {
-        if (item.kind === "photo") formData.append("photos", item.file);
+        if (item.kind === "photo") {
+          formData.append("photos", bakedByPhotoId.get(item.id) ?? item.file);
+        }
       }
       if (videoPath) {
         formData.set("videoPaths", JSON.stringify([videoPath]));
@@ -663,6 +807,8 @@ export function PostComposer({
         onAddPhotos={() => photoInputRef.current?.click()}
         onAddVideo={() => videoInputRef.current?.click()}
         onRemoveMedia={removeMedia}
+        maxPhotos={MAX_PHOTOS}
+        onSavePhotoEdit={savePhotoEdit}
         pollEnabled={pollEnabled}
         onPollChange={setPollEnabled}
         videoCategory={videoCategory}
@@ -672,8 +818,13 @@ export function PostComposer({
         previewId={previewId}
         uploadPct={uploadPct}
         measuringVideo={measuringVideo}
+        bakingProgress={bakingProgress}
         isPending={isPending}
         onPublish={submit}
+        // Las ranuras de "Etiquetar personas" y "Agregar música" quedan SIN
+        // pasar a propósito: este composer no monta ningún frente todavía —
+        // el día que exista, se enchufa acá con `tagSlot={<Algo />}` /
+        // `musicSlot={<Otro />}`, sin tocar composer-sheet.tsx.
       />
     </div>
   );

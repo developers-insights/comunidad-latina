@@ -6,10 +6,12 @@ import { Eye, Heart, SpeakerHigh, SpeakerSlash } from "@phosphor-icons/react/dis
 import { usePrefersReducedMotion } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { isPreviewTruncated, playbackCapSeconds } from "@/lib/media/video-policy";
+import { clampStartSeconds, clipEndSeconds } from "@/lib/media/audio-track";
+import { clipGain, musicTimeFor, resolveAudioMix } from "@/lib/media/audio-mix";
 import { VIDEOS_COPY } from "@/app/(app)/videos/copy";
 import { useCardLike } from "./card-like-context";
 import { COPY } from "./copy";
-import type { VideoScopeProp } from "./helpers";
+import type { PostMusicView, VideoScopeProp } from "./helpers";
 import styles from "./card-post-media.module.css";
 
 /** Umbral de visibilidad para autoplay (pedido cliente: "cuando se ve el 60%"). */
@@ -42,10 +44,14 @@ export const NO_REEL_SCOPE = "sin-reel";
  * `play()` puede devolver una promesa rechazada (política de autoplay) o
  * directamente `undefined` (navegadores viejos, jsdom): encadenar `.catch()`
  * a ciegas tiraba un TypeError. Mismo helper que usa el visor.
+ *
+ * `HTMLMediaElement` y no `HTMLVideoElement`: desde 0061 este helper también
+ * arranca el `<audio>` de la música — mismo método, misma promesa opcional,
+ * en las dos clases que lo implementan.
  */
-function safePlay(video: HTMLVideoElement) {
+function safePlay(media: HTMLMediaElement) {
   try {
-    const result = video.play() as Promise<void> | undefined;
+    const result = media.play() as Promise<void> | undefined;
     result?.catch(() => undefined);
   } catch {
     // El navegador rechazó la reproducción: no hay nada que hacer ni que avisar.
@@ -78,6 +84,13 @@ export interface CardVideoProps {
    */
   onTap?: () => void;
   className?: string;
+  /**
+   * Pista asociada al POST (0090). null = sin música → el video se comporta
+   * exactamente como antes (manda su propio audio). Con música, gana la
+   * música: ver `resolveAudioMix` (audio-mix.ts), el árbitro único de qué
+   * suena y cuándo.
+   */
+  music?: PostMusicView | null;
 }
 
 /** Segundos que la TARJETA reproduce. El completo se abre desde la publicación. */
@@ -112,29 +125,67 @@ export function CardVideo({
   active = true,
   onTap,
   className,
+  music = null,
 }: CardVideoProps) {
   const router = useRouter();
   const reduce = usePrefersReducedMotion();
   const like = useCardLike();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const delayRef = useRef<number | null>(null);
   const tapTimer = useRef<number | null>(null);
-  const [muted, setMuted] = useState(true);
+  /** Segundo del RECORTE (post_music.start_seconds) desde el que arranca la vuelta actual. */
+  const musicClipStartRef = useRef(0);
+  /** El GESTO de la persona: pidió sonido o no. Nunca se infiere de nada más. */
+  const [soundOn, setSoundOn] = useState(false);
   const [bursts, setBursts] = useState(0);
   /** Duración MEDIDA del archivo (metadata), no la declarada. null = todavía no. */
   const [measuredSeconds, setMeasuredSeconds] = useState<number | null>(null);
   const isPreview = isPreviewTruncated(measuredSeconds);
 
+  const hasMusic = Boolean(music);
+  /**
+   * `videoHasSound` va en `true` a propósito: no hay forma de saber si el
+   * archivo trae pista de audio sin decodificarlo, y el botón de sonido YA
+   * estaba disponible para todo video antes de esta feature. El árbitro
+   * (audio-mix.ts) sigue siendo la única fuente de qué suena de verdad — acá
+   * sólo se le da el dato más conservador que se tiene.
+   */
+  const mix = resolveAudioMix({ hasMusic, videoHasSound: true, soundOn });
+  const muted = mix.source === "silent";
+
   // Dejar de ser el medio activo (el usuario pasó a la foto siguiente del
   // carrusel) pausa YA, sin esperar a que el observer note que salió de vista.
+  // La música es del post: pausa junto con el video, nunca sigue sola.
   useEffect(() => {
     if (active) return;
-    const node = videoRef.current;
-    node?.pause();
+    videoRef.current?.pause();
+    audioRef.current?.pause();
   }, [active]);
 
+  // El `<video muted>` es un atributo DOM que no se controla vía JSX (se pisa
+  // a mano, igual que antes): acá se refleja lo que decide el árbitro cada vez
+  // que el gesto de sonido cambia. Al desmutear también se retoma la
+  // reproducción — mismo comportamiento que el toggle de siempre.
   useEffect(() => {
-    // Reduced-motion: no autoplay. El video queda pausado (primer frame).
+    const node = videoRef.current;
+    if (!node) return;
+    node.muted = mix.videoMuted;
+    if (!mix.videoMuted) safePlay(node);
+  }, [mix.videoMuted]);
+
+  // Mismo trato para la música: mutear/desmutear el `<audio>` y retomarla al
+  // desmutear. Si no hay pista, `audioRef.current` es null (no se monta el
+  // elemento) y esto no hace nada.
+  useEffect(() => {
+    const node = audioRef.current;
+    if (!node) return;
+    node.muted = mix.musicMuted;
+    if (!mix.musicMuted) safePlay(node);
+  }, [mix.musicMuted]);
+
+  useEffect(() => {
+    // Reduced-motion: no autoplay. El video (y la música) quedan pausados.
     if (reduce) return;
     // Fuera de la diapositiva visible no se arranca nada: dos videos del mismo
     // post no pueden sonar juntos.
@@ -160,11 +211,17 @@ export function CardVideo({
                 delayRef.current = null;
                 // Autoplay muted: si el navegador igual lo bloquea, no pasa nada.
                 safePlay(node);
+                // La música acompaña el mismo ciclo de vida que el video: sale
+                // de pantalla, se calla; vuelve a entrar, retoma (en silencio,
+                // como el video, hasta que la persona toque el altavoz).
+                const audioNode = audioRef.current;
+                if (audioNode) safePlay(audioNode);
               }, AUTOPLAY_DELAY_MS);
             }
           } else {
             clearDelay();
             node.pause();
+            audioRef.current?.pause();
           }
         }
       },
@@ -186,15 +243,33 @@ export function CardVideo({
     [],
   );
 
-  function toggleMute(event: React.MouseEvent) {
+  /**
+   * El único gesto de sonido de la card: no decide DIRECTAMENTE qué mutear —
+   * sólo cambia el pedido de la persona. El árbitro (`mix`, arriba) es quien
+   * traduce ese pedido en video mudo / música sonando / video sonando, y los
+   * dos efectos de arriba son los que aplican esa traducción al DOM.
+   */
+  function toggleSound(event: React.MouseEvent) {
     event.stopPropagation(); // el toque en el ícono NO abre el visor
-    const node = videoRef.current;
-    if (!node) return;
-    const next = !node.muted;
-    node.muted = next;
-    setMuted(next);
-    // Al activar el sonido, asegurar que esté corriendo (si estaba pausado).
-    if (!next) safePlay(node);
+    setSoundOn((current) => !current);
+  }
+
+  /**
+   * El recorte se repite y se desvanece en las puntas — MISMO patrón que la
+   * vista previa del picker (`music-picker.tsx:handleTimeUpdate`): el propio
+   * `timeupdate` del `<audio>` dispara el loop, sin un `setInterval` propio
+   * que sobreviva a la card.
+   */
+  function handleMusicTimeUpdate() {
+    const node = audioRef.current;
+    if (!node || !music) return;
+    const start = musicClipStartRef.current;
+    const end = clipEndSeconds(start, music.track.durationSeconds);
+    const elapsed = node.currentTime - start;
+    node.volume = clipGain(elapsed, Math.max(0, end - start));
+    if (node.currentTime >= end) {
+      node.currentTime = musicTimeFor(start, 0, music.track.durationSeconds);
+    }
   }
 
   function openVideos() {
@@ -255,6 +330,25 @@ export function CardVideo({
         }}
       />
 
+      {/* Hermano del video, no mezclado en el archivo (ver audio-mix.ts):
+          suena SINCRONIZADO por encima, nunca los dos a la vez con el video
+          (eso lo garantiza `mix`, arriba). `preload="none"`: un feed lleno de
+          videos con música no puede bajar 40 archivos de audio de arriba. */}
+      {music && (
+        <audio
+          ref={audioRef}
+          src={music.track.previewUrl}
+          preload="none"
+          muted
+          onLoadedMetadata={(event) => {
+            const start = clampStartSeconds(music.startSeconds, music.track.durationSeconds);
+            musicClipStartRef.current = start;
+            event.currentTarget.currentTime = start;
+          }}
+          onTimeUpdate={handleMusicTimeUpdate}
+        />
+      )}
+
       {/* Capa de toque: simple = reel a pantalla completa, doble = me gusta. */}
       <button
         type="button"
@@ -308,22 +402,26 @@ export function CardVideo({
         </span>
       )}
 
-      {/* Sonido: 44px de área táctil aunque el círculo sea de 36px. No navega. */}
-      <button
-        type="button"
-        onClick={toggleMute}
-        tabIndex={active ? 0 : -1}
-        aria-label={muted ? COPY.post.unmuteVideo : COPY.post.muteVideo}
-        className="absolute bottom-2 right-2 grid min-h-11 min-w-11 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-      >
-        <span className="grid size-9 place-items-center rounded-full bg-media-shade/60 text-on-media backdrop-blur-sm transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-90">
-          {muted ? (
-            <SpeakerSlash size={18} weight="fill" aria-hidden="true" />
-          ) : (
-            <SpeakerHigh size={18} weight="fill" aria-hidden="true" />
-          )}
-        </span>
-      </button>
+      {/* Sonido: 44px de área táctil aunque el círculo sea de 36px. No navega.
+          Oculto cuando no hay NADA que sonar (`!mix.canToggleSound`): un
+          altavoz que no hace nada es peor que no tenerlo. */}
+      {mix.canToggleSound && (
+        <button
+          type="button"
+          onClick={toggleSound}
+          tabIndex={active ? 0 : -1}
+          aria-label={muted ? COPY.post.unmuteVideo : COPY.post.muteVideo}
+          className="absolute bottom-2 right-2 grid min-h-11 min-w-11 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+        >
+          <span className="grid size-9 place-items-center rounded-full bg-media-shade/60 text-on-media backdrop-blur-sm transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-90">
+            {muted ? (
+              <SpeakerSlash size={18} weight="fill" aria-hidden="true" />
+            ) : (
+              <SpeakerHigh size={18} weight="fill" aria-hidden="true" />
+            )}
+          </span>
+        </button>
+      )}
     </div>
   );
 }

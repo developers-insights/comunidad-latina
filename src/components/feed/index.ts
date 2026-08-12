@@ -41,6 +41,7 @@ export {
   type PostEntityView,
   type PostMediaKind,
   type PostMediaView,
+  type PostMusicView,
   type PostPollView,
 } from "./helpers";
 export { PostActions, type PostActionsProps } from "./post-actions";

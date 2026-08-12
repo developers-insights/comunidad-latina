@@ -10,6 +10,7 @@ import {
   Buildings,
   CalendarBlank,
   HouseSimple,
+  Megaphone,
   Play,
   ShoppingBagOpen,
   Sparkle,
@@ -161,17 +162,52 @@ export const MODULES: ModuleItem[] = [
 ];
 
 /**
+ * Boost — OCTAVA sección de /buscar (pedido Manuel, 2026-08-11), separada a
+ * propósito de `MODULES`:
+ *
+ *  · `MODULES` es el catálogo de VERTICALES de contenido — cada entrada es un
+ *    tipo de aviso que alguien publica y otra persona navega. Boost no es una
+ *    vertical, es una COMPRA (pagar para que un aviso o un post lleguen a más
+ *    gente); meterlo en `MODULES` lo mezclaría con superficies que sí esperan
+ *    "una categoría por tipo de contenido" (p. ej. la burbuja "Publicá tu…" de
+ *    cada listado) y no corresponde ofrecer "Publicá tu Boost" ahí.
+ *  · Por eso mismo NO lleva `moduleKey`: el panel (/admin/dominio) apaga
+ *    VERTICALES ("no vamos a abrir el Creator Marketplace todavía"), pero
+ *    ningún tenant pide poder ocultar la forma de pagarle a la plataforma —
+ *    es infraestructura de monetización, igual de siempre-activa que
+ *    `mensajes` o `feed` (ver `ALWAYS_ON_MODULE_KEYS` en ./module-access).
+ *
+ * El acento sale de `--color-sponsored` (el mismo dorado del chip/anillo de
+ * contenido patrocinado en toda la app — ver card-ad-chip.tsx y los listados
+ * con `ring-sponsored`), no de un `--accent-*` de vertical: dorado es el color
+ * fijo de "esto es plata", no de una categoría.
+ */
+export const BOOST_MODULE: ModuleItem = {
+  href: "/impulsar",
+  // Sin `image`: no hay ícono 3D propio (set Meshy) para Boost todavía. El
+  // Phosphor `Megaphone` de abajo es el fallback normal — `ModuleBubble` ya
+  // resuelve el caso sin `image` (chip con el ícono plano, mismo layout).
+  label: t("nav", "moduleBoost"),
+  icon: Megaphone,
+  palette: accentPalette("var(--color-sponsored)"),
+};
+
+/**
  * Los módulos que /buscar ofrece como CATEGORÍAS.
  *
- * Es MODULES menos los que ya son una pestaña del bottom nav: Inicio y Videos
+ * Es MODULES menos los que ya son una pestaña del bottom nav (Inicio y Videos
  * están a un toque desde cualquier pantalla, y repetirlos en Buscar le enseña
- * a la gente que hay dos caminos para lo mismo. Lo que queda son las siete
- * secciones de listado — exactamente las siete que llevan la burbuja
- * "Publicá tu…", así que Buscar y los listados se explican entre sí.
+ * a la gente que hay dos caminos para lo mismo) MÁS Boost al final. Las
+ * primeras siete son las secciones de listado — las mismas que llevan la
+ * burbuja "Publicá tu…", así que Buscar y los listados se explican entre sí.
+ * Boost va OCTAVA y última a propósito: es la salida de "ya publiqué, ahora
+ * quiero que se vea más", no una categoría más para navegar — cierra la
+ * grilla en vez de mezclarse entre las verticales de contenido.
  */
-export const BROWSE_MODULES: ModuleItem[] = MODULES.filter(
-  (item) => item.href !== "/feed" && item.href !== "/videos",
-);
+export const BROWSE_MODULES: ModuleItem[] = [
+  ...MODULES.filter((item) => item.href !== "/feed" && item.href !== "/videos"),
+  BOOST_MODULE,
+];
 
 /**
  * ¿La ruta actual activa este módulo? Pura y testeada aparte.

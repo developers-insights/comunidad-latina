@@ -21,6 +21,7 @@ import { PostCaption } from "./post-caption";
 import { PostActions } from "./post-actions";
 import { QuestionBanner } from "./question-banner";
 import { TextBanner } from "./text-banner";
+import { TaggedPeople } from "./tagged-people";
 import {
   entityAccentVar,
   entityHref,
@@ -285,6 +286,13 @@ export function PostCard({
               <p className="text-xs text-foreground-muted">{post.timeAgoLabel}</p>
             )}
 
+            {/* "con Ana y 2 más" (0060). Va acá y no bajo el cuerpo porque
+                pertenece a la CABECERA: es parte de quién está en la
+                publicación, no de lo que dice. Sirve igual para las dos
+                cabeceras (persona y entidad). Sin etiquetas no pinta nada
+                — ni la línea ni el separador. */}
+            <TaggedPeople postId={post.id} people={post.taggedPeople} viewerId={viewerId} />
+
             {body}
           </div>
 
@@ -315,6 +323,7 @@ export function PostCard({
               videoScope={videoScope}
               viewCount={post.viewCount}
               ctaWhatsapp={post.ctaWhatsapp}
+              music={post.music}
             />
           )}
 

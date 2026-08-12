@@ -76,7 +76,7 @@ export const DEFAULT_TENANTS: Record<string, Tenant> = {
   dominicanos: {
     id: "00000000-0000-4000-8000-000000000001", // placeholder — el id real lo da la DB
     slug: "dominicanos",
-    name: "Dominicanos",
+    name: "Comunidad Latina",
     brandHex: "#1A5EDB",
     logoUrl: null,
     locale: "es-US",

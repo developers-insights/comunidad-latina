@@ -352,6 +352,51 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: Array<string>(4).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
+  // Música de una publicación, a la vista (0090): la píldora "♪ Título ·
+  // Artista" (y, si la licencia lo exige, la línea de atribución debajo) flota
+  // sobre la foto/video, así que escribe tinta on-media — mismo problema que
+  // el contador del carrusel. Ya trae su propio cl-print-fill en las DOS
+  // píldoras (no una: la de atribución es opcional y necesita el mismo
+  // relleno impreso que la principal).
+  "src/components/feed/music-badge.tsx": {
+    inks: ["text-on-media", "text-on-media"],
+    cobertura: "cl-print-fill",
+  },
+  // Elegir música para una publicación (0090): la fila ya elegida es un
+  // <button> que abre la hoja para cambiarla — el ícono de nota vive en tinta
+  // de tema (`text-brand-ink`, fuera de este inventario), pero el círculo de
+  // Reproducir/Pausar de cada fila DENTRO de la hoja es la MISMA tinta que el
+  // resto de los controles-pastilla del sistema (`bg-brand text-brand-foreground`
+  // cuando está sonando), y también es un <button>. La hoja entera además
+  // lleva `cl-print-hide` (no hace falta: el botón ya alcanza).
+  "src/components/feed/music-picker.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "control",
+  },
+  // Etiquetar personas — el selector (migración 0089): la marca de
+  // seleccionado/no-seleccionado de cada resultado es un <span aria-hidden>
+  // DENTRO de `PersonRow`, que es un <button>. El @media print ya lo esconde.
+  "src/components/feed/people-tagger.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "control",
+  },
+  // Editor de foto del composer rápido (§2/§3 filtros y texto, feedback
+  // cliente 2026-07-27): la vista previa en vivo del texto que se va a QUEMAR
+  // sobre la foto (`PhotoCaptionOverlay`) escribe tinta on-media sobre un velo
+  // — la misma pieza que la miniatura de la grilla en composer-sheet.tsx. NO
+  // es un <button>, así que la cobertura no es "control": `PhotoEditor` sólo
+  // se monta DENTRO del `BottomSheet` de `ComposerSheet` (reemplaza su
+  // contenido cuando se edita una foto — ver el docblock de este archivo), y
+  // ese panel entero ya lleva `cl-print-hide` (es la hoja donde se COMPONE una
+  // publicación: en papel no existe). La prueba apunta ahí, no acá.
+  "src/components/feed/photo-editor.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-hide",
+    prueba: {
+      archivo: "src/components/feed/composer-sheet.tsx",
+      contiene: ["cl-print-hide"],
+    },
+  },
   // Carrusel de medios (2026-07-27). Dos tintas, dos mecanismos:
   //  · el contador "7/12" del indicador se apoya en un velo (bg-media-scrim):
   //    sin ese relleno impreso queda en 1.00:1. El hook va en el CONTENEDOR del
@@ -515,6 +560,14 @@ const INVENTARIO: Record<string, Entrada> = {
   "src/app/(app)/ajustes/page.tsx": {
     inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",
+  },
+  // Fila "Quién puede etiquetarte" de Ajustes › Privacidad (migración 0089): el
+  // tilde de la opción activa vive dentro de un <button role="radio">, que el
+  // @media print ya esconde — mismo criterio que el resto de los radios/chips
+  // de este archivo.
+  "src/app/(app)/ajustes/privacidad/tag-policy-row.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "control",
   },
   // Pestañas de /notificaciones (2026-07-30): el contador de la pestaña activa
   // es la MISMA tinta que el badge de /ajustes, con el mismo problema y la misma

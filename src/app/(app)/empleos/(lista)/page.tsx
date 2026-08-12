@@ -4,11 +4,9 @@ import {
   CaretDown,
   CaretRight,
   ClipboardText,
-  Megaphone,
   Plus,
 } from "@phosphor-icons/react/dist/ssr";
 import {
-  Chip,
   EmptyState,
   SectionCta,
   SectionHeading,
@@ -29,17 +27,6 @@ import { fetchJobsPage } from "../queries";
 export const metadata = { title: "Empleos" };
 
 const C = COPY.list;
-
-/**
- * TODO(integración): el ideal es sumar `searchJobsLabel`/`searchJobsPlaceholder`
- * a `src/lib/i18n/es/sections.ts`, siguiendo el patrón ya usado por
- * `searchBusinessLabel`/`searchBusinessPlaceholder` (negocios) y
- * `searchEventsLabel`/`searchEventsPlaceholder` (eventos). Ese archivo es del
- * kit de búsqueda compartido — fuera del alcance de este frente (solo USO) —
- * así que el copy queda acá, local, hasta que alguien con ese archivo lo mueva.
- */
-const SEARCH_JOBS_LABEL = "Buscar empleos";
-const SEARCH_JOBS_PLACEHOLDER = "Buscá un empleo…";
 
 /** Acento + ícono 3D de la sección (los mismos del menú y de /buscar). */
 const SECCION = {
@@ -96,11 +83,13 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
   const { items, nextCursor } = await fetchJobsPage({
     tenantId: tenant.id,
     employmentType: filters.tipo || null,
+    q: filters.q || null,
     cursor: filters.cursor || null,
   });
 
   const nextParams = new URLSearchParams();
   if (filters.tipo) nextParams.set("tipo", filters.tipo);
+  if (filters.q) nextParams.set("q", filters.q);
   if (nextCursor) nextParams.set("cursor", nextCursor);
 
   return (
@@ -141,13 +130,22 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
         <CaretRight size={14} weight="bold" aria-hidden="true" className="ml-auto" />
       </Link>
 
+      {/* Buscador ARRIBA de los chips de jornada, mismo orden que /eventos y
+          /negocios: se busca DENTRO de lo que ya está filtrado por `tipo`, así
+          que acá no se resetea nada más que el cursor (lo hace el componente). */}
+      <ModuleSearchBar
+        label={t("sections", "searchJobsLabel")}
+        placeholder={t("sections", "searchJobsPlaceholder")}
+        className="mb-3"
+      />
+
       <EmploymentTypeChips className="mb-5" />
 
       {items.length === 0 ? (
         <EmptyState
           illustration="/images/empty-state-search.png"
-          title={filters.tipo ? C.emptyFilteredTitle : C.emptyTitle}
-          message={filters.tipo ? C.emptyFilteredMessage : C.emptyMessage}
+          title={filters.tipo || filters.q ? C.emptyFilteredTitle : C.emptyTitle}
+          message={filters.tipo || filters.q ? C.emptyFilteredMessage : C.emptyMessage}
           action={
             <Link
               href="/empleos/publicar"

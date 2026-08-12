@@ -14,6 +14,11 @@ import {
   type DurationRejection,
 } from "@/lib/media/video-policy";
 import {
+  MAX_PHOTOS,
+  MAX_VIDEOS,
+  checkPhotoPayload,
+} from "@/lib/media/post-media-limits";
+import {
   TIER_HUMAN,
   TIER_REVIEW,
   enqueueModeration,
@@ -104,9 +109,14 @@ const PHOTO_TYPES: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
 };
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
-const MAX_PHOTOS = 10;
-const MAX_VIDEOS = 1;
+/**
+ * El CUPO y el PESO de las fotos NO se escriben acá: viven en
+ * `@/lib/media/post-media-limits`, que es el mismo módulo que importa el
+ * composer. Estuvieron duplicados (10 en el cliente, 4 acá) y publicar con
+ * fotos quedó roto; que sea un solo lugar es lo que impide que vuelva a pasar.
+ * `checkPhotoPayload` es la regla completa —cupo, techo por archivo y techo del
+ * conjunto—: acá corre sobre lo que REALMENTE llegó, que es lo único que vale.
+ */
 
 /**
  * Path de video en post-media que este server ACEPTA en posts.media:
@@ -246,18 +256,22 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // ignora (no se confía en el cliente ni para esto).
   const pollKind = kind === "question" ? (parsed.data.pollKind ?? null) : null;
 
-  // Fotos: hasta MAX_PHOTOS por publicación (10 desde el composer premium
-  // 2026-08-11; eran 4 en el sprint reels 2026-07-21). Se acepta el
-  // campo legado `photo` (singular) por si un cliente viejo sigue en vuelo.
+  // Fotos: hasta `MAX_PHOTOS` por publicación (2026-08-11, antes 4). Se acepta
+  // el campo legado `photo` (singular) por si un cliente viejo sigue en vuelo.
   const photoEntries = [...formData.getAll("photos"), formData.get("photo")];
   const photos = photoEntries.filter(
     (entry): entry is File => entry instanceof File && entry.size > 0,
   );
-  if (photos.length > MAX_PHOTOS) return { ok: false, code: "photo" };
+  // Cupo + peso (por archivo y del conjunto) con la MISMA función que corre el
+  // navegador antes de mandar. Allá es cortesía —para que el aviso sea legible—
+  // y acá es la frontera: el cliente no es confiable. Corre ANTES del guard, de
+  // la moderación y de Storage: un payload que no se puede publicar no gasta
+  // plata ajena.
+  if (!checkPhotoPayload(photos.map((photo) => photo.size)).ok) {
+    return { ok: false, code: "photo" };
+  }
   for (const photo of photos) {
-    if (!PHOTO_TYPES[photo.type] || photo.size > MAX_PHOTO_BYTES) {
-      return { ok: false, code: "photo" };
-    }
+    if (!PHOTO_TYPES[photo.type]) return { ok: false, code: "photo" };
   }
 
   // Video: el navegador ya lo subió DIRECTO a post-media (la policy 0025 validó
@@ -437,7 +451,8 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // ---- Subida de fotos: bucket post-media con el CLIENTE DEL USUARIO (0025).
   // La policy post_media_insert exige path {tenant_id}/{user_id}/… — ya no hace
   // falta el admin client (terminó el desvío histórico a listing-photos).
-  // Secuencial a propósito: son ≤4 archivos chicos y así el primer fallo corta
+  // Secuencial a propósito: el conjunto entero ya está acotado por
+  // `checkPhotoPayload` y así el primer fallo corta
   // sin dejar una ráfaga de huérfanos.
   const photoPaths: string[] = [];
   // Los bytes se guardan para Content Integrity: el SHA-256 y la huella

@@ -23,10 +23,19 @@ import { ToastProvider } from "@/components/ui";
  * flujo de la UI, no la subida real.
  */
 
-const { createPostAction, prepareMediaUploadAction } = vi.hoisted(() => ({
+const { createPostAction, prepareMediaUploadAction, bakePhoto } = vi.hoisted(() => ({
   createPostAction: vi.fn(),
   prepareMediaUploadAction: vi.fn(),
+  // Por default, "hornea" devolviendo el mismo File que recibió — los tests
+  // que necesitan distinguir el archivo horneado del original lo sobrescriben.
+  bakePhoto: vi.fn(async (file: File) => file),
 }));
+
+// El horneado real usa canvas (no existe en jsdom) — se stubea acá, igual que
+// las server actions. Los tests de este archivo verifican QUÉ se manda al
+// publicar (el archivo que devuelve `bakePhoto`), no CÓMO se dibuja el canvas
+// (eso lo cubre bake-photo.test.ts, si existe, contra el módulo real).
+vi.mock("@/lib/media/bake-photo", () => ({ bakePhoto }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -144,6 +153,8 @@ afterEach(() => {
   cleanup();
   createPostAction.mockReset();
   prepareMediaUploadAction.mockReset();
+  bakePhoto.mockReset();
+  bakePhoto.mockImplementation(async (file: File) => file);
 });
 
 describe("PostComposer — un solo elemento en reposo", () => {
@@ -444,5 +455,197 @@ describe("PostComposer — el tope de publicaciones se explica como lo que es", 
 
     expect(await screen.findByText(COPY.composer.errorTitle)).toBeTruthy();
     expect(screen.queryByText(COPY.composer.rateLimitedTitle)).toBeNull();
+  });
+});
+
+describe("PostComposer — composer premium (más fotos + horneado al publicar)", () => {
+  function pickPhoto(name = "feria.jpg") {
+    const input = document.getElementById("post-composer-photos") as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], name, { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [file] } });
+  }
+
+  it("el cupo subió a 10: la foto número 11 se rechaza con el aviso correcto", async () => {
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+
+    const input = document.getElementById("post-composer-photos") as HTMLInputElement;
+    const files = Array.from(
+      { length: 11 },
+      (_, index) => new File([new Uint8Array([index])], `foto-${index}.jpg`, { type: "image/jpeg" }),
+    );
+    fireEvent.change(input, { target: { files } });
+
+    expect(await screen.findByText(COPY.composer.photoLimit)).toBeTruthy();
+    expect(screen.getByText("10 de 10 fotos")).toBeTruthy();
+  });
+
+  it("publicar manda el archivo HORNEADO (bakePhoto), no el original", async () => {
+    const baked = new File([new Uint8Array([9, 9, 9])], "horneada.jpg", { type: "image/jpeg" });
+    bakePhoto.mockResolvedValue(baked);
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+    pickPhoto();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) }),
+    );
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    expect(bakePhoto).toHaveBeenCalledTimes(1);
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    const sentPhoto = sent.getAll("photos")[0] as File;
+    expect(sentPhoto.name).toBe("horneada.jpg");
+  });
+
+  it("hornea TODAS las fotos, no sólo las que pasaron por el editor", async () => {
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+
+    const input = document.getElementById("post-composer-photos") as HTMLInputElement;
+    const files = [
+      new File([new Uint8Array([1])], "a.jpg", { type: "image/jpeg" }),
+      new File([new Uint8Array([2])], "b.jpg", { type: "image/jpeg" }),
+      new File([new Uint8Array([3])], "c.jpg", { type: "image/jpeg" }),
+    ];
+    fireEvent.change(input, { target: { files } });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) }),
+    );
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    // Ninguna se tocó en el editor y aun así las 3 pasaron por bakePhoto —
+    // es la recompresión SIEMPRE, no un efecto opt-in.
+    expect(bakePhoto).toHaveBeenCalledTimes(3);
+  });
+
+  /**
+   * EL FRENO QUE FALTABA (2026-08-11). Con 10 fotos permitidas, una publicación
+   * puede pasarse del tamaño que la server action acepta. Si no lo miramos
+   * ANTES de llamarla, Next corta el request y la persona ve un error opaco —o
+   * nada. El servidor valida igual (`checkPhotoPayload`): esto es cortesía, no
+   * seguridad.
+   */
+  function pickPhotos(count: number) {
+    const input = document.getElementById("post-composer-photos") as HTMLInputElement;
+    const files = Array.from(
+      { length: count },
+      (_, index) => new File([new Uint8Array([index])], `foto-${index}.jpg`, { type: "image/jpeg" }),
+    );
+    fireEvent.change(input, { target: { files } });
+  }
+
+  it("si las fotos horneadas se pasan del total, avisa claro y NO llama a la action", async () => {
+    // Cada una entra sola; el problema son las diez juntas.
+    bakePhoto.mockImplementation(async () =>
+      new File([new Uint8Array(1_100_000)], "horneada.jpg", { type: "image/jpeg" }),
+    );
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+    pickPhotos(10);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) }),
+    );
+
+    expect(await screen.findByText(COPY.composer.photosTooHeavyTitle)).toBeTruthy();
+    expect(screen.getByText(COPY.composer.photosTooHeavyBody)).toBeTruthy();
+    expect(createPostAction).not.toHaveBeenCalled();
+  });
+
+  it("si UNA foto no se pudo achicar, lo dice por esa foto y no manda nada", async () => {
+    bakePhoto.mockImplementation(async () =>
+      new File([new Uint8Array(4_000_000)], "sin-achicar.jpg", { type: "image/jpeg" }),
+    );
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+    pickPhoto();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) }),
+    );
+
+    expect(await screen.findByText(COPY.composer.photoCantShrinkTitle)).toBeTruthy();
+    expect(createPostAction).not.toHaveBeenCalled();
+  });
+
+  it("si el filtro no se pudo aplicar, reintenta SIN filtro antes de mandar el crudo", async () => {
+    // El fallback de `bakePhoto` devuelve el archivo ORIGINAL: en un navegador
+    // sin `ctx.filter` eso significaba mandar 5 MB crudos por la server action.
+    // Perder el efecto es aceptable; perder la recompresión, no.
+    const original = new File([new Uint8Array(3_000_000)], "cruda.jpg", { type: "image/jpeg" });
+    const recomprimida = new File([new Uint8Array(300_000)], "recomprimida.jpg", {
+      type: "image/jpeg",
+    });
+    bakePhoto.mockImplementation(
+      async (_file: File, options?: { filterCss?: string; onFallback?: (r: string) => void }) => {
+        if (options?.filterCss) {
+          options.onFallback?.("el navegador no soporta ctx.filter");
+          return original;
+        }
+        return recomprimida;
+      },
+    );
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+    pickPhoto();
+
+    // Abrir el editor de esa foto y elegir un filtro (sin filtro no hay nada
+    // que pueda fallar: `filterCss` viajaría vacío).
+    fireEvent.click(await screen.findByRole("button", { name: `${COPY.composer.editPhoto} 1` }));
+    fireEvent.click(await screen.findByRole("button", { name: /Cálido/ }));
+    fireEvent.click(screen.getByRole("button", { name: COPY.composer.photoEditor.done }));
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) }),
+    );
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    expect(bakePhoto).toHaveBeenCalledTimes(2);
+    // El stub declara un solo parámetro (`file`), así que las `options` del
+    // segundo argumento no están en el tipo de la tupla — se leen a mano.
+    const retryOptions = (bakePhoto.mock.calls[1] as unknown[])[1];
+    expect(retryOptions).toMatchObject({ filterCss: "" });
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect((sent.getAll("photos")[0] as File).name).toBe("recomprimida.jpg");
+  });
+
+  it("si bakePhoto avisa un fallback, se ve un toast que no bloquea la publicación", async () => {
+    const original = new File([new Uint8Array([1])], "original.jpg", { type: "image/jpeg" });
+    bakePhoto.mockImplementation(async (_file, options?: { onFallback?: (reason: string) => void }) => {
+      options?.onFallback?.("el navegador no soporta ctx.filter");
+      return original;
+    });
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+    pickPhoto();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) }),
+    );
+
+    expect(await screen.findByText(COPY.composer.bakeFallbackTitle)).toBeTruthy();
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect((sent.getAll("photos")[0] as File).name).toBe("original.jpg");
   });
 });

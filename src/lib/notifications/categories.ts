@@ -216,6 +216,11 @@ export const KIND_CATEGORY: Record<string, NotificationCategory> = {
   reaction: "social",
   comment: "social",
   mention: "social",
+  // "Te etiquetaron en una publicación" (0089). Vecino natural de `mention`:
+  // en los dos casos alguien te nombró en contenido ajeno. Sin esta fila el
+  // fallback de `categoryOf` igual daba "social", pero dejarlo implícito hacía
+  // que la categoría dependiera de un default en vez de una decisión.
+  tag: "social",
 
   // Reservados por módulo
   creator_proposal: "creator",

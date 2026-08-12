@@ -249,32 +249,33 @@ const nextConfig: NextConfig = {
       "@phosphor-icons/react/dist/ssr",
     ],
     /**
-     * LÍMITE DE BODY DE LAS SERVER ACTIONS — el techo real de una publicación
-     * con fotos, y por qué NO alcanza el default.
+     * BODY DE LAS SERVER ACTIONS. El default de Next son 1 MB
+     * (`01-app/02-guides/server-actions.md` §Security: "Action requests are
+     * capped at 1MB by default"), y con ese techo `createPostAction` NO PODÍA
+     * recibir una publicación con fotos: el request moría antes de entrar a la
+     * action y la persona veía un error opaco. Acepta bytes o string tipo
+     * '3mb' (`05-config/01-next-config-js/serverActions.md`).
      *
-     * Next pone 1 MB por defecto (docs serverActions.md §bodySizeLimit) sobre
-     * el body HTTP CRUDO, boundaries y headers de multipart incluidos. Las
-     * fotos del composer del feed viajan dentro del FormData de
-     * `createPostAction` (a diferencia del video, que se sube DIRECTO al
-     * bucket justamente para esquivar este límite — ver `prepareMediaUpload
-     * Action` en src/app/(app)/feed/actions.ts). Con 1 MB, DOS fotos de
-     * teléfono ya rebotan a nivel runtime, antes de que la action llegue a
-     * correr y a devolver su código de error `photo`: la persona ve un fallo
-     * genérico, no el mensaje de la app.
+     * POR QUÉ 11 Y NO OTRO NÚMERO. Las fotos son lo único que viaja por acá —el
+     * video sube directo al bucket por XHR— y su presupuesto vive en
+     * `src/lib/media/post-media-limits.ts`: `MAX_TOTAL_PHOTO_BYTES` = 10 MB
+     * (10 fotos horneadas de hasta ~1 MB), con `MAX_PHOTO_BYTES` = 2 MB por
+     * archivo. Este límite es ese total más 1 MB de aire para el overhead de
+     * multipart (bordes y headers de cada parte: los docs sugieren 10-20 KB) y
+     * el cuerpo de hasta 2000 caracteres.
      *
-     * 10 MB = presupuesto de las 10 fotos que admite el composer, horneadas a
-     * JPEG q0.85 / 1600px de lado largo (~300-700 KB cada una → ~7 MB en el
-     * peor caso realista) más margen para el overhead de multipart.
+     * No se sube más "por las dudas": este número es superficie de abuso —el
+     * chequeo corre ANTES de la autenticación y del rate limit, así que
+     * cualquiera puede empujar un body de este tamaño. La contención real es
+     * que el servidor rechace por peso (`checkPhotoPayload`), no que el
+     * transporte sea infinito.
      *
-     * ⚠️ CONTRAPARTIDA: el body se parsea ANTES del guard de sesión y del
-     * rate limit, así que esto también agranda lo que un cliente anónimo
-     * puede empujar por request. Es el precio de subir fotos por action.
-     * ARREGLO DE FONDO (deuda): llevar las fotos al mismo camino que el
-     * video —subida directa a post-media con la policy 0025— y devolver este
-     * límite a algo chico.
+     * ⚠️ Si cambiás `MAX_TOTAL_PHOTO_BYTES`, cambiá este número: el test
+     * `src/lib/media/post-media-limits.test.ts` lee ESTE archivo y falla si se
+     * desincronizan.
      */
     serverActions: {
-      bodySizeLimit: "10mb",
+      bodySizeLimit: "11mb",
     },
   },
 };

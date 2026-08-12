@@ -1,5 +1,5 @@
-import { Briefcase, MapPin } from "@phosphor-icons/react/dist/ssr";
-import { AccentLink, BezelCard } from "@/components/ui";
+import { Briefcase, MapPin, Megaphone } from "@phosphor-icons/react/dist/ssr";
+import { AccentLink, BezelCard, Chip } from "@/components/ui";
 import { DirectoryMedia } from "@/components/directory";
 import { PhotoTap } from "@/components/media/photo-tap";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
@@ -36,7 +36,7 @@ export function JobCard({ job }: { job: JobCardModel }) {
   const typeLabel = job.employmentType ? EMPLOYMENT_TYPE_LABEL[job.employmentType] : null;
   const photos = job.photos?.length ? job.photos : job.photoUrl ? [job.photoUrl] : [];
 
-  return (
+  const card = (
     <BezelCard coreClassName="overflow-hidden p-0">
       <article aria-label={job.title}>
         <PhotoTap photos={photos} label={C.openPhotos(job.title)} authorName={job.title}>
@@ -102,5 +102,42 @@ export function JobCard({ job }: { job: JobCardModel }) {
         </div>
       </article>
     </BezelCard>
+  );
+
+  if (!job.boosted) return card;
+
+  /**
+   * Aviso IMPULSADO: anillo dorado + chip "Patrocinado", los mismos tokens
+   * (`--color-sponsored`) que ya visten a Vivienda, Negocios, Eventos,
+   * Profesionales y el feed. `fetchJobsPage` venía calculando `job.boosted`
+   * y ordenando boosted-first desde 0050, pero esta card nunca lo pintaba:
+   * Empleos era la única superficie donde pagar por aparecer primero no se
+   * notaba, y una promo que no se ve ni se divulga falla dos veces — como
+   * producto y como transparencia (FTC: la publicidad se declara SIEMPRE).
+   *
+   * El anillo lo pone la CARD y no el listado (a diferencia de /eventos, que
+   * lo envuelve desde la página porque agrupa los patrocinados en su propia
+   * sección con encabezado). Acá los impulsados vienen mezclados y ordenados
+   * primero, así que atarlo a `job.boosted` es lo que hace que se pinte igual
+   * en cualquier superficie que reuse JobCard — hoy el listado, mañana el
+   * perfil o un carrusel — sin que nadie tenga que acordarse del wrapper.
+   *
+   * `rounded-xl` calza con el radio del BezelCard: el anillo abraza la card
+   * sin dejar una esquina cuadrada asomando.
+   */
+  return (
+    <div className="relative rounded-xl ring-2 ring-sponsored/70 shadow-[0_0_0_1px_var(--color-sponsored),0_10px_28px_-14px_var(--color-sponsored)]">
+      {/* Arriba a la DERECHA: el tipo de jornada ya ocupa la esquina izquierda
+          sobre la foto (overlayTopLeft), y encimarlos haría ilegibles a los dos. */}
+      <Chip
+        variant="neutral"
+        size="sm"
+        className="absolute right-3.5 top-3.5 z-10 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
+      >
+        <Megaphone size={14} weight="fill" aria-hidden="true" />
+        {C.adChip}
+      </Chip>
+      {card}
+    </div>
   );
 }

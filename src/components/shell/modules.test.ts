@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BROWSE_MODULES, MODULES, isBrowseRoute, isModuleActive } from "./modules";
+import { BOOST_MODULE, BROWSE_MODULES, MODULES, isBrowseRoute, isModuleActive } from "./modules";
 import { ALWAYS_ON_MODULE_KEYS } from "./module-access";
 import { MODULE_KEYS } from "@/app/admin/dominio/modules";
 
@@ -124,21 +124,25 @@ describe("MODULES ↔ MODULE_KEYS (el panel y la app hablan del mismo módulo)",
 });
 
 describe("BROWSE_MODULES (categorías de /buscar)", () => {
-  it("son los módulos que NO tienen pestaña propia en el bottom nav", () => {
+  it("son los módulos que NO tienen pestaña propia en el bottom nav, más Boost", () => {
     // Inicio y Videos están a un toque desde cualquier pantalla: repetirlos en
-    // Buscar enseñaría dos caminos para lo mismo.
+    // Buscar enseñaría dos caminos para lo mismo. Boost se suma aparte (no
+    // sale de MODULES — ver el comentario de BOOST_MODULE en ./modules.ts),
+    // así que la cuenta es MODULES menos esos dos, más uno.
     expect(BROWSE_MODULES.map((m) => m.href)).not.toContain("/feed");
     expect(BROWSE_MODULES.map((m) => m.href)).not.toContain("/videos");
-    expect(BROWSE_MODULES).toHaveLength(MODULES.length - 2);
+    expect(BROWSE_MODULES).toHaveLength(MODULES.length - 2 + 1);
   });
 
-  it("son exactamente las siete secciones de listado", () => {
-    // Las mismas siete que llevan la burbuja "Publicá tu…": si alguien agrega
-    // un módulo nuevo, tiene que decidir a conciencia si va a los dos lados.
+  it("son exactamente las ocho secciones: las siete de listado más Boost", () => {
+    // Las mismas siete que llevan la burbuja "Publicá tu…", más Boost — si
+    // alguien agrega un módulo nuevo, tiene que decidir a conciencia si va a
+    // los dos lados (MODULES y/o BROWSE_MODULES).
     expect(BROWSE_MODULES.map((m) => m.href).sort()).toEqual([
       "/creadores",
       "/empleos",
       "/eventos",
+      "/impulsar",
       "/marketplace",
       "/negocios",
       "/profesionales",
@@ -146,8 +150,23 @@ describe("BROWSE_MODULES (categorías de /buscar)", () => {
     ]);
   });
 
-  it("cada categoría llega con su ícono 3D — la grilla es visual antes que textual", () => {
+  it("Boost es la OCTAVA y última entrada — cierra la grilla, no se mezcla", () => {
+    expect(BROWSE_MODULES.at(-1)).toBe(BOOST_MODULE);
+  });
+
+  it("Boost no lleva moduleKey — no es una vertical que un tenant pueda apagar", () => {
+    expect(BOOST_MODULE.moduleKey).toBeUndefined();
+  });
+
+  it("Boost usa el dorado de patrocinado, no un acento de vertical", () => {
+    expect(BOOST_MODULE.palette.icon).toBe("var(--color-sponsored)");
+  });
+
+  it("cada categoría de listado llega con su ícono 3D — la grilla es visual antes que textual", () => {
+    // Boost es la excepción a propósito: todavía no hay ícono 3D para la
+    // compra, así que cae al fallback Phosphor (ver comentario en BOOST_MODULE).
     for (const item of BROWSE_MODULES) {
+      if (item === BOOST_MODULE) continue;
       expect(item.image, `${item.href} sin ícono 3D`).toMatch(/^\/icons\/menu\/.+\.webp$/);
     }
   });
@@ -158,6 +177,11 @@ describe("isBrowseRoute", () => {
     expect(isBrowseRoute("/negocios")).toBe(true);
     expect(isBrowseRoute("/propiedades/abc-123")).toBe(true);
     expect(isBrowseRoute("/marketplace/publicar")).toBe(true);
+  });
+
+  it("reconoce Boost — es la octava sección de Buscar, mismo trato que las otras siete", () => {
+    expect(isBrowseRoute("/impulsar")).toBe(true);
+    expect(isBrowseRoute("/impulsar/listing-123")).toBe(true);
   });
 
   it("no reclama las pestañas ajenas ni /buscar", () => {
