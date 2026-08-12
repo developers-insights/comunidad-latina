@@ -37,7 +37,42 @@ export type Tenant = {
 
 export const TENANT_COOKIE = "cl-tenant";
 export const TENANT_SLUG_HEADER = "x-tenant-slug";
-export const DEFAULT_TENANT_SLUG = "dominicanos";
+
+/**
+ * Comunidad que se sirve cuando el host NO identifica a ninguna.
+ *
+ * Pasa en un solo caso, pero es el que todo el equipo usa todos los días: los
+ * hosts de la plataforma (`*.vercel.app`, `localhost`) se saltean a propósito
+ * la consulta a `tenant_domains` —cada deploy estrena hostname y ninguno va a
+ * ser jamás el dominio de un tenant, ver `shouldSkipLookup` en
+ * `./domain-lookup`— así que caen acá. Los dominios REALES
+ * (`dominicanos.com`, `comunidadlatina.com`) nunca pasan por esta constante:
+ * resuelven por tabla, y si la base se cae tienen su propio respaldo por
+ * hostname.
+ *
+ * Es configurable por entorno porque decidir qué comunidad muestra el preview
+ * es una decisión de operación, no de código: el cliente revisa el avance en
+ * `comunidad-latina-sigma.vercel.app` y ahí veía "Dominicanos en USA", que es
+ * la comunidad equivocada para mostrarle. Cambiar eso no puede exigir un
+ * deploy — se setea `DEFAULT_TENANT_SLUG` en Vercel y listo. Mismo criterio
+ * que `TENANT_PLATFORM_HOSTS` en `./domain-lookup`.
+ *
+ * El valor por defecto se mantiene en `dominicanos` para que nada cambie donde
+ * la variable no esté definida.
+ */
+export const DEFAULT_TENANT_SLUG = sanitizeSlugAtBoot(
+  process.env.DEFAULT_TENANT_SLUG ?? process.env.NEXT_PUBLIC_DEFAULT_TENANT_SLUG,
+);
+
+/**
+ * Un slug inválido en la variable de entorno NO puede tumbar el arranque ni
+ * dejar la app sirviendo una comunidad inexistente: degrada al de siempre.
+ * Mismo alfabeto que el CHECK de `tenants.slug`.
+ */
+function sanitizeSlugAtBoot(raw: string | undefined): string {
+  const value = (raw ?? "").trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$/.test(value) ? value : "dominicanos";
+}
 
 /**
  * Módulos del tenant de fallback: NINGUNA clave, o sea TODO activo.
@@ -328,9 +363,15 @@ function mapTenantRow(row: Record<string, unknown>, fallback: Tenant): Tenant {
 
 /** Fallback derivado del slug (dev / degradación elegante), extraído para reusar. */
 function fallbackForSlug(slug: string): Tenant {
+  // El molde nunca puede ser `undefined`: desde que `DEFAULT_TENANT_SLUG` se
+  // configura por entorno, alguien puede apuntarlo a una comunidad que existe
+  // en la base pero no en este mapa hardcodeado. Sin esta red, el spread de
+  // `undefined` devolvería un tenant sin marca ni módulos y la app renderizaría
+  // rota justo cuando la base ya está caída — el peor momento posible.
+  const molde = DEFAULT_TENANTS[DEFAULT_TENANT_SLUG] ?? DEFAULT_TENANTS.dominicanos;
   return (
     DEFAULT_TENANTS[slug] ?? {
-      ...DEFAULT_TENANTS[DEFAULT_TENANT_SLUG],
+      ...molde,
       slug,
       name: slug,
     }

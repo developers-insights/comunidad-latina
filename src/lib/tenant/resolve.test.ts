@@ -205,3 +205,55 @@ describe("RESERVED_BRAND_SLUGS — sincronía con scripts/new-tenant.mjs", () =>
     expect(fromScript).toEqual([...MODULE_KEYS]);
   });
 });
+
+/**
+ * =============================================================================
+ * LA COMUNIDAD POR DEFECTO SE CONFIGURA, NO SE DEPLOYA
+ * =============================================================================
+ *
+ * Los hosts de plataforma (`*.vercel.app`, `localhost`) no consultan
+ * `tenant_domains` a propósito, así que caen en `DEFAULT_TENANT_SLUG`. Eso hacía
+ * que el preview donde el cliente revisa el avance mostrara siempre la comunidad
+ * equivocada, y cambiarlo exigía un commit.
+ *
+ * Lo que se prueba acá es la propiedad que importa: una variable rota nunca
+ * puede dejar la app sirviendo una comunidad inexistente — degrada a la de
+ * siempre.
+ */
+describe("DEFAULT_TENANT_SLUG configurable por entorno", () => {
+  const cargarModulo = async () => {
+    vi.resetModules();
+    return import("./resolve");
+  };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("sin variable definida se mantiene el de siempre", async () => {
+    vi.stubEnv("DEFAULT_TENANT_SLUG", "");
+    const { DEFAULT_TENANT_SLUG } = await cargarModulo();
+    expect(DEFAULT_TENANT_SLUG).toBe("dominicanos");
+  });
+
+  it("toma el slug de la variable cuando es válido", async () => {
+    vi.stubEnv("DEFAULT_TENANT_SLUG", "comunidadlatina");
+    const { DEFAULT_TENANT_SLUG } = await cargarModulo();
+    expect(DEFAULT_TENANT_SLUG).toBe("comunidadlatina");
+  });
+
+  it("normaliza mayúsculas y espacios en vez de rechazarlos", async () => {
+    vi.stubEnv("DEFAULT_TENANT_SLUG", "  ComunidadLatina  ");
+    const { DEFAULT_TENANT_SLUG } = await cargarModulo();
+    expect(DEFAULT_TENANT_SLUG).toBe("comunidadlatina");
+  });
+
+  it("un valor inválido NO tumba el arranque: cae al de siempre", async () => {
+    for (const roto of ["../../etc", "slug con espacios", "-empieza-mal", "x".repeat(60), "a"]) {
+      vi.stubEnv("DEFAULT_TENANT_SLUG", roto);
+      const { DEFAULT_TENANT_SLUG } = await cargarModulo();
+      expect(DEFAULT_TENANT_SLUG).toBe("dominicanos");
+    }
+  });
+});
