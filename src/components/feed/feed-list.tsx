@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { ReactNode } from "react";
 import { CaretDown } from "@phosphor-icons/react/dist/ssr";
 import { buttonVariants, Spinner } from "@/components/ui";
 import { ListingCard } from "@/components/listings";
@@ -98,7 +99,29 @@ export interface FeedListProps {
   /** Primera página, ya resuelta server-side (SSR) — se pinta sin animar. */
   initialItems: FeedItem[];
   initialCursor: string | null;
+  /**
+   * Bloque que se intercala DESPUÉS de las primeras publicaciones, en vez de ir
+   * arriba de todo.
+   *
+   * Nació para "Para vos", que encabezaba el feed: lo primero que veía alguien
+   * al abrir la app eran dos avisos recomendados, y el pedido del cliente fue
+   * exacto — que al abrir se vea el FEED, y la recomendación aparezca más
+   * abajo. Va como prop y no adentro porque quién se intercala es decisión de
+   * la página, no de la lista.
+   */
+  intercalado?: ReactNode;
+  /** Después de cuántas publicaciones aparece `intercalado`. */
+  intercaladoDespuesDe?: number;
 }
+
+/**
+ * Cuántas publicaciones se ven antes del bloque intercalado.
+ *
+ * Cinco es lo que pidió el cliente ("después de la quinta publicación más o
+ * menos") y coincide con lo que se ve en un celular antes del primer scroll
+ * largo: alcanza para que el feed se lea como feed y no como una vidriera.
+ */
+export const INTERCALADO_DESPUES_DE = 5;
 
 /**
  * Lista del feed con scroll infinito real (módulo FLUIDEZ): acumula páginas
@@ -108,7 +131,15 @@ export interface FeedListProps {
  * "Cargar más" como fallback accesible (teclado, o IO no soportado) — nunca
  * navega ni reemplaza la página como el <Link href="?cursor="> de antes.
  */
-export function FeedList({ tab, tenantId, viewerId, initialItems, initialCursor }: FeedListProps) {
+export function FeedList({
+  tab,
+  tenantId,
+  viewerId,
+  initialItems,
+  initialCursor,
+  intercalado,
+  intercaladoDespuesDe = INTERCALADO_DESPUES_DE,
+}: FeedListProps) {
   const [batches, setBatches] = useState<FeedItem[][]>([initialItems]);
   const [cursor, setCursor] = useState(initialCursor);
   const [hadError, setHadError] = useState(false);
@@ -181,10 +212,18 @@ export function FeedList({ tab, tenantId, viewerId, initialItems, initialCursor 
           // pedido del cliente es que el feed se sienta RÁPIDO, y una entrada
           // fade en el contenido que ya está resuelto en el HTML se leería
           // como que "tarda en aparecer".
-          batch.map((item) => (
-            <div key={feedItemKey(item)} className={OFFSCREEN_SKIP_CLASS}>
-              {renderFeedItem(item, tenantId, viewerId, tab)}
-            </div>
+          batch.map((item, i) => (
+            <Fragment key={feedItemKey(item)}>
+              <div className={OFFSCREEN_SKIP_CLASS}>
+                {renderFeedItem(item, tenantId, viewerId, tab)}
+              </div>
+              {/* El bloque intercalado va DESPUÉS de la enésima publicación, no
+                  arriba de todo. Si la primera página trae menos que eso, no se
+                  fuerza: aparece cuando hay feed suficiente para que tenga
+                  sentido, y si no, no aparece — mejor que empujarlo al final de
+                  una lista corta, donde volvería a ser lo único que se ve. */}
+              {intercalado && i === intercaladoDespuesDe - 1 && intercalado}
+            </Fragment>
           ))
         ) : (
           // Páginas siguientes (scroll infinito): stagger MUY leve — nada

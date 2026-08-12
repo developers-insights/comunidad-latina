@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { BezelCard, EmptyState, buttonVariants } from "@/components/ui";
 import { decodeCursor } from "@/components/listings";
@@ -152,17 +153,23 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
           ) : (
             <ComposerInvite />
           )}
-          {/* Matching "Para vos" (módulo MATCHING): solo logueados; primera página. */}
-          {user && isFirstPage && (
-            <Suspense fallback={<ParaVosSkeleton />}>
-              <ParaVos userId={user.id} />
-            </Suspense>
-          )}
+          {/* Matching "Para vos" (módulo MATCHING): solo logueados; primera
+              página. Ya NO va acá arriba — viaja como bloque intercalado y
+              aparece después de las primeras publicaciones. El pedido del
+              cliente fue exacto: lo primero que se veía al abrir la app eran
+              dos avisos recomendados, y lo que tiene que verse es el feed. */}
           <FeedRoot
             tab={tab}
             tenantId={tenant.id}
             viewerId={user?.id ?? null}
             cursorRaw={cursorRaw}
+            intercalado={
+              user && isFirstPage ? (
+                <Suspense fallback={<ParaVosSkeleton />}>
+                  <ParaVos userId={user.id} />
+                </Suspense>
+              ) : null
+            }
           />
         </>
       ) : (
@@ -187,11 +194,14 @@ async function FeedRoot({
   tenantId,
   viewerId,
   cursorRaw,
+  intercalado,
 }: {
   tab: FeedTabId;
   tenantId: string;
   viewerId: string | null;
   cursorRaw: string;
+  /** Bloque que se intercala después de las primeras publicaciones. */
+  intercalado?: ReactNode;
 }) {
   const { items, nextCursor } = await fetchFeedPageAction({
     tab,
@@ -237,6 +247,7 @@ async function FeedRoot({
       viewerId={viewerId}
       initialItems={items}
       initialCursor={nextCursor}
+      intercalado={intercalado}
     />
   );
 }
