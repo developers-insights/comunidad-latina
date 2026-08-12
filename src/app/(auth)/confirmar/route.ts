@@ -4,6 +4,7 @@ import { safeInternalPath } from "@/lib/url/safe-href";
 import { getTenant } from "@/lib/tenant/resolve";
 import { sendEmailInBackground } from "@/lib/email";
 import { welcomeEmail } from "@/lib/email/templates";
+import { syncEmailVerified } from "@/lib/auth/email-verified";
 
 /**
  * Confirmación de cuenta: el enlace del correo pega acá con `?token_hash=…`.
@@ -32,6 +33,24 @@ export async function GET(request: Request) {
     });
 
     if (!error && data.user) {
+      /**
+       * Espejo de la confirmación en `profiles.email_verified`.
+       *
+       * Va ACÁ y no antes: recién en esta rama Supabase Auth ya confirmó el
+       * correo, y `syncEmailVerified` vuelve a exigir la marca de Auth
+       * (`email_confirmed_at`) antes de escribir — la fuente de verdad es el
+       * usuario que devuelve `verifyOtp`, no el hecho de haber pasado por la
+       * ruta. Sin esto la columna se quedaba en `false` para siempre y el gate
+       * de activación de creador (0064, `require_email_verified` por defecto)
+       * era imposible de cumplir.
+       *
+       * Se espera el resultado —es un UPDATE por id, ya indexado— para que la
+       * pantalla a la que aterriza no lea todavía el estado viejo. La función
+       * nunca lanza: si falla, loguea y sigue, porque un correo confirmado no
+       * puede quedar sin aterrizaje por una columna derivada.
+       */
+      await syncEmailVerified(data.user);
+
       // Bienvenida: recién acá, no en el registro. Quien nunca confirma no
       // recibe un "bienvenido" a una cuenta que no puede usar. Fire-and-forget:
       // el correo jamás puede frenar el aterrizaje.

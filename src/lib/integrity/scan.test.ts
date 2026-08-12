@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database.types";
-import { DEFAULT_MAX_DISTANCE, scanContentAsset } from "./scan";
+import { scanContentAsset, type ScanThresholds } from "./scan";
 
 /**
  * =============================================================================
@@ -58,11 +58,11 @@ function createAdminStub(plan: Record<string, OpResult> = {}) {
   return { client: { from, rpc }, from, rpc, calls };
 }
 
-function run(stub: ReturnType<typeof createAdminStub>, maxDistance?: number) {
+function run(stub: ReturnType<typeof createAdminStub>, thresholds?: ScanThresholds) {
   return scanContentAsset(
     stub.client as unknown as SupabaseClient<Database>,
     ASSET,
-    maxDistance,
+    thresholds,
   );
 }
 
@@ -85,9 +85,13 @@ describe("la app delega en la función de la base y no reimplementa nada", () =>
     const result = await run(stub);
 
     expect(stub.rpc).toHaveBeenCalledTimes(1);
+    // Los tres en null = "usá los umbrales de esta comunidad" (0088). Que la
+    // app NO mande un número es la propiedad que se prueba acá.
     expect(stub.rpc).toHaveBeenCalledWith("scan_content_asset", {
       p_asset_id: ASSET,
-      p_max_distance: DEFAULT_MAX_DISTANCE,
+      p_max_distance: null,
+      p_max_distance_video: null,
+      p_max_distance_audio: null,
     });
     expect(result).toEqual({ ok: true, openAlerts: 1 });
   });
@@ -98,11 +102,13 @@ describe("la app delega en la función de la base y no reimplementa nada", () =>
       "content_integrity_alerts.select": { count: 0, error: null },
     });
 
-    await run(stub, 4);
+    await run(stub, { image: 4 });
 
     expect(stub.rpc).toHaveBeenCalledWith("scan_content_asset", {
       p_asset_id: ASSET,
       p_max_distance: 4,
+      p_max_distance_video: null,
+      p_max_distance_audio: null,
     });
   });
 

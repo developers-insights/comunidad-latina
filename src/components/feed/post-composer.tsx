@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { CreateMenu, type QuickPostKind } from "@/components/shell/create-menu";
 import { readVideoDurationSeconds } from "@/lib/media/measure-video";
+import { encodeAudioPcm16, sampleAudioPcm } from "@/lib/media/audio-samples";
 import { sampleVideoLumaFrames } from "@/lib/media/video-frames";
 import {
   DEFAULT_VIDEO_CATEGORY,
@@ -371,6 +372,8 @@ export function PostComposer({
        * frena la publicación.
        */
       let videoFrames: number[][] = [];
+      /** PCM mono en base64 de la pista de audio del video. null = no se pudo. */
+      let videoAudioPcm: string | null = null;
       if (video) {
         const prepared = await prepareMediaUploadAction();
         if (!prepared.ok) {
@@ -401,11 +404,17 @@ export function PostComposer({
         // El muestreo va en paralelo con la subida: son dos trabajos
         // independientes sobre el mismo archivo y encadenarlos le sumaría un
         // par de segundos a la espera por nada.
-        const [uploaded, frames] = await Promise.all([
+        const [uploaded, frames, audioPcm] = await Promise.all([
           uploadVideoWithProgress(video.file, videoPath, setUploadPct),
           sampleVideoLumaFrames(video.file),
+          // La pista de audio es una huella independiente de la imagen: quien
+          // recorta el video pero deja el sonido intacto matchea por acá. Va en
+          // el mismo Promise.all porque también es trabajo sobre el archivo que
+          // ya está en memoria, y degrada a null sin romper nada.
+          sampleAudioPcm(video.file),
         ]);
         videoFrames = frames;
+        videoAudioPcm = audioPcm ? encodeAudioPcm16(audioPcm) : null;
         setUploadPct(null);
         if (!uploaded) {
           toast({
@@ -441,6 +450,11 @@ export function PostComposer({
         // no viaja un `"[]"` que aparenta ser un análisis hecho.
         if (videoFrames.length > 0) {
           formData.set("videoFrames", JSON.stringify(videoFrames));
+        }
+        // Mismo criterio que los fotogramas: si no se pudo extraer, el campo no
+        // viaja. Un string vacío parecería un análisis hecho que dio nada.
+        if (videoAudioPcm) {
+          formData.set("videoAudioPcm", videoAudioPcm);
         }
       }
       formData.set(

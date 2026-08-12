@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CheckCircle, MapPin, Star } from "@phosphor-icons/react/dist/ssr";
+import { ChatCircle, CheckCircle, MapPin, Star } from "@phosphor-icons/react/dist/ssr";
 import { z } from "zod";
 import { Avatar, buttonVariants } from "@/components/ui";
 import { IdentityBadge } from "@/components/auth/identity-badge";
+import { MessageCta } from "@/components/auth/message-cta";
 import { FollowButton } from "@/components/social/follow-button";
 import {
   PublisherTrust,
@@ -17,6 +18,17 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { cn, formatDate } from "@/lib/utils";
 
 export const metadata = { title: "Perfil de creador" };
+
+/**
+ * Copy propio de esta pantalla. Va acá y no en `components/creators/copy.ts`
+ * porque ese archivo es compartido y lo están tocando otros frentes en paralelo:
+ * un solo dueño por archivo. Si estas líneas se estabilizan, mudarlas allá es
+ * una línea de diff.
+ */
+const LOCAL_COPY = {
+  messageCta: "Seguir la conversación",
+  messageNeedLogin: "Entrá también para escribirle antes de contratarlo.",
+} as const;
 
 export default async function CreadorPublicoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -74,15 +86,36 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
     : { data: [] as { id: string; display_name: string; avatar_url: string | null }[] };
   const reviewerById = new Map((reviewers ?? []).map((r) => [r.id, r]));
 
-  const { data: existingFollow } = user
-    ? await supabase
-        .from("follows")
-        .select("target_id")
-        .eq("follower_id", user.id)
-        .eq("target_kind", "profile")
-        .eq("target_id", id)
-        .maybeSingle()
-    : { data: null };
+  // Seguimiento + conversación previa. Las dos consultas dependen de la sesión y
+  // no dependen entre sí, así que van juntas y no una atrás de la otra.
+  //
+  // CONVERSACIÓN: mismo criterio EXACTO que /perfil/[id] — la RLS de
+  // `conversations` sólo devuelve los hilos de quien mira, así que para un
+  // visitante sin sesión no hay nada que traer y el CTA cae solo en "entrar".
+  // Se excluyen los hilos bloqueados: ofrecer "seguí la conversación" hacia un
+  // chat que la otra persona cortó sería empujar a alguien contra una puerta
+  // cerrada.
+  const [{ data: existingFollow }, { data: existingConversation }] = await Promise.all([
+    user
+      ? supabase
+          .from("follows")
+          .select("target_id")
+          .eq("follower_id", user.id)
+          .eq("target_kind", "profile")
+          .eq("target_id", id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    user
+      ? supabase
+          .from("conversations")
+          .select("id, status, created_at")
+          .or(`created_by.eq.${id},counterpart_id.eq.${id}`)
+          .neq("status", "blocked")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   const portfolio = creator.portfolio_photos ?? [];
 
@@ -105,6 +138,37 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
             </p>
           )}
         </div>
+
+        {/*
+          DISPONIBILIDAD. `creator_profiles.available` ya venía en el `select` de
+          esta página y no se pintaba en ningún lado: quien entraba al perfil no
+          tenía forma de saber si esa persona estaba tomando trabajos, y se
+          enteraba recién después de mandarle una propuesta.
+
+          Mismo lenguaje visual que el chip de la tarjeta del directorio
+          (`creator-card.tsx`) para que "Disponible" signifique lo mismo en las
+          dos pantallas. El punto de color es decorativo (`aria-hidden`): el
+          estado lo dice el TEXTO, no el color — quien no distingue verde de gris
+          lee lo mismo.
+        */}
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
+            creator.available
+              ? "border-success/20 bg-success-bg text-success-ink"
+              : "border-border-subtle bg-surface-subtle text-foreground-secondary",
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className={cn(
+              "size-1.5 rounded-full",
+              creator.available ? "bg-success" : "bg-foreground-muted",
+            )}
+          />
+          {creator.available ? COPY.directory.available : COPY.directory.unavailable}
+        </span>
+
         {user?.id !== id && (
           <FollowButton targetKind="profile" targetId={id} initialFollowing={Boolean(existingFollow)} size="sm" />
         )}
@@ -146,14 +210,51 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
             triggerClassName="w-full"
           />
           <p className="text-center text-xs text-foreground-muted">{COPY.profile.hireHint}</p>
+
+          {/*
+            ESCRIBIRLE SIN CONTRATARLO (pedido del cliente: "dar mensajes a otras
+            personas para que puedan conectar"). Antes de esto, la única forma de
+            hablarle a un creador desde su perfil era proponerle un contrato: o
+            contratás, o no hay canal. Mucha gente necesita preguntar primero.
+
+            GUARDAS, copiadas de /perfil/[id] y no inventadas acá:
+             - Perfil propio: la página ya redirige a /creadores/perfil arriba.
+             - Sin sesión: cae en la rama de abajo, que lleva a /entrar.
+             - Hilo ya existente: se va AL HILO en vez de ofrecer empezar otro.
+
+            Va DESPUÉS del CTA primario y con variant `outline`: una pantalla
+            tiene un solo CTA primario (el de contratar), y este es el camino
+            suave. Cuando no hay hilo se usa `MessageCta`, que hoy responde con
+            el estado honesto del contacto perfil→perfil — el mismo que ve
+            cualquiera en /perfil/[id]. Es deliberado: prometer un chat que
+            todavía no existe sería peor que decirlo.
+          */}
+          {existingConversation ? (
+            <Link
+              href={`/mensajes/${existingConversation.id}`}
+              className={cn(buttonVariants({ variant: "outline", size: "lg" }), "mt-1.5 w-full")}
+            >
+              <ChatCircle size={20} aria-hidden="true" />
+              {LOCAL_COPY.messageCta}
+            </Link>
+          ) : (
+            <div className="mt-1.5">
+              <MessageCta firstName={firstNameOf(displayName)} />
+            </div>
+          )}
         </div>
       ) : (
-        <Link
-          href={`/entrar?next=${encodeURIComponent(`/creadores/perfil/${id}`)}`}
-          className={cn(buttonVariants({ variant: "primary", size: "lg" }), "w-full")}
-        >
-          {COPY.profile.proposeCta}
-        </Link>
+        <div className="flex flex-col gap-2">
+          <Link
+            href={`/entrar?next=${encodeURIComponent(`/creadores/perfil/${id}`)}`}
+            className={cn(buttonVariants({ variant: "primary", size: "lg" }), "w-full")}
+          >
+            {COPY.profile.proposeCta}
+          </Link>
+          <p className="text-center text-xs text-foreground-muted">
+            {LOCAL_COPY.messageNeedLogin}
+          </p>
+        </div>
       )}
 
       {creator.bio && (

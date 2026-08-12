@@ -1,4 +1,5 @@
-import { Info } from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
+import { Info, UserCheck } from "@phosphor-icons/react/dist/ssr";
 import { EligibilityConfigForm } from "@/components/creators/eligibility-config-form";
 import { configFromRow } from "@/lib/creators/eligibility";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -34,6 +35,8 @@ const COPY = {
     "Los requisitos valen solo para tu comunidad. Otras comunidades de la plataforma tienen los suyos y no se tocan desde acá.",
   loadError:
     "No pudimos leer los requisitos guardados, así que abajo ves los que trae el sistema por defecto. Recargá la página antes de guardar: si guardás ahora, podrías pisar valores que tu comunidad ya había configurado.",
+  queueLink: "Ver solicitudes pendientes",
+  queueHint: "Acá definís los requisitos; las solicitudes que ya llegaron se aprueban del otro lado.",
 } as const;
 
 export default async function AdminCreadoresPage() {
@@ -73,6 +76,17 @@ export default async function AdminCreadoresPage() {
           <Info size={16} weight="fill" aria-hidden="true" className="mt-0.5 shrink-0 text-info" />
           {COPY.scopeNote}
         </p>
+        {/* Las dos mitades del mismo trabajo: acá se fijan los requisitos, allá
+            se resuelven las solicitudes que ya entraron. Sin este link la cola
+            existe pero no la encuentra nadie: el nav sólo llega hasta acá. */}
+        <Link
+          href="/admin/creadores/solicitudes"
+          className="mt-3 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors duration-(--duration-fast) hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+        >
+          <UserCheck size={16} aria-hidden="true" />
+          {COPY.queueLink}
+        </Link>
+        <p className="mt-0.5 text-xs text-foreground-muted">{COPY.queueHint}</p>
       </header>
 
       {error && (
