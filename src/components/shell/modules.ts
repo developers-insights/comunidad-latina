@@ -168,7 +168,12 @@ export const MODULES: ModuleItem[] = [
   {
     href: "/comunidad",
     moduleKey: "comunidad",
-    image: "/icons/menu/comunidad.webp",
+    // Sin `image`: todavía no existe `/icons/menu/comunidad.webp`, y el
+    // cliente confirmó (13/8) que el ícono Phosphor de mano+corazón está bien
+    // así. Sin este campo, el círculo cae al ícono (ver ternario en
+    // module-circles.tsx) — el mismo que ya usa `ComunidadHeading` en la
+    // pantalla del módulo. Si algún día se suma el .webp 3D, alcanza con
+    // agregar `image: "/icons/menu/comunidad.webp"` de vuelta acá.
     label: t("nav", "moduleComunidad"),
     icon: HandHeart,
     palette: accentPalette("var(--accent-comunidad)"),

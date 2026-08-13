@@ -19,15 +19,15 @@ export interface ComunidadHeadingProps {
  *
  * Es la MISMA cápsula que `<SectionHeading>` —relleno tintado del módulo,
  * hairline del acento, título y bajada— con una sola diferencia: el chip lleva
- * un ícono Phosphor en vez del render 3D del set del menú, porque Comunidad
- * todavía no tiene el suyo en `/public/icons/menu/`. Reusar el asset de otro
- * módulo sería peor que esto: la promesa de esos íconos es que la misma imagen
- * identifica a la misma sección en el menú, en Buscar y en su pantalla, y
- * prestado rompería esa correspondencia en tres lugares a la vez.
+ * un ícono Phosphor (mano + corazón) en vez del render 3D del set del menú.
+ * No es una solución provisoria: el cliente confirmó (13/8/2026) que este
+ * ícono está bien así, en las tres superficies (menú, Buscar y esta pantalla)
+ * — `modules.ts` no lleva `image` para Comunidad a propósito, y las tres
+ * caen al mismo Phosphor por el mismo motivo.
  *
- * Cuando llegue `comunidad.webp`, esta cabecera se reemplaza por
- * `<SectionHeading image="/icons/menu/comunidad.webp" …>` y este archivo se
- * borra. No hay nada más que migrar: los tamaños y el ritmo son los mismos.
+ * Si algún día se suma un ícono 3D (`/public/icons/menu/comunidad.webp`), esta
+ * cabecera se reemplaza por `<SectionHeading image="…" …>` y este archivo se
+ * borra — no hay nada más que migrar, los tamaños y el ritmo son los mismos.
  */
 export function ComunidadHeading({
   icon,

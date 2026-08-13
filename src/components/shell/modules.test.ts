@@ -166,10 +166,15 @@ describe("BROWSE_MODULES (categorías de /buscar)", () => {
   });
 
   it("cada categoría de listado llega con su ícono 3D — la grilla es visual antes que textual", () => {
-    // Boost es la excepción a propósito: todavía no hay ícono 3D para la
-    // compra, así que cae al fallback Phosphor (ver comentario en BOOST_MODULE).
+    // Dos excepciones a propósito, mismo motivo: sin ícono 3D todavía, caen al
+    // fallback Phosphor (ModuleBubble/ModuleCircles ya lo resuelven solos).
+    //  · Boost: ver comentario en BOOST_MODULE.
+    //  · Comunidad: el cliente confirmó (13/8/2026) que el ícono Phosphor
+    //    (mano + corazón) está bien así — no hace falta el .webp 3D. Si algún
+    //    día se suma, alcanza con volver a poner `image` en modules.ts y sacar
+    //    la excepción de acá.
     for (const item of BROWSE_MODULES) {
-      if (item === BOOST_MODULE) continue;
+      if (item === BOOST_MODULE || item.href === "/comunidad") continue;
       expect(item.image, `${item.href} sin ícono 3D`).toMatch(/^\/icons\/menu\/.+\.webp$/);
     }
   });
