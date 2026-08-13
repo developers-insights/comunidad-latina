@@ -13,6 +13,7 @@ import {
   normalizeUsername,
   usernameProblem,
 } from "@/lib/profile/username";
+import { isWithinOwnStoragePrefix } from "@/lib/profile/storage-path";
 import {
   LANGUAGE_CODES,
   LANGUAGES_MAX,
@@ -43,6 +44,7 @@ const COPY = {
   languageInvalid: "Ese idioma no está en la lista.",
   timeZoneInvalid: "Elegí una zona de la lista.",
   coverInvalid: "Esa imagen no se pudo usar. Probá con otra foto.",
+  avatarInvalid: "Esa foto no se pudo usar. Probá con otra.",
   privacySaved: "Listo, tus controles de privacidad quedaron guardados.",
   noSession: "Tu sesión se cerró — entrá de nuevo para continuar.",
   genericError:
@@ -166,6 +168,15 @@ const updateProfileSchema = z.object({
    * pero nada impediría GUARDAR en el perfil propio la ruta de la foto ajena.
    */
   coverPath: z.string().trim().max(300).optional(),
+  /**
+   * Ruta de la FOTO DE PERFIL, mismo bucket y misma validación que
+   * `coverPath` de arriba (`isWithinOwnStoragePrefix`, en `@/lib/profile/
+   * storage-path`) — es la misma regla de seguridad aplicada dos veces, no
+   * dos reglas distintas. `avatar_url` deja de ser de sólo lectura (antes se
+   * fijaba una única vez al entrar por Google/Apple, `provision.ts`) recién
+   * acá: mientras no se mande este campo, el valor existente no se toca.
+   */
+  avatarPath: z.string().trim().max(300).optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
@@ -195,6 +206,7 @@ export async function updateProfileAction(
     birthdate,
     languages,
     coverPath,
+    avatarPath,
   } = parsed.data;
   const username = normalizeUsername(parsed.data.username);
 
@@ -218,11 +230,26 @@ export async function updateProfileAction(
     } else {
       // La ruta canónica del bucket es `{tenant_id}/{user_id}/…` (0012). Una
       // ruta que no arranque así es la carpeta de otra persona.
-      const expectedPrefix = `${current.tenant_id}/${user.id}/`;
-      if (!coverPath.startsWith(expectedPrefix) || coverPath.includes("..")) {
+      if (!isWithinOwnStoragePrefix(coverPath, current.tenant_id, user.id)) {
         return { ok: false, fieldErrors: { coverPath: COPY.coverInvalid } };
       }
       coverUrl = supabase.storage.from("avatars").getPublicUrl(coverPath).data.publicUrl;
+    }
+  }
+
+  // Misma validación que la portada — ver el comentario de `avatarPath` en el
+  // schema. `avatar_url` deja de fijarse sólo en el alta (`provision.ts`) y
+  // pasa a poder actualizarse acá, con la misma regla de "nunca la carpeta
+  // de otra persona" que ya protege la portada.
+  let avatarUrl: string | null | undefined;
+  if (avatarPath !== undefined) {
+    if (avatarPath === "") {
+      avatarUrl = null; // Quitar la foto de perfil, volver al avatar por defecto.
+    } else {
+      if (!isWithinOwnStoragePrefix(avatarPath, current.tenant_id, user.id)) {
+        return { ok: false, fieldErrors: { avatarPath: COPY.avatarInvalid } };
+      }
+      avatarUrl = supabase.storage.from("avatars").getPublicUrl(avatarPath).data.publicUrl;
     }
   }
 
@@ -235,6 +262,7 @@ export async function updateProfileAction(
       area_label: area || null,
       country_origin: country || null,
       ...(coverUrl !== undefined ? { cover_url: coverUrl } : {}),
+      ...(avatarUrl !== undefined ? { avatar_url: avatarUrl } : {}),
     })
     .eq("id", user.id);
 
@@ -316,6 +344,41 @@ export async function prepareCoverUploadAction(): Promise<PrepareCoverUploadResu
   // El prefijo lo entrega el SERVIDOR y la policy `avatars_insert` (0012) lo
   // vuelve a validar contra el JWT: el navegador no puede escribir en la carpeta
   // de otra persona aunque arme el path a mano.
+  return { ok: true, tenantId: data.tenant_id, userId: user.id };
+}
+
+// ---------------------------------------------------------------------------
+// Foto de perfil (avatar): MISMO patrón que la portada de arriba — mismo
+// bucket (`avatars`), misma policy `avatars_insert` (0012), mismo motivo para
+// no recibir el archivo acá (evitar serializar la foto entera en memoria del
+// server y perder el progreso de subida). Se deja como una action separada
+// —en vez de que `avatar-upload-field.tsx` reuse `prepareCoverUploadAction`—
+// por el mismo criterio que ya aplica el resto de este archivo: cada
+// funcionalidad es un módulo chico y autocontenido, no una que otra depende
+// para funcionar. `avatar_url` deja de ser de sólo lectura acá: hasta ahora
+// sólo se fijaba una vez al entrar por Google/Apple (`src/lib/auth/
+// provision.ts`) y nunca más se podía tocar.
+// ---------------------------------------------------------------------------
+
+export type PrepareAvatarUploadResult =
+  | { ok: true; tenantId: string; userId: string }
+  | { ok: false; code: "unauthenticated" | "error" };
+
+export async function prepareAvatarUploadAction(): Promise<PrepareAvatarUploadResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, code: "unauthenticated" };
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("tenant_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (error || !data) return { ok: false, code: "error" };
+
   return { ok: true, tenantId: data.tenant_id, userId: user.id };
 }
 

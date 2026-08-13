@@ -85,6 +85,22 @@ export interface CardVideoProps {
   onTap?: () => void;
   className?: string;
   /**
+   * FILTRO DE PRESENTACIÓN (0104), ya resuelto a un valor de `filter` de CSS por
+   * el servidor a partir del catálogo (`resolvePhotoFilterCss`). Vacío o ausente
+   * = el video se ve tal cual se subió.
+   *
+   * Se aplica al PINTAR y no está quemado en el archivo, a diferencia de la
+   * foto: hornear un video es re-codificarlo en tiempo real, rompe la subida
+   * directa al bucket y le cambia la huella perceptual a Content Integrity (ver
+   * la 0104). El archivo sigue siendo el original; lo que cambia es cómo se ve.
+   *
+   * Va sobre el `<video>` y no sobre su contenedor a propósito: el chip de
+   * vistas, el botón de sonido y el corazón del doble toque son de la INTERFAZ,
+   * no del video, y un filtro que también los tiña dejaría "Vista previa"
+   * ilegible sobre un Carbón al 100%.
+   */
+  filterCss?: string;
+  /**
    * Pista asociada al POST (0090). null = sin música → el video se comporta
    * exactamente como antes (manda su propio audio). Con música, gana la
    * música: ver `resolveAudioMix` (audio-mix.ts), el árbitro único de qué
@@ -126,6 +142,7 @@ export function CardVideo({
   onTap,
   className,
   music = null,
+  filterCss,
 }: CardVideoProps) {
   const router = useRouter();
   const reduce = usePrefersReducedMotion();
@@ -313,6 +330,9 @@ export function CardVideo({
         ref={videoRef}
         src={src}
         className="aspect-[4/5] w-full bg-surface-subtle object-cover"
+        // Cadena vacía → `undefined`: sin filtro no se escribe el atributo, así
+        // el elemento no queda con una capa de composición propia por nada.
+        style={filterCss ? { filter: filterCss } : undefined}
         muted
         loop
         playsInline

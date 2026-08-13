@@ -31,6 +31,11 @@ export const NOTIFICATION_CATEGORIES = [
   "seguridad",
   "cuenta",
   "plataforma",
+  // Vencimiento de publicaciones (0098). Es categoría propia y no se reparte en
+  // la de cada módulo porque el hecho es TRANSVERSAL: alguien tiene un aviso en
+  // Vivienda, dos en Marketplace y uno en Empleos, y necesita UNA pestaña con
+  // todos los que se le vencen. Repartirlos obligaría a recorrer cinco.
+  "vencimientos",
 ] as const;
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
@@ -100,6 +105,7 @@ export const MORE_TAB_CATEGORIES = [
   "seguridad",
   "cuenta",
   "plataforma",
+  "vencimientos",
 ] as const satisfies readonly NotificationCategory[];
 
 /** Metadatos de presentación. `icon` es una CLAVE, no un componente: este
@@ -184,6 +190,11 @@ export const CATEGORY_META: Record<NotificationCategory, CategoryMeta> = {
     description: "Novedades y avisos del equipo.",
     icon: "plataforma",
   },
+  vencimientos: {
+    label: "Vencimientos",
+    description: "Cuándo vencen tus publicaciones y cuándo hace falta renovarlas.",
+    icon: "vencimientos",
+  },
 };
 
 /**
@@ -235,6 +246,13 @@ export const KIND_CATEGORY: Record<string, NotificationCategory> = {
   account_suspended: "seguridad",
   dispute: "seguridad",
   broadcast: "plataforma",
+
+  // Vencimiento de publicaciones (0098). Los emite la base, no la app:
+  // app.avisar_vencimientos() y app.vencer_publicaciones() insertan con estos
+  // literales, así que si acá dijeran otra cosa el mismo evento caería en dos
+  // pestañas según quién lo emitió.
+  listing_expiring: "vencimientos",
+  listing_expired: "vencimientos",
 };
 
 export function categoryForKind(kind: string): NotificationCategory {
@@ -257,6 +275,10 @@ export const KIND_PRIORITY: Record<string, NotificationPriority> = {
   identity: "high",
   creator_proposal: "high",
   listing_question: "high",
+  // Pide una decisión con fecha límite: renovar o dejar que venza. El aviso de
+  // que YA venció (`listing_expired`) es `normal` a propósito — ya pasó, y sigue
+  // siendo recuperable de un toque.
+  listing_expiring: "high",
   payment_failed: "critical",
   security_alert: "critical",
   account_suspended: "critical",

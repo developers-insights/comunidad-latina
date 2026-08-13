@@ -42,6 +42,11 @@ function makeRow(overrides: Partial<PostRow> = {}): PostRow {
     is_paid_ad: false,
     eligible_for_short_feed: true,
     video_category: null,
+    // Las tres marcas del menú ⋯ (0097): una publicación recién nacida no está
+    // fijada, ni oculta, ni tiene los comentarios cerrados.
+    pinned_at: null,
+    hidden_at: null,
+    comments_locked_at: null,
     ...overrides,
   };
 }
@@ -196,5 +201,79 @@ describe("fetchPostMusic", () => {
     const music = (await fetchPostMusic(stub.client, ["post-1"])).get("post-1");
     expect(music?.track.licenseKind).toBe("licensed");
     expect(music?.track.category).toBe("general");
+  });
+});
+
+/* ------------ Insumos del menú ⋯ y filtro de video (0097 / 0104) ---------- */
+
+describe("toPostCardModel — lo que la tarjeta necesita para montar el menú ⋯", () => {
+  it("lleva autor, estado, rutas crudas y las tres marcas", () => {
+    // Sin esto, el menú en el feed pedía una segunda consulta por publicación —
+    // o se montaba a ciegas y ofrecía "Fijar" sobre algo ya fijado.
+    const model = toPostCardModel(
+      makeRow({
+        media: ["t/u/foto.jpg"],
+        pinned_at: "2026-07-25T10:00:00Z",
+        comments_locked_at: "2026-07-25T11:00:00Z",
+      }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    expect(model.postMenu).toEqual({
+      authorId: "u1",
+      status: "published",
+      // LAS RUTAS, no las URLs públicas: la hoja de edición quita fotos
+      // nombrándolas por su ruta en el bucket.
+      mediaPaths: ["t/u/foto.jpg"],
+      pinnedAt: "2026-07-25T10:00:00Z",
+      hiddenAt: null,
+      commentsLockedAt: "2026-07-25T11:00:00Z",
+    });
+  });
+});
+
+describe("toPostCardModel — el filtro del video se resuelve contra el catálogo", () => {
+  it("le pone a cada medio el CSS que le corresponde POR RUTA", () => {
+    const model = toPostCardModel(
+      makeRow({
+        media: ["t/u/foto.jpg", "t/u/clip.mp4"],
+        media_filters: { "t/u/clip.mp4": { id: "byn", intensity: 1 } },
+      }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    expect(model.media[0]?.filterCss).toBeUndefined();
+    expect(model.media[1]?.filterCss).toBe("grayscale(1) contrast(1.1)");
+  });
+
+  it("un filtro inventado en la fila no llega a la tarjeta", () => {
+    // Una fila vieja o tocada a mano puede perder SU filtro; jamás puede meter
+    // un texto arbitrario en el `style` de quien abra la publicación.
+    const model = toPostCardModel(
+      makeRow({
+        media: ["t/u/clip.mp4"],
+        media_filters: { "t/u/clip.mp4": { id: "blur(40px)", css: "blur(40px)" } },
+      }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    expect(model.media[0]?.filterCss).toBeUndefined();
+  });
+
+  it("sin la columna (fila anterior a la 0104) simplemente no hay filtros", () => {
+    const model = toPostCardModel(
+      makeRow({ media: ["t/u/clip.mp4"] }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    expect(model.media[0]?.filterCss).toBeUndefined();
   });
 });

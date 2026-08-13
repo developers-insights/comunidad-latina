@@ -6,10 +6,24 @@ import { FileText } from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, Button, Field, Input, Textarea, type ButtonProps } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { proposeContract } from "@/app/(app)/creadores/actions";
+import { centsToInput } from "@/lib/pricing/money";
 import { dollarsToCents } from "./money";
 import { ContactBlockNotice, hasContactInfo } from "./contact-block-notice";
 import { DemoSeal } from "./demo-seal";
 import { COPY } from "./copy";
+
+/**
+ * Centavos → el texto del input de monto, SIN perder los centavos.
+ *
+ * Antes esto era `String(Math.round(cents / 100))` inline, que sobre un paquete
+ * de USD 150,50 escribía "151": el contrato nacía con medio dólar de más que el
+ * precio publicado, y eso no se descubre hasta el reclamo. Los montos redondos
+ * se siguen escribiendo sin decimales ("800", no "800.00") porque es lo que ya
+ * veían quienes prellenan desde un presupuesto de aviso.
+ */
+function prefillAmount(cents: number): string {
+  return cents % 100 === 0 ? String(Math.trunc(cents / 100)) : centsToInput(cents);
+}
 
 export interface ContractFormProps {
   creatorId: string;
@@ -20,6 +34,8 @@ export interface ContractFormProps {
   defaultScope?: string;
   /** Monto a prellenar (propuesto por el creador o presupuesto del aviso). */
   defaultAmountCents?: number | null;
+  /** Días de entrega a prellenar (los del paquete de servicio, si viene de uno). */
+  defaultDeliveryDays?: number | null;
   triggerLabel: string;
   triggerVariant?: ButtonProps["variant"];
   triggerSize?: ButtonProps["size"];
@@ -44,6 +60,7 @@ export function ContractForm({
   defaultTitle = "",
   defaultScope = "",
   defaultAmountCents = null,
+  defaultDeliveryDays = null,
   triggerLabel,
   triggerVariant = "primary",
   triggerSize = "md",
@@ -53,9 +70,11 @@ export function ContractForm({
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(defaultTitle);
   const [scope, setScope] = useState(defaultScope);
-  const [deliveryDays, setDeliveryDays] = useState("7");
+  const [deliveryDays, setDeliveryDays] = useState(
+    defaultDeliveryDays ? String(defaultDeliveryDays) : "7",
+  );
   const [amount, setAmount] = useState(
-    defaultAmountCents ? String(Math.round(defaultAmountCents / 100)) : "",
+    defaultAmountCents ? prefillAmount(defaultAmountCents) : "",
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

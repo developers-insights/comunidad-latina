@@ -15,6 +15,7 @@ import {
   normalizeTrustLevel,
   trustSignalsFrom,
 } from "@/components/auth/trust-signals";
+import { leerCheckAzul } from "@/lib/verificacion/read";
 import { ProfileHeader } from "../profile-header";
 import { ShareProfileButton } from "../share-profile-button";
 import { ProfileTabSection } from "../profile-tab-section";
@@ -142,6 +143,13 @@ export default async function PerfilPublicoPage({
   const base = `/perfil/${id}`;
   const memberSince = memberSinceLabel(card.createdAt, tenant.locale, viewerZone ?? undefined);
 
+  // El check azul (0101) sale de `profiles.verified_badge`, el espejo público
+  // que mantiene el trigger de la suscripción. NO de `profile_card`: esa RPC
+  // devuelve la ficha filtrada por privacidad, y la insignia no es un dato
+  // privado —es lo que ve cualquiera al lado del nombre—, así que meterla ahí
+  // habría sido cambiar la firma de la función para nada.
+  const checkAzul = await leerCheckAzul(supabase, card.id);
+
   return (
     <div className="flex flex-col gap-6">
       <ProfileHeader
@@ -154,6 +162,7 @@ export default async function PerfilPublicoPage({
         avatarUrl={card.avatarUrl}
         coverUrl={card.coverUrl}
         identityVerified={card.identityVerified}
+        verifiedBadge={checkAzul}
         location={location}
         memberSince={memberSince}
         stats={[

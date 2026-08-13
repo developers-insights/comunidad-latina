@@ -394,3 +394,32 @@ describe("CardPostMedia: insignia de música", () => {
     expect(badgeWrap?.className).toContain("bottom-[3.75rem]");
   });
 });
+
+/* -------- El filtro del video viaja por la card hasta reproducirse -------- */
+
+describe("filtro de presentación (0104) — llega desde el medio, no del post", () => {
+  it("cada diapositiva lleva el suyo: un video filtrado y una foto sin nada", () => {
+    // Es una decisión POR ARCHIVO. Un prop del post no podría expresar un
+    // carrusel con un video en Vintage y otro tal cual salió de la cámara.
+    const { container } = renderMedia([
+      { kind: "video", url: "https://cdn.example.com/uno.mp4", filterCss: "sepia(0.35)" },
+      { kind: "video", url: "https://cdn.example.com/dos.mp4" },
+    ]);
+
+    const videos = container.querySelectorAll("video");
+    expect(videos[0]?.style.filter).toBe("sepia(0.35)");
+    expect(videos[1]?.style.filter).toBe("");
+  });
+
+  it("la FOTO nunca lo recibe: el suyo ya está quemado en el archivo", () => {
+    // Si la foto también lo pintara, una publicación con filtro se vería con el
+    // efecto aplicado dos veces.
+    const { container } = renderMedia([
+      { kind: "image", url: "https://cdn.example.com/foto.jpg", filterCss: "grayscale(1)" },
+    ]);
+
+    for (const img of container.querySelectorAll("img")) {
+      expect(img.style.filter).toBe("");
+    }
+  });
+});

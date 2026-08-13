@@ -11,6 +11,15 @@ export const COPY = {
     signedOut: "Entrá a tu cuenta",
     signedOutHint: "Para publicar, guardar y hablar con la comunidad",
     signIn: "Entrar",
+    /**
+     * Se dice el nombre, no "modo negocio": lo que la persona necesita saber es
+     * con qué NOMBRE va a salir lo que publique. Aparece arriba de todo y sólo
+     * cuando está actuando como negocio — cuando está como ella misma, el
+     * avatar y su nombre ya lo dicen.
+     */
+    actingAs: (nombre: string) => `Estás usando la app como ${nombre}`,
+    actingAsHint: "Lo que publiques va a salir con el nombre del negocio.",
+    switchProfile: "Cambiar de perfil",
   },
 
   groups: {
@@ -47,6 +56,25 @@ export const COPY = {
     verified: {
       title: "Identidad verificada",
       description: "Ya tenés tu insignia. Gracias por cuidar a la comunidad.",
+    },
+    /**
+     * Las dos entradas que faltaban (pedido del cliente: «agregar el botón de
+     * hacerte creador en la sección de ajustes», «lo mismo para crear una
+     * cuenta de negocio»). El camino a creador ya existía completo en
+     * /creadores/solicitud pero NADA en la app llevaba ahí: era una pantalla
+     * huérfana. Acá sólo se agrega la puerta.
+     */
+    becomeCreator: {
+      title: "Recibí trabajos como creador",
+      description: "Postulate a los trabajos que publican los negocios y cobrá por ellos.",
+    },
+    createBusiness: {
+      title: "Crear una cuenta de negocio",
+      description: "Un segundo perfil para tu local, dentro de tu misma cuenta.",
+    },
+    businessAccount: {
+      title: "Tu cuenta de negocio",
+      description: "Elegí con qué perfil usás la app y administrá tu negocio.",
     },
     blocked: {
       title: "Cuentas bloqueadas",

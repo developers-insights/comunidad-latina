@@ -18,6 +18,7 @@ import {
   MAX_VIDEOS,
   checkPhotoPayload,
 } from "@/lib/media/post-media-limits";
+import { parseMediaFilterRef, type MediaFilterRef } from "@/lib/media/photo-filters";
 import {
   TIER_HUMAN,
   TIER_REVIEW,
@@ -290,6 +291,44 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     return { ok: false, code: "photo" };
   }
 
+  /**
+   * FILTRO DEL VIDEO (0104) — un arreglo PARALELO a `videoPaths`, cada entrada
+   * `null` o `{ id, intensity }`.
+   *
+   * Es paralelo a los paths y no un objeto ya armado por el cliente para que la
+   * clave —la ruta dentro del bucket— la escriba SIEMPRE este servidor, con los
+   * mismos paths que ya validó como propios más abajo (`isOwnVideoPath`). Si el
+   * cliente mandara el objeto, podría poner de clave la ruta del video de otra
+   * persona y pintarle un filtro encima.
+   *
+   * SE RECHAZA, NO SE LIMPIA. Un id fuera del catálogo o una intensidad fuera de
+   * rango no es un usuario: es un cliente que no es el nuestro. Publicar igual
+   * sin el filtro le enseñaría que puede mandar cualquier cosa mientras el
+   * servidor lo tape. Y un largo que no coincide con los videos recibidos
+   * significa que ya no sabemos qué filtro es de qué archivo — eso tampoco se
+   * adivina.
+   */
+  let videoFilters: Array<MediaFilterRef | null> = [];
+  try {
+    const raw = formData.get("videoFilters");
+    if (typeof raw === "string" && raw.length > 0) {
+      const decoded: unknown = JSON.parse(raw);
+      if (!Array.isArray(decoded) || decoded.length !== videoPaths.length) {
+        return { ok: false, code: GENERIC_INVALID };
+      }
+      const validated: Array<MediaFilterRef | null> = [];
+      for (const entry of decoded) {
+        const parsed = parseMediaFilterRef(entry);
+        if (!parsed.ok) return { ok: false, code: GENERIC_INVALID };
+        validated.push(parsed.value);
+      }
+      videoFilters = validated;
+    }
+  } catch {
+    // JSON ilegible: no hay forma de saber qué se quiso mandar.
+    return { ok: false, code: GENERIC_INVALID };
+  }
+
   // Orden de selección del usuario (foto/video intercalados). Opcional.
   let mediaOrder: Array<"photo" | "video"> = [];
   try {
@@ -500,6 +539,21 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // posts.media en el ORDEN en que el usuario eligió los medios.
   const mediaPaths: string[] = buildMediaInOrder(mediaOrder, photoPaths, videoPaths);
 
+  /**
+   * `posts.media_filters` (0104): el filtro elegido, indexado por la RUTA del
+   * archivo. Las claves salen de `videoPaths`, que a esta altura ya pasó por
+   * `isOwnVideoPath` — el cliente nunca escribe una clave.
+   *
+   * Las FOTOS no entran acá y no es un olvido: su filtro ya está quemado en los
+   * píxeles del archivo que se acaba de subir (`bake-photo.ts`). Guardarlo
+   * además como metadato lo aplicaría DOS veces al pintar.
+   */
+  const mediaFilters: Record<string, MediaFilterRef> = {};
+  videoPaths.forEach((path, index) => {
+    const filter = videoFilters[index];
+    if (filter) mediaFilters[path] = filter;
+  });
+
   // ---- Insert con el JWT del usuario: la RLS valida tenant/autor/status y,
   // si viene entity_listing_id, que el listing sea propio y published (0023).
   const basePayload = {
@@ -518,12 +572,25 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   };
   type PostInsert = typeof basePayload;
 
+  /**
+   * Ni `poll_kind` (0041) ni `media_filters` (0104) están todavía en
+   * database.types.ts —el archivo se regenera aparte—, así que el cast es por el
+   * TIPO generado, no por el contrato: las dos columnas existen en la base desde
+   * su migración. Al regenerar los tipos, esto se cae solo.
+   *
+   * `media_filters` viaja SIEMPRE, incluso vacío: es lo mismo que el default de
+   * la columna, y mandarlo explícito deja el insert diciendo la verdad completa
+   * de la publicación en vez de depender de un default que alguien podría tocar.
+   */
+  const insertPayload = {
+    ...basePayload,
+    media_filters: mediaFilters,
+    ...(pollKind ? { poll_kind: pollKind } : {}),
+  } as PostInsert;
+
   const { data: created, error: insertError } = await supabase
     .from("posts")
-    // `poll_kind` (0041) todavía no está en database.types.ts —el archivo se
-    // regenera aparte—, así que el cast es por el TIPO generado, no por el
-    // contrato: la columna existe en la base desde la migración.
-    .insert(pollKind ? ({ ...basePayload, poll_kind: pollKind } as PostInsert) : basePayload)
+    .insert(insertPayload)
     .select("id")
     .single();
 

@@ -11,6 +11,7 @@ import { COUNTRY_OPTIONS } from "@/components/auth/countries";
 import { FormError } from "@/components/auth/form-error";
 import { UsernameInput } from "@/components/auth/username-input";
 import { CoverUploadField } from "@/components/auth/cover-upload-field";
+import { AvatarUploadField } from "@/components/auth/avatar-upload-field";
 import { LanguagePicker } from "@/components/auth/language-picker";
 import { RESIDENCE_COUNTRIES } from "@/lib/profile/catalogs";
 import { ZoneInput } from "@/components/onboarding/zone-input";
@@ -91,6 +92,7 @@ export interface EditProfileInitial {
   birthdate: string;
   languages: string[];
   coverUrl: string | null;
+  avatarUrl: string | null;
 }
 
 export function EditProfileForm({ initial }: { initial: EditProfileInitial }) {
@@ -109,6 +111,8 @@ export function EditProfileForm({ initial }: { initial: EditProfileInitial }) {
   const [languages, setLanguages] = useState<string[]>(initial.languages);
   // `undefined` = la portada no se tocó. "" = se quitó. Ruta = se subió una.
   const [coverPath, setCoverPath] = useState<string | undefined>(undefined);
+  // Mismo contrato que `coverPath`, para la foto de perfil.
+  const [avatarPath, setAvatarPath] = useState<string | undefined>(undefined);
 
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -140,11 +144,13 @@ export function EditProfileForm({ initial }: { initial: EditProfileInitial }) {
         birthdate,
         languages,
         ...(coverPath !== undefined ? { coverPath } : {}),
+        ...(avatarPath !== undefined ? { avatarPath } : {}),
       };
       const result = await updateProfileAction(input);
       if (result.ok) {
         setFieldErrors({});
         setCoverPath(undefined);
+        setAvatarPath(undefined);
         toast({ title: COPY.saved, variant: "success" });
         return;
       }
@@ -171,6 +177,14 @@ export function EditProfileForm({ initial }: { initial: EditProfileInitial }) {
           value={coverPath}
           onChange={setCoverPath}
           currentUrl={initial.coverUrl}
+          disabled={pending}
+        />
+
+        <AvatarUploadField
+          value={avatarPath}
+          onChange={setAvatarPath}
+          currentUrl={initial.avatarUrl}
+          displayName={displayName}
           disabled={pending}
         />
 

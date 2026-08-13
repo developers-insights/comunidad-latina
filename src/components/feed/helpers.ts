@@ -39,6 +39,20 @@ export type PostMediaKind = "image" | "video";
 export interface PostMediaView {
   kind: PostMediaKind;
   url: string;
+  /**
+   * VALOR LISTO PARA `style.filter` de ESTE medio, o vacío/ausente si no lleva
+   * ninguno. Sólo lo traen los VIDEOS: la foto se publica con el filtro ya
+   * quemado en los píxeles (`bake-photo.ts`), así que volver a aplicarlo acá lo
+   * pintaría dos veces.
+   *
+   * Llega YA RESUELTO desde el servidor (`toPostCardModel` →
+   * `resolvePhotoFilterCss`) y no como `{id, intensidad}` a propósito: así el
+   * único lugar de toda la app que convierte un preset en CSS es el catálogo, y
+   * lo que se guardó en la base —un id y un número— nunca puede llegar a un
+   * `style` sin pasar por él. Un id corrupto se resuelve a cadena vacía; no hay
+   * camino por el que un texto arbitrario termine siendo una regla de estilo.
+   */
+  filterCss?: string;
 }
 
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|m4v)(\?.*)?$/i;
@@ -154,6 +168,37 @@ export function pollPercent(part: number, total: number): number {
   return Math.round((part / total) * 100);
 }
 
+/**
+ * LO QUE EL MENÚ ⋯ NECESITA SABER de una publicación (0097), viajando dentro del
+ * modelo de la tarjeta.
+ *
+ * Existe porque el menú se monta en DOS superficies con dos orígenes distintos:
+ * el detalle `/feed/[id]`, que tiene la fila cruda de `posts` en la mano, y el
+ * feed, que sólo tiene el `PostCardModel` ya armado. Sin esto, montar el menú en
+ * la tarjeta pedía una segunda consulta por publicación o un modelo a medias.
+ *
+ * NADA DE ESTO ES UN PERMISO. Que el menú ofrezca "Fijar" no autoriza a fijar:
+ * la autorización la deciden las server actions (relectura del post + autor +
+ * comunidad contra el JWT) y la RLS. Acá sólo se evita ofrecer algo que va a
+ * rebotar, y se elige el rótulo correcto ("Fijar" vs "Dejar de fijar").
+ */
+export interface PostMenuModel {
+  /** `posts.author_id`. null = la cuenta ya no existe (no hay a quién reportar). */
+  authorId: string | null;
+  /** `published` | `pending_review` | `removed`: sólo lo publicado se administra. */
+  status: string;
+  /**
+   * Las rutas de `posts.media` TAL CUAL están guardadas — no las URLs públicas
+   * de `media`. La hoja de edición nombra los archivos que se pueden quitar por
+   * su ruta; con la URL pública no podría.
+   */
+  mediaPaths: readonly string[];
+  /** Marcas de la 0097. null = la acción está apagada. */
+  pinnedAt: string | null;
+  hiddenAt: string | null;
+  commentsLockedAt: string | null;
+}
+
 export interface PostCardModel {
   id: string;
   kind: "post" | "question" | "text";
@@ -228,6 +273,12 @@ export interface PostCardModel {
    * post — igual que las encuestas y los etiquetados.
    */
   music: PostMusicView | null;
+  /**
+   * Insumos del menú ⋯ (0097). SIEMPRE presente —mismo criterio que
+   * `taggedPeople`—: la tarjeta lo consume sin defensas y un opcional acá se
+   * volvería un `?? {}` repetido en cada superficie que monte el menú.
+   */
+  postMenu: PostMenuModel;
 }
 
 /** Pista + recorte de UNA publicación, ya resuelta para el navegador. */

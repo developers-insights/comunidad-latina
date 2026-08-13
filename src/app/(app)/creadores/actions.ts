@@ -5,6 +5,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DAY_MS, HOUR_MS, limit } from "@/lib/rate-limit";
 import { getCreatorCommission } from "@/lib/creators/commission";
 import { WORK_MODES, normalizeWorkMode, requiresArea } from "@/lib/creators/work-mode";
+import {
+  DELIVERY_DAYS_MAX,
+  DELIVERY_DAYS_MIN,
+  DESCRIPTION_MAX,
+  DESCRIPTION_MIN,
+  MAX_INCLUDES,
+  MAX_PACKAGES,
+  TITLE_MAX,
+  TITLE_MIN,
+  normalizeIncludes,
+  parsePackagePrice,
+  reindexOrder,
+  type PriceError,
+} from "@/lib/creators/service-packages";
 import { isVisionConfigured } from "@/lib/config/services";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
@@ -504,6 +518,316 @@ export async function upsertCreatorProfile(
   if (error) {
     console.warn("[creadores] upsert de perfil falló", { code: error.code });
     return { ok: false, error: COPY.profile.errors.generic };
+  }
+
+  return { ok: true };
+}
+
+// ===========================================================================
+// Paquetes de servicio (0102) — el creador cierra precios en su perfil
+// ===========================================================================
+//
+// CONFIANZA: cliente del USUARIO, nunca admin. La RLS de
+// `creator_service_packages` ya resuelve quién escribe qué (dueño en su
+// comunidad, con perfil de creador existente), así que no hay nada que gatear
+// con service_role — a diferencia de gig_contracts, acá nadie mueve plata: se
+// publica un precio. Igual, cada escritura viaja con `.eq(creator_id)` y
+// `.eq(tenant_id)` explícitos: si mañana alguien afloja una policy, la query
+// sigue acotada por su cuenta (defensa en profundidad, patrón del repo).
+//
+// EL PRECIO LLEGA COMO TEXTO Y SE PARSEA ACÁ. El cliente manda lo que la
+// persona tipeó ("150,50"), no un número ya convertido: así el único lugar del
+// repo que convierte texto a centavos sigue siendo `parseAmountToCents`
+// (src/lib/pricing/money.ts), y un cliente hecho a mano no puede mandar
+// `priceCents: -1` ni `19.999`. Zod valida la FORMA; el monto lo valida el
+// parser, y el rango final lo vuelve a exigir la base.
+
+const includesSchema = z.array(z.string().max(200)).max(MAX_INCLUDES * 2);
+
+const packageSaveSchema = z.object({
+  /** Presente = edición; ausente = alta. */
+  id: z.uuid().nullish(),
+  title: z.string().trim().min(TITLE_MIN).max(TITLE_MAX),
+  description: z.string().trim().min(DESCRIPTION_MIN).max(DESCRIPTION_MAX),
+  includes: includesSchema,
+  /** Texto tal cual lo tipeó la persona — ver la cabecera. */
+  price: z.string().min(1).max(24),
+  deliveryDays: z.number().int().min(DELIVERY_DAYS_MIN).max(DELIVERY_DAYS_MAX),
+  active: z.boolean(),
+});
+
+export type ServicePackageInput = z.input<typeof packageSaveSchema>;
+
+export type SavePackageResult =
+  | { ok: true; id: string }
+  | { ok: false; error: string; needsAuth?: boolean; contactBlocked?: boolean };
+
+const PRICE_ERROR_COPY: Record<PriceError, string> = {
+  vacio: COPY.packages.errors.priceRequired,
+  formato: COPY.packages.errors.priceFormat,
+  cero: COPY.packages.errors.priceZero,
+  demasiado_grande: COPY.packages.errors.priceTooBig,
+};
+
+export async function saveServicePackage(
+  rawInput: ServicePackageInput,
+): Promise<SavePackageResult> {
+  const parsed = packageSaveSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    // El primer campo que falló manda el mensaje: un "revisá el formulario" no
+    // le dice a nadie qué revisar.
+    const field = parsed.error.issues[0]?.path[0];
+    if (field === "title") return { ok: false, error: COPY.packages.errors.titleShort };
+    if (field === "description") return { ok: false, error: COPY.packages.errors.descriptionShort };
+    if (field === "deliveryDays") return { ok: false, error: COPY.packages.errors.deliveryRequired };
+    if (field === "price") return { ok: false, error: COPY.packages.errors.priceRequired };
+    return { ok: false, error: COPY.packages.errors.generic };
+  }
+  const input = parsed.data;
+
+  // El precio, por el único parser de plata del repo.
+  const price = parsePackagePrice(input.price);
+  if (!price.ok) {
+    return { ok: false, error: PRICE_ERROR_COPY[price.reason] };
+  }
+
+  const includes = normalizeIncludes(input.includes);
+
+  // BLOQUEO DE DATOS DE CONTACTO (§6). El paquete es texto PÚBLICO que lee
+  // quien va a contratar: sirve igual de bien que un mensaje para mudar la
+  // conversación afuera ("escribime al…"). La regla ya rige en la propuesta de
+  // contrato y en la postulación; sería incoherente dejar abierta justamente la
+  // vidriera. Va después de Zod (que ya acotó longitudes) y ANTES de escribir.
+  const contact = blockContactInfoIn([input.title, input.description, ...includes]);
+  if (!contact.ok) {
+    return { ok: false, contactBlocked: true, error: contact.message };
+  }
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") {
+      return { ok: false, needsAuth: true, error: COPY.profile.needLoginCta };
+    }
+    return { ok: false, error: guard.message };
+  }
+  const { tenant, supabase, user } = guard;
+
+  if (!limit(`creator-package:${user.id}`, 60, HOUR_MS).ok) {
+    return { ok: false, error: COPY.packages.errors.generic };
+  }
+
+  // `creator_service_packages` llega con la 0102 y `database.types.ts` se
+  // regenera aparte: el cast es por el TIPO generado, no por el contrato — la
+  // tabla existe con sus CHECK y sus 4 policies. Mismo patrón que usa
+  // `createGigDraft` con `work_mode` (0087).
+  const open = supabase as unknown as SupabaseClient;
+
+  const payload = {
+    title: input.title,
+    description: input.description,
+    includes,
+    price_cents: price.cents,
+    currency: tenant.currency.toLowerCase(),
+    delivery_days: input.deliveryDays,
+    active: input.active,
+  };
+
+  if (input.id) {
+    // EDICIÓN. El `.eq(creator_id)` es lo que convierte "el id que mandó el
+    // cliente" en "un paquete mío": sin él, la RLS seguiría cubriendo, pero la
+    // action estaría confiando en un id ajeno para decidir qué escribir.
+    const { data: updated, error } = await open
+      .from("creator_service_packages")
+      .update(payload)
+      .eq("id", input.id)
+      .eq("tenant_id", tenant.id)
+      .eq("creator_id", user.id)
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[creadores] update de paquete falló", { code: error.code });
+      return { ok: false, error: COPY.packages.errors.generic };
+    }
+    if (!updated) return { ok: false, error: COPY.packages.errors.notFound };
+    return { ok: true, id: (updated as { id: string }).id };
+  }
+
+  // ALTA. El orden del nuevo va al final: se cuenta lo que ya hay y se usa ese
+  // número como `sort_order`. El tope de 6 se chequea acá para poder decirlo con
+  // palabras, pero el que MANDA es el trigger `creator_service_packages_cap`
+  // (dos pestañas guardando a la vez se saltean cualquier count de la app).
+  const { count } = await open
+    .from("creator_service_packages")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenant.id)
+    .eq("creator_id", user.id);
+
+  const existing = count ?? 0;
+  if (existing >= MAX_PACKAGES) {
+    return { ok: false, error: COPY.packages.errors.limit(MAX_PACKAGES) };
+  }
+
+  const { data: created, error } = await open
+    .from("creator_service_packages")
+    .insert({
+      ...payload,
+      tenant_id: tenant.id,
+      creator_id: user.id,
+      sort_order: Math.min(existing, MAX_PACKAGES - 1),
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    // 23514 = el CHECK/trigger de la base. El único que puede saltar acá con
+    // datos ya validados es el tope de 6 (carrera entre dos pestañas), así que
+    // se traduce a su mensaje en vez de al genérico.
+    if (error.code === "23514") {
+      return { ok: false, error: COPY.packages.errors.limit(MAX_PACKAGES) };
+    }
+    // 42501 = la RLS rechazó el INSERT. Con tenant y dueño correctos, lo que
+    // falta es el perfil de creador que exige el `exists` de la policy.
+    if (error.code === "42501") {
+      return { ok: false, error: COPY.packages.errors.needProfile };
+    }
+    console.warn("[creadores] insert de paquete falló", { code: error.code });
+    return { ok: false, error: COPY.packages.errors.generic };
+  }
+  if (!created) return { ok: false, error: COPY.packages.errors.generic };
+
+  return { ok: true, id: (created as { id: string }).id };
+}
+
+const packageIdSchema = z.object({ id: z.uuid() });
+
+export type PackageMutationResult =
+  | { ok: true }
+  | { ok: false; error: string; needsAuth?: boolean };
+
+/**
+ * Prender/apagar un paquete. Existe aparte de `saveServicePackage` porque
+ * apagar no debería obligar a reenviar (ni revalidar) todo el texto: es un
+ * gesto de un toque y tiene que responder como tal.
+ */
+export async function setServicePackageActive(
+  rawInput: { id: string; active: boolean },
+): Promise<PackageMutationResult> {
+  const parsed = packageIdSchema.extend({ active: z.boolean() }).safeParse(rawInput);
+  if (!parsed.success) return { ok: false, error: COPY.packages.errors.generic };
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") {
+      return { ok: false, needsAuth: true, error: COPY.profile.needLoginCta };
+    }
+    return { ok: false, error: guard.message };
+  }
+  const { tenant, supabase, user } = guard;
+
+  if (!limit(`creator-package:${user.id}`, 60, HOUR_MS).ok) {
+    return { ok: false, error: COPY.packages.errors.generic };
+  }
+
+  const open = supabase as unknown as SupabaseClient;
+  const { data: updated, error } = await open
+    .from("creator_service_packages")
+    .update({ active: parsed.data.active })
+    .eq("id", parsed.data.id)
+    .eq("tenant_id", tenant.id)
+    .eq("creator_id", user.id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[creadores] toggle de paquete falló", { code: error.code });
+    return { ok: false, error: COPY.packages.errors.generic };
+  }
+  if (!updated) return { ok: false, error: COPY.packages.errors.notFound };
+  return { ok: true };
+}
+
+export async function deleteServicePackage(
+  rawInput: { id: string },
+): Promise<PackageMutationResult> {
+  const parsed = packageIdSchema.safeParse(rawInput);
+  if (!parsed.success) return { ok: false, error: COPY.packages.errors.generic };
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") {
+      return { ok: false, needsAuth: true, error: COPY.profile.needLoginCta };
+    }
+    return { ok: false, error: guard.message };
+  }
+  const { tenant, supabase, user } = guard;
+
+  if (!limit(`creator-package:${user.id}`, 60, HOUR_MS).ok) {
+    return { ok: false, error: COPY.packages.errors.generic };
+  }
+
+  const open = supabase as unknown as SupabaseClient;
+  const { data: deleted, error } = await open
+    .from("creator_service_packages")
+    .delete()
+    .eq("id", parsed.data.id)
+    .eq("tenant_id", tenant.id)
+    .eq("creator_id", user.id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[creadores] delete de paquete falló", { code: error.code });
+    return { ok: false, error: COPY.packages.errors.generic };
+  }
+  if (!deleted) return { ok: false, error: COPY.packages.errors.notFound };
+  return { ok: true };
+}
+
+const reorderSchema = z.object({
+  ids: z.array(z.uuid()).min(1).max(MAX_PACKAGES),
+});
+
+/**
+ * Reordenar. Renumera 0,1,2… (ver `reindexOrder`) y escribe una fila por vez.
+ *
+ * NO se hace con un `upsert` de varias filas a propósito: un upsert manda las
+ * filas completas, así que un cliente hecho a mano podría colar un precio nuevo
+ * dentro de lo que dice ser "un reordenamiento". Acá cada UPDATE toca UNA
+ * columna —`sort_order`— y va acotado por dueño y comunidad. Son seis filas
+ * como mucho: el ahorro de un round-trip no paga abrir esa puerta.
+ */
+export async function reorderServicePackages(
+  rawInput: { ids: string[] },
+): Promise<PackageMutationResult> {
+  const parsed = reorderSchema.safeParse(rawInput);
+  if (!parsed.success) return { ok: false, error: COPY.packages.errors.generic };
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") {
+      return { ok: false, needsAuth: true, error: COPY.profile.needLoginCta };
+    }
+    return { ok: false, error: guard.message };
+  }
+  const { tenant, supabase, user } = guard;
+
+  if (!limit(`creator-package:${user.id}`, 60, HOUR_MS).ok) {
+    return { ok: false, error: COPY.packages.errors.generic };
+  }
+
+  const open = supabase as unknown as SupabaseClient;
+  for (const { id, sortOrder } of reindexOrder(parsed.data.ids)) {
+    const { error } = await open
+      .from("creator_service_packages")
+      .update({ sort_order: sortOrder })
+      .eq("id", id)
+      .eq("tenant_id", tenant.id)
+      .eq("creator_id", user.id);
+    if (error) {
+      console.warn("[creadores] reorden de paquetes falló", { code: error.code });
+      return { ok: false, error: COPY.packages.errors.generic };
+    }
   }
 
   return { ok: true };

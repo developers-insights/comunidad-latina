@@ -71,7 +71,15 @@ export function mapsHref(address: string | null | undefined): string | null {
 // Fila → modelo
 // ---------------------------------------------------------------------------
 
-function isResourceTopic(value: string): value is ResourceTopic {
+/**
+ * Exportada (antes vivía sólo acá adentro) porque `recursos/page.tsx` ahora la
+ * necesita para validar el `?tema=` de la URL antes de filtrar: un search param
+ * es texto libre que cualquiera puede escribir a mano, así que "es un tema
+ * real" tiene que verificarse con la MISMA regla que decide si una fila de la
+ * base se muestra, no con una copia a mano del arreglo.
+ */
+export function isResourceTopic(value: string | null | undefined): value is ResourceTopic {
+  if (!value) return false;
   return (RESOURCE_TOPICS as readonly string[]).includes(value);
 }
 

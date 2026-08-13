@@ -1,17 +1,24 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import {
   BookOpenText,
-  CaretRight,
+  ForkKnife,
   HandHeart,
   Lifebuoy,
   MagnifyingGlass,
+  UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
-import { Skeleton, bubbleStyle } from "@/components/ui";
-import { COMUNIDAD_ACCENT, ComunidadHeading, OrigenNota } from "@/components/comunidad";
+import { Skeleton, SquareTile } from "@/components/ui";
+import {
+  COMUNIDAD_ACCENT,
+  COMUNIDAD_ACCENT_COMIDA,
+  COMUNIDAD_ACCENT_GUIAS,
+  COMUNIDAD_ACCENT_PERDIDOS,
+  COMUNIDAD_ACCENT_VOLUNTARIOS,
+  ComunidadHeading,
+  OrigenNota,
+} from "@/components/comunidad";
 import { COMUNIDAD_COPY } from "@/lib/comunidad";
 import { getTenant } from "@/lib/tenant/resolve";
-import { cn } from "@/lib/utils";
 import { countOpenCases } from "../queries";
 
 export const metadata = { title: "Comunidad" };
@@ -26,13 +33,40 @@ const C = COMUNIDAD_COPY.index;
  * ayuda mutua. Los enlaces viejos a /comunidad ahora aterrizan acá, que es un
  * destino mejor que el que tenían.
  *
- * ── POR QUÉ TRES PUERTAS Y NO UNA LISTA ─────────────────────────────────────
- * Son tres cosas con tres urgencias distintas: buscar ayuda AHORA (recursos),
- * entender un trámite con tiempo (guías) y el ida y vuelta del barrio (perdido
- * y encontrado). Mezclarlas en un solo listado obliga a leer todo para
- * encontrar una. Tres tiles grandes, en ese orden, y el aviso de procedencia
- * arriba de todo: quien entra asustado tiene que saber de entrada que lo que va
- * a leer no se lo inventamos nosotros.
+ * ── DE TRES PUERTAS A GRILLA DE CUADRADOS (rediseño 2026-08-13) ─────────────
+ * Hasta acá esta pantalla mostraba tres filas apaisadas ("puertas": ícono +
+ * texto + flecha), documentado a propósito como "TRES PUERTAS Y NO UNA LISTA"
+ * — tres urgencias distintas que mezcladas en un solo listado obligaban a leer
+ * todo para encontrar una. Esa razón seguía siendo válida el día que cambió;
+ * lo que la superó fue el pedido EXPLÍCITO y textual del cliente, con captura
+ * de pantalla adjunta: «mantener los cuadrados iguales en la parte de
+ * búsqueda, pero en la sección de comunidad». /buscar ya resolvía el MISMO
+ * problema (categorías distintas, cada una con su urgencia y su color) con una
+ * grilla de cuadrados — ícono grande arriba, etiqueta abajo, acento pastel
+ * propio — y el cliente señaló esa grilla como el molde a copiar acá adentro.
+ * Entre "cada sección se escanea sola" (la razón original) y "toda la app usa
+ * el mismo lenguaje visual" (el pedido nuevo), gana la consistencia: una
+ * grilla de cuadrados sigue separando cada categoría tan bien como las filas
+ * lo hacían, y además hace que Comunidad se vea, se toque y se recorra igual
+ * que Buscar. El cuadrado en sí no se reimplementó: `SquareTile` es el mismo
+ * componente que dibuja /buscar, extraído a `@/components/ui` para esto — ver
+ * su cabecera.
+ *
+ * Dos categorías nuevas (pedido textual: "Bancos de comida gratis" y "Grupo de
+ * voluntarios"). Ninguna trajo tabla nueva:
+ *   · Bancos de comida YA vivía como tema `comida` de `community_resources`
+ *     (0096) — sólo le faltaba una puerta propia. La tarjeta filtra la MISMA
+ *     lectura (`fetchResourceGroups`) por `?tema=comida` en
+ *     `/comunidad/recursos` — ver ese archivo.
+ *   · Voluntarios es tema NUEVO (`voluntariado`, migración 0099) de la MISMA
+ *     tabla: directorio de organizaciones que reciben voluntarios, curado por
+ *     admins y con fuente obligatoria — el mismo trato que una clínica o un
+ *     consulado, no una convocatoria que publica cualquiera. El pedido del
+ *     cliente nunca describió "que la gente publique su propia convocatoria";
+ *     modelarlo como `listings` hubiese significado construir un flujo de
+ *     publicación de dos fases entero (borrador → moderación → publicado,
+ *     como Perdido y encontrado) para algo que el directorio curado ya
+ *     resuelve con cero tablas nuevas.
  */
 export default async function ComunidadPage() {
   return (
@@ -47,30 +81,61 @@ export default async function ComunidadPage() {
 
       <OrigenNota className="mt-5" incluirMigracion />
 
-      <nav aria-label={C.title} className="mt-6 flex flex-col gap-3">
-        <Puerta
-          href="/comunidad/recursos"
-          icon={<Lifebuoy size={26} weight="fill" aria-hidden="true" />}
-          title={C.cards.recursos.title}
-          hint={C.cards.recursos.hint}
-        />
-        <Puerta
-          href="/comunidad/guias"
-          icon={<BookOpenText size={26} weight="fill" aria-hidden="true" />}
-          title={C.cards.guias.title}
-          hint={C.cards.guias.hint}
-        />
-        <Puerta
-          href="/comunidad/perdidos"
-          icon={<MagnifyingGlass size={26} weight="bold" aria-hidden="true" />}
-          title={C.cards.perdidos.title}
-          hint={C.cards.perdidos.hint}
-          badge={
-            <Suspense fallback={<Skeleton className="h-5 w-20 rounded-full" />}>
-              <CasosAbiertos />
-            </Suspense>
-          }
-        />
+      {/* Mismas clases de grilla que /buscar (`grid-cols-2 gap-3 sm:grid-cols-3`):
+          es el punto que pidió el cliente, no un parecido de casualidad. */}
+      <nav aria-label={C.title} className="mt-6">
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <li>
+            <SquareTile
+              href="/comunidad/recursos"
+              label={C.cards.recursos.title}
+              hint={C.cards.recursos.hint}
+              icon={<Lifebuoy size={28} weight="fill" aria-hidden="true" />}
+              accent={COMUNIDAD_ACCENT}
+            />
+          </li>
+          <li>
+            <SquareTile
+              href="/comunidad/guias"
+              label={C.cards.guias.title}
+              hint={C.cards.guias.hint}
+              icon={<BookOpenText size={28} weight="fill" aria-hidden="true" />}
+              accent={COMUNIDAD_ACCENT_GUIAS}
+            />
+          </li>
+          <li>
+            <SquareTile
+              href="/comunidad/perdidos"
+              label={C.cards.perdidos.title}
+              hint={C.cards.perdidos.hint}
+              icon={<MagnifyingGlass size={28} weight="bold" aria-hidden="true" />}
+              accent={COMUNIDAD_ACCENT_PERDIDOS}
+              badge={
+                <Suspense fallback={<Skeleton className="h-5 w-20 rounded-full" />}>
+                  <CasosAbiertos />
+                </Suspense>
+              }
+            />
+          </li>
+          <li>
+            <SquareTile
+              href="/comunidad/recursos?tema=comida"
+              label={C.cards.comida.title}
+              hint={C.cards.comida.hint}
+              icon={<ForkKnife size={28} weight="fill" aria-hidden="true" />}
+              accent={COMUNIDAD_ACCENT_COMIDA}
+            />
+          </li>
+          <li>
+            <SquareTile
+              href="/comunidad/recursos?tema=voluntariado"
+              label={C.cards.voluntarios.title}
+              hint={C.cards.voluntarios.hint}
+              icon={<UsersThree size={28} weight="fill" aria-hidden="true" />}
+              accent={COMUNIDAD_ACCENT_VOLUNTARIOS}
+            />
+          </li>
+        </ul>
       </nav>
     </>
   );
@@ -78,7 +143,7 @@ export default async function ComunidadPage() {
 
 /**
  * El contador va en su propio Suspense: es lo único de esta pantalla que
- * consulta la base, y no puede retrasar el render de tres enlaces que ya se
+ * consulta la base, y no puede retrasar el render de cinco tarjetas que ya se
  * conocen. Si la consulta falla, el contador no aparece — nunca un cero que
  * mienta diciendo que no hay casos.
  */
@@ -88,63 +153,8 @@ async function CasosAbiertos() {
   if (abiertos === 0) return null;
 
   return (
-    <span className="inline-flex items-center rounded-full bg-[color-mix(in_oklab,var(--accent-comunidad)_18%,var(--color-surface))] px-2.5 py-0.5 text-xs font-semibold tabular-nums text-foreground">
+    <span className="inline-flex items-center rounded-full bg-[color-mix(in_oklab,var(--accent-comunidad-perdidos)_18%,var(--color-surface))] px-2.5 py-0.5 text-xs font-semibold tabular-nums text-foreground">
       {abiertos === 1 ? "1 caso abierto" : `${abiertos} casos abiertos`}
     </span>
-  );
-}
-
-function Puerta({
-  href,
-  icon,
-  title,
-  hint,
-  badge,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  title: string;
-  hint: string;
-  badge?: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      style={bubbleStyle(COMUNIDAD_ACCENT)}
-      className={cn(
-        "group relative flex items-center gap-3 rounded-xl border p-4",
-        "border-[var(--bubble-line)] bg-[var(--bubble-fill)]",
-        "shadow-[inset_0_1px_0_var(--cl-bezel-highlight)]",
-        "transition-[background-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
-        "active:scale-[0.99] hover:bg-[var(--bubble-fill-strong)]",
-        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className="flex size-12 shrink-0 items-center justify-center rounded-md bg-[var(--bubble-wash)] text-[var(--bubble-ink)]"
-      >
-        {icon}
-      </span>
-
-      <span className="min-w-0 flex-1">
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="font-display text-base font-semibold leading-snug text-foreground">
-            {title}
-          </span>
-          {badge}
-        </span>
-        <span className="mt-0.5 block text-sm leading-relaxed text-foreground-secondary">
-          {hint}
-        </span>
-      </span>
-
-      <CaretRight
-        size={18}
-        weight="bold"
-        aria-hidden="true"
-        className="shrink-0 text-foreground-muted transition-transform duration-(--duration-fast) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0"
-      />
-    </Link>
   );
 }

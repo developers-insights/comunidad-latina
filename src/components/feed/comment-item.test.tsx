@@ -61,6 +61,27 @@ describe("CommentItem", () => {
     expect(screen.queryByTestId("trust-badge")).toBeNull();
   });
 
+  it("sin menú: no se renderiza ningún slot extra (el comportamiento de siempre)", () => {
+    const { container } = renderItem();
+    expect(container.querySelector("[data-testid='menu']")).toBeNull();
+  });
+
+  it("con menú: el slot va DESPUÉS del autor y del tiempo en el orden del DOM", () => {
+    const { container } = renderItem({
+      menu: <span data-testid="menu">⋯</span>,
+    });
+    const menu = container.querySelector("[data-testid='menu']");
+    expect(menu).toBeTruthy();
+
+    // El lector de pantalla anuncia de quién es y de cuándo ANTES de ofrecer
+    // "opciones": si el menú quedara primero, cada comentario del hilo se leería
+    // empezando por un botón.
+    const nombre = screen.getByText("Rosa Peralta");
+    expect(
+      nombre.compareDocumentPosition(menu as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("optimista en vuelo: atenúa el item y usa el label de envío", () => {
     const { container } = renderItem({ timeAgoLabel: "Enviando…", pending: true });
     const li = container.querySelector("li");

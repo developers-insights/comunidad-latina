@@ -5,8 +5,13 @@ import type { Tenant } from "@/lib/tenant/resolve";
 import { BRAND_NAME } from "@/lib/brand";
 import { Avatar } from "@/components/ui";
 import { HeaderActions } from "@/components/shell/header-actions";
+import { IdentitySwitcher } from "@/components/shell/identity-switcher";
 import { NotificationBell } from "@/components/notifications";
 import { getShellContext } from "@/components/shell/shell-context";
+import {
+  getIdentidadActiva,
+  listarIdentidadesDeNegocio,
+} from "@/lib/perfil-activo/identidad";
 import { t } from "@/lib/i18n";
 
 const COPY = {
@@ -43,7 +48,14 @@ function isOptimizableSrc(src: string): boolean {
  * El `sticky top-0 z-40` vive en el wrapper de `(app)/layout.tsx`, NO acá.
  */
 export async function Header({ tenant, className }: { tenant: Tenant; className?: string }) {
-  const menu = await getShellContext();
+  // La identidad activa se resuelve en el SERVIDOR (0103): el cliente no elige
+  // con qué nombre publica, solo pide el cambio. Las tres lecturas están
+  // `cache()`-eadas por request, así que Ajustes las reusa sin repetir consultas.
+  const [menu, negocios, identidad] = await Promise.all([
+    getShellContext(),
+    listarIdentidadesDeNegocio(),
+    getIdentidadActiva(),
+  ]);
   // Single-community: si el tenant no trae logo propio, cae al logo de la
   // plataforma (las tres figuras azul·amarillo·rojo).
   const logoSrc = tenant.logoUrl ?? "/brand/logo-mark.png";
@@ -107,8 +119,26 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
             2026-07-29). El avatar es el control de identidad más reconocible que
             existe en una app social: dice de quién es la sesión ANTES de tocarlo,
             cosa que un ícono de hamburguesa nunca hizo. Sin sesión, la misma
-            posición invita a entrar. */}
-        {menu.user ? (
+            posición invita a entrar.
+
+            Desde la 0103 ese mismo avatar dice además CON QUÉ PERFIL estás
+            actuando: quien tiene cuenta de negocio lo toca y elige (ver
+            identity-switcher.tsx). Quien no tiene ninguna no nota el cambio —
+            el avatar sigue siendo el link de siempre a /perfil, porque un menú
+            de una sola opción es un menú que estorba. */}
+        {menu.user && negocios.length > 0 ? (
+          <IdentitySwitcher
+            personal={menu.user}
+            negocios={negocios.map((negocio) => ({
+              businessId: negocio.businessId,
+              nombre: negocio.nombre,
+              rol: negocio.rol,
+            }))}
+            activeBusinessId={
+              identidad.tipo === "negocio" ? identidad.negocio.businessId : null
+            }
+          />
+        ) : menu.user ? (
           <Link
             href="/perfil"
             aria-label={COPY.profile}

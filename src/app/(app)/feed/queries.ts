@@ -26,6 +26,7 @@ import {
   type PostMusicView,
   type PostPollView,
 } from "@/components/feed";
+import { mediaFilterCssByPath } from "@/lib/media/photo-filters";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { timeAgo } from "@/lib/utils";
 import type { TaggedProfile } from "@/lib/social/post-tags";
@@ -82,7 +83,48 @@ export interface PostRow {
   eligible_for_short_feed: boolean | null;
   /** posts.video_category — catálogo cerrado del menú de Videos Cortos. */
   video_category: string | null;
+  /**
+   * LAS TRES MARCAS DEL MENÚ ⋯ (0097). Viajan con toda fila de post por el mismo
+   * motivo que las de video: la decisión que habilitan —qué ofrece el menú y qué
+   * rótulo lleva cada fila— la toma un componente que se monta en varias
+   * superficies, y un select que las pidiera sólo en una dejaría a las otras
+   * decidiendo con datos que no tienen. Son tres columnas escalares.
+   */
+  pinned_at: string | null;
+  hidden_at: string | null;
+  comments_locked_at: string | null;
+  /**
+   * FILTRO DE PRESENTACIÓN POR ARCHIVO (0104). Objeto `{ruta: {id, intensity}}`
+   * — hoy sólo lo llevan los VIDEOS: la foto se publica con el filtro ya quemado
+   * en los píxeles y volver a aplicarlo al pintar lo mostraría dos veces.
+   *
+   * `unknown` a propósito: es jsonb, o sea que lo que vuelve de la base es lo
+   * que alguien escribió alguna vez. Se lo lee con `mediaFilterCssByPath`, que
+   * valida contra el catálogo y devuelve CSS del catálogo o nada — nunca lo que
+   * diga la fila. Opcional porque una consulta que no la pida (o una fila
+   * anterior a la 0104) significa "sin filtros", que es la verdad.
+   */
+  media_filters?: unknown;
 }
+
+/**
+ * Filtro PostgREST que saca del listado lo que su autor OCULTÓ (0097).
+ *
+ * Va como string de `.or()` y no como `.is("hidden_at", null)` por una razón
+ * concreta: `hidden_at` todavía no está en `database.types.ts` (se regenera
+ * aparte) y `.is()` sobre una columna que el tipo no conoce no compila. `.or()`
+ * recibe texto crudo, así que atraviesa el tipado sin castear el cliente entero.
+ * Un `.or()` de un solo término es un AND más, y PostgREST AND-ea cada `.or()`
+ * de nivel superior con los otros (visibilidad, bloqueados, keyset).
+ *
+ * ESTÁ ACÁ Y NO REPETIDO EN CADA QUERY para que sea UNA sola definición de "qué
+ * es una publicación visible". Lo usan el feed (`load-more.ts`), el scroll de
+ * Videos Cortos (`videos/queries.ts`) y el grid del perfil (`perfil/posts.ts`):
+ * las tres superficies de descubrimiento. El detalle `/feed/[id]` NO lo usa, y
+ * es deliberado — ocultar del feed no rompe el link que alguien ya compartió
+ * (ver el punto 2 de la cabecera de la 0097).
+ */
+export const VISIBLE_POSTS_FILTER = "hidden_at.is.null";
 
 /** El juego de columnas que supabase-js sabe parsear HOY (sin view_count). */
 type ParsablePostColumns =
@@ -108,7 +150,7 @@ type ParsablePostColumns =
  * escalares: el costo es nulo al lado de la clase de bug que evitan.
  */
 export const POST_COLUMNS =
-  "id, body, kind, media, status, like_count, comment_count, view_count, created_at, author_id, entity_listing_id, video_type, duration_seconds, is_paid_ad, eligible_for_short_feed, video_category" as ParsablePostColumns;
+  "id, body, kind, media, status, like_count, comment_count, view_count, created_at, author_id, entity_listing_id, video_type, duration_seconds, is_paid_ad, eligible_for_short_feed, video_category, pinned_at, hidden_at, comments_locked_at, media_filters" as ParsablePostColumns;
 
 const FALLBACK_AUTHOR: AuthorView = {
   profileId: null,
@@ -701,9 +743,16 @@ export function toPostCardModel(
   // Bucket post-media (0025): fotos y videos conviven en el array `media`;
   // el kind se infiere por extensión (mediaKindOf). photoUrl queda como la
   // primera FOTO para los consumidores viejos que renderizan <img>.
+  const filterCssByPath = mediaFilterCssByPath(row.media_filters);
   const media: PostMediaView[] = row.media
     .filter((path) => path && path.trim().length > 0)
-    .map((path) => ({ kind: mediaKindOf(path), url: postMediaUrl(path) }));
+    .map((path) => ({
+      kind: mediaKindOf(path),
+      url: postMediaUrl(path),
+      // Se busca por la RUTA guardada, no por posición: quitar una foto de una
+      // publicación ya publicada (0097) no puede correrle el filtro al video.
+      filterCss: filterCssByPath.get(path),
+    }));
   const firstPhoto = media.find((item) => item.kind === "image");
   return {
     id: row.id,
@@ -732,6 +781,19 @@ export function toPostCardModel(
     // que todavía no consulta `post_music` muestra un post sin música, que es
     // la verdad hasta que lo pida.
     music: extras?.music ?? null,
+    // Insumos del menú ⋯ (0097). Se mapean SIEMPRE y por el MISMO motivo que
+    // las columnas de video: el menú se monta en el feed y en el detalle, y una
+    // superficie que no los tuviera ofrecería "Fijar" sobre algo ya fijado.
+    postMenu: {
+      authorId: row.author_id,
+      status: row.status,
+      // Las rutas CRUDAS, no las URLs públicas de `media`: la hoja de edición
+      // quita fotos nombrándolas por su ruta en el bucket.
+      mediaPaths: row.media,
+      pinnedAt: row.pinned_at ?? null,
+      hiddenAt: row.hidden_at ?? null,
+      commentsLockedAt: row.comments_locked_at ?? null,
+    },
     // Columnas de video (0046). Se mapean SIEMPRE, en todas las superficies:
     // son las que dejan que la tarjeta sepa que un video es publicitario aunque
     // su campaña ya no esté vigente. `?? false` / `?? true` espejan los defaults

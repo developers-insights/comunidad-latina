@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database.types";
 import {
   POST_COLUMNS,
+  VISIBLE_POSTS_FILTER,
   fetchActivePromotedPostIds,
   fetchAuthorViews,
   fetchBlockedIds,
@@ -183,6 +184,12 @@ export async function fetchVideoReelsPage({
     query = query.or(
       feedPostVisibilityFilter(followedListingIds, [...promotedPostIds]),
     );
+
+    // Fuera lo que su autor ocultó del feed (0097). El scroll de Videos Cortos
+    // es una superficie de DESCUBRIMIENTO como el feed: si la persona sacó su
+    // publicación de un lado y siguiera apareciendo del otro, "ocultar" no
+    // significaría nada.
+    query = query.or(VISIBLE_POSTS_FILTER);
 
     if (blockedIds.size > 0) {
       query = query.or(

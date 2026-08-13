@@ -22,6 +22,7 @@ function postTile(overrides: Partial<PostTile> = {}): PostTile {
     mediaUrl: null,
     text: "Che, alguien alquila cuartos por Corona?",
     isQuestion: false,
+    pinned: false,
     ...overrides,
   };
 }

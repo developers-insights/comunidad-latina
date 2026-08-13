@@ -39,6 +39,15 @@ export interface CommentItemProps {
    *    por debajo de AA).
    */
   tone?: "surface" | "media";
+  /**
+   * Slot del menú ⋯ del comentario (`CommentMenu`, 0097). Es un SLOT y no un
+   * juego de props (`viewerId`, `postAuthorId`, `onDeleted`…) por lo que dice el
+   * docblock de arriba: este módulo corre igual en el servidor y en el cliente,
+   * y no puede llevar estado. Quien lo monta ya sabe quién está mirando y qué
+   * hacer cuando el comentario desaparece; acá sólo se le reserva el lugar.
+   * Ausente → el comentario se pinta exactamente como antes.
+   */
+  menu?: React.ReactNode;
 }
 
 export function CommentItem({
@@ -47,6 +56,7 @@ export function CommentItem({
   timeAgoLabel,
   pending = false,
   tone = "surface",
+  menu,
 }: CommentItemProps) {
   const onMedia = tone === "media";
   return (
@@ -95,6 +105,10 @@ export function CommentItem({
           >
             · {timeAgoLabel}
           </span>
+          {/* Último en el DOM y a la derecha por `ml-auto`: el lector de
+              pantalla anuncia de quién es el comentario y de cuándo ANTES de
+              ofrecer "opciones", que es el orden en que la gente lo lee. */}
+          {menu && <div className="ml-auto shrink-0">{menu}</div>}
         </div>
         <p
           className={cn(

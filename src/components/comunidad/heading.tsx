@@ -5,6 +5,19 @@ import { cn } from "@/lib/utils";
 /** Acento del módulo (globals.css). Una sola constante para todo Comunidad. */
 export const COMUNIDAD_ACCENT = "var(--accent-comunidad)";
 
+/**
+ * Sub-acentos de la grilla de categorías de la portada (0099, rediseño
+ * 2026-08-13). Nombradas acá y no como strings sueltos en `(indice)/page.tsx`
+ * por lo mismo que ya vale para `COMUNIDAD_ACCENT`: un typo en
+ * `"var(--accent-comunidad-comida)"` escrito a mano no lo agarra TypeScript,
+ * una constante mal importada sí. "Pedir ayuda" no tiene la suya: reusa
+ * `COMUNIDAD_ACCENT` a propósito (ver el comentario de la portada).
+ */
+export const COMUNIDAD_ACCENT_GUIAS = "var(--accent-comunidad-guias)";
+export const COMUNIDAD_ACCENT_PERDIDOS = "var(--accent-comunidad-perdidos)";
+export const COMUNIDAD_ACCENT_COMIDA = "var(--accent-comunidad-comida)";
+export const COMUNIDAD_ACCENT_VOLUNTARIOS = "var(--accent-comunidad-voluntarios)";
+
 export interface ComunidadHeadingProps {
   /** Ícono Phosphor de la pantalla, ya instanciado (28px). Decorativo. */
   icon: ReactNode;

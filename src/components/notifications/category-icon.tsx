@@ -4,6 +4,7 @@ import {
   Buildings,
   CalendarBlank,
   ChatCircle,
+  ClockCountdown,
   CreditCard,
   Handshake,
   House,
@@ -48,6 +49,9 @@ const ICONS: Record<NotificationCategory, ReactNode> = {
   seguridad: <ShieldWarning size={SIZE} />,
   cuenta: <UserCircle size={SIZE} />,
   plataforma: <Sparkle size={SIZE} />,
+  // Un reloj con cuenta regresiva, no un tacho ni un cartel de alerta: lo que
+  // pasa es que se acaba un plazo, no que se destruya algo (0098).
+  vencimientos: <ClockCountdown size={SIZE} />,
 };
 
 /**

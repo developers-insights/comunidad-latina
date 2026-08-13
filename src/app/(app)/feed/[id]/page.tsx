@@ -13,6 +13,7 @@ import {
 // Import por path directo (el barrel del feed es de otro agente): el item del
 // comentario es fuente única compartida con la hoja del feed.
 import { CommentItem } from "@/components/feed/comment-item";
+import { CommentMenu } from "@/components/feed/comment-menu";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
@@ -169,6 +170,8 @@ export default async function PostDetailPage({
     music: musicByPostId.get(post.id) ?? null,
   });
   const isPublished = post.status === "published";
+  /** Comentarios cerrados por su autor (0097). Vale también para él. */
+  const commentsLocked = Boolean(post.comments_locked_at);
 
   return (
     <>
@@ -219,7 +222,27 @@ export default async function PostDetailPage({
         // NO_REEL_SCOPE de components/feed/card-video.tsx (literal acá porque
         // esto es un server component y ese módulo es "use client").
         videoScope="sin-reel"
-        menu={<PostMenu postId={post.id} authorId={post.author_id} viewerId={viewerId} />}
+        menu={
+          <PostMenu
+            postId={post.id}
+            authorId={post.author_id}
+            viewerId={viewerId}
+            // Sin estos datos el menú no podía ofrecer editar (necesita el texto
+            // de partida) ni nombrar lo que se pierde al eliminar. Ya viajaban
+            // en la fila; sólo faltaba pasarlos.
+            postBody={post.body}
+            postStatus={post.status}
+            hasMedia={post.media.length > 0}
+            media={post.media}
+            commentCount={post.comment_count}
+            likeCount={post.like_count}
+            pinnedAt={post.pinned_at}
+            hiddenAt={post.hidden_at}
+            commentsLockedAt={post.comments_locked_at}
+            // Al eliminar hay que SALIR: esta página deja de existir.
+            redirectAfterDelete="/feed"
+          />
+        }
       />
 
       <section aria-label={COPY.comments.title} className="mt-6">
@@ -238,20 +261,46 @@ export default async function PostDetailPage({
           />
         ) : (
           <ul className="mt-4 flex flex-col gap-4">
-            {comments.map((comment) => (
-              <CommentItem
-                key={comment.id}
-                author={authorViewOf(authors, comment.author_id)}
-                body={comment.body}
-                timeAgoLabel={timeAgo(comment.created_at, now)}
-              />
-            ))}
+            {comments.map((comment) => {
+              const author = authorViewOf(authors, comment.author_id);
+              // Borran su autor y quien publicó (0097). Esto NO es el permiso
+              // —lo decide la policy `comments_delete` y la server action lee
+              // cuántas filas volvieron—: es para no ofrecer un menú que va a
+              // rebotar.
+              const isOwnComment = Boolean(viewerId && comment.author_id === viewerId);
+              const canDelete = isOwnComment || isAuthor;
+              return (
+                <CommentItem
+                  key={comment.id}
+                  author={author}
+                  body={comment.body}
+                  timeAgoLabel={timeAgo(comment.created_at, now)}
+                  menu={
+                    canDelete ? (
+                      <CommentMenu
+                        commentId={comment.id}
+                        authorName={author.displayName}
+                        isOwnComment={isOwnComment}
+                      />
+                    ) : undefined
+                  }
+                />
+              );
+            })}
           </ul>
         )}
 
         {isPublished && (
           <div className="mt-5">
-            {viewerId ? (
+            {commentsLocked ? (
+              // Comentarios cerrados por su autor (0097). Se dice en el lugar
+              // donde estaría el campo de escribir: un espacio vacío se lee
+              // como que la app se rompió. El candado real lo pone la policy
+              // `comments_insert`, no este `if`.
+              <p className="rounded-lg border border-dashed border-border bg-surface-subtle px-4 py-3 text-sm text-foreground-secondary">
+                {COPY.postMenu.commentsClosedNotice}
+              </p>
+            ) : viewerId ? (
               <CommentComposer postId={post.id} />
             ) : (
               <Link

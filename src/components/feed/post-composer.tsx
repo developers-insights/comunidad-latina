@@ -24,7 +24,14 @@ import {
   prepareMediaUploadAction,
 } from "@/app/(app)/feed/actions";
 import { bakePhoto } from "@/lib/media/bake-photo";
-import { getPhotoFilter } from "@/lib/media/photo-filters";
+import { saveTagsAction } from "@/app/(app)/feed/tag-actions";
+import { attachPostMusicAction } from "@/app/(app)/feed/music-actions";
+import type { TaggedProfile } from "@/lib/social/post-tags";
+import type { PickedTrack } from "@/lib/media/audio-track";
+import { PeopleTagger } from "./people-tagger";
+import { MusicPicker } from "./music-picker";
+import { TAGGER_COPY } from "./people-tagger-copy";
+import { MUSIC_COPY } from "./music-copy";
 /**
  * CUPO Y PESO DE LAS FOTOS: importados, nunca escritos acá. Este archivo tenía
  * su propio `MAX_PHOTOS = 10` mientras la server action seguía en 4 — publicar
@@ -37,7 +44,11 @@ import {
   checkPhotoPayload,
 } from "@/lib/media/post-media-limits";
 import { ComposerSheet, type ComposerMode } from "./composer-sheet";
-import { DEFAULT_PHOTO_EDIT, type PhotoEdit } from "./photo-editor";
+import {
+  DEFAULT_PHOTO_FILTER_ID,
+  DEFAULT_PHOTO_FILTER_INTENSITY,
+} from "@/lib/media/photo-filters";
+import { DEFAULT_PHOTO_EDIT, photoEditFilterCss, type PhotoEdit } from "./photo-editor";
 import { COPY } from "./copy";
 
 const MAX_VIDEO_BYTES = 60 * 1024 * 1024;
@@ -69,10 +80,17 @@ interface PickedMedia {
    */
   durationSeconds?: number;
   /**
-   * Filtro + texto elegidos en el editor (sólo `kind: "photo"`). Arranca en
-   * `DEFAULT_PHOTO_EDIT` (sin filtro, sin texto) apenas se elige la foto —
-   * así el horneado al publicar siempre tiene algo que leer, se haya abierto
-   * el editor o no.
+   * Filtro (+ texto, sólo en foto) elegidos en el editor. Arranca en
+   * `DEFAULT_PHOTO_EDIT` (sin filtro, sin texto) apenas se elige el archivo —
+   * así el horneado al publicar siempre tiene algo que leer, se haya abierto el
+   * editor o no.
+   *
+   * QUÉ SE HACE CON ÉL, según el medio:
+   *  · FOTO  → se HORNEA en los píxeles al publicar (`bake-photo.ts`).
+   *  · VIDEO → viaja como METADATO (`videoFilters` → `posts.media_filters`,
+   *    0104) y el reproductor lo aplica al pintar. Hornearlo pediría
+   *    re-codificar en tiempo real, rompería la subida directa al bucket y le
+   *    cambiaría la huella perceptual a Content Integrity.
    */
   edit?: PhotoEdit;
 }
@@ -145,6 +163,17 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
   const [declaration, setDeclaration] = useState<DeclarationValue>(
     EMPTY_DECLARATION_VALUE,
   );
+  /**
+   * PERSONAS ETIQUETADAS (0089) y PISTA ELEGIDA (0090). Viven acá, no dentro de
+   * cada selector, porque los dos se guardan DESPUÉS de publicar y con el
+   * `postId` recién creado: quien publica es este componente, así que es el
+   * único que puede encadenar los dos pasos. Los selectores son controlados y
+   * no saben que existe una base de datos.
+   */
+  const [taggedPeople, setTaggedPeople] = useState<TaggedProfile[]>([]);
+  const [track, setTrack] = useState<PickedTrack | null>(null);
+  /** Qué se está guardando después de publicar (etiquetas / música), o null. */
+  const [finishingLabel, setFinishingLabel] = useState<string | null>(null);
   /** Midiendo la duración del archivo recién elegido (antes de subir nada). */
   const [measuringVideo, setMeasuringVideo] = useState(false);
   /** Horneado de fotos en curso al publicar (null = no hay ninguno corriendo). */
@@ -275,6 +304,10 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         file,
         preview: URL.createObjectURL(file),
         durationSeconds: duration.seconds,
+        // Igual que la foto: el borrador arranca en "sin filtro" apenas se
+        // elige el archivo, así el editor y el envío siempre tienen algo que
+        // leer, se haya abierto el editor o no.
+        edit: { ...DEFAULT_PHOTO_EDIT },
       },
     ]);
     openCompose("media");
@@ -310,6 +343,11 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
     // una afirmación en boca de alguien que no la hizo sobre otras fotos.
     setDeclaration(EMPTY_DECLARATION_VALUE);
     setBakingProgress(null);
+    // Etiquetas y música son de ESTA publicación: arrastrarlas a la siguiente
+    // etiquetaría gente que nadie volvió a elegir.
+    setTaggedPeople([]);
+    setTrack(null);
+    setFinishingLabel(null);
     setMedia((current) => {
       for (const item of current) URL.revokeObjectURL(item.preview);
       return [];
@@ -434,7 +472,9 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         setBakingProgress({ done: 0, total: photoItems.length });
         for (const [index, item] of photoItems.entries()) {
           const edit = item.edit ?? DEFAULT_PHOTO_EDIT;
-          const filter = getPhotoFilter(edit.filterId);
+          // Preset + intensidad, resueltos por la MISMA función que pinta la
+          // vista previa y la miniatura: lo que se vio es lo que se quema.
+          const filterCss = photoEditFilterCss(edit);
           const captionText = edit.captionText.trim();
           const caption = captionText
             ? {
@@ -446,7 +486,7 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
 
           let fellBack = false;
           let baked = await bakePhoto(item.file, {
-            filterCss: filter.css,
+            filterCss,
             caption,
             onFallback: () => {
               fellBack = true;
@@ -460,7 +500,7 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
           // Perder el filtro es aceptable; mandar crudo, no. Si tampoco esto
           // sale (no se pudo decodificar la imagen), queda el original y la
           // guarda de peso de abajo lo dice con todas las letras.
-          if (fellBack && filter.css) {
+          if (fellBack && filterCss) {
             baked = await bakePhoto(item.file, {
               filterCss: "",
               caption,
@@ -539,6 +579,32 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
       }
       if (videoPath) {
         formData.set("videoPaths", JSON.stringify([videoPath]));
+        /**
+         * FILTRO DEL VIDEO (0104) — arreglo PARALELO a `videoPaths`, no un
+         * objeto ya indexado por ruta: la clave la escribe el servidor con los
+         * paths que él mismo validó como propios. Si la mandara el cliente,
+         * podría poner de clave el video de otra persona.
+         *
+         * Viaja SIEMPRE que hay video, incluso en `null` (sin filtro): así el
+         * servidor puede exigir que el largo coincida con los videos recibidos
+         * en vez de adivinar a qué archivo pertenece cada entrada.
+         *
+         * Sólo `id` e `intensity`. NUNCA el CSS: el string de `filter` lo arma
+         * el servidor desde el catálogo — mandarlo desde acá sería dejar que el
+         * navegador escriba en el `style` de todo el que abra la publicación.
+         */
+        const videoEdit = video?.edit;
+        formData.set(
+          "videoFilters",
+          JSON.stringify([
+            videoEdit && videoEdit.filterId !== DEFAULT_PHOTO_FILTER_ID
+              ? {
+                  id: videoEdit.filterId,
+                  intensity: videoEdit.filterIntensity ?? DEFAULT_PHOTO_FILTER_INTENSITY,
+                }
+              : null,
+          ]),
+        );
         // DECLARACIÓN OBLIGATORIA (0046): sin estos dos campos el INSERT rebota
         // contra `posts_video_declaration`. La duración es la MEDIDA al elegir
         // el archivo, y el servidor la vuelve a pasar por la misma política.
@@ -589,6 +655,67 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         } catch {
           // sin soporte háptico
         }
+
+        /**
+         * ---- 4) LO QUE NECESITABA EL `postId` -----------------------------
+         *
+         * Etiquetas (0089) y música (0090) se guardan ACÁ y no dentro de
+         * `createPostAction`: las dos referencian el post, que recién existe
+         * ahora. Next despacha las server actions de un mismo cliente de a una,
+         * así que no hay nada que coordinar más que el orden.
+         *
+         * NINGUNA DE LAS DOS PUEDE VOLTEAR LA PUBLICACIÓN. Ya está publicada y
+         * es lo que la persona vino a hacer; si un paso falla se avisa QUÉ
+         * quedó afuera y se sigue. El aviso es un toast aparte del de éxito
+         * —nunca en lugar de él— porque las dos cosas son verdad a la vez.
+         *
+         * El refresco del feed va DESPUÉS de los dos: refrescar antes traería
+         * la publicación sin sus etiquetas ni su música.
+         */
+        const postId = result.postId;
+        let extraWarning: { title: string; description?: string } | null = null;
+
+        if (taggedPeople.length > 0) {
+          setFinishingLabel(COPY.composer.savingTags);
+          const saved = await saveTagsAction({
+            postId,
+            profileIds: taggedPeople.map((person) => person.id),
+          });
+          if (!saved.ok) {
+            extraWarning = {
+              title:
+                saved.code === "rate-limited"
+                  ? TAGGER_COPY.save.rateLimited
+                  : TAGGER_COPY.save.partial,
+              description: TAGGER_COPY.save.partialGiveUp,
+            };
+          } else if (saved.rejected.length > 0) {
+            // Se guardó la mayoría: no es un fallo, es un dato que la persona
+            // merece tener antes de preguntarse por qué falta alguien.
+            extraWarning = { title: TAGGER_COPY.save.someRejected(saved.rejected.length) };
+          }
+        }
+
+        if (track) {
+          setFinishingLabel(COPY.composer.savingMusic);
+          const attached = await attachPostMusicAction({
+            postId,
+            trackId: track.id,
+            startSeconds: track.startSeconds,
+          });
+          if (!attached.ok) {
+            extraWarning = {
+              title:
+                attached.code === "track-unavailable"
+                  ? MUSIC_COPY.trackUnavailable
+                  : attached.code === "post-unavailable"
+                    ? MUSIC_COPY.postUnavailable
+                    : MUSIC_COPY.attachFailed,
+            };
+          }
+        }
+        setFinishingLabel(null);
+
         resetForm();
         if (result.status === "published") {
           toast({
@@ -602,6 +729,17 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
             description: COPY.composer.reviewBody,
             variant: "info",
             duration: 7000,
+          });
+        }
+        // Segundo aviso, DESPUÉS del de éxito y nunca en su lugar: la
+        // publicación salió (eso es lo primero que hay que saber) y además
+        // algo quedó afuera (eso es lo que hay que hacer).
+        if (extraWarning) {
+          toast({
+            title: extraWarning.title,
+            description: extraWarning.description,
+            variant: "warning",
+            duration: 9000,
           });
         }
         // El estado ya no vive en la página del feed (§docblock de arriba): si
@@ -763,12 +901,32 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         uploadPct={uploadPct}
         measuringVideo={measuringVideo}
         bakingProgress={bakingProgress}
+        finishingLabel={finishingLabel}
         isPending={isPending}
         onPublish={submit}
-        // Las ranuras de "Etiquetar personas" y "Agregar música" quedan SIN
-        // pasar a propósito: este composer no monta ningún frente todavía —
-        // el día que exista, se enchufa acá con `tagSlot={<Algo />}` /
-        // `musicSlot={<Otro />}`, sin tocar composer-sheet.tsx.
+        /**
+         * ETIQUETAR PERSONAS (0089) — en los TRES modos. Una pregunta o un
+         * texto también pueden hablar de alguien, y `post_tags` no pide medio
+         * para existir.
+         */
+        tagSlot={
+          <PeopleTagger
+            value={taggedPeople}
+            onChange={setTaggedPeople}
+            disabled={isPending}
+          />
+        }
+        /**
+         * MÚSICA (0090) — SÓLO con foto o video. La insignia de la pista y el
+         * sonido viven sobre el medio de la publicación (`card-post-media`):
+         * en un texto o una pregunta la canción no tendría ni dónde anunciarse
+         * ni sobre qué sonar, y ofrecerla sería prometer algo que no pasa.
+         */
+        musicSlot={
+          media.length > 0 ? (
+            <MusicPicker value={track} onChange={setTrack} disabled={isPending} />
+          ) : undefined
+        }
       />
     </ComposerMenuProvider>
   );

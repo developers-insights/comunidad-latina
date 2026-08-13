@@ -55,6 +55,7 @@ export {
 
 export {
   groupResourcesByTopic,
+  isResourceTopic,
   isSafeHttpUrl,
   mapsHref,
   telHref,

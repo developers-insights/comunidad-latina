@@ -2,6 +2,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ToastProvider } from "@/components/ui";
+import type { SaveTagsResult, SearchTaggableResult } from "@/app/(app)/feed/tag-actions";
+import type {
+  AttachPostMusicResult,
+  ListMusicTracksResult,
+} from "@/app/(app)/feed/music-actions";
 
 /**
  * Composer del feed — rediseño 2026-07-29 (pedido de Manuel).
@@ -23,9 +28,32 @@ import { ToastProvider } from "@/components/ui";
  * flujo de la UI, no la subida real.
  */
 
-const { createPostAction, prepareMediaUploadAction, bakePhoto } = vi.hoisted(() => ({
+const {
+  createPostAction,
+  prepareMediaUploadAction,
+  bakePhoto,
+  saveTagsAction,
+  attachPostMusicAction,
+  listMusicTracksAction,
+  searchTaggableMembersAction,
+} = vi.hoisted(() => ({
   createPostAction: vi.fn(),
   prepareMediaUploadAction: vi.fn(),
+  // Los dos pasos que corren DESPUÉS de publicar (necesitan el postId).
+  // Los tipos de resultado van EXPLÍCITOS: sin eso TypeScript infiere el caso
+  // feliz del default (`ok: true`) y ningún test podría simular un fallo.
+  saveTagsAction: vi.fn(
+    async (): Promise<SaveTagsResult> => ({ ok: true, tagged: [], rejected: [] }),
+  ),
+  attachPostMusicAction: vi.fn(
+    async (): Promise<AttachPostMusicResult> => ({ ok: true, startSeconds: 0 }),
+  ),
+  listMusicTracksAction: vi.fn(
+    async (): Promise<ListMusicTracksResult> => ({ ok: true, tracks: [] }),
+  ),
+  searchTaggableMembersAction: vi.fn(
+    async (): Promise<SearchTaggableResult> => ({ ok: true, people: [] }),
+  ),
   // Por default, "hornea" devolviendo el mismo File que recibió — los tests
   // que necesitan distinguir el archivo horneado del original lo sobrescriben.
   bakePhoto: vi.fn(async (file: File) => file),
@@ -77,6 +105,21 @@ vi.mock("@/app/(app)/feed/actions", () => ({
   prepareMediaUploadAction,
 }));
 
+// Etiquetas (0089) y música (0090): el composer las monta y las guarda después
+// de publicar. Acá sólo se verifica el CABLEADO — que se llamen con el postId
+// recién creado y que un fallo no voltee la publicación; lo que hace cada
+// action contra la base ya lo cubren tag-actions.test.ts / music-actions.test.ts.
+vi.mock("@/app/(app)/feed/tag-actions", () => ({
+  saveTagsAction,
+  searchTaggableMembersAction,
+  removeTagAction: vi.fn(),
+}));
+vi.mock("@/app/(app)/feed/music-actions", () => ({
+  attachPostMusicAction,
+  listMusicTracksAction,
+  detachPostMusicAction: vi.fn(),
+}));
+
 // motion neutralizado: el DOM refleja el estado del BottomSheet al instante
 // (mismo patrón que toast.test.tsx / comments-sheet.test.tsx).
 vi.mock("motion/react", () => {
@@ -126,6 +169,8 @@ vi.mock("motion/react", () => {
 import { PostComposerHost } from "./post-composer";
 import { ComposerTrigger } from "./composer-trigger";
 import { COPY } from "./copy";
+import { TAGGER_COPY } from "./people-tagger-copy";
+import { MUSIC_COPY } from "./music-copy";
 
 /**
  * `modules` vacío = nadie decidió nada en el panel, que es el default de
@@ -160,6 +205,14 @@ afterEach(() => {
   prepareMediaUploadAction.mockReset();
   bakePhoto.mockReset();
   bakePhoto.mockImplementation(async (file: File) => file);
+  saveTagsAction.mockReset();
+  saveTagsAction.mockResolvedValue({ ok: true, tagged: [], rejected: [] });
+  attachPostMusicAction.mockReset();
+  attachPostMusicAction.mockResolvedValue({ ok: true, startSeconds: 0 });
+  listMusicTracksAction.mockReset();
+  listMusicTracksAction.mockResolvedValue({ ok: true, tracks: [] });
+  searchTaggableMembersAction.mockReset();
+  searchTaggableMembersAction.mockResolvedValue({ ok: true, people: [] });
 });
 
 describe("PostComposer — un solo elemento en reposo", () => {
@@ -614,7 +667,10 @@ describe("PostComposer — composer premium (más fotos + horneado al publicar)"
     // Abrir el editor de esa foto y elegir un filtro (sin filtro no hay nada
     // que pueda fallar: `filterCss` viajaría vacío).
     fireEvent.click(await screen.findByRole("button", { name: `${COPY.composer.editPhoto} 1` }));
-    fireEvent.click(await screen.findByRole("button", { name: /Cálido/ }));
+    // Los chips del carrusel son radios de verdad (`input type="radio"`), no
+    // botones: el grupo tiene 16 opciones y las flechas del teclado tienen que
+    // moverse entre ellas sin que lo implementemos a mano.
+    fireEvent.click(await screen.findByRole("radio", { name: /Cálido/ }));
     fireEvent.click(screen.getByRole("button", { name: COPY.composer.photoEditor.done }));
 
     fireEvent.click(
@@ -652,5 +708,162 @@ describe("PostComposer — composer premium (más fotos + horneado al publicar)"
     await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
     const sent = createPostAction.mock.calls[0]?.[0] as FormData;
     expect((sent.getAll("photos")[0] as File).name).toBe("original.jpg");
+  });
+});
+
+/**
+ * =============================================================================
+ * MÚSICA Y ETIQUETAS, CABLEADAS AL COMPOSER (0089 / 0090)
+ * =============================================================================
+ *
+ * Los dos selectores estaban escritos y NO montados: `tagSlot` y `musicSlot`
+ * viajaban sin pasar, así que para quien usa la app las dos features no
+ * existían. Lo que este bloque ancla es justamente eso — que estén montadas y
+ * que lo elegido llegue a la base con el `postId` recién creado.
+ *
+ * La secuencia es publicar → guardar, porque las dos referencian un post que
+ * antes no existía. Por eso también se ancla que un fallo del segundo paso NO
+ * pueda voltear el primero: la publicación ya salió.
+ */
+describe("PostComposer — música y etiquetas montadas en la hoja", () => {
+  const TRACK = {
+    id: "11111111-1111-4111-8111-111111111111",
+    title: "Cumbia del barrio",
+    artist: "Los del Sur",
+    durationSeconds: 180,
+    previewUrl: "https://example.test/cumbia.mp3",
+    licenseKind: "cc0" as const,
+    attributionRequired: false,
+    attributionText: null,
+    category: "tropical" as const,
+  };
+
+  function pickPhoto() {
+    const input = document.getElementById("post-composer-photos") as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], "feria.jpg", { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [file] } });
+  }
+
+  async function openPhotoComposer() {
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+    pickPhoto();
+    await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) });
+  }
+
+  it("con una foto elegida se ven las dos filas: etiquetar y música", async () => {
+    await openPhotoComposer();
+    expect(screen.getByText(TAGGER_COPY.row.label)).toBeTruthy();
+    expect(screen.getByText(MUSIC_COPY.add)).toBeTruthy();
+  });
+
+  /**
+   * La insignia de la pista y el sonido viven sobre el MEDIO de la publicación:
+   * en un texto no habría ni dónde anunciarla ni sobre qué sonar. Etiquetar, en
+   * cambio, sí tiene sentido — un texto también puede hablar de alguien.
+   */
+  it("en modo Texto se puede etiquetar, pero no aparece la música", async () => {
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.text.title));
+
+    expect(await screen.findByText(TAGGER_COPY.row.label)).toBeTruthy();
+    expect(screen.queryByText(MUSIC_COPY.add)).toBeNull();
+  });
+
+  it("elegir una canción y publicar la asocia al post recién creado", async () => {
+    listMusicTracksAction.mockResolvedValue({ ok: true, tracks: [TRACK] });
+    createPostAction.mockResolvedValue({
+      ok: true,
+      status: "published",
+      postId: "22222222-2222-4222-8222-222222222222",
+    });
+
+    await openPhotoComposer();
+
+    // Abrir la hoja de música, elegir la pista y confirmar.
+    fireEvent.click(screen.getByText(MUSIC_COPY.add));
+    fireEvent.click(await screen.findByText(TRACK.title));
+    fireEvent.click(screen.getByRole("button", { name: MUSIC_COPY.done }));
+
+    // La fila ya muestra lo elegido: elegir y ver lo elegido son el mismo paso.
+    expect(await screen.findByText(TRACK.title)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(attachPostMusicAction).toHaveBeenCalledTimes(1));
+    expect(attachPostMusicAction).toHaveBeenCalledWith({
+      postId: "22222222-2222-4222-8222-222222222222",
+      trackId: TRACK.id,
+      startSeconds: 0,
+    });
+  });
+
+  it("si la música no se pudo asociar, la publicación igual salió y se avisa", async () => {
+    listMusicTracksAction.mockResolvedValue({ ok: true, tracks: [TRACK] });
+    attachPostMusicAction.mockResolvedValue({ ok: false, code: "error" });
+    createPostAction.mockResolvedValue({
+      ok: true,
+      status: "published",
+      postId: "22222222-2222-4222-8222-222222222222",
+    });
+
+    await openPhotoComposer();
+    fireEvent.click(screen.getByText(MUSIC_COPY.add));
+    fireEvent.click(await screen.findByText(TRACK.title));
+    fireEvent.click(screen.getByRole("button", { name: MUSIC_COPY.done }));
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    // Las dos cosas son verdad a la vez y las dos se dicen.
+    expect(await screen.findByText(COPY.composer.successTitle)).toBeTruthy();
+    expect(await screen.findByText(MUSIC_COPY.attachFailed)).toBeTruthy();
+  });
+
+  it("sin música elegida no se llama a la action de música", async () => {
+    createPostAction.mockResolvedValue({
+      ok: true,
+      status: "published",
+      postId: "22222222-2222-4222-8222-222222222222",
+    });
+    await openPhotoComposer();
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    expect(attachPostMusicAction).not.toHaveBeenCalled();
+    expect(saveTagsAction).not.toHaveBeenCalled();
+  });
+
+  it("etiquetar a alguien y publicar guarda esa etiqueta en el post nuevo", async () => {
+    searchTaggableMembersAction.mockResolvedValue({
+      ok: true,
+      people: [
+        { id: "33333333-3333-4333-8333-333333333333", displayName: "Ana Gómez", avatarUrl: null },
+      ],
+    });
+    createPostAction.mockResolvedValue({
+      ok: true,
+      status: "published",
+      postId: "22222222-2222-4222-8222-222222222222",
+    });
+
+    await openPhotoComposer();
+
+    fireEvent.click(screen.getByText(TAGGER_COPY.row.label));
+    const search = await screen.findByPlaceholderText(TAGGER_COPY.sheet.searchPlaceholder);
+    fireEvent.change(search, { target: { value: "ana" } });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: TAGGER_COPY.sheet.add("Ana Gómez") }, { timeout: 3000 }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: TAGGER_COPY.sheet.done }));
+
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(saveTagsAction).toHaveBeenCalledTimes(1));
+    expect(saveTagsAction).toHaveBeenCalledWith({
+      postId: "22222222-2222-4222-8222-222222222222",
+      profileIds: ["33333333-3333-4333-8333-333333333333"],
+    });
   });
 });

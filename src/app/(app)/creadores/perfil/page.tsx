@@ -5,12 +5,14 @@ import {
   COPY,
   CreatorProfileForm,
   CreatorRequirementsCard,
+  ServicePackagesEditor,
   SocialAudience,
   type CreatorProfileInitial,
 } from "@/components/creators";
 import { createClient } from "@/lib/supabase/server";
+import { getCreatorCommission } from "@/lib/creators/commission";
 import { getTenant } from "@/lib/tenant/resolve";
-import { fetchCreatorRequirements } from "./queries";
+import { fetchCreatorRequirements, fetchServicePackages } from "./queries";
 
 export const metadata = { title: "Mi perfil de creador" };
 
@@ -39,13 +41,19 @@ export default async function MiPerfilCreadorPage() {
     );
   }
 
-  const [{ data: existing }, { data: profile }] = await Promise.all([
+  // Las cuatro lecturas son independientes entre sí, así que van juntas y no
+  // una atrás de la otra. `getCreatorCommission` nunca lanza ni devuelve null:
+  // sin configuración cae en el 20% (ver su cabecera), así que el editor de
+  // paquetes siempre tiene una comisión con la que mostrar el neto.
+  const [{ data: existing }, { data: profile }, servicePackages, feePct] = await Promise.all([
     supabase
       .from("creator_profiles")
       .select("headline, bio, skills, rate_hint, available, portfolio_photos")
       .eq("profile_id", user.id)
       .maybeSingle(),
     supabase.from("profiles").select("created_at").eq("id", user.id).maybeSingle(),
+    fetchServicePackages(supabase, user.id, { activeOnly: false }),
+    getCreatorCommission(supabase),
   ]);
 
   // Requisitos para recibir trabajos (§6): datos reales, no un "no calificás".
@@ -119,6 +127,26 @@ export default async function MiPerfilCreadorPage() {
       />
 
       <CreatorProfileForm tenantId={tenant.id} userId={user.id} initial={initial} />
+
+      {/*
+        PAQUETES DE SERVICIO (0102). Va DESPUÉS del formulario de perfil y no
+        adentro: el perfil es una sola entidad que se guarda de un saque, y cada
+        paquete es una fila propia que se crea, se edita y se apaga por
+        separado. Meterlos en el mismo botón "Guardar" obligaría a reenviar seis
+        precios para corregir una coma.
+
+        Se muestra aunque todavía no exista el perfil de creador: el estado
+        vacío explica para qué sirve, y si alguien intenta crear un paquete sin
+        perfil, la policy de INSERT lo frena y la action responde con
+        `errors.needProfile` — que es exactamente el paso que falta.
+      */}
+      <div className="mt-8 border-t border-border-subtle pt-6">
+        <ServicePackagesEditor
+          initial={servicePackages}
+          feePct={feePct}
+          currency={tenant.currency}
+        />
+      </div>
     </>
   );
 }

@@ -10,6 +10,10 @@ import {
   postPromoMontoCentavos,
 } from "@/lib/stripe";
 import { PREMIUM_LISTING_PRICE_CENTS } from "@/lib/monetization/premium";
+import {
+  VERIFICACION_PLANES,
+  verificacionMontoCentavos,
+} from "@/lib/verificacion/catalogo";
 import { MEMBERSHIP_PRICE_CENTS } from "@/components/marketplace/membership";
 import { PRICE_SLOTS, slotKey } from "./catalog";
 
@@ -45,7 +49,7 @@ export interface FallbackPrice {
 const FALLBACK_CURRENCY = "USD";
 
 /**
- * Mapa `producto:variante:intervalo` → monto. Cubre las 17 casillas de
+ * Mapa `producto:variante:intervalo` → monto. Cubre las 20 casillas de
  * `PRICE_SLOTS`; hay un test que falla si alguna queda sin respaldo.
  */
 export const FALLBACK_PRICES: ReadonlyMap<string, FallbackPrice> = new Map([
@@ -135,6 +139,32 @@ export const FALLBACK_PRICES: ReadonlyMap<string, FallbackPrice> = new Map([
   [
     slotKey({ product: "listing_premium", variant: "estandar", interval: "mensual" }),
     { amountCents: PREMIUM_LISTING_PRICE_CENTS, currency: FALLBACK_CURRENCY },
+  ],
+
+  // Check azul (0101) — VERIFICACION_PLANES. Los montos salen de la misma
+  // función que arma el Checkout (`verificacionMontoCentavos`), que redondea en
+  // vez de truncar: 6.99 × 100 en punto flotante da 698.9999… y truncarlo
+  // cobraría USD 6.98.
+  [
+    slotKey({ product: "verificacion", variant: "persona", interval: "mensual" }),
+    {
+      amountCents: verificacionMontoCentavos(VERIFICACION_PLANES.persona),
+      currency: FALLBACK_CURRENCY,
+    },
+  ],
+  [
+    slotKey({ product: "verificacion", variant: "negocio", interval: "mensual" }),
+    {
+      amountCents: verificacionMontoCentavos(VERIFICACION_PLANES.negocio),
+      currency: FALLBACK_CURRENCY,
+    },
+  ],
+  [
+    slotKey({ product: "verificacion", variant: "profesional", interval: "mensual" }),
+    {
+      amountCents: verificacionMontoCentavos(VERIFICACION_PLANES.profesional),
+      currency: FALLBACK_CURRENCY,
+    },
   ],
 ]);
 

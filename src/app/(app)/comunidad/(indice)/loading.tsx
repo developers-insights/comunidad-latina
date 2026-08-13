@@ -19,9 +19,12 @@ export default function ComunidadIndiceLoading() {
       <Skeleton className="mt-4 h-4 w-4/5" />
       <Skeleton className="mt-2 h-4 w-3/5" />
       <Skeleton className="mt-5 h-32 w-full rounded-xl" />
-      <div className="mt-6 flex flex-col gap-3">
-        {Array.from({ length: 3 }, (_, index) => (
-          <Skeleton key={index} className="h-[88px] w-full rounded-xl" />
+      {/* Misma grilla que la pantalla real (grid-cols-2 sm:grid-cols-3, cinco
+          categorías): reserva el alto exacto del cuadrado (min-h-[7.5rem] de
+          SquareTile) para que nada salte cuando entran los datos. */}
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {Array.from({ length: 5 }, (_, index) => (
+          <Skeleton key={index} className="h-[7.5rem] w-full rounded-xl" />
         ))}
       </div>
     </div>

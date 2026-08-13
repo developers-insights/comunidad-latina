@@ -1,5 +1,68 @@
 # PROGRESS — Comunidad Latina
 
+## El feedback de Nacho del 11-ago, entero (✅ 2026-08-13)
+
+Llegaron 15 capturas de WhatsApp con feedback. Se auditó **cada ítem contra el
+código antes de tocar nada**, y el mapa inicial fue: 2 ya estaban hechos, 6
+parciales, 9 ausentes. Se despacharon 8 frentes en paralelo con fronteras de
+archivo estrictas y números de migración reservados (`0097`–`0104`).
+
+**El hallazgo que explicaba el pedido más fuerte.** Nacho decía «cuando se quiere
+postear, falta agregar música, filtros, taggs». Música y etiquetado **ya estaban
+construidos y funcionando**: `music-picker.tsx`, `people-tagger.tsx` y sus server
+actions. Lo que pasaba es que `post-composer.tsx` dejaba `tagSlot` y `musicSlot`
+sin pasar, con un comentario que decía «este composer no monta ningún frente
+todavía». `saveTagsAction` no se llamaba desde ningún lado. No faltaba la
+funcionalidad: faltaban dos props.
+
+**Lo que se construyó** — filtros de 7 → 16 con control de intensidad y
+miniaturas de la foto real; filtros de video **como metadato de presentación, no
+horneados** (hornear pediría re-codificar en tiempo real y desalinearía la huella
+perceptual); foto de perfil con recorte circular; menú de publicación completo
+(fijar, ocultar, cerrar comentarios) sobre tres columnas en `posts` y no tres
+tablas; borrar comentarios usando la policy `comments_delete` que existía desde
+la 0007 y nunca se había usado desde la app; vencimiento a 30 días **blando**
+(`published → expired`, nunca DELETE) que distingue avisos de presencia; grilla
+de Comunidad con la misma pieza cuadrada que Búsqueda, extraída a compartida;
+check azul pago en tres escalones con el regalo mensual **como crédito canjeable,
+no impulso automático**; paquetes de servicio de creador enganchados al flujo de
+contratación existente; cuenta de negocio e identidad activa con doble candado
+(policy + revalidación en cada lectura).
+
+**Quitar una foto de un post publicado** se resolvió distinguiendo *quitar* de
+*cambiar*: lo que prohíbe Content Integrity es un archivo NUEVO. Al quitar no
+entra nada, así que la fila de `content_assets` sigue siendo verdadera y se le
+agrega `retired_from_subject_at` — el libro de procedencia sólo crece.
+
+**Dos bugs de plata encontrados de paso**, ninguno pedido en el feedback:
+`ContractForm` prellenaba con `Math.round(cents/100)`, así que un paquete de USD
+150,50 generaba un contrato de **151**; y en el alta del check azul la moneda se
+normalizaba a minúsculas contra una columna que exige ISO en mayúsculas — habría
+violado el CHECK en **cada alta**, devuelto 500, y dejado gente cobrada sin
+insignia mientras Stripe reintentaba 3 días.
+
+**Estado del árbol:** typecheck limpio, lint sin errores, **3.735 tests en verde
+(eran 3.468), cero regresiones**. Quedan 88 rojos en 8 archivos
+(`consent`/`theme`/`legal`/`search-history`) que **ya fallaban antes de esta
+sesión** — verificado en un worktree limpio sobre `HEAD`. La causa es **Node 26**,
+que trae un `localStorage` global experimental e inerte que tapa al de jsdom:
+`window.localStorage` queda `undefined` y los tests mueren en el `beforeEach`. No
+se arregla con `environmentOptions.jsdom.url` ni cambiando el formato del pragma
+(ambas probadas y revertidas). El repo no fija Node: no hay `.nvmrc` ni `engines`.
+**La salida es Node 24 LTS**, que además es lo que corre Vercel.
+
+**Pendiente de decisión de producto** (no técnico): si los eventos deben vencer
+por fecha del evento y no a 30 días de publicados (hoy, un evento anunciado con
+45 días de anticipación desaparece antes de ocurrir); si los productos de una
+tienda paga se eximen del vencimiento; si hay tope de renovaciones; y el catálogo
+de música, que **no se siembra con un script** — cada pista necesita archivo,
+licencia verificada, URL de origen y texto de atribución.
+
+**Pendiente en Stripe** (dashboard, sin código): sumar el evento `invoice.paid`
+al webhook — sin él no llega ningún impulso de regalo, ni el primero; activar el
+Billing Portal con cancelación, que la pantalla ya promete; y activar Connect e
+Identity para negocios.
+
 ## La marca dejó de ser un tenant: cartel absurdo + feed vacío, resueltos (✅ 2026-08-13, madrugada)
 
 Manuel abrió el preview y vio dos cosas a la vez: **«Estás mirando Comunidad

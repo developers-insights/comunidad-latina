@@ -14,6 +14,8 @@ import {
   ShieldStar,
   SignIn,
   SlidersHorizontal,
+  Sparkle,
+  Storefront,
   UserCircle,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
@@ -21,8 +23,14 @@ import { Avatar, Button, buttonVariants } from "@/components/ui";
 import { PREFS_COPY } from "@/components/notifications";
 import { DeleteAccount } from "@/components/auth/delete-account";
 import { getShellContext } from "@/components/shell/shell-context";
+import { moduleAvailability } from "@/components/shell/module-access";
 import { createClient } from "@/lib/supabase/server";
 import { isPhoneVerificationEnabled } from "@/lib/config/services";
+import {
+  getIdentidadActiva,
+  listarIdentidadesDeNegocio,
+} from "@/lib/perfil-activo/identidad";
+import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import { signOutAction } from "../perfil/actions";
 import { ThemeRow } from "./theme-row";
@@ -53,10 +61,24 @@ export const metadata = { title: COPY.title };
  * queda la invitación a entrar en vez de un 404 en una pestaña fija de la barra.
  */
 export default async function AjustesPage() {
-  const [shell, supabase] = await Promise.all([getShellContext(), createClient()]);
+  const [shell, supabase, tenant, negocios, identidad] = await Promise.all([
+    getShellContext(),
+    createClient(),
+    getTenant(),
+    listarIdentidadesDeNegocio(),
+    getIdentidadActiva(),
+  ]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Las dos filas nuevas llevan a módulos que la comunidad puede tener
+  // apagados: ofrecer un enlace a una pantalla que devuelve 404 es peor que no
+  // ofrecerlo (mismo criterio que la fila del teléfono, más abajo).
+  const negociosActivo =
+    moduleAvailability("negocios", tenant.modules, tenant.modulesSoon) === "active";
+  const creadoresActivo =
+    moduleAvailability("creadores", tenant.modules, tenant.modulesSoon) === "active";
 
   let identityVerified = false;
   let timeZone: string | null = null;
@@ -132,6 +154,45 @@ export default async function AjustesPage() {
         </div>
       )}
 
+      {/* CON QUÉ PERFIL ESTÁS ACTUANDO. Va pegado a la tarjeta de identidad y
+          sólo aparece cuando la respuesta NO es la obvia: si estás como vos
+          mismo, tu avatar y tu nombre arriba ya lo dicen. Cuando estás como
+          negocio, el avatar de arriba sigue siendo el tuyo (es tu cuenta) y por
+          eso hace falta decirlo con palabras — la ambigüedad acá no es un
+          problema de estilo, es alguien publicando con un nombre que no
+          esperaba. */}
+      {identidad.tipo === "negocio" && (
+        <Link
+          href="/negocios/cuenta"
+          className={cn(
+            "flex items-center gap-3 rounded-xl border border-brand/30 bg-brand-tint p-3",
+            "transition-colors duration-(--duration-fast) hover:bg-brand-tint/80",
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          )}
+        >
+          <span
+            aria-hidden="true"
+            // `cl-print-hide`: el ícono es tinta `brand-foreground` (clara) sobre
+            // un relleno que el papel no imprime — sin el hook queda 1.00:1. Es
+            // decoración de una fila de Ajustes: en papel no dice nada.
+            className="cl-print-hide flex size-9 shrink-0 items-center justify-center rounded-full bg-brand text-brand-foreground"
+          >
+            <Storefront size={20} weight="fill" />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-sm font-semibold text-brand-ink">
+              {COPY.identity.actingAs(identidad.negocio.nombre)}
+            </span>
+            <span className="truncate text-xs text-foreground-secondary">
+              {COPY.identity.actingAsHint}
+            </span>
+          </span>
+          <span className="shrink-0 text-xs font-semibold text-brand-ink">
+            {COPY.identity.switchProfile}
+          </span>
+        </Link>
+      )}
+
       {shell.user && (
         <>
           <Group title={COPY.groups.activity}>
@@ -166,6 +227,25 @@ export default async function AjustesPage() {
                     ? "Ya está verificado. Podés cambiarlo o borrarlo."
                     : "Sumá una capa de confianza a tu cuenta."
                 }
+              />
+            )}
+            {/* Las dos puertas que faltaban. La de creador NO rehace nada: el
+                flujo entero ya existía en /creadores/solicitud y no había forma
+                de llegar desde acá. La de negocio abre el segundo perfil. */}
+            {creadoresActivo && (
+              <Row
+                href="/creadores/solicitud"
+                icon={Sparkle}
+                {...COPY.rows.becomeCreator}
+              />
+            )}
+            {negociosActivo && (
+              <Row
+                href="/negocios/cuenta"
+                icon={Storefront}
+                {...(negocios.length > 0
+                  ? COPY.rows.businessAccount
+                  : COPY.rows.createBusiness)}
               />
             )}
           </Group>

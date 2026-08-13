@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CalendarBlank, MapPin } from "@phosphor-icons/react/dist/ssr";
 import { Avatar } from "@/components/ui";
 import { AnimatedNumber } from "@/components/motion";
-import { IdentityBadge } from "@/components/auth/identity-badge";
+import { InsigniaDePerfil } from "@/components/verificacion/check-azul";
 
 export interface ProfileStat {
   label: string;
@@ -24,6 +24,13 @@ export interface ProfileHeaderProps {
   /** Foto de portada (banner). `null` = la cabecera va sin banner, como antes. */
   coverUrl?: string | null;
   identityVerified: boolean;
+  /**
+   * `profiles.verified_badge` (0101): el check azul pago. Va SEPARADO de
+   * `identityVerified` porque son dos hechos distintos —uno comprobado y
+   * gratis, el otro comprado— y quien decide cuál se dibuja es
+   * `<InsigniaDePerfil>`, no esta pantalla.
+   */
+  verifiedBadge?: boolean;
   /** Línea de ubicación ya armada: "Rep. Dominicana · Queens" (o solo la zona). */
   location: string | null;
   /**
@@ -50,6 +57,7 @@ export function ProfileHeader({
   avatarUrl,
   coverUrl,
   identityVerified,
+  verifiedBadge = false,
   location,
   memberSince,
   stats,
@@ -94,7 +102,17 @@ export function ProfileHeader({
             size="xl"
             src={avatarUrl}
             name={displayName}
-            badge={identityVerified ? <IdentityBadge /> : undefined}
+            badge={
+              // `undefined` y no `<InsigniaDePerfil/>` a secas: `Avatar` hace
+              // `{badge && …}`, y un elemento React que devuelve null sigue
+              // siendo truthy — dejaría el span posicionado, vacío, siempre.
+              verifiedBadge || identityVerified ? (
+                <InsigniaDePerfil
+                  checkAzul={verifiedBadge}
+                  identityVerified={identityVerified}
+                />
+              ) : undefined
+            }
           />
         </span>
 

@@ -1,14 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ArrowSquareOut,
+  ChatCircle,
+  ChatCircleSlash,
   DotsThree,
+  Eye,
+  EyeSlash,
   Megaphone,
   PencilSimple,
+  PushPin,
+  PushPinSlash,
   Trash,
 } from "@phosphor-icons/react/dist/ssr";
+import type { Icon } from "@phosphor-icons/react";
+import {
+  toggleCommentsLockedAction,
+  toggleHidePostAction,
+  togglePinPostAction,
+  type PostMenuResult,
+} from "@/app/(app)/feed/post-menu-actions";
 import { BottomSheet, useToast } from "@/components/ui";
 import { ReportScamButton, ReportSheet } from "@/components/trust";
 import { POST_EDIT_COPY } from "@/lib/social/post-editing";
@@ -29,6 +43,10 @@ const MENU_ROW = [
   "flex min-h-11 w-full items-center gap-2.5 px-4 py-3 text-left text-sm font-medium",
   "transition-colors duration-(--duration-fast) hover:bg-surface-subtle",
   "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring",
+  // Mientras una acción viaja, TODAS las filas se apagan: dos toggles a la vez
+  // sobre la misma publicación es la forma más fácil de terminar con la pantalla
+  // diciendo una cosa y la base otra.
+  "disabled:pointer-events-none disabled:opacity-50",
 ];
 
 export interface PostMenuProps {
@@ -47,9 +65,18 @@ export interface PostMenuProps {
   postStatus?: string;
   /** ¿Tiene foto o video? Decide si el texto puede quedar vacío al editar. */
   hasMedia?: boolean;
+  /**
+   * Las rutas de `posts.media` tal cual están guardadas. Sin esto la hoja de
+   * edición no ofrece quitar fotos: no puede nombrar lo que no conoce.
+   */
+  media?: readonly string[];
   /** Se nombran en la confirmación de borrado: es lo que se pierde. */
   commentCount?: number;
   likeCount?: number;
+  /** Marcas de la 0097. `null` (o ausente) = la acción está apagada. */
+  pinnedAt?: string | null;
+  hiddenAt?: string | null;
+  commentsLockedAt?: string | null;
   /**
    * Adónde ir después de eliminar. En el detalle hay que salir —la página deja
    * de existir—; en el feed alcanza con refrescar.
@@ -60,17 +87,33 @@ export interface PostMenuProps {
 /**
  * Menú ⋯ de una publicación. Reúne lo que se puede hacer CON ella:
  *
- *  · Sólo el autor: Promocionar, Editar y Eliminar.
- *  · Cualquiera con cuenta: Reportar (abre el ReportSheet unificado, 2 taps —
- *    el reporte viaja contra el PERFIL del autor, vía la RPC report_scam).
+ *  · Sólo el autor: Promocionar, Fijar, Editar, Ocultar del feed, Desactivar
+ *    comentarios y Eliminar.
+ *  · Cualquiera: Abrir en otra pestaña y Reportar (abre el ReportSheet
+ *    unificado, 2 taps — el reporte viaja contra el PERFIL del autor, vía la
+ *    RPC report_scam).
  *
- * Que un ítem no se muestre NO es la seguridad: la autorización real la
- * deciden `editPostAction` / `deletePostAction` en el servidor, comparando
- * autor y comunidad contra el JWT. Acá sólo se evita ofrecer algo que va a
- * rebotar.
+ * "Guardar" NO está acá y es a propósito: ya vive como marcador en la fila de
+ * acciones de la tarjeta (`post-actions.tsx`), con su propio estado optimista.
+ * Espejarlo en el menú daría dos controles con el mismo nombre y dos estados que
+ * se pueden desincronizar — el cliente ya lo dio por hecho y funciona.
  *
- * Eliminar va último y separado por una línea (acción destructiva: no puede
- * quedar pegada a las demás, donde se toca por inercia) y en color danger.
+ * Que un ítem no se muestre NO es la seguridad: la autorización real la deciden
+ * las server actions en el servidor (relectura del post + comparación de autor y
+ * comunidad contra el JWT), las funciones de la 0097 y la RLS. Acá sólo se evita
+ * ofrecer algo que va a rebotar.
+ *
+ * ORDEN DE LAS FILAS: primero lo que cambia la publicación (promocionar, fijar,
+ * editar), después lo que cambia su alcance (ocultar, comentarios), después lo
+ * neutro (abrir en otra pestaña, reportar) y al final, separada por una línea y
+ * en color danger, la única irreversible. Eliminar no puede quedar pegada a las
+ * demás, donde se toca por inercia.
+ *
+ * SIN DIÁLOGO DE CONFIRMACIÓN salvo para eliminar. Fijar, ocultar y cerrar
+ * comentarios se deshacen con el mismo toque que las hizo, así que un "¿estás
+ * seguro?" sería fricción sobre algo que no lastima. Lo que sí hacen es AVISAR
+ * qué pasó y qué NO pasó ("sigue siendo tuya", "los comentarios que ya están
+ * siguen a la vista"): el miedo real acá es haber borrado algo sin querer.
  */
 export function PostMenu({
   postId,
@@ -79,8 +122,12 @@ export function PostMenu({
   postBody,
   postStatus = "published",
   hasMedia = false,
+  media,
   commentCount = 0,
   likeCount = 0,
+  pinnedAt = null,
+  hiddenAt = null,
+  commentsLockedAt = null,
   redirectAfterDelete,
 }: PostMenuProps) {
   const router = useRouter();
@@ -89,7 +136,23 @@ export function PostMenu({
   const [reportOpen, setReportOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  // Sólo el dueño del post ve "Promocionar" — el resto ni sabe que existe.
+  const [isPending, startTransition] = useTransition();
+
+  /**
+   * Estado local de los tres toggles, sembrado de los props. Existe para que el
+   * rótulo cambie EN EL ACTO ("Fijar" → "Dejar de fijar") sin esperar a que el
+   * server component se vuelva a renderizar: sin esto, tocar "Fijar" deja la
+   * fila diciendo "Fijar" un segundo largo y la gente la toca de nuevo.
+   *
+   * Se escribe SÓLO después de que el servidor confirmó — no es optimismo, es
+   * eco. Y sólo su autor puede cambiar estas marcas, así que no hay un tercero
+   * que pueda dejarlo viejo.
+   */
+  const [pinned, setPinned] = useState(Boolean(pinnedAt));
+  const [hidden, setHidden] = useState(Boolean(hiddenAt));
+  const [commentsLocked, setCommentsLocked] = useState(Boolean(commentsLockedAt));
+
+  // Sólo el dueño del post ve las acciones de autor — el resto ni sabe que existen.
   const isOwnPost = Boolean(viewerId && authorId && viewerId === authorId);
 
   /**
@@ -99,6 +162,8 @@ export function PostMenu({
    * ofrecerlo: el detalle ya muestra el banner que explica el estado.
    */
   const canEdit = isOwnPost && postBody !== undefined && postStatus === "published";
+  /** Las tres marcas de la 0097 comparten exactamente la misma condición. */
+  const canManage = isOwnPost && postStatus === "published";
 
   function openReport() {
     setMenuOpen(false);
@@ -110,6 +175,35 @@ export function PostMenu({
     // Autor eliminado: no hay perfil contra el cual reportar (caso borde).
     if (!authorId) return;
     setReportOpen(true);
+  }
+
+  /**
+   * Corre una acción del menú y cuenta qué pasó. Un solo camino para las tres:
+   * cierra la hoja, espera al servidor, y recién con el `ok` mueve el estado
+   * local y avisa. Si falla, el mensaje que se muestra es EL DEL SERVIDOR (ya
+   * viene resuelto y en español) y nada cambia en pantalla.
+   */
+  function run(
+    action: () => Promise<PostMenuResult>,
+    onDone: () => void,
+    success: { title: string; description: string },
+  ) {
+    if (isPending) return;
+    setMenuOpen(false);
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) {
+        toast({
+          title: COPY.postMenu.errorTitle,
+          description: result.message,
+          variant: "danger",
+        });
+        return;
+      }
+      onDone();
+      toast({ ...success, variant: "success" });
+      router.refresh();
+    });
   }
 
   return (
@@ -146,25 +240,124 @@ export function PostMenu({
             </Link>
           )}
 
+          {canManage && (
+            <MenuButton
+              icon={pinned ? PushPinSlash : PushPin}
+              label={pinned ? COPY.postMenu.unpin : COPY.postMenu.pin}
+              disabled={isPending}
+              onClick={() =>
+                run(
+                  () => togglePinPostAction({ postId, pin: !pinned }),
+                  () => setPinned(!pinned),
+                  pinned
+                    ? {
+                        title: COPY.postMenu.unpinnedTitle,
+                        description: COPY.postMenu.unpinnedBody,
+                      }
+                    : {
+                        title: COPY.postMenu.pinnedTitle,
+                        description: COPY.postMenu.pinnedBody,
+                      },
+                )
+              }
+            />
+          )}
+
           {canEdit && (
-            <button
-              type="button"
+            <MenuButton
+              icon={PencilSimple}
+              label={POST_EDIT_COPY.menu.edit}
+              disabled={isPending}
               onClick={() => {
                 setMenuOpen(false);
                 setEditOpen(true);
               }}
-              className={cn(MENU_ROW, "text-foreground")}
-            >
-              <PencilSimple size={18} aria-hidden="true" className="shrink-0" />
-              {POST_EDIT_COPY.menu.edit}
-            </button>
+            />
           )}
+
+          {canManage && (
+            <MenuButton
+              icon={hidden ? Eye : EyeSlash}
+              label={hidden ? COPY.postMenu.unhide : COPY.postMenu.hide}
+              disabled={isPending}
+              onClick={() =>
+                run(
+                  () => toggleHidePostAction({ postId, hide: !hidden }),
+                  () => {
+                    setHidden(!hidden);
+                    // Ocultar desfija en la MISMA sentencia del servidor: el
+                    // rótulo de arriba tiene que enterarse o va a ofrecer
+                    // "Dejar de fijar" sobre algo que ya no está fijado.
+                    if (!hidden) setPinned(false);
+                  },
+                  hidden
+                    ? {
+                        title: COPY.postMenu.shownTitle,
+                        description: COPY.postMenu.shownBody,
+                      }
+                    : {
+                        title: COPY.postMenu.hiddenTitle,
+                        description: COPY.postMenu.hiddenBody,
+                      },
+                )
+              }
+            />
+          )}
+
+          {canManage && (
+            <MenuButton
+              icon={commentsLocked ? ChatCircle : ChatCircleSlash}
+              label={
+                commentsLocked
+                  ? COPY.postMenu.unlockComments
+                  : COPY.postMenu.lockComments
+              }
+              disabled={isPending}
+              onClick={() =>
+                run(
+                  () =>
+                    toggleCommentsLockedAction({ postId, lock: !commentsLocked }),
+                  () => setCommentsLocked(!commentsLocked),
+                  commentsLocked
+                    ? {
+                        title: COPY.postMenu.commentsUnlockedTitle,
+                        description: COPY.postMenu.commentsUnlockedBody,
+                      }
+                    : {
+                        title: COPY.postMenu.commentsLockedTitle,
+                        description: COPY.postMenu.commentsLockedBody,
+                      },
+                )
+              }
+            />
+          )}
+
+          {/*
+            Abrir en otra pestaña. Es un ancla de verdad y no un window.open():
+            así funciona el clic del medio, el "abrir en una ventana nueva" del
+            menú contextual y el copiar-enlace, y sobre todo NO lo come el
+            bloqueador de pop-ups (window.open fuera de un gesto directo del
+            usuario es exactamente lo que esos bloqueadores frenan).
+            `rel="noopener noreferrer"` va aunque el destino sea propio: es el
+            default sano y no cuesta nada.
+          */}
+          <a
+            href={`/feed/${postId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setMenuOpen(false)}
+            className={cn(MENU_ROW, "text-foreground")}
+          >
+            <ArrowSquareOut size={18} aria-hidden="true" className="shrink-0" />
+            {COPY.postMenu.openInNewTab}
+          </a>
 
           <ReportScamButton variant="menu-item" onReport={openReport} />
 
           {isOwnPost && (
             <button
               type="button"
+              disabled={isPending}
               onClick={() => {
                 setMenuOpen(false);
                 setDeleteOpen(true);
@@ -185,6 +378,7 @@ export function PostMenu({
           postId={postId}
           initialBody={postBody}
           hasMedia={hasMedia}
+          media={media}
         />
       )}
 
@@ -209,5 +403,30 @@ export function PostMenu({
         />
       )}
     </>
+  );
+}
+
+/** Fila-botón del menú. Existe para que ícono, alto y foco no se repitan seis veces. */
+function MenuButton({
+  icon: MenuIcon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: Icon;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(MENU_ROW, "text-foreground")}
+    >
+      <MenuIcon size={18} aria-hidden="true" className="shrink-0" />
+      {label}
+    </button>
   );
 }

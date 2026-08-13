@@ -16,6 +16,7 @@ import {
 import {
   LISTING_COLUMNS,
   POST_COLUMNS,
+  VISIBLE_POSTS_FILTER,
   fetchActivePromotions,
   fetchAuthorViews,
   fetchBlockedIds,
@@ -155,6 +156,11 @@ async function loadParaTiPage({
   postsQuery = postsQuery.or(
     feedPostVisibilityFilter(followedListingIds, [...promotedPostIds]),
   );
+
+  // Fuera lo que su autor OCULTÓ del feed (0097). No es moderación ni borrado:
+  // la publicación sigue existiendo y su link sigue abriendo — sólo deja de
+  // aparecer donde la app la muestra sin que nadie la pida.
+  postsQuery = postsQuery.or(VISIBLE_POSTS_FILTER);
 
   // Nunca mostrar en "Para ti" contenido de gente que el viewer bloqueó. El or()
   // preserva los posts de autor anónimo (cuenta borrada → author_id null): un

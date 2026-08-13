@@ -159,6 +159,12 @@ function postForm(input: {
   kind?: "post" | "question" | "text";
   photos?: File[];
   videoPaths?: string[];
+  /**
+   * Lo que el composer manda en `videoFilters`: un arreglo PARALELO a
+   * `videoPaths`. Se tipa `unknown` a propósito — la mitad de estas pruebas
+   * mandan basura, que es justamente el caso que la action tiene que frenar.
+   */
+  videoFilters?: unknown;
 }): FormData {
   const data = new FormData();
   data.set("body", input.body);
@@ -169,6 +175,9 @@ function postForm(input: {
     data.set("videoType", "short_video");
     data.set("durationSeconds", "42");
     data.set("videoCategory", "comunidad");
+  }
+  if (input.videoFilters !== undefined) {
+    data.set("videoFilters", JSON.stringify(input.videoFilters));
   }
   return data;
 }
@@ -455,5 +464,131 @@ describe("createPostAction — una foto sin pie no miente en la cola", () => {
 
     const payload = mocks.enqueueModeration.mock.calls[0]?.[1] as { reasons: string[] };
     expect(payload.reasons).toContain("moderation_skipped");
+  });
+});
+
+/* ------------- Filtro del video como metadato (0104) --------------------- */
+
+/**
+ * EL FILTRO DE UN VIDEO NO SE HORNEA: se guarda y se aplica al reproducir. Eso
+ * mueve la frontera de confianza — lo que antes era un efecto quemado en un
+ * archivo ahora es un dato que viaja del navegador y termina en un `style` que
+ * ve TODA la comunidad. Así que acá se prueba lo único que importa de verdad:
+ * que del cliente sólo entre lo que existe en el catálogo.
+ *
+ * La regla es RECHAZAR, no limpiar. Publicar igual sin el filtro le enseñaría a
+ * un cliente modificado que puede mandar cualquier cosa mientras el servidor lo
+ * tape en silencio.
+ */
+const VIDEO_PATH = `${TENANT_ID}/${USER_ID}/video-abc.mp4`;
+
+describe("createPostAction — el filtro del video se valida contra el catálogo", () => {
+  it("guarda el preset elegido indexado por la RUTA del archivo", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({
+        body: "",
+        videoPaths: [VIDEO_PATH],
+        videoFilters: [{ id: "vintage", intensity: 0.6 }],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(insertedPost(stub)?.media_filters).toEqual({
+      [VIDEO_PATH]: { id: "vintage", intensity: 0.6 },
+    });
+  });
+
+  it("RECHAZA un filtro que no existe en el catálogo", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({
+        body: "",
+        videoPaths: [VIDEO_PATH],
+        videoFilters: [{ id: "filtro-inventado", intensity: 1 }],
+      }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "invalid" });
+    // Y no se publicó NADA: el rechazo no puede dejar media a medio guardar.
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("RECHAZA CSS crudo aunque venga con un id válido al lado", async () => {
+    // El ataque real que esta validación existe para frenar: un cliente
+    // modificado mandando el string de `filter` para que termine en el `style`
+    // de todo el que abra la publicación. El campo ni se mira, pero el objeto
+    // entero tiene que pasar por el catálogo igual.
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({
+        body: "",
+        videoPaths: [VIDEO_PATH],
+        videoFilters: [{ id: "url(javascript:alert(1))", css: "blur(40px)" }],
+      }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "invalid" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("RECHAZA una intensidad fuera del rango del control", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({
+        body: "",
+        videoPaths: [VIDEO_PATH],
+        videoFilters: [{ id: "carbon", intensity: 8 }],
+      }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "invalid" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("RECHAZA un arreglo que no cuadra con los videos recibidos", async () => {
+    // Sin esta guarda ya no se sabe qué filtro es de qué archivo, y adivinar
+    // sería pintarle a alguien un video que no eligió.
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({
+        body: "",
+        videoPaths: [VIDEO_PATH],
+        videoFilters: [{ id: "calido", intensity: 1 }, { id: "byn", intensity: 1 }],
+      }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "invalid" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("'Original' y la ausencia de filtro se guardan igual: sin nada", async () => {
+    const stub = useGuardOk();
+
+    await createPostAction(
+      postForm({
+        body: "",
+        videoPaths: [VIDEO_PATH],
+        videoFilters: [{ id: "original", intensity: 1 }],
+      }),
+    );
+    expect(insertedPost(stub)?.media_filters).toEqual({});
+
+    const sinCampo = useGuardOk();
+    await createPostAction(postForm({ body: "", videoPaths: [VIDEO_PATH] }));
+    expect(insertedPost(sinCampo)?.media_filters).toEqual({});
+  });
+
+  it("una publicación de fotos nunca guarda filtros: los suyos van horneados", async () => {
+    const stub = useGuardOk();
+
+    await createPostAction(postForm({ body: "", photos: [photo()] }));
+
+    expect(insertedPost(stub)?.media_filters).toEqual({});
   });
 });

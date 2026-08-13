@@ -37,6 +37,7 @@ export { SectionHeading, type SectionHeadingProps } from "./section-heading";
 export { Select, type SelectProps } from "./select";
 export { Skeleton } from "./skeleton";
 export { Spinner } from "./spinner";
+export { SquareTile, type SquareTileProps } from "./square-tile";
 export { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
 /** Pestañas que NAVEGAN (una URL por pestaña). Ver la cabecera de nav-tabs.tsx. */
 export { NavTabs, type NavTabItem, type NavTabsProps } from "./nav-tabs";

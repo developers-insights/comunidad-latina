@@ -12,6 +12,7 @@ import { COPY } from "./copy";
 import { FeedListingCard } from "./feed-listing-card";
 import { GuideCard } from "./guide-card";
 import { PostCard } from "./post-card";
+import { PostMenu } from "./post-menu";
 import { PostCardSkeleton } from "./skeletons";
 import type { FeedItem, FeedTabId } from "./helpers";
 
@@ -81,6 +82,43 @@ export function renderFeedItem(
           tenantId={tenantId}
           viewerId={viewerId}
           videoScope={tab}
+          /**
+           * EL MENÚ ⋯ VA EN LA TARJETA DEL FEED, no sólo en el detalle (pedido
+           * del cliente con captura de una publicación del feed, 2026-08-13).
+           * Es el MISMO componente y el MISMO contrato que monta
+           * `/feed/[id]/page.tsx`; los datos que allá salían de la fila cruda
+           * viajan acá dentro del modelo (`post.postMenu`), así que no hay una
+           * segunda consulta por publicación ni dos versiones del menú.
+           *
+           * NO NAVEGA AL ABRIRSE, y eso no depende de un `stopPropagation`:
+           * depende de que la tarjeta no tenga un enlace que la envuelva. El
+           * texto, la foto y el banner llevan su propio disparador (ver el
+           * arreglo de `PostCaption`), el botón ⋯ vive suelto en la cabecera, y
+           * la hoja se dibuja en un portal fuera de la tarjeta.
+           *
+           * SIN `redirectAfterDelete`: el detalle tiene que salir porque la
+           * página deja de existir; acá alcanza con que el feed se refresque
+           * —lo hace el propio menú— y la publicación desaparezca de la lista.
+           */
+          menu={
+            <PostMenu
+              postId={item.post.id}
+              authorId={item.post.postMenu.authorId}
+              viewerId={viewerId}
+              postBody={item.post.body}
+              postStatus={item.post.postMenu.status}
+              // Las RUTAS crudas y no `post.media`: es exactamente lo que mira
+              // el detalle (`post.media.length > 0` sobre la fila) y evita que
+              // el retrocompat de `photoUrl` cuente como medio para la edición.
+              hasMedia={item.post.postMenu.mediaPaths.length > 0}
+              media={item.post.postMenu.mediaPaths}
+              commentCount={item.post.commentCount}
+              likeCount={item.post.likeCount}
+              pinnedAt={item.post.postMenu.pinnedAt}
+              hiddenAt={item.post.postMenu.hiddenAt}
+              commentsLockedAt={item.post.postMenu.commentsLockedAt}
+            />
+          }
         />
       );
     case "listing-property":

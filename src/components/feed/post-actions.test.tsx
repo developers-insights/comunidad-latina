@@ -266,6 +266,14 @@ describe("PostCard → PostActions: la hoja sigue a la diapositiva ACTIVA", () =
     ctaWhatsapp: null,
     taggedPeople: [],
     music: null,
+    postMenu: {
+      authorId: null,
+      status: "published",
+      mediaPaths: [],
+      pinnedAt: null,
+      hiddenAt: null,
+      commentsLockedAt: null,
+    },
   };
 
   function renderCard(media: PostMediaView[]) {

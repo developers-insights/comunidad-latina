@@ -74,3 +74,13 @@ export { ContractActions } from "./contract-actions";
 export { ReviewForm } from "./review-form";
 export { CreatorProfileForm, type CreatorProfileInitial } from "./creator-profile-form";
 export { GigPublishForm } from "./gig-publish-form";
+/** Paquetes de servicio del creador (0102): vitrina pública + editor. */
+export {
+  ServicePackages,
+  SERVICE_PACKAGES_ANCHOR,
+  type ServicePackagesProps,
+} from "./service-packages";
+export {
+  ServicePackagesEditor,
+  type ServicePackagesEditorProps,
+} from "./service-packages-editor";

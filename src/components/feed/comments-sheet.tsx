@@ -23,6 +23,7 @@ import type { Database } from "@/lib/types/database.types";
 import { cn, timeAgo } from "@/lib/utils";
 import { CommentComposer, type CommentOptimisticHandlers } from "./comment-composer";
 import { CommentItem } from "./comment-item";
+import { CommentMenu } from "./comment-menu";
 import { COPY } from "./copy";
 import type { AuthorView } from "./helpers";
 
@@ -350,19 +351,57 @@ interface ThreadRow {
   fallbackAvatarUrl?: string | null;
 }
 
-type ThreadResult = { ok: true; rows: ThreadRow[] } | { ok: false };
+/**
+ * Lo que el hilo necesita saber del SUJETO además de sus comentarios (0097):
+ * quién lo publicó —el autor de la publicación puede borrar comentarios de su
+ * hilo— y si los comentarios están cerrados.
+ */
+interface SubjectState {
+  authorId: string | null;
+  commentsLocked: boolean;
+}
+
+type ThreadResult =
+  | { ok: true; rows: ThreadRow[]; subject: SubjectState }
+  | { ok: false };
+
+/** Sin datos del sujeto: el caso del aviso, que no tiene ninguna de las dos cosas. */
+const NO_SUBJECT_STATE: SubjectState = { authorId: null, commentsLocked: false };
 
 /** Hilo de un POST: lectura directa con RLS (camino histórico, sin cambios). */
 async function loadPostThread(supabase: Supabase, postId: string): Promise<ThreadResult> {
-  const { data, error } = await supabase
-    .from("comments")
-    .select("id, body, created_at, author_id, status")
-    .eq("post_id", postId)
-    .eq("status", "published")
-    .order("created_at", { ascending: true })
-    .order("id", { ascending: true })
-    .limit(COMMENTS_LIMIT);
+  const [{ data, error }, postResult] = await Promise.all([
+    supabase
+      .from("comments")
+      .select("id, body, created_at, author_id, status")
+      .eq("post_id", postId)
+      .eq("status", "published")
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(COMMENTS_LIMIT),
+    // `comments_locked_at` llega con la 0097 y todavía no está en
+    // database.types.ts → cliente de schema abierto, igual que `saves`. Va en
+    // paralelo con el hilo: es una fila por su clave primaria, no suma espera.
+    (supabase as unknown as SupabaseClient)
+      .from("posts")
+      .select("author_id, comments_locked_at")
+      .eq("id", postId)
+      .maybeSingle(),
+  ]);
   if (error) return { ok: false };
+
+  // Que no se pueda leer el estado del post NO tira abajo el hilo: se cae al
+  // caso conservador (sin menú de borrar, con el campo de escribir abierto) y
+  // la policy `comments_insert` sigue siendo la que decide de verdad.
+  const postRow = postResult.data as
+    | { author_id: string | null; comments_locked_at: string | null }
+    | null;
+  if (postResult.error) {
+    console.warn("[feed] estado del post para el hilo no disponible", {
+      code: postResult.error.code,
+    });
+  }
+
   return {
     ok: true,
     rows: (data ?? []).map((row) => ({
@@ -371,6 +410,10 @@ async function loadPostThread(supabase: Supabase, postId: string): Promise<Threa
       createdAt: row.created_at,
       authorId: row.author_id,
     })),
+    subject: {
+      authorId: postRow?.author_id ?? null,
+      commentsLocked: Boolean(postRow?.comments_locked_at),
+    },
   };
 }
 
@@ -388,6 +431,9 @@ async function loadListingThread(listingId: string): Promise<ThreadResult> {
       fallbackName: item.authorName,
       fallbackAvatarUrl: item.avatarUrl,
     })),
+    // Los avisos no tienen ninguna de las dos cosas de la 0097: el borrado de
+    // `listing_comments` y su cierre son otra tabla y otra decisión.
+    subject: NO_SUBJECT_STATE,
   };
 }
 
@@ -497,6 +543,12 @@ function CommentsSheetBody({
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [comments, setComments] = useState<LoadedComment[]>([]);
   const [optimistic, setOptimistic] = useState<OptimisticComment[]>([]);
+  /**
+   * Quién publicó y si el hilo está cerrado (0097). Se llama `subjectState` y
+   * no `subject` porque ese nombre ya lo ocupa el prop que dice SOBRE QUÉ se
+   * abrió la hoja; son dos cosas distintas y confundirlas sería fácil.
+   */
+  const [subjectState, setSubjectState] = useState<SubjectState>(NO_SUBJECT_STATE);
   // undefined = auth sin resolver todavía; null = anónimo; objeto = logueado.
   const [viewer, setViewer] = useState<
     { id: string; author: AuthorView } | null | undefined
@@ -561,6 +613,7 @@ function CommentsSheetBody({
         ),
       })),
     );
+    setSubjectState(thread.subject);
     setViewer(
       viewerId ? { id: viewerId, author: authorViewOf(authors, viewerId) } : null,
     );
@@ -732,15 +785,46 @@ function CommentsSheetBody({
 
         {status === "ready" && visibleCount > 0 && (
           <ul className="flex flex-col gap-4 py-2">
-            {comments.map((comment) => (
-              <CommentItem
-                key={comment.id}
-                author={comment.author}
-                body={comment.body}
-                timeAgoLabel={comment.timeAgoLabel}
-                tone={onMedia ? "media" : "surface"}
-              />
-            ))}
+            {comments.map((comment) => {
+              // Borran su autor y quien publicó (0097). Acá sólo se decide qué
+              // OFRECER: el permiso lo tiene la policy `comments_delete`.
+              const isOwnComment = Boolean(
+                viewer && comment.author.profileId === viewer.id,
+              );
+              const canDelete =
+                subject.kind === "post" &&
+                Boolean(viewer) &&
+                (isOwnComment || subjectState.authorId === viewer?.id);
+              return (
+                <CommentItem
+                  key={comment.id}
+                  author={comment.author}
+                  body={comment.body}
+                  timeAgoLabel={comment.timeAgoLabel}
+                  tone={onMedia ? "media" : "surface"}
+                  menu={
+                    canDelete ? (
+                      <CommentMenu
+                        commentId={comment.id}
+                        authorName={comment.author.displayName}
+                        isOwnComment={isOwnComment}
+                        tone={onMedia ? "media" : "surface"}
+                        // La hoja NO se cierra ni se recarga: el comentario sale
+                        // de la lista en memoria y el hilo se queda donde
+                        // estaba. Recargarlo devolvería a la persona al
+                        // principio del hilo, que es justo lo que el cliente
+                        // pidió evitar cuando se creó esta hoja.
+                        onDeleted={() =>
+                          setComments((prev) =>
+                            prev.filter((item) => item.id !== comment.id),
+                          )
+                        }
+                      />
+                    ) : undefined
+                  }
+                />
+              );
+            })}
             {optimistic.map((item) => (
               <CommentItem
                 key={item.tempId}
@@ -762,7 +846,19 @@ function CommentsSheetBody({
           onMedia ? "border-on-media/15" : "border-border",
         )}
       >
-        {viewer === null ? (
+        {subjectState.commentsLocked ? (
+          // Comentarios cerrados por quien publicó (0097). Se dice en el lugar
+          // del campo de escribir: dejarlo vacío se lee como que la hoja se
+          // rompió. El candado real lo pone la policy `comments_insert`.
+          <p
+            className={cn(
+              "px-1 py-2 text-center text-sm",
+              onMedia ? "text-on-media" : "text-foreground-secondary",
+            )}
+          >
+            {COPY.postMenu.commentsClosedNotice}
+          </p>
+        ) : viewer === null ? (
           // Anónimo: entrar y volver acá mismo (no perdemos el lugar).
           <Link
             href={`/entrar?next=${encodeURIComponent(pathname || "/feed")}`}

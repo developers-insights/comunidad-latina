@@ -34,19 +34,41 @@ export const COMUNIDAD_COPY = {
     title: "Comunidad",
     subtitle: "Información útil y una mano cuando hace falta.",
     intro:
-      "Acá reunimos lo que la comunidad necesita tener a mano: adónde ir por ayuda, qué guías hay para los trámites, y quién perdió o encontró algo cerca tuyo.",
+      "Acá reunimos lo que la comunidad necesita tener a mano: adónde pedir ayuda, comida o trámites, quién perdió o encontró algo cerca tuyo, y dónde sumarte si te sobra una mano para dar.",
+    /**
+     * Grilla de categorías (rediseño 2026-08-13, pedido textual del cliente:
+     * «mantener los cuadrados iguales en la parte de búsqueda, pero en la
+     * sección de comunidad»). Cada `title` es lo único que se LEE en el
+     * cuadrado —mismo trato que "Vivienda" o "Marketplace" en /buscar, un
+     * sustantivo corto bajo un ícono— así que acá viven acortados; el nombre
+     * largo de cada sección sigue intacto como título de SU propia pantalla
+     * (`recursos.title`, `guias.title`, `perdidos.title` más abajo).
+     *
+     * `hint` NO se ve: entra como texto accesible extra del link (screen
+     * reader), porque "Guías" o "Voluntarios" solos no siempre alcanzan para
+     * decidir si tocar sin abrir la pantalla — se pierde ESE contexto, no la
+     * lectura visual, que tiene que quedar igual de limpia que la de /buscar.
+     */
     cards: {
       recursos: {
-        title: "Dónde pedir ayuda",
-        hint: "Clínicas sin seguro, comida, consulados y oficinas de ayuda, con su teléfono y su dirección.",
+        title: "Pedir ayuda",
+        hint: "Clínicas sin seguro, consulados y oficinas de ayuda, con teléfono y dirección.",
       },
       guias: {
-        title: "Guías para los trámites",
-        hint: "Explicadas paso a paso, siempre con el enlace a la fuente oficial.",
+        title: "Guías",
+        hint: "Trámites explicados paso a paso, con el enlace a la fuente oficial.",
       },
       perdidos: {
         title: "Perdido y encontrado",
         hint: "Buscá por zona lo que se te perdió, o avisá si encontraste algo.",
+      },
+      comida: {
+        title: "Bancos de comida",
+        hint: "Comedores y despensas gratuitas o a bajo costo cerca tuyo.",
+      },
+      voluntarios: {
+        title: "Voluntarios",
+        hint: "Organizaciones que reciben manos voluntarias para su trabajo comunitario.",
       },
     },
   },
@@ -89,6 +111,29 @@ export const COMUNIDAD_COPY = {
     emptyMessage:
       "Estamos armando el directorio de tu comunidad. Mientras tanto, las guías tienen los enlaces oficiales de cada trámite.",
     emptyAction: "Ver las guías",
+    /**
+     * Vacío de UN tema filtrado (`?tema=`, ver recursos/page.tsx) — distinto
+     * del vacío de arriba, que es "no hay nada en todo el directorio". Acá
+     * puede haber decenas de fichas en otros temas y cero en éste, así que el
+     * mensaje no puede sonar a que la sección entera está vacía. Sólo los dos
+     * temas con entrada propia en la grilla (comida, voluntariado) necesitan
+     * el suyo: el resto de los ocho temas se navegan desde la lista completa,
+     * que ya resuelve su propio vacío con `emptyTitle`/`emptyMessage`.
+     */
+    emptyTopic: {
+      comida: {
+        title: "Todavía no hay bancos de comida cargados",
+        message:
+          "Estamos sumando comedores y despensas de tu comunidad. Mientras tanto, mirá el resto de la ayuda disponible.",
+      },
+      voluntariado: {
+        title: "Todavía no hay grupos de voluntarios cargados",
+        message:
+          "Estamos armando este directorio. Mientras tanto, mirá el resto de la ayuda disponible.",
+      },
+    },
+    /** Vuelve a la lista completa — visible con y sin resultados en el tema. */
+    allTopicsCta: "Ver toda la ayuda disponible",
   },
 
   // -------------------------------------------------------------------------
@@ -249,6 +294,7 @@ export const RESOURCE_TOPIC_LABEL: Record<ResourceTopic, string> = {
   legal: "Ayuda legal",
   vivienda: "Vivienda y refugio",
   educacion: "Educación e idioma",
+  voluntariado: "Grupos de voluntarios",
 };
 
 /** Una línea por tema: qué vas a encontrar ahí adentro. */
@@ -261,6 +307,7 @@ export const RESOURCE_TOPIC_HINT: Record<ResourceTopic, string> = {
   legal: "Organizaciones con asistencia legal gratuita o a bajo costo.",
   vivienda: "Refugios y programas de ayuda con la vivienda.",
   educacion: "Clases de inglés, terminar la secundaria, formación.",
+  voluntariado: "Organizaciones que suman voluntarios para comedores, refugios y otras tareas del barrio.",
 };
 
 export const LOST_FOUND_TYPE_LABEL: Record<LostFoundType, string> = {

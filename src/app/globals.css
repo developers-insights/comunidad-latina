@@ -728,6 +728,18 @@
   --accent-empleos: #c2410c;       /* naranja cálido: el trabajo de la comunidad */
   --accent-comunidad: #be185d;     /* rosa hondo: ayuda mutua, distinto de los 8 anteriores */
 
+  /* Sub-acentos de la grilla DENTRO de Comunidad (0099, rediseño 2026-08-13):
+     mismo criterio que arriba —un color pastel propio por categoría, fijo en
+     los dos temas— pero acotados a la portada del módulo, no al menú. "Pedir
+     ayuda" reusa `--accent-comunidad`: es la puerta histórica del módulo, la
+     que ya llevaba ese rosa en la cabecera y en Buscar. Los otros cuatro son
+     nuevos y elegidos para separarse entre sí primero (son los que se ven
+     juntos, en la misma grilla) y de los 9 acentos de arriba después. */
+  --accent-comunidad-guias: #4338ca;        /* índigo: trámite, lectura calma */
+  --accent-comunidad-perdidos: #b45309;     /* ámbar: alerta cálida, buscar/avisar */
+  --accent-comunidad-comida: #4d7c0f;       /* verde lima: alimento fresco */
+  --accent-comunidad-voluntarios: #0e7490;  /* cian: manos que se suman */
+
   /* Iconografía (§2.6) y targets táctiles (§3.2) */
   --icon-sm: 16px;
   --icon-md: 20px;

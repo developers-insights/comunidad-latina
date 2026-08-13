@@ -37,16 +37,25 @@ const SQL_0092 = readFileSync(
   path.join(MIGRATIONS, "0092_alcance_geografico_del_boost.sql"),
   "utf8",
 );
+/**
+ * La 0101 (check azul) vuelve a REEMPLAZAR los dos CHECK y suma tres casillas a
+ * la semilla. Por el mismo motivo que la 0092: el estado final del esquema es el
+ * de la ÚLTIMA migración que tocó cada constraint, así que el "vigente" pasa a
+ * leerse de acá. La 0092 se sigue leyendo para su semilla y como escalón
+ * intermedio verificable.
+ */
+const SQL_0101 = readFileSync(path.join(MIGRATIONS, "0101_verificacion_paga.sql"), "utf8");
 
-describe("el catálogo espeja las migraciones 0072 + 0092", () => {
+describe("el catálogo espeja las migraciones 0072 + 0092 + 0101", () => {
   it("los productos del código son exactamente los del CHECK vigente", () => {
-    // El CHECK vigente es el que instala la 0092; el de la 0072 quedó atrás y
-    // se comprueba igual, para que quede a la vista que uno es subconjunto del
-    // otro y que la 0092 no le sacó ningún producto a nadie.
+    // El CHECK vigente es el que instala la 0101; los de la 0072 y la 0092
+    // quedaron atrás y se comprueban igual, para que quede a la vista que cada
+    // uno es subconjunto del siguiente y que ninguna migración le sacó un
+    // producto a nadie.
     const vigente = /add constraint tenant_prices_product_check check \(product in \(([\s\S]*?)\n  \)\)/.exec(
-      SQL_0092,
+      SQL_0101,
     );
-    expect(vigente, "no encontré el CHECK de product en la 0092").not.toBeNull();
+    expect(vigente, "no encontré el CHECK de product en la 0101").not.toBeNull();
     const enSql = [...vigente![1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
     expect(new Set(enSql)).toEqual(new Set(PRICE_PRODUCTS));
 
@@ -54,7 +63,15 @@ describe("el catálogo espeja las migraciones 0072 + 0092", () => {
     expect(original, "no encontré el CHECK de product en 0072").not.toBeNull();
     const enSql0072 = [...original![1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
     for (const producto of enSql0072) {
-      expect(enSql, `la 0092 dejó afuera el producto '${producto}'`).toContain(producto);
+      expect(enSql, `la 0101 dejó afuera el producto '${producto}'`).toContain(producto);
+    }
+
+    const intermedio = /add constraint tenant_prices_product_check check \(product in \(([\s\S]*?)\n  \)\)/.exec(
+      SQL_0092,
+    );
+    expect(intermedio, "no encontré el CHECK de product en la 0092").not.toBeNull();
+    for (const producto of [...intermedio![1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1])) {
+      expect(enSql, `la 0101 dejó afuera el producto '${producto}'`).toContain(producto);
     }
   });
 
@@ -69,9 +86,9 @@ describe("el catálogo espeja las migraciones 0072 + 0092", () => {
 
   it("toda variante usada por el catálogo está permitida por el CHECK vigente", () => {
     const check = /add constraint tenant_prices_variant_check check \(variant in \(([\s\S]*?)\n  \)\)/.exec(
-      SQL_0092,
+      SQL_0101,
     );
-    expect(check, "no encontré el CHECK de variant en la 0092").not.toBeNull();
+    expect(check, "no encontré el CHECK de variant en la 0101").not.toBeNull();
     const permitidas = new Set([...check![1].matchAll(/'([a-z0-9]+)'/g)].map((m) => m[1]));
     for (const slot of PRICE_SLOTS) {
       expect(permitidas.has(slot.variant), `variante '${slot.variant}' fuera del CHECK`).toBe(true);
@@ -81,10 +98,10 @@ describe("el catálogo espeja las migraciones 0072 + 0092", () => {
 
 describe("la semilla es la constante del código", () => {
   /**
-   * Las tuplas del `values (...)` de las DOS semillas: la 0073 sembró las 14
-   * casillas originales y la 0092 las tres del alcance. Se leen juntas porque
-   * juntas son "lo que hay sembrado", y la comparación de abajo exige que eso
-   * sea exactamente el catálogo.
+   * Las tuplas del `values (...)` de las TRES semillas: la 0073 sembró las 14
+   * casillas originales, la 0092 las tres del alcance y la 0101 las tres del
+   * check azul. Se leen juntas porque juntas son "lo que hay sembrado", y la
+   * comparación de abajo exige que eso sea exactamente el catálogo.
    */
   const TUPLA = /\(\s*'([a-z_]+)',\s*'([a-z0-9]+)',\s*'([a-z]+)',\s*(\d+)\)/g;
   const parsear = (sql: string) =>
@@ -94,7 +111,7 @@ describe("la semilla es la constante del código", () => {
       interval: m[3],
       cents: Number(m[4]),
     }));
-  const semilla = [...parsear(SQL_0073), ...parsear(SQL_0092)];
+  const semilla = [...parsear(SQL_0073), ...parsear(SQL_0092), ...parsear(SQL_0101)];
 
   it("siembra exactamente las casillas del catálogo, ni una más ni una menos", () => {
     expect(semilla.length).toBe(PRICE_SLOTS.length);

@@ -103,6 +103,13 @@ export interface LostFoundCase {
  * Temas del directorio. El ORDEN de este arreglo es el orden en que se muestran
  * los grupos en pantalla, y no es alfabético: arriba lo que la gente busca
  * cuando algo se puso urgente.
+ *
+ * `voluntariado` (migración 0099) va AL FINAL a propósito, separado de los
+ * ocho anteriores: los primeros ocho son "necesito ayuda", éste es "quiero
+ * darla" — el único tema del directorio que no es una urgencia. Sigue siendo
+ * `community_resources` (organizaciones curadas, con fuente obligatoria) y NO
+ * un tablón donde cualquiera publica su convocatoria: ver la portada de
+ * Comunidad (`(indice)/page.tsx`) para la decisión completa.
  */
 export const RESOURCE_TOPICS = [
   "emergencias",
@@ -113,6 +120,7 @@ export const RESOURCE_TOPICS = [
   "legal",
   "vivienda",
   "educacion",
+  "voluntariado",
 ] as const;
 export type ResourceTopic = (typeof RESOURCE_TOPICS)[number];
 

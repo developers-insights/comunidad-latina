@@ -22,6 +22,7 @@ export const PRICE_PRODUCTS = [
   "boost_scope",
   "post_promo",
   "store_membership",
+  "verificacion",
 ] as const;
 export type PriceProduct = (typeof PRICE_PRODUCTS)[number];
 
@@ -47,7 +48,7 @@ export interface PriceSlot {
 }
 
 /**
- * Las 17 casillas, en el orden en que se muestran.
+ * Las 20 casillas, en el orden en que se muestran.
  *
  * El orden importa: primero lo recurrente (la suscripción del negocio, que es
  * el ingreso previsible), después lo puntual. Dentro de cada producto, del más
@@ -91,6 +92,17 @@ export const PRICE_SLOTS: readonly PriceSlot[] = [
     interval: "mensual",
     label: "Publicación premium · por mes",
   },
+
+  // Check azul (0101). Del escalón más barato al más caro, que es como se lee
+  // una lista de precios — y además coincide con el orden en que se decide.
+  { product: "verificacion", variant: "persona", interval: "mensual", label: "Cuenta personal · por mes" },
+  { product: "verificacion", variant: "negocio", interval: "mensual", label: "Negocio · por mes" },
+  {
+    product: "verificacion",
+    variant: "profesional",
+    interval: "mensual",
+    label: "Profesional · por mes",
+  },
 ] as const;
 
 /**
@@ -128,11 +140,17 @@ export const PRODUCT_COPY: Record<PriceProduct, { label: string; blurb: string }
     label: "Publicación premium",
     blurb: "Mensual. Sube una publicación gratuita a premium: más fotos, video largo y botones.",
   },
+  verificacion: {
+    label: "Check azul",
+    blurb:
+      "Mensual. La insignia al lado del nombre de una cuenta que ya verificó su identidad con documento, más un impulso de 7 días de regalo por mes. No es lo mismo que la verificación de identidad, que es gratis.",
+  },
 };
 
 /** Orden en que se agrupan los productos en la pantalla. */
 export const PRODUCT_ORDER: readonly PriceProduct[] = [
   "presencia",
+  "verificacion",
   "boost",
   "boost_scope",
   "post_promo",

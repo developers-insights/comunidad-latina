@@ -21,6 +21,12 @@ export interface PostTile {
   text: string;
   /** kind='question': se rotula distinto ("Pregunta a la comunidad"). */
   isQuestion: boolean;
+  /**
+   * La fijó su autor (0097). El grid la pone primera Y la rotula: sin el
+   * rótulo, fijar una publicación que ya era la más nueva no se vería, y la
+   * persona pensaría que el botón no hizo nada.
+   */
+  pinned: boolean;
 }
 
 /** Fila mínima de `posts` que necesita el grid (sin like/comment counts). */
@@ -30,6 +36,8 @@ export interface PostTileInput {
   kind: string;
   /** Array `posts.media` (0025): fotos y videos conviven, el kind se infiere por extensión. */
   media: string[] | null;
+  /** `posts.pinned_at` (0097). Ausente o null = no está fijada. */
+  pinned_at?: string | null;
 }
 
 /**
@@ -44,6 +52,7 @@ export function toPostTile(input: PostTileInput): PostTile {
   const first = media[0];
   const isQuestion = input.kind === "question";
   const text = input.body ?? "";
+  const pinned = Boolean(input.pinned_at);
 
   if (first) {
     return {
@@ -52,6 +61,7 @@ export function toPostTile(input: PostTileInput): PostTile {
       mediaUrl: postMediaUrl(first),
       text,
       isQuestion,
+      pinned,
     };
   }
 
@@ -61,5 +71,6 @@ export function toPostTile(input: PostTileInput): PostTile {
     mediaUrl: null,
     text,
     isQuestion,
+    pinned,
   };
 }

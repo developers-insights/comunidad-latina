@@ -302,6 +302,16 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-on-success"],
     cobertura: "cl-print-fill",
   },
+  // El segundo portador que no es control: el sello AZUL del check pago (0101),
+  // hermano del escudo verde de arriba y con el mismo problema — es una tinta
+  // clara que sólo se lee encima de su relleno. Mismo hook `cl-print-fill`, misma
+  // razón: sin `print-color-adjust: exact` el tilde sale blanco sobre papel
+  // blanco (1.00:1). Que una insignia desaparezca al imprimir un perfil no es
+  // cosmético: la hoja diría que la cuenta NO tiene check.
+  "src/components/verificacion/check-azul.tsx": {
+    inks: ["text-on-info"],
+    cobertura: "cl-print-fill",
+  },
   // Composer de comentario. TRES tintas y DOS mecanismos, a propósito:
   //  · `text-brand-foreground` es el botón redondo de enviar — un <button>, que
   //    el @media print ya esconde en las dos superficies donde vive el composer
@@ -332,14 +342,36 @@ const INVENTARIO: Record<string, Entrada> = {
       contiene: ["cl-print-hide"],
     },
   },
+  // Menú ⋯ de un comentario (0097). Su única tinta `on-*` es el botón sobre el
+  // vidrio, o sea la variante tone="media", que SÓLO existe dentro de la hoja de
+  // comentarios — el detalle SSR /feed/[id] monta el mismo menú sin `tone`, en
+  // tokens de tema. Mismo ancla que comment-item: el panel entero lleva
+  // cl-print-hide.
+  "src/components/feed/comment-menu.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-hide",
+    prueba: {
+      archivo: "src/components/feed/comments-sheet.tsx",
+      contiene: ["cl-print-hide"],
+    },
+  },
+  // Hoja de edición (0097): el botón de quitar una foto es un círculo danger
+  // sobre la miniatura. Es literalmente un <button>, así que lo cubre la regla
+  // de controles del bloque print.
+  "src/components/feed/post-edit-sheet.tsx": {
+    inks: ["text-on-danger"],
+    cobertura: "control",
+  },
   // Hoja de comentarios sobre video (feedback cliente 2026-07-27): overlay modal
   // sobre TODA la página que, sobre el vidrio, escribe en tinta de media el
   // título, el contador, los dos textos del error + su botón de reintentar, los
   // dos del vacío y el CTA de entrar. Precedente exacto: media-viewer.tsx — en
   // papel una hoja de comentarios no significa nada, el panel entero lleva
   // cl-print-hide. Es también el ancla de comment-item y comment-composer.
+  // La novena (0097) es el cartel de "comentarios desactivados", que ocupa el
+  // lugar del campo de escribir cuando quien publicó cerró el hilo.
   "src/components/feed/comments-sheet.tsx": {
-    inks: Array<string>(8).fill("text-on-media"),
+    inks: Array<string>(9).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
   // Hoja de composición (2026-07-27). REEMPLAZA a post-composer.tsx, que salió
@@ -491,10 +523,12 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: Array<string>(12).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
-  // Glifo Play sobre el thumbnail de video del grid del perfil — se imprime
-  // con su velo (bg-media-scrim + cl-print-fill), como el contador de gallery.
+  // Dos tintas, mismo patrón: el glifo Play sobre el thumbnail de video y el
+  // rótulo "Fijada" de la publicación fijada (0097). Las dos se apoyan en un
+  // velo bg-media-scrim y las dos lo imprimen con cl-print-fill, como el
+  // contador de gallery.
   "src/app/(app)/perfil/posts-grid.tsx": {
-    inks: ["text-on-media"],
+    inks: ["text-on-media", "text-on-media"],
     cobertura: "cl-print-fill",
   },
   // Glifo Play sobre el thumbnail de video en el índice de Impulsar — mismo
@@ -557,8 +591,12 @@ const INVENTARIO: Record<string, Entrada> = {
   // fila de <main>, así que no lo alcanza ninguna regla de chrome. Lleva
   // `cl-print-hide` propio — un número de avisos pendientes no significa nada
   // en papel, y sin el hook sería blanco sobre blanco.
+  // La segunda tinta es el ícono redondo de la fila "Crear cuenta de negocio"
+  // (0103): un <span aria-hidden> con el glifo en `brand-foreground` sobre
+  // `bg-brand`. Mismo caso que el contador y mismo hook — decoración de una fila
+  // de Ajustes, que en papel no dice nada y sin el relleno sería invisible.
   "src/app/(app)/ajustes/page.tsx": {
-    inks: ["text-brand-foreground"],
+    inks: ["text-brand-foreground", "text-brand-foreground"],
     cobertura: "cl-print-hide",
   },
   // Píldora "Cerrado / Abierto / Las 24 horas" del editor de horarios (0093):
@@ -614,6 +652,14 @@ const INVENTARIO: Record<string, Entrada> = {
   "src/components/onboarding/onboarding-wizard.tsx": {
     inks: ["text-brand-foreground"],
     cobertura: "control",
+  },
+  // Distintivo del cambiador de identidad (0103): un <span aria-hidden> con el
+  // glifo en `brand-foreground` sobre `bg-brand`, pegado al avatar del header.
+  // Lleva `cl-print-hide` propio — sin el relleno quedaría 1.00:1, y con qué
+  // perfil estabas navegando no significa nada en una hoja impresa.
+  "src/components/shell/identity-switcher.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
   },
   "src/components/shell/offline-banner.tsx": {
     inks: ["text-on-surface-inverse"],

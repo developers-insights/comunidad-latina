@@ -38,7 +38,21 @@ function publicaciones(n: number): FeedItem[] {
   return Array.from({ length: n }, (_, i) => ({
     type: "post" as const,
     id: `p${i + 1}`,
-    post: { id: `p${i + 1}` },
+    // `postMenu` va aunque este test no mire el menú: desde que la tarjeta del
+    // feed monta el ⋯ (0097), `renderFeedItem` LEE estos campos para armarlo.
+    // Un fake sin ellos rompía acá y no en el feed — que es exactamente lo que
+    // un fixture nunca tiene que hacer.
+    post: {
+      id: `p${i + 1}`,
+      postMenu: {
+        authorId: null,
+        status: "published",
+        mediaPaths: [],
+        pinnedAt: null,
+        hiddenAt: null,
+        commentsLockedAt: null,
+      },
+    },
   })) as unknown as FeedItem[];
 }
 

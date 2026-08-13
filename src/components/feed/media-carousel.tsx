@@ -249,6 +249,11 @@ export function MediaCarousel({
                   active={active}
                   onTap={onVideoTap ? () => onVideoTap(slideIndex) : undefined}
                   music={music}
+                  // Filtro de ESTA diapositiva (0104), ya resuelto a CSS por el
+                  // servidor. Viaja dentro del medio y no como prop del carrusel
+                  // porque es una decisión POR ARCHIVO: un post puede traer un
+                  // video con Vintage y otro sin nada.
+                  filterCss={item.filterCss}
                 />
               ) : (
                 <>

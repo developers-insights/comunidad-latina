@@ -3,6 +3,7 @@ import {
   CaretDown,
   ChatCircle,
   Play,
+  PushPin,
 } from "@phosphor-icons/react/dist/ssr";
 import { buttonVariants } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,8 @@ const COPY = {
   loadMore: "Ver más",
   openPost: "Abrir la publicación",
   question: "Pregunta a la comunidad",
+  /** Rótulo de la publicación fijada (0097). */
+  pinned: "Fijada",
 } as const;
 
 export interface ProfilePostsGridProps {
@@ -69,6 +72,19 @@ export function ProfilePostsGrid({
                   )}
                 >
                   <PostTileMedia tile={tile} />
+                  {/* FIJADA (0097). El rótulo no es decoración: si la
+                      publicación fijada ya era la más nueva, ponerla primera no
+                      se nota, y quien tocó "Fijar" se queda sin saber si pasó
+                      algo. Va sobre un velo de tinta —no sobre el color de
+                      marca— porque abajo puede haber una foto de cualquier
+                      color; y el ícono queda aria-hidden porque la palabra ya
+                      está escrita al lado. */}
+                  {tile.pinned && (
+                    <span className="cl-print-fill absolute left-1.5 top-1.5 flex items-center gap-1 rounded-full bg-media-scrim px-2 py-0.5 text-[11px] font-semibold text-on-media backdrop-blur-sm">
+                      <PushPin size={11} weight="fill" aria-hidden="true" />
+                      {COPY.pinned}
+                    </span>
+                  )}
                 </Link>
               </li>
             ))}

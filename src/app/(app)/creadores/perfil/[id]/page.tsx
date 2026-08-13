@@ -12,10 +12,18 @@ import {
   firstNameOf,
   toTrustLevel,
 } from "@/components/listings";
-import { COPY, ContractForm, RatingStars, creatorPhotoUrl } from "@/components/creators";
+import {
+  COPY,
+  ContractForm,
+  RatingStars,
+  SERVICE_PACKAGES_ANCHOR,
+  ServicePackages,
+  creatorPhotoUrl,
+} from "@/components/creators";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn, formatDate } from "@/lib/utils";
+import { fetchServicePackages } from "../queries";
 
 export const metadata = { title: "Perfil de creador" };
 
@@ -42,7 +50,13 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
   // Mi propio perfil se edita en /creadores/perfil.
   if (user?.id === id) redirect("/creadores/perfil");
 
-  const [{ data: creator }, { data: profile }, { data: trust }, { data: reviews }] = await Promise.all([
+  const [
+    { data: creator },
+    { data: profile },
+    { data: trust },
+    { data: reviews },
+    servicePackages,
+  ] = await Promise.all([
     supabase
       .from("creator_profiles")
       .select("profile_id, headline, bio, skills, portfolio_photos, rate_hint, available, completed_jobs, rating_avg, rating_count")
@@ -56,6 +70,10 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
       .eq("ratee_id", id)
       .order("created_at", { ascending: false })
       .limit(20),
+    // Sólo los ACTIVOS: un paquete apagado no es una oferta. La policy de
+    // SELECT (0102) además no se los devolvería a un visitante aunque los
+    // pidiéramos — esto evita traer filas que igual se descartan.
+    fetchServicePackages(supabase, id, { activeOnly: true }),
   ]);
 
   if (!creator) {
@@ -273,9 +291,53 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
                 {skill}
               </li>
             ))}
+
+            {/*
+              EL CHIP QUE PIDIÓ EL CLIENTE, literal: «al lado de instagram, que
+              diga paquetes de servicio». Va como último chip de "Lo que hago",
+              donde él lo señaló sobre la captura.
+
+              No es un chip más de texto: es un ANCLA que baja hasta la sección
+              de paquetes. Un chip que dijera "Paquetes de servicio" y no
+              llevara a ningún lado sería una etiqueta mintiendo al lado de
+              cuatro que describen a la persona.
+
+              Y sólo aparece si hay paquetes ACTIVOS. Prometer paquetes en un
+              perfil que no tiene ninguno es peor que no ofrecerlos: manda a
+              alguien a buscar algo que no existe.
+            */}
+            {servicePackages.length > 0 && (
+              <li>
+                <a
+                  href={`#${SERVICE_PACKAGES_ANCHOR}`}
+                  aria-label={COPY.packages.anchorLabel}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border border-brand/25 bg-brand-tint px-3 py-1",
+                    "text-sm font-semibold text-brand-ink transition-colors hover:bg-brand-tint/80",
+                    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+                  )}
+                >
+                  {COPY.packages.anchorChip}
+                </a>
+              </li>
+            )}
           </ul>
         </section>
       )}
+
+      {/*
+        PAQUETES DE SERVICIO (0102). Va acá —entre "Lo que hago" y el
+        portfolio— porque es la continuación natural de la lectura: primero qué
+        hace esta persona, después cuánto cuesta contratarla, y recién ahí las
+        pruebas (portfolio y reseñas). El componente se esconde solo si no hay
+        paquetes activos.
+      */}
+      <ServicePackages
+        packages={servicePackages}
+        creatorId={id}
+        creatorName={displayName}
+        isAuthenticated={Boolean(user)}
+      />
 
       {portfolio.length > 0 && (
         <section className="flex flex-col gap-2">

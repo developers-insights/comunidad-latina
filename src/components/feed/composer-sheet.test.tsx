@@ -416,7 +416,13 @@ describe("ComposerSheet — editor de foto (filtro + texto encima)", () => {
   it("una foto con texto guardado lo muestra encima de la miniatura de la grilla", () => {
     const edited: ComposerMediaItem = {
       ...PHOTO,
-      edit: { filterId: "original", captionText: "Se vende", captionPosition: "bottom", captionBackground: "solid" },
+      edit: {
+        filterId: "original",
+        filterIntensity: 1,
+        captionText: "Se vende",
+        captionPosition: "bottom",
+        captionBackground: "solid",
+      },
     };
     mount({ mode: "media", media: [edited] });
     expect(screen.getByText("Se vende")).toBeTruthy();

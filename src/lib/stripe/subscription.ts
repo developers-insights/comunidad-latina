@@ -69,6 +69,70 @@ export function periodEndFromSubscription(
 }
 
 /**
+ * INICIO del período pagado, en ISO.
+ *
+ * Vive en el MISMO lugar que `current_period_end` —dentro de cada
+ * `SubscriptionItem`, no en la raíz de la `Subscription`— y por el mismo motivo
+ * (ver la advertencia de arriba). Leerlo del objeto raíz devuelve `undefined`.
+ *
+ * Se toma el ítem que EMPIEZA MÁS TEMPRANO, que es el espejo exacto del criterio
+ * de `periodEndFromSubscription`: entre los dos delimitan la ventana completa de
+ * lo que está pago, y no un pedazo de ella.
+ *
+ * PARA QUÉ SE USA, Y POR QUÉ IMPORTA QUE SEA ESTABLE. Es la clave de idempotencia
+ * del impulso de regalo del check azul (0101): `verification_boost_grants` es
+ * unique (subscription_id, period_start). Si este valor se moviera dentro del
+ * mismo ciclo, el mismo período generaría dos créditos — o sea, dos impulsos
+ * gratis por un solo mes pago. Stripe lo mantiene fijo durante todo el ciclo.
+ */
+export function periodStartFromSubscription(
+  subscription: Stripe.Subscription,
+): string | null {
+  const starts = (subscription.items?.data ?? [])
+    .map((item) => item.current_period_start)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (starts.length === 0) return null;
+  return new Date(Math.min(...starts) * 1000).toISOString();
+}
+
+/**
+ * El período de servicio que cubre una factura de suscripción, en ISO.
+ *
+ * ⚠️ NO SE LEE DE `invoice.period_start`/`period_end`. La documentación de Stripe
+ * es explícita: esos dos campos describen cuándo se crearon los ítems de la
+ * factura y NO siempre coinciden con el período facturado. El período de
+ * servicio real vive en el `period` de cada LÍNEA. Usar los de la raíz haría que
+ * dos ciclos distintos informaran la misma fecha de inicio —y con eso el segundo
+ * mes pago no generaría su impulso de regalo, porque chocaría contra el UNIQUE
+ * del primero.
+ *
+ * Se ignoran las líneas de PRORRATA: una prorrata empieza cuando se calculó, no
+ * cuando arranca el ciclo, y tomarla como inicio del período partiría un mes en
+ * dos. Si después de filtrarlas no queda ninguna línea utilizable, devuelve
+ * `null` — y quien llama decide, que siempre es mejor que inventar una fecha.
+ */
+export function periodFromInvoice(
+  invoice: Stripe.Invoice,
+): { start: string; end: string } | null {
+  const periodos = (invoice.lines?.data ?? [])
+    .filter((line) => line.parent?.subscription_item_details?.proration !== true)
+    .map((line) => line.period)
+    .filter(
+      (period): period is { start: number; end: number } =>
+        typeof period?.start === "number" &&
+        typeof period?.end === "number" &&
+        Number.isFinite(period.start) &&
+        Number.isFinite(period.end),
+    );
+  if (periodos.length === 0) return null;
+
+  return {
+    start: new Date(Math.min(...periodos.map((p) => p.start)) * 1000).toISOString(),
+    end: new Date(Math.max(...periodos.map((p) => p.end)) * 1000).toISOString(),
+  };
+}
+
+/**
  * ¿Está programada para NO renovar?
  *
  * Cancelar en el portal de Stripe no apaga nada en el momento: manda

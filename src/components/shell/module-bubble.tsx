@@ -31,6 +31,18 @@ export interface ModuleBubbleProps {
  *
  * Sin hooks ni "use client": el menú (cliente) le pasa `onNavigate` y /buscar
  * (servidor) no le pasa nada.
+ *
+ * NOTA (rediseño Comunidad, 2026-08-13): el cuadrado que dibuja `layout="tile"`
+ * de acá abajo ahora tiene una versión compartida y desacoplada de
+ * `tenants.modules` en `@/components/ui/square-tile` (`SquareTile`), que usa la
+ * grilla de categorías DENTRO de Comunidad. No se unificó ESTE archivo con esa
+ * porque acá el tile todavía carga el estado "muy pronto" y el anillo de
+ * activo —cosas que sólo tienen sentido para un módulo de plataforma, no para
+ * una categoría interna— y porque hoy `layout="tile"` tiene un único call site
+ * (`/buscar`) que nunca pasa `active`: tocar este componente para desenredar
+ * esa lógica es un cambio aparte, no algo para colar en medio de otro pedido.
+ * Si el día de mañana hace falta una tercera grilla de cuadrados, es la señal
+ * de que conviene migrar este branch a `SquareTile` de una vez.
  */
 export function ModuleBubble({
   item,

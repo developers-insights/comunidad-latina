@@ -20,6 +20,8 @@ import {
   canEditPost,
   postBodySchema,
 } from "@/lib/social/post-editing";
+import { postMenuDenialOf } from "@/lib/social/post-menu";
+import { retireAssetFromSubject } from "@/lib/integrity/retire";
 
 /**
  * =============================================================================
@@ -45,10 +47,15 @@ import {
  * · El texto editado VUELVE A MODERARSE con las mismas reglas que al publicar.
  *   Sin eso, editar sería el agujero: publicás algo inocuo, pasa el filtro, y
  *   después lo cambiás por lo que quieras.
- * · Las FOTOS Y EL VIDEO NO SE TOCAN. El porqué —la fila de `content_assets`
- *   con su `first_uploaded_at` es evidencia y no se puede desincronizar del
- *   contenido que describe— está desarrollado en `lib/social/post-editing.ts`.
- *   Este archivo simplemente no acepta archivos ni escribe `posts.media`.
+ * · NO ENTRAN ARCHIVOS NUEVOS. Cambiar una foto por otra sigue prohibido y el
+ *   porqué —un archivo nuevo necesita el pipeline completo de integridad, y la
+ *   fila vieja de `content_assets` quedaría describiendo un contenido que ya no
+ *   es— está desarrollado en `lib/social/post-editing.ts`. `editPostAction` no
+ *   acepta archivos ni escribe `posts.media`.
+ *   Desde la 0097 sí se puede QUITAR una foto (`removePostPhotoAction`, al final
+ *   de este archivo), que es un caso distinto: no entra ningún archivo, así que
+ *   no hay pipeline que rehacer, y la fila de procedencia del que sale sigue
+ *   siendo verdadera — sólo se le anota la fecha en que dejó de mostrarse.
  *
  * QUÉ PASA AL ELIMINAR (todo por contrato de la base, nada acá)
  * ------------------------------------------------------------
@@ -394,6 +401,132 @@ export async function deletePostAction(input: {
     console.warn("[feed] delete de post falló", { code: deleteError.code });
     return { ok: false, code: "error", message: POST_EDIT_COPY.error.generic };
   }
+
+  revalidatePath("/feed");
+  revalidatePath(`/feed/${postId}`);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Quitar UNA foto de una publicación ya publicada (migración 0097)
+// ---------------------------------------------------------------------------
+
+const removePhotoSchema = z.object({
+  postId: z.uuid(),
+  /**
+   * La ruta tal cual está guardada en `posts.media`. No se acepta un índice:
+   * "sacá la tercera" depende de que el cliente y el servidor estén viendo el
+   * mismo array, y basta con que la persona tenga la pantalla vieja (o dos
+   * pestañas abiertas) para que la tercera ya no sea la misma foto. Con la ruta,
+   * lo peor que puede pasar es que esa foto ya no esté y la respuesta sea "esa
+   * foto ya no está en la publicación", que es la verdad.
+   */
+  path: z.string().min(1).max(2000),
+  /** Mismo seguro que el borrado: sin confirmación explícita no se quita nada. */
+  confirmed: z.literal(true),
+});
+
+export type RemovePhotoResult =
+  | { ok: true }
+  | { ok: false; code: PostEditErrorCode; message: string };
+
+/**
+ * Saca UNA foto de una publicación propia y publicada.
+ *
+ * POR QUÉ ESTO SÍ SE PUEDE Y CAMBIAR LA FOTO NO. `lib/social/post-editing.ts`
+ * prohíbe cambiar los archivos por dos motivos, y ninguno de los dos aplica acá:
+ * no entra ningún archivo nuevo (así que no hay que rehacer subida, SHA-256,
+ * huella, escaneo, declaración de licencia ni moderación de imagen), y la fila
+ * de procedencia del archivo que sale sigue siendo verdadera palabra por palabra
+ * —dice quién lo subió, cuándo por primera vez y desde qué dominio, y nada de
+ * eso deja de haber ocurrido porque la foto ya no se muestre—. De hecho esa fila
+ * ya sobrevive hoy al borrado COMPLETO de la publicación (0061), así que un
+ * asset cuyo post no lo muestra es un estado contemplado desde el día uno.
+ *
+ * LO QUE NO PASA, y es deliberado:
+ *  · No se borra la fila de `content_assets`. Se le ANOTA `retired_from_subject_at`
+ *    (ver `lib/integrity/retire.ts`): el libro de procedencia sólo crece.
+ *  · No se borra el objeto del bucket. El hash apunta a ese archivo y borrarlo
+ *    vaciaría la evidencia que la fila promete conservar — mismo motivo por el
+ *    que el borrado de una publicación tampoco lo toca.
+ *
+ * LAS REGLAS LAS APLICA LA BASE. `public.quitar_foto_de_publicacion` (0097)
+ * exige en su WHERE que la foto esté, que quede al menos un medio y que no sea
+ * un video, y modifica el array DENTRO del UPDATE: dos pestañas quitando fotos
+ * distintas no pueden pisarse. Acá sólo se traduce el código que devuelve.
+ *
+ * LA ANOTACIÓN VA DESPUÉS Y NO PUEDE ROMPER NADA. La foto ya se quitó cuando
+ * corre; si la anotación falla, se registra en el log del servidor y la persona
+ * igual ve su publicación actualizada. Un aviso perdido no puede desandar un
+ * cambio que ya ocurrió.
+ */
+export async function removePostPhotoAction(input: {
+  postId: string;
+  path: string;
+  confirmed: true;
+}): Promise<RemovePhotoResult> {
+  const { COPY } = await import("@/components/feed/copy");
+  const menuCopy = COPY.postMenu;
+
+  const parsed = removePhotoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, code: GENERIC_INVALID, message: menuCopy.errorBody };
+  }
+  const { postId, path } = parsed.data;
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") {
+      return { ok: false, code: "unauthenticated", message: menuCopy.needsAuth };
+    }
+    if (guard.reason === "tenant-mismatch") {
+      return { ok: false, code: "tenant-mismatch", message: guard.message };
+    }
+    return { ok: false, code: "error", message: menuCopy.errorBody };
+  }
+  const { tenant, supabase, user } = guard;
+
+  // Mismo techo que editar: quitar una foto es una edición y comparte el gasto.
+  if (!limit(`post-photo:${user.id}`, EDITS_PER_HOUR, HOUR_MS).ok) {
+    return { ok: false, code: "rate-limited", message: menuCopy.rateLimited };
+  }
+
+  const { data, error } = await supabase.rpc(
+    // `quitar_foto_de_publicacion` llega con la 0097 y todavía no está en
+    // database.types.ts (se regenera aparte). Mismo patrón que las columnas
+    // nuevas en el resto del módulo: el cast es por el TIPO, no por el contrato.
+    "quitar_foto_de_publicacion" as never,
+    { p_post: postId, p_path: path } as never,
+  );
+
+  if (error) {
+    console.warn("[feed] quitar_foto_de_publicacion falló", { code: error.code });
+    return { ok: false, code: "error", message: menuCopy.errorBody };
+  }
+
+  const outcome = postMenuDenialOf(typeof data === "string" ? data : null);
+  if (!outcome.ok) {
+    if (outcome.kind === "unauthenticated") {
+      return { ok: false, code: "unauthenticated", message: menuCopy.needsAuth };
+    }
+    if (outcome.kind === "denial") {
+      // `no-esta`, `es-video` y `es-la-unica` NO son "forbidden": la persona
+      // tiene todo el derecho, lo que no se puede es esa foto en particular.
+      const blocked =
+        outcome.reason === "no-disponible" ? ("forbidden" as const) : ("blocked" as const);
+      return { ok: false, code: blocked, message: menuCopy.denial[outcome.reason] };
+    }
+    return { ok: false, code: "error", message: menuCopy.errorBody };
+  }
+
+  // El libro de procedencia: se anota que ese archivo dejó de mostrarse. Nunca
+  // lanza y nunca bloquea — ver el docblock de retireAssetFromSubject.
+  await retireAssetFromSubject({
+    tenantId: tenant.id,
+    subjectKind: "post",
+    subjectId: postId,
+    storagePath: path,
+  });
 
   revalidatePath("/feed");
   revalidatePath(`/feed/${postId}`);

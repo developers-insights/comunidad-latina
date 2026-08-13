@@ -232,6 +232,99 @@ export const COPY = {
   },
 
   // -------------------------------------------------------------------------
+  // PAQUETES DE SERVICIO (0102) — el creador cierra precios en su perfil.
+  //
+  // Tono: le habla a alguien que vende su trabajo y que muchas veces nunca puso
+  // un precio por escrito. Por eso el copy nombra el beneficio concreto ("que
+  // te contraten sin negociar cada vez") y NUNCA esconde la comisión: el neto
+  // se muestra mientras se escribe el precio, no al final. Nadie se entera de
+  // cuánto le queda cuando ya es tarde.
+  // -------------------------------------------------------------------------
+  packages: {
+    // ---- Perfil público
+    title: "Paquetes de servicio",
+    subtitle: "Precios cerrados, listos para contratar.",
+    /** Chip al final de "Lo que hago" que baja hasta la sección (pedido del cliente). */
+    anchorChip: "Paquetes de servicio",
+    anchorLabel: "Ver los paquetes de servicio",
+    includesTitle: "Incluye",
+    deliveryDays: (days: number) =>
+      days === 1 ? "Entrega en 1 día" : `Entrega en ${days} días`,
+    hireCta: "Contratar este paquete",
+    hireHint: "Se abre una propuesta de contrato con el precio ya cargado. Podés ajustarla antes de enviar.",
+    needLoginCta: "Entrar para contratar",
+
+    // ---- Editor (mi perfil)
+    editorTitle: "Paquetes de servicio",
+    editorHelp:
+      "Armá precios cerrados para lo que hacés más seguido. Los negocios los ven en tu perfil y te contratan sin tener que negociar cada vez.",
+    empty: "Todavía no tenés paquetes. Creá el primero con lo que más te piden.",
+    add: "Agregar un paquete",
+    addFirst: "Crear mi primer paquete",
+    edit: "Editar",
+    remove: "Eliminar",
+    removeConfirm: "¿Eliminar este paquete? No se puede deshacer.",
+    moveUp: "Subir",
+    moveDown: "Bajar",
+    activeLabel: "Visible en mi perfil",
+    inactiveBadge: "Oculto",
+    inactiveNote: "Este paquete no se ve en tu perfil. Prendelo cuando quieras volver a ofrecerlo.",
+    limitReached: (max: number) =>
+      `Llegaste al máximo de ${max} paquetes. Eliminá o editá uno para agregar otro.`,
+    count: (n: number, max: number) => `${n} de ${max}`,
+
+    // ---- Formulario
+    form: {
+      newTitle: "Nuevo paquete",
+      editTitle: "Editar paquete",
+      titleLabel: "Nombre del paquete",
+      titlePlaceholder: "Ej.: Pack 3 reels para redes",
+      titleHelp: "Cómo lo va a buscar un negocio.",
+      descriptionLabel: "Qué se entrega",
+      descriptionPlaceholder:
+        "Contá qué recibe el negocio: formato, duración, si va editado, cuántos cambios incluye…",
+      descriptionHelp: "Esto se copia al contrato cuando te contratan, así que sé concreto.",
+      includesLabel: "Incluye",
+      includesPlaceholder: "Ej.: 1 ronda de cambios",
+      includesHelp: "Opcional. Escribí uno y presioná Enter. Hasta 8 renglones.",
+      includesAdd: "Agregar",
+      includesRemove: (item: string) => `Quitar ${item}`,
+      priceLabel: "Precio",
+      pricePlaceholder: "800",
+      deliveryLabel: "Días para entregar",
+      save: "Guardar paquete",
+      saving: "Guardando…",
+      cancel: "Cancelar",
+    },
+
+    // ---- Desglose de plata (siempre visible mientras se escribe el precio)
+    breakdown: {
+      title: "Si te contratan por este paquete",
+      price: "Precio del paquete",
+      fee: (pct: number) => `Comisión de la plataforma (${pct}%)`,
+      net: "Te queda",
+      note: "La comisión se descuenta al liberarse el pago en garantía. Si tu comunidad la cambia, los contratos ya firmados mantienen la que viste al firmarlos.",
+    },
+
+    errors: {
+      titleShort: "Poné un nombre al paquete (al menos 3 caracteres).",
+      descriptionShort: "Contá qué se entrega — al menos 10 caracteres.",
+      priceRequired: "Poné el precio del paquete.",
+      priceFormat: "Usá solo números y, si hace falta, una coma para los centavos. Por ejemplo: 150,50.",
+      priceZero: "El precio tiene que ser mayor a cero. Si querés trabajar gratis, arreglalo por mensaje.",
+      priceTooBig: "Ese precio es demasiado alto. Revisá si sobra un cero.",
+      deliveryRequired: "Decinos en cuántos días entregás (de 1 a 365).",
+      limit: (max: number) => `Podés publicar hasta ${max} paquetes.`,
+      needProfile: "Primero guardá tu perfil de creador: un paquete necesita un perfil detrás.",
+      notFound: "No encontramos ese paquete. Puede que ya lo hayas eliminado.",
+      generic: GENERIC_ERROR,
+    },
+
+    saved: "Listo, guardamos tu paquete.",
+    removed: "Eliminamos el paquete.",
+  },
+
+  // -------------------------------------------------------------------------
   contract: {
     // Formulario de propuesta de contrato
     proposeTitle: "Proponer contrato",

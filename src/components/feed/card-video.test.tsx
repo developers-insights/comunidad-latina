@@ -408,3 +408,60 @@ describe("CardVideo: música asociada a la publicación (0090)", () => {
     expect(pause).toHaveBeenCalled();
   });
 });
+
+/* ---------------- Filtro de presentación del video (0104) ----------------- */
+
+/**
+ * En una foto el filtro se hornea en los píxeles y el archivo publicado ES la
+ * foto filtrada. Un video no se hornea —re-codificar en tiempo real rompería la
+ * subida directa al bucket y le cambiaría la huella a Content Integrity—, así
+ * que el filtro llega como un valor de `filter` ya resuelto por el servidor y se
+ * aplica al reproducir.
+ */
+describe("el filtro del video se pinta al reproducir", () => {
+  function videoNode(container: HTMLElement) {
+    const node = container.querySelector("video");
+    if (!node) throw new Error("la tarjeta no montó el <video>");
+    return node;
+  }
+
+  it("aplica el filtro que llegó resuelto desde el servidor", () => {
+    const { container } = render(
+      <CardVideo
+        src="https://cdn.example.com/clip.mp4"
+        postId={POST_ID}
+        scope="para-ti"
+        filterCss="grayscale(1) contrast(1.1)"
+      />,
+    );
+
+    expect(videoNode(container).style.filter).toBe("grayscale(1) contrast(1.1)");
+  });
+
+  it("sin filtro no escribe ningún estilo", () => {
+    // Un `filter` vacío igual crearía una capa de composición propia por nada.
+    const { container } = render(
+      <CardVideo src="https://cdn.example.com/clip.mp4" postId={POST_ID} scope="para-ti" />,
+    );
+
+    expect(videoNode(container).style.filter).toBe("");
+  });
+
+  it("el filtro NO tiñe la interfaz que va encima del video", () => {
+    // Va sobre el `<video>` y no sobre su contenedor: si tiñera el contenedor,
+    // el chip de vistas y el botón de sonido quedarían ilegibles sobre un
+    // Carbón al 100%.
+    const { container } = render(
+      <CardVideo
+        src="https://cdn.example.com/clip.mp4"
+        postId={POST_ID}
+        scope="para-ti"
+        viewCount={120}
+        filterCss="grayscale(1)"
+      />,
+    );
+
+    const wrapper = videoNode(container).parentElement;
+    expect(wrapper?.style.filter ?? "").toBe("");
+  });
+});

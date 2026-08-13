@@ -12,6 +12,9 @@ import {
   COMUNIDAD_COPY,
   RESOURCE_TOPIC_HINT,
   RESOURCE_TOPIC_LABEL,
+  isResourceTopic,
+  type ResourceGroup,
+  type ResourceTopic,
 } from "@/lib/comunidad";
 import { getTenant } from "@/lib/tenant/resolve";
 import { fetchResourceGroups } from "../queries";
@@ -22,6 +25,17 @@ const C = COMUNIDAD_COPY.recursos;
 
 /**
  * DIRECTORIO DE AYUDA — agrupado por tema, con la fuente de cada ficha.
+ *
+ * ── `?tema=` (0099, rediseño de la portada) ─────────────────────────────────
+ * Dos tarjetas de la grilla de `/comunidad` ("Bancos de comida", "Voluntarios")
+ * apuntan ACÁ con `?tema=comida` / `?tema=voluntariado` en vez de llevar a una
+ * pantalla propia: es la misma lectura (`fetchResourceGroups`), filtrada. Un
+ * `tema` válido angosta el título, la bajada y la lista a UN grupo; sin `tema`
+ * (o con uno que no exista) esta pantalla se comporta exactamente como antes.
+ * `isResourceTopic` es la MISMA guarda que decide si una fila de la base se
+ * muestra (`recursos.ts`) — un search param es texto libre que cualquiera
+ * escribe a mano, así que se valida con la fuente de verdad, no con un chequeo
+ * propio.
  *
  * ── EL ORDEN DE LOS GRUPOS NO ES ALFABÉTICO ─────────────────────────────────
  * Lo fija `RESOURCE_TOPICS` y arriba va lo urgente: emergencias, migración,
@@ -35,7 +49,15 @@ const C = COMUNIDAD_COPY.recursos;
  * existen a propósito: es la regla que si se rompe hace que la plataforma
  * parezca estar dando consejos de salud y de migración propios.
  */
-export default function RecursosPage() {
+export default async function RecursosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tema?: string | string[] }>;
+}) {
+  const { tema } = await searchParams;
+  const temaCrudo = Array.isArray(tema) ? tema[0] : tema;
+  const topic = isResourceTopic(temaCrudo) ? temaCrudo : null;
+
   return (
     <>
       <Link
@@ -49,24 +71,54 @@ export default function RecursosPage() {
       <ComunidadHeading
         className="mt-2"
         icon={<Lifebuoy size={30} weight="fill" aria-hidden="true" />}
-        title={C.title}
-        subtitle={C.subtitle}
+        title={topic ? RESOURCE_TOPIC_LABEL[topic] : C.title}
+        subtitle={topic ? RESOURCE_TOPIC_HINT[topic] : C.subtitle}
       />
+
+      {topic && (
+        <Link
+          href="/comunidad/recursos"
+          className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 hover:decoration-brand-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+        >
+          {C.allTopicsCta}
+        </Link>
+      )}
 
       <OrigenNota className="mt-5" incluirMigracion />
 
       <Suspense fallback={<div className="mt-8"><RecursosSkeleton /></div>}>
-        <Grupos />
+        <Grupos topic={topic} />
       </Suspense>
     </>
   );
 }
 
-async function Grupos() {
+async function Grupos({ topic }: { topic: ResourceTopic | null }) {
   const tenant = await getTenant();
   const grupos = await fetchResourceGroups(tenant.id);
+  const visibles = topic ? grupos.filter((grupo) => grupo.topic === topic) : grupos;
 
-  if (grupos.length === 0) {
+  if (visibles.length === 0) {
+    const vacioDeTema = topic && topicEmptyCopy(topic);
+    if (vacioDeTema) {
+      // Vacío de UN tema (hay directorio, no hay fichas de éste todavía):
+      // nunca el mensaje genérico de abajo, que suena a "no hay nada" cuando
+      // en realidad sobra ayuda en los demás temas.
+      return (
+        <EmptyState
+          className="mt-8"
+          icon={<Lifebuoy size={32} weight="light" aria-hidden="true" />}
+          title={vacioDeTema.title}
+          message={vacioDeTema.message}
+          action={
+            <Link href="/comunidad/recursos" className={buttonVariants({ variant: "primary", size: "md" })}>
+              {C.allTopicsCta}
+            </Link>
+          }
+        />
+      );
+    }
+
     return (
       <EmptyState
         className="mt-8"
@@ -87,30 +139,49 @@ async function Grupos() {
 
   return (
     <div className="mt-8 space-y-10">
-      {grupos.map((grupo) => (
-        <section key={grupo.topic} aria-labelledby={`tema-${grupo.topic}`}>
-          <header className="mb-3">
-            <h2
-              id={`tema-${grupo.topic}`}
-              className="font-display text-lg font-bold tracking-tight text-foreground"
-            >
-              {RESOURCE_TOPIC_LABEL[grupo.topic]}
-            </h2>
-            <p className="mt-0.5 text-sm text-foreground-muted">
-              {RESOURCE_TOPIC_HINT[grupo.topic]}
-            </p>
-          </header>
-
-          {/* Una ficha por fila en el celular: tienen mucha información y tres
-              botones de contacto que no pueden achicarse. Dos columnas desde
-              `sm`, donde el shell ya deja ancho suficiente. */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {grupo.resources.map((recurso) => (
-              <RecursoCard key={recurso.id} recurso={recurso} />
-            ))}
-          </div>
-        </section>
+      {visibles.map((grupo) => (
+        <GrupoDeRecursos key={grupo.topic} grupo={grupo} />
       ))}
     </div>
   );
+}
+
+function GrupoDeRecursos({ grupo }: { grupo: ResourceGroup }) {
+  return (
+    <section aria-labelledby={`tema-${grupo.topic}`}>
+      <header className="mb-3">
+        <h2
+          id={`tema-${grupo.topic}`}
+          className="font-display text-lg font-bold tracking-tight text-foreground"
+        >
+          {RESOURCE_TOPIC_LABEL[grupo.topic]}
+        </h2>
+        <p className="mt-0.5 text-sm text-foreground-muted">
+          {RESOURCE_TOPIC_HINT[grupo.topic]}
+        </p>
+      </header>
+
+      {/* Una ficha por fila en el celular: tienen mucha información y tres
+          botones de contacto que no pueden achicarse. Dos columnas desde
+          `sm`, donde el shell ya deja ancho suficiente. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {grupo.resources.map((recurso) => (
+          <RecursoCard key={recurso.id} recurso={recurso} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Copy del vacío ESPECÍFICO de un tema — sólo existe para los dos temas que
+ * tienen entrada propia en la grilla de la portada (comida, voluntariado). El
+ * resto de los ocho temas se navegan desde la lista completa, que ya resuelve
+ * su propio vacío con `C.emptyTitle`/`C.emptyMessage`; si algún día alguno de
+ * ellos suma su propia tarjeta, agrega su caso acá.
+ */
+function topicEmptyCopy(topic: ResourceTopic): { title: string; message: string } | null {
+  if (topic === "comida") return C.emptyTopic.comida;
+  if (topic === "voluntariado") return C.emptyTopic.voluntariado;
+  return null;
 }

@@ -127,6 +127,14 @@ export const COPY = {
     bakeFallbackTitle: "Alguna foto se publicó sin editar",
     bakeFallbackBody:
       "No pudimos aplicarle el filtro o el texto en este navegador, así que salió tal cual — igual se publicó bien.",
+    /**
+     * PASOS POSTERIORES A LA PUBLICACIÓN. Las etiquetas y la música necesitan
+     * el id del post, así que se guardan DESPUÉS de que ya salió. Estas dos
+     * líneas existen para que ese tramo no se sienta como un botón colgado: no
+     * son un "cargando" genérico, dicen exactamente qué se está guardando.
+     */
+    savingTags: "Guardando las etiquetas…",
+    savingMusic: "Guardando la música…",
     publish: "Publicar",
     publishing: "Publicando…",
     successTitle: "¡Publicado!",
@@ -255,6 +263,13 @@ export const COPY = {
     photoEditor: {
       title: "Editar foto",
       filtersLabel: "Filtros",
+      /**
+       * Control de cuánto se aplica el filtro elegido. "Intensidad" y no
+       * "opacidad" ni "fuerza del efecto": es la palabra que ya usa cualquiera
+       * que tocó un filtro en el teléfono.
+       */
+      intensityLabel: "Intensidad",
+      intensityValue: (percent: number) => `${percent}%`,
       /** Botón que abre el panel de texto (todavía sin nada escrito). */
       textButton: "Texto",
       /** Mismo botón, una vez que ya hay una frase cargada. */
@@ -534,4 +549,171 @@ export const COPY = {
     notFoundMessage:
       "Puede que se haya retirado o que el link esté incompleto. Volvé al feed para ver lo último.",
   },
+
+  /**
+   * MENÚ ⋯ DE UNA PUBLICACIÓN (migración 0097, pedido del cliente con Facebook
+   * de referencia: fijar, ocultar, desactivar comentarios, abrir en otra
+   * pestaña). "Guardar" no está acá: ya vive como marcador en la fila de
+   * acciones de la tarjeta y duplicarlo daría dos botones con el mismo nombre y
+   * dos estados que se pueden desincronizar.
+   *
+   * Todos los rótulos dicen lo que la acción HACE, nunca el estado en el que
+   * está: "Fijar publicación" y "Dejar de fijar" son dos textos distintos, como
+   * "Me gusta" / "Quitar me gusta". Un botón que dice el estado obliga a
+   * adivinar si al tocarlo lo prende o lo apaga.
+   */
+  postMenu: {
+    pin: "Fijar publicación",
+    unpin: "Dejar de fijar",
+    pinnedTitle: "Publicación fijada",
+    /** Se dice DÓNDE se ve el resultado: fijar sin ver el efecto parece que no hizo nada. */
+    pinnedBody: "Va a aparecer primero en tu perfil. Podés fijar otra cuando quieras.",
+    unpinnedTitle: "Ya no está fijada",
+    unpinnedBody: "Vuelve a su lugar por fecha en tu perfil.",
+
+    /**
+     * "Ocultar del feed" y no "del timeline": nadie de esta comunidad dice
+     * timeline. El cuerpo del aviso aclara las dos cosas que la gente asume mal
+     * —que se borró y que se pierden los comentarios— antes de que las asuma.
+     */
+    hide: "Ocultar del feed",
+    unhide: "Volver a mostrar",
+    hiddenTitle: "Ya no aparece en el feed",
+    hiddenBody:
+      "Sigue siendo tuya: la ves en tu perfil, los comentarios y los me gusta quedan, y quien tenga el link la puede abrir. Volvé a mostrarla cuando quieras.",
+    shownTitle: "Volvió al feed",
+    shownBody: "Tu comunidad la puede ver de nuevo.",
+
+    lockComments: "Desactivar comentarios",
+    unlockComments: "Activar comentarios",
+    commentsLockedTitle: "Comentarios desactivados",
+    /** Se aclara que lo escrito no se borra: es el miedo real al tocar esto. */
+    commentsLockedBody:
+      "Nadie puede comentar por ahora, ni vos. Los comentarios que ya están siguen a la vista.",
+    commentsUnlockedTitle: "Comentarios activados",
+    commentsUnlockedBody: "Tu comunidad ya puede responder.",
+    /** Cartel en el lugar del campo de escribir, para quien entra al hilo. */
+    commentsClosedNotice: "Quien publicó desactivó los comentarios.",
+
+    openInNewTab: "Abrir en otra pestaña",
+
+    /** Un mensaje por motivo. Ninguno culpa a la persona ni usa jerga. */
+    denial: {
+      "no-disponible":
+        "Solo quien publicó puede hacer esto, y desde su comunidad.",
+      "no-publicada":
+        "Tu publicación está en revisión. Vas a poder hacerlo apenas el equipo la mire.",
+      "esta-oculta":
+        "Está oculta del feed. Volvé a mostrarla y después fijala.",
+      "no-esta": "Esa foto ya no está en la publicación.",
+      "es-video":
+        "El video no se puede quitar. Si querés cambiarlo, publicá de nuevo.",
+      "es-la-unica":
+        "Es la única foto de la publicación. Si la sacás no queda nada para ver — mejor publicá de nuevo.",
+    },
+    errorTitle: "No pudimos hacer ese cambio",
+    errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
+    needsAuth: "Entrá a tu cuenta para administrar tus publicaciones.",
+    rateLimited: "Hiciste muchos cambios seguidos. Esperá un ratito — tu cuenta está bien.",
+  },
+
+  /**
+   * QUITAR UNA FOTO de una publicación ya publicada (0097). Vive en la hoja de
+   * edición, sobre cada miniatura.
+   *
+   * El diálogo dice las dos cosas que no se pueden deshacer —la foto no vuelve y
+   * la publicación queda marcada como editada— ANTES de confirmar. Enterarse
+   * después es enterarse tarde (mismo criterio que el aviso de edición).
+   */
+  removePhoto: {
+    trigger: "Quitar esta foto",
+    /** Encabeza la tira de miniaturas dentro de la hoja de edición. */
+    sectionLabel: "Fotos de la publicación",
+    /** Nombre accesible del botón de cada miniatura ("Quitar la foto 2 de 5"). */
+    triggerFor: (index: number, total: number) =>
+      `Quitar la foto ${index} de ${total}`,
+    dialogTitle: "¿Quitar esta foto?",
+    dialogBody:
+      "Deja de verse en la publicación y no se puede deshacer. Las demás fotos quedan como están, y la publicación va a figurar como editada.",
+    confirm: "Sí, quitarla",
+    confirming: "Quitando…",
+    cancel: "No, dejarla",
+    successTitle: "Foto quitada",
+    successBody: "Tu publicación ya se ve sin ella.",
+    /** Con una sola foto no se ofrece el botón: se dice por qué, no se esconde. */
+    onlyOneHint:
+      "Podés quitar fotos cuando hay más de una. Para cambiarlas o sumar otras, publicá de nuevo.",
+  },
+
+  /**
+   * MENÚ DE UN COMENTARIO (0097). Hoy tiene una sola opción —eliminar— y aun así
+   * es un menú y no una cruz suelta: una acción irreversible a un toque de
+   * distancia del texto se toca sin querer mientras se scrollea.
+   */
+  commentMenu: {
+    menuLabel: "Opciones del comentario",
+    delete: "Eliminar comentario",
+    dialogTitle: "¿Eliminar este comentario?",
+    /**
+     * Dos cuerpos, porque son dos situaciones distintas. Borrar el propio es un
+     * arrepentimiento; borrar el de otra persona es un acto de moderación sobre
+     * algo que alguien escribió, y el texto tiene que nombrarlo así en vez de
+     * hacerlo sentir un trámite.
+     */
+    dialogBodyOwn: "Va a desaparecer del hilo y no se puede deshacer.",
+    dialogBodyOther: (name: string) =>
+      `Lo escribió ${name}. Va a desaparecer del hilo, no se le avisa, y no se puede deshacer.`,
+    confirm: "Sí, eliminarlo",
+    confirming: "Eliminando…",
+    cancel: "No, dejarlo",
+    successTitle: "Comentario eliminado",
+    successBody: "Ya no aparece en el hilo.",
+    errorTitle: "No pudimos eliminarlo",
+    errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
+    /** La RLS lo rechazó: no es de la persona ni la publicación es suya. */
+    forbidden:
+      "Solo quien lo escribió o quien publicó pueden eliminar este comentario.",
+  },
+} as const;
+
+/**
+ * COPY QUE SE AGREGÓ DESPUÉS, EN BLOQUES PROPIOS.
+ *
+ * Van fuera de `COPY` a propósito y no es una preferencia de estilo: este
+ * archivo lo están editando varios frentes a la vez, y meter una clave en el
+ * medio de un objeto de 600 líneas es la forma más segura de perder trabajo
+ * ajeno en un merge. Cuando el archivo esté quieto, entran donde corresponde
+ * (`COPY.post` y `COPY.composer`) y estos dos exports desaparecen.
+ */
+
+/** Marcas que la TARJETA muestra sobre el estado de una publicación (0097). */
+export const POST_CARD_COPY = {
+  /**
+   * Publicación fijada. Se nombra igual que el aviso que aparece al fijarla
+   * (`COPY.postMenu.pinnedTitle`): quien acaba de tocar "Fijar" tiene que
+   * reconocer en la tarjeta la misma palabra que leyó en el aviso.
+   *
+   * Fijar ordena el PERFIL de quien publicó, no el feed — acá la marca no
+   * promete que esté primero, sólo cuenta que está fijada.
+   */
+  pinnedLabel: "Publicación fijada",
+} as const;
+
+/**
+ * FILTROS SOBRE UN VIDEO (0104). Mismo carrusel y mismo catálogo de 16 que las
+ * fotos; lo único distinto es lo que hay que contar: en la foto el filtro se
+ * quema en el archivo y en el video se aplica al reproducirlo.
+ */
+export const VIDEO_EDITOR_COPY = {
+  /** Título de la hoja mientras se elige el filtro de un video. */
+  title: "Filtros del video",
+  /** Botón/miniatura que abre esa hoja. */
+  openLabel: "Elegir filtro del video",
+  /**
+   * Por qué es instantáneo y por qué no hay que esperar nada. Se dice en
+   * positivo —"se sube tal cual lo grabaste"— y no en técnico: nadie tiene que
+   * enterarse de qué es re-codificar para entender que su video no se va a
+   * arruinar.
+   */
+  hint: "Tu video se sube tal cual lo grabaste. El filtro se aplica al reproducirlo.",
 } as const;

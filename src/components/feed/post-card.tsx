@@ -3,6 +3,7 @@ import {
   Briefcase,
   CalendarBlank,
   House,
+  PushPin,
   Question,
   Storefront,
   UserGear,
@@ -11,7 +12,7 @@ import type { Icon } from "@phosphor-icons/react";
 import { Avatar, Chip } from "@/components/ui";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import { cn } from "@/lib/utils";
-import { COPY } from "./copy";
+import { COPY, POST_CARD_COPY } from "./copy";
 import { AdChip } from "./card-ad-chip";
 import { CardLikeProvider } from "./card-like-context";
 import { CardMediaProvider } from "./card-media-context";
@@ -243,6 +244,22 @@ export function PostCard({
         >
           {/* Cabecera + cuerpo con margen; la foto de abajo va full-bleed. */}
           <div className="flex flex-col gap-2.5 px-4 pb-2.5 pt-3.5">
+            {/* PUBLICACIÓN FIJADA (0097) — una línea fina ARRIBA de la
+                cabecera, no un chip más adentro. Dos razones: la cabecera ya
+                pelea espacio a 375px (nombre + Trust Score + chips + ⋯), y esta
+                marca no habla de la publicación sino de su lugar, que es
+                exactamente para lo que sirve una línea de contexto encima. Es
+                el patrón que la gente ya reconoce de otras redes.
+
+                Vive con el resto de la publicación: fijar es público —ordena el
+                perfil de quien publicó— así que no se esconde a los demás. */}
+            {post.postMenu.pinnedAt && (
+              <p className="flex items-center gap-1.5 text-xs font-medium text-foreground-muted">
+                <PushPin size={13} weight="fill" aria-hidden="true" className="shrink-0" />
+                {POST_CARD_COPY.pinnedLabel}
+              </p>
+            )}
+
             <header className="flex items-start gap-2.5">
               <Avatar size="sm" name={avatarName} src={avatarSrc} />
               {entity ? (

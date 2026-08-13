@@ -68,6 +68,13 @@ export interface CardPostMediaProps {
  * leer el mismo dato para elegir la forma de la hoja de comentarios. Acá se lo
  * consume y se lo mueve; el visor abre en el medio que se estaba viendo —desde
  * la tercera foto, en la tercera— porque lee exactamente ese índice.
+ *
+ * FILTRO DE VIDEO (0104): viaja DENTRO de cada diapositiva (`item.filterCss`),
+ * ya resuelto a CSS por el servidor contra el catálogo de filtros. Pasa por acá
+ * sin que este módulo tenga que opinar —es una decisión por archivo, no del
+ * post— y lo aplica `CardVideo` sobre el `<video>`. Las FOTOS nunca lo traen:
+ * el suyo ya está quemado en los píxeles al publicar (`bake-photo.ts`), y
+ * pintarlo otra vez acá lo mostraría dos veces.
  */
 export function CardPostMedia({
   postId,

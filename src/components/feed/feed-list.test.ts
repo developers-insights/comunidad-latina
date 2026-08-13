@@ -43,6 +43,14 @@ function makePost(id: string, createdAt = "2026-01-01T00:00:00Z"): FeedItem {
       ctaWhatsapp: null,
       taggedPeople: [],
       music: null,
+      postMenu: {
+        authorId: null,
+        status: "published",
+        mediaPaths: [],
+        pinnedAt: null,
+        hiddenAt: null,
+        commentsLockedAt: null,
+      },
     },
   };
 }

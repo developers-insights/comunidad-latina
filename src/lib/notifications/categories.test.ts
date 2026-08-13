@@ -27,16 +27,36 @@ const MIGRATION = readFileSync(
   "utf8",
 );
 
-describe("las 13 categorías de la app espejan el CHECK de la base", () => {
-  it("todas las categorías aparecen en la migración", () => {
+/**
+ * El CHECK ya no vive en una sola migración: 0098 lo reescribió para sumar
+ * `vencimientos`. El contrato que hay que verificar es el CHECK VIGENTE, así que
+ * el test mira las dos — 0045 por las trece originales (que 0098 no puede haber
+ * perdido en el camino) y 0098 por la catorceava.
+ */
+const MIGRATION_0098 = readFileSync(
+  fileURLToPath(
+    new URL("../../../supabase/migrations/0098_vencimiento_de_publicaciones.sql", import.meta.url),
+  ),
+  "utf8",
+);
+
+describe("las 14 categorías de la app espejan el CHECK de la base", () => {
+  it("todas las categorías aparecen en el CHECK vigente (0098)", () => {
     for (const category of NOTIFICATION_CATEGORIES) {
+      expect(MIGRATION_0098).toContain(`'${category}'`);
+    }
+  });
+
+  it("las trece originales siguen estando (0098 no perdió ninguna)", () => {
+    for (const category of NOTIFICATION_CATEGORIES) {
+      if (category === "vencimientos") continue;
       expect(MIGRATION).toContain(`'${category}'`);
     }
   });
 
-  it("son 13 y no hay repetidas", () => {
-    expect(NOTIFICATION_CATEGORIES).toHaveLength(13);
-    expect(new Set(NOTIFICATION_CATEGORIES).size).toBe(13);
+  it("son 14 y no hay repetidas", () => {
+    expect(NOTIFICATION_CATEGORIES).toHaveLength(14);
+    expect(new Set(NOTIFICATION_CATEGORIES).size).toBe(14);
   });
 
   it("las cuatro prioridades también", () => {

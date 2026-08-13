@@ -16,6 +16,7 @@ import { handleInvoicePaidEvent } from "@/lib/monetization/renovacion";
 import { createNotification } from "@/lib/notifications/notify";
 import { PLAN_IDS, getStripe, type PlanId } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { handleVerificacionEvent } from "@/lib/verificacion/webhook-handlers";
 import { clampScore, getTrustLevel } from "@/lib/trust/levels";
 import type { Json } from "@/lib/types/database.types";
 import { formatDate } from "@/lib/utils";
@@ -153,6 +154,27 @@ export async function POST(request: Request) {
     // se concedía a mano con service_role, que no es autoservicio ni se puede
     // dar de baja solo.
     if (await handleListingPremiumEvent(admin, event)) {
+      await admin
+        .from("payment_events")
+        .update({ processed: true })
+        .eq("provider", "stripe")
+        .eq("event_id", event.id);
+      return NextResponse.json({ received: true });
+    }
+
+    // CHECK AZUL (0101): se reconoce por metadata.kind='verificacion' y lo maneja
+    // su propio módulo, junto a la action que abre su Checkout. Mismo contrato
+    // que los dos de arriba: devuelve true ⇒ el evento ya está atendido.
+    //
+    // ⚠️ VA ANTES QUE `handleInvoicePaidEvent`, Y NO ES UN DETALLE DE ESTILO.
+    // Ese handler devuelve true para TODA factura, incluso para las que no
+    // reconoce, y el route corta acá mismo. Puesto después, el check azul nunca
+    // vería un `invoice.paid` — que es justo el evento del que cuelga su impulso
+    // de regalo mensual. La insignia andaría y el regalo no llegaría jamás, sin
+    // un solo error en los logs. Este handler devuelve false apenas ve que el
+    // `kind` no es el suyo, así que adelantarlo no le cambia el comportamiento a
+    // ningún otro producto.
+    if (await handleVerificacionEvent(admin, event)) {
       await admin
         .from("payment_events")
         .update({ processed: true })

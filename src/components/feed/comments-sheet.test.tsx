@@ -126,6 +126,12 @@ interface Fixtures {
     identity_verified: boolean;
   }>;
   trust?: Array<{ profile_id: string; score: number; level: string; signals: unknown }>;
+  /**
+   * Estado del POST del hilo (0097): quién lo publicó —puede borrar comentarios
+   * de su publicación— y si cerró los comentarios. Sin fixture, la hoja se
+   * comporta como antes de la 0097: sin menús y con el campo de escribir.
+   */
+  post?: { author_id: string | null; comments_locked_at: string | null } | null;
 }
 
 function makeClient(f: Fixtures) {
@@ -137,17 +143,21 @@ function makeClient(f: Fixtures) {
     user_blocks: { data: f.blocks ?? [], error: null },
     profiles: { data: f.profiles ?? [], error: null },
     trust_scores: { data: f.trust ?? [], error: null },
+    posts: { data: f.post ?? null, error: null },
   };
   const chainFor = (table: string) => {
     const result = results[table];
     // Cada método devuelve el mismo builder; el builder es "thenable" y resuelve
     // el fixture de su tabla — modela .select().eq().order().limit()/.in() → await.
+    // `maybeSingle` es la otra forma de rematar la cadena (la usa la lectura del
+    // estado del post) y resuelve el MISMO fixture.
     const chain: Record<string, unknown> = {
       select: () => chain,
       eq: () => chain,
       order: () => chain,
       limit: () => chain,
       in: () => chain,
+      maybeSingle: async () => result,
       then: (resolve: (v: unknown) => unknown) => resolve(result),
     };
     return chain;

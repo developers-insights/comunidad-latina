@@ -339,6 +339,15 @@ const HEX_PERMITIDO = new Map<string, string>([
     "#1A5EDB es el valor inicial de un <input type=color>: un DATO (la marca que el " +
       "admin va a elegir), no un color de UI. Nunca pinta cromo de la app.",
   ],
+  [
+    "src/components/feed/filter-carousel.tsx",
+    "Los dos #000 viven dentro de un `mask-image`, donde el color NO se dibuja: " +
+      "el canal alfa decide qué se ve. #000 es 'opaco' y transparent es 'recortado' — " +
+      "la misma máscara sirve en claro y en oscuro justamente porque no es cromo. " +
+      "Un token de color acá sería incorrecto, no más prolijo: si el tenant lo tiñe " +
+      "de rojo la máscara se comporta igual, y si algún día tuviera alfa, recortaría " +
+      "los bordes del carrusel sin que nadie lo haya pedido.",
+  ],
 ]);
 
 /* ─────────────────────────────── el barrido ─────────────────────────────── */

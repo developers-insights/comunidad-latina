@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database.types";
 import { computeCreatorRequirements, type CreatorRequirementsResult } from "@/components/creators";
+import type { ServicePackage } from "@/lib/creators/service-packages";
 
 /**
  * =============================================================================
@@ -96,4 +97,76 @@ export async function fetchCreatorRequirements(
       // creatorScore: pendiente de que `creator_scores` entre a los tipos.
     }),
   };
+}
+
+/* ========================================================================== */
+/* PAQUETES DE SERVICIO (0102)                                                */
+/* ========================================================================== */
+
+interface ServicePackageRow {
+  id: string;
+  title: string;
+  description: string | null;
+  includes: string[] | null;
+  price_cents: number;
+  currency: string;
+  delivery_days: number;
+  active: boolean;
+  sort_order: number;
+}
+
+/**
+ * Los paquetes de un creador, en el orden que él eligió.
+ *
+ * QUIÉN FILTRA QUÉ. El `activeOnly` NO es la protección — es una comodidad para
+ * el perfil público. Quien decide si alguien puede ver un paquete apagado es la
+ * policy `creator_service_packages_select` (0102): lo apagado sólo lo ve su
+ * dueño y el staff de la comunidad. Aunque esta función pidiera todo, un
+ * visitante no recibiría los apagados de otro. Se filtra igual acá porque
+ * pedirle a la base filas que va a descartar es trabajo al pedo.
+ *
+ * `creator_service_packages` llega con la 0102 y `database.types.ts` se
+ * regenera aparte: el cast es por el TIPO generado, no por el contrato — mismo
+ * patrón que `createGigDraft` con `work_mode` (0087).
+ *
+ * Un error de lectura devuelve lista vacía y NO rompe el perfil: que no
+ * carguen los paquetes no puede tumbar la página entera de alguien.
+ */
+export async function fetchServicePackages(
+  supabase: SupabaseClient<Database>,
+  creatorId: string,
+  options: { activeOnly: boolean },
+): Promise<ServicePackage[]> {
+  const open = supabase as unknown as SupabaseClient;
+  let query = open
+    .from("creator_service_packages")
+    .select("id, title, description, includes, price_cents, currency, delivery_days, active, sort_order")
+    .eq("creator_id", creatorId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(12);
+
+  if (options.activeOnly) query = query.eq("active", true);
+
+  const { data, error } = await query.returns<ServicePackageRow[]>();
+
+  if (error) {
+    console.warn("[creadores] no se pudieron leer los paquetes", { code: error.code });
+    return [];
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    title: row.title,
+    // `description` es nullable en la base (ver 0102) pero la app la exige al
+    // guardar. El `?? ""` cubre una fila cargada por fuera del formulario sin
+    // que la pantalla explote.
+    description: row.description ?? "",
+    includes: row.includes ?? [],
+    priceCents: row.price_cents,
+    currency: row.currency,
+    deliveryDays: row.delivery_days,
+    active: row.active,
+    sortOrder: row.sort_order,
+  }));
 }

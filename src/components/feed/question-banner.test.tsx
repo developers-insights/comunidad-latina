@@ -352,6 +352,14 @@ const BASE_POST: PostCardModel = {
   ctaWhatsapp: null,
   taggedPeople: [],
   music: null,
+  postMenu: {
+    authorId: null,
+    status: "published",
+    mediaPaths: [],
+    pinnedAt: null,
+    hiddenAt: null,
+    commentsLockedAt: null,
+  },
 };
 
 function renderCard(post: Partial<PostCardModel>) {

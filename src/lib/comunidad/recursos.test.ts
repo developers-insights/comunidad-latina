@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   groupResourcesByTopic,
+  isResourceTopic,
   isSafeHttpUrl,
   mapsHref,
   telHref,
@@ -44,6 +45,22 @@ describe("isSafeHttpUrl", () => {
     expect(isSafeHttpUrl("ejemplo.gov")).toBe(false);
     expect(isSafeHttpUrl("")).toBe(false);
     expect(isSafeHttpUrl(null)).toBe(false);
+  });
+});
+
+describe("isResourceTopic", () => {
+  it("acepta los nueve temas conocidos, incluido voluntariado (0099)", () => {
+    for (const topic of RESOURCE_TOPICS) {
+      expect(isResourceTopic(topic)).toBe(true);
+    }
+  });
+
+  it("rechaza cualquier otra cosa, incluido lo que puede llegar por un ?tema= a mano", () => {
+    expect(isResourceTopic("salud-mental")).toBe(false);
+    expect(isResourceTopic("VOLUNTARIADO")).toBe(false);
+    expect(isResourceTopic("")).toBe(false);
+    expect(isResourceTopic(null)).toBe(false);
+    expect(isResourceTopic(undefined)).toBe(false);
   });
 });
 
@@ -146,6 +163,18 @@ describe("groupResourcesByTopic", () => {
 
   it("un tema sin recursos no genera encabezado vacío", () => {
     expect(groupResourcesByTopic([]).length).toBe(0);
+  });
+
+  it("voluntariado (0099) agrupa igual que cualquier otro tema, y va último", () => {
+    const conVoluntarios = [
+      ...recursos,
+      toCommunityResource(
+        fila({ id: "4", topic: "voluntariado", name: "Comedor Esperanza — voluntariado" }),
+      )!,
+    ];
+    const temas = groupResourcesByTopic(conVoluntarios).map((grupo) => grupo.topic);
+    expect(temas).toEqual(["salud", "comida", "voluntariado"]);
+    expect(RESOURCE_TOPICS.indexOf("voluntariado")).toBe(RESOURCE_TOPICS.length - 1);
   });
 });
 

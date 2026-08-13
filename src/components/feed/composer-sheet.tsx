@@ -5,20 +5,20 @@ import { CaretDown, Check, Plus, SealCheck, VideoCamera, X } from "@phosphor-ico
 import { BottomSheet, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { formatDuration, type VideoCategory } from "@/lib/media/video-policy";
-import { getPhotoFilter } from "@/lib/media/photo-filters";
 import {
   VIDEO_CATEGORY_LABELS,
   VIDEO_CATEGORY_ORDER,
 } from "@/app/(app)/videos/copy";
 import { OriginalityFields, type DeclarationValue } from "@/components/integrity/originality-fields";
 import { licenseLabel } from "@/lib/integrity/declarations";
-import { COPY } from "./copy";
+import { COPY, VIDEO_EDITOR_COPY } from "./copy";
 import { QuestionBanner } from "./question-banner";
 import { TextBanner } from "./text-banner";
 import {
   DEFAULT_PHOTO_EDIT,
   PhotoCaptionOverlay,
   PhotoEditor,
+  photoEditFilterCss,
   type PhotoEdit,
 } from "./photo-editor";
 
@@ -42,7 +42,7 @@ import {
  * Es presentacional a propósito: el estado (texto, archivos, subida) vive en
  * PostComposer, que es quien publica. Así no hay dos fuentes de verdad ni un
  * FileList viajando entre componentes. ÚNICA excepción: QUÉ FOTO se está
- * editando ahora mismo (`editingPhotoId`) — es puramente de esta hoja (nunca
+ * editando ahora mismo (`editingMediaId`) — es puramente de esta hoja (nunca
  * viaja a ningún lado), así que vive acá.
  */
 
@@ -57,7 +57,16 @@ export interface ComposerMediaItem {
   preview: string;
   /** Duración medida del video, en segundos (sólo en `kind: "video"`). */
   durationSeconds?: number;
-  /** Edición de filtro + texto (sólo en `kind: "photo"`). Sin tocar el editor, queda `undefined` (= sin filtro, sin texto). */
+  /**
+   * Filtro (+ texto, sólo en foto) elegidos en el editor. Sin tocar el editor
+   * queda `undefined` (= sin filtro, sin texto).
+   *
+   * LO COMPARTEN LOS DOS MEDIOS y el catálogo es el mismo; lo que cambia es
+   * cuándo se aplica: en la foto se QUEMA en los píxeles al publicar
+   * (`bake-photo.ts`) y en el video viaja como metadato (0104) para aplicarse al
+   * reproducir. `captionText` sólo tiene sentido en foto — el editor lo fuerza a
+   * vacío cuando se está editando un video.
+   */
   edit?: PhotoEdit;
 }
 
@@ -98,6 +107,14 @@ export interface ComposerSheetProps {
    * número mudo.
    */
   bakingProgress?: { done: number; total: number } | null;
+  /**
+   * Qué se está guardando DESPUÉS de que la publicación ya salió (etiquetas,
+   * música). Son pasos propios porque necesitan el id del post recién creado, y
+   * mientras corren el botón sigue diciendo "Publicando…" — sin esta línea, esa
+   * espera parecería el post colgado en vez de dos guardados cortos.
+   * `null` = no hay ninguno en curso.
+   */
+  finishingLabel?: string | null;
   isPending: boolean;
   onPublish: () => void;
   /**
@@ -394,6 +411,7 @@ export function ComposerSheet({
   uploadPct,
   measuringVideo = false,
   bakingProgress = null,
+  finishingLabel = null,
   isPending,
   onPublish,
   tagSlot,
@@ -408,9 +426,16 @@ export function ComposerSheet({
   const hasMedia = media.length > 0;
   const trimmed = body.trim();
 
-  /** Qué foto se está editando ahora (id) — puramente de esta hoja, ver docblock. */
-  const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
-  const editingPhoto = photos.find((item) => item.id === editingPhotoId) ?? null;
+  /**
+   * Qué MEDIO se está editando ahora (id) — puramente de esta hoja, ver docblock.
+   *
+   * Antes era "qué foto": el editor sólo abría sobre imágenes. Desde la 0104 el
+   * video también tiene filtros (se guardan como metadato en vez de hornearse),
+   * así que se busca en `media` entera y el panel decide qué ofrecer según el
+   * `kind` — un solo estado, un solo editor, un solo catálogo.
+   */
+  const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
+  const editingItem = media.find((item) => item.id === editingMediaId) ?? null;
 
   /**
    * Escape / click en el velo / arrastre hacia abajo del `BottomSheet`
@@ -420,8 +445,8 @@ export function ComposerSheet({
    * estaba mirando de más).
    */
   function handleSheetClose() {
-    if (editingPhoto) {
-      setEditingPhotoId(null);
+    if (editingItem) {
+      setEditingMediaId(null);
       return;
     }
     onClose();
@@ -460,8 +485,10 @@ export function ComposerSheet({
       size="tall"
       keyboardAware
       title={
-        editingPhoto
-          ? COPY.composer.photoEditor.title
+        editingItem
+          ? editingItem.kind === "video"
+            ? VIDEO_EDITOR_COPY.title
+            : COPY.composer.photoEditor.title
           : isQuestion
             ? COPY.composer.compose.questionTitle
             : isText
@@ -481,15 +508,17 @@ export function ComposerSheet({
       // botón de publicar queda flotando a media pantalla.
       bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
     >
-      {editingPhoto ? (
+      {editingItem ? (
         <PhotoEditor
-          key={editingPhoto.id}
-          preview={editingPhoto.preview}
-          edit={editingPhoto.edit ?? DEFAULT_PHOTO_EDIT}
-          onCancel={() => setEditingPhotoId(null)}
+          key={editingItem.id}
+          preview={editingItem.preview}
+          edit={editingItem.edit ?? DEFAULT_PHOTO_EDIT}
+          // El panel es el mismo; lo que cambia es qué ofrece (ver PhotoEditor).
+          kind={editingItem.kind === "video" ? "video" : "photo"}
+          onCancel={() => setEditingMediaId(null)}
           onSave={(edit) => {
-            onSavePhotoEdit(editingPhoto.id, edit);
-            setEditingPhotoId(null);
+            onSavePhotoEdit(editingItem.id, edit);
+            setEditingMediaId(null);
           }}
         />
       ) : (
@@ -556,7 +585,7 @@ export function ComposerSheet({
                           // que se acaba de borrar.
                           <button
                             type="button"
-                            onClick={() => setEditingPhotoId(item.id)}
+                            onClick={() => setEditingMediaId(item.id)}
                             disabled={isPending}
                             aria-label={`${COPY.composer.editPhoto} ${index + 1}`}
                             className={cn(
@@ -569,7 +598,10 @@ export function ComposerSheet({
                             <img
                               src={item.preview}
                               alt=""
-                              style={{ filter: getPhotoFilter(item.edit?.filterId).css || undefined }}
+                              // MISMA función que la vista previa grande y que
+                              // el horneado: preset + intensidad resueltos en
+                              // un solo lugar (ver photo-editor.tsx).
+                              style={{ filter: photoEditFilterCss(item.edit) || undefined }}
                               className="absolute inset-0 size-full object-cover"
                             />
                             {item.edit?.captionText.trim() && (
@@ -584,17 +616,39 @@ export function ComposerSheet({
                           </button>
                         ) : (
                           <>
+                            {/* El video también se toca para elegirle filtro
+                                (0104), con el MISMO gesto que una foto: la
+                                miniatura entera es el disparador y el botón de
+                                "Quitar" queda encima, aparte. Que uno se pueda
+                                editar y el otro no era la única diferencia
+                                entre los dos medios, y no había ningún motivo
+                                para que existiera. */}
                             <video
                               src={item.preview}
                               muted
                               playsInline
                               preload="metadata"
+                              // El filtro elegido, ya visible en la tira: es
+                              // exactamente como se va a ver publicado, porque
+                              // en el feed también se aplica al pintar.
+                              style={{ filter: photoEditFilterCss(item.edit) || undefined }}
                               className="absolute inset-0 size-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setEditingMediaId(item.id)}
+                              disabled={isPending}
+                              aria-label={VIDEO_EDITOR_COPY.openLabel}
+                              className={cn(
+                                "absolute inset-0 size-full",
+                                "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring",
+                                "disabled:pointer-events-none",
+                              )}
                             />
                             {/* La DURACIÓN medida, no la palabra "Video": es el
                                 dato que importa cuando el tope son 90 s, y ya lo
                                 tenemos —se midió antes de aceptar el archivo. */}
-                            <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-full bg-media-scrim px-2 py-0.5 text-xs font-semibold text-on-media">
+                            <span className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-full bg-media-scrim px-2 py-0.5 text-xs font-semibold text-on-media">
                               <VideoCamera size={12} weight="fill" aria-hidden="true" />
                               {formatDuration(item.durationSeconds) ?? COPY.composer.videoChip}
                             </span>
@@ -784,6 +838,15 @@ export function ComposerSheet({
                 onChange={onDeclarationChange}
                 disabled={isPending}
               />
+            )}
+
+            {/* Ya se publicó; falta guardar lo que necesitaba el id del post
+                (etiquetas, música). Va acá y no arriba porque es el último
+                tramo de la espera, a un renglón del botón que la disparó. */}
+            {finishingLabel && (
+              <p role="status" className="mt-3 shrink-0 text-xs font-medium text-foreground-secondary">
+                {finishingLabel}
+              </p>
             )}
 
             {/* Progreso REAL de la subida del video (XHR), no una barra decorativa. */}
