@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { getTenant } from "@/lib/tenant/resolve";
+import { BRAND_NAME } from "@/lib/brand";
 import { t } from "@/lib/i18n";
 import { buttonVariants } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme";
@@ -9,8 +9,6 @@ import { LanguageToggle } from "@/components/marketing/language-toggle";
 
 /** Layout público: header liviano con nav + footer premium con disclaimer §11. */
 export default async function MarketingLayout({ children }: { children: ReactNode }) {
-  const tenant = await getTenant();
-
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-foreground">
       <a
@@ -31,7 +29,8 @@ export default async function MarketingLayout({ children }: { children: ReactNod
             href="/guias"
             className="rounded-full font-display text-lg font-bold tracking-tight text-brand-ink"
           >
-            {tenant.name}
+            {/* Marca del programa, no nombre del tenant. Ver @/lib/brand. */}
+            {BRAND_NAME}
           </Link>
 
           {/* El toggle de tema no es navegación: vive al lado del nav, no adentro. */}
@@ -69,7 +68,7 @@ export default async function MarketingLayout({ children }: { children: ReactNod
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
             <div className="lg:col-span-1">
               <p className="font-display text-lg font-bold tracking-tight text-brand-ink">
-                {tenant.name}
+                {BRAND_NAME}
               </p>
               <p className="mt-2 max-w-xs text-sm leading-relaxed text-foreground-secondary">
                 {COPY.footer.tagline}
@@ -140,8 +139,11 @@ export default async function MarketingLayout({ children }: { children: ReactNod
               {COPY.footer.disclaimer}
             </p>
             <p className="mt-4 text-xs text-foreground-muted">
-              © {new Date().getFullYear()} {tenant.name} · Una comunidad de Comunidad Latina ·{" "}
-              {COPY.footer.tagline}
+              {/* El copyright es de la MARCA. Antes decía "{tenant.name} · Una
+                  comunidad de Comunidad Latina", que con el tenant llamado
+                  "Comunidad Latina" quedaba "Comunidad Latina · Una comunidad de
+                  Comunidad Latina". Ver @/lib/brand. */}
+              © {new Date().getFullYear()} {BRAND_NAME} · {COPY.footer.tagline}
             </p>
           </div>
         </div>

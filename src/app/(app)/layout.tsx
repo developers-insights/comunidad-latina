@@ -7,7 +7,6 @@ import { CommentsSheetProvider, MediaViewerProvider, PostComposerHost } from "@/
 import { ViewerTimeZoneProvider } from "@/components/time/viewer-time-zone";
 import { getViewerAccount } from "@/lib/time/viewer-zone";
 import { OfflineBanner } from "@/components/shell/offline-banner";
-import { TenantMismatchBanner } from "@/components/shell/tenant-mismatch-banner";
 import { AccountGate } from "@/components/shell/account-gate";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 
@@ -82,7 +81,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <div className="sticky top-0 z-40">
         <Header tenant={tenant} />
       </div>
-      <TenantMismatchBanner />
+      {/* Acá vivía <TenantMismatchBanner />. Se eliminó el 2026-08-13: avisaba
+          de un problema de configuración nuestro con palabras que le pedían al
+          usuario que lo resolviera. Ver la nota al final de lib/tenant/guard.ts. */}
       <main
         id="contenido"
         tabIndex={-1}

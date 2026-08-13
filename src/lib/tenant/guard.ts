@@ -1,6 +1,5 @@
 import "server-only";
 
-import { cache } from "react";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database.types";
@@ -27,8 +26,9 @@ import {
  * fallaba el insert.
  *
  * NO bloquea lecturas: el contenido `published` es cross-tenant a propósito
- * (SEO, policy `listings_select`). La divergencia solo cierra la escritura y
- * se avisa con `<TenantMismatchBanner>` en el shell de `(app)/`.
+ * (SEO, policy `listings_select`). La divergencia solo cierra la escritura, y
+ * desde 2026-08-13 NO se le avisa al usuario en el shell — ver la nota al final
+ * de este archivo.
  */
 
 export interface HomeTenant {
@@ -154,19 +154,21 @@ export async function requireTenantMatch(): Promise<TenantGuardResult> {
   };
 }
 
-/**
- * Para el shell de `(app)/`: `null` cuando no hay nada que avisar.
+/*
+ * NO existe un `getTenantMismatch()` para pintar un aviso en el shell, y es a
+ * propósito (2026-08-13).
  *
- * Cacheado por request — el layout y cualquier RSC del mismo render comparten
- * el `getUser()`. Se muestra a TODOS los roles: un `global_admin` saltando de
- * tenant con `?t=` tampoco puede insertar (la policy `listings_insert` no tiene
- * escape para staff, solo `listings_update`), así que el aviso también es
- * verdadero para él.
+ * Existió: `<TenantMismatchBanner>` en `(app)/layout.tsx`. Se eliminó porque en
+ * la práctica no avisaba de un problema del usuario — avisaba de un problema
+ * NUESTRO. Las dos únicas veces que apareció en producción fue porque la
+ * plataforma estaba sirviendo el tenant equivocado (`DEFAULT_TENANT_SLUG`
+ * apuntando a la marca) o porque una cuenta había quedado atada a un tenant que
+ * no es su comunidad. En los dos casos el cartel le pedía al usuario que
+ * resolviera algo que él no puede resolver, y en el peor caso decía "estás
+ * mirando Comunidad Latina pero tu cuenta vive en Comunidad Latina".
+ *
+ * La divergencia sigue existiendo como concepto y `requireTenantMatch()` sigue
+ * cerrando TODA escritura — eso es la seguridad y no se toca. Lo que se sacó es
+ * el cartel: si vuelve a haber divergencia, se arregla el dato, no se le avisa
+ * al usuario.
  */
-export const getTenantMismatch = cache(
-  async (): Promise<{ current: Tenant; home: HomeTenant | null } | null> => {
-    const guard = await requireTenantMatch();
-    if (guard.ok || guard.reason !== "tenant-mismatch") return null;
-    return { current: guard.tenant, home: guard.homeTenant };
-  },
-);

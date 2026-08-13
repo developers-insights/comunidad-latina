@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { getTenant } from "@/lib/tenant/resolve";
+import { BRAND_NAME } from "@/lib/brand";
 import { ThemeToggle } from "@/components/theme";
 
 /**
@@ -12,8 +12,6 @@ import { ThemeToggle } from "@/components/theme";
  * derecha; `top` respeta el notch (el root layout usa viewportFit: cover).
  */
 export default async function AuthLayout({ children }: { children: ReactNode }) {
-  const tenant = await getTenant();
-
   return (
     <div className="relative flex min-h-dvh flex-col items-center px-4">
       <ThemeToggle className="absolute right-2 top-[max(0.5rem,env(safe-area-inset-top))] z-10" />
@@ -28,10 +26,11 @@ export default async function AuthLayout({ children }: { children: ReactNode }) 
         <Link
           href="/guias"
           className="mb-8 self-center rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-          aria-label={tenant.name}
+          aria-label={BRAND_NAME}
         >
+          {/* La marca del programa, no el nombre del tenant. Ver @/lib/brand. */}
           <span className="text-2xl font-bold tracking-tight text-brand-ink">
-            {tenant.name}
+            {BRAND_NAME}
           </span>
         </Link>
         {children}

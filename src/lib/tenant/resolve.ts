@@ -39,6 +39,46 @@ export const TENANT_COOKIE = "cl-tenant";
 export const TENANT_SLUG_HEADER = "x-tenant-slug";
 
 /**
+ * Slugs reservados de MARCA/legal — NUNCA se resuelven como comunidad pública,
+ * aunque tengan su propia fila en `tenants` y su propio dominio.
+ *
+ * Vive ACÁ ARRIBA, y no junto a `isActiveCommunitySlug()` donde estaba, porque
+ * `sanitizeSlugAtBoot()` (unas líneas más abajo) lo consulta mientras se evalúa
+ * el módulo: declarado después quedaría en zona muerta temporal.
+ *
+ * Hoy es solo `comunidadlatina`: es la MARCA y el panel de administración, con
+ * una razón puntual de negocio detrás (specimen de marca registrada en curso,
+ * PLAN_MAESTRO §11.1 — "uso GENUINO, no una transacción manufacturada") — el
+ * cliente jamás debe verla como si fuera una comunidad más. Decisión original:
+ * commit `d293119` (2026-07-09).
+ *
+ * Cualquier slug que NO esté en este set se resuelve DINÁMICAMENTE contra la
+ * fila real de `tenants` (`getTenant()`, cacheada) apenas existe, sin tocar
+ * este archivo — ese es el contrato que permite nacer una comunidad nueva
+ * (`scripts/new-tenant.mjs`) sin reprogramar. Antes este set funcionaba al
+ * revés (allowlist de UN solo slug activo): eso "resolvía" bien a
+ * `comunidadlatina`, pero de yapa clampeaba a la comunidad por defecto a
+ * CUALQUIER tenant nuevo — ninguna comunidad nacida después de `dominicanos`
+ * iba a ser alcanzable ni siquiera con `?t=<slug>` sin editar este archivo y
+ * redeployar, que es exactamente el "todavía hay que reprogramar" que el
+ * playbook de nacimiento de tenant (`docs/PLAYBOOK-TENANT.md`) viene a cerrar.
+ * Sumar un slug ACÁ sigue siendo una decisión de marca/legal explícita sobre
+ * UN tenant puntual — no un paso rutinario del alta.
+ *
+ * NO afecta al panel de admin: /admin usa el `tenant_id` del JWT, no este
+ * (src/app/admin/guard.ts) — un global_admin siempre pudo administrar
+ * `comunidadlatina` aunque el público no la vea como comunidad.
+ *
+ * El dominio propio ya NO es un paso de código: desde la migración 0060 vive en
+ * `public.tenant_domains` y lo resuelve el proxy contra la base
+ * (`./domain-lookup` + `./domain-routing`). Este set sigue mandando por encima
+ * de lo que diga la base — un slug reservado nunca se sirve como comunidad
+ * pública, tampoco si alguien le carga un dominio (`clampToPublicCommunity` en
+ * `./domain-routing`).
+ */
+export const RESERVED_BRAND_SLUGS = new Set<string>(["comunidadlatina"]);
+
+/**
  * Comunidad que se sirve cuando el host NO identifica a ninguna.
  *
  * Pasa en un solo caso, pero es el que todo el equipo usa todos los días: los
@@ -68,10 +108,27 @@ export const DEFAULT_TENANT_SLUG = sanitizeSlugAtBoot(
  * Un slug inválido en la variable de entorno NO puede tumbar el arranque ni
  * dejar la app sirviendo una comunidad inexistente: degrada al de siempre.
  * Mismo alfabeto que el CHECK de `tenants.slug`.
+ *
+ * Y TAMPOCO puede ser un slug RESERVADO de marca. Esto no es teoría: el
+ * 2026-08-13 se seteó `DEFAULT_TENANT_SLUG=comunidadlatina` en Vercel y
+ * producción pasó a servir el tenant de MARCA como si fuera una comunidad —
+ * feed vacío (todo el contenido vive en `dominicanos`) y, para colmo, el aviso
+ * de divergencia contra la cuenta de quien miraba. El clamp de
+ * `resolveTenantSlug` no alcanzaba para atajarlo: devuelve `DEFAULT_TENANT_SLUG`
+ * cuando el candidato está reservado, así que con el reservado ADENTRO de la
+ * constante el clamp se volvía un no-op que devolvía justo lo que quería
+ * bloquear. El corte tiene que estar acá, en el arranque, que es donde entra el
+ * valor.
+ *
+ * Por eso `RESERVED_BRAND_SLUGS` se declara ARRIBA de `DEFAULT_TENANT_SLUG` y no
+ * donde estaba: esta función corre durante la evaluación del módulo, así que un
+ * set declarado después quedaría en zona muerta temporal y tiraría
+ * `ReferenceError` en el arranque. Se testea en `resolve.test.ts`.
  */
 function sanitizeSlugAtBoot(raw: string | undefined): string {
   const value = (raw ?? "").trim().toLowerCase();
-  return /^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$/.test(value) ? value : "dominicanos";
+  const wellFormed = /^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$/.test(value);
+  return wellFormed && !RESERVED_BRAND_SLUGS.has(value) ? value : "dominicanos";
 }
 
 /**
@@ -187,43 +244,12 @@ export const KNOWN_TENANT_DOMAINS: ReadonlySet<string> = new Set(
   Object.keys(DOMAIN_TENANTS),
 );
 
-/**
- * Slugs reservados de MARCA/legal — NUNCA se resuelven como comunidad pública,
- * aunque tengan su propia fila en `tenants` y su propio dominio en
- * `DOMAIN_TENANTS`.
- *
- * Hoy es solo `comunidadlatina`: es la MARCA y el panel de administración, con
- * una razón puntual de negocio detrás (specimen de marca registrada en curso,
- * PLAN_MAESTRO §11.1 — "uso GENUINO, no una transacción manufacturada") — el
- * cliente jamás debe verla como si fuera una comunidad más. Decisión original:
- * commit `d293119` (2026-07-09).
- *
- * Cualquier slug que NO esté en este set se resuelve DINÁMICAMENTE contra la
- * fila real de `tenants` (`getTenant()`, cacheada) apenas existe, sin tocar
- * este archivo — ese es el contrato que permite nacer una comunidad nueva
- * (`scripts/new-tenant.mjs`) sin reprogramar. Antes este set funcionaba al
- * revés (allowlist de UN solo slug activo): eso "resolvía" bien a
- * `comunidadlatina`, pero de yapa clampeaba a la comunidad por defecto a
- * CUALQUIER tenant nuevo — ninguna comunidad nacida después de `dominicanos`
- * iba a ser alcanzable ni siquiera con `?t=<slug>` sin editar este archivo y
- * redeployar, que es exactamente el "todavía hay que reprogramar" que el
- * playbook de nacimiento de tenant (`docs/PLAYBOOK-TENANT.md`) viene a cerrar.
- * Sumar un slug ACÁ sigue siendo una decisión de marca/legal explícita sobre
- * UN tenant puntual — no un paso rutinario del alta.
- *
- * NO afecta al panel de admin: /admin usa el `tenant_id` del JWT, no este
- * (src/app/admin/guard.ts) — un global_admin siempre pudo administrar
- * `comunidadlatina` aunque el público no la vea como comunidad.
- *
- * El dominio propio ya NO es un paso de código: desde la migración 0060 vive en
- * `public.tenant_domains` y lo resuelve el proxy contra la base
- * (`./domain-lookup` + `./domain-routing`). Este set sigue mandando por encima
- * de lo que diga la base — un slug reservado nunca se sirve como comunidad
- * pública, tampoco si alguien le carga un dominio (`clampToPublicCommunity` en
- * `./domain-routing`). Sumar un slug ACÁ sigue siendo una decisión de
- * marca/legal explícita sobre UN tenant puntual, no un paso rutinario del alta.
+/*
+ * `RESERVED_BRAND_SLUGS` vivía acá. Se movió arriba, junto a
+ * `DEFAULT_TENANT_SLUG`: `sanitizeSlugAtBoot()` lo consulta durante la
+ * evaluación del módulo, y un `const` declarado después queda en zona muerta
+ * temporal (`ReferenceError` en el arranque). El docblock viajó con él.
  */
-export const RESERVED_BRAND_SLUGS = new Set<string>(["comunidadlatina"]);
 
 /**
  * ¿Este slug puede resolver como comunidad pública (no está reservado de
