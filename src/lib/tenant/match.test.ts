@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyTenantMatch,
-  tenantMismatchBanner,
   tenantMismatchMessage,
   type TenantMatchInput,
 } from "./match";
@@ -115,21 +114,9 @@ describe("tenantMismatchMessage", () => {
   });
 });
 
-describe("tenantMismatchBanner", () => {
-  it("ofrece la vuelta nombrando la comunidad del usuario", () => {
-    const copy = tenantMismatchBanner("Dominicanos", "Comunidad Latina");
-    expect(copy.title).toContain("Comunidad Latina");
-    expect(copy.action).toBe("Volver a Comunidad Latina");
-  });
-
-  it("degrada el CTA sin inventar un nombre", () => {
-    const copy = tenantMismatchBanner("Dominicanos", null);
-    expect(copy.action).toBe("Volver a mi comunidad");
-    expect(copy.title).toContain("otra comunidad");
-  });
-
-  it("el cuerpo aclara que la lectura sigue abierta (cross-tenant por SEO)", () => {
-    const copy = tenantMismatchBanner("Dominicanos", "Comunidad Latina");
-    expect(copy.body).toContain("Podés leer todo lo que quieras acá");
-  });
-});
+/*
+ * Los tests de `tenantMismatchBanner()` se fueron con el banner el 2026-08-13
+ * (el porqué está al final de `guard.ts`). `tenantMismatchMessage()` sigue vivo
+ * y cubierto arriba: es el texto del error que devuelve una server action
+ * cuando la escritura rebota, que es un caso REAL que el usuario puede provocar.
+ */

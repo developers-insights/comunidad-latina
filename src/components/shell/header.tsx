@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChatCircle } from "@phosphor-icons/react/dist/ssr";
 import type { Tenant } from "@/lib/tenant/resolve";
+import { BRAND_NAME } from "@/lib/brand";
 import { Avatar } from "@/components/ui";
 import { HeaderActions } from "@/components/shell/header-actions";
 import { NotificationBell } from "@/components/notifications";
@@ -58,7 +59,7 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
         <Link
           href="/feed"
           className="flex min-h-11 min-w-0 items-center gap-2 rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-          aria-label={tenant.name}
+          aria-label={BRAND_NAME}
         >
           {isOptimizableSrc(logoSrc) ? (
             <Image
@@ -76,8 +77,11 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
               className="h-8 w-8 shrink-0 object-contain"
             />
           )}
+          {/* La MARCA, no el nombre del tenant: el header dice siempre
+              "Comunidad Latina", sirva la comunidad que sirva. Ver
+              @/lib/brand. */}
           <span className="truncate text-base font-bold tracking-tight text-brand-ink">
-            {tenant.name}
+            {BRAND_NAME}
           </span>
         </Link>
 

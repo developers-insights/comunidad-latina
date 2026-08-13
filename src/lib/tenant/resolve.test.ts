@@ -238,15 +238,15 @@ describe("DEFAULT_TENANT_SLUG configurable por entorno", () => {
   });
 
   it("toma el slug de la variable cuando es válido", async () => {
-    vi.stubEnv("DEFAULT_TENANT_SLUG", "comunidadlatina");
+    vi.stubEnv("DEFAULT_TENANT_SLUG", "mexicanos");
     const { DEFAULT_TENANT_SLUG } = await cargarModulo();
-    expect(DEFAULT_TENANT_SLUG).toBe("comunidadlatina");
+    expect(DEFAULT_TENANT_SLUG).toBe("mexicanos");
   });
 
   it("normaliza mayúsculas y espacios en vez de rechazarlos", async () => {
-    vi.stubEnv("DEFAULT_TENANT_SLUG", "  ComunidadLatina  ");
+    vi.stubEnv("DEFAULT_TENANT_SLUG", "  MexicanosEnUSA  ");
     const { DEFAULT_TENANT_SLUG } = await cargarModulo();
-    expect(DEFAULT_TENANT_SLUG).toBe("comunidadlatina");
+    expect(DEFAULT_TENANT_SLUG).toBe("mexicanosenusa");
   });
 
   it("un valor inválido NO tumba el arranque: cae al de siempre", async () => {
@@ -254,6 +254,29 @@ describe("DEFAULT_TENANT_SLUG configurable por entorno", () => {
       vi.stubEnv("DEFAULT_TENANT_SLUG", roto);
       const { DEFAULT_TENANT_SLUG } = await cargarModulo();
       expect(DEFAULT_TENANT_SLUG).toBe("dominicanos");
+    }
+  });
+
+  /**
+   * REGRESIÓN 2026-08-13 — incidente en producción, no hipótesis.
+   *
+   * Se seteó `DEFAULT_TENANT_SLUG=comunidadlatina` en Vercel y la app pasó a
+   * servir el tenant de MARCA como si fuera una comunidad: feed vacío (todo el
+   * contenido vive en `dominicanos`) y aviso de divergencia contra la cuenta de
+   * quien miraba.
+   *
+   * El clamp de `resolveTenantSlug` no lo atajaba porque su salida ante un slug
+   * reservado ES `DEFAULT_TENANT_SLUG` — con el reservado adentro de la
+   * constante, el clamp devolvía exactamente lo que quería bloquear. Por eso el
+   * corte tiene que estar en el arranque.
+   */
+  it("un slug RESERVADO de marca en la variable degrada a la comunidad de siempre", async () => {
+    for (const reservado of ["comunidadlatina", "  ComunidadLatina  "]) {
+      vi.stubEnv("DEFAULT_TENANT_SLUG", reservado);
+      const { DEFAULT_TENANT_SLUG, resolveTenantSlug } = await cargarModulo();
+      expect(DEFAULT_TENANT_SLUG).toBe("dominicanos");
+      // Y el resolver tampoco lo sirve por ninguna otra puerta.
+      expect(resolveTenantSlug(null, null, null)).toBe("dominicanos");
     }
   });
 });

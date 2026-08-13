@@ -86,16 +86,11 @@ export function tenantMismatchMessage(
     : `Estás mirando ${currentTenantName}, pero tu cuenta es de otra comunidad. Podés leer todo acá; para publicar o participar, volvé a la tuya.`;
 }
 
-/** Copy del banner del shell — informa sin bloquear la lectura. */
-export function tenantMismatchBanner(
-  currentTenantName: string,
-  homeTenantName: string | null,
-): { title: string; body: string; action: string } {
-  return {
-    title: homeTenantName
-      ? `Estás mirando ${currentTenantName}, pero tu cuenta vive en ${homeTenantName}.`
-      : `Estás mirando ${currentTenantName}, pero tu cuenta es de otra comunidad.`,
-    body: "Podés leer todo lo que quieras acá. Para publicar, escribir o anotarte a algo, volvé a tu comunidad.",
-    action: homeTenantName ? `Volver a ${homeTenantName}` : "Volver a mi comunidad",
-  };
-}
+/*
+ * Acá vivía `tenantMismatchBanner()`, el copy del cartel del shell. Se eliminó
+ * el 2026-08-13 junto con el banner: ver la nota al final de `./guard`.
+ *
+ * `tenantMismatchMessage()` (arriba) NO se tocó — es el texto que devuelve una
+ * server action cuando la escritura rebota, y ese sí es un caso que el usuario
+ * provoca con una acción suya, en el momento en que la hace.
+ */

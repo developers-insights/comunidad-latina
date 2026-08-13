@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./resolve", () => ({ getTenant: mocks.getTenant }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.createClient }));
 
-import { getTenantMismatch, requireTenantMatch } from "./guard";
+import { requireTenantMatch } from "./guard";
 
 /* ------------------------------- Fixtures --------------------------------- */
 
@@ -182,32 +182,12 @@ describe("requireTenantMatch", () => {
   });
 });
 
-/* ---------------------------- getTenantMismatch --------------------------- */
-
-describe("getTenantMismatch", () => {
-  it("no avisa nada cuando el tenant coincide", async () => {
-    useSupabase(member(DOMINICANOS.id));
-    await expect(getTenantMismatch()).resolves.toBeNull();
-  });
-
-  it("no avisa nada a un anónimo (la lectura pública es cross-tenant a propósito)", async () => {
-    useSupabase(null);
-    await expect(getTenantMismatch()).resolves.toBeNull();
-  });
-
-  it("no muestra el banner cuando el tenant está en fallback", async () => {
-    mocks.getTenant.mockResolvedValue({ ...DOMINICANOS, isFallback: true });
-    useSupabase(member(COMUNIDAD_LATINA_ROW.id), COMUNIDAD_LATINA_ROW);
-
-    await expect(getTenantMismatch()).resolves.toBeNull();
-  });
-
-  it("devuelve la comunidad actual y la del usuario ante divergencia", async () => {
-    useSupabase(member(COMUNIDAD_LATINA_ROW.id), COMUNIDAD_LATINA_ROW);
-
-    const mismatch = await getTenantMismatch();
-
-    expect(mismatch?.current.name).toBe("Dominicanos");
-    expect(mismatch?.home?.slug).toBe("comunidadlatina");
-  });
-});
+/*
+ * Acá vivían los tests de `getTenantMismatch()`, que alimentaba el banner
+ * "estás mirando otra comunidad" del shell. Los dos —función y banner— se
+ * eliminaron el 2026-08-13; el porqué está al final de `guard.ts`.
+ *
+ * Lo que SÍ sigue cubierto, arriba en este mismo archivo, es lo único que
+ * importaba de verdad: `requireTenantMatch()` cierra la escritura ante
+ * divergencia. Eso es la seguridad; el cartel era solo la explicación.
+ */
