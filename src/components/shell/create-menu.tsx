@@ -24,19 +24,19 @@ import { cn } from "@/lib/utils";
 import { moduleAvailability } from "./module-access";
 
 /**
- * Menú "crear publicación" — hoja ÚNICA de toda la app.
+ * Menú "crear publicación" — hoja ÚNICA de toda la app, montada UNA vez por
+ * `PostComposerHost` (`@/components/feed/post-composer.tsx`) en el shell.
  *
- * Nació adentro del composer del feed (§b, feedback cliente 2026-07-24) y salió
- * de ahí el 2026-07-29, cuando el "+" del bottom nav pasó a abrir exactamente lo
- * mismo desde cualquier pantalla. Dos hojas distintas con las mismas diez
- * opciones se habrían desincronizado en la primera semana, así que hay una sola
- * y son sus consumidores los que cambian:
- *
- *  · En el feed, el composer está montado y resuelve foto/video/pregunta ahí
- *    mismo (`onQuickPost`): elegís Foto y se abre el selector, sin navegar.
- *  · Desde cualquier otra pantalla no hay composer al que hablarle, así que esas
- *    tres opciones son enlaces a /feed?crear=… y el composer las levanta al
- *    montarse (ver post-composer.tsx). Sigue siendo UN toque para la persona.
+ * Nació adentro del composer del feed (§b, feedback cliente 2026-07-24) y el
+ * 2026-07-29 pasó a abrirse también desde el "+" del bottom nav. Hasta el
+ * 2026-08-13 eso significaba DOS caminos para foto/video/pregunta: con el
+ * composer montado (feed) resolvían ahí mismo (`onQuickPost`); sin él (otra
+ * pantalla) navegaban a /feed?crear=… y el composer las retomaba al montarse
+ * — y ESE segundo camino perdía el gesto de usuario que abre el selector de
+ * archivos en varios navegadores (Safari, sobre todo). Con el estado en el
+ * shell (`PostComposerHost` envuelve TODA la app), `onQuickPost` es ahora el
+ * ÚNICO camino: no importa desde qué pantalla se abrió este menú, foto/video
+ * disparan el input oculto en el mismo toque, siempre.
  *
  * Los tiles de módulos SÍ se filtran por el panel (`moduleAvailability`): ofrecer
  * "Publicá un producto" con Marketplace apagado es prometer una pantalla que no
@@ -178,11 +178,6 @@ const CREATE_MENU_TILES: CreateMenuTile[] = [
   },
 ];
 
-/** Adónde manda una opción rápida cuando NO hay composer montado. */
-export function quickPostHref(quick: QuickPostKind): string {
-  return `/feed?crear=${quick}`;
-}
-
 /** Chip de ícono tintado (14% del acento) — mismo lenguaje visual que AccentLink. */
 export function TileIconChip({
   accent,
@@ -215,11 +210,8 @@ export interface CreateMenuProps {
   /** `tenants.modules` / `modules_soon` del request. */
   modules: Record<string, boolean>;
   modulesSoon: Record<string, boolean>;
-  /**
-   * Presente = hay un composer montado que resuelve foto/video/pregunta acá
-   * mismo. Ausente = esas tres opciones navegan al feed con `?crear=`.
-   */
-  onQuickPost?: (quick: QuickPostKind) => void;
+  /** Resuelve foto/video/pregunta sin navegar (ver el docblock de arriba). */
+  onQuickPost: (quick: QuickPostKind) => void;
 }
 
 export function CreateMenu({
@@ -258,23 +250,6 @@ export function CreateMenu({
             </>
           );
 
-          // Opción rápida SIN composer montado: enlace real a /feed?crear=…, no
-          // un botón que navegue por JS — así conserva "abrir en pestaña nueva",
-          // el estado de foco y el atrás del sistema.
-          if (tile.action.kind === "quick" && !onQuickPost) {
-            return (
-              <li key={tile.key}>
-                <Link
-                  href={quickPostHref(tile.action.quick)}
-                  onClick={onClose}
-                  className={rowClass}
-                >
-                  {rowContent}
-                </Link>
-              </li>
-            );
-          }
-
           return (
             <li key={tile.key}>
               {tile.action.kind === "link" ? (
@@ -287,7 +262,7 @@ export function CreateMenu({
                   onClick={() => {
                     const { quick } = tile.action as { quick: QuickPostKind };
                     onClose();
-                    onQuickPost?.(quick);
+                    onQuickPost(quick);
                   }}
                   className={rowClass}
                 >

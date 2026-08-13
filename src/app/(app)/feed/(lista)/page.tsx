@@ -6,7 +6,7 @@ import { decodeCursor } from "@/components/listings";
 import {
   COPY,
   FeedSkeleton,
-  PostComposer,
+  ComposerTrigger,
   parseTab,
   type FeedTabId,
 } from "@/components/feed";
@@ -147,12 +147,7 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
       {tab === "para-ti" ? (
         <>
           {user ? (
-            <PostComposer
-              viewerName={viewerName}
-              viewerAvatarUrl={viewerAvatarUrl}
-              modules={tenant.modules}
-              modulesSoon={tenant.modulesSoon}
-            />
+            <ComposerTrigger viewerName={viewerName} viewerAvatarUrl={viewerAvatarUrl} />
           ) : (
             <ComposerInvite />
           )}

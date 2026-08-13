@@ -1,13 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { m, useReducedMotion } from "motion/react";
 import { Plus } from "@phosphor-icons/react/dist/ssr";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { CreateMenu } from "./create-menu";
+import { useComposerMenu } from "@/components/feed/composer-context";
 import { moduleAvailability } from "./module-access";
 import { isBrowseRoute, isModuleActive } from "./modules";
 
@@ -99,52 +98,46 @@ export interface BottomNavProps {
  */
 export function BottomNav({ modules, modulesSoon, canCreate, unread }: BottomNavProps) {
   const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
+  // Mismo menú que la tarjeta "¿Qué querés publicar?" del feed — el estado
+  // vive en `PostComposerHost` (montado en el shell), no acá. Ver
+  // `@/components/feed/composer-context`.
+  const { open: menuOpen, openMenu } = useComposerMenu();
   const reduceMotion = useReducedMotion();
 
   const visible = (item: NavItem) =>
     moduleAvailability(item.moduleKey, modules, modulesSoon) === "active";
 
   return (
-    <>
-      <nav
-        aria-label={t("nav", "mainNav")}
-        // `overflow-visible` + z-40: el "+" sobresale por arriba del hairline.
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/92 backdrop-blur-md"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <ul className="mx-auto grid w-full max-w-lg grid-cols-[1fr_1fr_auto_1fr_1fr] items-stretch">
-          {LEFT_ITEMS.map((item) => (
+    <nav
+      aria-label={t("nav", "mainNav")}
+      // `overflow-visible` + z-40: el "+" sobresale por arriba del hairline.
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/92 backdrop-blur-md"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <ul className="mx-auto grid w-full max-w-lg grid-cols-[1fr_1fr_auto_1fr_1fr] items-stretch">
+        {LEFT_ITEMS.map((item) => (
+          <NavTab key={item.href} item={item} pathname={pathname} unread={unread} />
+        ))}
+
+        <li className="flex items-start justify-center">
+          <CreateButton
+            open={menuOpen}
+            canCreate={canCreate}
+            reduceMotion={Boolean(reduceMotion)}
+            onOpen={openMenu}
+          />
+        </li>
+
+        {RIGHT_ITEMS.map((item) =>
+          visible(item) ? (
             <NavTab key={item.href} item={item} pathname={pathname} unread={unread} />
-          ))}
-
-          <li className="flex items-start justify-center">
-            <CreateButton
-              open={menuOpen}
-              canCreate={canCreate}
-              reduceMotion={Boolean(reduceMotion)}
-              onOpen={() => setMenuOpen(true)}
-            />
-          </li>
-
-          {RIGHT_ITEMS.map((item) =>
-            visible(item) ? (
-              <NavTab key={item.href} item={item} pathname={pathname} unread={unread} />
-            ) : (
-              // Casillero vacío a propósito: mantiene el "+" en el centro.
-              <li key={item.href} aria-hidden="true" />
-            ),
-          )}
-        </ul>
-      </nav>
-
-      <CreateMenu
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        modules={modules}
-        modulesSoon={modulesSoon}
-      />
-    </>
+          ) : (
+            // Casillero vacío a propósito: mantiene el "+" en el centro.
+            <li key={item.href} aria-hidden="true" />
+          ),
+        )}
+      </ul>
+    </nav>
   );
 }
 
