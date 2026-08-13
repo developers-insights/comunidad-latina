@@ -61,6 +61,12 @@ export {
 } from "./helpers";
 export { PostActions, type PostActionsProps } from "./post-actions";
 export { PostCard, type PostCardProps } from "./post-card";
-export { PostComposer, type PostComposerProps } from "./post-composer";
+export { PostComposerHost, type PostComposerHostProps } from "./post-composer";
+export { ComposerTrigger, type ComposerTriggerProps } from "./composer-trigger";
+export {
+  ComposerMenuProvider,
+  useComposerMenu,
+  type ComposerMenuValue,
+} from "./composer-context";
 export { PostMenu, type PostMenuProps } from "./post-menu";
 export { FeedSkeleton, PostCardSkeleton } from "./skeletons";

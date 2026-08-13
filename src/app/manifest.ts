@@ -10,7 +10,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 /**
  * short_name aparece bajo el ícono en el launcher: los SO truncan ~12
  * caracteres. Si el nombre completo no entra, usamos la primera palabra
- * ("Dominicanos en USA" → "Dominicanos").
+ * ("Comunidad Latina" → "Comunidad").
  */
 function shortName(name: string): string {
   if (name.length <= 12) return name;

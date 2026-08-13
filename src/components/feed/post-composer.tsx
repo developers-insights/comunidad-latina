@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { CaretRight } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, useToast } from "@/components/ui";
+import { useId, useRef, useState, useTransition, type ReactNode } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { useToast } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { CreateMenu, type QuickPostKind } from "@/components/shell/create-menu";
+import { ComposerMenuProvider } from "./composer-context";
 import { readVideoDurationSeconds } from "@/lib/media/measure-video";
 import { encodeAudioPcm16, sampleAudioPcm } from "@/lib/media/audio-samples";
 import { sampleVideoLumaFrames } from "@/lib/media/video-frames";
@@ -49,15 +48,12 @@ const VIDEO_TYPES: Record<string, string> = {
 };
 
 /**
- * El menú "crear publicación" (§b, feedback cliente 2026-07-24) vive ahora en
+ * El menú "crear publicación" (§b, feedback cliente 2026-07-24) vive en
  * `@/components/shell/create-menu`: el "+" del bottom nav abre EL MISMO menú
- * desde cualquier pantalla (2026-07-29), así que las diez opciones no pueden
- * seguir siendo una lista privada de este archivo.
+ * desde cualquier pantalla (2026-07-29).
  *
  * Lo que sí sigue siendo de acá: qué pasa cuando elegís foto, video o pregunta.
- * Este composer las resuelve sin navegar (selector + hoja de texto). Cuando el
- * menú se abre desde otra pantalla, esas tres viajan como /feed?crear=… y las
- * levanta el efecto de abajo.
+ * Este composer las resuelve sin navegar (selector + hoja de texto).
  */
 
 /** Un medio elegido, en el ORDEN de selección (posts.media respeta ese orden). */
@@ -81,24 +77,31 @@ interface PickedMedia {
   edit?: PhotoEdit;
 }
 
-export interface PostComposerProps {
-  viewerName: string;
-  viewerAvatarUrl: string | null;
+export interface PostComposerHostProps {
   /** `tenants.modules` / `modules_soon`: filtran los tiles del menú de crear. */
   modules: Record<string, boolean>;
   modulesSoon: Record<string, boolean>;
+  children: ReactNode;
 }
 
 /**
- * Composer del feed (§4.b) — rediseño 2026-07-29 (pedido de Manuel: "no quiero
- * que tenga un input para escribir… quiero que el principal y único sea el de
- * '¿Qué querés publicar?'").
+ * Dueño de TODO el estado de "publicar" — texto, medios elegidos, subida,
+ * horneado — montado UNA vez en el shell (`(app)/layout.tsx`), no por página.
  *
- * En reposo hay UNA sola cosa: la tarjeta "¿Qué querés publicar?", con nada
- * más que la abra o la reemplace — sin campo de texto ni botón Publicar
- * afuera. Tocarla abre el menú (CreateMenu, compartido con el "+" del bottom
- * nav) y ahí se elige QUÉ se publica; escribir el cuerpo pasa a vivir siempre
- * DENTRO de ese flujo (ComposerSheet), nunca en esta tarjeta.
+ * Nació adentro del feed (rediseño 2026-07-29, pedido de Manuel) y subió acá
+ * el 2026-08-13: el "+" del bottom nav abría este mismo menú desde CUALQUIER
+ * pantalla navegando primero a `/feed?crear=…`, y el intento de abrir el
+ * selector de archivos apenas montaba de nuevo (un `useEffect`, sin gesto de
+ * usuario) fallaba silenciosamente en varios navegadores (Safari, sobre todo)
+ * — la persona tocaba "Foto" desde /buscar y no pasaba nada. Con el estado acá
+ * arriba, elegir "Foto" desde CUALQUIER pantalla dispara `input.click()` en el
+ * MISMO gesto de tacto que abrió el menú, exactamente como ya funcionaba
+ * dentro del feed: un solo camino, nunca dos comportamientos.
+ *
+ * Expone `openMenu()` por `ComposerMenuProvider` (`./composer-context`): la
+ * tarjeta "¿Qué querés publicar?" del feed (`ComposerTrigger`) y el "+" del
+ * bottom nav son los dos consumidores, y ninguno de los dos sabe ni le importa
+ * dónde vive el estado.
  *
  * REGLA "TODO POST LLEVA IMAGEN". El trigger MEDIA_REQUIRED (0023/0043) exige
  * medio en `kind='post'` y exime a `question` y a `text`. Como ya no hay forma
@@ -117,13 +120,9 @@ export interface PostComposerProps {
  * `selectVideo` copian `input.files` SINCRÓNICAMENTE en el handler, antes de
  * cualquier setState.
  */
-export function PostComposer({
-  viewerName,
-  viewerAvatarUrl,
-  modules,
-  modulesSoon,
-}: PostComposerProps) {
+export function PostComposerHost({ modules, modulesSoon, children }: PostComposerHostProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { toast } = useToast();
   const [body, setBody] = useState("");
   const [media, setMedia] = useState<PickedMedia[]>([]);
@@ -160,47 +159,6 @@ export function PostComposer({
 
   const photos = media.filter((item) => item.kind === "photo");
   const video = media.find((item) => item.kind === "video") ?? null;
-
-  /**
-   * Arranque por URL: `/feed?crear=photo|video|text|question`. Es el camino
-   * del "+" del bottom nav cuando el menú se abrió desde otra pantalla y este
-   * composer todavía no existía.
-   *
-   * Se lee de `window.location` y no con `useSearchParams` a propósito: es un
-   * efecto de una sola vez y no vale arrastrar un Suspense boundary a toda la
-   * página del feed por él.
-   */
-  const consumedUrlIntent = useRef(false);
-  useEffect(() => {
-    if (consumedUrlIntent.current) return;
-    consumedUrlIntent.current = true;
-
-    const params = new URLSearchParams(window.location.search);
-    const quick = params.get("crear");
-    if (quick !== "photo" && quick !== "video" && quick !== "text" && quick !== "question") return;
-
-    // El parámetro se CONSUME: recargar o volver atrás no puede reabrir la hoja.
-    params.delete("crear");
-    const query = params.toString();
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${query ? `?${query}` : ""}`,
-    );
-
-    if (quick === "question" || quick === "text") {
-      openCompose(quick);
-      return;
-    }
-
-    // La hoja se abre SIEMPRE (adentro tiene "Agregar foto"/"Agregar video") y
-    // además se intenta abrir el selector del sistema. El intento puede no
-    // prosperar —varios browsers piden gesto del usuario y acá venimos de una
-    // navegación—, así que la garantía del camino es la hoja, no el click.
-    openCompose("media");
-    const input = quick === "photo" ? photoInputRef.current : videoInputRef.current;
-    input?.click();
-  }, []);
 
   /**
    * Lee el FileList VIVO del input de fotos de forma SÍNCRONA (gotcha de
@@ -646,7 +604,16 @@ export function PostComposer({
             duration: 7000,
           });
         }
-        router.refresh();
+        // El estado ya no vive en la página del feed (§docblock de arriba): si
+        // se publicó desde otra pantalla (el "+" del bottom nav en /buscar,
+        // por ejemplo) `refresh()` refrescaría ESA pantalla, que nunca muestra
+        // la publicación nueva. Sólo cuando ya se está en /feed alcanza con
+        // refrescar sin navegar — es el mismo camino de siempre.
+        if (pathname?.startsWith("/feed")) {
+          router.refresh();
+        } else {
+          router.push("/feed");
+        }
         return;
       }
 
@@ -725,41 +692,18 @@ export function PostComposer({
   }
 
   return (
-    <div className="rounded-lg border border-border-subtle bg-surface p-4 shadow-xs">
-      {/* ÚNICO elemento en reposo (pedido de Manuel, 2026-07-29): nada de campo
-          de texto ni de botón Publicar acá — toda la tarjeta es el disparador,
-          y presionarla es lo que despliega las opciones (CreateMenu). Escribir
-          pasa a vivir siempre DENTRO del paso que abre cada opción
-          (ComposerSheet), nunca acá afuera. */}
-      <button
-        type="button"
-        onClick={() => setMenuOpen(true)}
-        className={cn(
-          "flex w-full items-center gap-3 rounded-md text-left",
-          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-        )}
-      >
-        <Avatar size="sm" name={viewerName} src={viewerAvatarUrl} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-display text-base font-semibold text-foreground">
-            {COPY.composer.createMenu.rowLabel}
-          </span>
-          <span className="block truncate text-sm text-foreground-secondary">
-            {COPY.composer.createMenu.rowHint}
-          </span>
-        </span>
-        <CaretRight size={18} aria-hidden="true" className="shrink-0 text-foreground-muted" />
-      </button>
+    <ComposerMenuProvider value={{ open: menuOpen, openMenu: () => setMenuOpen(true) }}>
+      {children}
 
       {/*
        * Inputs reales, ocultos: los FileList se leen SINCRÓNICAMENTE (gotcha).
        *
        * `tabIndex={-1}` + `aria-hidden`: `sr-only` recorta por clip, así que el
        * control SIGUE siendo focusable y visible para el lector de pantalla. Sin
-       * esto, al tabular por el compositor aparecían dos paradas anunciadas como
-       * "Examinar…" sin etiqueta y sin contexto. A estos inputs se los dispara
-       * por código (`photoInputRef.current?.click()`); el control real, con su
-       * nombre, es el botón de arriba.
+       * esto, al tabular por cualquier disparador aparecían dos paradas
+       * anunciadas como "Examinar…" sin etiqueta y sin contexto. A estos inputs
+       * se los dispara por código (`photoInputRef.current?.click()`); el control
+       * real, con su nombre, es la tarjeta del feed o el "+" del bottom nav.
        */}
       <input
         ref={photoInputRef}
@@ -826,7 +770,7 @@ export function PostComposer({
         // el día que exista, se enchufa acá con `tagSlot={<Algo />}` /
         // `musicSlot={<Otro />}`, sin tocar composer-sheet.tsx.
       />
-    </div>
+    </ComposerMenuProvider>
   );
 }
 

@@ -39,6 +39,10 @@ vi.mock("@/lib/media/bake-photo", () => ({ bakePhoto }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  // El host lee `pathname` para decidir refresh() vs push("/feed") al publicar
+  // (ver post-composer.tsx) — estos tests siempre montan como si ya se
+  // estuviera en el feed.
+  usePathname: () => "/feed",
 }));
 
 // next/link sin contexto de router: sólo un <a href>.
@@ -119,22 +123,23 @@ vi.mock("motion/react", () => {
   };
 });
 
-import { PostComposer } from "./post-composer";
+import { PostComposerHost } from "./post-composer";
+import { ComposerTrigger } from "./composer-trigger";
 import { COPY } from "./copy";
 
 /**
  * `modules` vacío = nadie decidió nada en el panel, que es el default de
  * `moduleAvailability`: el menú de crear sale con las once opciones.
+ *
+ * `PostComposerHost` + `ComposerTrigger` por separado, como en la app real
+ * (el host vive en el shell, el trigger en el feed) — ver composer-context.tsx.
  */
 function mount(viewerName = "Ana Gómez") {
   return render(
     <ToastProvider>
-      <PostComposer
-        viewerName={viewerName}
-        viewerAvatarUrl={null}
-        modules={{}}
-        modulesSoon={{}}
-      />
+      <PostComposerHost modules={{}} modulesSoon={{}}>
+        <ComposerTrigger viewerName={viewerName} viewerAvatarUrl={null} />
+      </PostComposerHost>
     </ToastProvider>,
   );
 }

@@ -3,7 +3,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { Header } from "@/components/shell/header";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { getShellContext } from "@/components/shell/shell-context";
-import { CommentsSheetProvider, MediaViewerProvider } from "@/components/feed";
+import { CommentsSheetProvider, MediaViewerProvider, PostComposerHost } from "@/components/feed";
 import { ViewerTimeZoneProvider } from "@/components/time/viewer-time-zone";
 import { getViewerAccount } from "@/lib/time/viewer-zone";
 import { OfflineBanner } from "@/components/shell/offline-banner";
@@ -63,6 +63,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         cualquier card de cualquier página los abre sin remontar nada. */}
     <MediaViewerProvider>
     <CommentsSheetProvider>
+    {/* Estado de "publicar" a nivel shell (2026-08-13): la tarjeta del feed
+        (ComposerTrigger, adentro de `children`) y el "+" de BottomNav son dos
+        disparadores del MISMO menú — antes el "+" navegaba a /feed?crear=… y
+        perdía el gesto de usuario que abre el selector de archivos en Safari.
+        Ver el docblock de post-composer.tsx. */}
+    <PostComposerHost modules={tenant.modules} modulesSoon={tenant.modulesSoon}>
     <div className="flex min-h-dvh flex-col">
       <a
         href="#contenido"
@@ -98,6 +104,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       />
       <InstallPrompt />
     </div>
+    </PostComposerHost>
     </CommentsSheetProvider>
     </MediaViewerProvider>
     </ViewerTimeZoneProvider>

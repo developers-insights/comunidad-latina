@@ -107,7 +107,10 @@ const ALL_MODULES_ON = Object.fromEntries(MODULE_KEYS.map((key) => [key, true]))
 const TENANTS = [
   {
     slug: 'dominicanos',
-    name: 'Dominicanos en USA',
+    // Antes "Dominicanos en USA": el cliente lo quiere con la marca insignia
+    // en TODOS los dominios por ahora (2026-08-13) — el nombre por dominio es
+    // algo que se decide más adelante, dominio por dominio, no el default.
+    name: 'Comunidad Latina',
     brand_hex: '#1A5EDB',
     locale: 'es',
     currency: 'USD',
