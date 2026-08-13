@@ -1,5 +1,78 @@
 # PROGRESS — Comunidad Latina
 
+## La marca dejó de ser un tenant: cartel absurdo + feed vacío, resueltos (✅ 2026-08-13, madrugada)
+
+Manuel abrió el preview y vio dos cosas a la vez: **«Estás mirando Comunidad
+Latina, pero tu cuenta vive en Comunidad Latina»** y un **feed sin una sola
+publicación**. Las dos venían del mismo malentendido, y las dos eran nuestras.
+
+**El malentendido:** "Comunidad Latina" **no es una comunidad, es el programa**.
+Las comunidades son las de adentro — "Dominicanos en USA", "Mexicanos en USA" —
+cada una con su fila en `tenants` y, a futuro, su dominio propio. El modelo de
+datos siempre lo supo; la interfaz no, porque el header pintaba `tenant.name`.
+
+**Por qué el feed estaba vacío.** Se había seteado `DEFAULT_TENANT_SLUG=comunidadlatina`
+en Vercel. Ese tenant es la **marca y el panel de admin**: 3 posts de prueba
+("hola", "test 2"). Los **38 posts, 66 avisos y 15 perfiles** reales viven en
+`dominicanos`. La app estaba sirviendo la comunidad equivocada, entera. La
+variable se eliminó — el default del código ya era el correcto.
+
+Es la continuación directa del arreglo de ayer (ver la entrada de abajo): esa
+variable nació para que el preview dejara de decir "Dominicanos". Servía para
+eso, pero se la usó apuntando a la marca, que es la respuesta equivocada a la
+pregunta correcta.
+
+**Por qué el cartel decía un absurdo.** Para que el header dijera "Comunidad
+Latina", el commit `a560d53` **renombró el tenant `dominicanos` en la base**. Eso
+dejó dos filas de `tenants` con el mismo `name`, y el aviso de divergencia quedó
+comparando una cadena contra sí misma.
+
+**El arreglo de fondo — `@/lib/brand`:** el nombre visible de la plataforma es una
+**constante de marca**, no un dato del tenant. El header de la app, el de auth,
+el de marketing y el footer dicen siempre "Comunidad Latina", sirva la comunidad
+que sirva. Los textos que hablan de ESTA comunidad (normas, legales, SEO) siguen
+usando `tenant.name`, que es lo correcto ahí. Renombrar tenants para arreglar lo
+que dice el header era arreglar el espejo, no la cara.
+
+**Se eliminó `<TenantMismatchBanner>` entero.** Las dos veces que apareció en
+producción fue por un problema de configuración NUESTRO, y el texto le pedía al
+usuario que lo resolviera él. `requireTenantMatch()` **sigue cerrando toda
+escritura** ante divergencia — eso es la seguridad y no se tocó. Lo que se fue es
+el cartel.
+
+**Blindaje, porque el clamp no alcanzaba.** Un slug **reservado** de marca en
+`DEFAULT_TENANT_SLUG` ahora degrada a la comunidad de siempre, y el corte va en el
+arranque (`sanitizeSlugAtBoot`). El clamp de `resolveTenantSlug` no podía
+atajarlo: su salida ante un slug reservado **es** `DEFAULT_TENANT_SLUG`, así que
+con el reservado adentro de la constante devolvía justo lo que quería bloquear.
+Test de regresión que cuenta el incidente incluido.
+
+**Datos.** `manuelnavarro@insightsapps.tech` vivía en el tenant de marca (claim
+del JWT + 4 filas de identidad); se movió a `dominicanos`. Una cuenta sin
+`tenant_id` en el JWT (`ecuaface@gmail.com`, registro incompleto) también quedó
+apuntada a `dominicanos` — sin el claim, toda escritura RLS rebota para siempre.
+**Geovanny (`global_admin`) NO se tocó**: su casa en el tenant de marca es
+intencional y ese tenant tiene **16 tablas con configuración propia** (precios,
+roles, integridad); moverlo habría sido una migración de datos, no un fix.
+
+⚠️ **Trampa de herramientas, para la próxima sesión:** el MCP
+`supabase-comunidad-latina` **NO apunta a la base de este proyecto** — responde
+sobre una base con el schema `public` vacío. La base real es
+**`ktmbtpuhqqofdkisqseq`**, y se llega por el MCP `supabase-cuenta-dev` pasando
+`project_id` explícito. Y `apps` aparte: `.env.local` puede estar desactualizado;
+para saber a qué base apunta producción de verdad, el camino corto es bajar un
+chunk del bundle desplegado y grepear `*.supabase.co`.
+
+Verificado: typecheck limpio · 3.563 tests (201 archivos) · lint 0 errores · build
+de producción · desplegado y comprobado en vivo (el header dice "Comunidad
+Latina", no queda rastro del cartel, y `/propiedades` sirve contenido que solo
+existe en `dominicanos`).
+
+**Pendiente de Manuel:** cerrar sesión y volver a entrar. El `tenant_id` viaja en
+el JWT y el token viejo sigue trayendo el tenant anterior hasta que se renueve.
+
+---
+
 ## Auditoría del contrato completo + feedback en video y módulo Comunidad (✅ 2026-08-12, tarde)
 
 Origen: el pliego de las 4 fases, un Loom de 4:40 de Nacho recorriendo la app, y
