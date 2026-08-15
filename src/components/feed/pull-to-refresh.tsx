@@ -73,6 +73,9 @@ export function PullToRefresh({ children, className }: PullToRefreshProps) {
   // debe ser puro —sin llamar a triggerRefresh()— porque React puede
   // invocarlo dos veces en Strict Mode y dispararía el refresh doble.)
   const pullRef = useRef(0);
+  // Frame de rAF pendiente para el `setPull` agrupado (ver `scheduleSetPull`
+  // en el efecto de abajo) — null cuando no hay ninguno en vuelo.
+  const pullRafRef = useRef<number | null>(null);
 
   const triggerRefresh = useCallback(() => {
     setRefreshing(true);
@@ -105,6 +108,29 @@ export function PullToRefresh({ children, className }: PullToRefreshProps) {
       return document.scrollingElement?.scrollTop ?? window.scrollY ?? 0;
     }
 
+    /**
+     * `touchmove` nativo dispara decenas de veces por segundo, y cada
+     * `setPull` de golpe re-renderiza el indicador con un `height` nuevo —
+     * una propiedad que fuerza reflow (perf, gesto más usado de la app). Acá
+     * se agrupan todas las muestras que lleguen DENTRO del mismo frame en un
+     * solo `setPull`, con el valor más reciente: como máximo un render por
+     * paint, en vez de uno por evento táctil.
+     */
+    function scheduleSetPull(next: number) {
+      pullRef.current = next;
+      if (pullRafRef.current !== null) return; // ya hay un frame pedido: se lleva este valor cuando corra
+      pullRafRef.current = window.requestAnimationFrame(() => {
+        pullRafRef.current = null;
+        setPull(pullRef.current);
+      });
+    }
+
+    function cancelScheduledPull() {
+      if (pullRafRef.current === null) return;
+      window.cancelAnimationFrame(pullRafRef.current);
+      pullRafRef.current = null;
+    }
+
     function onTouchStart(e: TouchEvent) {
       if (refreshing || e.touches.length !== 1 || getScrollTop() > 0) {
         startYRef.current = null;
@@ -119,24 +145,26 @@ export function PullToRefresh({ children, className }: PullToRefreshProps) {
       const deltaY = e.touches[0].clientY - startYRef.current;
       if (deltaY <= 0) {
         // Volvió a subir sin haber tirado: no es un pull, no tocamos el scroll.
-        pullRef.current = 0;
-        setPull(0);
+        scheduleSetPull(0);
         return;
       }
       // Tirón hacia abajo confirmado, arriba del todo: acá SÍ se frena el
       // comportamiento nativo (bounce / recarga del navegador).
       e.preventDefault();
-      const next = dampPull(deltaY);
-      pullRef.current = next;
-      setPull(next);
+      scheduleSetPull(dampPull(deltaY));
     }
 
     function onTouchEnd() {
       const wasTracking = startYRef.current !== null;
       startYRef.current = null;
       setIsTouching(false);
+      // Un frame de touchmove puede seguir en vuelo cuando el dedo se
+      // levanta: si corriera después, pisaría con un valor viejo el pull
+      // fijo (umbral o 0) que se decide acá abajo.
+      cancelScheduledPull();
       if (!wasTracking) return;
       if (isPullReady(pullRef.current)) {
+        pullRef.current = REFRESH_THRESHOLD;
         setPull(REFRESH_THRESHOLD);
         triggerRefresh();
       } else {
@@ -154,6 +182,10 @@ export function PullToRefresh({ children, className }: PullToRefreshProps) {
       node.removeEventListener("touchmove", onTouchMove);
       node.removeEventListener("touchend", onTouchEnd);
       node.removeEventListener("touchcancel", onTouchEnd);
+      // La card puede desmontarse (scroll rápido del feed, navegación) con un
+      // frame de rAF todavía pedido: sin cancelarlo, ese callback correría
+      // sobre un `setPull` de un componente que ya no está.
+      cancelScheduledPull();
     };
   }, [refreshing, triggerRefresh]);
 
@@ -166,6 +198,14 @@ export function PullToRefresh({ children, className }: PullToRefreshProps) {
       <div
         aria-hidden="true"
         className="flex items-center justify-center overflow-hidden text-foreground-muted"
+        // Sigue en `height` a propósito (auditoría perf 2026-08): es lo que
+        // EMPUJA el contenido de abajo para abrir el hueco del indicador —
+        // el efecto entero del gesto. `transform` no reserva espacio en el
+        // flujo, así que pasarlo ahí dejaría el indicador flotando encima del
+        // feed en vez de correrlo. Lo que sí se arregló es la FRECUENCIA de
+        // los `setPull` que llegan a este `height` (ver `scheduleSetPull`
+        // arriba): agrupados por rAF, como mucho un reflow por frame en vez
+        // de uno por evento táctil.
         style={{
           height: pull,
           transition: noTransition ? "none" : "height var(--duration-base) var(--ease-out-premium)",

@@ -1,10 +1,8 @@
 import "server-only";
 
 import { createHmac } from "node:crypto";
-import OpenAI from "openai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isOpenAIConfigured } from "@/lib/config/services";
 import type { Database, Json } from "@/lib/types/database.types";
 
 /**
@@ -16,14 +14,14 @@ import type { Database, Json } from "@/lib/types/database.types";
  *
  * ```ts
  * import { createAdminClient } from "@/lib/supabase/admin";
- * import { searchChunks, logQuery } from "@/lib/rag";
+ * import { searchChunksFts, logQuery } from "@/lib/rag";
  *
- * // 1. Buscar contexto (admin client interno; la RPC es definer y desde 0018
+ * // 1. Buscar contexto (admin client interno; la RPC es definer y desde 0019
  * //    solo-service_role — llamar SOLO después de moderación + rate limit):
- * const { chunks, skipped } = await searchChunks(tenant.id, pregunta);
+ * const { chunks, skipped } = await searchChunksFts(tenant.id, pregunta);
  *
  * if (skipped) {
- *   // OpenAI sin configurar o caído → degradación elegante (§5.6):
+ *   // Error técnico de la base → degradación elegante (§5.6):
  *   // <ProximamentePremium feature="asistente" /> — jamás un error crudo.
  * }
  * if (chunks.length === 0) {
@@ -44,49 +42,42 @@ import type { Database, Json } from "@/lib/types/database.types";
  * // await setQueryFeedback(createAdminClient(), logged.id, true);
  * ```
  *
+ * POR QUÉ ACÁ NO HAY EMBEDDINGS (auditoría 2026-08-13)
+ * ---------------------------------------------------
+ * La 0017 trajo el camino vectorial (`match_chunks` + `embedQuery` con
+ * text-embedding-3-small) y la 0019 trajo su gemelo textual
+ * (`match_chunks_fts`, full-text en español dentro de Postgres). El asistente
+ * eligió el textual —una sola credencial, ANTHROPIC_API_KEY— y el vectorial
+ * quedó SIN UN SOLO CONSUMIDOR: `embedQuery`, `searchChunks` y sus dos
+ * constantes de calibración vivieron meses como código muerto que arrastraba el
+ * SDK de OpenAI a este módulo y `https://api.openai.com` a la CSP del navegador.
+ * Se borraron. La RPC `match_chunks` y la columna `embedding` de `rag_chunks`
+ * siguen en la base: nada de esto es una decisión irreversible, y si algún día
+ * vuelve el camino vectorial vuelve con su consumidor.
+ *
  * ANTI-HONEYPOT §5.4 (regla de este módulo):
  *  - La pregunta del usuario JAMÁS se persiste ni se loguea en claro — ni acá
- *    ni en consola (puede revelar estatus migratorio). Solo viaja a OpenAI
- *    para embeddearse y a assistant_queries como HMAC-SHA256 con secreto
+ *    ni en consola (puede revelar estatus migratorio). Viaja a la base como
+ *    texto de búsqueda y a assistant_queries como HMAC-SHA256 con secreto
  *    FUERA de la base (ver hashQuestion).
- *  - El índice solo contiene contenido ya público (lo garantiza el pipeline
- *    scripts/embed-content.mjs + el re-chequeo de published de match_chunks).
+ *  - El índice solo contiene contenido ya público (lo garantiza el re-chequeo
+ *    de published en vivo que hace `match_chunks_fts`).
  *
- * Acceso a la RPC: desde 0018 match_chunks es EXECUTE solo-service_role (nadie
- * la invoca por PostgREST salteando moderación/rate limit), por eso
- * searchChunks usa el ADMIN client — está bien porque esta capa SOLO se llama
- * desde el route handler del ASISTENTE, que aplica moderación + rate limit
- * por IP/sesión ANTES de buscar.
+ * Acceso a la RPC: desde 0019 `match_chunks_fts` es EXECUTE solo-service_role
+ * (nadie la invoca por PostgREST salteando moderación/rate limit), por eso
+ * `searchChunksFts` usa el ADMIN client — está bien porque esta capa SOLO se
+ * llama desde el route handler del ASISTENTE, que aplica moderación + rate
+ * limit por IP/sesión ANTES de buscar.
  *
- * server-only: lee OPENAI_API_KEY y usa node:crypto — jamás importar desde un
- * client component.
+ * server-only: usa el cliente service_role y node:crypto — jamás importar desde
+ * un client component.
  * =============================================================================
  */
 
 /* ------------------------------- Constantes ------------------------------ */
 
-const EMBEDDING_MODEL = "text-embedding-3-small";
-/** Dimensión del índice — DEBE coincidir con vector(1536) de rag_chunks (0017). */
-export const EMBEDDING_DIMENSIONS = 1536;
-/** Defaults alineados con la firma SQL de match_chunks (0017). */
+/** Default alineado con la firma SQL de match_chunks_fts (0019). */
 export const DEFAULT_MATCH_COUNT = 6;
-/**
- * Umbral de similitud coseno CALIBRADO empíricamente (scripts/diagnose-rag.mjs)
- * contra el índice real con text-embedding-3-small. Medición sobre las 4
- * preguntas sugeridas del asistente:
- *   - "¿Cómo saco mi ITIN?"           → guía ITIN exacta a 0.748
- *   - "¿Qué hago si me para ICE?"     → guía de derechos ante ICE a 0.589
- *   - "vivienda sin crédito"          → listings de vivienda a 0.454 (relevante)
- *   - "estafas de alquiler"           → listings a 0.387 (NO relevante: no hay
- *                                        guía anti-estafa embebida → debe caer
- *                                        en el fallback honesto + derivación)
- * 0.42 captura los tres matches genuinos y rechaza el ruido de 0.387. El 0.75
- * original (default de una métrica distinta) rechazaba TODO, incluida la guía
- * que respondía la pregunta — el moat citaba "no sé" sobre su propio contenido.
- * text-embedding-3-small: los buenos matches temáticos viven en ~0.45-0.75, no
- * cerca de 1.0.
- */
-export const DEFAULT_MIN_SIMILARITY = 0.42;
 
 // Una pregunta real nunca necesita más; acota costo/latencia del peor caso.
 const MAX_QUERY_CHARS = 2_000;
@@ -95,28 +86,26 @@ const MAX_QUERY_CHARS = 2_000;
 
 export type RagSourceKind = "guide" | "listing" | "faq";
 
-/** Un chunk devuelto por match_chunks, listo para citar en el prompt. */
+/** Un chunk devuelto por match_chunks_fts, listo para citar en el prompt. */
 export type MatchedChunk = {
   content: string;
   /** Contexto citable (guide: title/slug/section/topics/city · listing: kind/title/area_label/…). */
   metadata: Record<string, Json | undefined>;
   sourceKind: RagSourceKind;
   sourceId: string;
-  /** Similitud coseno 0-1 (1 = idéntico). Siempre ≥ minSimilarity. */
+  /** Puntaje 0-1 (ts_rank normalizado). */
   similarity: number;
 };
 
 export type SearchChunksOptions = {
   /** 1-20 (clamp en SQL). Default 6. */
   matchCount?: number;
-  /** 0-1. Default 0.42 (calibrado, ver DEFAULT_MIN_SIMILARITY): sin fuentes relevantes, "no sé". */
-  minSimilarity?: number;
 };
 
 export type SearchChunksResult = {
   chunks: MatchedChunk[];
   /**
-   * true = la búsqueda NO corrió (OpenAI sin configurar o error técnico).
+   * true = la búsqueda NO corrió (error técnico de la base).
    * El caller degrada premium (§5.6); NO es lo mismo que chunks vacío con
    * skipped=false (ahí el asistente responde "no encontré nada sobre eso").
    */
@@ -142,14 +131,6 @@ export type LogQueryResult = { ok: true; id: string } | { ok: false; error: stri
  * estos casts pueden borrarse y usar el cliente tipado directo.
  * ------------------------------------------------------------------------- */
 
-type MatchChunksArgs = {
-  /** PostgREST serializa el array como "[0.1,…]" — el formato de texto de pgvector. */
-  p_query_embedding: number[];
-  p_tenant_id: string;
-  p_match_count?: number;
-  p_min_similarity?: number;
-};
-
 type MatchChunkRpcRow = {
   content: string;
   metadata: Json;
@@ -157,11 +138,6 @@ type MatchChunkRpcRow = {
   source_id: string;
   similarity: number;
 };
-
-type MatchChunksRpc = (
-  fn: "match_chunks",
-  args: MatchChunksArgs,
-) => PromiseLike<{ data: MatchChunkRpcRow[] | null; error: { message: string } | null }>;
 
 type MatchChunksFtsArgs = {
   p_query: string;
@@ -196,119 +172,26 @@ type AssistantQueriesClient = {
   from(table: "assistant_queries"): AssistantQueriesTable;
 };
 
-/* ------------------------------- embedQuery ------------------------------ */
-
-/**
- * Embeddea una pregunta con text-embedding-3-small (1536 dims — la dimensión
- * del índice de 0017).
- *
- * Degradación elegante (§5.6): sin OPENAI_API_KEY, texto vacío o error de API
- * devuelve `null` — NUNCA lanza. No loguea el texto (anti-PII), solo el error
- * técnico.
- */
-export async function embedQuery(text: string): Promise<number[] | null> {
-  const input = text.trim().slice(0, MAX_QUERY_CHARS);
-  if (!isOpenAIConfigured || input.length === 0) return null;
-
-  try {
-    const openai = new OpenAI();
-    const response = await openai.embeddings.create({
-      model: EMBEDDING_MODEL,
-      input,
-      dimensions: EMBEDDING_DIMENSIONS,
-    });
-    const embedding = response.data[0]?.embedding;
-    if (!Array.isArray(embedding) || embedding.length !== EMBEDDING_DIMENSIONS) {
-      console.error("[rag] embedQuery: respuesta con dimensión inesperada, se degrada a null");
-      return null;
-    }
-    return embedding;
-  } catch (error) {
-    // Solo el error técnico — jamás la pregunta del usuario (anti-PII §5.4).
-    console.error(
-      "[rag] embedQuery falló, se degrada a null:",
-      error instanceof Error ? error.message : "error desconocido",
-    );
-    return null;
-  }
-}
-
-/* ------------------------------ searchChunks ----------------------------- */
-
-/**
- * Busca contexto para el asistente: embeddea la pregunta y llama a la RPC
- * `match_chunks` con el cliente ADMIN (la RPC es security definer y desde
- * 0018 su EXECUTE es solo-service_role: por PostgREST nadie puede hacer
- * búsquedas vectoriales cross-tenant salteando el rate limit del asistente).
- * La RPC re-chequea que cada fuente siga publicada. Devuelve chunks del
- * tenant + globales (tenant_id null), orden por similitud.
- *
- * Nunca lanza: cualquier falla → `{ chunks: [], skipped: true }`.
- */
-export async function searchChunks(
-  tenantId: string,
-  query: string,
-  options: SearchChunksOptions = {},
-): Promise<SearchChunksResult> {
-  const embedding = await embedQuery(query);
-  if (embedding === null) return { chunks: [], skipped: true };
-
-  try {
-    const supabase = createAdminClient();
-    // Cast estructural: match_chunks aún no existe en database.types.ts (ver arriba).
-    const rpc = supabase.rpc.bind(supabase) as unknown as MatchChunksRpc;
-    const { data, error } = await rpc("match_chunks", {
-      p_query_embedding: embedding,
-      p_tenant_id: tenantId,
-      p_match_count: options.matchCount ?? DEFAULT_MATCH_COUNT,
-      p_min_similarity: options.minSimilarity ?? DEFAULT_MIN_SIMILARITY,
-    });
-
-    if (error) {
-      console.error("[rag] match_chunks falló, se degrada a skipped:", error.message);
-      return { chunks: [], skipped: true };
-    }
-
-    const chunks: MatchedChunk[] = (data ?? []).map((row) => ({
-      content: row.content,
-      metadata: (row.metadata ?? {}) as MatchedChunk["metadata"],
-      sourceKind: row.source_kind as RagSourceKind,
-      sourceId: row.source_id,
-      similarity: row.similarity,
-    }));
-
-    return { chunks, skipped: false };
-  } catch (error) {
-    console.error(
-      "[rag] searchChunks falló, se degrada a skipped:",
-      error instanceof Error ? error.message : "error desconocido",
-    );
-    return { chunks: [], skipped: true };
-  }
-}
-
 /* ----------------------------- searchChunksFts --------------------------- */
 
 /**
  * Recuperación de contexto para el Asistente por FULL-TEXT SEARCH (español),
- * SIN embeddings — el camino que usa el asistente Anthropic para depender de
- * una sola credencial (ANTHROPIC_API_KEY) y no de OpenAI.
+ * dentro de Postgres — el ÚNICO camino de recuperación que tiene el asistente,
+ * y el motivo por el que depende de una sola credencial (ANTHROPIC_API_KEY).
  *
- * Gemela de `searchChunks`: mismo contrato (`{ chunks, skipped }`), mismo admin
- * client (la RPC `match_chunks_fts` de 0019 es security definer y solo-service_
- * role, con el mismo re-chequeo de published en vivo). La diferencia: puntúa por
- * ts_rank en vez de similitud coseno. `similarity` viene normalizada a 0-1.
+ * La RPC `match_chunks_fts` (0019) es security definer y solo-service_role, con
+ * re-chequeo de `published` en vivo, así que se llama con el admin client.
+ * Puntúa por `ts_rank`; `similarity` viene normalizada a 0-1.
  *
- * Nunca lanza: cualquier falla → `{ chunks: [], skipped: true }`. A diferencia
- * de la versión con embeddings, `skipped` acá es raro (solo error de DB): sin
- * OpenAI no hay razón para degradar, así que "no hubo match" se expresa como
+ * Nunca lanza: cualquier falla → `{ chunks: [], skipped: true }`. `skipped` acá
+ * es raro (solo error de DB), así que "no hubo match" se expresa como
  * `{ chunks: [], skipped: false }` → el asistente responde "todavía no tengo
  * información verificada", nunca inventa.
  */
 export async function searchChunksFts(
   tenantId: string,
   query: string,
-  options: Pick<SearchChunksOptions, "matchCount"> = {},
+  options: SearchChunksOptions = {},
 ): Promise<SearchChunksResult> {
   const input = query.trim().slice(0, MAX_QUERY_CHARS);
   if (input.length === 0) return { chunks: [], skipped: false };

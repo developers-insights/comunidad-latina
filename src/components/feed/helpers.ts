@@ -85,6 +85,27 @@ export function postMediaItems(
 }
 
 // ---------------------------------------------------------------------------
+// Hilo de comentarios paginado (keyset) — rótulos compartidos
+// ---------------------------------------------------------------------------
+
+/**
+ * Rótulos de la paginación del hilo. Los usan las DOS superficies —la hoja del
+ * feed (`comments-sheet.tsx`) y el detalle `/feed/[id]`— y tienen que decir lo
+ * MISMO en las dos: es la misma acción sobre el mismo hilo.
+ *
+ * Viven acá y no en `copy.ts` por coordinación, no por diseño: ese archivo lo
+ * está tocando otro frente en esta misma tanda. MOVER a `COPY.comments` cuando
+ * se pueda editar. El precedente de tener texto de UI en este módulo ya existe
+ * (ENTITY_KIND_META, más abajo).
+ */
+export const COMMENT_THREAD_COPY = {
+  /** Trae la tanda ANTERIOR (más vieja) del hilo. */
+  older: "Ver comentarios anteriores",
+  /** Vuelve al final del hilo, que es donde está la conversación viva. */
+  newest: "Ver los más recientes",
+} as const;
+
+// ---------------------------------------------------------------------------
 // Tabs (los 5 feeds del wireframe §4.b) — el estado vive en ?tab= (URL)
 // ---------------------------------------------------------------------------
 

@@ -14,7 +14,35 @@ import { defineConfig } from "vitest/config";
  *   y sus propios stubs. Cada worktree corre sus tests desde su raíz.
  * - Los tests de componentes piden `// @vitest-environment jsdom` en su cabecera;
  *   los de lógica pura se quedan en el entorno node, que arranca más rápido.
+ * - `execArgv`: ver WEBSTORAGE_ARGV abajo.
  */
+
+/**
+ * Devolverle a jsdom su `localStorage` cuando el Node que corre los tests se lo
+ * roba.
+ *
+ * Desde Node 22.4 existe un Web Storage propio del runtime. En Node 26 se
+ * instala un accessor `localStorage` sobre `globalThis` **siempre**, y su getter
+ * devuelve `undefined` salvo que se arranque con `--localstorage-file`. Como en
+ * el entorno jsdom de Vitest `window === globalThis`, ese accessor tapa al
+ * `localStorage` real de jsdom: `window.localStorage` queda `undefined` y todo
+ * test que lo toque muere en su `beforeEach`. (`sessionStorage` no se ve
+ * afectado: el stub del runtime es sólo para `localStorage`.)
+ *
+ * `--no-experimental-webstorage` hace que Node no lo instale y jsdom vuelve a
+ * ganar, con su `Storage` de verdad — lo que importa porque hay tests que espían
+ * `Storage.prototype.setItem`, y un reemplazo hecho a mano no comparte ese
+ * prototipo.
+ *
+ * El flag se pasa sólo si el Node actual lo conoce: este repo no fija versión, y
+ * un flag desconocido no degrada, impide arrancar el proceso. Los Node donde el
+ * problema no existe son exactamente los que no tienen el flag, así que la
+ * condición cubre el caso entero.
+ */
+const WEBSTORAGE_ARGV = process.allowedNodeEnvironmentFlags.has("--no-experimental-webstorage")
+  ? ["--no-experimental-webstorage"]
+  : [];
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -24,5 +52,6 @@ export default defineConfig({
   },
   test: {
     exclude: ["**/node_modules/**", "**/dist/**", "**/.claude/worktrees/**"],
+    execArgv: WEBSTORAGE_ARGV,
   },
 });

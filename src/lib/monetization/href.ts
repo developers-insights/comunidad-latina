@@ -1,6 +1,18 @@
 import { safeExternalHref } from "@/lib/url/safe-href";
 import { CTA_VALUE_KIND, parseListingKind, type ExternalCtaKind } from "./tier";
 
+/*
+ * NOTA DE SUPERFICIE (auditoría 2026-08-13). `listingModuleHref`, `telDigits`,
+ * `whatsappDigits` y `mapsSearchHref` estaban exportadas y NINGUNA tenía un
+ * consumidor fuera de este archivo. No se borraron —las cuatro las usan
+ * `listingViewHref` y `ctaHref`, acá abajo— pero sí dejaron de exportarse: una
+ * función pública es un contrato con el resto del repo, y estas cuatro son
+ * pasos internos. En particular `telDigits`/`whatsappDigits` normalizan un
+ * valor que después va a un `href`, y `mapsSearchHref` arma una URL externa:
+ * que sólo se lleguen a través de `ctaHref` es lo que garantiza que nadie se
+ * saltee `safeExternalHref` ni los pisos de largo.
+ */
+
 // ---------------------------------------------------------------------------
 // Dónde vive cada aviso
 // ---------------------------------------------------------------------------
@@ -34,7 +46,7 @@ export function listingDetailHref(kind: unknown, id: string): string | null {
 }
 
 /** Listado del módulo. Siempre existe: es el fallback de `listingDetailHref`. */
-export function listingModuleHref(kind: unknown): string {
+function listingModuleHref(kind: unknown): string {
   switch (parseListingKind(kind)) {
     case "property":
       return "/propiedades";
@@ -88,7 +100,7 @@ export interface CtaHref {
  * números de varios países); el esquema `tel:` no los quiere, así que la
  * normalización vive acá y no en la base.
  */
-export function telDigits(raw: string): string {
+function telDigits(raw: string): string {
   const trimmed = raw.trim();
   const digits = trimmed.replace(/\D/g, "");
   if (!digits) return "";
@@ -101,7 +113,7 @@ export function telDigits(raw: string): string {
  * mandar a la persona a un chat vacío, así que se exige un mínimo de 8 dígitos
  * (mismo piso que la campaña de posts ya usa).
  */
-export function whatsappDigits(raw: string): string {
+function whatsappDigits(raw: string): string {
   const digits = raw.replace(/\D/g, "");
   return digits.length >= 8 && digits.length <= 15 ? digits : "";
 }
@@ -114,7 +126,7 @@ export function whatsappDigits(raw: string): string {
  * ~5 km precisamente porque el plan prohíbe el punto exacto, y un botón no es
  * motivo para reabrir esa decisión (la 0048 lo dice con todas las letras).
  */
-export function mapsSearchHref(address: string): string {
+function mapsSearchHref(address: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address.trim())}`;
 }
 

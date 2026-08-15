@@ -131,34 +131,68 @@ interface Fixtures {
    * de su publicación— y si cerró los comentarios. Sin fixture, la hoja se
    * comporta como antes de la 0097: sin menús y con el campo de escribir.
    */
-  post?: { author_id: string | null; comments_locked_at: string | null } | null;
+  post?: {
+    author_id: string | null;
+    comments_locked_at: string | null;
+    /** Comunidad del post: es de donde sale el filtro que usa el índice. */
+    tenant_id?: string | null;
+  } | null;
+  /**
+   * TANDAS sucesivas del hilo (keyset): la primera es la que se ve al abrir, la
+   * segunda la que trae "Ver comentarios anteriores", y así. Sin esto se usa
+   * `comments` para todas las lecturas, que es el caso de un hilo corto.
+   */
+  commentPages?: Array<
+    Array<{
+      id: string;
+      body: string;
+      created_at: string;
+      author_id: string | null;
+      status: string;
+    }>
+  >;
 }
 
+/** Filtros que recibió la última query de comentarios (para fijar el índice). */
+const recorded = { commentsEq: [] as Array<[string, unknown]> };
+
 function makeClient(f: Fixtures) {
-  const results: Record<string, { data: unknown; error: unknown }> = {
-    comments: {
-      data: f.comments ?? [],
-      error: f.commentsError ? { message: "boom" } : null,
-    },
-    user_blocks: { data: f.blocks ?? [], error: null },
-    profiles: { data: f.profiles ?? [], error: null },
-    trust_scores: { data: f.trust ?? [], error: null },
-    posts: { data: f.post ?? null, error: null },
+  recorded.commentsEq = [];
+  let commentsCall = 0;
+  const resultFor = (table: string): { data: unknown; error: unknown } => {
+    if (table === "comments") {
+      if (f.commentPages) {
+        const page = f.commentPages[commentsCall] ?? [];
+        commentsCall += 1;
+        return { data: page, error: null };
+      }
+      return {
+        data: f.comments ?? [],
+        error: f.commentsError ? { message: "boom" } : null,
+      };
+    }
+    if (table === "user_blocks") return { data: f.blocks ?? [], error: null };
+    if (table === "profiles") return { data: f.profiles ?? [], error: null };
+    if (table === "trust_scores") return { data: f.trust ?? [], error: null };
+    return { data: f.post ?? null, error: null };
   };
   const chainFor = (table: string) => {
-    const result = results[table];
     // Cada método devuelve el mismo builder; el builder es "thenable" y resuelve
-    // el fixture de su tabla — modela .select().eq().order().limit()/.in() → await.
-    // `maybeSingle` es la otra forma de rematar la cadena (la usa la lectura del
-    // estado del post) y resuelve el MISMO fixture.
+    // el fixture de su tabla — modela .select().eq().order().limit()/.in()/.or()
+    // → await. `maybeSingle` es la otra forma de rematar la cadena (la usa la
+    // lectura del estado del post) y resuelve el MISMO fixture.
     const chain: Record<string, unknown> = {
       select: () => chain,
-      eq: () => chain,
+      eq: (column: string, value: unknown) => {
+        if (table === "comments") recorded.commentsEq.push([column, value]);
+        return chain;
+      },
       order: () => chain,
       limit: () => chain,
       in: () => chain,
-      maybeSingle: async () => result,
-      then: (resolve: (v: unknown) => unknown) => resolve(result),
+      or: () => chain,
+      maybeSingle: async () => resultFor(table),
+      then: (resolve: (v: unknown) => unknown) => resolve(resultFor(table)),
     };
     return chain;
   };
@@ -583,5 +617,140 @@ describe("CommentsSheet sobre video: el hilo se desplaza solo", () => {
       await vi.advanceTimersByTimeAsync(8000);
     });
     expect(thread.scrollTop).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EL HILO SE PAGINA (antes tenía techo duro de 200 y sin cursor)
+// ---------------------------------------------------------------------------
+
+/**
+ * El bug que estos tests existen para que no vuelva: el hilo se leía ascendente
+ * con `.limit(200)` y sin cursor, así que el comentario 201 no existía para
+ * NADIE —tampoco para quien lo escribió— y lo que se perdía era lo más nuevo,
+ * o sea la conversación viva. Una publicación viral lo alcanzaba el primer día.
+ *
+ * Ahora la tanda se lee descendente (los más nuevos, garantizados) y se pinta
+ * ascendente (se lee igual que siempre); "Ver comentarios anteriores" va hacia
+ * atrás con keyset (created_at, id) — nunca OFFSET, que en un hilo que crece
+ * mientras se lee repite y saltea filas.
+ */
+
+const PAGE_SIZE = 50;
+
+/** Tanda tal como llega de la base: DESCENDENTE, la más nueva primero. */
+function pageOf(prefix: string, count: number, authorId: string | null = "a1") {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `${prefix}-${index}`,
+    body: `${prefix}-${index}`,
+    created_at: new Date(2026, 0, 1, 0, 0, count - index).toISOString(),
+    author_id: authorId,
+    status: "published",
+  }));
+}
+
+describe("CommentsSheet — hilo paginado", () => {
+  it("trae la tanda MÁS NUEVA y ofrece ir hacia atrás cuando hay más", async () => {
+    supa.client = makeClient({
+      user: { id: "viewer" },
+      profiles: PROFILES,
+      // 51 filas: 50 de tanda + la que delata que hay más atrás.
+      commentPages: [pageOf("nuevo", PAGE_SIZE + 1)],
+    });
+    mount();
+    fireEvent.click(screen.getByText("abrir"));
+
+    // El más nuevo del hilo SIEMPRE está: es lo que antes se perdía.
+    expect(await screen.findByText("nuevo-0")).toBeTruthy();
+    expect(screen.getByText(`nuevo-${PAGE_SIZE - 1}`)).toBeTruthy();
+    // La fila +1 es sonda, no contenido: no se pinta.
+    expect(screen.queryByText(`nuevo-${PAGE_SIZE}`)).toBeNull();
+    expect(screen.getByText("Ver comentarios anteriores")).toBeTruthy();
+  });
+
+  it("se lee ascendente: el más nuevo queda ABAJO, como siempre", async () => {
+    supa.client = makeClient({
+      user: { id: "viewer" },
+      profiles: PROFILES,
+      commentPages: [pageOf("nuevo", 3)],
+    });
+    mount();
+    fireEvent.click(screen.getByText("abrir"));
+    await screen.findByText("nuevo-0");
+
+    const bodies = [...document.querySelectorAll("[data-comments-thread] li")].map(
+      (item) => item.textContent ?? "",
+    );
+    // La base los devuelve nuevo-0 (el más nuevo) → nuevo-2; en pantalla van al
+    // revés.
+    expect(bodies[0]).toContain("nuevo-2");
+    expect(bodies[bodies.length - 1]).toContain("nuevo-0");
+  });
+
+  it("«ver anteriores» pega los viejos ARRIBA y se apaga al llegar al principio", async () => {
+    supa.client = makeClient({
+      user: { id: "viewer" },
+      profiles: PROFILES,
+      commentPages: [pageOf("nuevo", PAGE_SIZE + 1), pageOf("viejo", 2)],
+    });
+    mount();
+    fireEvent.click(screen.getByText("abrir"));
+    await screen.findByText("nuevo-0");
+
+    fireEvent.click(screen.getByText("Ver comentarios anteriores"));
+
+    expect(await screen.findByText("viejo-0")).toBeTruthy();
+    expect(screen.getByText("viejo-1")).toBeTruthy();
+    // Lo que ya se estaba leyendo NO se pierde…
+    expect(screen.getByText("nuevo-0")).toBeTruthy();
+    // …y los viejos quedan arriba.
+    const bodies = [...document.querySelectorAll("[data-comments-thread] li")].map(
+      (item) => item.textContent ?? "",
+    );
+    expect(bodies[0]).toContain("viejo-1");
+    // Tanda corta = no hay más atrás: el botón desaparece en vez de mentir.
+    expect(screen.queryByText("Ver comentarios anteriores")).toBeNull();
+  });
+
+  it("la tanda anterior también filtra a los bloqueados", async () => {
+    // Sin esto, "ver anteriores" era la puerta de atrás por la que reaparecía
+    // la persona que el viewer bloqueó.
+    supa.client = makeClient({
+      user: { id: "viewer" },
+      profiles: PROFILES,
+      blocks: [{ blocked_id: "bloqueado" }],
+      commentPages: [
+        pageOf("nuevo", PAGE_SIZE + 1),
+        pageOf("deBloqueado", 2, "bloqueado"),
+      ],
+    });
+    mount();
+    fireEvent.click(screen.getByText("abrir"));
+    await screen.findByText("nuevo-0");
+
+    fireEvent.click(screen.getByText("Ver comentarios anteriores"));
+
+    await screen.findByText("nuevo-0");
+    expect(screen.queryByText("deBloqueado-0")).toBeNull();
+    expect(screen.queryByText("deBloqueado-1")).toBeNull();
+  });
+
+  it("pide el hilo con el tenant del post: sin eso el índice no se usa", async () => {
+    // `comments_post_thread_idx` es (tenant_id, post_id, created_at, id) y la
+    // policy no aporta tenant_id como qual (lo tiene dentro de un OR). Sin este
+    // filtro el plan cae a comments_post_fk_idx + Sort en memoria: ordenar los
+    // 5.000 comentarios del hilo para devolver 50, en cada apertura.
+    supa.client = makeClient({
+      user: { id: "viewer" },
+      profiles: PROFILES,
+      comments: ROWS,
+      post: { author_id: "a1", comments_locked_at: null, tenant_id: "t1" },
+    });
+    mount();
+    fireEvent.click(screen.getByText("abrir"));
+    await screen.findByText("Primer comentario");
+
+    expect(recorded.commentsEq).toContainEqual(["tenant_id", "t1"]);
+    expect(recorded.commentsEq).toContainEqual(["post_id", "p1"]);
   });
 });

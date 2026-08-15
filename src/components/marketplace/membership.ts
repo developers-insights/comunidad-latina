@@ -1,3 +1,5 @@
+import { MEMBERSHIP_CURRENCY, MEMBERSHIP_PRICE_CENTS } from "@/lib/pricing/membership";
+
 /**
  * =============================================================================
  * MEMBRESÍA DE TIENDA — USD 10/mes (spec §7)
@@ -25,9 +27,20 @@
 export const MEMBERSHIP_STATUSES = ["active", "past_due", "canceled", "expired"] as const;
 export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
 
-/** Precio de la spec. `price_cents` de la fila manda si viene distinto. */
-export const MEMBERSHIP_PRICE_CENTS = 1_000;
-export const MEMBERSHIP_CURRENCY = "usd";
+/**
+ * EL PRECIO YA NO SE DEFINE ACÁ (auditoría 2026-08-13).
+ *
+ * `MEMBERSHIP_PRICE_CENTS` vivía en este archivo y `src/lib/pricing/defaults.ts`
+ * —el mapa de precios de respaldo del Checkout— lo importaba desde `components/`.
+ * Una carpeta que el contrato (`docs/ARQUITECTURA.md` §2) le da al agente de
+ * DISEÑO no puede ser la fuente de un monto que se cobra: un cambio "de UI"
+ * movía un precio.
+ *
+ * Se re-exportan para no romper a quien ya los importaba de acá (el barril
+ * `./index.ts`, los tests de la membresía). Para CAMBIAR el precio hay que ir a
+ * `src/lib/pricing/membership.ts`.
+ */
+export { MEMBERSHIP_CURRENCY, MEMBERSHIP_PRICE_CENTS };
 
 export function parseMembershipStatus(raw: unknown): MembershipStatus | null {
   return MEMBERSHIP_STATUSES.includes(raw as MembershipStatus)

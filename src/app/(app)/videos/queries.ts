@@ -56,6 +56,32 @@ type Supabase = SupabaseClient<Database>;
  */
 type VideoPostRow = PostRow;
 
+/**
+ * Las MISMAS columnas del post, más el join INNER a la entidad que lo publica.
+ *
+ * Existe para que el scope por módulo (Negocios, Eventos, …) se resuelva DENTRO
+ * de la base. Antes se resolvía en dos pasos: una query traía hasta 500
+ * `listings.id` del vertical y esos ids se metían en un `.in("entity_listing_id",
+ * …)`. Las lecturas de supabase-js son GET, así que esos 500 uuids viajaban en
+ * el querystring — ~19 KB contra el request line de ~8 KB que aceptan Kong y
+ * nginx: **414 garantizado**, y con romper de verdad a ~200 negocios publicados
+ * ya alcanzaba. Con el join no viaja NINGÚN id: la condición la evalúa Postgres.
+ *
+ * De yapa se cierra un empty state mentiroso: aquel primer paso descartaba su
+ * `error`, así que un fallo de lectura se mostraba como «todavía no hay
+ * videos».
+ *
+ * `!inner` es exactamente la semántica que tenía el `.in(...)`: sólo posts CON
+ * entidad de ese vertical (los personales, `entity_listing_id null`, quedaban
+ * fuera igual). El embed no lleva hint de FK porque `posts` tiene una sola clave
+ * foránea a `listings` (`posts_entity_listing_id_fkey`, 0023) — sin ambigüedad.
+ *
+ * El `as typeof POST_COLUMNS` es el mismo truco que en `feed/queries.ts`: el
+ * valor pide el embed a PostgREST y el tipo se queda en las columnas que
+ * `database.types.ts` sabe parsear (la forma real de la fila la fija `PostRow`).
+ */
+const SCOPED_POST_COLUMNS = `${POST_COLUMNS}, listings!inner(id)` as typeof POST_COLUMNS;
+
 const SCAN_CHUNK = 40;
 const MAX_SCANS = 4;
 const DEFAULT_PAGE_SIZE = 6;
@@ -127,28 +153,15 @@ export async function fetchVideoReelsPage({
     fetchActivePromotedPostIds(supabase, tenantId),
   ]);
 
-  // Scope por módulo: ids de listings published de ese vertical en el tenant.
-  // La comunidad es única y chica (single-community): el set entra en memoria.
+  // Scope por módulo: el vertical de la entidad que publica. Se resuelve con el
+  // join de SCOPED_POST_COLUMNS (ver su docblock) — sin round-trip previo y sin
+  // ids viajando por la URL.
   const kind = scopeListingKind(scope);
-  let kindListingIds: string[] | null = null;
-  if (kind) {
-    const { data } = await supabase
-      .from("listings")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("kind", kind)
-      .eq("status", "published")
-      .limit(500);
-    kindListingIds = (data ?? []).map((row) => row.id);
-    if (kindListingIds.length === 0) {
-      return { items: [], nextCursor: null };
-    }
-  }
 
   const buildQuery = (keyset: ReelsCursor | null) => {
     let query = supabase
       .from("posts")
-      .select(POST_COLUMNS)
+      .select(kind ? SCOPED_POST_COLUMNS : POST_COLUMNS)
       .eq("tenant_id", tenantId)
       .eq("status", "published")
       // EL FILTRO QUE SOSTIENE LA SUPERFICIE (0046 §6): sólo cortos elegibles.
@@ -174,9 +187,13 @@ export async function fetchVideoReelsPage({
       query = query.eq("video_category", category);
     }
 
-    if (kindListingIds) {
-      // Scope de módulo: solo posts DE una entidad de ese vertical.
-      query = query.in("entity_listing_id", kindListingIds);
+    if (kind) {
+      // Scope de módulo: sólo posts DE una entidad published de ese vertical.
+      // Filtros sobre el recurso embebido — con `!inner` en el select, filtrar
+      // la entidad filtra el post. El tenant no hace falta repetirlo: el post ya
+      // está acotado por `tenant_id` y su entidad es del mismo tenant por policy
+      // (0023).
+      query = query.eq("listings.kind", kind).eq("listings.status", "published");
     }
 
     // Alcance "para vos" (los ids vienen de la DB, no del usuario — mismo

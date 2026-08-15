@@ -48,6 +48,8 @@ export function AssistantChat({ isAnon, initialAnonRemaining }: AssistantChatPro
 
   const inputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  /** El stream en vuelo de `send()` — se aborta si la pantalla se desmonta a mitad. */
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const limitReached = isAnon && anonRemaining !== null && anonRemaining <= 0;
 
@@ -60,6 +62,17 @@ export function AssistantChat({ isAnon, initialAnonRemaining }: AssistantChatPro
       block: "end",
     });
   }, [messages]);
+
+  // Si la persona navega fuera con una respuesta a mitad de streaming, el
+  // fetch y el loop de reader.read() seguían corriendo en segundo plano y
+  // disparando setState sobre un componente que ya no está. Al desmontar se
+  // aborta lo que haya en vuelo — `send()` atrapa el AbortError y no muestra
+  // nada: irse de la pantalla no es una falla.
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   function patchAssistant(
     id: string,
@@ -103,6 +116,9 @@ export function AssistantChat({ isAnon, initialAnonRemaining }: AssistantChatPro
     const question = raw.trim();
     if (question.length < MIN_QUESTION || isStreaming || limitReached || aiDown) return;
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     const assistantId = crypto.randomUUID();
     setMessages((prev) => [
       ...prev,
@@ -125,6 +141,7 @@ export function AssistantChat({ isAnon, initialAnonRemaining }: AssistantChatPro
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question }),
+        signal: controller.signal,
       });
 
       if (response.status === 429) {
@@ -207,7 +224,13 @@ export function AssistantChat({ isAnon, initialAnonRemaining }: AssistantChatPro
       }
 
       if (!finished) finishWithFallback(assistantId, COPY.errors.generic);
-    } catch {
+    } catch (error) {
+      // Abortado a propósito (desmontaje o navegación a mitad del stream):
+      // irse de la pantalla no es un error, así que no hay nada que avisar.
+      // OJO: DOMException NO extiende Error (ni acá ni en el navegador —
+      // WebIDL las define como interfaces separadas), así que el check tiene
+      // que ser contra DOMException y no contra Error.
+      if (error instanceof DOMException && error.name === "AbortError") return;
       finishWithFallback(assistantId, COPY.errors.generic);
     } finally {
       setIsStreaming(false);

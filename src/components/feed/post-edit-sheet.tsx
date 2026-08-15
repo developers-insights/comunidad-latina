@@ -332,8 +332,13 @@ function MediaStrip({
                   }}
                   aria-label={COPY.removePhoto.triggerFor(index + 1, items.length)}
                   className={cn(
-                    "absolute -right-1 -top-1 flex size-7 items-center justify-center rounded-full",
+                    "absolute -right-1 -top-1 flex size-8 items-center justify-center rounded-full",
                     "bg-danger text-on-danger shadow-sm",
+                    // Área táctil a 44px con ::after y no agrandando el botón: acá
+                    // taparía la miniatura (mismo patrón que gig-publish-form y
+                    // creator-profile-form). `touch-hitbox` no sirve porque fuerza
+                    // `position: relative` y este botón es `absolute`.
+                    "after:absolute after:left-1/2 after:top-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']",
                     "transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-90",
                     "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
                     "disabled:pointer-events-none disabled:opacity-50",

@@ -101,6 +101,23 @@ export type ModerationResult = {
 const MAX_INPUT_CHARS = 8_000;
 
 /**
+ * EL PEOR CASO TAMBIÉN SE ACOTA POR TIEMPO, no sólo por tamaño del input.
+ *
+ * El default del SDK de Node son 10 MINUTOS con 2 reintentos, y `moderateText`
+ * corre EN LÍNEA antes de decidir el status de una publicación. Basta una
+ * degradación de OpenAI (no una caída: una degradación) para que la server
+ * action de publicar quede colgada hasta el límite de la plataforma: la persona
+ * ve el spinner eterno, toca "Publicar" otra vez y ahora hay dos.
+ *
+ * 8 segundos es holgado para una llamada de moderación y sigue dejando margen
+ * dentro del presupuesto de una server action. `maxRetries: 1` porque el
+ * reintento multiplica la espera y el manejo de errores de abajo ya degrada a
+ * `skipped`, que es un resultado ÚTIL: el contenido no se bloquea, se encola
+ * para revisión. Preferimos encolar en 8 segundos que acertar en 10 minutos.
+ */
+const OPENAI_TIMEOUT_MS = 8_000;
+
+/**
  * Modera un texto con `omni-moderation-latest`.
  *
  * Degradación elegante (§5.6): si OpenAI no está configurado o la API falla,
@@ -116,7 +133,7 @@ export async function moderateText(text: string): Promise<ModerationResult> {
   }
 
   try {
-    const openai = new OpenAI();
+    const openai = new OpenAI({ timeout: OPENAI_TIMEOUT_MS, maxRetries: 1 });
     const response = await openai.moderations.create({
       model: "omni-moderation-latest",
       input,

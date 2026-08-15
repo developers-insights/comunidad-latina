@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { DARK_THEME_COLOR, type ResolvedTheme } from "@/components/theme/constants";
 import { applyToDocument, getSnapshot } from "@/components/theme/theme-store";
 
@@ -10,11 +11,17 @@ import { applyToDocument, getSnapshot } from "@/components/theme/theme-store";
  * existir. Por eso es casi autónomo: HTML propio, un <style> inline, cero
  * componentes.
  *
- * ── Los dos únicos imports ────────────────────────────────────────────────
+ * ── Los imports, contados de a uno ────────────────────────────────────────
  * `constants.ts` no importa nada y `theme-store.ts` sólo importa `constants.ts`:
  * dos módulos hoja, sin React, sin JSX y sin CSS. A propósito NO se importa desde
  * el barrel `@/components/theme`, que arrastraría <ThemeScript>, <ThemeToggle> y
  * <ThemeColorSync> al chunk de la pantalla que aparece cuando ya falló todo.
+ *
+ * El tercero es el SDK de Sentry, y se gana el lugar: si el ROOT LAYOUT se cayó,
+ * este es el único código nuestro que sigue corriendo, y sin `captureException`
+ * el peor error de todos —el que rompe la app entera— era justamente el único
+ * que no se reportaba. No trae CSS ni componentes, y ya viaja en el bundle del
+ * cliente por `instrumentation-client.ts`.
  *
  * ── Tema oscuro sin depender de nada ──────────────────────────────────────
  * Acá no hay Tailwind ni tokens: `globals.css` lo importa el root layout, que es
@@ -138,6 +145,15 @@ export default function GlobalError({
   reset: () => void;
 }) {
   console.error("[app] global-error", { digest: error.digest });
+
+  // El reporte va en un effect y no en el render: el render de esta pantalla
+  // corre también en el SERVER (ver la nota de `applyToDocument` más abajo) y en
+  // StrictMode corre dos veces — reportaríamos el mismo fallo por duplicado o
+  // desde el runtime equivocado. Acá el SDK ya está inicializado por
+  // `instrumentation-client.ts`; sin DSN, `captureException` es un no-op.
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
 
   const resolved = resolveThemeClass();
 

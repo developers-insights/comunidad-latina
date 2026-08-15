@@ -1,6 +1,5 @@
 import "server-only";
 
-import { imageLuma } from "./image";
 import { LUMA_SIZE, VIDEO_FRAMES, videoPhash256 } from "./phash";
 
 /**
@@ -34,9 +33,14 @@ import { LUMA_SIZE, VIDEO_FRAMES, videoPhash256 } from "./phash";
  *     video, y contra eso ninguna huella perceptual puede nada.
  * Está documentado acá y en el reporte de entrega en vez de escondido.
  *
- * SI ALGÚN DÍA HAY UN WORKER CON FFMPEG: `videoPhashFromEncodedFrames` ya
- * acepta fotogramas como imágenes codificadas, que es lo que escupiría ffmpeg.
- * El resto del pipeline no se entera del cambio.
+ * SI ALGÚN DÍA HAY UN WORKER CON FFMPEG: este archivo tenía preparado un
+ * `videoPhashFromEncodedFrames(frames: Uint8Array[])` que entraba por imágenes
+ * codificadas (PNG/JPEG), que es lo que escupiría ffmpeg. Se borró en la
+ * auditoría 2026-08-13 por no tener consumidor. No se pierde nada de diseño:
+ * lo que hacía era `imageLuma()` (./image) sobre cada fotograma y después el
+ * mismo `videoPhash256`, o sea seis líneas. Lo que de verdad importaba —que la
+ * huella sea comparable con las que ya están en la base— vive en
+ * `videoPhash256`, no en el envoltorio.
  */
 
 /** Cuántos fotogramas pide el pipeline. Re-export para el muestreador del navegador. */
@@ -79,27 +83,3 @@ export function videoPhashFromLumaFrames(frames: unknown): string | null {
   }
 }
 
-/**
- * Misma huella, pero a partir de fotogramas como IMÁGENES CODIFICADAS (PNG/JPEG).
- *
- * Es el camino que usaría un extractor server-side (ffmpeg en un worker, o un
- * servicio de transcodificación): entra lo que ese extractor produce y sale la
- * misma huella de 256 bits, comparable con las que ya están en la base. Hoy no
- * hay quien lo llame — está para que el día que exista no haya que rediseñar
- * la columna.
- */
-export async function videoPhashFromEncodedFrames(
-  frames: Uint8Array[],
-): Promise<string | null> {
-  const lumas: Uint8Array[] = [];
-  for (const frame of frames.slice(0, VIDEO_FRAMES)) {
-    const luma = await imageLuma(frame);
-    if (luma) lumas.push(luma);
-  }
-  if (lumas.length === 0) return null;
-  try {
-    return videoPhash256(lumas);
-  } catch {
-    return null;
-  }
-}

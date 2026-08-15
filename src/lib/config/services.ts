@@ -32,13 +32,15 @@ export const isOpenAIConfigured = Boolean(process.env.OPENAI_API_KEY);
  */
 export const isAnthropicConfigured = Boolean(process.env.ANTHROPIC_API_KEY);
 
-export const isVercelConfigured = Boolean(
-  process.env.VERCEL_API_TOKEN && process.env.VERCEL_PROJECT_ID,
-);
-
-export const isSupabaseConfigured = Boolean(
-  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-);
+/*
+ * `isVercelConfigured` e `isSupabaseConfigured` vivían acá y se borraron en la
+ * auditoría 2026-08-13: ninguno de los dos tenía un solo consumidor. El de
+ * Supabase además era engañoso — cada módulo que necesita esas dos env las
+ * chequea donde las usa y decide qué hacer con la falta (lanzar, degradar o
+ * saltear), que es lo correcto: un booleano global no puede saber cuál de las
+ * tres corresponde. `assertSupabaseConfigured()` (más abajo) sí se usa y sí se
+ * queda.
+ */
 
 // ---------------------------------------------------------------------------
 // Entrar con Google / Apple

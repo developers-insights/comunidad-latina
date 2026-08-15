@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { m } from "motion/react";
 import { Button, Dialog } from "@/components/ui";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 /**
  * Confirmación de alto riesgo (§4.4 del design brief): la entrada del Dialog
@@ -37,6 +38,7 @@ export function ConfirmSlowDialog({
   children?: React.ReactNode;
 }) {
   const [ready, setReady] = useState(false);
+  const reduce = usePrefersReducedMotion();
 
   // Reset del "pensalo" al abrir/cerrar — ajuste de estado EN RENDER (patrón
   // recomendado, sin cascada de effects).
@@ -60,11 +62,19 @@ export function ConfirmSlowDialog({
           aria-hidden="true"
           className="h-1 w-full overflow-hidden rounded-full bg-surface-subtle"
         >
+          {/* `scaleX` + `origin-left` en vez de `width`: anima transform, no
+              layout (perf — mismo criterio que el resto de las barras/scrims
+              de progreso de la app). El botón sigue inhabilitado por THINK_MS
+              vía el timer de `ready` más abajo, así que con reduced motion la
+              barra salta llena al instante pero la pausa real ("pensalo") no
+              se acorta — sólo se va el barrido visual, no la funcionalidad. */}
           <m.div
-            className="h-full rounded-full bg-brand"
-            initial={{ width: "0%" }}
-            animate={{ width: open ? "100%" : "0%" }}
-            transition={{ duration: THINK_MS / 1000, ease: "linear" }}
+            className="h-full w-full origin-left rounded-full bg-brand"
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: open ? 1 : 0 }}
+            transition={
+              reduce ? { duration: 0 } : { duration: THINK_MS / 1000, ease: "linear" }
+            }
           />
         </div>
         <p className="mt-2 text-xs text-foreground-muted" aria-live="polite">

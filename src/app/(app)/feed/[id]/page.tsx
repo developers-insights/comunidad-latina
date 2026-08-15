@@ -14,6 +14,8 @@ import {
 // comentario es fuente única compartida con la hoja del feed.
 import { CommentItem } from "@/components/feed/comment-item";
 import { CommentMenu } from "@/components/feed/comment-menu";
+import { COMMENT_THREAD_COPY } from "@/components/feed/helpers";
+import { decodeCursor, encodeCursor } from "@/components/listings";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
@@ -37,7 +39,20 @@ import { fetchTagsForPost } from "@/lib/social/post-tags";
 export const metadata = { title: "Publicación" };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const COMMENTS_LIMIT = 200;
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+/**
+ * Cuántos comentarios trae CADA tanda del hilo. Es un tamaño de PÁGINA, no un
+ * techo: antes eran 200 sin cursor y el comentario 201 no existía para nadie —
+ * ni para quien lo escribió. Y como el orden era ascendente, lo que se perdía
+ * era lo más NUEVO: justo la conversación viva. Una publicación viral alcanzaba
+ * ese techo el primer día.
+ */
+const COMMENTS_PAGE_SIZE = 200;
+
+/** Cursor keyset del hilo: `?antes=` trae la tanda anterior (más vieja). */
+const OLDER_PARAM = "antes";
 
 /**
  * Detalle de post (§4.b → destino de la card): post completo + hilo de
@@ -46,11 +61,20 @@ const COMMENTS_LIMIT = 200;
  */
 export default async function PostDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: SearchParams;
 }) {
-  const { id } = await params;
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
   if (!UUID_RE.test(id)) notFound();
+
+  // Cursor del hilo. `decodeCursor` valida forma (ISO + uuid) y devuelve null
+  // ante cualquier otra cosa: lo que se interpola abajo en el filtro de
+  // PostgREST nunca es texto libre de la URL.
+  const olderThan = decodeCursor(
+    typeof sp[OLDER_PARAM] === "string" ? sp[OLDER_PARAM] : undefined,
+  );
 
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
   const {
@@ -78,22 +102,61 @@ export default async function PostDetailPage({
 
   const post = postRow as PostRow;
 
-  // Comentarios published del hilo, ascendente (lectura natural).
-  const { data: commentRows } = await supabase
+  // Comentarios published del hilo. Se LEEN descendentes (los más nuevos
+  // primero) y se pintan ascendentes: así la tanda que siempre está garantizada
+  // es la de la conversación viva, y "ver anteriores" va hacia atrás con keyset
+  // — nunca un OFFSET, que en un hilo que crece mientras se lee repite y
+  // saltea filas.
+  //
+  // `tenant_id` va en el WHERE aunque el `post_id` ya sea único: es la columna
+  // LÍDER de `comments_post_thread_idx (tenant_id, post_id, created_at, id)`, y
+  // la policy no lo aporta como qual (lo tiene dentro de un OR, y un OR no se
+  // convierte en condición de índice). Sin él el plan cae a `comments_post_fk_idx`
+  // + Sort en memoria: leer y ordenar los 5.000 comentarios de un hilo para
+  // devolver 200, en cada apertura. Verificado con EXPLAIN: con tenant_id es
+  // "Index Scan Backward using comments_post_thread_idx" y sin Sort.
+  let commentsQuery = supabase
     .from("comments")
     .select("id, body, created_at, author_id, status")
+    .eq("tenant_id", tenant.id)
     .eq("post_id", post.id)
     .eq("status", "published")
-    .order("created_at", { ascending: true })
-    .order("id", { ascending: true })
-    .limit(COMMENTS_LIMIT);
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    // +1 para saber si HAY tanda anterior sin pagar una segunda consulta.
+    .limit(COMMENTS_PAGE_SIZE + 1);
+
+  if (olderThan) {
+    commentsQuery = commentsQuery.or(
+      `created_at.lt."${olderThan.createdAt}",and(created_at.eq."${olderThan.createdAt}",id.lt."${olderThan.id}")`,
+    );
+  }
+
+  const { data: commentRows, error: commentsError } = await commentsQuery;
+  if (commentsError) {
+    console.warn("[feed] query del hilo falló", { code: commentsError.code });
+  }
+
+  const fetched = commentRows ?? [];
+  const pageRows = fetched.slice(0, COMMENTS_PAGE_SIZE);
+  const hasOlder = fetched.length > COMMENTS_PAGE_SIZE;
+  // El cursor sale de la última fila LEÍDA, no de la última visible: si el
+  // filtro de bloqueados de abajo se come la más vieja, la tanda siguiente
+  // tiene que arrancar igual donde terminó ésta.
+  const oldestRow = pageRows[pageRows.length - 1];
+  const olderHref =
+    hasOlder && oldestRow
+      ? `/feed/${post.id}?${OLDER_PARAM}=${encodeCursor(oldestRow.created_at, oldestRow.id)}`
+      : null;
 
   // Filtro barato en memoria (§ contrato bloqueo): sin comentarios de gente
   // que el viewer bloqueó. Un solo select liviano, reutilizado del módulo FEED.
   const blockedIds = await fetchBlockedIds(supabase, viewerId);
-  const comments = (commentRows ?? []).filter(
-    (comment) => !comment.author_id || !blockedIds.has(comment.author_id),
-  );
+  const comments = pageRows
+    .filter((comment) => !comment.author_id || !blockedIds.has(comment.author_id))
+    // De vuelta a ascendente: la LECTURA del hilo no cambia (el más viejo
+    // arriba), sólo cambió qué tanda se trae.
+    .reverse();
 
   // Batch: autores del post + comentarios, y estado de like del viewer.
   const authorIds = [
@@ -253,12 +316,30 @@ export default async function PostDetailPage({
           </span>
         </h2>
 
+        {/* Tanda ANTERIOR (más vieja). Va arriba del hilo porque es hacia
+            arriba que se va al pasado: el orden de lectura es ascendente. */}
+        {olderHref && (
+          <div className="mt-4">
+            <Link
+              href={olderHref}
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+            >
+              {COMMENT_THREAD_COPY.older}
+            </Link>
+          </div>
+        )}
+
         {comments.length === 0 ? (
-          <EmptyState
-            className="py-8"
-            title={COPY.comments.emptyTitle}
-            message={COPY.comments.emptyMessage}
-          />
+          // El vacío honesto es sólo el del hilo SIN cursor. Una tanda vacía
+          // más atrás no significa "nadie comentó todavía": significa que ahí
+          // se terminó el hilo, y para eso está el link de volver al final.
+          !olderThan && (
+            <EmptyState
+              className="py-8"
+              title={COPY.comments.emptyTitle}
+              message={COPY.comments.emptyMessage}
+            />
+          )
         ) : (
           <ul className="mt-4 flex flex-col gap-4">
             {comments.map((comment) => {
@@ -288,6 +369,19 @@ export default async function PostDetailPage({
               );
             })}
           </ul>
+        )}
+
+        {/* Con el hilo corrido hacia atrás, abajo está la salida: volver al
+            final, que es donde sigue la conversación. */}
+        {olderThan && (
+          <div className="mt-4">
+            <Link
+              href={`/feed/${post.id}`}
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+            >
+              {COMMENT_THREAD_COPY.newest}
+            </Link>
+          </div>
         )}
 
         {isPublished && (

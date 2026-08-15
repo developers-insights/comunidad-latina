@@ -1,5 +1,81 @@
 # PROGRESS — Comunidad Latina
 
+## Auditoría completa del programa + endurecimiento (✅ 2026-08-13, tarde)
+
+Barrido de los ~1.035 archivos de `src/` (193k líneas) y las 104 migraciones en
+cinco frentes paralelos, y después cinco frentes de arreglo con fronteras de
+archivo estrictas. **El detalle entero está en
+[`docs/auditoria-2026-08-13/HALLAZGOS.md`](auditoria-2026-08-13/HALLAZGOS.md)** —
+acá va sólo lo que cambia cómo se trabaja de acá en adelante.
+
+**Los 88 tests rojos: el diagnóstico anterior estaba equivocado.** No es que Node
+26 traiga «un `localStorage` global experimental e inerte». Node instala sobre
+`globalThis` un **accessor** cuyo getter devuelve `undefined` sin
+`--localstorage-file`, y como en el entorno jsdom de Vitest `window === globalThis`,
+ese accessor **tapa al `Storage` real de jsdom**. `sessionStorage` no se ve
+afectado. Y la salida tampoco era bajar a Node 24: `vitest.config.ts` pasa ahora
+`--no-experimental-webstorage`, **sólo si el Node actual conoce el flag** — el
+repo no fija versión, y un flag desconocido no degrada: impide arrancar el
+proceso. Los Node donde el problema no existe son exactamente los que no tienen
+el flag. Se probó también un `Storage` propio y **falla**: `theme-store.test.ts`
+espía `Storage.prototype.setItem` y un reemplazo hecho a mano no comparte ese
+prototipo. Anclado en `src/test/web-storage-contract.test.ts`.
+
+**El techo del feed no es de rendimiento, es un límite de URL.** Las lecturas de
+supabase-js son GET: todo `.in(...)` viaja en el querystring, ~39 bytes por UUID,
+y Kong corta el request line en ~8 KB. Con las promociones activas, los seguidos
+y los bloqueados sin cota, el feed devolvía **414 para todos los usuarios del
+tenant a la vez** — el negocio de publicidad funcionando rompía el producto. Se
+pusieron cotas (150/200/200) que vuelven la falla acotada y predecible, pero
+**sumadas siguen dando ~21 KB en el peor caso**. El cierre real es un RPC
+`security definer` que resuelva la página contra `follows`/`post_promotions`/
+`user_blocks` dentro de la base, para que ningún id viaje por la URL. Está
+anotado en el docblock de `feed/queries.ts` y referenciado desde cada tope.
+Videos Cortos sí se cerró del todo: el scope pasó a join embebido
+(`listings!inner`), verificado contra el PostgREST real.
+
+**Tres auditorías independientes convergieron en el mismo defecto del webhook de
+Stripe**: la idempotencia por `event_id` cubre el reintento secuencial, no dos
+entregas concurrentes, y los handlers eran read-then-write sin condición de
+estado en el `WHERE`. Las tres transiciones (boosts, promotions, identity) ahora
+llevan el predicado en el `UPDATE` y tratan «cero filas» como «llegó segundo».
+Aparte, un error de lectura transitorio **reseteaba el Trust Score** de quien
+acababa de pagar por verificarse: `null` era indistinguible de «no tiene fila» y
+el upsert pisaba `score` y `signals` enteros.
+
+**Dos cosas que salieron de escribir los tests, no de auditar.** `DOMException`
+**no extiende `Error`** —ni por spec WebIDL, ni en jsdom, ni en Chrome/Node— así
+que el `catch` del abort del asistente estaba mal y habría mostrado el error
+genérico en cada navegación. Y `reset()` de un error boundary de Next
+**re-renderiza sin volver a pedir el contenido**: ante un Server Component caído
+el botón «Reintentar» no arregla nada. El `(app)/error.tsx` nuevo usa
+`unstable_retry ?? reset`; los dos boundaries viejos siguen con `reset` solo.
+
+**`error.tsx` prometía algo que no pasaba.** El copy decía «ya quedó registrado
+para que lo revisemos», pero `instrumentation.ts` sólo expone `onRequestError`,
+que cubre RSC y route handlers: un error de render **en cliente** lo captura el
+boundary de React y nunca llega al SDK. Cero `captureException` en los dos
+archivos. Ahora sí reportan.
+
+**Estado del árbol:** typecheck limpio, lint 0 errores (77 warnings
+preexistentes), **3.881 tests en verde, 0 rojos** (eran 3.735 verdes y 88 rojos),
+build de producción verde. Nada commiteado.
+
+**Lo que NO se tocó y necesita decisión** — los tres primeros son de
+infraestructura, no de código, y están desarrollados en HALLAZGOS.md: la base de
+Supabase **compartida con caughtcode** (mismas claves `anon` y `service_role`
+para los dos productos); `anon` y `authenticated` con **`TRUNCATE` sobre 74 y 81
+tablas**, que RLS no puede contener; y `profiles` legible **sin sesión y sin
+filtro de tenant**, con zona y país de origen — el honeypot que la doctrina del
+propio repo dice evitar. Más nueve migraciones de índices y policies, con el SQL
+escrito. **Ninguna se aplicó.**
+
+**Incidente:** uno de los cinco agentes de auditoría, despachado con instrucción
+explícita de sólo lectura, **commiteó y pusheó `c6925a8` a `main`** (142
+archivos). El contenido es el trabajo sin commitear de la sesión anterior, no de
+esta auditoría: nada se perdió ni se sobrescribió. No se revirtió — deshacerlo
+pide force-push a `main`.
+
 ## El feedback de Nacho del 11-ago, entero (✅ 2026-08-13)
 
 Llegaron 15 capturas de WhatsApp con feedback. Se auditó **cada ítem contra el

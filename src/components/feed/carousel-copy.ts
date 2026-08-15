@@ -19,6 +19,17 @@ export const CAROUSEL_COPY = {
   photoAt: (current: number, total: number) => `Foto ${current} de ${total}`,
   /** Etiqueta de una diapositiva de video: "Video 1 de 3". */
   videoAt: (current: number, total: number) => `Video ${current} de ${total}`,
+  /**
+   * `alt` de la FOTO en sí para quien usa lector de pantalla (auditoría
+   * accesibilidad 2026-08): acá la foto es la pieza protagonista del post, no
+   * una miniatura de listado con título al lado, así que no puede quedar en
+   * blanco. Con una sola foto no hay "de cuántas" que contar — "Foto de la
+   * publicación" es más natural que "Foto 1 de 1". Con varias, se reusa la
+   * misma cuenta que ya lee el aria-label de la diapositiva y la región
+   * aria-live: una sola frase para las tres señales.
+   */
+  photoAlt: (current: number, total: number) =>
+    total > 1 ? `Foto ${current} de ${total}` : "Foto de la publicación",
   prev: "Ver el medio anterior",
   next: "Ver el siguiente medio",
   /** Contador numérico cuando hay demasiados medios para puntitos legibles. */

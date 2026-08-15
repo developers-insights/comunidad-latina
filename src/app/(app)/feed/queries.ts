@@ -52,6 +52,42 @@ import {
 
 type Supabase = SupabaseClient<Database>;
 
+// ---------------------------------------------------------------------------
+// EL PRESUPUESTO DE 8 KB DE LA URL (por qué estas lecturas llevan tope)
+// ---------------------------------------------------------------------------
+
+/**
+ * Las lecturas de supabase-js son **GET**: todo `.in(…)` y todo `.or(…in.(…))`
+ * viaja en el QUERYSTRING, no en un body. Medido con el propio postgrest-js de
+ * este repo, cada uuid de una lista cuesta ~39 bytes de URL (36 del uuid + la
+ * coma, que se serializa `%2C`). Kong y nginx cortan el request line alrededor
+ * de los 8 KB y responden **414**.
+ *
+ * Lo grave del 414 no es que falle: es A QUIÉN le falla. La lista de campañas
+ * activas es del TENANT, no del usuario — cuando cruza el umbral, el feed deja
+ * de responder para TODOS a la vez. O sea: el negocio de publicidad funcionando
+ * rompería el producto. Por eso las tres lecturas que alimentan esos filtros
+ * (campañas, seguidos y bloqueados) llevan tope explícito: sin él, el límite no
+ * lo pone el código sino el crecimiento del producto.
+ *
+ * LOS TRES TOPES COMPARTEN UNA SOLA URL, y sumados NO entran en 8 KB
+ * (150 + 200 + 200 ids ≈ 21 KB). No son la solución: son la cota que vuelve la
+ * falla acotada y predecible en lugar de abierta. LA SOLUCIÓN de fondo es mover
+ * el filtro DENTRO de la base — un RPC `security definer` que devuelva la página
+ * del feed ya resuelta contra follows / post_promotions / user_blocks, sin que
+ * un solo id viaje por la URL. Mientras ese RPC no exista, estos números no se
+ * suben: subirlos es acercar el 414, no dar más alcance.
+ */
+
+/** Campañas vigentes que se inyectan en la visibilidad (~5,8 KB de URL). */
+const ACTIVE_PROMOTIONS_CAP = 150;
+
+/** Entidades seguidas que se inyectan en la visibilidad (~7,8 KB de URL). */
+const FOLLOWED_LISTINGS_CAP = 200;
+
+/** Perfiles bloqueados que se inyectan en el `not.in.(…)` (~7,8 KB de URL). */
+const BLOCKED_PROFILES_CAP = 200;
+
 export interface PostRow {
   id: string;
   body: string;
@@ -213,17 +249,44 @@ export function authorViewOf(
  * Ids de perfiles bloqueados por el viewer (bloqueo global, 0020_user_blocks.sql).
  * RLS de user_blocks ya limita a blocker_id = auth.uid(); el .eq es redundante
  * pero explícito, en línea con el resto del módulo. Set vacío si no hay sesión.
+ *
+ * LANZA SI LA LECTURA FALLA, y es deliberado que acá sea al revés que en el
+ * resto del módulo (encuestas, música y guardados degradan en silencio porque
+ * son adornos de la tarjeta). Esto NO es un adorno: es el filtro que saca del
+ * feed, del reel y del hilo a la persona que el viewer bloqueó, y lo consumen
+ * las tres superficies. Devolver un set vacío ante un error convierte «no pude
+ * leer tus bloqueos» en «no bloqueaste a nadie»: quien bloqueó a su acosador lo
+ * vuelve a ver por un hipo de la base, sin una sola línea de log. Fail-closed —
+ * el error sube y lo agarra el error boundary (src/app/error.tsx) o el
+ * "reintentar" del scroll infinito (feed-list.tsx): una pantalla honesta antes
+ * que un feed que miente.
+ *
+ * TOPE de BLOCKED_PROFILES_CAP: los ids se concatenan en un
+ * `author_id.not.in.(…)` que viaja por la URL (ver «el presupuesto de 8 KB»).
+ * Se ordena por `created_at desc` para que, pasado el tope, sobrevivan los
+ * bloqueos MÁS RECIENTES — que son los que la persona acaba de decidir. Un
+ * viewer con más de 200 bloqueos vuelve a ver a los más viejos: es una pérdida
+ * real y por eso el arreglo de fondo (el filtro dentro de la base) no es
+ * opcional.
  */
 export async function fetchBlockedIds(
   supabase: Supabase,
   viewerId: string | null,
 ): Promise<Set<string>> {
   if (!viewerId) return new Set();
-  const { data } = await supabase
+  const result = await supabase
     .from("user_blocks")
     .select("blocked_id")
-    .eq("blocker_id", viewerId);
-  return new Set((data ?? []).map((row) => row.blocked_id));
+    .eq("blocker_id", viewerId)
+    .order("created_at", { ascending: false })
+    .limit(BLOCKED_PROFILES_CAP);
+  if (result.error) {
+    console.error("[feed] no se pudieron leer los bloqueos del viewer", {
+      code: result.error.code,
+    });
+    throw new Error("No se pudieron leer los bloqueos del viewer");
+  }
+  return new Set(result.data.map((row) => row.blocked_id));
 }
 
 /** Ids de posts likeados por el viewer, para pintar el estado inicial del like. */
@@ -469,17 +532,35 @@ export function fetchViewerSavedListingIds(
  * Ids de las ENTIDADES (listings) que el viewer sigue. Query chica y primera:
  * con estos ids se arma el `.or()` de visibilidad del feed (patrón exacto del
  * filtro de bloqueados). Vacío si no hay sesión.
+ *
+ * TOPE de FOLLOWED_LISTINGS_CAP: estos ids se inlinean en
+ * `entity_listing_id.in.(…)` y viajan por la URL (ver «el presupuesto de 8 KB»).
+ * `created_at desc` para que, pasado el tope, sobrevivan los seguimientos MÁS
+ * RECIENTES: quien sigue 250 entidades ve las 200 que eligió último, no una
+ * muestra arbitraria del planificador.
  */
 export async function fetchFollowedListingIds(
   supabase: Supabase,
   viewerId: string | null,
 ): Promise<string[]> {
   if (!viewerId) return [];
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("follows")
     .select("target_id")
     .eq("follower_id", viewerId)
-    .eq("target_kind", "listing");
+    .eq("target_kind", "listing")
+    .order("created_at", { ascending: false })
+    .limit(FOLLOWED_LISTINGS_CAP);
+  // A diferencia de los bloqueos, esto NO es fail-closed: seguir es alcance, no
+  // seguridad. Sin la lista, el feed queda con lo personal + lo promocionado —
+  // menos contenido, nada indebido. Pero se LOGUEA: un feed misteriosamente
+  // pobre tiene que dejar rastro.
+  if (error) {
+    console.warn("[feed] no se pudieron leer los seguidos del viewer", {
+      code: error.code,
+    });
+    return [];
+  }
   return (data ?? []).map((row) => row.target_id);
 }
 
@@ -503,6 +584,15 @@ export interface ActivePromotions {
  * cliente de schema abierto. Si la columna aún no existe (entorno sin migrar),
  * se reintenta con la forma vieja: perder el botón de WhatsApp es aceptable,
  * perder los posts promocionados del feed no.
+ *
+ * TOPE de ACTIVE_PROMOTIONS_CAP: esta es la lista COMPARTIDA (es del tenant, no
+ * del viewer), la que hace que el 414 le pegue a todo el mundo al mismo tiempo
+ * — ver «el presupuesto de 8 KB de la URL» arriba. `ends_at desc` porque, si
+ * alguna vez hubiera más de 150 campañas vigentes, las que tienen que
+ * sobrevivir al corte son las que más días de campaña les quedan por delante, y
+ * no las que están por vencer; el índice `post_promotions_tenant_active_idx
+ * (tenant_id, status, ends_at desc)` ya sirve ese orden sin ordenar nada en
+ * memoria.
  */
 export async function fetchActivePromotions(
   supabase: Supabase,
@@ -515,7 +605,9 @@ export async function fetchActivePromotions(
       .select(columns)
       .eq("tenant_id", tenantId)
       .eq("status", "active")
-      .gt("ends_at", new Date().toISOString());
+      .gt("ends_at", new Date().toISOString())
+      .order("ends_at", { ascending: false })
+      .limit(ACTIVE_PROMOTIONS_CAP);
 
   let { data, error } = await activeQuery("post_id, cta_whatsapp");
   if (error) {

@@ -49,15 +49,45 @@ export interface FormatMoneyOptions {
   showCents?: boolean;
 }
 
+/**
+ * Monto (en unidades, no centavos) → texto con símbolo de moneda.
+ *
+ * EL `try/catch` NO ES DEFENSIVO POR LAS DUDAS (auditoría 2026-08-13).
+ * `Intl.NumberFormat` con `style: "currency"` LANZA un `RangeError` si el
+ * código de moneda no es ISO 4217 válido — y la moneda no la elige este código:
+ * la elige el tenant (`tenants.currency`) y viaja por la fila del aviso
+ * (`listings.price_currency`, `tenant_prices.currency`). O sea que una fila con
+ * "US$" en vez de "USD" no rompe un número: rompe el render entero de la
+ * pantalla que lo pinta, y esta función se pinta en 7 lugares — la tabla de
+ * precios del panel, las tarjetas de avisos, los paquetes de creadores.
+ *
+ * `formatCents` (src/lib/pricing/money.ts) ya se protegía así, con el
+ * argumento escrito: «una moneda que Intl no conoce no puede tumbar una
+ * pantalla de precios». Acá se REPLICA en vez de delegar por dos razones
+ * concretas: `formatCents` no tiene el modo `showCents` (decide los decimales
+ * mirando si el monto es redondo), y `utils.ts` lo importa medio repo —
+ * incluidos client components— así que colgarle una dependencia a `lib/pricing`
+ * arrastraría el módulo de precios a bundles que sólo querían `cn()`.
+ *
+ * El fallback es el MISMO texto que el de `formatCents` ("USD 19,99" → `USD 19`)
+ * a propósito: la app no puede tener dos dialectos para el mismo número.
+ */
 export function formatMoney(amount: number, options: FormatMoneyOptions = {}): string {
   const { locale = DEFAULT_LOCALE, currency = DEFAULT_CURRENCY, showCents } = options;
   const wholeAmount = Number.isInteger(amount) && !showCents;
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    minimumFractionDigits: wholeAmount ? 0 : 2,
-    maximumFractionDigits: wholeAmount ? 0 : 2,
-  }).format(amount);
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: wholeAmount ? 0 : 2,
+      maximumFractionDigits: wholeAmount ? 0 : 2,
+    }).format(amount);
+  } catch {
+    // Moneda fuera de ISO 4217 (o locale mal formado): se muestra el código tal
+    // cual y el número. Un precio sin símbolo se lee igual; una pantalla en
+    // blanco, no.
+    return `${currency} ${wholeAmount ? String(amount) : amount.toFixed(2)}`;
+  }
 }
 
 export interface FormatDateOptions {

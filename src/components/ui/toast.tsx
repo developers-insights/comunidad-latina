@@ -18,6 +18,7 @@ import {
   X,
   XCircle,
 } from "@phosphor-icons/react/dist/ssr";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { cn } from "@/lib/utils";
 import { useMounted } from "@/lib/design/use-overlay";
 
@@ -81,6 +82,7 @@ function ToastCard({
   // eran persistentes.
   const [paused, setPaused] = useState(false);
   const remainingRef = useRef(item.duration);
+  const reduce = usePrefersReducedMotion();
 
   useEffect(() => {
     if (item.duration <= 0 || paused) return;
@@ -102,9 +104,16 @@ function ToastCard({
       // onFocus/onBlur en React son focusin/focusout: burbujean desde el botón cerrar.
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
-      initial={{ opacity: 0, y: 16, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 8, transition: { duration: 0.15 } }}
+      // Con prefers-reduced-motion se conserva el fade (misma señal que Dialog:
+      // el aviso sigue apareciendo/desapareciendo) y se saca el desplazamiento
+      // y el escalado — el estado final (visible/oculto) no cambia.
+      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.97 }}
+      animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+      exit={
+        reduce
+          ? { opacity: 0, transition: { duration: 0.15 } }
+          : { opacity: 0, y: 8, transition: { duration: 0.15 } }
+      }
       transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
       className={cn(
         "pointer-events-auto flex w-full items-start gap-3 rounded-md",

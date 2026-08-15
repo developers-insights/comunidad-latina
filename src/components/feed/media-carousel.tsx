@@ -257,9 +257,17 @@ export function MediaCarousel({
                 />
               ) : (
                 <>
+                  {/* La foto ES el contenido acá (no una miniatura de listado
+                      con título al lado): el default decorativo de CardMedia
+                      (alt="") la dejaría invisible para un lector de pantalla.
+                      Sin cuerpo de post disponible en estas props, se usa el
+                      genérico de CAROUSEL_COPY — "Foto de la publicación" o,
+                      en carrusel, "Foto 2 de 3" (misma cuenta que ya lee el
+                      aria-label de la diapositiva). */}
                   <CardMedia
                     src={item.url}
                     fallbackSrc={item.url}
+                    alt={CAROUSEL_COPY.photoAlt(slideIndex + 1, total)}
                     aspect="portrait"
                     quality={62}
                   />

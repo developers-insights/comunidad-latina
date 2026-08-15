@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_TIME_ZONE, formatDate, formatMoney } from "./utils";
+// `formatCents` se importa SÓLO para anclar que los dos fallbacks coinciden.
+import { formatCents } from "./pricing/money";
 
 /**
  * Lo que cuidan estos tests no es que la fecha quede linda: es que el resultado
@@ -123,5 +125,32 @@ describe("formatMoney", () => {
   it("los muestra si se piden o si el monto los tiene", () => {
     expect(formatMoney(1200, { showCents: true })).toBe("$1,200.00");
     expect(formatMoney(1200.5)).toBe("$1,200.50");
+  });
+
+  /**
+   * POR QUÉ EXISTEN ESTOS TRES CASOS (auditoría 2026-08-13).
+   *
+   * La moneda no la elige este código: la elige el tenant (`tenants.currency`)
+   * y viaja por la fila del aviso (`listings.price_currency`). `Intl` LANZA con
+   * un código que no es ISO 4217, así que una fila con "US$" no rompía un
+   * número — rompía el render de las 7 pantallas que llaman a `formatMoney`,
+   * mientras las 26 que usan `formatCents` degradaban prolijo porque esa sí
+   * tenía el try/catch. Lo que se ancla acá es que las dos se comporten igual.
+   */
+  it("una moneda que Intl no conoce NO tumba la pantalla: degrada a texto", () => {
+    expect(formatMoney(19, { currency: "US$" })).toBe("US$ 19");
+    expect(formatMoney(19.9, { currency: "US$" })).toBe("US$ 19.90");
+  });
+
+  it("un locale mal formado tampoco lanza", () => {
+    expect(formatMoney(19, { locale: "no-es-un-locale-válido" })).toBe("USD 19");
+  });
+
+  it("degrada con el MISMO texto que formatCents, para no tener dos dialectos", () => {
+    // 1999 centavos y 19.99 unidades son el mismo precio: si el fallback de una
+    // dijera "USD 19,99" y el de la otra "USD 19.99", la app mostraría el mismo
+    // número de dos formas según qué pantalla lo pintó.
+    expect(formatMoney(19.99, { currency: "US$" })).toBe(formatCents(1999, "US$"));
+    expect(formatMoney(19, { currency: "US$" })).toBe(formatCents(1900, "US$"));
   });
 });

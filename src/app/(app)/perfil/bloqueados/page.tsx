@@ -37,13 +37,23 @@ export default async function BloqueadosPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/entrar?next=/perfil/bloqueados");
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("user_blocks")
     .select(
       `blocked_id, created_at,
        blocked:profiles!user_blocks_blocked_id_fkey(id, display_name, avatar_url)`,
     )
     .order("created_at", { ascending: false });
+
+  // ACÁ EL ERROR SE PROPAGA, Y ES LA RESPUESTA CORRECTA. El cliente de Supabase
+  // no lanza: devuelve `{ data, error }`. Con el `error` descartado, un fallo de
+  // lectura dejaba `data` en null → `[]` → la pantalla afirmaba "No bloqueaste a
+  // nadie". Alguien que entra justamente a confirmar que su bloqueo sigue puesto
+  // lee que no tiene ninguno y concluye que el sistema se lo borró — sobre una
+  // función de seguridad personal, esa mentira es peor que un error. El boundary
+  // de `(app)` la muestra dentro de la app, con el chrome y la navegación
+  // intactos, y ofrece reintentar.
+  if (error) throw error;
 
   const rows = (data ?? []) as unknown as BlockedRow[];
 

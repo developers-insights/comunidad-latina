@@ -25,52 +25,163 @@
 
 ## 2. Estructura de carpetas (ownership del enjambre)
 
+> **Regenerada desde el árbol real el 2026-08-13.** La versión anterior listaba 8 rutas
+> en `(app)/`, 6 carpetas en `components/` y 7 en `lib/`; el repo tenía 25, 33 y 36.
+> Además ubicaba `supabase/migrations/` y `scripts/` DENTRO de `src/`, cuando están en
+> la raíz. Eso no era un detalle cosmético: la regla de ownership del final de esta
+> sección es lo que evita que dos agentes escriban el mismo archivo en un despacho
+> paralelo, y una carpeta que no figura acá no tiene dueño que la proteja.
+>
+> **`SIN DUEÑO — asignar` es una entrada honesta, no un hueco.** Marca las carpetas
+> cuyo dueño no se pudo inferir del contenido ni de los dueños ya declarados. Una
+> atribución inventada es peor que un `SIN DUEÑO` visible: la primera hace que dos
+> agentes se pisen creyendo que tienen permiso.
+
+### 2.1 Raíz del repo
+
 ```
-src/
-├─ middleware.ts               ← resolución de tenant + sesión Supabase (INFRA)
-├─ app/
-│  ├─ layout.tsx               ← root: fuentes, theme del tenant, providers (INFRA/DESIGN)
-│  ├─ globals.css              ← TODOS los design tokens (@theme) (DESIGN)
-│  ├─ manifest.ts              ← PWA manifest dinámico por tenant (PWA)
-│  ├─ sw.ts                    ← service worker Serwist (PWA)
-│  ├─ (marketing)/             ← landing pública, guías SEO (LANDING)
-│  │  ├─ page.tsx              ← landing del tenant
-│  │  └─ guias/[slug]/
-│  ├─ (auth)/                  ← login, registro, onboarding (AUTH)
-│  │  ├─ entrar/  ├─ registro/  └─ bienvenida/   ← onboarding "Recién Llegado"
-│  │  ├─ callback/             ← canjea ?code= (PKCE: magic link, reset)
-│  │  └─ confirmar/            ← canjea ?token_hash= (confirmación de cuenta,
-│  │                             minteado por lib/auth/confirmation.ts)
-│  ├─ (app)/                   ← app autenticada con bottom-nav (shell: INFRA)
-│  │  ├─ feed/                 ← feed principal (SOCIAL)
-│  │  ├─ propiedades/          ← vertical vivienda (VIVIENDA)
-│  │  │  ├─ page.tsx (búsqueda/lista) ├─ [id]/ (detalle) └─ publicar/
-│  │  ├─ negocios/  ├─ profesionales/  ├─ eventos/   (SOCIAL/directorios)
-│  │  ├─ mensajes/             ← contacto protegido (MENSAJES)
-│  │  ├─ perfil/               ← perfil propio + [id] público (AUTH)
-│  │  └─ escudo/               ← Escudo Anti-Estafa: verificador + reportes (ESCUDO)
-│  ├─ admin/                   ← paneles por rol (ADMIN)
-│  │  ├─ global/  ├─ dominio/  └─ moderacion/
-│  └─ api/
-│     ├─ webhooks/stripe/route.ts   (PAGOS)
-│     └─ cron/…/route.ts            (protegidos con CRON_SECRET)
-├─ components/
-│  ├─ ui/          ← primitivos del design system (DESIGN — solo DESIGN escribe acá)
-│  ├─ trust/       ← TrustScoreBadge, TrustScoreSheet, VerificationCard, ScamShieldNotice, ReportScamButton (ESCUDO)
-│  ├─ listings/    (VIVIENDA)  ├─ feed/ (SOCIAL)  ├─ messaging/ (MENSAJES)  └─ shell/ (INFRA: BottomNav, Header)
-├─ lib/
-│  ├─ supabase/    ← client.ts (browser), server.ts (RSC/actions), admin.ts (service-role, SOLO server), middleware.ts
-│  ├─ tenant/      ← resolve.ts (Host→tenant, cache), brand-pipeline.ts (hex→escala tonal WCAG)
-│  ├─ config/services.ts       ← flags de degradación elegante (isStripeConfigured, …)
-│  ├─ i18n/        ← diccionarios ES (default) / EN, helper t()
-│  ├─ trust/       ← cómputo/formateo de niveles Trust Score
-│  ├─ types/database.types.ts  ← generado desde Supabase (NO editar a mano)
-│  └─ utils.ts     ← cn(), formatos Intl
-├─ supabase/migrations/        ← SQL (DB — ya aplicado vía MCP, NO tocar sin gate)
-└─ scripts/                    ← rls-enumerator.mjs, seed.mjs
+comunidad_latina/
+├─ src/                        ← la app (ver 2.2–2.4)
+├─ supabase/migrations/        ← SQL numerado (DB — ya aplicado vía MCP, NO tocar sin gate)
+├─ scripts/                    ← utilitarios .mjs de operación (INFRA)
+│                                new-tenant.mjs · seed*.mjs · apply-migrations.mjs
+│                                rls-enumerator.mjs · vercel-env-sync.mjs · generate-icons.mjs
+├─ public/                     ← estáticos (PWA). `sw.js` es GENERADO: está en .gitignore
+├─ docs/                       ← este contrato + PROGRESS.md + investigación
+├─ assets-source/              ← fuentes de los assets (DESIGN)
+├─ next.config.ts              ← CSP, headers, imágenes, Serwist (PWA + INFRA)
+├─ eslint.config.mjs · vitest.config.ts · tsconfig.json   ← tooling (INFRA)
+└─ AGENTS.md · CLAUDE.md       ← instrucciones del enjambre (INFRA)
 ```
 
-**Regla de ownership:** cada agente escribe SOLO en las carpetas de su módulo (marcadas arriba). `components/ui/` y `globals.css` son del agente DESIGN; los demás los consumen, no los editan.
+### 2.2 `src/app/`
+
+```
+src/
+├─ middleware.ts               ← resolución de tenant (tenant_domains) + sesión (INFRA)
+├─ instrumentation*.ts         ← Sentry / onRequestError (OBSERVABILIDAD)
+├─ app/
+│  ├─ layout.tsx · error.tsx · global-error.tsx · not-found.tsx   ← raíz (INFRA)
+│  ├─ globals.css              ← TODOS los design tokens (@theme) (DESIGN)
+│  ├─ manifest.ts · sw.ts · ~offline/   ← PWA
+│  ├─ robots.ts · sitemap.ts   ← indexación; leen tenant_domains (LANDING)
+│  ├─ (marketing)/             ← LANDING
+│  │  ├─ page.tsx · guias/     ← landing + guías SEO
+│  │  └─ legal/                ← términos, privacidad, cookies (LEGAL)
+│  ├─ (auth)/                  ← AUTH
+│  │  ├─ entrar/ · registro/ · bienvenida/ · recuperar/
+│  │  ├─ callback/             ← canjea ?code= (PKCE)
+│  │  └─ confirmar/            ← canjea ?token_hash= (lib/auth/confirmation.ts)
+│  ├─ (app)/                   ← app autenticada con bottom-nav (shell: INFRA)
+│  │  ├─ feed/ · social/ · videos/         ← SOCIAL
+│  │  ├─ publicaciones/                    ← "mis publicaciones" + renovación (MONETIZACIÓN)
+│  │  ├─ publicar/                         ← alta de aviso, cualquier vertical (DIRECTORIOS)
+│  │  ├─ propiedades/                      ← VIVIENDA
+│  │  ├─ negocios/ · profesionales/ · eventos/   ← DIRECTORIOS
+│  │  ├─ marketplace/                      ← tiendas, productos, membresía (MARKETPLACE)
+│  │  ├─ empleos/                          ← EMPLEOS
+│  │  ├─ creadores/                        ← CREADORES
+│  │  ├─ comunidad/                        ← guías, casos, perdidos (COMUNIDAD)
+│  │  ├─ asistente/                        ← ASISTENTE
+│  │  ├─ buscar/                           ← BÚSQUEDA
+│  │  ├─ mensajes/                         ← contacto protegido (MENSAJES)
+│  │  ├─ notificaciones/                   ← NOTIFICACIONES
+│  │  ├─ perfil/                           ← perfil propio + [id] público (AUTH)
+│  │  ├─ ajustes/                          ← cuenta, privacidad, teléfono, tema (AUTH)
+│  │  ├─ verificacion/                     ← check azul pago, 0101 (VERIFICACIÓN)
+│  │  ├─ escudo/                           ← verificador + reportes de estafa (ESCUDO)
+│  │  ├─ contenido/reclamar/               ← disputas de autoría (INTEGRIDAD)
+│  │  ├─ impulsar/ · impulsar-post/        ← boosts y campañas (MONETIZACIÓN)
+│  │  └─ reportes/                         ← SIN DUEÑO — asignar (una action suelta;
+│  │                                         parece ESCUDO o MODERACIÓN, no está claro)
+│  ├─ admin/                   ← ADMIN
+│  │  ├─ global/ (incl. dominios/) · dominio/ · moderacion/ · miembros/
+│  │  ├─ creadores/ · empleos/ · metricas/
+│  │  └─ guard.ts · scope.ts   ← autorización por rol desde el JWT
+│  └─ api/
+│     ├─ assistant/            ← ASISTENTE (moderación + rate limit + RAG fts)
+│     └─ webhooks/stripe/      ← PAGOS
+```
+
+### 2.3 `src/components/`
+
+```
+├─ components/
+│  ├─ ui/            ← primitivos del design system (DESIGN — solo DESIGN escribe acá)
+│  ├─ theme/ · motion/ · experience/ · media/   ← tema, animación, transiciones (DESIGN)
+│  ├─ shell/         ← BottomNav, Header, module-access (INFRA)
+│  ├─ pwa/           ← install prompt, retry (PWA)
+│  ├─ auth/          ← formularios de sesión, perfil, identidad (AUTH)
+│  ├─ feed/ · social/ ← tarjetas, composer, comentarios (SOCIAL)
+│  ├─ listings/      ← VIVIENDA
+│  ├─ directory/ · negocios/   ← fichas y horarios de directorios (DIRECTORIOS)
+│  ├─ marketplace/   ← MARKETPLACE
+│  ├─ empleos/       ← EMPLEOS
+│  ├─ creators/      ← CREADORES
+│  ├─ comunidad/     ← COMUNIDAD
+│  ├─ assistant/     ← ASISTENTE
+│  ├─ search/        ← BÚSQUEDA
+│  ├─ messaging/     ← MENSAJES
+│  ├─ notifications/ ← NOTIFICACIONES
+│  ├─ verificacion/  ← check azul (VERIFICACIÓN)
+│  ├─ trust/ · escudo/  ← Trust Score, verificador, reportes (ESCUDO)
+│  ├─ integrity/     ← declaración de originalidad (INTEGRIDAD)
+│  ├─ boosts/        ← MONETIZACIÓN
+│  ├─ legal/         ← banner y preferencias de consentimiento (LEGAL)
+│  ├─ admin/         ← ADMIN
+│  ├─ marketing/     ← LANDING
+│  ├─ onboarding/    ← wizard de "Recién Llegado" (AUTH)
+│  ├─ resenas/       ← reseñas y estrellas (RESEÑAS)
+│  ├─ matching/      ← "Para vos" (MATCHING)
+│  └─ time/          ← zona horaria del lector (INFRA)
+```
+
+### 2.4 `src/lib/`
+
+```
+├─ lib/
+│  ├─ supabase/      ← client.ts (browser), server.ts (RSC/actions),
+│  │                   admin.ts (service-role, SOLO server), middleware.ts (INFRA)
+│  ├─ tenant/        ← resolve.ts · domain-lookup.ts · domain-routing.ts · guard.ts ·
+│  │                   match.ts (INFRA) · brand-pipeline.ts (INFRA + DESIGN: la escala
+│  │                   tonal WCAG la consume el tema, pero el gate lo corre new-tenant.mjs)
+│  ├─ config/services.ts   ← flags de degradación elegante (INFRA)
+│  ├─ types/database.types.ts  ← generado desde Supabase (DB — NO editar a mano)
+│  ├─ i18n/          ← diccionarios ES/EN, helper t() (i18n, §8)
+│  ├─ utils.ts       ← cn(), formatos Intl (INFRA — lo importa medio repo)
+│  ├─ auth/ · profile/ · perfil-activo/ · phone/   ← AUTH
+│  ├─ social/        ← SOCIAL
+│  ├─ listings/ · propiedades/   ← VIVIENDA
+│  ├─ horarios/      ← apertura de negocios (DIRECTORIOS)
+│  ├─ empleos/ · creators/       ← EMPLEOS · CREADORES
+│  ├─ comunidad/     ← COMUNIDAD
+│  ├─ rag/           ← recuperación fts del Asistente (ASISTENTE)
+│  ├─ moderation/    ← clasificación de contenido y contact-block (MODERACIÓN)
+│  ├─ trust/         ← cómputo/formateo de niveles Trust Score (ESCUDO)
+│  ├─ integrity/     ← huellas, procedencia, disputas (INTEGRIDAD)
+│  ├─ verificacion/  ← check azul: catálogo, lectura, webhook (VERIFICACIÓN)
+│  ├─ stripe/ · pricing/ · monetization/ · boosts/   ← PAGOS / MONETIZACIÓN
+│  ├─ notifications/ ← NOTIFICACIONES
+│  ├─ resenas/       ← RESEÑAS
+│  ├─ matching/      ← MATCHING
+│  ├─ metrics/       ← métricas del panel (ADMIN)
+│  ├─ consent/       ← categorías y gate de cookies (LEGAL)
+│  ├─ email/         ← Resend + templates (EMAILS)
+│  ├─ media/         ← límites, medición y mezcla de audio/video (SOCIAL + INTEGRIDAD)
+│  ├─ time/          ← zona horaria de la comunidad y del lector (INFRA)
+│  ├─ rate-limit/ · url/   ← INFRA (seguridad app-layer, §9)
+│  ├─ brand.ts       ← SIN DUEÑO — asignar (constante suelta; convive con
+│  │                   tenant/brand-pipeline.ts, que sí tiene dueño)
+│  └─ design/        ← SIN DUEÑO — asignar (un solo hook, `use-overlay.ts`;
+│                      por contenido parece DESIGN, pero DESIGN escribe en
+│                      `components/ui/` y esto es lógica)
+```
+
+**Regla de ownership:** cada agente escribe SOLO en las carpetas de su módulo (marcadas
+arriba). `components/ui/` y `globals.css` son del agente DESIGN; los demás los consumen,
+no los editan. `supabase/migrations/` y `lib/types/database.types.ts` no se tocan sin el
+gate de DB. Una carpeta marcada `SIN DUEÑO — asignar` se toca previa asignación
+explícita, no por default.
 
 ## 3. Multi-tenancy (cómo fluye el tenant)
 

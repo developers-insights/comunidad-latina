@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import * as Sentry from "@sentry/nextjs";
 import { CloudSlash } from "@phosphor-icons/react/dist/ssr";
 import { ThemeToggle } from "@/components/theme";
 import { Button, EmptyState, buttonVariants } from "@/components/ui";
@@ -38,8 +39,16 @@ export default function GlobalErrorBoundary({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log técnico solo en consola (y a Sentry vía instrumentation cuando esté
-    // configurado). Nunca PII: digest + message alcanzan para rastrear.
+    // EL COPY PROMETE "ya quedó registrado", ASÍ QUE ACÁ SE REGISTRA DE VERDAD.
+    //
+    // `instrumentation.ts` sólo expone `onRequestError`, que cubre RSC y route
+    // handlers. Un error de render EN CLIENTE lo atrapa el error boundary de
+    // React y nunca llega a `window.onerror`, así que el SDK no lo ve solo: sin
+    // este `captureException` la pantalla le decía al usuario que lo íbamos a
+    // revisar y no llegaba nada. Sin init (sin DSN) es un no-op del SDK.
+    Sentry.captureException(error);
+    // Y la consola igual: en dev es lo único que se lee, y no cuesta nada.
+    // Nunca PII: digest + message alcanzan para rastrear.
     console.error("[app] error boundary", { digest: error.digest, message: error.message });
   }, [error]);
 

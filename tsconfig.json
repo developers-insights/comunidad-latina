@@ -30,5 +30,10 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  // Los git worktrees viven anidados en `.claude/worktrees/`, así que desde la
+  // raíz `tsc` entra ahí y chequea el código y el `.next/` de OTRA rama — justo
+  // durante un despacho paralelo, que es cuando los worktrees existen. Cada
+  // worktree corre su propio typecheck desde su raíz. Mismo motivo que el
+  // `ignores` de eslint.config.mjs y el `exclude` de vitest.config.ts.
+  "exclude": ["node_modules", "**/.claude/worktrees/**"]
 }

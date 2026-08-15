@@ -17,6 +17,16 @@
 /.next/
 /out/
 
+# Service worker emitido por @serwist/next en cada `next build --webpack`
+# (swDest de next.config.ts). Es un bundle de ~62 KB, no código fuente: cambia
+# en cada build de cada rama y es imposible de mergear. Vercel lo regenera en
+# su propio build, y el precache se versiona por `buildRevision` (hash de
+# timestamp + commit sha, next.config.ts) — no por el archivo commiteado, así
+# que sacarlo del índice no afecta la actualización del SW en producción.
+# eslint.config.mjs ya lo ignoraba; esto cierra la otra mitad.
+/public/sw.js
+/public/sw.js.map
+
 # production
 /build
 

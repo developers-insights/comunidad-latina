@@ -105,12 +105,10 @@ export function browserTimeZone(): string | null {
   }
 }
 
-/**
- * La zona del navegador PERO acotada al catálogo. Alguien en `America/Indiana/
- * Vincennes` no encuentra su opción en la lista; lo honesto es no preseleccionar
- * nada antes que preseleccionar la zona equivocada.
+/*
+ * Acá vivía `suggestedTimeZone()` — la zona del navegador acotada al catálogo.
+ * Se borró en la auditoría 2026-08-13 por no tener un solo consumidor: el
+ * selector de zona usa `browserTimeZone()` directo y decide por su cuenta.
+ * Si vuelve a hacer falta preseleccionar acotando al catálogo, son dos líneas
+ * (`browserTimeZone()` + `isKnownTimeZone()`), las dos ya acá arriba.
  */
-export function suggestedTimeZone(): string | null {
-  const zone = browserTimeZone();
-  return zone && KNOWN.has(zone) ? zone : null;
-}

@@ -133,8 +133,8 @@ const envPattern = supabaseRemotePattern();
  *   `style-src 'unsafe-inline'` no se puede sacar ni con nonce: el branding del
  *   tenant se pinta como ATRIBUTO `style` en <html> (ARQUITECTURA §3) y los
  *   nonces no aplican a atributos, sólo a elementos <style>.
- * - connect-src: Supabase (REST + Realtime wss), OpenAI (moderación/RAG),
- *   Sentry ingest, Stripe API.
+ * - connect-src: Supabase (REST + Realtime wss), Sentry ingest, Stripe API.
+ *   OpenAI NO está: se llama sólo desde el servidor (ver la nota en la lista).
  * - img-src: blob:/data: (previews de upload) + Storage de Supabase + Pexels (demo).
  * - media-src: <video>/<audio> de Supabase Storage + blob: (preview local).
  */
@@ -149,7 +149,13 @@ const csp = [
   // https://images.pexels.com también en connect-src: el service worker (Serwist)
   // revalida las <img> con fetch() y ese fetch cae bajo connect-src, no img-src —
   // sin esto las fotos del seed demo se bloquean bajo enforcing (deuda: ver arriba).
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://images.pexels.com https://api.openai.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com",
+  // NO va `https://api.openai.com`: OpenAI se llama SÓLO desde el servidor
+  // (moderación, copiloto de negocios), y `connect-src` gobierna únicamente lo
+  // que el NAVEGADOR puede pedir. La entrada estaba desde el camino RAG
+  // vectorial, que se borró en la auditoría 2026-08-13 por no tener
+  // consumidores. Permitir un host que el navegador nunca visita es superficie
+  // de exfiltración regalada.
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://images.pexels.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com",
   "frame-src https://js.stripe.com https://hooks.stripe.com",
   "worker-src 'self' blob:",
   "base-uri 'self'",

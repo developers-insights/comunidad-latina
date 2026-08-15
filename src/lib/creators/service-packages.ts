@@ -152,7 +152,12 @@ export function reindexOrder(ids: readonly string[]): { id: string; sortOrder: n
   return ids.map((id, index) => ({ id, sortOrder: index }));
 }
 
-/** Orden de presentación: el que eligió el creador; los empates, por antigüedad. */
-export function comparePackages(a: ServicePackage, b: ServicePackage): number {
-  return a.sortOrder - b.sortOrder;
-}
+/*
+ * Acá vivía `comparePackages(a, b) => a.sortOrder - b.sortOrder`. Se borró en
+ * la auditoría 2026-08-13: nadie la llamaba. El orden ya llega resuelto desde
+ * la base (`order by sort_order`), que es donde corresponde ordenar una lista
+ * que igual hay que traer completa — un comparador en memoria sólo agregaba un
+ * segundo lugar donde el orden podía divergir. Nota del docstring original, que
+ * NO se cumplía en el código borrado y sí lo cumple el `order by`: los empates
+ * se desempatan por antigüedad.
+ */

@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { m } from "motion/react";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { cn } from "@/lib/utils";
 
 interface TabsContextValue {
@@ -121,6 +122,7 @@ export function TabsTrigger({
 }) {
   const { value: selectedValue, setValue, idBase } = useTabsContext("TabsTrigger");
   const selected = selectedValue === value;
+  const reduce = usePrefersReducedMotion();
 
   return (
     <button
@@ -142,12 +144,15 @@ export function TabsTrigger({
     >
       {children}
       {selected && (
-        // underline con color de marca, se desliza entre tabs
+        // underline con color de marca, se desliza entre tabs — con
+        // prefers-reduced-motion el FLIP de layoutId igual reubica el
+        // underline (mismo estado final), pero en un frame en vez de
+        // deslizarse (duration: 0, receta oficial de motion para reduced motion).
         <m.span
           layoutId={`${idBase}-underline`}
           aria-hidden="true"
           className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand"
-          transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+          transition={reduce ? { duration: 0 } : { duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
         />
       )}
     </button>

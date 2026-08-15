@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchPostMusic, toPostCardModel, type PostRow } from "./queries";
+import {
+  fetchActivePromotions,
+  fetchBlockedIds,
+  fetchFollowedListingIds,
+  fetchPostMusic,
+  toPostCardModel,
+  type PostRow,
+} from "./queries";
 import type { AuthorView, PostMusicView } from "@/components/feed";
 
 /**
@@ -275,5 +282,117 @@ describe("toPostCardModel — el filtro del video se resuelve contra el catálog
     );
 
     expect(model.media[0]?.filterCss).toBeUndefined();
+  });
+});
+
+/* ------------------------------------------------------------------------- *
+ * Lo que viaja por la URL: topes y fail-closed
+ *
+ * Las lecturas de supabase-js son GET, así que cada uuid de estas listas
+ * termina en el querystring (~39 bytes). Sin tope, el 414 de Kong/nginx no lo
+ * dispara un usuario raro: lo dispara el crecimiento del producto, y le pega a
+ * todo el tenant a la vez. Estos tests fijan que los topes existan Y que estén
+ * ORDENADOS — un `.limit()` sin `.order()` deja que el planificador elija qué
+ * 200 sobreviven, que es tan arbitrario como no tener tope.
+ * ------------------------------------------------------------------------- */
+
+interface RecordedCall {
+  method: string;
+  args: unknown[];
+}
+
+/** Builder falso que además ANOTA cómo se armó la query (order/limit/eq). */
+function createRecordingStub(result: QueryResult) {
+  const calls: RecordedCall[] = [];
+  const record =
+    (method: string) =>
+    (...args: unknown[]) => {
+      calls.push({ method, args });
+      return builder;
+    };
+  const builder = {
+    select: record("select"),
+    eq: record("eq"),
+    gt: record("gt"),
+    in: record("in"),
+    order: record("order"),
+    limit: record("limit"),
+    then: (resolve: (v: QueryResult) => unknown, reject: (e: unknown) => unknown) =>
+      Promise.resolve(result).then(resolve, reject),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+  const from = vi.fn(() => builder);
+  const argsOf = (method: string) => calls.filter((c) => c.method === method).map((c) => c.args);
+  return { client: { from } as unknown as SupabaseClient, from, calls, argsOf };
+}
+
+describe("fetchBlockedIds — filtro de seguridad, no adorno", () => {
+  it("si la lectura de bloqueos FALLA, NO devuelve un set vacío: lanza", async () => {
+    // El bug que este test existe para que no vuelva: `const { data } = await …`
+    // descartaba el error y devolvía `new Set(data ?? [])`, o sea que un hipo de
+    // la base se leía como "no bloqueaste a nadie" y quien bloqueó a su acosador
+    // volvía a verlo en el feed, en el reel y en los hilos — sin un solo log.
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const stub = createRecordingStub({ error: { code: "57014" } });
+
+    await expect(fetchBlockedIds(stub.client, "viewer-1")).rejects.toThrow();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("sin sesión no consulta nada (anónimo no bloqueó a nadie)", async () => {
+    const stub = createRecordingStub({ data: [] });
+    expect((await fetchBlockedIds(stub.client, null)).size).toBe(0);
+    expect(stub.from).not.toHaveBeenCalled();
+  });
+
+  it("acota a 200 y se queda con los bloqueos MÁS RECIENTES", async () => {
+    const stub = createRecordingStub({ data: [{ blocked_id: "b1" }, { blocked_id: "b2" }] });
+
+    const blocked = await fetchBlockedIds(stub.client, "viewer-1");
+
+    expect([...blocked]).toEqual(["b1", "b2"]);
+    expect(stub.argsOf("limit")).toEqual([[200]]);
+    expect(stub.argsOf("order")).toEqual([["created_at", { ascending: false }]]);
+  });
+});
+
+describe("fetchFollowedListingIds — alcance, no seguridad", () => {
+  it("acota a 200 por los más recientes", async () => {
+    const stub = createRecordingStub({ data: [{ target_id: "l1" }] });
+
+    expect(await fetchFollowedListingIds(stub.client, "viewer-1")).toEqual(["l1"]);
+    expect(stub.argsOf("limit")).toEqual([[200]]);
+    expect(stub.argsOf("order")).toEqual([["created_at", { ascending: false }]]);
+  });
+
+  it("si falla, el feed queda con lo personal + lo promocionado (y se loguea)", async () => {
+    // Acá SÍ se degrada en silencio, al revés que con los bloqueos: no ver lo
+    // que seguís es ver de menos; no aplicar un bloqueo es mostrar lo que la
+    // persona pidió no ver nunca más.
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const stub = createRecordingStub({ error: { code: "57014" } });
+
+    expect(await fetchFollowedListingIds(stub.client, "viewer-1")).toEqual([]);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+});
+
+describe("fetchActivePromotions — la lista compartida del tenant", () => {
+  it("acota a 150 campañas y prioriza las que más tiempo les queda", async () => {
+    // Es la lista del TENANT, no la del viewer: cuando cruza el presupuesto de
+    // la URL, el feed devuelve 414 para todos a la vez. El orden por `ends_at
+    // desc` lo sirve el índice post_promotions_tenant_active_idx.
+    const stub = createRecordingStub({
+      data: [{ post_id: "p1", cta_whatsapp: " +13055550134 " }, { post_id: "p2" }],
+    });
+
+    const promos = await fetchActivePromotions(stub.client, "tenant-1");
+
+    expect([...promos.postIds]).toEqual(["p1", "p2"]);
+    expect(promos.whatsappByPostId.get("p1")).toBe("+13055550134");
+    expect(stub.argsOf("limit")).toEqual([[150]]);
+    expect(stub.argsOf("order")).toEqual([["ends_at", { ascending: false }]]);
   });
 });

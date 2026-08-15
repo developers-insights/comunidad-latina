@@ -25,7 +25,7 @@ import { CommentComposer, type CommentOptimisticHandlers } from "./comment-compo
 import { CommentItem } from "./comment-item";
 import { CommentMenu } from "./comment-menu";
 import { COPY } from "./copy";
-import type { AuthorView } from "./helpers";
+import { COMMENT_THREAD_COPY, type AuthorView } from "./helpers";
 
 /**
  * HOJA DE COMENTARIOS estilo Instagram (feedback cliente 2026-07-21: "doy un
@@ -257,7 +257,27 @@ export function CommentsSheetProvider({ children }: { children: ReactNode }) {
 
 type Supabase = SupabaseClient<Database>;
 
-const COMMENTS_LIMIT = 200;
+/**
+ * Cuántos comentarios trae CADA tanda del hilo. Es un tamaño de PÁGINA, no un
+ * techo: antes eran 200 sin cursor, o sea que el comentario 201 no existía para
+ * nadie —ni para quien lo escribió—, y como el orden era ascendente lo que se
+ * perdía era lo más NUEVO: justo la conversación viva. Una publicación viral
+ * alcanzaba ese techo el primer día.
+ */
+const COMMENTS_PAGE_SIZE = 50;
+
+/**
+ * Botón sobre el VIDRIO: contorneado en tinta de media (AA de sobra sobre el
+ * velo al 72%). Sobre el vidrio, el botón claro de siempre sería justo el
+ * bloque blanco que el cliente pidió sacar.
+ *
+ * Está declarado UNA vez y no repetido en cada botón porque es el mismo
+ * tratamiento — y porque `src/test/print-contract.test.ts` inventaría cuántas
+ * tintas `on-*` escribe cada archivo: repetir el literal es sumar una tinta más
+ * que justificar sin que haya una decisión nueva detrás.
+ */
+const ON_MEDIA_BUTTON =
+  "border border-on-media/45 bg-transparent text-on-media hover:bg-on-media/10";
 
 /** Autor faltante → miembro anónimo cálido (espejo de FALLBACK_AUTHOR en queries.ts). */
 const FALLBACK_AUTHOR: AuthorView = {
@@ -338,6 +358,38 @@ function authorViewOf(
 }
 
 /**
+ * Fila del hilo → comentario pintable. Una sola función para la tanda de
+ * apertura y para las de "ver anteriores": si cada una resolviera el autor por
+ * su cuenta, los comentarios viejos podrían aparecer con otro nombre que los
+ * nuevos del mismo autor.
+ */
+function toLoadedComment(
+  row: ThreadRow,
+  authors: Map<string, AuthorView>,
+  now: Date,
+): LoadedComment {
+  return {
+    id: row.id,
+    body: row.body,
+    timeAgoLabel: timeAgo(row.createdAt, now),
+    // Si el perfil no resuelve pero la action trajo nombre/foto, se usan sin
+    // profileId: mostramos a la persona, pero NO afirmamos confianza que no
+    // tenemos (sin profileId, CommentItem no pinta el badge de Trust).
+    author: authorViewOf(
+      authors,
+      row.authorId,
+      row.fallbackName
+        ? {
+            ...FALLBACK_AUTHOR,
+            displayName: row.fallbackName,
+            avatarUrl: row.fallbackAvatarUrl ?? null,
+          }
+        : FALLBACK_AUTHOR,
+    ),
+  };
+}
+
+/**
  * Fila del hilo ya normalizada: los comentarios de un post vienen de Supabase y
  * los de un aviso de una server action, pero de acá para abajo se tratan igual.
  */
@@ -361,40 +413,125 @@ interface SubjectState {
   commentsLocked: boolean;
 }
 
+/** Posición del hilo para pedir la tanda ANTERIOR (keyset, nunca OFFSET). */
+interface ThreadCursor {
+  createdAt: string;
+  id: string;
+}
+
+/** Una tanda del hilo, ya en orden de lectura (la más vieja primero). */
+interface ThreadPage {
+  rows: ThreadRow[];
+  /** Hay comentarios MÁS VIEJOS que los de esta tanda. */
+  hasOlder: boolean;
+  /**
+   * Desde dónde seguir hacia atrás: la fila más vieja LEÍDA (no la más vieja
+   * VISIBLE). El filtro de bloqueados corre después, y si se comiera justo esa
+   * fila, un cursor tomado de lo visible saltearía comentarios.
+   */
+  olderCursor: ThreadCursor | null;
+}
+
 type ThreadResult =
-  | { ok: true; rows: ThreadRow[]; subject: SubjectState }
+  | {
+      ok: true;
+      page: ThreadPage;
+      subject: SubjectState;
+      /** Comunidad del post: la necesita el keyset de las tandas siguientes. */
+      tenantId: string | null;
+    }
   | { ok: false };
 
 /** Sin datos del sujeto: el caso del aviso, que no tiene ninguna de las dos cosas. */
 const NO_SUBJECT_STATE: SubjectState = { authorId: null, commentsLocked: false };
 
-/** Hilo de un POST: lectura directa con RLS (camino histórico, sin cambios). */
-async function loadPostThread(supabase: Supabase, postId: string): Promise<ThreadResult> {
-  const [{ data, error }, postResult] = await Promise.all([
-    supabase
-      .from("comments")
-      .select("id, body, created_at, author_id, status")
-      .eq("post_id", postId)
-      .eq("status", "published")
-      .order("created_at", { ascending: true })
-      .order("id", { ascending: true })
-      .limit(COMMENTS_LIMIT),
-    // `comments_locked_at` llega con la 0097 y todavía no está en
-    // database.types.ts → cliente de schema abierto, igual que `saves`. Va en
-    // paralelo con el hilo: es una fila por su clave primaria, no suma espera.
-    (supabase as unknown as SupabaseClient)
-      .from("posts")
-      .select("author_id, comments_locked_at")
-      .eq("id", postId)
-      .maybeSingle(),
-  ]);
+/**
+ * UNA tanda de comentarios de un post, de la más nueva hacia atrás.
+ *
+ * Se LEE descendente y se ENTREGA ascendente: la lectura del hilo sigue siendo
+ * la de siempre (el más viejo arriba), pero la tanda garantizada pasa a ser la
+ * de la conversación viva en vez de la de los primeros 200 comentarios de la
+ * historia.
+ *
+ * `tenant_id` va en el WHERE aunque `post_id` ya acote el hilo: es la columna
+ * LÍDER de `comments_post_thread_idx (tenant_id, post_id, created_at, id)`, y
+ * la policy no lo aporta como qual (lo tiene dentro de un OR, y un OR no se
+ * convierte en condición de índice). Sin él el plan cae a `comments_post_fk_idx`
+ * + Sort en memoria — leer y ordenar los 5.000 comentarios de un hilo para
+ * devolver 50, cada vez que alguien abre la hoja. Verificado con EXPLAIN: con
+ * `tenant_id` es "Index Scan Backward using comments_post_thread_idx", sin Sort.
+ *
+ * Va como parámetro opcional porque en el cliente el tenant no se conoce de
+ * antemano (no hay provider ni env pública): sale de la fila del post. Si esa
+ * lectura falla, la tanda se pide igual SIN el filtro — es una optimización de
+ * plan, no una frontera de seguridad (esa la ponen la RLS y el `post_id`).
+ */
+async function fetchPostComments(
+  supabase: Supabase,
+  postId: string,
+  tenantId: string | null,
+  olderThan: ThreadCursor | null,
+): Promise<{ ok: true; page: ThreadPage } | { ok: false }> {
+  let query = supabase
+    .from("comments")
+    .select("id, body, created_at, author_id, status")
+    .eq("post_id", postId)
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    // +1 para saber si hay tanda anterior sin pagar una segunda consulta.
+    .limit(COMMENTS_PAGE_SIZE + 1);
+
+  if (tenantId) query = query.eq("tenant_id", tenantId);
+  if (olderThan) {
+    query = query.or(
+      `created_at.lt."${olderThan.createdAt}",and(created_at.eq."${olderThan.createdAt}",id.lt."${olderThan.id}")`,
+    );
+  }
+
+  const { data, error } = await query;
   if (error) return { ok: false };
+
+  const fetched = data ?? [];
+  const pageRows = fetched.slice(0, COMMENTS_PAGE_SIZE);
+  const oldest = pageRows[pageRows.length - 1];
+  return {
+    ok: true,
+    page: {
+      hasOlder: fetched.length > COMMENTS_PAGE_SIZE,
+      olderCursor: oldest ? { createdAt: oldest.created_at, id: oldest.id } : null,
+      rows: pageRows
+        .map((row) => ({
+          id: row.id,
+          body: row.body,
+          createdAt: row.created_at,
+          authorId: row.author_id,
+        }))
+        .reverse(),
+    },
+  };
+}
+
+/** Hilo de un POST: lectura directa con RLS (camino histórico, ahora paginado). */
+async function loadPostThread(supabase: Supabase, postId: string): Promise<ThreadResult> {
+  // El estado del post va PRIMERO y solo, no ya en paralelo con el hilo: de acá
+  // sale el `tenant_id` que la tanda necesita para entrar por el índice del
+  // hilo. Es una fila por su clave primaria — un salto barato a cambio de dejar
+  // de ordenar el hilo entero en memoria en cada apertura.
+  //
+  // `comments_locked_at` llega con la 0097 y todavía no está en
+  // database.types.ts → cliente de schema abierto, igual que `saves`.
+  const postResult = await (supabase as unknown as SupabaseClient)
+    .from("posts")
+    .select("tenant_id, author_id, comments_locked_at")
+    .eq("id", postId)
+    .maybeSingle();
 
   // Que no se pueda leer el estado del post NO tira abajo el hilo: se cae al
   // caso conservador (sin menú de borrar, con el campo de escribir abierto) y
   // la policy `comments_insert` sigue siendo la que decide de verdad.
   const postRow = postResult.data as
-    | { author_id: string | null; comments_locked_at: string | null }
+    | { tenant_id: string | null; author_id: string | null; comments_locked_at: string | null }
     | null;
   if (postResult.error) {
     console.warn("[feed] estado del post para el hilo no disponible", {
@@ -402,14 +539,14 @@ async function loadPostThread(supabase: Supabase, postId: string): Promise<Threa
     });
   }
 
+  const tenantId = postRow?.tenant_id ?? null;
+  const comments = await fetchPostComments(supabase, postId, tenantId, null);
+  if (!comments.ok) return { ok: false };
+
   return {
     ok: true,
-    rows: (data ?? []).map((row) => ({
-      id: row.id,
-      body: row.body,
-      createdAt: row.created_at,
-      authorId: row.author_id,
-    })),
+    page: comments.page,
+    tenantId,
     subject: {
       authorId: postRow?.author_id ?? null,
       commentsLocked: Boolean(postRow?.comments_locked_at),
@@ -423,14 +560,22 @@ async function loadListingThread(listingId: string): Promise<ThreadResult> {
   if (!result.ok) return { ok: false };
   return {
     ok: true,
-    rows: result.items.map((item) => ({
-      id: item.id,
-      body: item.body,
-      createdAt: item.createdAt,
-      authorId: item.authorId,
-      fallbackName: item.authorName,
-      fallbackAvatarUrl: item.avatarUrl,
-    })),
+    // El aviso trae su hilo entero desde la action (otra tabla, otro dueño): no
+    // hay tanda anterior que pedir desde acá. Si `listing_comments` crece hasta
+    // necesitarlo, el cursor tiene que nacer en esa action, no en esta hoja.
+    tenantId: null,
+    page: {
+      hasOlder: false,
+      olderCursor: null,
+      rows: result.items.map((item) => ({
+        id: item.id,
+        body: item.body,
+        createdAt: item.createdAt,
+        authorId: item.authorId,
+        fallbackName: item.authorName,
+        fallbackAvatarUrl: item.avatarUrl,
+      })),
+    },
     // Los avisos no tienen ninguna de las dos cosas de la 0097: el borrado de
     // `listing_comments` y su cierre son otra tabla y otra decisión.
     subject: NO_SUBJECT_STATE,
@@ -549,6 +694,21 @@ function CommentsSheetBody({
    * abrió la hoja; son dos cosas distintas y confundirlas sería fácil.
    */
   const [subjectState, setSubjectState] = useState<SubjectState>(NO_SUBJECT_STATE);
+  /**
+   * Desde dónde pedir la tanda ANTERIOR. `null` = no hay más hacia atrás (o el
+   * hilo todavía no cargó), y por eso es lo mismo que decide si se ofrece el
+   * botón: nunca se muestra un "ver anteriores" que no vaya a traer nada.
+   */
+  const [olderCursor, setOlderCursor] = useState<ThreadCursor | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  /** Comunidad del post — la necesita el keyset de las tandas siguientes. */
+  const [tenantId, setTenantId] = useState<string | null>(null);
+  /**
+   * Bloqueos del viewer, guardados para poder filtrar TAMBIÉN las tandas que
+   * lleguen después. Sin esto, "ver anteriores" era la puerta de atrás por la
+   * que reaparecía la persona bloqueada.
+   */
+  const blockedRef = useRef<ReadonlySet<string>>(new Set());
   // undefined = auth sin resolver todavía; null = anónimo; objeto = logueado.
   const [viewer, setViewer] = useState<
     { id: string; author: AuthorView } | null | undefined
@@ -580,9 +740,10 @@ function CommentsSheetBody({
     const blocked = new Set(
       (blocksResult.data ?? []).map((row) => row.blocked_id),
     );
+    blockedRef.current = blocked;
     // Mismo filtro que el detalle: fuera los comentarios de gente que el viewer
     // bloqueó (barato, en memoria).
-    const rows = thread.rows.filter(
+    const rows = thread.page.rows.filter(
       (row) => !row.authorId || !blocked.has(row.authorId),
     );
 
@@ -592,33 +753,62 @@ function CommentsSheetBody({
     );
     const authors = await fetchAuthorViewsClient(supabase, authorIds);
 
-    setComments(
-      rows.map((row) => ({
-        id: row.id,
-        body: row.body,
-        timeAgoLabel: timeAgo(row.createdAt, now),
-        // Si el perfil no resuelve pero la action trajo nombre/foto, se usan sin
-        // profileId: mostramos a la persona, pero NO afirmamos confianza que no
-        // tenemos (sin profileId, CommentItem no pinta el badge de Trust).
-        author: authorViewOf(
-          authors,
-          row.authorId,
-          row.fallbackName
-            ? {
-                ...FALLBACK_AUTHOR,
-                displayName: row.fallbackName,
-                avatarUrl: row.fallbackAvatarUrl ?? null,
-              }
-            : FALLBACK_AUTHOR,
-        ),
-      })),
-    );
+    setComments(rows.map((row) => toLoadedComment(row, authors, now)));
+    setTenantId(thread.tenantId);
+    setOlderCursor(thread.page.hasOlder ? thread.page.olderCursor : null);
     setSubjectState(thread.subject);
     setViewer(
       viewerId ? { id: viewerId, author: authorViewOf(authors, viewerId) } : null,
     );
     setStatus("ready");
   }, [subject]);
+
+  /**
+   * Trae la tanda ANTERIOR y la pega ARRIBA de lo que ya se está leyendo.
+   *
+   * Conserva la posición de lectura: se mide la distancia al fondo antes de
+   * insertar y se restaura después. Sin eso, meter 50 comentarios encima
+   * teletransporta a quien estaba leyendo — que es exactamente lo que esta hoja
+   * nació para evitar ("después de comentar no debería salirme del feed").
+   */
+  const loadOlder = useCallback(async () => {
+    if (subject.kind !== "post" || !olderCursor || loadingOlder) return;
+    setLoadingOlder(true);
+    const supabase = createClient();
+    const now = new Date();
+    const result = await fetchPostComments(supabase, subject.id, tenantId, olderCursor);
+    if (!result.ok) {
+      // La tanda anterior no se pudo traer: el hilo que ya está en pantalla NO
+      // se toca (sería castigar al que sólo quiso leer más atrás). El botón
+      // vuelve a quedar disponible para reintentar.
+      setLoadingOlder(false);
+      return;
+    }
+
+    const rows = result.page.rows.filter(
+      (row) => !row.authorId || !blockedRef.current.has(row.authorId),
+    );
+    const authors = await fetchAuthorViewsClient(
+      supabase,
+      rows.map((row) => row.authorId).filter((id): id is string => Boolean(id)),
+    );
+
+    const node = scrollRef.current;
+    const anchor = node ? node.scrollHeight - node.scrollTop : null;
+
+    setComments((prev) => [
+      ...rows.map((row) => toLoadedComment(row, authors, now)),
+      ...prev,
+    ]);
+    setOlderCursor(result.page.hasOlder ? result.page.olderCursor : null);
+    setLoadingOlder(false);
+
+    if (node && anchor !== null && typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => {
+        node.scrollTop = node.scrollHeight - anchor;
+      });
+    }
+  }, [subject, olderCursor, loadingOlder, tenantId]);
 
   useEffect(() => {
     // Diferido a un frame (patrón splash-screen): la regla set-state-in-effect
@@ -742,13 +932,7 @@ function CommentsSheetBody({
             <Button
               variant="secondary"
               size="sm"
-              // Sobre el vidrio, el botón claro de siempre sería justo el bloque
-              // blanco que el cliente pidió sacar: acá va contorneado en tinta
-              // de media (AA de sobra sobre el velo al 72%).
-              className={cn(
-                onMedia &&
-                  "border border-on-media/45 bg-transparent text-on-media hover:bg-on-media/10",
-              )}
+              className={cn(onMedia && ON_MEDIA_BUTTON)}
               onClick={() => {
                 setStatus("loading");
                 void load();
@@ -780,6 +964,23 @@ function CommentsSheetBody({
             >
               {COPY.comments.emptyMessage}
             </p>
+          </div>
+        )}
+
+        {/* Tanda ANTERIOR. Va arriba del hilo porque hacia arriba es hacia el
+            pasado: el orden de lectura es ascendente. Sólo aparece cuando hay
+            algo real que traer (olderCursor). */}
+        {status === "ready" && olderCursor && (
+          <div className="flex justify-center pt-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={loadingOlder}
+              className={cn(onMedia && ON_MEDIA_BUTTON)}
+              onClick={() => void loadOlder()}
+            >
+              {COMMENT_THREAD_COPY.older}
+            </Button>
           </div>
         )}
 

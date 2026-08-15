@@ -62,8 +62,14 @@ export const getCurrentUser = cache(async () => {
  * server-side hasta que el token expira (~1h). Usar para gating de LECTURA
  * respaldado por RLS (¿estás logueado? ¿cuál es tu user id?). Para autorización
  * SENSIBLE (admin, dinero, mutaciones) seguir usando getCurrentUser()/getUser().
+ *
+ * NO se exporta (auditoría 2026-08-13): fuera de este archivo nadie la usaba, y
+ * la forma correcta de consumirla es `getAuthUserId()`, que ya extrae el `sub`
+ * validado. Exportar los claims crudos invita a leer `role` o `email` de un
+ * token que sólo se verificó localmente — justo el uso que el párrafo de arriba
+ * desaconseja.
  */
-export const getCurrentClaims = cache(async () => {
+const getCurrentClaims = cache(async () => {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   return data?.claims ?? null;

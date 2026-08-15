@@ -12,6 +12,7 @@ import {
   Storefront,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -99,6 +100,7 @@ export function AdminNav({
   pendingCount: number;
 }) {
   const pathname = usePathname();
+  const reduce = usePrefersReducedMotion();
   const visible = ITEMS.filter((item) => RANK[role] >= item.minRank);
 
   return (
@@ -131,11 +133,14 @@ export function AdminNav({
                 </span>
               )}
               {active && (
+                // Con prefers-reduced-motion el FLIP de layoutId igual reubica
+                // el underline (mismo estado final), pero en un frame en vez
+                // de deslizarse (duration: 0, mismo criterio que ui/tabs.tsx).
                 <m.span
                   layoutId="admin-nav-underline"
                   aria-hidden="true"
                   className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand"
-                  transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+                  transition={reduce ? { duration: 0 } : { duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
                 />
               )}
             </Link>

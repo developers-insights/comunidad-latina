@@ -601,7 +601,15 @@ async function syncPresenciaFromSubscription(
 
 /**
  * Activa un boost pagado (§7): status active + ventana [now, now + días].
- * Idempotente: si ya está activo (retry de Stripe), no hace nada.
+ *
+ * IDEMPOTENTE INCLUSO ANTE DOS ENTREGAS A LA VEZ, y eso no lo daba el `if` de
+ * estado: la transición se gatea en el `WHERE` del UPDATE
+ * (`.eq("status","pending_payment")`), así que Postgres serializa y la segunda
+ * ejecución no toca ninguna fila. La idempotencia por `event_id` no alcanzaba
+ * acá — dos ramas distintas del switch llaman a esta función desde eventos
+ * DISTINTOS, y ante un 23505 con `processed=false` el route reprocesa a
+ * propósito. Sin el predicado: `ends_at` pisado, dos notificaciones al
+ * comprador y dos filas de auditoría.
  *
  * CORRELACIÓN OBLIGATORIA (fiscal R3): la metadata sola no alcanza — antes de
  * activar se exige que (a) el boost siga `pending_payment` (un
@@ -683,15 +691,38 @@ async function activateBoost(
   const startsAt = new Date();
   const endsAt = new Date(startsAt.getTime() + boost.duration_days * 86_400_000);
 
-  const { error: updateError } = await admin
+  // EL ESTADO SE EXIGE OTRA VEZ ACÁ, EN EL `WHERE`, Y NO ES REDUNDANTE.
+  //
+  // El `if (boost.status !== "pending_payment")` de arriba mira una fila que se
+  // leyó hace unas líneas: entre esa lectura y esta escritura cabe otra entrega
+  // del MISMO pago. La idempotencia por `event_id` no la cubre —dos eventos
+  // distintos (`completed` y `async_payment_succeeded`) llaman a esta misma
+  // función, y ante un 23505 con `processed=false` el route reprocesa a
+  // propósito—, así que las dos ejecuciones pueden ver `pending_payment` y
+  // seguir. Con el predicado en el `WHERE`, Postgres serializa los dos updates
+  // y el segundo no matchea NINGUNA fila: no se pisa `ends_at`, no se manda una
+  // segunda notificación "¡Tu impulso ya está activo!" y no se duplica la
+  // auditoría. Mismo patrón que `transitionContract`
+  // (src/app/(app)/creadores/actions.ts).
+  const { data: activados, error: updateError } = await admin
     .from("boosts")
     .update({
       status: "active",
       starts_at: startsAt.toISOString(),
       ends_at: endsAt.toISOString(),
     })
-    .eq("id", boost.id);
+    .eq("id", boost.id)
+    .eq("status", "pending_payment")
+    .select("id");
   if (updateError) throw new Error(`update boosts: ${updateError.code}`);
+  if ((activados ?? []).length === 0) {
+    // Cero filas NO es un error: es "otra entrega del mismo pago llegó primero".
+    // Éxito, y se corta acá para no duplicar los efectos de al lado.
+    console.warn(
+      `[pagos:webhook] boost ${boost.id}: otra entrega del pago (${session.id}) lo activó primero — no se duplican notificación ni auditoría.`,
+    );
+    return;
+  }
 
   // Notificación + auditoría: best-effort, jamás rompen la activación.
   await createNotification(admin, {
@@ -707,7 +738,9 @@ async function activateBoost(
     body: `Tu aviso aparece primero en tu zona, marcado como "Patrocinado", hasta el ${formatDate(endsAt, { style: "long" })}.`,
     href: listingViewHref(boost.listings?.kind, boost.listing_id),
   });
-  await admin.from("audit_log").insert({
+  // Best-effort SÍ, mudo NO: si la auditoría de una activación paga se pierde,
+  // el rastro de por qué ese impulso está activo desaparece sin dejar señal.
+  const { error: auditError } = await admin.from("audit_log").insert({
     tenant_id: boost.tenant_id,
     actor_id: boost.buyer_id,
     action: "boost_activated",
@@ -715,6 +748,11 @@ async function activateBoost(
     subject_id: boost.id,
     meta: { listing_id: boost.listing_id, duration_days: boost.duration_days },
   });
+  if (auditError) {
+    console.error(
+      `[pagos:webhook] boost ${boost.id} quedó ACTIVO pero no se pudo auditar — code=${auditError.code}. La activación es válida; falta el rastro.`,
+    );
+  }
 }
 
 /**
@@ -724,8 +762,9 @@ async function activateBoost(
  * la campaña siga `pending_payment`, (b) la session del evento sea EXACTAMENTE
  * la vinculada al crearla, y (c) el monto Y la moneda cobrados coincidan.
  * Discrepancia → log de alerta + NO activar (sin throw: reintentar no lo
- * arregla; queda en payment_events para reconciliar a mano). Idempotente: si ya
- * está activa (retry), no hace nada.
+ * arregla; queda en payment_events para reconciliar a mano). Idempotente hasta
+ * ante entregas CONCURRENTES, por el mismo predicado de estado en el `WHERE`
+ * que usa `activateBoost` — ver su docblock.
  */
 async function activatePostPromotion(
   admin: AdminClient,
@@ -786,15 +825,26 @@ async function activatePostPromotion(
   const startsAt = new Date();
   const endsAt = new Date(startsAt.getTime() + promo.duration_days * 86_400_000);
 
-  const { error: updateError } = await admin
+  // Mismo predicado de estado en el `WHERE` que en `activateBoost`, y por lo
+  // mismo: dos entregas concurrentes del mismo pago leen las dos
+  // `pending_payment`. Ver el comentario largo allá arriba.
+  const { data: activadas, error: updateError } = await admin
     .from("post_promotions")
     .update({
       status: "active",
       starts_at: startsAt.toISOString(),
       ends_at: endsAt.toISOString(),
     })
-    .eq("id", promo.id);
+    .eq("id", promo.id)
+    .eq("status", "pending_payment")
+    .select("id");
   if (updateError) throw new Error(`update post_promotions: ${updateError.code}`);
+  if ((activadas ?? []).length === 0) {
+    console.warn(
+      `[pagos:webhook] post_promotion ${promo.id}: otra entrega del pago (${session.id}) la activó primero — no se duplican notificación ni auditoría.`,
+    );
+    return;
+  }
 
   // Notificación + auditoría: best-effort, jamás rompen la activación.
   await createNotification(admin, {
@@ -807,7 +857,7 @@ async function activatePostPromotion(
     body: `Tu publicación llega a toda la comunidad hasta el ${formatDate(endsAt, { style: "long" })}.`,
     href: `/feed/${promo.post_id}`,
   });
-  await admin.from("audit_log").insert({
+  const { error: auditError } = await admin.from("audit_log").insert({
     tenant_id: promo.tenant_id,
     actor_id: promo.buyer_id,
     action: "post_promotion_activated",
@@ -815,6 +865,11 @@ async function activatePostPromotion(
     subject_id: promo.id,
     meta: { post_id: promo.post_id, duration_days: promo.duration_days },
   });
+  if (auditError) {
+    console.error(
+      `[pagos:webhook] post_promotion ${promo.id} quedó ACTIVA pero no se pudo auditar — code=${auditError.code}. La activación es válida; falta el rastro.`,
+    );
+  }
 }
 
 /** +25 al Trust Score al verificar identidad (clamp 0-100, una sola vez). */
@@ -823,7 +878,11 @@ const IDENTITY_TRUST_BONUS = 25;
 /**
  * Identity verificada (§5.4): enciende el flag del perfil, recomputa el
  * Trust Score y avisa. Del documento NO llega ni se persiste NADA.
- * Idempotente: un perfil ya verificado no vuelve a sumar puntos.
+ *
+ * Idempotente: un perfil ya verificado no vuelve a sumar puntos — y el gate no
+ * es sólo el `if` sobre la fila leída, sino `identity_verified=false` en el
+ * `WHERE` del UPDATE, que es lo que sostiene el caso de dos entregas a la vez
+ * (mismo patrón que `activateBoost`).
  */
 async function handleIdentityVerified(
   admin: AdminClient,
@@ -849,21 +908,42 @@ async function handleIdentityVerified(
   }
   if (profile.identity_verified) return; // retry o segunda sesión: ya está
 
-  const { error: updateError } = await admin
+  // El `identity_verified: false` va en el `WHERE` por lo mismo que el estado
+  // del boost: dos entregas del mismo evento leen las dos el perfil sin
+  // verificar y siguen las dos. Con el predicado acá, la segunda no matchea
+  // ninguna fila y corta antes de duplicar la notificación y la auditoría.
+  const { data: verificados, error: updateError } = await admin
     .from("profiles")
     .update({
       identity_verified: true,
       identity_verified_at: new Date().toISOString(),
     })
-    .eq("id", userId);
+    .eq("id", userId)
+    .eq("identity_verified", false)
+    .select("id");
   if (updateError) throw new Error(`update profiles: ${updateError.code}`);
+  if ((verificados ?? []).length === 0) {
+    console.warn(
+      `[pagos:webhook] identity ${session.id}: el perfil ya había quedado verificado por otra entrega — no se duplica nada.`,
+    );
+    return;
+  }
 
   // Trust Score: +25 clamp 100 + señal explicable (§4.3 — contadores, no grafo).
-  const { data: trust } = await admin
+  //
+  // ⚠️ EL `error` DE ESTE SELECT SE LANZA, NO SE IGNORA. Es un read-modify-write:
+  // el upsert de abajo escribe `score` y REEMPLAZA `signals` entero. Un `data`
+  // en null por un fallo de lectura es indistinguible de "no tiene fila", así
+  // que descartarlo convertía un timeout transitorio en "score 25 y una sola
+  // señal" para alguien que venía con 85 y acababa de PAGAR por verificarse:
+  // bajaba de nivel justo cuando compró subir, y sin una línea de log. Lanzar
+  // deja que el reintento de Stripe lo reprocese entero.
+  const { data: trust, error: trustSelectError } = await admin
     .from("trust_scores")
     .select("score, signals")
     .eq("profile_id", userId)
     .maybeSingle();
+  if (trustSelectError) throw new Error(`select trust_scores: ${trustSelectError.code}`);
   const signals: Record<string, Json | undefined> =
     trust?.signals && typeof trust.signals === "object" && !Array.isArray(trust.signals)
       ? { ...(trust.signals as Record<string, Json | undefined>) }
@@ -900,7 +980,7 @@ async function handleIdentityVerified(
     href: "/perfil",
     dedupeUnread: true,
   });
-  await admin.from("audit_log").insert({
+  const { error: auditError } = await admin.from("audit_log").insert({
     tenant_id: profile.tenant_id,
     actor_id: userId,
     action: "identity_verified",
@@ -909,6 +989,11 @@ async function handleIdentityVerified(
     // §5.4: NADA del documento — solo la fuente del flag.
     meta: { via: "stripe_identity" },
   });
+  if (auditError) {
+    console.error(
+      `[pagos:webhook] identity de ${userId} quedó verificada pero no se pudo auditar — code=${auditError.code}. La verificación es válida; falta el rastro.`,
+    );
+  }
 }
 
 /**

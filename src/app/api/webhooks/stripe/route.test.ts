@@ -86,7 +86,12 @@ function createAdminStub(config: AdminConfig = {}) {
       }),
       select: vi.fn((...args: unknown[]) => {
         calls.push({ table, method: "select", args });
-        op = "select";
+        // Un `.select()` DESPUÉS de un write es el RETURNING de ese write, no
+        // una consulta nueva: no puede pisar la operación en curso. Sin esto,
+        // `update(...).eq(...).select("id")` —el patrón que evita la doble
+        // activación— devolvería el resultado configurado para `select` y el
+        // stub mentiría sobre cuántas filas tocó el UPDATE.
+        if (op === null) op = "select";
         return builder;
       }),
       eq: vi.fn((...args: unknown[]) => {
@@ -138,6 +143,19 @@ function boostEvent(sessionOverrides: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * Lo que devuelve el UPDATE gateado por estado cuando SÍ le tocó una fila.
+ *
+ * `activateBoost` escribe con `.eq("status","pending_payment").select("id")`, así
+ * que el resultado es un ARRAY: una fila = se activó acá; cero filas = otra
+ * entrega concurrente del mismo pago llegó primero. Configurar `{ error: null }`
+ * a secas simularía lo segundo.
+ */
+const BOOST_ACTIVADO = { data: [{ id: "boost-1" }], error: null };
+const PROMO_ACTIVADA = { data: [{ id: "promo-1" }], error: null };
+/** Cero filas: el UPDATE no matcheó nada porque el estado ya había cambiado. */
+const NINGUNA_FILA = { data: [] as Array<{ id: string }>, error: null };
+
 const BOOST_ROW = {
   id: "boost-1",
   tenant_id: "tenant-1",
@@ -183,6 +201,21 @@ const PROMO_ROW = {
   currency: "usd",
   stripe_checkout_session_id: "cs_test_promo_1",
 };
+
+/* --- Identity (§5.4): el flag del perfil + el Trust Score ------------------ */
+
+function identityEvent() {
+  return {
+    id: "evt_identity_1",
+    type: "identity.verification_session.verified",
+    // Del documento NO llega nada: solo el id de la sesión y a quién pertenece.
+    data: { object: { id: "vs_test_1", metadata: { user_id: "user-1" } } },
+  };
+}
+
+const PROFILE_ROW = { id: "user-1", tenant_id: "tenant-1", identity_verified: false };
+/** El UPDATE gateado por `identity_verified=false` tocó la fila: es esta entrega. */
+const PROFILE_VERIFICADO = { data: [{ id: "user-1" }], error: null };
 
 function makeRequest(rawBody: string, signature: string | null) {
   const headers = new Headers();
@@ -268,7 +301,7 @@ describe("webhook stripe — idempotencia / replay", () => {
         select: { data: { processed: true }, error: null },
       },
       // boosts se configura pero NO debe consultarse: el replay corta antes.
-      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
     });
 
     const res = await POST(validRequestFor(boostEvent()));
@@ -286,7 +319,7 @@ describe("webhook stripe — idempotencia / replay", () => {
         insert: { error: { code: "23505" } },
         select: { data: { processed: false }, error: null },
       },
-      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
     });
 
     const res = await POST(validRequestFor(boostEvent()));
@@ -306,7 +339,7 @@ describe("webhook stripe — correlación monto / session (fiscal R3)", () => {
       boosts: {
         // amount_cents esperado 1000, pero la session cobró 999.
         select: { data: { ...BOOST_ROW, amount_cents: 1000 }, error: null },
-        update: { error: null },
+        update: BOOST_ACTIVADO,
       },
     });
 
@@ -326,7 +359,7 @@ describe("webhook stripe — correlación monto / session (fiscal R3)", () => {
           data: { ...BOOST_ROW, stripe_checkout_session_id: "cs_test_OTRA" },
           error: null,
         },
-        update: { error: null },
+        update: BOOST_ACTIVADO,
       },
     });
 
@@ -342,7 +375,7 @@ describe("webhook stripe — correlación monto / session (fiscal R3)", () => {
       payment_events: { insert: { error: null } },
       boosts: {
         select: { data: { ...BOOST_ROW, status: "canceled" }, error: null },
-        update: { error: null },
+        update: BOOST_ACTIVADO,
       },
     });
 
@@ -360,7 +393,7 @@ describe("webhook stripe — happy path", () => {
   it("firma válida + evento nuevo + correlación correcta → activa el boost, notifica y marca processed", async () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
-      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
     });
 
     const res = await POST(validRequestFor(boostEvent()));
@@ -379,7 +412,7 @@ describe("webhook stripe — happy path", () => {
   it("un checkout.session.completed no pagado (payment_status != paid) no activa el boost", async () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
-      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
     });
 
     const res = await POST(validRequestFor(boostEvent({ payment_status: "unpaid" })));
@@ -410,7 +443,7 @@ describe("webhook stripe — la moneda del cobro (fiscal R3)", () => {
   it("camino feliz: el impulso cobrado en la misma moneda de la fila se activa", async () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
-      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
     });
 
     const res = await POST(validRequestFor(boostEvent()));
@@ -422,7 +455,7 @@ describe("webhook stripe — la moneda del cobro (fiscal R3)", () => {
   it("camino feliz: la campaña de post cobrada en la misma moneda se activa", async () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
-      post_promotions: { select: { data: PROMO_ROW, error: null }, update: { error: null } },
+      post_promotions: { select: { data: PROMO_ROW, error: null }, update: PROMO_ACTIVADA },
     });
 
     const res = await POST(validRequestFor(promoEvent()));
@@ -440,7 +473,7 @@ describe("webhook stripe — la moneda del cobro (fiscal R3)", () => {
           data: { ...BOOST_ROW, amount_cents: 4_500_000, currency: "ars" },
           error: null,
         },
-        update: { error: null },
+        update: BOOST_ACTIVADO,
       },
     });
 
@@ -460,7 +493,7 @@ describe("webhook stripe — la moneda del cobro (fiscal R3)", () => {
       payment_events: { insert: { error: null } },
       boosts: {
         select: { data: { ...BOOST_ROW, currency: "USD" }, error: null },
-        update: { error: null },
+        update: BOOST_ACTIVADO,
       },
     });
 
@@ -475,7 +508,7 @@ describe("webhook stripe — la moneda del cobro (fiscal R3)", () => {
       payment_events: { insert: { error: null } },
       post_promotions: {
         select: { data: { ...PROMO_ROW, currency: "EUR" }, error: null },
-        update: { error: null },
+        update: PROMO_ACTIVADA,
       },
     });
 
@@ -488,7 +521,7 @@ describe("webhook stripe — la moneda del cobro (fiscal R3)", () => {
   it("NO activa el impulso cobrado en otra moneda con el mismo entero (1000 ARS ≠ 1000 usd)", async () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
-      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
     });
 
     const res = await POST(validRequestFor(boostEvent({ currency: "ars" })));
@@ -502,7 +535,7 @@ describe("webhook stripe — la moneda del cobro (fiscal R3)", () => {
   it("NO activa la campaña de post cobrada en otra moneda con el mismo entero", async () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
-      post_promotions: { select: { data: PROMO_ROW, error: null }, update: { error: null } },
+      post_promotions: { select: { data: PROMO_ROW, error: null }, update: PROMO_ACTIVADA },
     });
 
     const res = await POST(validRequestFor(promoEvent({ currency: "ars" })));
@@ -515,7 +548,7 @@ describe("webhook stripe — la moneda del cobro (fiscal R3)", () => {
   it("NO activa si la session no trae moneda: un pago one-time sin moneda es inverificable", async () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
-      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
     });
 
     const res = await POST(validRequestFor(boostEvent({ currency: null })));
@@ -528,7 +561,7 @@ describe("webhook stripe — la moneda del cobro (fiscal R3)", () => {
   it("el log de rechazo por moneda alcanza para reconciliar: session, cobrado y esperado", async () => {
     useAdmin({
       payment_events: { insert: { error: null } },
-      boosts: { select: { data: BOOST_ROW, error: null }, update: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
     });
 
     await POST(validRequestFor(boostEvent({ currency: "ars" })));
@@ -537,5 +570,165 @@ describe("webhook stripe — la moneda del cobro (fiscal R3)", () => {
     expect(mensaje).toContain("boost-1");
     expect(mensaje).toContain("ars"); // lo cobrado
     expect(mensaje).toContain("usd"); // lo esperado
+  });
+});
+
+/* ======================================================================== */
+/* 6. DOS ENTREGAS DEL MISMO PAGO — la carrera                              */
+/* ======================================================================== */
+
+/**
+ * La idempotencia por `event_id` cubre el reintento SECUENCIAL, no dos entregas
+ * a la vez: ante un 23505 el route relee `processed` y, si está en `false`,
+ * reprocesa a propósito — así que dos entregas concurrentes ven las dos
+ * `processed=false`. Y ni siquiera hace falta que sea el mismo evento: dos ramas
+ * distintas del switch (`checkout.session.completed` y
+ * `checkout.session.async_payment_succeeded`) llaman a `activateBoost`.
+ *
+ * Con el predicado de estado en el `WHERE`, Postgres serializa los dos UPDATE y
+ * el segundo no matchea ninguna fila. Cero filas es ÉXITO ("ya estaba
+ * activado"), no error: 200, sin segunda notificación y sin segunda auditoría.
+ */
+describe("webhook stripe — dos entregas del mismo pago (carrera)", () => {
+  it("el UPDATE del boost lleva el estado en el WHERE, no solo en un if de arriba", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
+    });
+
+    await POST(validRequestFor(boostEvent()));
+
+    const predicados = stub.calls
+      .filter((c) => c.table === "boosts" && c.method === "eq")
+      .map((c) => c.args);
+    expect(predicados).toContainEqual(["status", "pending_payment"]);
+  });
+
+  it("la entrega que PIERDE la carrera (cero filas) no manda una segunda notificación ni duplica la auditoría", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      // El UPDATE corrió pero no tocó ninguna fila: otra entrega lo activó
+      // medio milisegundo antes y el estado ya no es `pending_payment`.
+      boosts: { select: { data: BOOST_ROW, error: null }, update: NINGUNA_FILA },
+      audit_log: { insert: { error: null } },
+    });
+
+    const res = await POST(validRequestFor(boostEvent()));
+
+    // 200: no es un fallo, es el resultado correcto de haber llegado segundo.
+    expect(res.status).toBe(200);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+    expect(touched(stub, "audit_log", "insert")).toBe(false);
+  });
+
+  it("la campaña de post se comporta igual: cero filas ⇒ no se duplica nada", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      post_promotions: { select: { data: PROMO_ROW, error: null }, update: NINGUNA_FILA },
+      audit_log: { insert: { error: null } },
+    });
+
+    const res = await POST(validRequestFor(promoEvent()));
+
+    expect(res.status).toBe(200);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+    expect(touched(stub, "audit_log", "insert")).toBe(false);
+  });
+
+  it("identity: la segunda entrega no vuelve a notificar ni a auditar", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      profiles: { select: { data: PROFILE_ROW, error: null }, update: NINGUNA_FILA },
+      trust_scores: { select: { data: null, error: null }, upsert: { error: null } },
+      audit_log: { insert: { error: null } },
+    });
+
+    const res = await POST(validRequestFor(identityEvent()));
+
+    expect(res.status).toBe(200);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+    // Y sobre todo: no se vuelve a tocar el Trust Score.
+    expect(touched(stub, "trust_scores", "upsert")).toBe(false);
+  });
+});
+
+/* ======================================================================== */
+/* 7. EL TRUST SCORE DE QUIEN PAGÓ POR VERIFICARSE                          */
+/* ======================================================================== */
+
+/**
+ * `handleIdentityVerified` hace un read-modify-write: lee `trust_scores`, suma
+ * 25 y hace `upsert` con `onConflict: profile_id` — que pisa `score` y REEMPLAZA
+ * `signals` entero.
+ *
+ * El `error` del select se descartaba. Como el cliente de Supabase no lanza,
+ * un fallo de lectura dejaba `data` en null, indistinguible de "no tiene fila":
+ * alguien con score 85 y señales acumuladas terminaba con score 25 y UNA señal
+ * justo después de pagar por subir de nivel. Y sin log.
+ */
+describe("webhook stripe — Trust Score al verificar identidad", () => {
+  it("un select fallido de trust_scores NO pisa el score: no hay upsert y el evento queda para reintento", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null }, update: { error: null } },
+      profiles: { select: { data: PROFILE_ROW, error: null }, update: PROFILE_VERIFICADO },
+      // Timeout de lectura: el caso exacto que reseteaba el score.
+      trust_scores: { select: { data: null, error: { code: "57014" } }, upsert: { error: null } },
+    });
+
+    const res = await POST(validRequestFor(identityEvent()));
+
+    // 500 ⇒ Stripe reintenta y el reintento reprocesa (processed quedó en false).
+    expect(res.status).toBe(500);
+    // Lo que importa: NADA se escribió sobre el score con un dato que no se leyó.
+    expect(touched(stub, "trust_scores", "upsert")).toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("con la lectura OK, suma sobre el score existente y CONSERVA las señales previas", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null }, update: { error: null } },
+      profiles: { select: { data: PROFILE_ROW, error: null }, update: PROFILE_VERIFICADO },
+      trust_scores: {
+        select: { data: { score: 85, signals: { vecino_referido: true } }, error: null },
+        upsert: { error: null },
+      },
+      audit_log: { insert: { error: null } },
+    });
+
+    const res = await POST(validRequestFor(identityEvent()));
+
+    expect(res.status).toBe(200);
+    const upsert = stub.calls.find((c) => c.table === "trust_scores" && c.method === "upsert");
+    const fila = upsert?.args[0] as { score: number; signals: Record<string, unknown> };
+    // 85 + 25 = 110, clampeado a 100 — no 25.
+    expect(fila.score).toBe(100);
+    // Y la señal que ya tenía sigue ahí: el upsert reemplaza `signals` entero.
+    expect(fila.signals.vecino_referido).toBe(true);
+    expect(fila.signals.identity_verified).toBe(true);
+  });
+});
+
+/* ======================================================================== */
+/* 8. LA AUDITORÍA DE LAS ACTIVACIONES PAGAS                                */
+/* ======================================================================== */
+
+describe("webhook stripe — auditoría best-effort, pero con log", () => {
+  it("si el insert en audit_log falla, la activación sigue valiendo y el fallo queda logueado", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
+      audit_log: { insert: { error: { code: "42501" } } },
+    });
+
+    const res = await POST(validRequestFor(boostEvent()));
+
+    // La compra se entrega igual: la auditoría nunca rompe una activación.
+    expect(res.status).toBe(200);
+    expect(touched(stub, "boosts", "update")).toBe(true);
+    expect(mocks.createNotification).toHaveBeenCalledTimes(1);
+    // Pero no se pierde en silencio, que era el punto.
+    const mensaje = errorSpy.mock.calls.flat().join(" ");
+    expect(mensaje).toContain("auditar");
+    expect(mensaje).toContain("boost-1");
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import { LinkSimple, Plus, X } from "@phosphor-icons/react/dist/ssr";
 import { Input } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,16 @@ export function PortfolioLinksField({
   const rows = value.length > 0 ? value : [""];
   const canAdd = rows.length < MAX_PORTFOLIO_LINKS && rows.every((row) => row.trim().length > 0);
 
+  /**
+   * Id ESTABLE por fila, generado al agregarla — no el índice. Con el índice
+   * como key, borrar la fila del medio hacía que React reutilizara el nodo
+   * (mismo índice, otro enlace ahora) y el foco podía terminar sobre un input
+   * que ya representa un enlace distinto al que se estaba editando. `ids`
+   * vive en lockstep con `rows`: `update` no cambia el largo y no lo toca;
+   * `add`/`remove` mutan los dos arreglos a la vez, en la misma posición.
+   */
+  const [ids, setIds] = useState<string[]>(() => rows.map(() => crypto.randomUUID()));
+
   function update(index: number, next: string) {
     const copy = [...rows];
     copy[index] = next;
@@ -47,7 +57,13 @@ export function PortfolioLinksField({
 
   function remove(index: number) {
     const copy = rows.filter((_, i) => i !== index);
+    setIds((current) => current.filter((_, i) => i !== index));
     onChange(copy);
+  }
+
+  function add() {
+    setIds((current) => [...current, crypto.randomUUID()]);
+    onChange([...rows, ""]);
   }
 
   const errorId = `${groupId}-error`;
@@ -61,7 +77,7 @@ export function PortfolioLinksField({
 
       <div className="flex flex-col gap-2">
         {rows.map((link, index) => (
-          <div key={index} className="flex items-center gap-2">
+          <div key={ids[index] ?? index} className="flex items-center gap-2">
             <Input
               id={`${groupId}-${index}`}
               type="url"
@@ -99,7 +115,7 @@ export function PortfolioLinksField({
       {canAdd && (
         <button
           type="button"
-          onClick={() => onChange([...rows, ""])}
+          onClick={add}
           disabled={disabled}
           className={cn(
             "flex min-h-11 items-center gap-1.5 self-start text-sm font-semibold text-brand",

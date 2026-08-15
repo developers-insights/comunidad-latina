@@ -96,19 +96,39 @@ export async function resolveViewerGeo(
   let areaLabel = input.zoneFilter?.trim() || input.profileArea?.trim() || null;
 
   if (!areaLabel && input.userId && input.profileArea === undefined) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
       .select("area_label")
       .eq("id", input.userId)
       .maybeSingle();
+    // "NO DECLARÓ ZONA" Y "NO SE PUDO LEER" TERMINAN LOS DOS EN `null`, PERO NO
+    // SON LO MISMO. Sin zona, `sameZoneLabel(null, x)` da false y los impulsos
+    // LOCALES no aplican — que es la respuesta correcta para el primer caso y un
+    // daño silencioso en el segundo: el anunciante pagó por alcance local, su
+    // aviso no se le muestra a gente que SÍ está en la zona, no se cuenta la
+    // impresión y hasta acá no quedaba ni una línea de log. No se puede inventar
+    // una zona, pero sí dejar la señal: un impulso pago que no se sirve merece
+    // aparecer en algún lado.
+    if (error) {
+      console.warn("[boosts] no se pudo leer la zona de quien mira — los impulsos locales no van a aplicar", {
+        code: error.code,
+      });
+    }
     areaLabel = data?.area_label?.trim() || null;
   }
 
-  const { data: tenant } = await supabase
+  const { data: tenant, error: tenantError } = await supabase
     .from("tenants")
     .select("country_focus")
     .eq("id", input.tenantId)
     .maybeSingle();
+  // Mismo razonamiento un escalón más arriba: sin país, los impulsos NACIONALES
+  // de otras comunidades dejan de entrar acá y los de ésta dejan de salir.
+  if (tenantError) {
+    console.warn("[boosts] no se pudo leer el país de la comunidad — los impulsos nacionales no van a aplicar", {
+      code: tenantError.code,
+    });
+  }
 
   return { areaLabel, country: tenant?.country_focus?.trim() || null };
 }

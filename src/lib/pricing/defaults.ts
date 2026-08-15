@@ -14,7 +14,7 @@ import {
   VERIFICACION_PLANES,
   verificacionMontoCentavos,
 } from "@/lib/verificacion/catalogo";
-import { MEMBERSHIP_PRICE_CENTS } from "@/components/marketplace/membership";
+import { MEMBERSHIP_PRICE_CENTS } from "./membership";
 import { PRICE_SLOTS, slotKey } from "./catalog";
 
 /**

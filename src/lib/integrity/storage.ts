@@ -27,6 +27,24 @@ export type StorageReadResult =
   | { ok: true; sha256: string; byteSize: number; bytes: Uint8Array | null }
   | { ok: false; reason: "demasiado-grande" | "no-encontrado" | "error"; detail?: string };
 
+/**
+ * Tope de tiempo de la descarga completa, cuerpo incluido.
+ *
+ * `AbortSignal.timeout` corta el stream, no sólo el handshake: si Storage se
+ * degrada a mitad de un archivo, la lectura no queda colgada esperando bytes que
+ * no llegan. Sin esto, el `fetch` no tenía NINGÚN límite y esta función corre
+ * dentro del request de publicación — o sea, el tope real era el de la
+ * plataforma, con la persona mirando el spinner hasta el final.
+ *
+ * 20 s es holgado para los 24 MB del tope (`MAX_INLINE_BYTES`) en un enlace
+ * servidor-a-servidor y sigue siendo mucho menos que el límite de la función. El
+ * riesgo de acortarlo es real y va en la dirección contraria: un timeout corto
+ * manda a revisión humana archivos perfectamente sanos. Por eso el corte se
+ * loguea distinto de un error cualquiera — si empieza a aparecer seguido, el
+ * número está mal o Storage está en problemas, y en los dos casos se ve.
+ */
+const DOWNLOAD_TIMEOUT_MS = 20_000;
+
 export async function hashStorageObject(
   admin: SupabaseClient<Database>,
   bucket: string,
@@ -42,7 +60,11 @@ export async function hashStorageObject(
       return { ok: false, reason: "no-encontrado", detail: signError?.message };
     }
 
-    const response = await fetch(signed.signedUrl);
+    // Mismo patrón que `lib/tenant/domain-lookup.ts`: todo fetch que sale de
+    // nuestro proceso lleva su propio tope de tiempo.
+    const response = await fetch(signed.signedUrl, {
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    });
     if (!response.ok || !response.body) {
       await response.body?.cancel();
       return { ok: false, reason: "no-encontrado", detail: `HTTP ${response.status}` };
@@ -85,10 +107,18 @@ export async function hashStorageObject(
 
     return { ok: true, sha256: hash.digest("hex"), byteSize, bytes };
   } catch (error) {
-    return {
-      ok: false,
-      reason: "error",
-      detail: error instanceof Error ? error.message : "error desconocido",
-    };
+    const detail = error instanceof Error ? error.message : "error desconocido";
+    // NO ES UN CATCH MUDO, y el motivo es operativo: este return manda el
+    // archivo a revisión humana. Si Storage se degrada, TODO cae a la cola y el
+    // equipo ve la fila inundada sin ninguna pista de que la causa es la
+    // descarga y no el contenido. Con esta línea, la causa está a un grep.
+    // El `signedUrl` NO se loguea: es una credencial de lectura.
+    const porTiempo = error instanceof Error && error.name === "TimeoutError";
+    console.error(
+      porTiempo
+        ? `[integrity] la descarga de ${bucket}/${path} pasó los ${DOWNLOAD_TIMEOUT_MS} ms y se cortó — el archivo va a revisión humana. Si se repite, es Storage, no el contenido.`
+        : `[integrity] no se pudo leer ${bucket}/${path} para la huella: ${detail} — el archivo va a revisión humana.`,
+    );
+    return { ok: false, reason: "error", detail };
   }
 }
