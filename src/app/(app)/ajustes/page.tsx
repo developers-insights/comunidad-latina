@@ -7,6 +7,7 @@ import {
   ChatCircle,
   DeviceMobile,
   FileText,
+  Lifebuoy,
   PencilSimple,
   Prohibit,
   Scales,
@@ -285,6 +286,7 @@ export default async function AjustesPage() {
         <Row href="/legal/normas" icon={Scales} {...COPY.rows.rules} />
         <Row href="/legal/terminos" icon={FileText} {...COPY.rows.terms} />
         <Row href="/legal/privacidad" icon={ShieldCheck} {...COPY.rows.privacy} />
+        <Row href="/ajustes/soporte" icon={Lifebuoy} {...COPY.rows.support} />
       </Group>
 
       {shell.isStaff && (

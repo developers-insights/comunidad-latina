@@ -97,6 +97,13 @@ export const COPY = {
       title: "Política de privacidad",
       description: "Qué datos guardamos y para qué.",
     },
+    // Va DESPUÉS de los tres legales y no antes: los legales se leen, soporte
+    // se usa. Lo último de la lista es lo que queda a mano cuando ninguna de
+    // las respuestas escritas alcanzó.
+    support: {
+      title: "Soporte",
+      description: "Hablá con una persona del equipo.",
+    },
     admin: {
       title: "Panel de administración",
       description: "Moderación, miembros y configuración de la comunidad.",
