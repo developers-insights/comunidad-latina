@@ -29,14 +29,14 @@ import { COPY, VIDEO_EDITOR_COPY } from "./copy";
  * EDICIÓN DE UNA FOTO (§2 filtros / §3 texto del pedido de Manuel).
  *
  * Se abre DENTRO de la hoja ya abierta de `ComposerSheet` (no es un
- * `BottomSheet` propio, es un panel que reemplaza su contenido): dos hojas
- * apiladas compartirían el mismo `useFocusTrap` global por `document`, y su
- * Escape/scrim no distinguen "cerrar el editor" de "cerrar todo el
- * compositor" (`stopPropagation` no alcanza entre dos listeners del mismo
- * `document`, hace falta `stopImmediatePropagation`, y esos hooks no son
- * nuestros para tocar). `ComposerSheet` decide cuándo mostrar este panel
- * dentro de SU MISMO `BottomSheet`, así que Escape/scrim/arrastre siempre
- * hacen lo mismo: salir de a un paso.
+ * `BottomSheet` propio, es un panel que reemplaza su contenido). Sigue siendo
+ * la forma correcta aunque ya no sea la única posible: desde 2026-08-20
+ * `useFocusTrap`/`useBodyScrollLock` (`src/lib/design/use-overlay.ts`) sí
+ * reparten Escape/scroll entre hojas apiladas por una pila LIFO de módulo, así
+ * que dos `BottomSheet` distintos ya se cerrarían de a uno. Pero acá conviene
+ * igual: `ComposerSheet` decide cuándo mostrar este panel dentro de SU MISMO
+ * `BottomSheet`, y así Escape/scrim/arrastre son un solo gesto que siempre
+ * hace lo mismo —salir de a un paso—, sin depender de qué hoja quedó arriba.
  *
  * Vista previa en vivo: el filtro se aplica con `filter` de CSS (gratis, sin
  * canvas) y el texto usa el MISMO componente (`PhotoCaptionOverlay`) que la

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Star } from "@phosphor-icons/react/dist/ssr";
+import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { Button, Field, Textarea } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { submitReview } from "@/app/(app)/creadores/actions";
@@ -12,9 +13,18 @@ import { COPY } from "./copy";
  * Formulario de reseña (aparece solo cuando el contrato está liberado y esta
  * parte todavía no reseñó). Estrellas 1–5 + texto. Al enviar, refresca la
  * página para mostrar la reseña ya dejada.
+ *
+ * ── SI LA SESIÓN SE CAYÓ, NO SE PIERDE LA RESEÑA (cliente 2026-08-20) ───────
+ * Acá no llega gente anónima —el formulario aparece sobre un contrato propio ya
+ * liberado—, pero una sesión sí puede vencerse mientras se escribe. Antes eso
+ * era un `router.push("/entrar")` en el peor momento posible: la reseña escrita
+ * desaparecía con el componente y había que volver a redactarla de memoria.
+ * Ahora la puerta se abre encima, el formulario sigue montado con las estrellas
+ * y el texto donde estaban, y al entrar el envío se reintenta solo.
  */
 export function ReviewForm({ contractId, rateeName }: { contractId: string; rateeName: string }) {
   const router = useRouter();
+  const requireAuth = useRequireAuth();
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [body, setBody] = useState("");
@@ -32,7 +42,13 @@ export function ReviewForm({ contractId, rateeName }: { contractId: string; rate
       const result = await submitReview({ contractId, rating, body: body.trim() || null });
       if (!result.ok) {
         if (result.needsAuth) {
-          router.push("/entrar");
+          // El reintento vuelve a entrar por `handleSubmit`: no hay guard de
+          // anónimo que revisar —quién reseña lo deriva el server de la
+          // cookie—, así que no puede reabrir la hoja en bucle.
+          requireAuth({
+            reason: AUTH_REASON.review,
+            onAuthenticated: () => void handleSubmit(),
+          });
           return;
         }
         setError(result.error);

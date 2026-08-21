@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -10,6 +10,7 @@ import {
   LinkSimple,
   PaperPlaneTilt,
 } from "@phosphor-icons/react/dist/ssr";
+import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import {
   BottomSheet,
   Button,
@@ -18,6 +19,7 @@ import {
   buttonVariants,
   useToast,
 } from "@/components/ui";
+import { useCloseOnBack } from "@/lib/design/use-overlay";
 import { cn } from "@/lib/utils";
 import { normalizePortfolioLinks, portfolioLinkLabel } from "@/lib/empleos/cv";
 import { applyToJobAction } from "@/app/(app)/empleos/actions";
@@ -29,6 +31,18 @@ import type { JobAnswer, JobQuestion } from "./helpers";
 import { COPY } from "./copy";
 
 const C = COPY.apply;
+
+/**
+ * Cuánto se espera antes de avisarle al dueño que puede desmontar la hoja.
+ *
+ * `BottomSheet` anima la salida con `AnimatePresence` (~0,25 s el panel, 0,2 s
+ * el telón). Si `onDismiss` se llama en el mismo tick que `setOpen(false)`, el
+ * padre desmonta este componente y se lleva el portal ANTES de que el `exit`
+ * corra: la hoja no baja deslizando, PARPADEA. Todas las demás hojas de la app
+ * se van igual; ésta era la única que desaparecía de golpe (revisión
+ * 2026-08-20). Mismo número y mismo motivo que `feed/post-sheet.tsx`.
+ */
+const DISMISS_AFTER_EXIT_MS = 320;
 
 /** Copy humano por código de la action — nunca el code crudo en pantalla. */
 const ERROR_BY_CODE: Record<string, string> = {
@@ -46,13 +60,34 @@ export interface JobApplySheetProps {
   /** Preguntas del aviso (attrs.questions). Vacío = postulación de un toque. */
   questions: JobQuestion[];
   /**
-   * Sin sesión el mismo CTA lleva a entrar y vuelve al aviso. Abrir la hoja
-   * para descubrir al enviar que hace falta cuenta sería trabajo tirado —
-   * quien busca trabajo está en datos móviles.
+   * ¿Había sesión al pintar? No cambia el CTA —es el mismo para todos— sino
+   * CUÁNDO se pide la cuenta: al tocar, antes de escribir. Dejar que alguien
+   * arme la postulación entera para pedírsela al final es trabajo tirado, y los
+   * caminos de entrada que se van del navegador (Google, enlace mágico) vuelven
+   * en otra carga, sin nada de lo que había escrito.
    */
   isLoggedIn: boolean;
   /** Autocompletado: lo que quien contrata va a ver si comparte su perfil. */
   profile: ApplicantProfilePreview | null;
+  /**
+   * POSTULARSE DESDE LA LISTA (cliente 2026-08-20: "mientras menos pasos
+   * mejor"). En `false` —el default, y lo que hace la página de detalle— la hoja
+   * se dibuja a sí misma el CTA sticky y se abre sola al tocarlo.
+   *
+   * En `true` la hoja NACE ABIERTA y NO dibuja CTA: quien la monta (la card del
+   * listado) ya puso su propio botón y es dueño del ciclo de vida. Sin esto
+   * habría dos controles apilados diciendo lo mismo, uno de ellos fijo sobre el
+   * bottom nav de una pantalla que no es la del aviso.
+   */
+  openOnMount?: boolean;
+  /** Se cerró la hoja: el dueño la desmonta. Solo aplica con `openOnMount`. */
+  onDismiss?: () => void;
+  /**
+   * La postulación entró. La card cambia a "Ya te postulaste" con ESTO y no con
+   * `router.refresh()`: refrescar desde el listado volvería a pedir las 12 cards
+   * y su scroll para cambiar un botón.
+   */
+  onApplied?: () => void;
 }
 
 type AnswerValue = boolean | string;
@@ -76,11 +111,20 @@ type Panel = "form" | "review" | "done";
  * validateJobAnswers): se chequea en el cliente para no gastarle un viaje a
  * alguien en datos móviles, y el server vuelve a validar igual.
  */
-export function JobApplySheet({ jobId, questions, isLoggedIn, profile }: JobApplySheetProps) {
+export function JobApplySheet({
+  jobId,
+  questions,
+  isLoggedIn,
+  profile,
+  openOnMount = false,
+  onDismiss,
+  onApplied,
+}: JobApplySheetProps) {
   const router = useRouter();
+  const requireAuth = useRequireAuth();
   const { toast } = useToast();
   const groupId = useId();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(openOnMount);
   const [panel, setPanel] = useState<Panel>("form");
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [message, setMessage] = useState("");
@@ -91,16 +135,86 @@ export function JobApplySheet({ jobId, questions, isLoggedIn, profile }: JobAppl
   const [error, setError] = useState<string | null>(null);
   const [linksError, setLinksError] = useState<string | null>(null);
 
-  const loginHref = `/entrar?next=${encodeURIComponent(`/empleos/${jobId}`)}`;
+  /**
+   * Abre la postulación. Sin sesión pide la puerta ANTES —ver `isLoggedIn`— y la
+   * abre recién después de entrar.
+   *
+   * El `setOpen(true)` va DENTRO de `onAuthenticated`, nunca antes: quien mira
+   * un aviso sin cuenta, toca "Postularme" y cierra la hoja sin entrar no puede
+   * encontrarse la postulación abriéndose sola tres pantallas después, cuando
+   * entre por otro motivo.
+   */
+  function openApply() {
+    if (!isLoggedIn) {
+      requireAuth({
+        reason: AUTH_REASON.apply,
+        onAuthenticated: () => setOpen(true),
+      });
+      return;
+    }
+    setOpen(true);
+  }
+
+  /**
+   * Pide la puerta con la postulación ya escrita esperando atrás.
+   *
+   * Se usa cuando el server dice `unauthenticated` con la hoja YA ABIERTA: la
+   * sesión venció mientras la persona respondía las preguntas. Antes eso era un
+   * `router.push` a /entrar —expulsar a alguien desde adentro de una hoja
+   * abierta, con el formulario lleno— y se perdía todo: respuestas, mensaje,
+   * currículum adjunto y enlaces. Ahora la puerta se apila ENCIMA, la
+   * postulación sigue montada intacta y al entrar el envío se reintenta solo.
+   */
+  function requireApply(retry?: () => void) {
+    requireAuth({
+      reason: AUTH_REASON.apply,
+      ...(retry ? { onAuthenticated: retry } : {}),
+    });
+  }
+
+  /** Ver `DISMISS_AFTER_EXIT_MS`. En ref para poder cancelarlo al desmontar. */
+  const dismissTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current);
+    },
+    [],
+  );
 
   function setAnswer(questionId: string, value: AnswerValue) {
     setAnswers((current) => ({ ...current, [questionId]: value }));
     setError(null);
   }
 
+  /**
+   * El "atrás" del teléfono cierra LA HOJA, no la pantalla (revisión de código
+   * 2026-08-21).
+   *
+   * Es la contracara obligatoria de haber dejado de navegar. Antes postularse
+   * exigía ir a `/empleos/[id]`, así que el gesto de atrás —el más usado en
+   * Android, que es la mayoría de este público— devolvía el listado. Desde que
+   * la hoja se abre SOBRE el listado, ese mismo gesto salía de `/empleos`
+   * entero y se llevaba puestas las respuestas, el CV adjunto y el mensaje ya
+   * escritos. Un formulario largo que se borra con el gesto más natural del
+   * teléfono es peor que la navegación que vinimos a sacar.
+   */
+  useCloseOnBack(open, () => close());
+
   function close() {
     if (submitting) return;
     setOpen(false);
+    if (openOnMount) {
+      // Desde la lista el estado nuevo ya viajó por `onApplied`: refrescar acá
+      // costaría la página entera de avisos para cambiar un botón. El aviso de
+      // desmontaje se DIFIERE para que la hoja alcance a bajar deslizando —
+      // ver `DISMISS_AFTER_EXIT_MS`.
+      if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current);
+      dismissTimer.current = window.setTimeout(() => {
+        dismissTimer.current = null;
+        onDismiss?.();
+      }, DISMISS_AFTER_EXIT_MS);
+      return;
+    }
     // Al cerrar después de enviar, la página vuelve a leer el estado y pinta la
     // tarjeta "Ya te postulaste" en lugar del CTA.
     if (panel === "done") router.refresh();
@@ -151,7 +265,10 @@ export function JobApplySheet({ jobId, questions, isLoggedIn, profile }: JobAppl
 
       if (!result.ok) {
         if (result.code === "unauthenticated") {
-          router.push(loginHref);
+          // Reintenta por `handleSubmit`: no hay guard de anónimo en el camino
+          // —quién postula lo deriva el server de la cookie—, así que no puede
+          // reabrir la hoja en bucle.
+          requireApply(() => void handleSubmit());
           return;
         }
         // Los errores de contenido mandan de vuelta al formulario: el mensaje
@@ -165,6 +282,7 @@ export function JobApplySheet({ jobId, questions, isLoggedIn, profile }: JobAppl
 
       setPanel("done");
       toast({ variant: "success", title: C.successTitle });
+      onApplied?.();
     } catch {
       setError(C.errors.generic);
     } finally {
@@ -175,36 +293,28 @@ export function JobApplySheet({ jobId, questions, isLoggedIn, profile }: JobAppl
   return (
     <>
       {/* CTA sticky: la acción principal del aviso vive siempre a mano, por
-          encima del bottom nav (mismo anclaje que EventActions). */}
-      <div
-        className={cn(
-          "fixed inset-x-0 z-30",
-          "bottom-[calc(3.5rem+env(safe-area-inset-bottom))]",
-          "bg-gradient-to-t from-canvas via-canvas/95 to-transparent pb-3 pt-6",
-        )}
-      >
-        <div className="mx-auto w-full max-w-lg px-4">
-          {isLoggedIn ? (
-            <Button
-              variant="primary"
-              size="lg"
-              className="w-full"
-              onClick={() => setOpen(true)}
-            >
+          encima del bottom nav (mismo anclaje que EventActions). Montada desde
+          la lista NO existe — ahí el botón es de la card, y una barra fija sobre
+          un listado prometería postularse "a algo" sin decir a qué. */}
+      {!openOnMount && (
+        <div
+          className={cn(
+            "fixed inset-x-0 z-30",
+            "bottom-[calc(3.5rem+env(safe-area-inset-bottom))]",
+            "bg-gradient-to-t from-canvas via-canvas/95 to-transparent pb-3 pt-6",
+          )}
+        >
+          <div className="mx-auto w-full max-w-lg px-4">
+            {/* UN SOLO CTA, con o sin cuenta: quien todavía no entró no tiene
+                por qué leer un botón distinto al de todos. Si hace falta
+                sesión, la puerta se abre encima del aviso. */}
+            <Button variant="primary" size="lg" className="w-full" onClick={openApply}>
               <PaperPlaneTilt size={20} weight="fill" aria-hidden="true" />
               {C.cta}
             </Button>
-          ) : (
-            <Link
-              href={loginHref}
-              className={cn(buttonVariants({ variant: "primary", size: "lg" }), "w-full")}
-            >
-              <PaperPlaneTilt size={20} weight="fill" aria-hidden="true" />
-              {C.ctaLoggedOut}
-            </Link>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       <BottomSheet
         open={open}
@@ -360,7 +470,12 @@ export function JobApplySheet({ jobId, questions, isLoggedIn, profile }: JobAppl
               value={cv}
               onChange={setCv}
               disabled={submitting}
-              onUnauthenticated={() => router.push(loginHref)}
+              // El archivo se sube DIRECTO al bucket desde el navegador, así que
+              // el reintento no puede vivir acá: el `File` es del input y ya no
+              // existe cuando la persona vuelve. Lo que sí se respeta es lo
+              // importante — no se la expulsa de la hoja llena: entra encima y
+              // vuelve a tocar "adjuntar", con todo lo demás donde estaba.
+              onUnauthenticated={() => requireApply()}
             />
 
             {/* ---- 5. Enlaces de portafolio --------------------------------- */}

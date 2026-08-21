@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { usePathname, useRouter } from "next/navigation";
 import { Check } from "@phosphor-icons/react/dist/ssr";
 import { m, useReducedMotion } from "motion/react";
+import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
@@ -80,8 +80,7 @@ export function PollYesNo({
   tone = "media",
   className,
 }: PollYesNoProps) {
-  const router = useRouter();
-  const pathname = usePathname();
+  const requireAuth = useRequireAuth();
   const { toast } = useToast();
   const reduce = useReducedMotion();
 
@@ -103,11 +102,33 @@ export function PollYesNo({
   const yesPercent = pollPercent(counts.yes, total);
   const noPercent = total > 0 ? 100 - yesPercent : 0;
 
+  /**
+   * Pide sesión sin sacar a la persona de la publicación, con el voto ya
+   * armado. Reanuda por `applyVote` y no por `castVote`: éste vuelve a mirar
+   * `viewerId`, que en el closure de antes de entrar sigue en `null` y
+   * reabriría la hoja en bucle. El server action deriva el votante de la
+   * cookie, así que el reintento no necesita el id del cliente.
+   */
+  function requireVote(choice: boolean) {
+    requireAuth({
+      reason: AUTH_REASON.vote,
+      // Parada en `/feed/[id]` la persona abrió un enlace compartido: el
+      // destino de respaldo es esa misma URL. Ver `resumeDestination`.
+      foldPostDetail: false,
+      onAuthenticated: () => applyVote(choice),
+    });
+  }
+
   function castVote(choice: boolean) {
     if (!viewerId) {
-      router.push(`/entrar?next=${encodeURIComponent(pathname || "/feed")}`);
+      requireVote(choice);
       return;
     }
+    applyVote(choice);
+  }
+
+  /** El camino con sesión: optimista, con reversión si el servidor dice que no. */
+  function applyVote(choice: boolean) {
     if (choice === vote) return; // ya es su voto: nada que registrar
 
     const previous = { vote, counts };
@@ -141,7 +162,7 @@ export function PollYesNo({
       setVote(previous.vote);
       setCounts(previous.counts);
       if (result.code === "unauthenticated") {
-        router.push(`/entrar?next=${encodeURIComponent(pathname || "/feed")}`);
+        requireVote(choice);
         return;
       }
       // "Estás mirando otra comunidad" tiene su propio copy, ya resuelto por el

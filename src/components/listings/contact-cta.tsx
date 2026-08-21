@@ -1,8 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   ArrowSquareOut,
   CalendarCheck,
@@ -15,11 +13,12 @@ import {
   Ticket,
   WhatsappLogo,
 } from "@phosphor-icons/react/dist/ssr";
-import { BottomSheet, Button, buttonVariants, useToast } from "@/components/ui";
+import { BottomSheet, Button } from "@/components/ui";
+import { InlineContact, listingMessageOutcome } from "@/components/messaging";
 import { cn } from "@/lib/utils";
-import { requestContactAction } from "@/app/(app)/propiedades/actions";
+import { sendListingMessageAction } from "@/app/(app)/mensajes/inline-actions";
 import { recordCtaClickAction } from "@/lib/monetization/actions";
-import { ctaHref, listingViewHref } from "@/lib/monetization/href";
+import { ctaHref } from "@/lib/monetization/href";
 import {
   MONETIZATION_COPY,
   externalCtasFor,
@@ -31,6 +30,40 @@ import { COPY } from "./copy";
 
 const M = MONETIZATION_COPY;
 
+/**
+ * Copy del composer, local al componente: `./copy.ts` lo comparten varios
+ * flujos y lo toca otro agente en paralelo. Un solo dueño por archivo.
+ *
+ * Los textos de "ya sos quien lo publica" y compañía sí salen de `copy.ts`
+ * porque ya estaban escritos y revisados para exactamente ese caso.
+ */
+const INLINE = {
+  fieldLabel: "Escribí tu mensaje",
+  /**
+   * Neutro a propósito: esta barra la monta Propiedades y también
+   * `comunidad/perdidos`. "¿Sigue disponible?" sobre un perro perdido se lee
+   * espantoso, así que el default sirve para los dos y quien quiera afinarlo
+   * pasa `placeholder`.
+   */
+  placeholder: "Hola, quería consultarte por este aviso.",
+  send: "Enviar mensaje",
+  cancel: "Cancelar",
+  sentTitle: "Mensaje enviado",
+  sentBody: "Te avisamos acá apenas te respondan.",
+  reusedTitle: "Lo sumamos al chat que ya tenían",
+  reusedBody: "No abrimos nada nuevo: tu mensaje quedó en esa misma conversación.",
+  threadLink: "Abrir el chat",
+  retryLogin: "Entrar a mi cuenta",
+  errors: {
+    self: COPY.detail.contactOwnBody,
+    blocked: "No podemos entregar este mensaje.",
+    unauthenticated: "Se cerró tu sesión. Entrá de nuevo y lo mandamos.",
+    "tenant-mismatch": "Algo no cuadra con tu sesión. Salí y volvé a entrar.",
+    invalid: "Escribí un poquito más antes de enviarlo.",
+    error: "No pudimos enviarlo — no es tu culpa. Probá de nuevo en un ratito.",
+  },
+} as const;
+
 export interface ContactCtaProps {
   listingId: string;
   isLoggedIn: boolean;
@@ -38,57 +71,48 @@ export interface ContactCtaProps {
   isExternal: boolean;
   /** Nombre visible de la fuente externa (publisher_name). */
   externalName?: string | null;
+  /** Primera línea sugerida del mensaje, si el vertical la quiere afinar. */
+  placeholder?: string;
 }
 
 /**
- * CTA sticky "Contactar (protegido)" (§4.d) — el CTA primario de la pantalla de
- * detalle, y el ÚNICO contacto de una publicación gratuita.
+ * CTA sticky "Contactar" (§4.d) — el CTA primario de la pantalla de detalle, y
+ * el ÚNICO contacto de una publicación gratuita.
  *
- * - Sin sesión → /entrar con redirect de vuelta al aviso.
- * - Con sesión → RPC request_contact (conversación pending, contacto protegido).
- * - Aviso externo (seed) → BottomSheet honesto: la fuente + recordatorio anti-estafa.
+ * - Sin sesión → hoja de `auth-sheet` ENCIMA del aviso; al volver, el composer
+ *   se abre solo.
+ * - Con sesión → mini-composer en la misma barra: se escribe y se confirma sin
+ *   cambiar de ruta.
+ * - Aviso externo (seed) → BottomSheet honesto: la fuente + recordatorio
+ *   anti-estafa.
  *
- * El clic se registra como `chat` en `cta_clicks`. Ese kind existe en la 0048
+ * ── POR QUÉ YA NO SE VA A /mensajes (cliente 2026-08-20) ────────────────────
+ * "Ahí nomás dentro de pantalla se tiene que fluir sin sacarte del feed; si no
+ * es como que te corta el mambo." Hasta hoy este botón hacía
+ * `router.push('/mensajes')` — a la bandeja GENÉRICA, ni siquiera al hilo — y
+ * la persona perdía el aviso, las fotos y el scroll del listado del que venía.
+ * Ahora el hilo es una opción al final de la confirmación, no un peaje.
+ *
+ * ── POR QUÉ AHORA SE ESCRIBE UN MENSAJE Y NO SÓLO SE "PIDE CONTACTO" ────────
+ * `sendListingMessageAction` llama por debajo al MISMO `request_contact`, así
+ * que el contacto protegido §9.2 queda igual: la conversación nace pending y el
+ * receptor acepta o ignora. Lo que cambia es que del otro lado llega una
+ * pregunta concreta en vez de un aviso vacío, y que la confirmación puede ser
+ * honesta: cuando ya había conversación, lo dice — no la pinta como alta nueva.
+ *
+ * El clic se registra como `chat` en `cta_clicks` al ABRIR el composer, que es
+ * el momento equivalente al clic de siempre. Ese kind existe en la 0048
  * justamente para esto: sin él, el panel del dueño podría decir "23 llamadas" y
- * nada sobre los mensajes, y "cuántos me escribieron" contra "cuántos me
- * llamaron" es la comparación que decide si conviene pagar los botones.
+ * nada sobre los mensajes.
  */
 export function ContactCta({
   listingId,
   isLoggedIn,
   isExternal,
   externalName,
+  placeholder = INLINE.placeholder,
 }: ContactCtaProps) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [isPending, startTransition] = useTransition();
   const [sheetOpen, setSheetOpen] = useState(false);
-
-  function handleContact() {
-    startTransition(async () => {
-      // La métrica va primero y sin `await` bloqueante del resultado: el
-      // contacto no espera al contador (ver recordCtaClickAction).
-      void recordCtaClickAction({ listingId, kind: "chat" });
-      const result = await requestContactAction(listingId);
-      if (result.ok) {
-        toast({
-          title: COPY.detail.contactSuccessTitle,
-          description: COPY.detail.contactSuccessBody,
-          variant: "success",
-        });
-        router.push("/mensajes");
-        return;
-      }
-      // El tono lo decide la action: "info" para aclaraciones amables (aviso
-      // propio, sin cuenta, sesión vencida) → variante neutra; "error" para
-      // fallas reales → warning. Nunca "danger": ningún caso acá amerita alarma.
-      toast({
-        title: result.title,
-        description: result.error,
-        variant: result.tone === "info" ? "info" : "warning",
-      });
-    });
-  }
 
   // Barra de acción sólida, no un degradado: el degradado dejaba ver la card
   // de abajo a través suyo y se leía como un solapamiento sucio (pedido
@@ -104,39 +128,52 @@ export function ContactCta({
     <>
       <div className={wrapperClass}>
         <div className="mx-auto w-full max-w-lg px-4">
-          {!isLoggedIn ? (
-            <Link
-              href={`/entrar?next=${encodeURIComponent(`/propiedades/${listingId}`)}`}
-              className={cn(buttonVariants({ variant: "primary", size: "lg" }), "w-full")}
-            >
-              <ChatCircleDots size={20} aria-hidden="true" />
-              {COPY.detail.contactCta}
-            </Link>
-          ) : isExternal ? (
-            <Button
-              variant="primary"
-              size="lg"
-              className="w-full"
-              onClick={() => setSheetOpen(true)}
-            >
-              <ChatCircleDots size={20} aria-hidden="true" />
-              {COPY.detail.contactCta}
-            </Button>
+          {isExternal ? (
+            <>
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full"
+                onClick={() => setSheetOpen(true)}
+              >
+                <ChatCircleDots size={20} aria-hidden="true" />
+                {COPY.detail.contactCta}
+              </Button>
+              <p className="mt-1.5 text-center text-xs text-foreground-muted">
+                {COPY.detail.contactHint}
+              </p>
+            </>
           ) : (
-            <Button
-              variant="primary"
-              size="lg"
-              className="w-full"
-              loading={isPending}
-              onClick={handleContact}
-            >
-              <ChatCircleDots size={20} aria-hidden="true" />
-              {COPY.detail.contactCta}
-            </Button>
+            <InlineContact
+              isLoggedIn={isLoggedIn}
+              triggerIcon={<ChatCircleDots size={20} aria-hidden="true" />}
+              onOpen={() => {
+                // Sin `await`: el contacto no espera al contador (ver
+                // recordCtaClickAction).
+                void recordCtaClickAction({ listingId, kind: "chat" });
+              }}
+              copy={{
+                trigger: COPY.detail.contactCta,
+                fieldLabel: INLINE.fieldLabel,
+                placeholder,
+                send: INLINE.send,
+                cancel: INLINE.cancel,
+                hint: COPY.detail.contactHint,
+                sentTitle: INLINE.sentTitle,
+                sentBody: INLINE.sentBody,
+                reusedTitle: INLINE.reusedTitle,
+                reusedBody: INLINE.reusedBody,
+                threadLink: INLINE.threadLink,
+                retryLogin: INLINE.retryLogin,
+              }}
+              onSend={async (body) =>
+                listingMessageOutcome(
+                  await sendListingMessageAction({ listingId, body }),
+                  INLINE.errors,
+                )
+              }
+            />
           )}
-          <p className="mt-1.5 text-center text-xs text-foreground-muted">
-            {COPY.detail.contactHint}
-          </p>
         </div>
       </div>
 
@@ -254,6 +291,11 @@ export interface ListingActionsProps {
  *     botón gris que al tocarlo vende. El aviso gratuito se contacta por el
  *     chat y punto; la venta va en el panel del dueño, no en la cara de quien
  *     vino a preguntar por un alquiler.
+ *
+ * El chat de esta fila también dejó de navegar (cliente 2026-08-20): el
+ * composer se abre en la misma celda de la grilla y la fila de botones sigue
+ * ahí abajo. Antes mandaba a `/mensajes` y la persona perdía los otros cinco
+ * botones que estaba comparando.
  */
 export function ListingActions({
   listingId,
@@ -265,10 +307,6 @@ export function ListingActions({
   isLoggedIn = true,
   className,
 }: ListingActionsProps) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [isPending, startTransition] = useTransition();
-
   if (!canUseActionButtons(tier)) return null;
 
   const buttons: ResolvedCta[] = [];
@@ -278,35 +316,6 @@ export function ListingActions({
   }
 
   if (buttons.length === 0) return null;
-
-  function handleChat() {
-    if (!isLoggedIn) {
-      // El destino sale del `kind` del aviso, no de una ruta fija: esta fila la
-      // montan Eventos, Profesionales, Negocios y Marketplace además de
-      // Propiedades, y mandar a todos a /propiedades/<id> devolvía un 404
-      // JUSTO después de que la persona se tomara el trabajo de entrar.
-      router.push(`/entrar?next=${encodeURIComponent(listingViewHref(kind, listingId))}`);
-      return;
-    }
-    startTransition(async () => {
-      void recordCtaClickAction({ listingId, kind: "chat" });
-      const result = await requestContactAction(listingId);
-      toast(
-        result.ok
-          ? {
-              title: COPY.detail.contactSuccessTitle,
-              description: COPY.detail.contactSuccessBody,
-              variant: "success",
-            }
-          : {
-              title: result.title,
-              description: result.error,
-              variant: result.tone === "info" ? "info" : "warning",
-            },
-      );
-      if (result.ok) router.push("/mensajes");
-    });
-  }
 
   return (
     <section className={cn("flex flex-col gap-2.5", className)} aria-label={M.cta.formTitle}>
@@ -355,16 +364,40 @@ export function ListingActions({
         })}
 
         {showChat && (
-          <Button
-            variant="primary"
-            className="col-span-2 min-h-11 sm:col-span-3"
-            loading={isPending}
-            aria-label={M.cta.accessible.chat(subject)}
-            onClick={handleChat}
-          >
-            <ChatCircleDots size={18} aria-hidden="true" />
-            {M.cta.label.chat}
-          </Button>
+          <InlineContact
+            className="col-span-2 sm:col-span-3"
+            isLoggedIn={isLoggedIn}
+            triggerSize="md"
+            triggerAriaLabel={M.cta.accessible.chat(subject)}
+            triggerIcon={<ChatCircleDots size={18} aria-hidden="true" />}
+            onOpen={() => {
+              void recordCtaClickAction({ listingId, kind: "chat" });
+            }}
+            copy={{
+              trigger: M.cta.label.chat,
+              fieldLabel: INLINE.fieldLabel,
+              // Genérico a propósito: esta fila la montan Eventos,
+              // Profesionales, Negocios y Marketplace además de Propiedades.
+              placeholder: "Hola, quería hacerte una consulta.",
+              send: INLINE.send,
+              cancel: INLINE.cancel,
+              // Corta: la nota de seguridad larga ya vive al pie de la fila y
+              // repetirla acá era decir dos veces lo mismo en 40px.
+              hint: "Se abre un chat privado.",
+              sentTitle: INLINE.sentTitle,
+              sentBody: INLINE.sentBody,
+              reusedTitle: INLINE.reusedTitle,
+              reusedBody: INLINE.reusedBody,
+              threadLink: INLINE.threadLink,
+              retryLogin: INLINE.retryLogin,
+            }}
+            onSend={async (body) =>
+              listingMessageOutcome(
+                await sendListingMessageAction({ listingId, body }),
+                INLINE.errors,
+              )
+            }
+          />
         )}
       </div>
 

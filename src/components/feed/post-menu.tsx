@@ -23,6 +23,7 @@ import {
   togglePinPostAction,
   type PostMenuResult,
 } from "@/app/(app)/feed/post-menu-actions";
+import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { BottomSheet, useToast } from "@/components/ui";
 import { ReportScamButton, ReportSheet } from "@/components/trust";
 import { POST_EDIT_COPY } from "@/lib/social/post-editing";
@@ -131,6 +132,7 @@ export function PostMenu({
   redirectAfterDelete,
 }: PostMenuProps) {
   const router = useRouter();
+  const requireAuth = useRequireAuth();
   const { toast } = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -167,13 +169,34 @@ export function PostMenu({
 
   function openReport() {
     setMenuOpen(false);
+    /**
+     * Cinturón. La fila "Reportar" ya no se dibuja sin `authorId` (ver más
+     * abajo), así que esto no debería alcanzarse; queda por si alguien vuelve a
+     * montar el control sin la condición. Lo que NO puede volver a pasar es lo
+     * de antes: un `return` mudo DESPUÉS del formulario de entrada, o sea
+     * hacerle a alguien pagar un login entero para que la pantalla no se mueva
+     * (revisión 2026-08-20).
+     */
+    if (!authorId) return;
     if (!viewerId) {
-      toast({ title: COPY.report.needsAuth, variant: "info" });
-      router.push(`/entrar?next=${encodeURIComponent(`/feed/${postId}`)}`);
+      // Antes: un toast y un `push` a /entrar con `next=/feed/[postId]`, o sea
+      // salir del feed para aterrizar en el detalle. Ahora la puerta se abre
+      // acá mismo y al entrar se abre la hoja de reporte que la persona pidió
+      // (feedback cliente 2026-08-20). El toast sobra: el título de la hoja ya
+      // dice para qué hay que entrar, y decirlo dos veces es un paso más.
+      requireAuth({
+        reason: AUTH_REASON.report,
+        // Parada en `/feed/[id]` la persona abrió un enlace compartido: el
+        // destino de respaldo es esa misma URL. Ver `resumeDestination`.
+        foldPostDetail: false,
+        onAuthenticated: () => {
+          // Sin `viewerId` a propósito: en el closure de antes de entrar sigue
+          // siendo null y volvería a abrir la hoja en bucle. La sesión ya está.
+          setReportOpen(true);
+        },
+      });
       return;
     }
-    // Autor eliminado: no hay perfil contra el cual reportar (caso borde).
-    if (!authorId) return;
     setReportOpen(true);
   }
 
@@ -352,7 +375,14 @@ export function PostMenu({
             {COPY.postMenu.openInNewTab}
           </a>
 
-          <ReportScamButton variant="menu-item" onReport={openReport} />
+          {/* SIN AUTOR NO SE OFRECE REPORTAR (revisión 2026-08-20). El reporte
+              viaja contra el PERFIL del autor; si la cuenta ya no existe no hay
+              a quién reportar. Antes la fila estaba igual y el camino terminaba
+              en un `return` mudo — para quien no tenía sesión, después de haber
+              pasado por el formulario de entrada COMPLETO. Un toast avisando
+              sería un paso más y un callejón igual: mejor no abrir la puerta que
+              disculparse al final del pasillo. */}
+          {authorId && <ReportScamButton variant="menu-item" onReport={openReport} />}
 
           {isOwnPost && (
             <button

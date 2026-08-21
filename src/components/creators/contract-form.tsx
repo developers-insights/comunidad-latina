@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileText } from "@phosphor-icons/react/dist/ssr";
+import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { BottomSheet, Button, Field, Input, Textarea, type ButtonProps } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { proposeContract } from "@/app/(app)/creadores/actions";
@@ -40,6 +41,21 @@ export interface ContractFormProps {
   triggerVariant?: ButtonProps["variant"];
   triggerSize?: ButtonProps["size"];
   triggerClassName?: string;
+  /**
+   * ¿Había sesión cuando el servidor pintó esta pantalla?
+   *
+   * Ausente = `true`, que es lo que valía hasta hoy: los dos llamadores viejos
+   * (el CTA del perfil y el de una aplicación aceptada) sólo se renderizan con
+   * sesión, así que para ellos nada cambia.
+   *
+   * En `false` la puerta se pide ANTES de abrir el formulario, no al enviarlo.
+   * Es a propósito y va contra el patrón del resto de la app: acá hay cuatro
+   * campos, y los caminos de entrada que se van del navegador (Google, enlace
+   * mágico) vuelven en otra carga, sin árbol de React — o sea, sin lo que la
+   * persona había escrito. Pedir primero cuesta un toque; pedir al final puede
+   * costar el contrato entero escrito de nuevo.
+   */
+  isAuthenticated?: boolean;
 }
 
 /**
@@ -65,8 +81,10 @@ export function ContractForm({
   triggerVariant = "primary",
   triggerSize = "md",
   triggerClassName,
+  isAuthenticated = true,
 }: ContractFormProps) {
   const router = useRouter();
+  const requireAuth = useRequireAuth();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(defaultTitle);
   const [scope, setScope] = useState(defaultScope);
@@ -80,6 +98,23 @@ export function ContractForm({
   const [error, setError] = useState<string | null>(null);
 
   const contactBlocked = hasContactInfo(title, scope);
+
+  /**
+   * Abrir la propuesta. Sin sesión pide entrar acá mismo y la abre recién
+   * después: ver `isAuthenticated`. El `setOpen(true)` va DENTRO de
+   * `onAuthenticated` —nunca antes— para que cerrar la hoja sin entrar no deje
+   * un formulario que se abre solo en la próxima entrada.
+   */
+  function openProposal() {
+    if (!isAuthenticated) {
+      requireAuth({
+        reason: AUTH_REASON.contract,
+        onAuthenticated: () => setOpen(true),
+      });
+      return;
+    }
+    setOpen(true);
+  }
 
   async function handleSubmit() {
     if (contactBlocked) return;
@@ -107,7 +142,18 @@ export function ContractForm({
       });
       if (!result.ok) {
         if (result.needsAuth) {
-          router.push("/entrar");
+          /**
+           * Red de seguridad para la sesión que se venció con el formulario ya
+           * escrito (el caso de arriba, `isAuthenticated`, la evita antes de
+           * empezar). La hoja de entrada se apila SOBRE esta propuesta, que
+           * sigue montada con todo lo escrito, y al entrar se reintenta el
+           * mismo envío. Antes esto era un `router.push` a /entrar: el contrato
+           * a medio escribir se perdía entero.
+           */
+          requireAuth({
+            reason: AUTH_REASON.contract,
+            onAuthenticated: () => void handleSubmit(),
+          });
           return;
         }
         setError(result.error);
@@ -127,7 +173,7 @@ export function ContractForm({
         variant={triggerVariant}
         size={triggerSize}
         className={cn(triggerClassName)}
-        onClick={() => setOpen(true)}
+        onClick={openProposal}
       >
         <FileText size={triggerSize === "sm" ? 15 : 18} weight="fill" aria-hidden="true" />
         {triggerLabel}

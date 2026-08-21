@@ -18,6 +18,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { Avatar, Button, Dialog, useToast } from "@/components/ui";
+import { ContactDone } from "@/components/messaging";
 import { PublisherTrust, firstNameOf, toTrustLevel } from "@/components/listings";
 import type { TrustSignal } from "@/components/trust";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,37 @@ import { CvDownloadButton } from "./cv-download-button";
 import { COPY } from "./copy";
 
 const C = COPY.candidates;
+
+/**
+ * Copy del contacto inline, local a esta tarjeta: `./copy.ts` lo comparten
+ * varios flujos del módulo.
+ *
+ * ── LO QUE DECÍA ANTES Y ERA FALSO (revisión de código 2026-08-21) ──────────
+ * Decía "Ya podés escribirle" y "Todavía no le llegó nada". Las dos mentían, y
+ * en direcciones opuestas:
+ *  · La conversación nace en `pending` (`empleos/actions.ts`), y
+ *    `sendMessageAction` corta con `status !== "accepted"` — o sea que NO se
+ *    puede escribir todavía. El link llevaba a un hilo sin campo de texto y con
+ *    un cartel de espera que contradecía el título.
+ *  · Y sí le llegó algo: la bandeja lista los `pending` y se los muestra como
+ *    "Te quiere contactar".
+ * Era el mismo éxito falso que esta tanda vino a sacar de la app — se había
+ * quitado el campo de texto que el servidor iba a rechazar, pero había quedado
+ * la frase.
+ *
+ * Ahora los dos textos dicen lo que de verdad pasó, que además es lo que le
+ * importa a quien contrata: si tiene que esperar una aceptación, o si ya hay
+ * una conversación con historia para leer antes de escribir.
+ */
+const MESSAGE_INLINE = {
+  openedTitle: "Le mandamos tu solicitud",
+  openedBody:
+    "Cuando la acepte van a poder escribirse por acá. Te avisamos apenas responda.",
+  reusedTitle: "Ya tenían un chat abierto",
+  reusedBody: "Seguí ahí la conversación — no hace falta abrir otra.",
+  openedLink: "Ver la solicitud",
+  reusedLink: "Ir al chat",
+} as const;
 
 /** Cada paso del embudo con su verbo, su ícono y si necesita confirmación. */
 const ACTION: Record<
@@ -91,6 +123,11 @@ export function CandidateCard({ candidate, trustSignals }: CandidateCardProps) {
   const [saved, setSaved] = useState(candidate.saved);
   const [savePending, setSavePending] = useState(false);
   const [messagePending, setMessagePending] = useState(false);
+  /** El hilo, una vez resuelto. `reused` decide QUÉ se le dice a la persona. */
+  const [conversation, setConversation] = useState<{
+    id: string;
+    reused: boolean;
+  } | null>(null);
 
   const transitions = employerTransitions(status);
   const profile = candidate.profile;
@@ -142,6 +179,21 @@ export function CandidateCard({ candidate, trustSignals }: CandidateCardProps) {
     }
   }
 
+  /**
+   * Abrir (o recuperar) el chat con quien se postuló, SIN irse de la lista.
+   *
+   * Cliente 2026-08-20: "ahí nomás dentro de pantalla se tiene que fluir sin
+   * sacarte del feed". Esto hacía `router.push('/mensajes/[id]')`, así que
+   * quien estaba revisando doce postulaciones —con su filtro puesto y su scroll
+   * hecho— caía adentro de un hilo y volvía a empezar. Ahora el hilo queda como
+   * una opción en la confirmación: la mayoría de las veces se abre el chat de
+   * tres candidatos seguidos y recién después se entra a escribir.
+   *
+   * Acá NO hay composer, a diferencia de las pantallas de avisos: la
+   * conversación que abre el empleador nace `pending` y `sendMessageAction`
+   * sólo escribe en las `accepted`. Ofrecer un campo de texto que el servidor
+   * va a rechazar sería el éxito falso que estamos sacando, no arreglando.
+   */
   async function message() {
     setMessagePending(true);
     try {
@@ -150,7 +202,7 @@ export function CandidateCard({ candidate, trustSignals }: CandidateCardProps) {
         toast({ variant: "danger", title: result.message ?? C.advanceError });
         return;
       }
-      router.push(`/mensajes/${result.conversationId}`);
+      setConversation({ id: result.conversationId, reused: result.reused });
     } catch {
       toast({ variant: "danger", title: C.advanceError });
     } finally {
@@ -303,7 +355,7 @@ export function CandidateCard({ candidate, trustSignals }: CandidateCardProps) {
             del hilo. Ofrecerlo acá deshacía en un toque lo que esta tarjeta
             oculta a propósito. La acción del servidor también lo rechaza —esto
             es para no ofrecer lo que va a fallar, no la barrera. */}
-        {candidate.applicantId && (
+        {candidate.applicantId && conversation === null && (
           <Button variant="ghost" size="sm" loading={messagePending} onClick={message}>
             <ChatCircleDots size={16} aria-hidden="true" />
             {C.sendMessage}
@@ -325,6 +377,23 @@ export function CandidateCard({ candidate, trustSignals }: CandidateCardProps) {
           {saved ? C.saved : C.save}
         </Button>
       </div>
+
+      {/* El chat quedó abierto acá mismo: la lista de postulantes no se movió y
+          el hilo es una opción, no el destino obligatorio. */}
+      {conversation && (
+        <ContactDone
+          title={
+            conversation.reused ? MESSAGE_INLINE.reusedTitle : MESSAGE_INLINE.openedTitle
+          }
+          body={
+            conversation.reused ? MESSAGE_INLINE.reusedBody : MESSAGE_INLINE.openedBody
+          }
+          linkLabel={
+            conversation.reused ? MESSAGE_INLINE.reusedLink : MESSAGE_INLINE.openedLink
+          }
+          conversationId={conversation.id}
+        />
+      )}
 
       {/* ---- Avanzar el embudo --------------------------------------------- */}
       {transitions.length > 0 ? (

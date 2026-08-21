@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   BookmarkSimple,
   ChatCircle,
@@ -16,6 +15,11 @@ import {
   SpeakerSlash,
 } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/client";
+import {
+  AUTH_REASON,
+  useAuthSheetOpen,
+  useRequireAuth,
+} from "@/components/auth/auth-sheet";
 import { Avatar, Chip, buttonVariants, useToast } from "@/components/ui";
 import { LikeBurst, usePrefersReducedMotion } from "@/components/motion";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
@@ -105,6 +109,19 @@ export function VideoReels({
   const [muted, setMuted] = useState(false);
   const loadingRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * CON LA PUERTA ABIERTA, EL VIDEO SE PARA.
+   *
+   * La hoja de entrada es un panel opaco que tapa el reel; el video, que es
+   * pantalla completa y con audio, seguiría corriendo detrás. Quien toca ♥ sin
+   * cuenta terminaría llenando un formulario de entrada mientras escucha un
+   * video que ya no ve —y en un teléfono, sin poder bajarle el volumen sin
+   * cerrar la hoja—. No es lo mismo que la hoja de comentarios, que es media
+   * hoja de vidrio y deja el video a la vista a propósito: ahí el video es parte
+   * de la conversación, acá estorba.
+   */
+  const authOpen = useAuthSheetOpen();
 
   // Índice activo desde el scroll: slides de altura exacta del contenedor →
   // la cuenta es exacta y no hace falta IntersectionObserver.
@@ -206,7 +223,7 @@ export function VideoReels({
               post={post}
               tenantId={tenantId}
               viewerId={viewerId}
-              active={index === activeIndex}
+              active={index === activeIndex && !authOpen}
               muted={muted}
               onMutedChange={setMuted}
             />
@@ -258,12 +275,13 @@ function ReelSlide({
   /**
    * Doble toque sobre el video = me gusta, igual que en la card del feed.
    * IDEMPOTENTE: nunca quita el me gusta (para eso está el corazón del riel).
-   * El corazón grande sólo aparece con sesión — sin sesión el toggle lleva a
-   * /entrar y sería mentir un me gusta que no se guardó.
+   * El corazón grande sólo aparece con sesión — sin sesión el toggle abre la
+   * hoja de entrada, y celebrar un me gusta que todavía no se guardó sería
+   * mentirle a la persona justo antes de pedirle que se registre.
    */
   function handleDoubleTap() {
     if (!viewerId) {
-      like.toggle(true); // sin sesión el toggle no reacciona: lleva a /entrar
+      like.toggle(true); // sin sesión el toggle pide la puerta, no reacciona
       return;
     }
     setBursts((current) => current + 1);
@@ -422,15 +440,56 @@ function useReelLike({
   tenantId: string;
   viewerId: string | null;
 }): ReelLikeState {
-  const router = useRouter();
+  const requireAuth = useRequireAuth();
   const [liked, setLiked] = useState(post.likedByViewer);
   const [count, setCount] = useState(post.likeCount);
 
+  /**
+   * El me gusta que quedó pendiente mientras la persona entraba.
+   *
+   * Mismo caso que en el feed (`card-like-context`): el insert en `reactions`
+   * escribe `profile_id` con el `viewerId` que baja del servidor, y al momento
+   * de reanudar ese prop todavía dice `null` —el closure es el de antes de
+   * entrar—. Así que el deseo se guarda acá y se ejecuta recién cuando el
+   * `router.refresh()` de la hoja trae el viewer verdadero.
+   */
+  const pendingLike = useRef<boolean | null>(null);
+
+  /**
+   * Pide sesión sin sacar a nadie del reel (cliente 2026-08-20: "mientras menos
+   * pasos mejor"). Antes esto era un `router.push` a /entrar: la persona perdía
+   * el video, la posición del scroll infinito y el sonido que había desbloqueado
+   * — y volvía al primer video de la lista, no al que le había gustado.
+   *
+   * El deseo se arma DENTRO de `onAuthenticated` y nunca antes: quien toca el
+   * corazón sin cuenta y cierra la hoja sin entrar no puede terminar con un me
+   * gusta fantasma aplicado en la próxima entrada, por otro motivo, a un video
+   * que ya ni está en pantalla.
+   */
+  function requireLike(nextLiked: boolean) {
+    requireAuth({
+      reason: AUTH_REASON.like,
+      onAuthenticated: () => {
+        pendingLike.current = nextLiked;
+      },
+    });
+  }
+
   function toggle(nextLiked: boolean) {
     if (!viewerId) {
-      router.push(`/entrar?next=${encodeURIComponent("/videos")}`);
+      requireLike(nextLiked);
       return;
     }
+    applyToggle(nextLiked);
+  }
+
+  /** El camino con sesión: optimista + persistencia. */
+  function applyToggle(nextLiked: boolean) {
+    if (nextLiked === liked) return; // ya está en ese estado: nada que hacer
+    // Sólo se llega acá con sesión (`toggle` corta a los anónimos y el efecto de
+    // abajo espera al viewer verdadero); el guard además narrowea `viewerId` a
+    // string para las escrituras.
+    if (!viewerId) return;
     // Optimista: la UI responde al instante; si la DB dice que no, se revierte.
     setLiked(nextLiked);
     setCount((current) => Math.max(0, current + (nextLiked ? 1 : -1)));
@@ -469,6 +528,20 @@ function useReelLike({
     })();
   }
 
+  useEffect(() => {
+    if (!viewerId || pendingLike.current === null) return;
+    const wanted = pendingLike.current;
+    pendingLike.current = null;
+    // El efecto va DEBAJO de `applyToggle`: leer desde un efecto una función
+    // declarada más abajo congela la versión vieja y el compilador de React lo
+    // rechaza. Diferido a un frame porque el efecto corre dentro del commit del
+    // refresh y un setState sincrónico acá encadena renders.
+    const raf = requestAnimationFrame(() => applyToggle(wanted));
+    return () => cancelAnimationFrame(raf);
+    // `applyToggle` se redefine en cada render; el disparador real es viewerId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewerId]);
+
   return { liked, count, toggle };
 }
 
@@ -485,7 +558,7 @@ function ReelActions({
   muted: boolean;
   onMutedChange: (muted: boolean) => void;
 }) {
-  const router = useRouter();
+  const requireAuth = useRequireAuth();
   const { toast } = useToast();
   const commentsSheet = useCommentsSheet();
   const { liked, count, toggle: toggleLike } = like;
@@ -493,17 +566,38 @@ function ReelActions({
   const [savePending, setSavePending] = useState(false);
 
   /**
+   * Pide sesión con el guardado ya cargado para aplicarlo apenas entra.
+   *
+   * Reanuda por `applySave` y no por `toggleSave`: éste vuelve a mirar
+   * `viewerId`, que en el closure de antes de entrar sigue siendo `null` —
+   * reabriría la hoja que la persona acaba de cerrar, en bucle. El server action
+   * deriva quién guarda desde la cookie, que ya está escrita.
+   */
+  function requireSave(next: boolean) {
+    requireAuth({
+      reason: AUTH_REASON.save,
+      onAuthenticated: () => applySave(next),
+    });
+  }
+
+  /**
    * Guardar/quitar de guardados. Optimista local: el ícono responde al toque y
    * se revierte si el server dice que no. Sin sesión, guardar no tiene dónde
-   * guardarse → mismo camino que el me gusta, a /entrar.
+   * guardarse: se pide acá mismo, sin dejar el video.
    */
   function toggleSave() {
-    if (!viewerId) {
-      router.push(`/entrar?next=${encodeURIComponent("/videos")}`);
-      return;
-    }
     if (savePending) return;
     const next = !saved;
+    if (!viewerId) {
+      requireSave(next);
+      return;
+    }
+    applySave(next);
+  }
+
+  /** El camino con sesión. */
+  function applySave(next: boolean) {
+    if (savePending) return;
     setSaved(next);
     setSavePending(true);
     try {
@@ -519,7 +613,13 @@ function ReelActions({
           save: next,
         });
         if (!result.ok) {
-          setSaved(!next);
+          setSaved(!next); // la UI no puede mentir sobre lo guardado
+          if (result.code === "unauthenticated") {
+            // La sesión se venció entre el toque y el viaje: se vuelve a pedir
+            // la puerta, no un error que no explica nada.
+            requireSave(next);
+            return;
+          }
           toast({
             title: VIDEOS_COPY.saveErrorTitle,
             description: result.message ?? VIDEOS_COPY.saveErrorBody,

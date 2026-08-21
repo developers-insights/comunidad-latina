@@ -172,6 +172,8 @@ export interface ModuleCirclesProps {
 export function ModuleCircles({ active, modules, modulesSoon }: ModuleCirclesProps) {
   const reduceMotion = useReducedMotion();
   const activeItemRef = useRef<HTMLLIElement>(null);
+  /** El carril horizontal: es lo ÚNICO que se mueve al cambiar de filtro. */
+  const railRef = useRef<HTMLDivElement>(null);
 
   const { filters, sections } = moduleCircles(modules, modulesSoon);
 
@@ -193,14 +195,51 @@ export function ModuleCircles({ active, modules, modulesSoon }: ModuleCirclesPro
   const indexOf = (tab: FeedTabId) => filters.findIndex((circle) => circle.tab === tab);
   const distance = Math.abs(indexOf(current) - indexOf(from));
 
-  // El círculo elegido siempre visible: si quedó fuera del scroll horizontal,
-  // entra solo. Imperativo a propósito (no toca estado de React).
+  /**
+   * El círculo elegido siempre visible: si quedó fuera del scroll horizontal,
+   * entra solo. Imperativo a propósito (no toca estado de React).
+   *
+   * ── POR QUÉ NO ES `scrollIntoView` (cliente 2026-08-20) ─────────────────
+   * Era `activeItemRef.current.scrollIntoView({ block: "nearest", inline:
+   * "nearest" })`, y tenía un efecto que nadie pidió: `block: "nearest"` mira
+   * también el eje VERTICAL, así que cuando la fila de módulos había quedado
+   * fuera de vista —o sea, cada vez que alguien venía scrolleando el feed— el
+   * click en un filtro pegaba un salto vertical de toda la página.
+   *
+   * Y ese salto se veía, además, como un defecto raro: el anillo del módulo
+   * activo se anima con `layoutId`, o sea midiendo la posición ANTES y DESPUÉS
+   * del cambio. Si entremedio la página se movió en vertical, esa diferencia
+   * entra en la medición y el anillo cruza la pantalla en diagonal — el
+   * cliente lo describió como "una barrita del color del tema que viene desde
+   * abajo del todo". No era el anillo: era el scroll de la página metiéndose
+   * en la medición.
+   *
+   * Ahora se mueve SÓLO el carril, con su propio `scrollLeft`. Un scroll
+   * horizontal de un contenedor no puede tocar el scroll vertical del
+   * documento, así que el defecto no puede volver por otro camino.
+   */
   useEffect(() => {
-    activeItemRef.current?.scrollIntoView({
-      block: "nearest",
-      inline: "nearest",
-      behavior: reduceMotion ? "auto" : "smooth",
-    });
+    const rail = railRef.current;
+    const item = activeItemRef.current;
+    if (!rail || !item) return;
+
+    const railBox = rail.getBoundingClientRect();
+    const itemBox = item.getBoundingClientRect();
+    // El mismo respiro que el `px-4` del carril: el círculo elegido no queda
+    // pegado al borde, así se sigue viendo que hay más a los costados.
+    const margin = 16;
+
+    let delta = 0;
+    if (itemBox.left < railBox.left + margin) {
+      delta = itemBox.left - railBox.left - margin;
+    } else if (itemBox.right > railBox.right - margin) {
+      delta = itemBox.right - railBox.right + margin;
+    }
+    if (delta === 0) return;
+
+    // `scrollBy` puede no existir en jsdom: el ajuste es cosmético y no vale
+    // romper un test por él.
+    rail.scrollBy?.({ left: delta, behavior: reduceMotion ? "auto" : "smooth" });
   }, [current, reduceMotion]);
 
   return (
@@ -209,7 +248,10 @@ export function ModuleCircles({ active, modules, modulesSoon }: ModuleCirclesPro
           sola cosa aunque por dentro sean dos listas. `snap-x` sin `mandatory`
           — el snap acomoda el gesto, no lo pelea (con `mandatory` no se puede
           dejar medio círculo asomando, que es justo la pista de "hay más"). */}
-      <div className="flex snap-x items-start gap-1 overflow-x-auto px-4 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        ref={railRef}
+        className="flex snap-x items-start gap-1 overflow-x-auto px-4 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         <ul aria-label={COPY.modules.filtersLabel} className="flex items-start gap-1">
           {filters.map((circle) => {
             const isCurrent = circle.tab === current;

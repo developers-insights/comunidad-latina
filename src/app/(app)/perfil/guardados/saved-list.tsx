@@ -11,6 +11,7 @@ import {
   Play,
   UserCircle,
 } from "@phosphor-icons/react/dist/ssr";
+import { PostSheetTrigger } from "@/components/feed";
 import { BezelCard, EmptyState, buttonVariants } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { PostTile } from "../post-tiles";
@@ -91,45 +92,67 @@ export function SavedList({ items, nextHref }: SavedListProps) {
   );
 }
 
-/** Cáscara compartida de fila: thumbnail + título/meta + chevron, un solo tap target. */
+/**
+ * Cáscara compartida de fila: thumbnail + título/meta + chevron, un solo tap target.
+ *
+ * Con `postId` la fila abre la publicación en una HOJA, sin salir de Guardados
+ * (feedback cliente 2026-08-20: "mientras menos pasos mejor"). Guardar algo es
+ * decir "esto lo quiero para después": que "después" costara una navegación de
+ * ida y un "atrás" que perdía la lista era el peaje más caro de toda la
+ * pantalla. Un aviso del marketplace sigue navegando: su destino es una ficha
+ * completa, no una tarjeta.
+ */
 function SavedRowShell({
   href,
+  postId,
   ariaLabel,
   thumb,
   title,
   meta,
 }: {
   href: string;
+  /** Publicación del feed → hoja en el lugar. Ausente → link de siempre. */
+  postId?: string;
   ariaLabel: string;
   thumb: React.ReactNode;
   title: string;
   meta: string;
 }) {
+  const shellClass =
+    "group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring";
+  const core = (
+    <BezelCard coreClassName="flex items-center gap-3 p-3">
+      <span
+        aria-hidden="true"
+        className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-subtle text-foreground-muted"
+      >
+        {thumb}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-display text-sm font-semibold text-foreground">
+          {title}
+        </span>
+        <span className="mt-0.5 block truncate text-xs text-foreground-secondary">{meta}</span>
+      </span>
+      <CaretRight
+        size={18}
+        aria-hidden="true"
+        className="shrink-0 text-foreground-muted transition-transform duration-(--duration-fast) ease-(--ease-out-premium) group-hover:translate-x-0.5"
+      />
+    </BezelCard>
+  );
+
+  if (postId) {
+    return (
+      <PostSheetTrigger postId={postId} ariaLabel={ariaLabel} className={shellClass}>
+        {core}
+      </PostSheetTrigger>
+    );
+  }
+
   return (
-    <Link
-      href={href}
-      aria-label={ariaLabel}
-      className="group block rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-    >
-      <BezelCard coreClassName="flex items-center gap-3 p-3">
-        <span
-          aria-hidden="true"
-          className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-subtle text-foreground-muted"
-        >
-          {thumb}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-display text-sm font-semibold text-foreground">
-            {title}
-          </span>
-          <span className="mt-0.5 block truncate text-xs text-foreground-secondary">{meta}</span>
-        </span>
-        <CaretRight
-          size={18}
-          aria-hidden="true"
-          className="shrink-0 text-foreground-muted transition-transform duration-(--duration-fast) ease-(--ease-out-premium) group-hover:translate-x-0.5"
-        />
-      </BezelCard>
+    <Link href={href} aria-label={ariaLabel} className={shellClass}>
+      {core}
     </Link>
   );
 }
@@ -142,6 +165,7 @@ function SavedPostRow({ tile }: { tile: PostTile }) {
   return (
     <SavedRowShell
       href={`/feed/${tile.id}`}
+      postId={tile.id}
       ariaLabel={title}
       title={title}
       meta={meta}

@@ -16,6 +16,7 @@ import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
 import { ACCENT_CHIP_CLASS, DirectoryDetailHero, FollowRow } from "@/components/directory";
 import { HorarioSeccion } from "@/components/negocios";
+import { PostSheetTrigger } from "@/components/feed";
 import {
   ResenaForm,
   ResenasLista,
@@ -399,8 +400,15 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
           <ul className="flex flex-col gap-3">
             {posts.map((post) => (
               <li key={post.id}>
-                <Link
-                  href={`/feed/${post.id}`}
+                {/* La publicación se abre en una HOJA, sin salir del negocio
+                    (feedback cliente 2026-08-20: "mientras menos pasos
+                    mejor"). Quien está mirando una ficha vino a conocer el
+                    negocio: mandarlo a /feed/[id] por leer una novedad lo
+                    sacaba de esa lectura y el "atrás" lo devolvía arriba de
+                    todo. `PostSheetTrigger` es un client component chiquito —
+                    esta página sigue siendo server. */}
+                <PostSheetTrigger
+                  postId={post.id}
                   className="flex items-center gap-3 rounded-lg border border-border-subtle bg-surface p-3 transition-colors duration-(--duration-fast) hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
                 >
                   {post.photoUrl ? (
@@ -426,7 +434,7 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
                       {post.timeAgoLabel}
                     </span>
                   </span>
-                </Link>
+                </PostSheetTrigger>
               </li>
             ))}
           </ul>

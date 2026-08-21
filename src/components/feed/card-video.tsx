@@ -10,6 +10,8 @@ import { clampStartSeconds, clipEndSeconds } from "@/lib/media/audio-track";
 import { clipGain, musicTimeFor, resolveAudioMix } from "@/lib/media/audio-mix";
 import { VIDEOS_COPY } from "@/app/(app)/videos/copy";
 import { useCardLike } from "./card-like-context";
+import { useCardMedia } from "./card-media-context";
+import { useMediaViewer, type ViewerMediaItem } from "./media-viewer";
 import { COPY } from "./copy";
 import type { PostMusicView, VideoScopeProp } from "./helpers";
 import styles from "./card-post-media.module.css";
@@ -60,7 +62,11 @@ function safePlay(media: HTMLMediaElement) {
 
 export interface CardVideoProps {
   src: string;
-  /** Post de origen — para navegar al feed de videos a pantalla completa. */
+  /**
+   * Post de origen. Viaja al visor para que la vista quede contada sobre la
+   * publicación correcta, y arma la URL del reel en el único caso en que
+   * todavía se navega (ver `openVideo`).
+   */
   postId: string;
   /**
    * Contexto del feed de videos (p. ej. "para-ti" en el feed general). Tipado
@@ -68,6 +74,13 @@ export interface CardVideoProps {
    * del reel sin que el compilador lo frene (ver `VideoScopeProp`).
    */
   scope: VideoScopeProp;
+  /**
+   * Nombre visible del autor. Sólo viaja al visor, para que su encabezado diga
+   * de quién es el video y su `aria-label` no caiga en el genérico "Fotos y
+   * videos de la publicación" — que es lo que se leía cuando este camino no
+   * conocía al autor. La tarjeta no lo pinta: eso ya lo hace su cabecera.
+   */
+  authorName?: string;
   /** Vistas acumuladas del post; 0 (o sin dato) no muestra píldora. */
   viewCount?: number;
   /**
@@ -78,9 +91,12 @@ export interface CardVideoProps {
    */
   active?: boolean;
   /**
-   * Qué hace el toque simple. Sin esto abre el reel vertical (`/videos`) — el
-   * camino del feed. Con esto manda quien monta el video: el detalle de una
-   * publicación abre el visor a pantalla completa y NO el scroll infinito.
+   * Qué hace el toque simple, cuando quien monta el video quiere decidirlo:
+   * el detalle de una publicación y los anuncios abren el visor CON las
+   * diapositivas y el tope que ellos calculan (ver CardPostMedia).
+   *
+   * Sin esto el toque también abre el visor —el default dejó de navegar el
+   * 2026-08-20—, sólo que armado con lo que la propia tarjeta sabe.
    */
   onTap?: () => void;
   className?: string;
@@ -113,6 +129,18 @@ export interface CardVideoProps {
 const PREVIEW_CAP_SECONDS = playbackCapSeconds("feed");
 
 /**
+ * Tope del VISOR cuando el video se abre desde la tarjeta: el de una
+ * publicación (300 s), no el de la vista previa. Lo que el toque abre ES el
+ * video completo — que era, textual, la promesa de su etiqueta ("Ver el video
+ * completo").
+ *
+ * El tope de 10 minutos del anuncio no se decide acá y no hace falta que se
+ * decida: un anuncio nunca llega a este camino, porque CardPostMedia le pasa su
+ * propio `onTap` con el tope que calculó (ver `viewerPlaybackCapFor`).
+ */
+const VIEWER_CAP_SECONDS = playbackCapSeconds("detail");
+
+/**
  * Video en el feed (§5): autoplay MUTED cuando ≥60% visible, con ~2s de espera
  * para que un scroll rápido no dispare decenas de reproducciones; loop,
  * playsInline, preload=metadata. Ícono de sonido tocable (no navega).
@@ -125,7 +153,7 @@ const PREVIEW_CAP_SECONDS = playbackCapSeconds("feed");
  * anteriores a la 0046 no la declaran).
  *
  * Interacción sobre el video — MISMA gramática que la foto (card-post-media):
- *  - un toque abre el feed de videos a pantalla completa (`/videos`);
+ *  - un toque abre el visor a pantalla completa SOBRE el feed, sin navegar;
  *  - doble toque da me gusta (corazón grande animado en el centro) reusando el
  *    estado compartido del post (useCardLike). El doble-tap es EXTRA: el botón
  *    de me gusta de PostActions sigue siendo el camino accesible.
@@ -137,6 +165,7 @@ export function CardVideo({
   src,
   postId,
   scope,
+  authorName,
   viewCount = 0,
   active = true,
   onTap,
@@ -147,6 +176,8 @@ export function CardVideo({
   const router = useRouter();
   const reduce = usePrefersReducedMotion();
   const like = useCardLike();
+  const viewer = useMediaViewer();
+  const media = useCardMedia();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const delayRef = useRef<number | null>(null);
@@ -252,7 +283,7 @@ export function CardVideo({
   }, [reduce, active]);
 
   // Si la card se desmonta con un toque en vuelo (scroll rápido), no dejar que
-  // el timer navegue desde una card que ya no está en pantalla.
+  // el timer abra el visor desde una card que ya no está en pantalla.
   useEffect(
     () => () => {
       if (tapTimer.current !== null) clearTimeout(tapTimer.current);
@@ -289,16 +320,77 @@ export function CardVideo({
     }
   }
 
-  function openVideos() {
-    // Fuera del feed y de /videos no hay reel: quien monta el video decide qué
-    // pasa (ver NO_REEL_SCOPE y CardPostMedia).
+  /**
+   * LAS DIAPOSITIVAS QUE VE EL VISOR. Cuando la tarjeta declaró sus medios —el
+   * carrusel los publica en el contexto— se abren TODAS, arrancando en este
+   * video: tocar el video de un post que además trae fotos tiene que dejar
+   * llegar a las fotos, igual que tocar una foto ya deja llegar al video.
+   * Fuera de una tarjeta con contexto (un video suelto) se abre este archivo y
+   * nada más.
+   */
+  function viewerSlides(): { items: ViewerMediaItem[]; startIndex: number } {
+    const all = media?.items ?? [];
+    const found = all.findIndex((item) => item.kind === "video" && item.url === src);
+    if (found < 0) return { items: [{ kind: "video", url: src }], startIndex: 0 };
+    return { items: all, startIndex: found };
+  }
+
+  /**
+   * Al cerrarse el visor la tarjeta retoma sola. Sin esto quedaba congelada en
+   * el frame donde la pausamos: el observador de visibilidad no vuelve a
+   * dispararse porque la card nunca dejó de estar a la vista (el visor es un
+   * overlay, no una navegación). Con reduced-motion no se retoma nada — ahí el
+   * video nunca arranca solo.
+   */
+  function resumeAfterViewer() {
+    if (reduce) return;
+    const node = videoRef.current;
+    if (node) safePlay(node);
+    const audioNode = audioRef.current;
+    if (audioNode) safePlay(audioNode);
+  }
+
+  /**
+   * EL TOQUE ABRE EL VIDEO SIN MOVERTE DEL FEED (pedido del cliente,
+   * 2026-08-20: "no te tiene que mover a otra publicación; ahí nomás dentro de
+   * pantalla se tiene que fluir sin sacarte del feed; si no es como que te
+   * corta el mambo. Mientras menos pasos mejor"). Hasta ese día esto navegaba a
+   * `/videos`, y volver costaba un "atrás" que además perdía el scroll del feed
+   * y te dejaba parado en OTRA publicación.
+   *
+   * `/videos` no se toca: sigue siendo el destino de Videos Cortos, donde el
+   * scroll vertical entre publicaciones ES lo que la persona fue a buscar. Lo
+   * que cambió es el gesto de la tarjeta, que nunca lo pidió.
+   */
+  function openVideo() {
+    // Quien monta el video puede decidirlo (el detalle de una publicación y los
+    // anuncios abren el visor con sus propias diapositivas y su propio tope).
     if (onTap) {
       onTap();
       return;
     }
-    router.push(
-      `/videos?start=${encodeURIComponent(postId)}&scope=${encodeURIComponent(scope)}`,
-    );
+    // Sin provider de visor montado el toque quedaría muerto: ahí sí, el reel.
+    if (!viewer.available) {
+      router.push(
+        `/videos?start=${encodeURIComponent(postId)}&scope=${encodeURIComponent(scope)}`,
+      );
+      return;
+    }
+    const node = videoRef.current;
+    const { items, startIndex } = viewerSlides();
+    // La tarjeta se calla ANTES de abrir: el visor arranca con sonido y dos
+    // copias del mismo clip sonando juntas no se le hace a nadie.
+    node?.pause();
+    audioRef.current?.pause();
+    viewer.open({
+      items,
+      startIndex,
+      postId,
+      authorName,
+      maxPlaybackSeconds: VIEWER_CAP_SECONDS,
+      startSeconds: node?.currentTime,
+      onClose: resumeAfterViewer,
+    });
   }
 
   function handleDoubleTap() {
@@ -311,7 +403,7 @@ export function CardVideo({
   }
 
   function handleTap() {
-    // Un toque abre el reel; dos toques (dentro de la ventana) dan me gusta.
+    // Un toque abre el video; dos toques (dentro de la ventana) dan me gusta.
     if (tapTimer.current !== null) {
       clearTimeout(tapTimer.current);
       tapTimer.current = null;
@@ -320,7 +412,7 @@ export function CardVideo({
     }
     tapTimer.current = window.setTimeout(() => {
       tapTimer.current = null;
-      openVideos();
+      openVideo();
     }, DOUBLE_TAP_MS);
   }
 
@@ -369,7 +461,8 @@ export function CardVideo({
         />
       )}
 
-      {/* Capa de toque: simple = reel a pantalla completa, doble = me gusta. */}
+      {/* Capa de toque: simple = visor a pantalla completa sobre el propio
+          feed, doble = me gusta. */}
       <button
         type="button"
         onClick={handleTap}

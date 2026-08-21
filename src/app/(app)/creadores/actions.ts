@@ -334,7 +334,24 @@ const applySchema = z.object({
   proposedAmount: z.number().positive().max(1_000_000).nullish(),
 });
 
+/**
+ * Copy propio de `applyToGig`. Vive acá y no en `creators/copy.ts` porque ese
+ * archivo lo comparten varios flujos y lo está editando otro frente en paralelo
+ * — mismo criterio que `PROMOTE_LABEL` en `feed/post-menu.tsx`.
+ * TODO(integración): mudarlo a `creators/copy.ts` cuando ese archivo quede libre.
+ */
+const APPLY_COPY = {
+  ownGig: "Este aviso lo publicaste vos. Vas a ver las propuestas que te lleguen.",
+  unavailable: "Este trabajo ya no está disponible.",
+} as const;
+
 export type ApplyResult =
+  /**
+   * `alreadyApplied` NO es un alta. Significa que la propuesta que se acaba de
+   * escribir NO se guardó porque ya había una de esta persona para este aviso
+   * (revisión 2026-08-20). Quien llama TIENE que contarlo distinto: pintarlo
+   * como envío exitoso es mentirle a alguien que se tomó el trabajo de escribir.
+   */
   | { ok: true; alreadyApplied?: boolean }
   | { ok: false; error: string; needsAuth?: boolean; contactBlocked?: boolean };
 
@@ -367,6 +384,45 @@ export async function applyToGig(rawInput: z.input<typeof applySchema>): Promise
     return { ok: false, error: GENERIC_ERROR };
   }
 
+  /**
+   * NADIE SE POSTULA A SU PROPIO AVISO, Y SE DECIDE ACÁ (revisión 2026-08-20).
+   *
+   * Hasta hoy la única barrera era de PANTALLA: `GigCard` escondía el botón
+   * cuando no le pasaban `applicationsCount`, o sea que deducía "sos el dueño"
+   * de un campo de presentación. Esa inferencia nunca fue una identidad —en
+   * `/creadores` ese conteo no viaja para nadie, así que el dueño veía el botón
+   * igual— y esta action, que es una URL pública, jamás comparaba `created_by`
+   * contra la sesión. Empleos ya lo cubría (`own-job` en
+   * `apply-context-action.ts`); acá faltaba.
+   *
+   * El `user.id` sale del guard de sesión, nunca del input: es la única
+   * identidad que quien llama no puede escribir. La lectura va con el cliente
+   * del USUARIO y filtrada por tenant — la RLS sigue siendo la frontera; esto
+   * agrega la regla que la RLS no puede expresar sola.
+   */
+  const { data: gig, error: gigError } = await supabase
+    .from("listings")
+    .select("id, created_by")
+    .eq("id", gigId)
+    .eq("tenant_id", tenant.id)
+    .eq("kind", "creator_gig")
+    .eq("status", "published")
+    .maybeSingle();
+
+  if (gigError) {
+    console.warn("[creadores] no se pudo leer el aviso para postular", {
+      gigId,
+      code: gigError.code,
+    });
+    return { ok: false, error: GENERIC_ERROR };
+  }
+  if (!gig) {
+    return { ok: false, error: APPLY_COPY.unavailable };
+  }
+  if (gig.created_by === user.id) {
+    return { ok: false, error: APPLY_COPY.ownGig };
+  }
+
   const { error } = await supabase.from("gig_applications").insert({
     tenant_id: tenant.id,
     gig_id: gigId,
@@ -378,6 +434,8 @@ export async function applyToGig(rawInput: z.input<typeof applySchema>): Promise
 
   if (error) {
     // 23505: ya había una aplicación de esta persona a este aviso (unique).
+    // No se guardó NADA de lo que se acaba de escribir — el flag viaja para que
+    // la hoja lo diga con esas palabras, no para que festeje un alta.
     if (error.code === "23505") {
       return { ok: true, alreadyApplied: true };
     }

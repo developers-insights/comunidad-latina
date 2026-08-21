@@ -368,10 +368,16 @@ const INVENTARIO: Record<string, Entrada> = {
   // dos del vacío y el CTA de entrar. Precedente exacto: media-viewer.tsx — en
   // papel una hoja de comentarios no significa nada, el panel entero lleva
   // cl-print-hide. Es también el ancla de comment-item y comment-composer.
-  // La novena (0097) es el cartel de "comentarios desactivados", que ocupa el
+  // La octava (0097) es el cartel de "comentarios desactivados", que ocupa el
   // lugar del campo de escribir cuando quien publicó cerró el hilo.
+  //
+  // Eran NUEVE hasta el 2026-08-20. La que se fue es la del CTA de entrar: dejó
+  // de ser un <Link> con las clases escritas a mano y pasó a ser un <Button>
+  // que reusa ON_MEDIA_BUTTON —la misma cadena, ya inventariada acá arriba—
+  // cuando abre la hoja de autenticación sin sacar a nadie del feed. Una tinta
+  // menos en el conteo, cero cambios en lo que se ve.
   "src/components/feed/comments-sheet.tsx": {
-    inks: Array<string>(9).fill("text-on-media"),
+    inks: Array<string>(8).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
   // Hoja de composición (2026-07-27). REEMPLAZA a post-composer.tsx, que salió
@@ -579,11 +585,15 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-brand-foreground"],
     cobertura: "control",
   },
-  // Mensaje inline del detalle de aviso (call cliente 2026-07-24): mismo
-  // composer que el hilo de Mensajes, embebido en la publicación. Único
-  // portador = el botón redondo de enviar, un <button>. El CTA colapsado sin
-  // sesión es un <a> con buttonVariants, que ya trae su propio cl-print-hide.
-  "src/components/listings/inline-message-cta.tsx": {
+  // Contacto inline (call cliente 2026-07-24, extendido a las cuatro pantallas
+  // el 2026-08-20): mismo composer que el hilo de Mensajes, embebido en la
+  // publicación, el perfil o la card. Único portador = el botón redondo de
+  // enviar, un <button>. El CTA colapsado es un <Button>, que ya trae su propio
+  // cl-print-hide vía buttonVariants.
+  //
+  // La tinta se mudó acá desde listings/inline-message-cta.tsx: ese archivo
+  // ahora sólo aporta copy y delega el markup en este componente compartido.
+  "src/components/messaging/inline-contact.tsx": {
     inks: ["text-brand-foreground"],
     cobertura: "control",
   },

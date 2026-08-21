@@ -60,7 +60,18 @@ describe("zona horaria: una sola definición en todo el repo", () => {
     expect(sourceFiles.length).toBeGreaterThan(0);
   });
 
-  it(`ningún módulo vuelve a escribir "${ZONE_LITERAL}" a mano`, () => {
+  /**
+   * Timeout explícito (2026-08-21): este caso LEE EL REPO ENTERO desde disco,
+   * archivo por archivo. Aislado tarda ~650 ms, pero corriendo dentro de la
+   * suite completa —con el resto de los workers peleando el mismo disco— se
+   * pasaba de los 5 s por default y tiraba un rojo que no era un rojo. Pasó
+   * tres veces en una sola sesión, siempre en verde al re-correrlo solo.
+   *
+   * Un test que falla por la máquina y no por el código es peor que no
+   * tenerlo: enseña a ignorar la suite. 30 s no afloja lo que verifica —el
+   * assert es idéntico—, sólo deja de competir con el I/O de los demás.
+   */
+  it(`ningún módulo vuelve a escribir "${ZONE_LITERAL}" a mano`, { timeout: 30_000 }, () => {
     const offenders: string[] = [];
 
     for (const file of sourceFiles) {

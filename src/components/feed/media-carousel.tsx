@@ -245,6 +245,10 @@ export function MediaCarousel({
                   src={item.url}
                   postId={postId}
                   scope={videoScope}
+                  // Sólo para el encabezado del visor que abre el toque: sin
+                  // esto su rótulo caía en "Fotos y videos de la publicación",
+                  // mientras que la foto de la MISMA card sí nombraba al autor.
+                  authorName={authorName}
                   viewCount={viewCount}
                   active={active}
                   onTap={onVideoTap ? () => onVideoTap(slideIndex) : undefined}

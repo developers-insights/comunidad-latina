@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { usePathname, useRouter } from "next/navigation";
 import {
   BookmarkSimple,
   ChatCircle,
   Heart,
   ShareNetwork,
 } from "@phosphor-icons/react/dist/ssr";
+import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { useToast } from "@/components/ui";
 import { LikeBurst } from "@/components/motion";
 import { cn } from "@/lib/utils";
@@ -111,8 +111,7 @@ export function PostActions({
   immersiveBackground = false,
   className,
 }: PostActionsProps) {
-  const router = useRouter();
-  const pathname = usePathname();
+  const requireAuth = useRequireAuth();
   const { toast } = useToast();
   const commentsSheet = useCommentsSheet();
   // Sin contexto (acciones montadas fuera de una card con medios) no hay medio
@@ -146,15 +145,35 @@ export function PostActions({
   const [saved, setSaved] = useState(savedByViewer);
   const [, startSaveTransition] = useTransition();
 
-  function goToLogin() {
-    router.push(`/entrar?next=${encodeURIComponent(pathname || "/feed")}`);
+  /**
+   * Pide sesión SIN sacar a la persona del feed, y con el guardado ya cargado
+   * para reintentarlo apenas entra (feedback cliente 2026-08-20: "mientras
+   * menos pasos mejor").
+   *
+   * Reanuda con `applySave` y no con `toggleSave`: éste vuelve a mirar
+   * `viewerId`, que en el closure de antes de entrar sigue siendo `null` —
+   * reabriría la hoja que la persona acaba de cerrar, en bucle.
+   */
+  function requireSave(next: boolean) {
+    requireAuth({
+      reason: AUTH_REASON.save,
+      // Parada en `/feed/[id]` la persona abrió un enlace compartido: el
+      // destino de respaldo es esa misma URL. Ver `resumeDestination`.
+      foldPostDetail: false,
+      onAuthenticated: () => applySave(next),
+    });
   }
 
   function toggleSave(next: boolean) {
     if (!viewerId) {
-      goToLogin();
+      requireSave(next);
       return;
     }
+    applySave(next);
+  }
+
+  /** El camino con sesión. El server action deriva el usuario de la cookie. */
+  function applySave(next: boolean) {
     if (next === saved) return; // ya está en ese estado: nada que hacer
     setSaved(next);
     try {
@@ -177,7 +196,7 @@ export function PostActions({
       }
       setSaved(!next); // revertimos: la UI no puede mentir sobre lo guardado
       if (result.code === "unauthenticated") {
-        goToLogin();
+        requireSave(next);
         return;
       }
       toast({

@@ -11,14 +11,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useReducedMotion } from "motion/react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { BottomSheet, Button, Skeleton, buttonVariants } from "@/components/ui";
+import { BottomSheet, Button, Skeleton } from "@/components/ui";
 import { buildTrustSignals, toTrustLevel } from "@/components/listings";
 import { fetchListingCommentsAction } from "@/app/(app)/marketplace/comments-actions";
+import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { createClient } from "@/lib/supabase/client";
+import { useCloseOnBack } from "@/lib/design/use-overlay";
 import type { Database } from "@/lib/types/database.types";
 import { cn, timeAgo } from "@/lib/utils";
 import { CommentComposer, type CommentOptimisticHandlers } from "./comment-composer";
@@ -176,6 +176,16 @@ export function CommentsSheetProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const closeSheet = useCallback(() => setOpen(false), []);
+
+  /**
+   * El "atrás" del teléfono cierra el hilo y devuelve la publicación, no la
+   * pantalla (revisión de código 2026-08-20). Es la misma promesa que el resto
+   * de la rama —"sin sacarte del feed"— aplicada al gesto más usado de Android:
+   * sin esto, leer los comentarios y tocar atrás te sacaba de donde estabas. Y
+   * apilado (publicación → comentarios → entrar) cierra de a UNA, la de arriba,
+   * porque `useCloseOnBack` lleva una pila compartida de capas.
+   */
+  useCloseOnBack(open, closeSheet);
 
   // Soltar la sesión RECIÉN tras la animación de salida: si la limpiáramos junto
   // con `open=false`, el panel saldría vacío (los children se desmontarían antes
@@ -676,7 +686,6 @@ function CommentsSheetBody({
   initialCount: number;
   surface: CommentsSurface;
 }) {
-  const pathname = usePathname();
   const reduceMotion = useReducedMotion();
   const headingId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -685,6 +694,7 @@ function CommentsSheetBody({
   // el vidrio oscuro); sobre el feed, con los tokens de tema de siempre.
   const onMedia = isGlassSurface(surface);
 
+  const requireAuth = useRequireAuth();
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [comments, setComments] = useState<LoadedComment[]>([]);
   const [optimistic, setOptimistic] = useState<OptimisticComment[]>([]);
@@ -1060,17 +1070,39 @@ function CommentsSheetBody({
             {COPY.postMenu.commentsClosedNotice}
           </p>
         ) : viewer === null ? (
-          // Anónimo: entrar y volver acá mismo (no perdemos el lugar).
-          <Link
-            href={`/entrar?next=${encodeURIComponent(pathname || "/feed")}`}
-            className={cn(
-              buttonVariants({ variant: "outline", size: "md" }),
-              "w-full",
-              onMedia && "border-on-media/45 bg-transparent text-on-media hover:bg-on-media/10",
-            )}
+          // Anónimo: la sesión se pide EN LA MISMA PANTALLA (cliente 2026-08-20).
+          //
+          // Acá vivía un `<Link href="/entrar?next=…">`, y de todas las salidas
+          // del feed era la más cruel: alguien toca "comentar", la hoja se abre
+          // con la promesa de que se responde ahí, y lo único que hay adentro
+          // es un botón que lo saca de la app. Vuelve —si vuelve— a otra
+          // pantalla, con el hilo cerrado y el scroll perdido. Es textualmente
+          // lo que reportó el cliente: "cuando querés comentar una publicación
+          // no te tiene que mover a otra publicación; ahí nomás dentro de
+          // pantalla se tiene que fluir sin sacarte del feed".
+          //
+          // Ahora abre la hoja de autenticación POR ENCIMA de ésta (el
+          // AuthSheetProvider se monta más afuera que todo el resto de los
+          // overlays justamente para eso, ver `app/(app)/layout.tsx`) y, al
+          // volver con sesión, sólo se recarga el hilo: esta hoja nunca se
+          // cerró, así que quien acaba de entrar sigue mirando la publicación
+          // que quería responder, con el campo ya listo.
+          <Button
+            variant="outline"
+            size="md"
+            className={cn("w-full", onMedia && ON_MEDIA_BUTTON)}
+            onClick={() =>
+              requireAuth({
+                reason: AUTH_REASON.comment,
+                onAuthenticated: () => {
+                  setStatus("loading");
+                  void load();
+                },
+              })
+            }
           >
             {COPY.comments.signInPrompt}
-          </Link>
+          </Button>
         ) : subject.kind === "post" ? (
           <CommentComposer
             postId={subject.id}

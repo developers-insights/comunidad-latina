@@ -3,11 +3,13 @@
 import {
   createContext,
   useContext,
+  useEffect,
+  useRef,
   useState,
   useTransition,
   type ReactNode,
 } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { createClient } from "@/lib/supabase/client";
 import { notifyPostReactionAction } from "@/app/(app)/feed/actions";
 
@@ -26,7 +28,7 @@ import { notifyPostReactionAction } from "@/app/(app)/feed/actions";
 export interface PostLikeState {
   liked: boolean;
   count: number;
-  /** Alterna el me gusta (botón). Si el viewer es anónimo, va a /entrar. */
+  /** Alterna el me gusta (botón). Si el viewer es anónimo, abre la hoja de entrada. */
   toggle: (next: boolean) => void;
   /** Me gusta IDEMPOTENTE (doble-tap): nunca quita; si ya está, no hace nada. */
   likeOnce: () => void;
@@ -55,14 +57,56 @@ export function useOptimisticLike({
   initialLiked,
   initialCount,
 }: UseOptimisticLikeArgs): PostLikeState {
-  const router = useRouter();
-  const pathname = usePathname();
+  const requireAuth = useRequireAuth();
   const [liked, setLiked] = useState(initialLiked);
   const [count, setCount] = useState(initialCount);
   const [, startTransition] = useTransition();
 
-  function goToLogin() {
-    router.push(`/entrar?next=${encodeURIComponent(pathname || "/feed")}`);
+  /**
+   * El me gusta que quedó pendiente mientras la persona entraba.
+   *
+   * Éste es el único caso del feed que NO puede reintentarse en el acto: el
+   * insert en `reactions` escribe `profile_id` con el `viewerId` que baja del
+   * servidor, y en el momento de reanudar ese prop todavía dice `null` (el
+   * closure es el de antes de entrar). Así que el deseo se guarda acá y se
+   * ejecuta recién cuando el `router.refresh()` de la hoja trae el viewer
+   * verdadero — el efecto que hay debajo de `applyToggle` lo está esperando.
+   *
+   * Lo alternativo sería preguntarle a Supabase quién es desde el cliente, o
+   * sea un segundo camino de sesión conviviendo con el que ya existe.
+   */
+  const pendingLike = useRef<boolean | null>(null);
+
+  /**
+   * Abre la hoja de entrada dejando el me gusta armado para después.
+   *
+   * El deseo se arma DENTRO de `onAuthenticated`, no antes de abrir la hoja
+   * (revisión de código 2026-08-20). Armarlo antes dejaba un me gusta fantasma:
+   * quien tocaba el corazón siendo anónimo y CERRABA la hoja sin entrar se
+   * quedaba con el ref cargado, porque el `dismiss()` del provider limpia su
+   * propia acción pendiente pero no puede alcanzar este ref. Y el efecto que lo
+   * consume espera un cambio de `viewerId`, o sea CUALQUIER login posterior:
+   * entrar más tarde por otro motivo —guardar otra publicación, votar— le
+   * aplicaba el me gusta abandonado a la publicación de antes y le mandaba la
+   * notificación a su autor. Con dos corazones abandonados, se aplicaban los
+   * dos.
+   *
+   * Puesto acá, el ref sólo se carga si la sesión efectivamente se creó, y el
+   * efecto de abajo lo levanta igual cuando el `router.refresh()` trae el
+   * viewer verdadero.
+   */
+  function requireLike(nextLiked: boolean) {
+    requireAuth({
+      reason: AUTH_REASON.like,
+      // Esta card se pinta igual en el feed que en `/feed/[id]`, y ahí sólo se
+      // llega abriendo un enlace compartido o una notificación: si el camino se
+      // va del navegador (Google, enlace mágico), plegar al feed le come justo
+      // la publicación que la persona fue a ver. Ver `resumeDestination`.
+      foldPostDetail: false,
+      onAuthenticated: () => {
+        pendingLike.current = nextLiked;
+      },
+    });
   }
 
   function persist(nextLiked: boolean) {
@@ -108,9 +152,14 @@ export function useOptimisticLike({
 
   function toggle(nextLiked: boolean) {
     if (!viewerId) {
-      goToLogin();
+      requireLike(nextLiked);
       return;
     }
+    applyToggle(nextLiked);
+  }
+
+  /** El camino con sesión: optimista + persistencia. */
+  function applyToggle(nextLiked: boolean) {
     if (nextLiked === liked) return; // ya está en ese estado: nada que hacer
     setLiked(nextLiked);
     setCount((current) => Math.max(0, current + (nextLiked ? 1 : -1)));
@@ -122,9 +171,25 @@ export function useOptimisticLike({
     persist(nextLiked);
   }
 
+  useEffect(() => {
+    if (!viewerId || pendingLike.current === null) return;
+    const wanted = pendingLike.current;
+    pendingLike.current = null;
+    // El efecto vive DEBAJO de `applyToggle` a propósito: leer desde un efecto
+    // una función declarada más abajo congela la versión vieja y el compilador
+    // de React lo rechaza (react-hooks/immutability).
+    //
+    // Diferido a un frame: el efecto corre dentro del commit del refresh y un
+    // setState sincrónico acá encadena renders (react-hooks/set-state-in-effect).
+    const raf = requestAnimationFrame(() => applyToggle(wanted));
+    return () => cancelAnimationFrame(raf);
+    // `applyToggle` se redefine en cada render; el disparador real es viewerId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewerId]);
+
   function likeOnce() {
     if (!viewerId) {
-      goToLogin();
+      requireLike(true);
       return;
     }
     if (liked) return; // doble-tap sobre algo ya likeado: no se toca el estado

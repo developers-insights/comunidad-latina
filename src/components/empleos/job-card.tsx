@@ -1,16 +1,16 @@
-import { Briefcase, MapPin, Megaphone } from "@phosphor-icons/react/dist/ssr";
-import { AccentLink, BezelCard, Chip } from "@/components/ui";
+import Link from "next/link";
+import { Briefcase, CaretRight, MapPin, Megaphone } from "@phosphor-icons/react/dist/ssr";
+import { BezelCard, Chip } from "@/components/ui";
 import { DirectoryMedia } from "@/components/directory";
 import { PhotoTap } from "@/components/media/photo-tap";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import type { JobCardModel } from "@/app/(app)/empleos/queries";
+import { cn } from "@/lib/utils";
+import { JobApplyInline } from "./job-apply-inline";
 import { EMPLOYMENT_TYPE_LABEL } from "./helpers";
 import { COPY } from "./copy";
 
 const C = COPY.list;
-
-/** Acento naranja del módulo (solo decorativo) para la píldora de acción. */
-const ACCENT = "var(--accent-empleos)";
 
 /**
  * Card de empleo — misma gramática que EventCard (foto 4:5 + franja de vidrio),
@@ -22,9 +22,12 @@ const ACCENT = "var(--accent-empleos)";
  * ícono. El título sigue siendo el encabezado real (h3) aunque el número pese
  * más — jerarquía visual y semántica no tienen por qué coincidir.
  *
- * DOS destinos, uno por gesto (feedback 2026-07-26): cuando el aviso SÍ trae
- * foto, tocarla abre el visor con todas; al detalle se entra por la píldora "Ver
- * empleo". Sin foto el gradiente no es tocable — no hay nada que mirar.
+ * TRES GESTOS, TRES RESULTADOS. Cuando el aviso SÍ trae foto, tocarla abre el
+ * visor con todas (feedback 2026-07-26); sin foto el gradiente no es tocable, no
+ * hay nada que mirar. "Postularme" RESUELVE en la misma pantalla —abre la hoja
+ * de postulación sobre el listado, la URL no cambia— y "Ver empleo" es el único
+ * que navega, ahora como acción secundaria (cliente 2026-08-20: "mientras menos
+ * pasos mejor"). Ver el aviso completo dejó de ser el peaje para postularse.
  *
  * TRUST BADGE del publicador (era la única card de las 5 sin señal de
  * confianza, en un producto anti-estafa): mismo patrón que ListingCard y
@@ -96,9 +99,31 @@ export function JobCard({ job }: { job: JobCardModel }) {
             </p>
           ) : null}
 
-          <AccentLink accent={ACCENT} href={`/empleos/${job.id}`} ariaLabel={job.title}>
+          {/* DOS ACCIONES, UNA SOLA PRIMARIA (cliente 2026-08-20: "mientras
+              menos pasos mejor"). Postularse es lo que la persona vino a hacer y
+              se resuelve acá mismo: el botón de marca —el mismo que ve en el
+              aviso— abre la hoja sobre el listado. "Ver empleo" no desaparece,
+              baja de rango: quien quiera leer horarios, tareas y publicador
+              sigue teniendo su camino, ahora como texto tranquilo y no como la
+              única salida de la card. La píldora con el acento del módulo se
+              retira a propósito: dos píldoras del mismo peso serían dos
+              primarias, y una card con dos primarias no tiene ninguna. */}
+          <JobApplyInline jobId={job.id} jobTitle={job.title} />
+
+          <Link
+            href={`/empleos/${job.id}`}
+            aria-label={`${C.viewJob}: ${job.title}`}
+            className={cn(
+              "flex min-h-11 w-full items-center justify-center gap-1 rounded-full px-4",
+              "text-sm font-semibold text-foreground-secondary",
+              "transition-[background-color,color,transform] duration-(--duration-fast) ease-(--ease-spring)",
+              "hover:bg-surface-subtle hover:text-foreground active:scale-[0.98]",
+              "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+            )}
+          >
             {C.viewJob}
-          </AccentLink>
+            <CaretRight size={15} aria-hidden="true" className="shrink-0 opacity-70" />
+          </Link>
         </div>
       </article>
     </BezelCard>

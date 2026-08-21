@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { ADVERTISING_VIDEO_MAX_SECONDS } from "@/lib/media/video-policy";
+import {
+  ADVERTISING_VIDEO_MAX_SECONDS,
+  PREMIUM_DETAIL_MAX_SECONDS,
+} from "@/lib/media/video-policy";
 import { CardMediaProvider } from "./card-media-context";
 import { CardPostMedia } from "./card-post-media";
 import { NO_REEL_SCOPE } from "./card-video";
@@ -43,7 +46,9 @@ vi.mock("next/link", () => ({
 // El visor vive en el layout de la app: acá espiamos con qué lo abre la card.
 vi.mock("./media-viewer", () => ({
   MediaViewerProvider: ({ children }: { children: React.ReactNode }) => children,
-  useMediaViewer: () => ({ open: viewerOpen }),
+  // `available` es lo que le dice a CardVideo que hay visor de verdad: sin él,
+  // el toque sobre un video caería a su fallback de navegación.
+  useMediaViewer: () => ({ open: viewerOpen, available: true }),
 }));
 
 const PHOTO = (n: number): PostMediaView => ({
@@ -248,15 +253,21 @@ describe("CardPostMedia: el visor abre en el medio que se estaba viendo", () => 
 });
 
 describe("CardPostMedia: el reel infinito sólo donde corresponde", () => {
-  it("en el feed, tocar el video abre el reel con el scope del tab", () => {
+  it("en el feed, tocar el video lo abre ACÁ MISMO y no te manda a /videos", () => {
+    // Pedido del cliente 2026-08-20: "no te tiene que mover a otra publicación;
+    // ahí nomás dentro de pantalla se tiene que fluir sin sacarte del feed". El
+    // scroll vertical entre publicaciones sigue existiendo en Videos Cortos,
+    // que es donde se va a buscarlo a propósito.
     renderMedia([VIDEO(1)], "eventos");
     fireEvent.click(screen.getByRole("button", { name: /ver el video/i }));
     act(() => {
       vi.advanceTimersByTime(300);
     });
 
-    expect(nav.push).toHaveBeenCalledWith(`/videos?start=${POST_ID}&scope=eventos`);
-    expect(viewerOpen).not.toHaveBeenCalled();
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(viewerOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ startIndex: 0, postId: POST_ID }),
+    );
   });
 
   it("fuera del feed (detalle de una publicación) el video abre el visor y NO el reel", () => {
@@ -339,14 +350,20 @@ describe("CardPostMedia: un anuncio nunca te tira al reel", () => {
     );
   });
 
-  it("un post orgánico SÍ abre el reel (el veto es del anuncio, no de todos)", () => {
+  it("un post orgánico tampoco navega, pero se mira con el tope de publicación", () => {
+    // Lo que distingue al orgánico del anuncio ya no es a DÓNDE va el toque
+    // —los dos abren el visor sobre el feed— sino cuánto video se reproduce:
+    // 5 minutos la publicación, 10 el anuncio.
     renderMedia([VIDEO(1)], "para-ti", { videoType: "short_video" });
     fireEvent.click(screen.getByRole("button", { name: /ver el video/i }));
     act(() => {
       vi.advanceTimersByTime(300);
     });
 
-    expect(nav.push).toHaveBeenCalledWith(`/videos?start=${POST_ID}&scope=para-ti`);
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(viewerOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ maxPlaybackSeconds: PREMIUM_DETAIL_MAX_SECONDS }),
+    );
     expect(screen.queryByText("Patrocinado")).toBeNull();
   });
 });

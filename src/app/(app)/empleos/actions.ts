@@ -839,7 +839,16 @@ export async function removeSavedCandidateAction(input: {
 // ===========================================================================
 
 export type StartConversationResult =
-  | { ok: true; conversationId: string }
+  | {
+      ok: true;
+      conversationId: string;
+      /**
+       * `true` = el hilo ya existía y lo estamos recuperando; `false` = recién
+       * lo abrimos. La tarjeta del candidato lo dice con todas las letras: dar
+       * por nueva una conversación vieja es festejar un contacto que no pasó.
+       */
+      reused: boolean;
+    }
   | { ok: false; code: "unauthenticated" | "invalid" | "blocked" | "error"; message?: string };
 
 /**
@@ -915,7 +924,7 @@ export async function startCandidateConversationAction(input: {
 
   const reusable =
     existing?.find((row) => row.listing_id === application.job_id) ?? existing?.[0] ?? null;
-  if (reusable) return { ok: true, conversationId: reusable.id };
+  if (reusable) return { ok: true, conversationId: reusable.id, reused: true };
 
   const { data: created, error } = await supabase
     .from("conversations")
@@ -944,7 +953,7 @@ export async function startCandidateConversationAction(input: {
     return { ok: false, code: "error", message: GENERIC_ERROR };
   }
 
-  return { ok: true, conversationId: created.id };
+  return { ok: true, conversationId: created.id, reused: false };
 }
 
 // ===========================================================================

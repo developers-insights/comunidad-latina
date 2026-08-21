@@ -47,7 +47,7 @@ vi.mock("@/lib/moderation", () => ({
   enqueueModeration: mocks.enqueueModeration,
 }));
 
-import { finalizeGig } from "./actions";
+import { applyToGig, finalizeGig } from "./actions";
 
 /* -------------------------------- Fixtures -------------------------------- */
 
@@ -56,7 +56,7 @@ const USER_ID = "99999999-9999-4999-8999-999999999999";
 const LISTING_ID = "44444444-4444-4444-8444-444444444444";
 
 type OpResult = { data?: unknown; error?: unknown };
-type TableOps = Partial<Record<"select" | "update", OpResult>>;
+type TableOps = Partial<Record<"select" | "update" | "insert", OpResult>>;
 
 interface RecordedCall {
   table: string;
@@ -83,6 +83,11 @@ function createSupabaseStub(config: Record<string, TableOps> = {}) {
       update: vi.fn((...args: unknown[]) => {
         calls.push({ table, method: "update", args });
         op = "update";
+        return builder;
+      }),
+      insert: vi.fn((...args: unknown[]) => {
+        calls.push({ table, method: "insert", args });
+        op = "insert";
         return builder;
       }),
       eq: vi.fn((...args: unknown[]) => {
@@ -194,5 +199,114 @@ describe("finalizeGig — cuota propia", () => {
     expect(mocks.limit).toHaveBeenCalledWith(`gig-finalize:${USER_ID}`, 20, 86_400_000);
     expect(stub.from).not.toHaveBeenCalled();
     expect(mocks.moderateText).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * `applyToGig` — postularse a una colaboración (revisión 2026-08-20).
+ *
+ * Dos hallazgos de correctitud viven acá, y los dos son del SERVIDOR porque es
+ * el único lugar que no se puede saltear: la action es una URL pública y la
+ * pantalla que esconde un botón no autoriza nada.
+ *
+ *  1. El DUEÑO no puede postularse a su propio aviso. Antes la única barrera era
+ *     que `GigCard` escondía el botón cuando no le pasaban `applicationsCount`
+ *     — una inferencia sobre un campo de presentación que en el listado no
+ *     viaja para nadie, así que ni siquiera funcionaba.
+ *  2. Un "ya te habías postulado" viaja marcado (`alreadyApplied`), y NO es un
+ *     alta: no se guardó nada de lo que se escribió. Que la hoja lo cuente
+ *     distinto se prueba en `components/creators/gig-card.test.tsx`.
+ *
+ * La identidad sale SIEMPRE del guard de sesión (`user.id`), nunca del input.
+ */
+describe("applyToGig — el dueño no se postula a lo suyo", () => {
+  const OTHER_USER = "88888888-8888-4888-8888-888888888888";
+  const PROPOSAL = "Hago reels para gastronomía y te puedo entregar tres videos verticales.";
+
+  function applyInput() {
+    return { gigId: LISTING_ID, message: PROPOSAL, proposedAmount: null };
+  }
+
+  it("rechaza al dueño comparando created_by contra la SESIÓN, sin escribir nada", async () => {
+    const stub = useGuardOk({
+      // `created_by` es el mismo usuario que devuelve el guard.
+      listings: { select: { data: { id: LISTING_ID, created_by: USER_ID }, error: null } },
+    });
+
+    const result = await applyToGig(applyInput());
+
+    expect(result.ok).toBe(false);
+    // Cero escrituras: el rechazo pasa ANTES del insert.
+    expect(stub.calls.some((call) => call.method === "insert")).toBe(false);
+  });
+
+  it("el aviso se lee filtrado por tenant, kind y estado publicado", async () => {
+    const stub = useGuardOk({
+      listings: { select: { data: { id: LISTING_ID, created_by: OTHER_USER }, error: null } },
+      gig_applications: { insert: { error: null } },
+    });
+
+    await applyToGig(applyInput());
+
+    expect(stub.calls).toContainEqual({ table: "listings", method: "eq", args: ["tenant_id", TENANT_ID] });
+    expect(stub.calls).toContainEqual({ table: "listings", method: "eq", args: ["kind", "creator_gig"] });
+    expect(stub.calls).toContainEqual({ table: "listings", method: "eq", args: ["status", "published"] });
+  });
+
+  it("un aviso que ya no existe (o no es de este tenant) no llega al insert", async () => {
+    const stub = useGuardOk({
+      listings: { select: { data: null, error: null } },
+    });
+
+    const result = await applyToGig(applyInput());
+
+    expect(result.ok).toBe(false);
+    expect(stub.calls.some((call) => call.method === "insert")).toBe(false);
+  });
+
+  it("quien no publicó el aviso SÍ se postula, y el creator_id sale de la sesión", async () => {
+    const stub = useGuardOk({
+      listings: { select: { data: { id: LISTING_ID, created_by: OTHER_USER }, error: null } },
+      gig_applications: { insert: { error: null } },
+    });
+
+    const result = await applyToGig(applyInput());
+
+    expect(result).toEqual({ ok: true });
+    const insert = stub.calls.find((call) => call.method === "insert");
+    expect(insert?.table).toBe("gig_applications");
+    expect(insert?.args[0]).toMatchObject({
+      gig_id: LISTING_ID,
+      creator_id: USER_ID,
+      tenant_id: TENANT_ID,
+    });
+  });
+});
+
+describe("applyToGig — 'ya estaba' se devuelve MARCADO, no como alta", () => {
+  const OTHER_USER = "88888888-8888-4888-8888-888888888888";
+  const PROPOSAL = "Hago reels para gastronomía y te puedo entregar tres videos verticales.";
+
+  it("la unique (23505) devuelve alreadyApplied: quien llama tiene que contarlo distinto", async () => {
+    useGuardOk({
+      listings: { select: { data: { id: LISTING_ID, created_by: OTHER_USER }, error: null } },
+      gig_applications: { insert: { error: { code: "23505" } } },
+    });
+
+    const result = await applyToGig({ gigId: LISTING_ID, message: PROPOSAL, proposedAmount: null });
+
+    expect(result).toEqual({ ok: true, alreadyApplied: true });
+  });
+
+  it("un alta de verdad NO trae la marca — es lo que las distingue en la pantalla", async () => {
+    useGuardOk({
+      listings: { select: { data: { id: LISTING_ID, created_by: OTHER_USER }, error: null } },
+      gig_applications: { insert: { error: null } },
+    });
+
+    const result = await applyToGig({ gigId: LISTING_ID, message: PROPOSAL, proposedAmount: null });
+
+    expect(result).toEqual({ ok: true });
+    expect("alreadyApplied" in result).toBe(false);
   });
 });

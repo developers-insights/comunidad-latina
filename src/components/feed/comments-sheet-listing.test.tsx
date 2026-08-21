@@ -13,6 +13,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 const actions = vi.hoisted(() => ({
   fetchListingComments: vi.fn(),
 }));
+// Ver la nota del caso anónimo, abajo: la sesión se pide sin salir del aviso.
+const authGate = vi.hoisted(() => ({
+  calls: [] as { reason?: string; onAuthenticated?: () => void }[],
+}));
 
 vi.mock("@/app/(app)/marketplace/comments-actions", () => ({
   fetchListingCommentsAction: (input: { listingId: string }) =>
@@ -22,6 +26,13 @@ vi.mock("@/app/(app)/marketplace/comments-actions", () => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/marketplace/l1",
+}));
+
+vi.mock("@/components/auth/auth-sheet", () => ({
+  AUTH_REASON: { comment: "comment" },
+  useRequireAuth: () => (args: { reason?: string; onAuthenticated?: () => void }) => {
+    authGate.calls.push(args ?? {});
+  },
 }));
 
 vi.mock("next/link", () => ({
@@ -225,7 +236,14 @@ describe("CommentsSheet — modo aviso (listing)", () => {
     expect(panel).not.toContain("bg-surface-raised");
   });
 
-  it("anónimo: sin composer, con CTA a entrar y volver al aviso", async () => {
+  /**
+   * Antes esto se resolvía mandando a /entrar con `next=/marketplace/l1`: se
+   * volvía al aviso, sí, pero con la hoja cerrada y la lectura perdida. Desde
+   * 2026-08-20 la sesión se pide encima de la hoja y no hay viaje: por eso el
+   * test ya no busca un `next` correcto, busca que no haya viaje ninguno.
+   */
+  it("anónimo: sin composer, y el CTA pide sesión sin salir del aviso", async () => {
+    authGate.calls.length = 0;
     supa.client = makeClient(null);
     actions.fetchListingComments.mockResolvedValue({
       ok: true,
@@ -237,7 +255,13 @@ describe("CommentsSheet — modo aviso (listing)", () => {
 
     expect(await screen.findByText("¿Sigue disponible?")).toBeTruthy();
     expect(screen.queryByTestId("composer")).toBeNull();
+
     const cta = screen.getByText("Entrá a tu cuenta para responder");
-    expect(cta.getAttribute("href")).toContain("%2Fmarketplace%2Fl1");
+    expect(cta.closest("a")).toBeNull();
+    expect(document.querySelectorAll('a[href*="/entrar"]').length).toBe(0);
+
+    fireEvent.click(cta);
+    expect(authGate.calls).toHaveLength(1);
+    expect(authGate.calls[0].reason).toBe("comment");
   });
 });

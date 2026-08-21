@@ -10,6 +10,12 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
  */
 
 const supa = vi.hoisted(() => ({ client: null as unknown }));
+// La hoja de autenticación se pide por hook: acá sólo se registra QUE se pidió
+// (que es lo que garantiza que nadie navega fuera del feed) y se guarda el
+// `onAuthenticated` para poder dispararlo como si la persona hubiera entrado.
+const authGate = vi.hoisted(() => ({
+  calls: [] as { reason?: string; onAuthenticated?: () => void }[],
+}));
 // Se puede encender por test: el auto-scroll del hilo NO debe existir con
 // prefers-reduced-motion.
 const motionPrefs = vi.hoisted(() => ({ reduce: false }));
@@ -20,6 +26,13 @@ vi.mock("@/lib/supabase/client", () => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/feed",
+}));
+
+vi.mock("@/components/auth/auth-sheet", () => ({
+  AUTH_REASON: { comment: "comment" },
+  useRequireAuth: () => (args: { reason?: string; onAuthenticated?: () => void }) => {
+    authGate.calls.push(args ?? {});
+  },
 }));
 
 // next/link sin contexto de router: sólo un <a href>.
@@ -300,15 +313,34 @@ describe("CommentsSheet", () => {
     expect(await screen.findByText("Primer comentario")).toBeTruthy();
   });
 
-  it("anónimo: sin composer, con CTA a entrar y volver", async () => {
+  /**
+   * El caso que motivó el cambio (cliente 2026-08-20): acá había un `<a>` a
+   * /entrar. Alguien tocaba "comentar", la hoja se abría, y lo único que había
+   * adentro era el botón que lo sacaba de la app. Ahora la sesión se pide sin
+   * salir, así que lo que se fija es lo contrario de antes: que NO haya ningún
+   * link a /entrar y que sí se pida la hoja de autenticación.
+   */
+  it("anónimo: sin composer, y el CTA pide sesión SIN navegar fuera del feed", async () => {
+    authGate.calls.length = 0;
     supa.client = makeClient({ user: null, comments: ROWS, profiles: PROFILES });
     mount();
     fireEvent.click(screen.getByText("abrir"));
 
     expect(await screen.findByText("Primer comentario")).toBeTruthy();
     expect(screen.queryByTestId("composer")).toBeNull();
+
     const cta = screen.getByText("Entrá a tu cuenta para responder");
-    expect(cta.getAttribute("href")).toContain("/entrar?next=");
+    // Ni el CTA ni nada de la hoja puede ser una salida a /entrar.
+    expect(cta.closest("a")).toBeNull();
+    expect(
+      document.querySelectorAll('a[href*="/entrar"]').length,
+    ).toBe(0);
+
+    fireEvent.click(cta);
+    expect(authGate.calls).toHaveLength(1);
+    expect(authGate.calls[0].reason).toBe("comment");
+    // Y trae con qué seguir: al volver con sesión el hilo se recarga solo.
+    expect(typeof authGate.calls[0].onAuthenticated).toBe("function");
   });
 
   it("optimista: aparece al instante y suma al conteo; el rechazo lo retira", async () => {
