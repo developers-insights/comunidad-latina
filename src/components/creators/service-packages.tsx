@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { Check, Clock } from "@phosphor-icons/react/dist/ssr";
-import { buttonVariants } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { buildPackageScope, type ServicePackage } from "@/lib/creators/service-packages";
 import { ContractForm } from "./contract-form";
@@ -33,13 +31,27 @@ import { COPY } from "./copy";
  * ya cargados desde el paquete. De ahí en adelante es el flujo de siempre:
  * propuesta → aceptación → pago en garantía. No hay un checkout paralelo, y por
  * eso la comisión, el escrow y las reseñas siguen funcionando sin tocarlos.
+ *
+ * UN SOLO BOTÓN, CON O SIN CUENTA (cliente 2026-08-20: "mientras menos pasos
+ * mejor"). Acá había dos CTA distintos: quien tenía sesión veía "Contratar este
+ * paquete" y quien no, un enlace "Entrar para contratar" que lo sacaba del
+ * perfil, lo dejaba en /entrar y —si volvía— lo devolvía al tope de la página,
+ * sin el paquete que había elegido y sin el precio que fue a mirar. Ahora el
+ * botón es el mismo para todos y la puerta, cuando hace falta, se abre encima:
+ * se entra y la propuesta se abre sola, con el paquete ya cargado. El dato de
+ * sesión sigue viajando porque decide CUÁNDO se pide (antes de escribir, no
+ * después) — ver `isAuthenticated` en `ContractForm`.
  */
 
 export interface ServicePackagesProps {
   packages: ServicePackage[];
   creatorId: string;
   creatorName: string;
-  /** Sin sesión no se puede contratar: el CTA lleva a entrar y vuelve acá. */
+  /**
+   * ¿Había sesión al pintar? No cambia QUÉ botón se ve —es el mismo para
+   * todos— sino cuándo se pide la cuenta: sin sesión, al tocar y antes de
+   * escribir nada.
+   */
   isAuthenticated: boolean;
   className?: string;
 }
@@ -112,26 +124,18 @@ export function ServicePackages({
             )}
 
             <div className="mt-4">
-              {isAuthenticated ? (
-                <ContractForm
-                  creatorId={creatorId}
-                  creatorName={creatorName}
-                  defaultTitle={pkg.title}
-                  defaultScope={buildPackageScope(pkg)}
-                  defaultAmountCents={pkg.priceCents}
-                  defaultDeliveryDays={pkg.deliveryDays}
-                  triggerLabel={COPY.packages.hireCta}
-                  triggerVariant="secondary"
-                  triggerClassName="w-full"
-                />
-              ) : (
-                <Link
-                  href={`/entrar?next=${encodeURIComponent(`/creadores/perfil/${creatorId}`)}`}
-                  className={cn(buttonVariants({ variant: "secondary", size: "md" }), "w-full")}
-                >
-                  {COPY.packages.needLoginCta}
-                </Link>
-              )}
+              <ContractForm
+                creatorId={creatorId}
+                creatorName={creatorName}
+                defaultTitle={pkg.title}
+                defaultScope={buildPackageScope(pkg)}
+                defaultAmountCents={pkg.priceCents}
+                defaultDeliveryDays={pkg.deliveryDays}
+                triggerLabel={COPY.packages.hireCta}
+                triggerVariant="secondary"
+                triggerClassName="w-full"
+                isAuthenticated={isAuthenticated}
+              />
             </div>
           </li>
         ))}

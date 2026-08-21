@@ -223,3 +223,124 @@ describe("MediaViewer: abrir y cerrar no es navegar", () => {
     expect(video?.getAttribute("onended")).toBeNull();
   });
 });
+
+/**
+ * EL VISOR COMO DESTINO DEL VIDEO DEL FEED (2026-08-20). Tocar un video en una
+ * card ya no navega a `/videos`: abre este visor sobre la misma pantalla. Eso
+ * le sumó dos obligaciones al contrato, y las dos son de continuidad:
+ *
+ *  · avisar cuando se cierra, porque la tarjeta pausó su propio video al abrir
+ *    y sin el aviso se queda congelada para siempre;
+ *  · heredar el segundo en el que venía, para que abrir sea seguir mirando y no
+ *    volver a empezar.
+ */
+describe("MediaViewer: le devuelve el control a quien lo abrió", () => {
+  const VIDEO_DEL_FEED = (extra: Partial<OpenMediaViewerArgs> = {}) =>
+    ({
+      items: [{ kind: "video", url: "https://cdn.example.com/clip.mp4" }],
+      authorName: "Doña Rosa",
+      postId: "post-feed",
+      ...extra,
+    }) satisfies OpenMediaViewerArgs;
+
+  it("avisa al cerrar con la X", () => {
+    const onClose = vi.fn();
+    render(
+      <MediaViewerProvider>
+        <Trigger args={VIDEO_DEL_FEED({ onClose })} />
+      </MediaViewerProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "abrir visor" }));
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("avisa también cuando cierra el gesto atrás del teléfono", () => {
+    const onClose = vi.fn();
+    render(
+      <MediaViewerProvider>
+        <Trigger args={VIDEO_DEL_FEED({ onClose })} />
+      </MediaViewerProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "abrir visor" }));
+    fireEvent.popState(window);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("el aviso llega UNA sola vez, no una por cada camino de cierre", () => {
+    // La X consume la entrada de historial en silencio: si ese popstate
+    // volviera a avisar, la tarjeta retomaría el video dos veces.
+    const onClose = vi.fn();
+    render(
+      <MediaViewerProvider>
+        <Trigger args={VIDEO_DEL_FEED({ onClose })} />
+      </MediaViewerProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "abrir visor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    fireEvent.popState(window);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("el video arranca en el segundo que traía la tarjeta, no en cero", () => {
+    // jsdom no tiene reloj de medios: se intercepta la escritura, que es
+    // exactamente lo que hace el visor para continuar la reproducción.
+    const seeks: number[] = [];
+    const original = Object.getOwnPropertyDescriptor(
+      HTMLMediaElement.prototype,
+      "currentTime",
+    );
+    Object.defineProperty(HTMLMediaElement.prototype, "currentTime", {
+      configurable: true,
+      get: () => 0,
+      set: (value: number) => {
+        seeks.push(value);
+      },
+    });
+
+    try {
+      render(
+        <MediaViewerProvider>
+          <Trigger args={VIDEO_DEL_FEED({ startSeconds: 17.25 })} />
+        </MediaViewerProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "abrir visor" }));
+
+      expect(seeks).toContain(17.25);
+    } finally {
+      if (original) {
+        Object.defineProperty(HTMLMediaElement.prototype, "currentTime", original);
+      }
+    }
+  });
+});
+
+/**
+ * `available` es lo que separa "no hay visor montado" de "el visor no hizo
+ * nada": sin ese dato, una card cuya acción principal es abrir el visor tendría
+ * un toque muerto fuera del provider.
+ */
+describe("MediaViewer: se puede saber si hay provider", () => {
+  function Probe() {
+    const viewer = useMediaViewer();
+    return <span data-testid="probe">{viewer.available ? "sí" : "no"}</span>;
+  }
+
+  it("dentro del provider dice que sí", () => {
+    render(
+      <MediaViewerProvider>
+        <Probe />
+      </MediaViewerProvider>,
+    );
+    expect(screen.getByTestId("probe").textContent).toBe("sí");
+  });
+
+  it("fuera del provider dice que no", () => {
+    render(<Probe />);
+    expect(screen.getByTestId("probe").textContent).toBe("no");
+  });
+});

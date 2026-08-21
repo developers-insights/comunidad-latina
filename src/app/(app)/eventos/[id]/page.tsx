@@ -24,6 +24,7 @@ import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 // paquete de marketplace porque es donde nació el guardado de avisos; es
 // genérica por listingId y no arrastra nada específico de productos.
 import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
+import { PostSheetTrigger } from "@/components/feed";
 import {
   COPY,
   DirectoryDetailHero,
@@ -389,9 +390,16 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           </h2>
           <div className="flex flex-col gap-3">
             {news.map((post) => (
-              <Link
+              /* La novedad se abre en una HOJA, sin salir del evento (feedback
+                 cliente 2026-08-20: "mientras menos pasos mejor"). Acá el costo
+                 era doble: quien está leyendo un evento suele estar decidiendo
+                 si va, y navegar a /feed/[id] lo alejaba del CTA "Quiero ir"
+                 con un "atrás" que lo devolvía arriba de todo.
+                 `PostSheetTrigger` es un client component chiquito — esta
+                 página sigue siendo server. */
+              <PostSheetTrigger
                 key={post.id}
-                href={`/feed/${post.id}`}
+                postId={post.id}
                 className={cn(
                   "flex gap-3 rounded-lg border border-border-subtle bg-surface p-3",
                   "transition-colors duration-(--duration-fast) hover:bg-surface-subtle",
@@ -419,7 +427,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
                   </p>
                   <p className="mt-1 text-xs text-foreground-muted">{post.timeAgoLabel}</p>
                 </div>
-              </Link>
+              </PostSheetTrigger>
             ))}
           </div>
         </section>

@@ -1,8 +1,9 @@
 "use client";
 
 import { useId, useRef, useState, useTransition } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { PaperPlaneRight } from "@phosphor-icons/react/dist/ssr";
+import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { Spinner, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
@@ -82,7 +83,7 @@ export function CommentComposer(props: CommentComposerProps) {
   const listingId = props.listingId ?? null;
 
   const router = useRouter();
-  const pathname = usePathname();
+  const requireAuth = useRequireAuth();
   const { toast } = useToast();
   const [value, setValue] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -135,7 +136,16 @@ export function CommentComposer(props: CommentComposerProps) {
   function send() {
     const body = value.trim();
     if (!body || isPending || disabled) return;
+    sendBody(body);
+  }
 
+  /**
+   * Publica UN texto concreto. Separado de `send()` porque el reintento después
+   * de entrar tiene que llevar el texto ENCIMA: cuando la hoja de entrada
+   * devuelve el control, el closure de `send` sigue viendo el `value` que había
+   * en el momento del rechazo (vacío, porque el envío optimista lo limpió).
+   */
+  function sendBody(body: string) {
     // Optimista: limpiamos el campo YA y avisamos para pintar el comentario en
     // el acto. Si el servidor lo rechaza, devolvemos el texto para reintentar.
     const tempId = optimistic ? crypto.randomUUID() : "";
@@ -164,10 +174,23 @@ export function CommentComposer(props: CommentComposerProps) {
       }
 
       if (result.code === "unauthenticated") {
-        // Volver EXACTAMENTE a donde estaba: el detalle del post cuando es un
-        // post, o la página del aviso cuando el comentario es de un listing.
-        const next = postId ? `/feed/${postId}` : pathname || "/";
-        router.push(`/entrar?next=${encodeURIComponent(next)}`);
+        // Antes acá había un `router.push('/entrar?next=/feed/[postId]')`: la
+        // persona salía del feed Y volvía al DETALLE de la publicación, que es
+        // una pantalla donde nunca había estado. Es el reclamo literal del
+        // cliente (2026-08-20): "no te tiene que mover a otra publicación; ahí
+        // nomás dentro de pantalla se tiene que fluir sin sacarte del feed".
+        //
+        // Ahora la puerta se abre ENCIMA (la hoja de comentarios sigue abierta
+        // detrás, con su scroll intacto) y al entrar se reintenta el mismo
+        // texto. `sendBody` y no `send`: ver su docblock.
+        requireAuth({
+          reason: AUTH_REASON.comment,
+          // Este composer es el del detalle SSR: si la persona está ahí es
+          // porque abrió el enlace compartido, así que el destino de respaldo
+          // es esa misma publicación. Ver `resumeDestination`.
+          foldPostDetail: false,
+          onAuthenticated: () => sendBody(body),
+        });
         return;
       }
       if (result.code === "tenant-mismatch") {

@@ -23,6 +23,7 @@ import { ModuleSearchBar, sanitizeSearchQuery } from "@/components/search";
 import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { getViewerAccount } from "@/lib/time/viewer-zone";
 
 export const metadata = { title: "Creadores" };
 
@@ -52,7 +53,18 @@ export default async function CreadoresPage({ searchParams }: { searchParams: Se
 }
 
 async function FeedContent({ q }: { q: string }) {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  /**
+   * `getViewerAccount()` sale GRATIS acá: está memoizada por request con
+   * `cache()` de React y el layout de `(app)` ya la pidió antes de pintar el
+   * shell. Se usa para una sola cosa —no ofrecerle a nadie postularse a su
+   * propio aviso— y por eso viaja como `viewerId` a cada card en vez de meterse
+   * en `GigCardModel`: es un dato de QUIEN MIRA, no del aviso.
+   */
+  const [tenant, supabase, viewer] = await Promise.all([
+    getTenant(),
+    createClient(),
+    getViewerAccount(),
+  ]);
 
   // Todos los avisos publicados, juntos (sin filtro por categoría): se muestran
   // todos los trabajos que buscan creadores.
@@ -192,7 +204,7 @@ async function FeedContent({ q }: { q: string }) {
       ) : (
         <div className="flex flex-col gap-4">
           {gigs.map((gig) => (
-            <GigCard key={gig.id} gig={gig} />
+            <GigCard key={gig.id} gig={gig} viewerId={viewer?.id ?? null} />
           ))}
         </div>
       )}

@@ -5,6 +5,7 @@ import {
   Play,
   PushPin,
 } from "@phosphor-icons/react/dist/ssr";
+import { PostSheetTrigger } from "@/components/feed";
 import { buttonVariants } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { PostTile } from "./post-tiles";
@@ -38,7 +39,14 @@ function shortText(text: string): string {
 /**
  * Grid de publicaciones tipo red social: 3 columnas de thumbnails cuadrados.
  * Server component — el `<video>` pinta su primer frame con `preload="metadata"`
- * y no necesita JS. Cada tile abre el detalle en /feed/[id].
+ * y no necesita JS.
+ *
+ * Cada tile abre la publicación en una HOJA, acá mismo (feedback cliente
+ * 2026-08-20: "mientras menos pasos mejor"). Antes navegaba a `/feed/[id]`, y
+ * volver costaba un "atrás" que perdía la grilla y el scroll — justo en la
+ * pantalla donde se recorren publicaciones de a muchas. `PostSheetTrigger` es
+ * un `<a href="/feed/[id]">` de verdad: el deep link, compartir y "abrir en
+ * otra pestaña" no cambian; sólo cambia el toque simple.
  */
 export function ProfilePostsGrid({
   tiles,
@@ -59,9 +67,9 @@ export function ProfilePostsGrid({
           <ul className="grid grid-cols-3 gap-1.5">
             {tiles.map((tile) => (
               <li key={tile.id}>
-                <Link
-                  href={`/feed/${tile.id}`}
-                  aria-label={
+                <PostSheetTrigger
+                  postId={tile.id}
+                  ariaLabel={
                     shortText(tile.text) ||
                     (tile.isQuestion ? COPY.question : COPY.openPost)
                   }
@@ -85,7 +93,7 @@ export function ProfilePostsGrid({
                       {COPY.pinned}
                     </span>
                   )}
-                </Link>
+                </PostSheetTrigger>
               </li>
             ))}
           </ul>

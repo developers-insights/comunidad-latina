@@ -17,6 +17,7 @@ import { Play, SpeakerHigh, SpeakerSlash, X } from "@phosphor-icons/react/dist/s
 import { cn } from "@/lib/utils";
 import {
   useBodyScrollLock,
+  useCloseOnBack,
   useFocusTrap,
   useMounted,
 } from "@/lib/design/use-overlay";
@@ -37,8 +38,19 @@ import { VIEWER_COPY } from "./viewer-copy";
  *   usuario, así que el autoplay con audio es legal — y es lo que pidió el
  *   cliente. Si el navegador igual lo rechaza (políticas raras de WebView),
  *   caemos a mudo y el botón de sonido queda a un tap.
+ * - Desde el 2026-08-20 éste es TAMBIÉN el destino del toque sobre un video de
+ *   la tarjeta del feed, que antes navegaba a `/videos` ("no te tiene que mover
+ *   a otra publicación; ahí nomás dentro de pantalla se tiene que fluir sin
+ *   sacarte del feed"). Eso trajo dos exigencias nuevas al contrato de open():
+ *   heredar el segundo en el que venía el video (`startSeconds`) y avisar
+ *   cuando el visor se cierra (`onClose`), para que la tarjeta retome sola.
  * - Cierre por historial: al abrir se apila una entrada, así el gesto/botón
- *   "atrás" del teléfono cierra el visor en vez de sacarte de la página.
+ *   "atrás" del teléfono cierra el visor en vez de sacarte de la página. Desde
+ *   el 2026-08-20 ese par pushState/popstate ya no vive acá: es
+ *   `useCloseOnBack`, compartido con las tres hojas nuevas (publicación,
+ *   comentarios, entrar), que no lo tenían y por eso el "atrás" se llevaba la
+ *   pantalla entera. El comportamiento del visor no cambia; lo que cambia es
+ *   que ahora, apilado con una hoja encima, el "atrás" cierra de a UNA.
  * - Cierre por ARRASTRE hacia abajo: el gesto que ya espera cualquiera que usó
  *   una galería de teléfono. Convive con el swipe horizontal porque motion pone
  *   `touch-action: pan-x` en un draggable de eje Y — el scroll-snap lateral
@@ -78,10 +90,39 @@ export interface OpenMediaViewerArgs {
    * valor, el video se reproduce entero.
    */
   maxPlaybackSeconds?: number | null;
+  /**
+   * SEGUNDO EN EL QUE VENÍA el video que se tocó. Existe por el pedido del
+   * cliente del 2026-08-20 ("ahí nomás dentro de pantalla se tiene que fluir
+   * sin sacarte del feed"): un video que ya estaba corriendo en la tarjeta y
+   * vuelve a empezar de cero al abrirse es un salto, no una continuación.
+   *
+   * Se aplica UNA vez y sólo al medio de entrada (`startIndex`): pasar a la
+   * foto de al lado y volver no vuelve a saltar, porque a esa altura el reloj
+   * del video ya es del visor y no de la tarjeta.
+   */
+  startSeconds?: number;
+  /**
+   * Aviso de CIERRE, por el camino que sea (la X, Escape, el "atrás" del
+   * teléfono o el arrastre hacia abajo). No es un detalle de ciclo de vida: la
+   * tarjeta del feed pausa su propio video antes de abrir —dos copias del mismo
+   * clip sonando juntas es un desastre— y sin este aviso se quedaba congelada
+   * en el frame donde la pausamos. El observador de visibilidad no la despierta
+   * porque la card nunca dejó de estar a la vista: el visor es un overlay, no
+   * una navegación.
+   */
+  onClose?: () => void;
 }
 
 interface MediaViewerContextValue {
   open: (args: OpenMediaViewerArgs) => void;
+  /**
+   * ¿Hay un provider REAL montado? El fallback del hook es un no-op silencioso
+   * —lo correcto para que ninguna card rompa fuera del provider—, pero para
+   * quien depende del visor como acción PRINCIPAL eso sería un toque muerto.
+   * Leyendo esto, el video de la tarjeta puede caer a su camino de siempre
+   * (`/videos`) en vez de no hacer nada.
+   */
+  available: boolean;
 }
 
 const MediaViewerContext = createContext<MediaViewerContextValue | null>(null);
@@ -89,7 +130,7 @@ const MediaViewerContext = createContext<MediaViewerContextValue | null>(null);
 /** Hook de las cards. Fuera del provider devuelve un no-op (nunca rompe). */
 export function useMediaViewer(): MediaViewerContextValue {
   const fallback = useMemo<MediaViewerContextValue>(
-    () => ({ open: () => undefined }),
+    () => ({ open: () => undefined, available: false }),
     [],
   );
   return useContext(MediaViewerContext) ?? fallback;
@@ -97,58 +138,52 @@ export function useMediaViewer(): MediaViewerContextValue {
 
 export function MediaViewerProvider({ children }: { children: ReactNode }) {
   const [args, setArgs] = useState<OpenMediaViewerArgs | null>(null);
-  // ¿Apilamos una entrada de historial por este visor? El "atrás" del teléfono
-  // la consume y cierra; si cerramos por UI (X/Escape) la consumimos nosotros.
-  const pushedHistory = useRef(false);
-  const suppressNextPop = useRef(false);
+  /**
+   * El `onClose` de la apertura vigente. Vive en una ref y no en el estado
+   * porque los dos caminos de cierre —la UI y el `popstate`— corren fuera del
+   * render, y porque el aviso tiene que entregarse UNA sola vez salga por donde
+   * salga el visor.
+   */
+  const closeNotifier = useRef<(() => void) | null>(null);
 
-  const open = useCallback((next: OpenMediaViewerArgs) => {
-    if (!next.items || next.items.length === 0) return;
-    setArgs(next);
-    try {
-      window.history.pushState({ clMediaViewer: true }, "");
-      pushedHistory.current = true;
-    } catch {
-      pushedHistory.current = false; // sin historial (SSR raro): X/Escape siguen cerrando
-    }
+  const notifyClosed = useCallback(() => {
+    const notify = closeNotifier.current;
+    closeNotifier.current = null;
+    notify?.();
   }, []);
 
-  // Cierre iniciado por la UI (X, Escape): cerramos YA (la salida no puede
-  // sentirse lenta) y consumimos la entrada de historial en silencio.
-  const closeFromUi = useCallback(() => {
+  const open = useCallback(
+    (next: OpenMediaViewerArgs) => {
+      if (!next.items || next.items.length === 0) return;
+      // Abrir sobre un visor ya abierto igual cierra al anterior: su dueño tiene
+      // que enterarse, o se queda esperando un aviso que no va a llegar.
+      notifyClosed();
+      closeNotifier.current = next.onClose ?? null;
+      setArgs(next);
+    },
+    [notifyClosed],
+  );
+
+  /**
+   * Un solo cierre para los cuatro caminos (la X, Escape, el arrastre y el
+   * "atrás" del teléfono): el visor se va YA —la salida no puede sentirse
+   * lenta— y quien lo abrió se entera una sola vez. La contabilidad del
+   * historial la lleva `useCloseOnBack`, que sabe además que puede haber otras
+   * capas abiertas y no tiene que llevárselas puestas.
+   */
+  const close = useCallback(() => {
     setArgs(null);
-    if (pushedHistory.current) {
-      pushedHistory.current = false;
-      suppressNextPop.current = true;
-      try {
-        window.history.back();
-      } catch {
-        suppressNextPop.current = false;
-      }
-    }
-  }, []);
+    notifyClosed();
+  }, [notifyClosed]);
 
-  // Cierre por gesto/botón atrás: el navegador ya sacó la entrada, solo cerramos.
-  useEffect(() => {
-    if (!args) return;
-    function onPopState() {
-      if (suppressNextPop.current) {
-        suppressNextPop.current = false;
-        return;
-      }
-      pushedHistory.current = false;
-      setArgs(null);
-    }
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [args]);
+  useCloseOnBack(args !== null, close);
 
-  const value = useMemo(() => ({ open }), [open]);
+  const value = useMemo(() => ({ open, available: true }), [open]);
 
   return (
     <MediaViewerContext.Provider value={value}>
       {children}
-      <MediaViewerOverlay args={args} onClose={closeFromUi} />
+      <MediaViewerOverlay args={args} onClose={close} />
     </MediaViewerContext.Provider>
   );
 }
@@ -191,6 +226,17 @@ function ViewerPanel({
   // Sonido global del visor: arranca ENCENDIDO (hubo gesto); si el navegador
   // rechaza el play con audio, cae a mudo y el toggle queda a mano.
   const [muted, setMuted] = useState(false);
+  /**
+   * El medio POR EL QUE SE ENTRÓ. Es el único que hereda el reloj de la
+   * superficie que abrió (`startSeconds`): si la persona pasa a la foto de al
+   * lado y vuelve, el video ya está en su propia línea de tiempo y volver a
+   * saltar sería un corte, no una continuación.
+   *
+   * Estado y no ref: se lee DURANTE el render (elige a qué diapositiva le baja
+   * el segundo heredado) y una ref leída en render es exactamente lo que
+   * prohíbe `react-hooks/refs`. Sin setter, es un valor congelado al montar.
+   */
+  const [entryIndex] = useState(index);
 
   useFocusTrap(panelRef, true, onClose);
   useBodyScrollLock(true);
@@ -304,6 +350,9 @@ function ViewerPanel({
                 onMutedChange={setMuted}
                 authorLabel={authorLabel}
                 maxPlaybackSeconds={args.maxPlaybackSeconds}
+                startSeconds={
+                  itemIndex === entryIndex ? args.startSeconds : undefined
+                }
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element -- visor fullscreen: URL pública del bucket, sin optimizador
@@ -407,6 +456,12 @@ export interface ViewerVideoProps {
    * detalle de una publicación, donde se ve completo.
    */
   maxPlaybackSeconds?: number | null;
+  /**
+   * SEGUNDO DEL QUE ARRANCA, cuando el video venía reproduciéndose en la
+   * superficie que abrió el visor (la tarjeta del feed). Se aplica una sola vez,
+   * al primer play de este elemento.
+   */
+  startSeconds?: number;
   className?: string;
 }
 
@@ -421,11 +476,14 @@ export function ViewerVideo({
   onDoubleTap,
   controlsClassName,
   maxPlaybackSeconds,
+  startSeconds,
   className,
 }: ViewerVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const tapTimer = useRef<number | null>(null);
+  /** El salto de continuidad se hace UNA vez; después manda el reloj del visor. */
+  const seeded = useRef(false);
   const [paused, setPaused] = useState(!active);
   const [isLandscape, setIsLandscape] = useState(false);
 
@@ -439,13 +497,27 @@ export function ViewerVideo({
       return;
     }
     video.muted = muted;
+    // CONTINUIDAD antes del play: el video sigue donde venía en vez de volver al
+    // segundo cero. Se escribe aunque la metadata no haya cargado todavía —el
+    // navegador guarda la posición y arranca ahí— y una sola vez, para que
+    // volver a este medio desde otra diapositiva no rebobine.
+    if (!seeded.current) {
+      seeded.current = true;
+      if (typeof startSeconds === "number" && startSeconds > 0) {
+        try {
+          video.currentTime = startSeconds;
+        } catch {
+          // Sin reloj disponible: arranca del principio, que es lo honesto.
+        }
+      }
+    }
     safePlay(video, () => {
       // Autoplay con audio bloqueado → caemos a mudo (y el toggle queda visible).
       onMutedChange(true);
       video.muted = true;
       safePlay(video);
     });
-  }, [active, muted, onMutedChange]);
+  }, [active, muted, onMutedChange, startSeconds]);
 
   // Con la pestaña oculta el video se pausa; al volver, si sigue activo,
   // retoma solo (cortesía estándar de reproductores móviles).

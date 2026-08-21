@@ -12,6 +12,13 @@ const state = vi.hoisted(() => ({
   insertResult: { error: null as { code: string } | null },
   deleteResult: { error: null as { code: string } | null },
   push: vi.fn(),
+  inserts: 0,
+}));
+// La hoja de entrada, manejada a mano: se registra el pedido y se guarda el
+// `onAuthenticated` para poder decidir, por caso, si la persona ENTRÓ o si
+// cerró la hoja sin entrar.
+const authGate = vi.hoisted(() => ({
+  calls: [] as { reason?: string; onAuthenticated?: () => void }[],
 }));
 
 vi.mock("next/navigation", () => ({
@@ -19,10 +26,20 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/feed",
 }));
 
+vi.mock("@/components/auth/auth-sheet", () => ({
+  AUTH_REASON: { like: "Entrá para dar me gusta" },
+  useRequireAuth: () => (args: { reason?: string; onAuthenticated?: () => void }) => {
+    authGate.calls.push(args ?? {});
+  },
+}));
+
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     from: () => ({
-      insert: () => Promise.resolve(state.insertResult),
+      insert: () => {
+        state.inserts += 1;
+        return Promise.resolve(state.insertResult);
+      },
       delete: () => ({
         eq: () => ({
           eq: () => ({
@@ -66,9 +83,53 @@ describe("useOptimisticLike", () => {
   beforeEach(() => {
     state.insertResult = { error: null };
     state.deleteResult = { error: null };
+    state.inserts = 0;
     state.push.mockClear();
+    authGate.calls.length = 0;
   });
   afterEach(cleanup);
+
+  /**
+   * Regresión de la revisión de código (2026-08-20): el ME GUSTA FANTASMA.
+   *
+   * El deseo pendiente se armaba ANTES de abrir la hoja de entrada, así que
+   * cerrarla sin entrar dejaba el ref cargado. El efecto que lo consume espera
+   * un cambio de `viewerId`, o sea CUALQUIER login posterior: entrar más tarde
+   * por otro motivo le aplicaba el me gusta abandonado a la publicación de
+   * antes, y le mandaba la notificación a su autor.
+   */
+  it("cerrar la hoja sin entrar NO deja un me gusta armado para el próximo login", async () => {
+    const view = render(
+      <Harness {...LOGGED_IN} viewerId={null} initialLiked={false} />,
+    );
+    fireEvent.click(screen.getByText("toggle"));
+
+    // Se pidió sesión y no se escribió nada todavía.
+    expect(authGate.calls).toHaveLength(1);
+    expect(state.inserts).toBe(0);
+
+    // La persona CIERRA la hoja: `onAuthenticated` no se ejecuta nunca.
+    // Más tarde entra por otro motivo y el viewer aparece.
+    view.rerender(<Harness {...LOGGED_IN} viewerId="user-1" initialLiked={false} />);
+
+    await waitFor(() => expect(state.inserts).toBe(0));
+    expect(liked()).toBe("false");
+  });
+
+  it("si SÍ entra, el me gusta que había quedado pendiente se aplica", async () => {
+    const view = render(
+      <Harness {...LOGGED_IN} viewerId={null} initialLiked={false} />,
+    );
+    fireEvent.click(screen.getByText("toggle"));
+    expect(authGate.calls).toHaveLength(1);
+
+    // Entró: la hoja ejecuta el `onAuthenticated` y después llega el viewer
+    // verdadero con el refresh del árbol del servidor.
+    authGate.calls[0].onAuthenticated?.();
+    view.rerender(<Harness {...LOGGED_IN} viewerId="user-1" initialLiked={false} />);
+
+    await waitFor(() => expect(state.inserts).toBe(1));
+  });
 
   it("like optimista: la UI sube al instante (antes de que responda la DB)", () => {
     render(<Harness {...LOGGED_IN} />);
@@ -92,12 +153,18 @@ describe("useOptimisticLike", () => {
     expect(count()).toBe("1");
   });
 
-  it("anónimo (viewer null): no cambia el estado y va a /entrar con retorno", () => {
+  /**
+   * Antes esto navegaba a /entrar. Desde 2026-08-20 la sesión se pide en la
+   * misma pantalla ("no te tiene que mover a otra publicación"), así que lo que
+   * se fija es que el corazón no miente Y que nadie sale del feed.
+   */
+  it("anónimo (viewer null): no cambia el estado y pide sesión sin navegar", () => {
     render(<Harness {...LOGGED_IN} viewerId={null} />);
     fireEvent.click(screen.getByText("toggle"));
     expect(liked()).toBe("false");
     expect(count()).toBe("3");
-    expect(state.push).toHaveBeenCalledWith("/entrar?next=%2Ffeed");
+    expect(state.push).not.toHaveBeenCalled();
+    expect(authGate.calls).toHaveLength(1);
     expect(screen.getByTestId("canReact").textContent).toBe("false");
   });
 

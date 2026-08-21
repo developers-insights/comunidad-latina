@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { HOUR_MS, limit } from "@/lib/rate-limit";
+import { moderateText } from "@/lib/moderation";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getTenant } from "@/lib/tenant/resolve";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -36,7 +38,17 @@ const sendSchema = z.object({
 });
 
 export type SendListingMessageResult =
-  | { ok: true; conversationId: string }
+  | {
+      ok: true;
+      conversationId: string;
+      /**
+       * `true` = ya había una conversación por este aviso y el mensaje se sumó
+       * ahí. `undefined` = no se pudo averiguar, y entonces NO se afirma nada:
+       * la pantalla usa el texto neutro. Nunca se pinta un alta nueva sobre una
+       * conversación vieja (feedback de la revisión de código, 2026-08).
+       */
+      reused?: boolean;
+    }
   | {
       ok: false;
       code:
@@ -45,6 +57,8 @@ export type SendListingMessageResult =
         | "self"
         | "blocked"
         | "invalid"
+        | "rate-limited"
+        | "flagged"
         | "error";
       message?: string;
     };
@@ -123,6 +137,85 @@ export async function sendListingMessageAction(input: {
   }
   const { tenant, supabase, user } = guard;
 
+  /**
+   * TECHO Y MODERACIÓN, ANTES DE CREAR NADA (auditoría de seguridad 2026-08-20).
+   *
+   * Esta action nació para el "mensaje de presentación" del marketplace, pero
+   * desde esta rama es también el canal de contacto de Propiedades y
+   * Profesionales — donde antes se mandaba una solicitud VACÍA. O sea: pasó a
+   * escribir texto libre de un usuario en `messages`, la misma tabla que
+   * `sendMessageAction`, y esa hermana ya documenta por qué no se puede hacer
+   * sin tope ni moderación: "una cuenta sola es a la vez una factura y un canal
+   * de hostigamiento con nuestro remitente". Cada llamada además dispara una
+   * notificación y un mail al dueño del aviso.
+   *
+   * El bucket es EL MISMO (`mensaje:<uid>`) que el de `sendMessageAction`: si
+   * fueran dos, el techo real sería el doble y no serviría de nada.
+   *
+   * Va antes del RPC a propósito: un mensaje rechazado no tiene que dejar atrás
+   * una conversación pendiente que la otra persona ve aparecer sin contenido.
+   */
+  if (!limit(`mensaje:${user.id}`, 120, HOUR_MS).ok) {
+    return { ok: false, code: "rate-limited" };
+  }
+
+  const moderation = await moderateText(body);
+  if (moderation.flagged) {
+    // No se entrega, pero tampoco se pierde: queda para revisión humana.
+    // `moderation_queue` es insert-only para el pipeline (RLS `with check
+    // false` para JWT de usuario), así que va con admin client — uso permitido
+    // por §6, igual que en `mensajes/actions.ts`.
+    try {
+      const admin = createAdminClient();
+      const { error: queueError } = await admin.from("moderation_queue").insert({
+        tenant_id: tenant.id,
+        subject_kind: "message",
+        // El mensaje nunca se insertó: id sintético del intento.
+        subject_id: crypto.randomUUID(),
+        tier: 3,
+        reasons: {
+          source: "openai_omni_moderation",
+          categories: moderation.categories,
+          body,
+          listing_id: listingId,
+          sender_id: user.id,
+        },
+      });
+      if (queueError) {
+        console.error("[mensajes] no se pudo encolar moderación:", queueError.message);
+      }
+    } catch (error) {
+      console.error(
+        "[mensajes] admin client no disponible para encolar moderación:",
+        error instanceof Error ? error.message : "error desconocido",
+      );
+    }
+    return { ok: false, code: "flagged" };
+  }
+
+  // ¿Ya veníamos hablando por este aviso? Se pregunta ANTES del RPC porque
+  // después es tarde: `request_contact` es idempotente y devuelve el mismo id
+  // haya creado la conversación o la haya encontrado, así que a la salida las
+  // dos situaciones son indistinguibles. El índice único (listing_id,
+  // created_by) garantiza que hay a lo sumo una fila.
+  //
+  // Best-effort a propósito: si esta lectura falla, `reused` queda `undefined`
+  // y la pantalla usa el texto neutro. Preferimos no decir nada antes que
+  // afirmar un alta nueva sobre una conversación que ya existía.
+  let reused: boolean | undefined;
+  try {
+    const { data: prior } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("tenant_id", tenant.id)
+      .eq("listing_id", listingId)
+      .eq("created_by", user.id)
+      .maybeSingle();
+    reused = Boolean(prior);
+  } catch {
+    reused = undefined;
+  }
+
   // Idempotente por contrato del RPC: si ya pedí contacto por este aviso,
   // devuelve la conversación existente en vez de crear otra.
   const { data, error } = await supabase.rpc("request_contact", {
@@ -163,9 +256,73 @@ export async function sendListingMessageAction(input: {
     };
   }
 
-  // Aviso al dueño (best-effort, espejo de requestContactAction §12): el insert
-  // de notifications es solo del sistema (RLS with check false) → admin client.
-  // Si esto falla, el mensaje YA salió — jamás rompe el resultado.
+  /**
+   * Aviso al dueño (best-effort, espejo de requestContactAction §12): el insert
+   * de notifications es solo del sistema (RLS with check false) → admin client.
+   * Si esto falla, el mensaje YA salió — jamás rompe el resultado.
+   *
+   * Se saltea cuando la conversación YA existía (auditoría 2026-08-20). Ese
+   * caso no es un contacto nuevo: es alguien escribiendo otra vez en un hilo
+   * abierto, y ahí "te contactaron por tu aviso" —con su mail— es un aviso
+   * repetido que la persona ya recibió. Además era el pedal que convertía
+   * escribir muchas veces en mandar muchos mails con nuestro remitente.
+   * `reused === undefined` (la lectura falló) avisa igual: ante la duda,
+   * preferimos un aviso de más antes que perder un contacto real.
+   */
+  if (reused === true) {
+    /**
+     * Pero SÍ se avisa que hay un mensaje nuevo (revisión de código
+     * 2026-08-21). Saltear el bloque entero era peor que el problema que venía
+     * a resolver: el hilo ya existía, así que la bandeja no estrena badge, y
+     * la persona podía quedarse sin enterarse para siempre mientras la
+     * pantalla de quien escribió decía "te avisamos apenas te respondan".
+     *
+     * Lo que se saltea es el `contact_request` y su mail de lead: eso es "te
+     * contactaron por tu aviso", y ya se mandó la primera vez. Acá va el aviso
+     * de CHAT, con `dedupeUnread` — el mismo que usa `sendMessageAction`
+     * (`mensajes/actions.ts:170`) justamente para no convertir una conversación
+     * activa en una lluvia de notificaciones.
+     */
+    try {
+      const [{ data: listing }, { data: me }] = await Promise.all([
+        supabase
+          .from("listings")
+          .select("created_by, tenant_id")
+          .eq("id", listingId)
+          .maybeSingle(),
+        supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+      ]);
+      // Sin dueño, o si el dueño soy yo, no hay a quién avisarle.
+      if (!listing?.created_by || listing.created_by === user.id) {
+        revalidatePath("/mensajes");
+        return { ok: true, conversationId, reused };
+      }
+      const admin = createAdminClient();
+      await createNotification(admin, {
+        tenantId: listing.tenant_id,
+        profileId: listing.created_by,
+        kind: "message",
+        category: "mensajes",
+        title: me?.display_name
+          ? `${me.display_name} te escribió`
+          : "Tenés un mensaje nuevo",
+        // PRIVACIDAD: el cuerpo NUNCA lleva el texto (se lee de costado en
+        // pantallas compartidas). Mismo criterio que el chat.
+        body: "Abrí la conversación para leerlo.",
+        href: `/mensajes/${conversationId}`,
+        dedupeUnread: true,
+      });
+    } catch (notifyError) {
+      // El mensaje YA se insertó: un aviso que falla nunca cambia el resultado.
+      console.warn("[mensajes] no se pudo avisar del mensaje en el hilo existente:", {
+        message:
+          notifyError instanceof Error ? notifyError.message : "error desconocido",
+      });
+    }
+    revalidatePath("/mensajes");
+    return { ok: true, conversationId, reused };
+  }
+
   try {
     const { data: listing } = await supabase
       .from("listings")
@@ -215,5 +372,5 @@ export async function sendListingMessageAction(input: {
   }
 
   revalidatePath("/mensajes");
-  return { ok: true, conversationId };
+  return { ok: true, conversationId, reused };
 }

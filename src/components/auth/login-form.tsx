@@ -73,17 +73,38 @@ const URL_ERRORS: Record<string, string> = {
   proveedor: COPY.providerFailed,
 };
 
-export function LoginForm({
-  next,
-  urlError,
-  oauthProviders = [],
-}: {
+export interface LoginFormProps {
   next?: string;
   /** Código de error que llega por query (?error=enlace del callback). */
   urlError?: string;
   /** Proveedores con credenciales. Vacío = no se dibuja el bloque. */
   oauthProviders?: readonly OAuthProvider[];
-}) {
+  /**
+   * Sesión creada. Si viene, el formulario NO navega: avisa y se queda quieto.
+   * Lo usa la hoja de entrada del feed, que cierra, refresca el árbol del
+   * servidor y reanuda la acción que la persona había intentado — todo sin
+   * moverse de pantalla (ver components/auth/auth-sheet.tsx).
+   *
+   * Ausente = el comportamiento de siempre: `replace(next)` + `refresh()`.
+   */
+  onSuccess?: () => void;
+  /** Oculta el título y el subtítulo (la hoja pone los suyos en la cabecera). */
+  hideHeader?: boolean;
+  /**
+   * Convierte "Sumate a tu comunidad" en un cambio de paso en vez de un enlace
+   * a /registro. Ausente = enlace de siempre.
+   */
+  onGoRegister?: () => void;
+}
+
+export function LoginForm({
+  next,
+  urlError,
+  oauthProviders = [],
+  onSuccess,
+  hideHeader = false,
+  onGoRegister,
+}: LoginFormProps) {
   const router = useRouter();
   // `safeInternalPath` y no la vieja `safeNextPath`: aquella clasificaba por
   // string y dejaba pasar `/\t/evil.com`, que `new URL()` convierte en
@@ -147,6 +168,10 @@ export function LoginForm({
       else setError(COPY.genericError);
       return;
     }
+    if (onSuccess) {
+      onSuccess();
+      return;
+    }
     router.replace(destination);
     router.refresh();
   }
@@ -175,12 +200,14 @@ export function LoginForm({
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="font-display text-2xl font-bold text-foreground">
-          {COPY.title}
-        </h1>
-        <p className="text-sm text-foreground-secondary">{COPY.subtitle}</p>
-      </header>
+      {!hideHeader && (
+        <header className="flex flex-col gap-1">
+          <h1 className="font-display text-2xl font-bold text-foreground">
+            {COPY.title}
+          </h1>
+          <p className="text-sm text-foreground-secondary">{COPY.subtitle}</p>
+        </header>
+      )}
 
       <FormError>{error}</FormError>
 
@@ -309,12 +336,22 @@ export function LoginForm({
 
       <p className="text-center text-sm text-foreground-secondary">
         {COPY.noAccount}{" "}
-        <Link
-          href="/registro"
-          className="font-semibold text-brand-ink underline-offset-4 hover:underline"
-        >
-          {COPY.goRegister}
-        </Link>
+        {onGoRegister ? (
+          <button
+            type="button"
+            onClick={onGoRegister}
+            className="rounded-sm font-semibold text-brand-ink underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+          >
+            {COPY.goRegister}
+          </button>
+        ) : (
+          <Link
+            href="/registro"
+            className="font-semibold text-brand-ink underline-offset-4 hover:underline"
+          >
+            {COPY.goRegister}
+          </Link>
+        )}
       </p>
     </div>
   );

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { AUTH_REASON, AuthSheetProvider } from "@/components/auth/auth-sheet";
 import type { JobQuestion } from "./helpers";
 import { JobApplySheet } from "./job-apply-sheet";
 import { COPY } from "./copy";
@@ -37,6 +38,20 @@ vi.mock("@/lib/supabase/client", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: nav.push, refresh: nav.refresh }),
   usePathname: () => "/empleos/job-1",
+}));
+
+/**
+ * El panel de la hoja de entrada se stubea entero (mismo criterio que
+ * `auth-sheet.test.tsx`): trae los formularios de auth y sus server actions, que
+ * importan `next/headers`. Acá sólo importa CUÁNDO se monta y qué pasa cuando
+ * avisa que hay sesión.
+ */
+vi.mock("@/components/auth/auth-sheet-panel", () => ({
+  AuthSheetPanel: ({ onAuthenticated }: { onAuthenticated: () => void }) => (
+    <button type="button" onClick={onAuthenticated}>
+      stub-entrar
+    </button>
+  ),
 }));
 
 vi.mock("next/link", () => ({
@@ -277,27 +292,63 @@ describe("JobApplySheet", () => {
     expect(screen.getByRole("button", { name: new RegExp(C.cv.choose) })).toBeTruthy();
   });
 
-  it("sin sesión el server manda a entrar y vuelve al aviso", async () => {
-    actions.applyToJobAction.mockResolvedValue({ ok: false, code: "unauthenticated" });
-    openSheet();
+  /**
+   * ESTOS DOS TESTS CAMBIARON DE SUJETO EL 2026-08-20, y por qué importa.
+   *
+   * Antes exigían justo lo que el cliente vino a sacar: que sin sesión la
+   * postulación NAVEGARA a /entrar. Uno de los dos casos era el más absurdo de
+   * toda la ronda — la hoja ya estaba abierta, con las preguntas respondidas, y
+   * el server contestaba "unauthenticated" desde adentro: se expulsaba a alguien
+   * de un formulario lleno para mandarlo a una pantalla donde lo perdía todo.
+   *
+   * Lo que se fija ahora es lo contrario y es lo único que la persona percibe:
+   * nadie cambia de ruta, la puerta se abre encima, y al entrar la postulación
+   * sigue exactamente donde estaba.
+   */
+  it("sin sesión DESDE ADENTRO de la hoja abierta: no expulsa, pide la puerta encima y reintenta el envío", async () => {
+    actions.applyToJobAction
+      .mockResolvedValueOnce({ ok: false, code: "unauthenticated" })
+      .mockResolvedValueOnce({ ok: true });
+    render(
+      <AuthSheetProvider>
+        <JobApplySheet jobId="job-1" questions={QUESTIONS} isLoggedIn profile={PROFILE} />
+      </AuthSheetProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(C.cta) }));
 
     fillAndReview();
     fireEvent.click(screen.getByRole("button", { name: C.submit }));
 
-    await vi.waitFor(() =>
-      expect(nav.push).toHaveBeenCalledWith(
-        `/entrar?next=${encodeURIComponent("/empleos/job-1")}`,
-      ),
+    // La puerta se abre ACÁ MISMO: ni un `router.push`.
+    expect(await screen.findByText(AUTH_REASON.apply)).toBeTruthy();
+    expect(nav.push).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByText("stub-entrar"));
+
+    // El envío se reintenta solo y con el MISMO paquete: nada que rehacer.
+    expect(await screen.findByText(C.successBody)).toBeTruthy();
+    expect(actions.applyToJobAction).toHaveBeenCalledTimes(2);
+    expect(actions.applyToJobAction.mock.calls[1]![0]).toEqual(
+      actions.applyToJobAction.mock.calls[0]![0],
     );
   });
 
-  it("deslogueado el CTA lleva a entrar en vez de abrir la hoja", () => {
+  it("deslogueado el CTA no navega: abre la puerta y, al entrar, la postulación", async () => {
     render(
-      <JobApplySheet jobId="job-9" questions={QUESTIONS} isLoggedIn={false} profile={null} />,
+      <AuthSheetProvider>
+        <JobApplySheet jobId="job-9" questions={QUESTIONS} isLoggedIn={false} profile={null} />
+      </AuthSheetProvider>,
     );
 
-    const link = screen.getByRole("link", { name: new RegExp(C.ctaLoggedOut) });
-    expect(link.getAttribute("href")).toBe(`/entrar?next=${encodeURIComponent("/empleos/job-9")}`);
+    // El CTA es el MISMO que ve quien tiene cuenta: no hay una puerta distinta
+    // para quien todavía no entró.
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(C.cta) }));
+    expect(nav.push).not.toHaveBeenCalled();
+    // La postulación no se abrió todavía: primero la cuenta, así nadie escribe
+    // media hoja para descubrir al final que le falta entrar.
     expect(screen.queryByText(C.intro)).toBeNull();
+
+    fireEvent.click(await screen.findByText("stub-entrar"));
+    expect(await screen.findByText(C.intro)).toBeTruthy();
   });
 });

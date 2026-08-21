@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { JobCardModel } from "@/app/(app)/empleos/queries";
 import { JobCard } from "./job-card";
 import { COPY } from "./copy";
@@ -11,15 +11,62 @@ import { COPY } from "./copy";
  * sin foto la card no se vacía — el pago y el puesto siguen siendo lo que se
  * lee — y que el monto está siempre presente, aunque el aviso no traiga número.
  *
- * Y desde el feedback 2026-07-26, el reparto de gestos de Vivienda: tocar la
- * FOTO abre el visor con todas las fotos del aviso, y al detalle se entra SOLO
- * por la píldora. Sin foto no hay visor que abrir.
+ * Y el reparto de gestos, que ahora son TRES:
+ *  · la FOTO abre el visor con todas las fotos del aviso (feedback 2026-07-26);
+ *  · "Postularme" RESUELVE en el listado — abre la hoja, no navega a ningún
+ *    lado (cliente 2026-08-20: "mientras menos pasos mejor");
+ *  · "Ver empleo" es el ÚNICO que navega, y quedó como acción secundaria.
+ *
+ * El tercer bloque es el que protege la mejora: si alguien vuelve a convertir
+ * "Postularme" en un <Link>, o si la hoja deja de montarse desde la card,
+ * postularse vuelve a costar dos pantallas y nadie se entera hasta producción.
  */
 
 const viewer = vi.hoisted(() => ({ open: vi.fn() }));
+const nav = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
+const context = vi.hoisted(() => ({ load: vi.fn() }));
+// La hoja de autenticación se pide por hook. Acá se registra el pedido y se
+// guarda el `onAuthenticated` para poder ejecutarlo como si la persona hubiera
+// entrado sin salir del listado.
+const authGate = vi.hoisted(() => ({
+  calls: [] as { reason?: string; onAuthenticated?: () => void }[],
+}));
+const actions = vi.hoisted(() => ({
+  applyToJobAction: vi.fn(),
+  prepareCvUploadAction: vi.fn(),
+}));
+const toasts = vi.hoisted(() => ({ toast: vi.fn() }));
 
 vi.mock("@/components/feed/media-viewer", () => ({
   useMediaViewer: () => ({ open: viewer.open }),
+}));
+
+vi.mock("@/components/auth/auth-sheet", () => ({
+  AUTH_REASON: { apply: "Entrá y mandá tu postulación" },
+  useRequireAuth: () => (args: { reason?: string; onAuthenticated?: () => void }) => {
+    authGate.calls.push(args ?? {});
+  },
+}));
+
+vi.mock("@/app/(app)/empleos/apply-context-action", () => ({
+  loadJobApplyContextAction: context.load,
+}));
+
+vi.mock("@/app/(app)/empleos/actions", () => ({
+  applyToJobAction: actions.applyToJobAction,
+  prepareCvUploadAction: actions.prepareCvUploadAction,
+}));
+
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({
+    storage: { from: () => ({ remove: vi.fn() }) },
+    auth: { getSession: vi.fn(async () => ({ data: { session: null } })) },
+  }),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: nav.push, refresh: nav.refresh }),
+  usePathname: () => "/empleos",
 }));
 
 vi.mock("next/link", () => ({
@@ -29,6 +76,45 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
+
+// useToast lanza fuera de su provider: reemplazamos SOLO ese hook.
+vi.mock("@/components/ui", async () => {
+  const actual = await vi.importActual<typeof import("@/components/ui")>("@/components/ui");
+  return { ...actual, useToast: () => ({ toast: toasts.toast }) };
+});
+
+// motion neutralizado: la hoja aparece en el DOM al instante.
+vi.mock("motion/react", () => {
+  const filter = (props: Record<string, unknown>) => {
+    const {
+      layout,
+      initial,
+      animate,
+      exit,
+      transition,
+      drag,
+      dragConstraints,
+      dragElastic,
+      onDragEnd,
+      whileTap,
+      whileHover,
+      ...rest
+    } = props;
+    return rest;
+  };
+  const div = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) => (
+    <div {...filter(props)}>{children}</div>
+  );
+  return {
+    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
+    m: { div },
+    motion: { div },
+    useReducedMotion: () => true,
+  };
+});
 
 const C = COPY.list;
 
@@ -54,7 +140,22 @@ function photoButton() {
   return screen.getByRole("button", { name: /ver fotos de/i });
 }
 
-beforeEach(() => viewer.open.mockReset());
+function applyButton() {
+  return screen.getByRole("button", { name: /^postularme a /i });
+}
+
+function detailLink() {
+  return screen.getByRole("link", { name: new RegExp(C.viewJob) });
+}
+
+beforeEach(() => {
+  viewer.open.mockReset();
+  nav.push.mockReset();
+  nav.refresh.mockReset();
+  actions.applyToJobAction.mockReset();
+  context.load.mockReset();
+  context.load.mockResolvedValue({ state: "ready", questions: [], profile: null });
+});
 afterEach(cleanup);
 
 describe("JobCard", () => {
@@ -93,7 +194,7 @@ describe("JobCard", () => {
   });
 });
 
-describe("JobCard: la foto abre el visor, la píldora navega", () => {
+describe("JobCard: la foto abre el visor, solo 'Ver empleo' navega", () => {
   it("tocar la foto abre el visor con TODAS las fotos del aviso", () => {
     render(<JobCard job={CON_FOTOS} />);
     fireEvent.click(photoButton());
@@ -108,7 +209,7 @@ describe("JobCard: la foto abre el visor, la píldora navega", () => {
     });
   });
 
-  it("tocar la foto NO navega: el único link de la card es la píldora", () => {
+  it("el ÚNICO link de la card sigue siendo el detalle: ni la foto ni postularse navegan", () => {
     render(<JobCard job={CON_FOTOS} />);
     const links = screen.getAllByRole("link");
 
@@ -116,16 +217,88 @@ describe("JobCard: la foto abre el visor, la píldora navega", () => {
     expect(links[0].getAttribute("href")).toBe("/empleos/job-1");
   });
 
-  it('"Ver empleo" navega al detalle y NO abre el visor', () => {
+  it("'Ver empleo' navega al detalle, se nombra con el puesto y NO abre el visor", () => {
     render(<JobCard job={CON_FOTOS} />);
-    const pill = screen.getByRole("link", { name: CON_FOTOS.title });
+    const link = detailLink();
 
-    fireEvent.click(pill);
+    // Label-in-name (2.5.3): el nombre accesible contiene el texto visible.
+    expect(link.getAttribute("aria-label")).toBe(`${C.viewJob}: ${CON_FOTOS.title}`);
+    fireEvent.click(link);
     expect(viewer.open).not.toHaveBeenCalled();
   });
 
   it("sin foto no hay área tocable: el gradiente del módulo no abre visor", () => {
     render(<JobCard job={BASE} />);
     expect(screen.queryByRole("button", { name: /ver fotos de/i })).toBeNull();
+  });
+});
+
+describe("JobCard: postularse se resuelve en la lista", () => {
+  it("'Postularme' es un BOTÓN, no un link — no puede navegar aunque se quiera", () => {
+    render(<JobCard job={BASE} />);
+    expect(applyButton().tagName).toBe("BUTTON");
+    expect(screen.queryByRole("link", { name: /postularme/i })).toBeNull();
+  });
+
+  it("abre la hoja SOBRE el listado: aparece el diálogo y nadie navega", async () => {
+    render(<JobCard job={BASE} />);
+    fireEvent.click(applyButton());
+
+    const sheet = await screen.findByRole("dialog");
+    expect(sheet).toBeTruthy();
+    expect(context.load).toHaveBeenCalledWith("job-1");
+    expect(nav.push).not.toHaveBeenCalled();
+    // El link al detalle sigue siendo el único: la hoja no agregó navegación.
+    expect(screen.getAllByRole("link").some((a) => a.getAttribute("href") === "/empleos/job-1")).toBe(
+      true,
+    );
+  });
+
+  it("si ya se había postulado no abre formulario: lo dice y listo", async () => {
+    context.load.mockResolvedValue({ state: "already-applied" });
+    render(<JobCard job={BASE} />);
+    fireEvent.click(applyButton());
+
+    expect(await screen.findByText("Ya te postulaste")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("si el aviso es suyo lo explica en una línea, sin cartel de error", async () => {
+    context.load.mockResolvedValue({ state: "own-job" });
+    render(<JobCard job={BASE} />);
+    fireEvent.click(applyButton());
+
+    expect(await screen.findByText("Este aviso es tuyo.")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  /**
+   * Antes esto navegaba a /entrar y volvía al DETALLE del aviso: postularse sin
+   * cuenta costaba salir de la app, volver a otra pantalla y arrancar de nuevo.
+   * Desde 2026-08-20 la sesión se pide encima del listado y el intento se
+   * reanuda solo — cero navegaciones también para quien todavía no tiene
+   * cuenta, que en un tablero de empleos es la mitad de la gente que llega.
+   */
+  it("sin sesión pide entrar SIN navegar, y al volver reintenta solo", async () => {
+    authGate.calls.length = 0;
+    context.load.mockResolvedValue({ state: "unauthenticated" });
+    render(<JobCard job={BASE} />);
+    fireEvent.click(applyButton());
+
+    await waitFor(() => expect(authGate.calls).toHaveLength(1));
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    // Entró: el reintento vuelve a pedir el contexto, ahora con sesión, y la
+    // hoja de postulación se abre sin que haya que tocar el botón otra vez.
+    context.load.mockResolvedValue({
+      state: "ready",
+      questions: [],
+      profile: { displayName: "Ana", avatarUrl: null },
+    });
+    authGate.calls[0].onAuthenticated?.();
+
+    await waitFor(() => expect(context.load).toHaveBeenCalledTimes(2));
+    expect(nav.push).not.toHaveBeenCalled();
   });
 });

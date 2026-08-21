@@ -1,23 +1,38 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { ChatCircleDots, ShieldWarning } from "@phosphor-icons/react/dist/ssr";
-import { BottomSheet, Button, buttonVariants, useToast } from "@/components/ui";
+import { BottomSheet, Button } from "@/components/ui";
+import { InlineContact, listingMessageOutcome } from "@/components/messaging";
 import { cn } from "@/lib/utils";
-// Contacto protegido §9.2: MISMO RPC request_contact que vivienda —
-// reutilizamos la server action pública del módulo, no la duplicamos.
-import { requestContactAction } from "@/app/(app)/propiedades/actions";
+// Contacto protegido §9.2: por debajo sigue siendo el MISMO RPC request_contact
+// que vivienda — `sendListingMessageAction` lo llama y le adjunta el primer
+// mensaje. No duplicamos la escritura ni inventamos queries nuevas.
+import { sendListingMessageAction } from "@/app/(app)/mensajes/inline-actions";
 
 const COPY = {
   // Ver nota en listings/copy.ts: una sola mención, y concreta.
   cta: "Contactar",
   hint: "Tu teléfono no se comparte",
-  successTitle: "¡Listo! Le avisamos",
-  successBody: "Cuando acepte tu contacto, van a poder hablar por acá.",
-  errorTitle: "No pudimos enviar tu solicitud",
-  errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo en un ratito.",
+  fieldLabel: "Escribí tu mensaje",
+  placeholder: "Hola, quería consultarte por tu servicio.",
+  send: "Enviar mensaje",
+  cancel: "Cancelar",
+  sentTitle: "Mensaje enviado",
+  sentBody: "Te avisamos acá apenas te responda.",
+  // Honestidad, no cortesía: si ya venían hablando, no hubo ningún alta nueva.
+  reusedTitle: "Lo sumamos al chat que ya tenían",
+  reusedBody: "No abrimos nada nuevo: tu mensaje quedó en esa misma conversación.",
+  threadLink: "Abrir el chat",
+  retryLogin: "Entrar a mi cuenta",
+  errors: {
+    self: "Este perfil es tuyo — no hace falta que te escribas.",
+    blocked: "No podemos entregar este mensaje.",
+    unauthenticated: "Se cerró tu sesión. Entrá de nuevo y lo mandamos.",
+    "tenant-mismatch": "Algo no cuadra con tu sesión. Salí y volvé a entrar.",
+    invalid: "Escribí un poquito más antes de enviarlo.",
+    error: "No pudimos enviarlo — no es tu culpa. Probá de nuevo en un ratito.",
+  },
   externalSheetTitle: "Este perfil vino de una fuente externa",
   externalSheetBody: (name: string) =>
     `Lo publicó ${name} fuera de la app, con su permiso. El contacto se hace por los datos que esa fuente publicó — no podemos protegerlo desde acá.`,
@@ -28,8 +43,12 @@ const COPY = {
 
 export interface DirectoryContactCtaProps {
   listingId: string;
-  /** Ruta de vuelta tras el login (ej. /profesionales/abc). */
-  returnPath: string;
+  /**
+   * Ruta de vuelta tras entrar. Ya no decide nada —la hoja de sesión resuelve
+   * en el lugar y no navega— pero se mantiene declarada para no romper el call
+   * site que la sigue pasando.
+   */
+  returnPath?: string;
   isLoggedIn: boolean;
   /** true si es un aviso de seed/API sin cuenta (created_by null). */
   isExternal: boolean;
@@ -37,40 +56,24 @@ export interface DirectoryContactCtaProps {
 }
 
 /**
- * CTA sticky de contacto protegido para detalles del directorio — mismo
- * comportamiento que vivienda (RPC request_contact), con redirect de login
- * correcto para estas rutas.
+ * CTA sticky de contacto protegido para el detalle de un profesional.
+ *
+ * Mismo comportamiento que vivienda, y ahora también la misma FORMA: el
+ * mensaje se escribe y se confirma en esta pantalla (cliente 2026-08-20,
+ * "mientras menos pasos mejor"). Antes hacía `router.push('/mensajes')` y la
+ * persona perdía el perfil que estaba evaluando —reseñas, verificación, precios—
+ * justo en el momento en que decidía contratarlo.
+ *
+ * Sin sesión tampoco se navega: la hoja de `auth-sheet` se abre encima del
+ * perfil y al volver el composer se abre solo.
  */
 export function DirectoryContactCta({
   listingId,
-  returnPath,
   isLoggedIn,
   isExternal,
   externalName,
 }: DirectoryContactCtaProps) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [isPending, startTransition] = useTransition();
   const [sheetOpen, setSheetOpen] = useState(false);
-
-  function handleContact() {
-    startTransition(async () => {
-      const result = await requestContactAction(listingId);
-      if (result.ok) {
-        toast({ title: COPY.successTitle, description: COPY.successBody, variant: "success" });
-        router.push("/mensajes");
-        return;
-      }
-      // El tono lo decide la action: "info" para aclaraciones amables (aviso
-      // propio, sin cuenta, sesión vencida) → variante neutra; "error" para
-      // fallas reales → warning. Nunca "danger": ningún caso acá amerita alarma.
-      toast({
-        title: result.title,
-        description: result.error,
-        variant: result.tone === "info" ? "info" : "warning",
-      });
-    });
-  }
 
   return (
     <>
@@ -84,32 +87,47 @@ export function DirectoryContactCta({
         )}
       >
         <div className="mx-auto w-full max-w-lg px-4">
-          {!isLoggedIn ? (
-            <Link
-              href={`/entrar?next=${encodeURIComponent(returnPath)}`}
-              className={cn(buttonVariants({ variant: "primary", size: "lg" }), "w-full")}
-            >
-              <ChatCircleDots size={20} aria-hidden="true" />
-              {COPY.cta}
-            </Link>
-          ) : isExternal ? (
-            <Button variant="primary" size="lg" className="w-full" onClick={() => setSheetOpen(true)}>
-              <ChatCircleDots size={20} aria-hidden="true" />
-              {COPY.cta}
-            </Button>
+          {isExternal ? (
+            <>
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full"
+                onClick={() => setSheetOpen(true)}
+              >
+                <ChatCircleDots size={20} aria-hidden="true" />
+                {COPY.cta}
+              </Button>
+              <p className="mt-1.5 text-center text-xs text-foreground-muted">
+                {COPY.hint}
+              </p>
+            </>
           ) : (
-            <Button
-              variant="primary"
-              size="lg"
-              className="w-full"
-              loading={isPending}
-              onClick={handleContact}
-            >
-              <ChatCircleDots size={20} aria-hidden="true" />
-              {COPY.cta}
-            </Button>
+            <InlineContact
+              isLoggedIn={isLoggedIn}
+              triggerIcon={<ChatCircleDots size={20} aria-hidden="true" />}
+              copy={{
+                trigger: COPY.cta,
+                fieldLabel: COPY.fieldLabel,
+                placeholder: COPY.placeholder,
+                send: COPY.send,
+                cancel: COPY.cancel,
+                hint: COPY.hint,
+                sentTitle: COPY.sentTitle,
+                sentBody: COPY.sentBody,
+                reusedTitle: COPY.reusedTitle,
+                reusedBody: COPY.reusedBody,
+                threadLink: COPY.threadLink,
+                retryLogin: COPY.retryLogin,
+              }}
+              onSend={async (body) =>
+                listingMessageOutcome(
+                  await sendListingMessageAction({ listingId, body }),
+                  COPY.errors,
+                )
+              }
+            />
           )}
-          <p className="mt-1.5 text-center text-xs text-foreground-muted">{COPY.hint}</p>
         </div>
       </div>
 

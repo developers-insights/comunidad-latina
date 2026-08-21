@@ -69,4 +69,18 @@ export {
   type ComposerMenuValue,
 } from "./composer-context";
 export { PostMenu, type PostMenuProps } from "./post-menu";
+/**
+ * Hoja de publicación (2026-08-20): abrir un post desde una miniatura sin
+ * navegar. `PostSheetProvider` va a nivel shell —y DENTRO de
+ * `CommentsSheetProvider`, ver el docblock de post-sheet.tsx— y
+ * `PostSheetTrigger` es lo que envuelve cada miniatura, también desde server
+ * components (perfil, guardados, negocios, eventos).
+ */
+export {
+  PostSheetProvider,
+  PostSheetTrigger,
+  usePostSheet,
+  type OpenPostSheetArgs,
+  type PostSheetTriggerProps,
+} from "./post-sheet";
 export { FeedSkeleton, PostCardSkeleton } from "./skeletons";

@@ -15,7 +15,9 @@ import {
 import { CommentItem } from "@/components/feed/comment-item";
 import { CommentMenu } from "@/components/feed/comment-menu";
 import { COMMENT_THREAD_COPY } from "@/components/feed/helpers";
+import { COMMENT_THREAD_PAGE_SIZE } from "@/components/feed/comment-thread";
 import { decodeCursor, encodeCursor } from "@/components/listings";
+import { ThreadPager } from "./thread-pager";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
@@ -43,15 +45,27 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 /**
- * Cuántos comentarios trae CADA tanda del hilo. Es un tamaño de PÁGINA, no un
- * techo: antes eran 200 sin cursor y el comentario 201 no existía para nadie —
- * ni para quien lo escribió. Y como el orden era ascendente, lo que se perdía
- * era lo más NUEVO: justo la conversación viva. Una publicación viral alcanzaba
- * ese techo el primer día.
+ * Tamaño de tanda del hilo. Vive junto al de la hoja del feed, en
+ * `components/feed/comment-thread.ts`, que es donde se ve por qué son distintos.
  */
-const COMMENTS_PAGE_SIZE = 200;
+const COMMENTS_PAGE_SIZE = COMMENT_THREAD_PAGE_SIZE.detail;
 
-/** Cursor keyset del hilo: `?antes=` trae la tanda anterior (más vieja). */
+/**
+ * Cursor keyset del hilo: `?antes=` arranca la lectura en una tanda vieja.
+ *
+ * LA UI YA NO GENERA ESTAS URLs. Desde 2026-08-20 "ver comentarios anteriores"
+ * carga en el lugar (ver `./thread-pager.tsx`) y la ruta no cambia al paginar.
+ * El parámetro se sigue HONRANDO igual, y a propósito: estuvo vivo, así que hay
+ * links guardados y compartidos con un `?antes=` adentro, y romperlos sería
+ * cambiar un salto molesto por una página que no muestra lo que prometía. Quien
+ * llega con uno ve esa tanda renderizada por el servidor —igual que antes— y
+ * desde ahí sigue paginando sin recargar, como todo el mundo.
+ *
+ * Es también la razón por la que abajo sobrevive "Ver los más recientes" como
+ * navegación de verdad: aparece SÓLO cuando se entró por un ancla vieja, y lo
+ * que hace es devolver a la URL canónica del hilo. Es una salida única de un
+ * link heredado, no un costo por tanda.
+ */
 const OLDER_PARAM = "antes";
 
 /**
@@ -144,9 +158,11 @@ export default async function PostDetailPage({
   // filtro de bloqueados de abajo se come la más vieja, la tanda siguiente
   // tiene que arrancar igual donde terminó ésta.
   const oldestRow = pageRows[pageRows.length - 1];
-  const olderHref =
+  // Cursor pelado, ya no un href: la tanda anterior la pide la isla cliente por
+  // server action y la URL de la publicación no se toca.
+  const olderCursor =
     hasOlder && oldestRow
-      ? `/feed/${post.id}?${OLDER_PARAM}=${encodeCursor(oldestRow.created_at, oldestRow.id)}`
+      ? encodeCursor(oldestRow.created_at, oldestRow.id)
       : null;
 
   // Filtro barato en memoria (§ contrato bloqueo): sin comentarios de gente
@@ -316,63 +332,63 @@ export default async function PostDetailPage({
           </span>
         </h2>
 
-        {/* Tanda ANTERIOR (más vieja). Va arriba del hilo porque es hacia
-            arriba que se va al pasado: el orden de lectura es ascendente. */}
-        {olderHref && (
-          <div className="mt-4">
-            <Link
-              href={olderHref}
-              className={buttonVariants({ variant: "ghost", size: "sm" })}
-            >
-              {COMMENT_THREAD_COPY.older}
-            </Link>
-          </div>
-        )}
-
-        {comments.length === 0 ? (
+        {/* El hilo y su paginación EN EL LUGAR (2026-08-20). La tanda anterior
+            ya no es una navegación: la isla la pide por server action y la
+            pega arriba conservando el punto de lectura. Los `<li>` de ESTA
+            tanda se siguen renderizando acá, en el servidor, y bajan como
+            children — llegan en el HTML, así que el deep link, el compartir y
+            el SEO quedan exactamente igual que antes. */}
+        <ThreadPager
+          postId={post.id}
+          viewerId={viewerId}
+          postAuthorId={post.author_id}
+          initialOlderCursor={olderCursor}
+          hasInitialComments={comments.length > 0}
           // El vacío honesto es sólo el del hilo SIN cursor. Una tanda vacía
           // más atrás no significa "nadie comentó todavía": significa que ahí
           // se terminó el hilo, y para eso está el link de volver al final.
-          !olderThan && (
-            <EmptyState
-              className="py-8"
-              title={COPY.comments.emptyTitle}
-              message={COPY.comments.emptyMessage}
-            />
-          )
-        ) : (
-          <ul className="mt-4 flex flex-col gap-4">
-            {comments.map((comment) => {
-              const author = authorViewOf(authors, comment.author_id);
-              // Borran su autor y quien publicó (0097). Esto NO es el permiso
-              // —lo decide la policy `comments_delete` y la server action lee
-              // cuántas filas volvieron—: es para no ofrecer un menú que va a
-              // rebotar.
-              const isOwnComment = Boolean(viewerId && comment.author_id === viewerId);
-              const canDelete = isOwnComment || isAuthor;
-              return (
-                <CommentItem
-                  key={comment.id}
-                  author={author}
-                  body={comment.body}
-                  timeAgoLabel={timeAgo(comment.created_at, now)}
-                  menu={
-                    canDelete ? (
-                      <CommentMenu
-                        commentId={comment.id}
-                        authorName={author.displayName}
-                        isOwnComment={isOwnComment}
-                      />
-                    ) : undefined
-                  }
-                />
-              );
-            })}
-          </ul>
-        )}
+          emptyState={
+            olderThan ? undefined : (
+              <EmptyState
+                className="py-8"
+                title={COPY.comments.emptyTitle}
+                message={COPY.comments.emptyMessage}
+              />
+            )
+          }
+        >
+          {comments.map((comment) => {
+            const author = authorViewOf(authors, comment.author_id);
+            // Borran su autor y quien publicó (0097). Esto NO es el permiso
+            // —lo decide la policy `comments_delete` y la server action lee
+            // cuántas filas volvieron—: es para no ofrecer un menú que va a
+            // rebotar.
+            const isOwnComment = Boolean(viewerId && comment.author_id === viewerId);
+            const canDelete = isOwnComment || isAuthor;
+            return (
+              <CommentItem
+                key={comment.id}
+                author={author}
+                body={comment.body}
+                timeAgoLabel={timeAgo(comment.created_at, now)}
+                menu={
+                  canDelete ? (
+                    <CommentMenu
+                      commentId={comment.id}
+                      authorName={author.displayName}
+                      isOwnComment={isOwnComment}
+                    />
+                  ) : undefined
+                }
+              />
+            );
+          })}
+        </ThreadPager>
 
-        {/* Con el hilo corrido hacia atrás, abajo está la salida: volver al
-            final, que es donde sigue la conversación. */}
+        {/* Única navegación que queda en el hilo, y sólo para quien entró por
+            un `?antes=` heredado (ver el docblock de OLDER_PARAM): abajo está la
+            salida hacia el final, que es donde sigue la conversación — y de
+            paso hacia la URL canónica de la publicación. */}
         {olderThan && (
           <div className="mt-4">
             <Link

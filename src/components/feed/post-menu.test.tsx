@@ -28,6 +28,9 @@ vi.mock("@/app/(app)/feed/post-menu-actions", () => ({
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: mocks.refresh, push: mocks.push }),
+  // `useRequireAuth` (hoja de entrada) lo usa para saber a dónde volver cuando
+  // el menú se renderiza fuera del provider, como en este test.
+  usePathname: () => "/feed",
 }));
 vi.mock("@/components/ui", async () => {
   const react = await import("react");
@@ -144,6 +147,46 @@ describe("qué ofrece el menú", () => {
     openMenu();
 
     expect(screen.getByRole("button", { name: "Volver a mostrar" })).toBeTruthy();
+  });
+});
+
+/**
+ * SIN AUTOR NO SE OFRECE REPORTAR (revisión 2026-08-20).
+ *
+ * El reporte viaja contra el PERFIL del autor. Si la cuenta ya no existe no hay
+ * a quién reportar, y hasta hoy la fila se ofrecía igual: quien la tocaba sin
+ * sesión pasaba por el formulario de entrada COMPLETO para que después la
+ * pantalla no se moviera. El repo tiene como regla que todo error se ve; acá se
+ * elige el camino de menos pasos y directamente no se abre la puerta.
+ */
+describe("reportar cuando la cuenta del autor ya no existe", () => {
+  it("no ofrece 'Reportar' si no hay autor", () => {
+    renderMenu({ authorId: null, viewerId: OTHER });
+    openMenu();
+
+    expect(screen.queryByRole("button", { name: "Reportar" })).toBeNull();
+    // El resto del menú sigue entero: lo que se cae es sólo lo que no lleva a
+    // ninguna parte.
+    expect(screen.getByRole("link", { name: "Abrir en otra pestaña" })).toBeTruthy();
+  });
+
+  it("tampoco lo ofrece a quien no tiene sesión — el login sería un peaje a la nada", () => {
+    renderMenu({ authorId: null, viewerId: null });
+    openMenu();
+
+    expect(screen.queryByRole("button", { name: "Reportar" })).toBeNull();
+  });
+
+  it("con autor sí lo ofrece, con y sin sesión", () => {
+    renderMenu({ authorId: OTHER, viewerId: null });
+    openMenu();
+    expect(screen.getByRole("button", { name: "Reportar" })).toBeTruthy();
+
+    cleanup();
+
+    renderMenu({ authorId: OTHER, viewerId: ME });
+    openMenu();
+    expect(screen.getByRole("button", { name: "Reportar" })).toBeTruthy();
   });
 });
 

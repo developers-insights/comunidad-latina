@@ -51,13 +51,19 @@ vi.mock("motion/react", () => {
 });
 
 /**
- * jsdom no implementa `scrollIntoView` (no tiene layout). La fila lo usa para
- * traer a la vista el círculo activo — comportamiento de navegador real, no
- * lógica de este componente: se apaga acá en vez de blindarlo en producción.
+ * jsdom no implementa scroll (no tiene layout). La fila trae a la vista el
+ * círculo activo moviendo el `scrollLeft` de SU carril — comportamiento de
+ * navegador real, no lógica de este componente: se apaga acá.
+ *
+ * `scrollIntoView` sigue stubeado aunque la fila ya no lo use: si alguien lo
+ * vuelve a meter, el test tiene que fallar por lo que importa (la página se
+ * mueve en vertical) y no por un método inexistente en jsdom.
  */
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
+  Element.prototype.scrollBy = vi.fn();
 });
+
 
 /** Comunidad recién sembrada: nadie decidió nada todavía. */
 const SIN_DECISIONES: Record<string, boolean> = {};
@@ -123,6 +129,31 @@ describe("moduleCircles (cómo se arma la fila)", () => {
 
 describe("ModuleCircles", () => {
   afterEach(cleanup);
+
+  /**
+   * REGRESIÓN (cliente 2026-08-20): "una barrita del color del tema que viene
+   * desde abajo del todo" al clickear un filtro en la compu.
+   *
+   * No era el anillo. La fila llamaba `scrollIntoView({ block: "nearest" })`,
+   * que mira también el eje VERTICAL y pegaba un salto de PÁGINA cuando la fila
+   * había quedado fuera de vista (o sea, cada vez que alguien venía scrolleando
+   * el feed). El anillo del módulo activo se anima con `layoutId` —midiendo la
+   * posición antes y después—, así que ese salto entraba en la medición y lo
+   * hacía cruzar la pantalla en diagonal.
+   *
+   * Lo que se fija acá es la causa, no el síntoma: al montar la fila con un
+   * filtro elegido no se llama NADA que pueda mover el scroll vertical del
+   * documento. El ajuste horizontal se hace sobre el `scrollLeft` del carril,
+   * que no puede tocar la página.
+   */
+  it("traer a la vista el filtro elegido NO puede mover la página en vertical", () => {
+    const intoView = vi.fn();
+    Element.prototype.scrollIntoView = intoView;
+
+    renderRow("negocios");
+
+    expect(intoView).not.toHaveBeenCalled();
+  });
 
   it("cada círculo lleva adonde promete su nombre", () => {
     renderRow();

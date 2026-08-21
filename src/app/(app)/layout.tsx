@@ -3,7 +3,14 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { Header } from "@/components/shell/header";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { getShellContext } from "@/components/shell/shell-context";
-import { CommentsSheetProvider, MediaViewerProvider, PostComposerHost } from "@/components/feed";
+import {
+  CommentsSheetProvider,
+  MediaViewerProvider,
+  PostComposerHost,
+  PostSheetProvider,
+} from "@/components/feed";
+import { AuthSheetProvider } from "@/components/auth/auth-sheet";
+import { availableOAuthProviders } from "@/app/(auth)/oauth-actions";
 import { ViewerTimeZoneProvider } from "@/components/time/viewer-time-zone";
 import { getViewerAccount } from "@/lib/time/viewer-zone";
 import { OfflineBanner } from "@/components/shell/offline-banner";
@@ -58,10 +65,30 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
      * vino resuelta arriba). Ver `components/time/viewer-time-zone.tsx`.
      */
     <ViewerTimeZoneProvider preferred={viewer?.timezone ?? null}>
+    {/* La hoja de autenticación va MÁS AFUERA que todo el resto de los overlays
+        a propósito (2026-08-20): su panel se monta después de `children`, así
+        que su portal queda ÚLTIMO en el body y pinta ENCIMA de cualquier otra
+        hoja abierta. Es la condición para que pedirle sesión a alguien que ya
+        tenía los comentarios abiertos no lo saque de ahí — el pedido literal
+        del cliente: "no te tiene que mover a otra publicación… ahí nomás dentro
+        de pantalla se tiene que fluir sin sacarte del feed".
+
+        `oauthProviders` se resuelve ACÁ (revisión 2026-08-20). Sin la prop, el
+        panel los pedía al abrirse: un round-trip antes de poder dibujar Google
+        y Apple, justo cuando alguien se topó con la puerta y lo único que
+        importa es el camino más corto. `availableOAuthProviders()` no toca ni
+        la DB ni la red — lee dos env vars del servidor— así que resolverla en
+        un layout que ya es Server Component no cuesta nada y lo que ahorra se
+        nota en datos móviles. */}
+    <AuthSheetProvider oauthProviders={await availableOAuthProviders()}>
     {/* Overlays sociales (visor de medios + sheet de comentarios) a nivel shell:
         cualquier card de cualquier página los abre sin remontar nada. */}
     <MediaViewerProvider>
     <CommentsSheetProvider>
+    {/* DENTRO de CommentsSheetProvider, no al revés: la hoja de publicación
+        monta una PostCard real y su botón de comentar busca `useCommentsSheet()`
+        hacia arriba. Invertido, comentar desde la hoja no haría nada. */}
+    <PostSheetProvider>
     {/* Estado de "publicar" a nivel shell (2026-08-13): la tarjeta del feed
         (ComposerTrigger, adentro de `children`) y el "+" de BottomNav son dos
         disparadores del MISMO menú — antes el "+" navegaba a /feed?crear=… y
@@ -106,8 +133,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <InstallPrompt />
     </div>
     </PostComposerHost>
+    </PostSheetProvider>
     </CommentsSheetProvider>
     </MediaViewerProvider>
+    </AuthSheetProvider>
     </ViewerTimeZoneProvider>
   );
 }

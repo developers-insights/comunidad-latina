@@ -3,13 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { CardVideo } from "./card-video";
 import { CardLikeProvider } from "./card-like-context";
-import type { PostMusicView } from "./helpers";
+import { CardMediaProvider } from "./card-media-context";
+import { PREMIUM_DETAIL_MAX_SECONDS } from "@/lib/media/video-policy";
+import type { PostMediaView, PostMusicView } from "./helpers";
 
 /**
  * Gramática táctil del video en el feed (§5 + feedback 2026-07-26): un toque
- * abre el reel a pantalla completa, DOS toques dan me gusta — igual que la
+ * abre el video a pantalla completa, DOS toques dan me gusta — igual que la
  * foto. Acá se testea esa ventana con timers falsos: sin ella, el doble-tap
- * sería indistinguible de dos navegaciones.
+ * sería indistinguible de dos aperturas.
+ *
+ * Desde el 2026-08-20 ese toque NO navega: abre el visor global sobre el mismo
+ * feed ("no te tiene que mover a otra publicación… sin sacarte del feed"). Los
+ * tests de acá abajo son los que impiden que `/videos` vuelva a colarse en el
+ * gesto de la tarjeta.
  *
  * El estado de me gusta se comparte con el resto de la card vía CardLikeProvider
  * (el mismo que monta PostCard), así que el doble-tap escribe en `reactions` por
@@ -18,10 +25,20 @@ import type { PostMusicView } from "./helpers";
 
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 const supa = vi.hoisted(() => ({ insert: vi.fn(), remove: vi.fn() }));
+/**
+ * El visor vive en el layout de la app: acá se espía con qué lo abre la tarjeta.
+ * `available` es mutable a propósito — hay un caso que prueba justamente qué
+ * pasa cuando NO hay provider montado.
+ */
+const viewer = vi.hoisted(() => ({ open: vi.fn(), available: true }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: nav.push }),
   usePathname: () => "/feed",
+}));
+
+vi.mock("./media-viewer", () => ({
+  useMediaViewer: () => ({ open: viewer.open, available: viewer.available }),
 }));
 
 vi.mock("@/lib/supabase/client", () => ({
@@ -63,6 +80,7 @@ function renderCard({
         src="https://cdn.example.com/clip.mp4"
         postId={POST_ID}
         scope="negocios"
+        authorName="Doña Rosa"
         viewCount={viewCount}
       />
     </CardLikeProvider>,
@@ -79,6 +97,8 @@ beforeEach(() => {
   nav.push.mockReset();
   supa.insert.mockReset();
   supa.remove.mockReset();
+  viewer.open.mockReset();
+  viewer.available = true;
   // IntersectionObserver no existe en jsdom: el autoplay no es lo que se testea acá.
   vi.stubGlobal(
     "IntersectionObserver",
@@ -95,27 +115,126 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("CardVideo: un toque abre el reel", () => {
-  it("navega a /videos con el post de arranque y el scope del tab, recién al vencer la ventana", () => {
+describe("CardVideo: un toque abre el video SIN sacarte del feed", () => {
+  it("abre el visor sobre la misma pantalla y no navega a ningún lado", () => {
     renderCard();
     fireEvent.click(tapLayer());
 
-    // Todavía dentro de la ventana de doble-tap: no se navegó.
-    expect(nav.push).not.toHaveBeenCalled();
+    // Todavía dentro de la ventana de doble-tap: no se abrió nada.
+    expect(viewer.open).not.toHaveBeenCalled();
 
     act(() => {
       vi.advanceTimersByTime(250);
     });
 
-    expect(nav.push).toHaveBeenCalledTimes(1);
-    expect(nav.push).toHaveBeenCalledWith(
-      `/videos?start=${POST_ID}&scope=negocios`,
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(viewer.open).toHaveBeenCalledTimes(1);
+    expect(viewer.open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        postId: POST_ID,
+        startIndex: 0,
+        items: [{ kind: "video", url: "https://cdn.example.com/clip.mp4" }],
+        // El encabezado del visor nombra al autor: por este camino también, o
+        // el video de una card diría menos que su propia foto.
+        authorName: "Doña Rosa",
+      }),
     );
+  });
+
+  it("lo que abre es el video COMPLETO, no otra vista previa de 59 s", () => {
+    renderCard();
+    fireEvent.click(tapLayer());
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(viewer.open).toHaveBeenCalledWith(
+      expect.objectContaining({ maxPlaybackSeconds: PREMIUM_DETAIL_MAX_SECONDS }),
+    );
+  });
+
+  it("sigue donde venía: el visor hereda el segundo de la tarjeta, no vuelve a cero", () => {
+    renderCard();
+    const clock = stubMediaClock(videoNode(), 90);
+    clock.seek(12.5);
+
+    fireEvent.click(tapLayer());
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(viewer.open).toHaveBeenCalledWith(
+      expect.objectContaining({ startSeconds: 12.5 }),
+    );
+  });
+
+  it("la tarjeta se calla al abrir y retoma sola al cerrarse el visor", () => {
+    renderCard();
+    const node = videoNode();
+    const pause = vi.spyOn(node, "pause").mockImplementation(() => undefined);
+    const play = vi
+      .spyOn(node, "play")
+      .mockImplementation(() => Promise.resolve());
+
+    fireEvent.click(tapLayer());
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    expect(pause).toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
+
+    // El visor avisa que se cerró (la X, Escape, atrás o el arrastre).
+    const args = viewer.open.mock.calls[0][0] as { onClose?: () => void };
+    act(() => {
+      args.onClose?.();
+    });
+
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it("con las diapositivas del post, abre TODAS y arranca en el video tocado", () => {
+    const items: PostMediaView[] = [
+      { kind: "image", url: "https://cdn.example.com/foto.webp" },
+      { kind: "video", url: "https://cdn.example.com/clip.mp4" },
+    ];
+    render(
+      <CardMediaProvider items={items}>
+        <CardVideo
+          src="https://cdn.example.com/clip.mp4"
+          postId={POST_ID}
+          scope="negocios"
+        />
+      </CardMediaProvider>,
+    );
+    fireEvent.click(tapLayer());
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    // Tocar el video deja llegar a la foto, igual que tocar la foto deja llegar
+    // al video: es el mismo carrusel, no dos visores distintos.
+    expect(viewer.open).toHaveBeenCalledWith(
+      expect.objectContaining({ items, startIndex: 1 }),
+    );
+  });
+
+  it("sin visor montado el toque NO queda muerto: cae al reel de /videos", () => {
+    // `/videos` sigue existiendo y sigue siendo un destino válido; lo que dejó
+    // de ser es el destino del gesto cuando hay visor.
+    viewer.available = false;
+    renderCard();
+    fireEvent.click(tapLayer());
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(viewer.open).not.toHaveBeenCalled();
+    expect(nav.push).toHaveBeenCalledWith(`/videos?start=${POST_ID}&scope=negocios`);
   });
 });
 
 describe("CardVideo: doble toque da me gusta", () => {
-  it("dos toques dentro de la ventana likean y NO navegan", () => {
+  it("dos toques dentro de la ventana likean y NO abren el video", () => {
     renderCard();
     fireEvent.click(tapLayer());
     act(() => {
@@ -129,6 +248,7 @@ describe("CardVideo: doble toque da me gusta", () => {
     });
 
     expect(nav.push).not.toHaveBeenCalled();
+    expect(viewer.open).not.toHaveBeenCalled();
     expect(supa.insert).toHaveBeenCalledTimes(1);
   });
 
@@ -171,7 +291,7 @@ describe("CardVideo: píldora de vistas", () => {
     expect(screen.queryByText(/vistas/)).toBeNull();
   });
 
-  it("el botón de sonido sigue siendo suyo: no abre el reel ni likea", () => {
+  it("el botón de sonido sigue siendo suyo: no abre el video ni likea", () => {
     renderCard();
     fireEvent.click(screen.getByRole("button", { name: /silenciar el video|activar el sonido/i }));
     act(() => {
@@ -179,6 +299,7 @@ describe("CardVideo: píldora de vistas", () => {
     });
 
     expect(nav.push).not.toHaveBeenCalled();
+    expect(viewer.open).not.toHaveBeenCalled();
     expect(supa.insert).not.toHaveBeenCalled();
   });
 });
