@@ -354,9 +354,10 @@ export const COPY = {
 
   inviteCard: {
     title: "Unite a la conversación",
-    body: "Con tu cuenta podés publicar, preguntar y responderle a tus vecinos. Te toma un minuto.",
-    cta: "Crear mi cuenta",
-    secondary: "Ya tengo cuenta",
+    body: "Con tu cuenta podés publicar, preguntar y responderle a tus vecinos.",
+    // El alta de cuentas está en pausa (todavía nadie puede crear una): queda
+    // un solo botón, el de entrar con una cuenta que ya existe.
+    cta: "Entrá a tu cuenta",
   },
 
   post: {

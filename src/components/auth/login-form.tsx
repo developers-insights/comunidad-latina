@@ -60,8 +60,6 @@ const COPY = {
     "No pudimos terminar de crear tu cuenta. No se guardó nada — probá de nuevo en un momento, o sumate con tu email.",
   providerFailed:
     "Ese servicio no pudo confirmarnos quién sos. Probá de nuevo, o entrá con tu email y contraseña.",
-  noAccount: "¿Primera vez por acá?",
-  goRegister: "Sumate a tu comunidad",
 } as const;
 
 /** Los errores que llegan por `?error=` en la URL, con su copy. */
@@ -90,11 +88,6 @@ export interface LoginFormProps {
   onSuccess?: () => void;
   /** Oculta el título y el subtítulo (la hoja pone los suyos en la cabecera). */
   hideHeader?: boolean;
-  /**
-   * Convierte "Sumate a tu comunidad" en un cambio de paso en vez de un enlace
-   * a /registro. Ausente = enlace de siempre.
-   */
-  onGoRegister?: () => void;
 }
 
 export function LoginForm({
@@ -103,7 +96,6 @@ export function LoginForm({
   oauthProviders = [],
   onSuccess,
   hideHeader = false,
-  onGoRegister,
 }: LoginFormProps) {
   const router = useRouter();
   // `safeInternalPath` y no la vieja `safeNextPath`: aquella clasificaba por
@@ -333,26 +325,6 @@ export function LoginForm({
           con contraseña —el caso mayoritario en una app que arrancó sin OAuth—
           no tiene que saltear nada para llegar a lo suyo. */}
       <OAuthButtons providers={oauthProviders} next={destination} />
-
-      <p className="text-center text-sm text-foreground-secondary">
-        {COPY.noAccount}{" "}
-        {onGoRegister ? (
-          <button
-            type="button"
-            onClick={onGoRegister}
-            className="rounded-sm font-semibold text-brand-ink underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-          >
-            {COPY.goRegister}
-          </button>
-        ) : (
-          <Link
-            href="/registro"
-            className="font-semibold text-brand-ink underline-offset-4 hover:underline"
-          >
-            {COPY.goRegister}
-          </Link>
-        )}
-      </p>
     </div>
   );
 }

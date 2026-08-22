@@ -168,7 +168,7 @@ export default async function GuiaDetallePage({ params }: Props) {
           </p>
         </div>
         <Link
-          href="/registro"
+          href="/entrar"
           className={buttonVariants({ variant: "primary", size: "md" })}
         >
           {COPY.guideDetail.ctaButton}

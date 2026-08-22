@@ -22,7 +22,10 @@ export const COPY = {
       `El lugar donde ${gentilicio} que llegan encuentran a su gente y resuelven su vida, con datos verificados.`,
     subhead:
       "Vivienda revisada, guías paso a paso para tus trámites y verificación contra registros oficiales antes de que entregues un peso. Estamos empezando por lo más urgente: que consigas dónde vivir con tranquilidad.",
-    ctaPrimary: "Sumate a tu comunidad",
+    /**
+     * El alta de cuentas está en pausa (todavía nadie puede crear una): el
+     * hero se queda con un solo CTA, el que no depende de tener cuenta.
+     */
     ctaSecondary: "Explorar sin cuenta",
     /** Señales de confianza del hero — hechos verificables, sin métricas infladas. */
     trustSignals: [
@@ -107,7 +110,7 @@ export const COPY = {
     ],
     communityTitle: "Comunidad",
     community: [
-      { label: "Sumate", href: "/registro" },
+      { label: "Entrá", href: "/entrar" },
       { label: "Para negocios", href: "/negocios/presencia" },
     ],
     legalTitle: "Legal",
@@ -156,7 +159,7 @@ export const COPY = {
     ctaTitle: "¿Te sirvió esta guía?",
     ctaBody:
       "En la comunidad hay gente que ya pasó por esto y puede darte una mano — y avisos de vivienda con datos verificados.",
-    ctaButton: "Sumate a tu comunidad",
+    ctaButton: "Entrá a tu comunidad",
     backToGuides: "Todas las guías",
   },
 

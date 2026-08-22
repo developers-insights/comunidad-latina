@@ -314,16 +314,10 @@ export function AssistantChat({ isAnon, initialAnonRemaining }: AssistantChatPro
             </div>
             <div className="flex flex-wrap items-center gap-2.5">
               <Link
-                href="/registro"
+                href="/entrar?next=/asistente"
                 className={buttonVariants({ variant: "primary", size: "sm" })}
               >
                 {COPY.anon.limitCta}
-              </Link>
-              <Link
-                href="/entrar?next=/asistente"
-                className={buttonVariants({ variant: "ghost", size: "sm" })}
-              >
-                {COPY.anon.limitSecondary}
               </Link>
             </div>
           </BezelCard>

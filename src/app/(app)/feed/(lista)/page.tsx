@@ -265,16 +265,10 @@ function ComposerInvite() {
       </div>
       <div className="flex flex-wrap items-center gap-2.5">
         <Link
-          href="/registro"
+          href="/entrar?next=/feed"
           className={buttonVariants({ variant: "primary", size: "sm" })}
         >
           {COPY.inviteCard.cta}
-        </Link>
-        <Link
-          href="/entrar?next=/feed"
-          className={buttonVariants({ variant: "ghost", size: "sm" })}
-        >
-          {COPY.inviteCard.secondary}
         </Link>
       </div>
     </BezelCard>

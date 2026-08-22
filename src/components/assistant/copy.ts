@@ -52,14 +52,15 @@ export const ASSISTANT_COPY = {
       n === 1
         ? "Te queda 1 pregunta de prueba."
         : `Te quedan ${n} preguntas de prueba.`,
-    limitTitle: "Creá tu cuenta para seguir preguntando",
+    limitTitle: "Entrá para seguir preguntando",
     limitBody:
-      "Las primeras preguntas van por casa. Con tu cuenta gratis seguís preguntando sin límite y guardás lo que encuentres.",
-    limitCta: "Crear mi cuenta gratis",
-    limitSecondary: "Ya tengo cuenta",
+      "Las primeras preguntas van por casa. Con tu cuenta seguís preguntando sin límite y guardás lo que encuentres.",
+    // El alta de cuentas está en pausa (todavía nadie puede crear una): queda
+    // un solo botón, el de entrar con una cuenta que ya existe.
+    limitCta: "Entrá a tu cuenta",
     /** Burbuja del asistente cuando el invitado agota sus 3 preguntas. */
     limitBubble:
-      "Me encantaría seguir ayudándote. Creá tu cuenta gratis — tarda menos de un minuto — y seguimos justo donde quedamos.",
+      "Me encantaría seguir ayudándote. Entrá con tu cuenta y seguimos justo donde quedamos.",
   },
 
   errors: {
