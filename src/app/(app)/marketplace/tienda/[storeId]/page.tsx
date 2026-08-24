@@ -3,12 +3,15 @@ import { notFound } from "next/navigation";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { allPhotoUrls, firstPhotoUrl } from "@/components/listings";
 import { InlineMessageCta } from "@/components/listings/inline-message-cta";
+import { ResumenPuntajeCard, fetchResenasDeAviso } from "@/components/resenas";
+import { RESENAS_COPY } from "@/lib/resenas";
 import {
   COPY,
   ProductCard,
   ProductGridSkeleton,
   StoreHeader,
   StoreOffNotice,
+  businessCategoryDisplayLabel,
   formatProductPrice,
   parseProductAttrs,
   type ProductCardModel,
@@ -36,8 +39,9 @@ const fetchStoreById = cache(async (id: string) => {
       // store_verified: espejo público de Presencia Verificada (0039).
       // store_active: espejo público de la membresía de tienda (0048) — la app
       // lee ESTA columna, nunca store_memberships (que la RLS le esconde al
-      // visitante). true = la tienda se muestra.
-      "id, tenant_id, kind, title, area_label, photos, status, created_by, created_at, store_verified, store_active",
+      // visitante). true = la tienda se muestra. `attrs` trae la categoría
+      // (mismo lugar que category/condition de un producto).
+      "id, tenant_id, kind, title, area_label, attrs, photos, status, created_by, created_at, store_verified, store_active",
     )
     .eq("id", id)
     .eq("kind", "business")
@@ -99,6 +103,8 @@ async function TiendaContent({ storeId }: { storeId: string }) {
     { data: productRows, error },
     { count: followerCount },
     { data: myFollow },
+    { data: owner },
+    resenas,
   ] = await Promise.all([
     supabase
       .from("listings")
@@ -125,6 +131,15 @@ async function TiendaContent({ storeId }: { storeId: string }) {
           .eq("target_id", storeId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    // Identidad de quien administra la tienda (fix badge 2026-08-24) — GRATIS,
+    // distinta de `store_verified` (el plan pago). Ver seller-chip.tsx.
+    store.created_by
+      ? supabase.from("profiles").select("identity_verified").eq("id", store.created_by).maybeSingle()
+      : Promise.resolve({ data: null }),
+    // Calificaciones (listing_review_stats, 0093): la tienda ES un listing
+    // kind='business', así que reusa el mismo lector que ya usan Negocios y
+    // Profesionales — sin escribir una consulta nueva para lo mismo.
+    fetchResenasDeAviso(supabase, storeId, user?.id ?? null),
   ]);
 
   if (error) {
@@ -132,6 +147,13 @@ async function TiendaContent({ storeId }: { storeId: string }) {
   }
 
   const verified = store.store_verified;
+  // `parseProductAttrs` es genérico para cualquier `attrs` con la clave
+  // `category` (producto o negocio comparten el mismo nombre de campo) — acá
+  // sólo se usa esa parte; `storeListingId`/`condition`/`fulfillment` no
+  // aplican a una tienda y vuelven vacíos, sin efecto.
+  const categoryLabel = businessCategoryDisplayLabel(parseProductAttrs(store.attrs).category);
+
+  const identityVerified = owner?.identity_verified ?? false;
 
   const storeModel: StoreHeaderModel = {
     id: store.id,
@@ -141,6 +163,8 @@ async function TiendaContent({ storeId }: { storeId: string }) {
     followerCount: followerCount ?? 0,
     initialFollowing: Boolean(myFollow),
     verified,
+    identityVerified,
+    categoryLabel,
   };
 
   const cards: ProductCardModel[] = (productRows ?? []).map((row) => ({
@@ -151,7 +175,7 @@ async function TiendaContent({ storeId }: { storeId: string }) {
     photoUrl: firstPhotoUrl(row.photos),
     // Tocar la foto abre el visor con todas, sin salir de la vidriera.
     photos: allPhotoUrls(row.photos),
-    seller: { kind: "store", name: store.title, storeId: store.id, verified },
+    seller: { kind: "store", name: store.title, storeId: store.id, verified, identityVerified },
   }));
 
   return (
@@ -165,6 +189,18 @@ async function TiendaContent({ storeId }: { storeId: string }) {
       )}
 
       <StoreHeader store={storeModel} />
+
+      {/* Calificaciones (spec cliente) — mismo componente que ya usan Negocios
+          y Profesionales para la MISMA tabla (listing_review_stats, 0093): una
+          tienda es un listing kind='business' como cualquier otro. Sólo el
+          resumen, no la lista completa de reseñas ni el formulario para dejar
+          una — eso sigue viviendo en /negocios/[id] para el mismo aviso. */}
+      <section className="mt-6">
+        <h2 className="mb-2 font-display text-lg font-bold text-foreground">
+          {RESENAS_COPY.titulo}
+        </h2>
+        <ResumenPuntajeCard resumen={resenas.resumen} reparto={resenas.reparto} />
+      </section>
 
       {/* Escribirle a la tienda sin salir de su vidriera. El destinatario es el
           listing kind='business': request_contact resuelve a su dueño. Sin
@@ -219,6 +255,10 @@ function PageSkeleton() {
           <Skeleton className="mt-2 h-4 w-1/3" />
         </div>
         <Skeleton className="h-11 w-40 rounded-full" />
+      </div>
+      <div className="mt-6">
+        <Skeleton className="mb-2 h-6 w-32" />
+        <Skeleton className="h-20 w-full rounded-xl" />
       </div>
       <div className="mt-6">
         <Skeleton className="mb-3 h-6 w-48" />

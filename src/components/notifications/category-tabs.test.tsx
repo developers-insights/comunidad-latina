@@ -7,7 +7,8 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { CATEGORY_META } from "@/lib/notifications/categories";
-import { CategoryTabs, INBOX_PANEL_ID } from "./category-tabs";
+import { INBOX_PANEL_ID } from "@/lib/notifications/href";
+import { CategoryTabs } from "./category-tabs";
 import { COPY } from "./copy";
 
 /**

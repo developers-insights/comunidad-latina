@@ -122,6 +122,10 @@ const BASE: JobCardModel = {
   id: "job-1",
   title: "Niñera para dos nenes, tardes",
   salaryLabel: "US$ 18/hora",
+  // Sin techo cargado, el rango es igual al piso — que es lo que devuelve
+  // `etiquetaDeSalario` cuando `attrs.salary_max` viene vacío (el caso común).
+  salaryRangeLabel: "US$ 18/hora",
+  workMode: null,
   employmentType: "part_time",
   areaLabel: "Washington Heights",
   photoUrl: null,
@@ -179,8 +183,17 @@ describe("JobCard", () => {
   });
 
   it("sin monto cargado dice 'Pago a convenir' en vez de dejar el hueco", () => {
-    render(<JobCard job={{ ...BASE, salaryLabel: null }} />);
+    // Los dos en null y no sólo `salaryLabel`: sin piso cargado
+    // `etiquetaDeSalario` también devuelve null (no hay rango que armar sin
+    // desde dónde). Dejar el rango con valor acá probaría un estado que la
+    // query no puede producir.
+    render(<JobCard job={{ ...BASE, salaryLabel: null, salaryRangeLabel: null }} />);
     expect(screen.getByText(C.salaryToAgree)).toBeTruthy();
+  });
+
+  it("con techo cargado muestra el rango completo, no sólo el piso", () => {
+    render(<JobCard job={{ ...BASE, salaryRangeLabel: "US$ 18 a US$ 22/hora" }} />);
+    expect(screen.getByText("US$ 18 a US$ 22/hora")).toBeTruthy();
   });
 
   it("muestra la jornada del aviso y omite el chip si no la tiene", () => {

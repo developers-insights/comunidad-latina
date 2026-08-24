@@ -1,7 +1,16 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { MagicWand, Megaphone, SealCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { allPhotoUrls, firstNameOf, firstPhotoUrl } from "@/components/listings";
+import {
+  Clock,
+  MagicWand,
+  MapPinLine,
+  Megaphone,
+  SealCheck,
+  Storefront,
+  Trophy,
+} from "@phosphor-icons/react/dist/ssr";
+import { allPhotoUrls, decodeCursor, firstNameOf, firstPhotoUrl } from "@/components/listings";
+import { OfertasPanel, PublicacionesPanel } from "@/components/negocios";
 import {
   ModuleFilterSelect,
   ModuleFilterToggle,
@@ -13,9 +22,11 @@ import {
   BezelCard,
   Chip,
   EmptyState,
+  NavTabs,
   SectionCta,
   SectionHeading,
   buttonVariants,
+  type NavTabItem,
 } from "@/components/ui";
 import { ImpulsosDeOtrasComunidades } from "@/components/boosts";
 import {
@@ -24,43 +35,111 @@ import {
   selectOwnBoosts,
 } from "@/lib/boosts/select";
 import { t } from "@/lib/i18n";
+import { canUseActionButtons } from "@/lib/monetization";
+import { ctaHref } from "@/lib/monetization/href";
+import {
+  estadosDeApertura,
+  estaAbiertoAhora,
+  fetchHorariosDeNegocios,
+} from "@/lib/negocios/horarios";
+import {
+  encodeOfertasCursor,
+  fetchOfertasVigentes,
+  parseOfertasCursor,
+} from "@/lib/negocios/ofertas";
+import { fetchBusinessPostsPage } from "@/lib/negocios/publicaciones";
+import { fetchListingRatings } from "@/lib/profesionales/ratings";
+import type { ResumenPuntaje } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { toTrustProps } from "@/lib/trust/signals";
 import type { Tables } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
-import { BusinessCard, type BusinessCardModel, type OwnerTrust } from "../business-card";
+import {
+  BusinessCard,
+  type BusinessCardModel,
+  type OwnerTrust,
+} from "../business-card";
+import {
+  BUSINESS_TAB_IDS,
+  BUSINESS_TAB_LABELS,
+  businessTabHref,
+  parseBusinessTab,
+} from "../business-tabs";
 import { BUSINESS_CATEGORIES, businessCategoryLabel, businessCategoryOf } from "../categories";
-import { COPY, NegociosSkeleton, SECCION } from "./list-shell";
+import {
+  COPY,
+  DirectorioSkeleton,
+  ListaDePublicacionesSkeleton,
+  SECCION,
+} from "./list-shell";
+import type { AccionRapida } from "@/components/negocios";
 
 export const metadata = { title: "Negocios" };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
+/** Cuántos negocios entran en una pantalla del directorio. */
+const PAGE_SIZE = 30;
+
+/** "Todavía nadie opinó". Constante y no un literal por tarjeta: es UN objeto. */
+const SIN_RESENAS: ResumenPuntaje = { promedio: null, cantidad: 0 };
+
 /**
- * FILTROS DE NEGOCIOS: los que la base puede responder HOY, y sólo esos.
+ * Cuántos se piden cuando hay un filtro que NO se puede expresar en SQL. Ver
+ * `Filters` abajo: los tres filtros nuevos que dependen de horarios,
+ * calificaciones o Trust Score se aplican en memoria sobre este colchón.
+ */
+const OVERFETCH_POSTFILTRO = 90;
+
+/**
+ * FILTROS DE NEGOCIOS — los seis de la spec, y de dónde sale cada uno.
  *
+ * ── RESUELTOS EN SQL ────────────────────────────────────────────────────────
  *   · `q`           → `listings.search`, el índice FTS español de 0004;
  *   · `rubro`       → `attrs.category` (texto libre; el set curado vive en
- *                     ./categories.ts);
+ *                     ./categories.ts) — el "Categorías" de la spec;
  *   · `verificados` → `listings.store_verified`, el espejo público de
- *                     `business_accounts.verified_presence` (0039).
+ *                     `business_accounts.verified_presence` (0039);
+ *   · `cerca`       → `listings.area_label ILIKE %zona%`, con la zona que la
+ *                     persona ya declaró en su perfil. Sin zona declarada el
+ *                     control ni se ofrece: un filtro que no puede filtrar es
+ *                     peor que no tenerlo.
  *
- * LO QUE PIDE LA SPEC Y NO SE CONSTRUYE, con el motivo:
- *   · "Abierto ahora" — no hay horarios de atención en ninguna tabla
- *     (`business_accounts` guarda categoría, plan y verificación; nada de
- *     horarios). Un filtro así necesita una columna nueva y un huso horario
- *     por negocio.
- *   · "Mejor calificados" — no existen reseñas de negocios. La única tabla de
- *     reseñas del esquema es `gig_reviews`, que es de Colaboraciones y no tiene
- *     nada que ver.
- * Los dos quedan anotados como pendientes de base: sin el dato, el filtro
- * devolvería siempre lo mismo y mentiría sobre lo que sabe la app.
+ * ── RESUELTOS EN MEMORIA, SOBRE UN COLCHÓN ──────────────────────────────────
+ *   · `abiertos`     → `listing_hours` + `listing_hours_slots` (0093);
+ *   · `calificacion` → `listing_review_stats` (0093);
+ *   · `destacados`   → `trust_scores.level` del dueño.
+ *
+ * Los tres dependen de datos que la página YA trae en lote para pintar las
+ * tarjetas, así que filtrarlos en memoria no cuesta ninguna consulta extra. Y
+ * ninguno se puede expresar en SQL sin mandar una lista de ids en el
+ * querystring: las lecturas de supabase-js son GET y Kong corta el request line
+ * cerca de los 8 KB — el 414 que ya documentan `videos/queries.ts` y
+ * `lib/profesionales/entity-posts.ts`. "Abierto ahora" además ni siquiera es
+ * expresable: depende de la zona horaria de cada negocio y de tramos que pueden
+ * cruzar la medianoche, cuentas que viven en `lib/horarios` y no en Postgres.
+ *
+ * EL TECHO, DICHO: con alguno de esos tres activo, el resultado sale de los
+ * `OVERFETCH_POSTFILTRO` negocios más recientes que pasan los filtros de SQL. Es
+ * un techo real y es el precio de no romper el querystring; con el volumen de
+ * una comunidad (decenas a cientos de comercios) cubre el catálogo entero.
+ *
+ * ⚠️ NOTA PARA QUIEN LEA ESTO DESPUÉS: hasta el 2026-08 acá había un comentario
+ * que decía que "Abierto ahora" y "Mejor calificados" NO se podían construir
+ * porque ninguna tabla guardaba horarios ni reseñas de negocios. Eso dejó de ser
+ * cierto con la migración 0093, que creó las cuatro tablas. El comentario
+ * sobrevivió a la migración y se leía como un motivo vigente — se borró.
  */
 interface Filters {
   q: string;
   rubro: string;
   verificados: boolean;
+  cerca: boolean;
+  abiertos: boolean;
+  destacados: boolean;
+  /** "" | "4" | "3" — puntaje promedio MÍNIMO. */
+  calificacion: string;
 }
 
 function firstValue(value: string | string[] | undefined): string {
@@ -68,19 +147,56 @@ function firstValue(value: string | string[] | undefined): string {
 }
 
 function parseFilters(sp: Record<string, string | string[] | undefined>): Filters {
+  const calificacion = firstValue(sp.calificacion);
   return {
     q: sanitizeSearchQuery(firstValue(sp.q)),
     // Sin validar contra el set curado: `attrs.category` es texto libre y un
     // rubro fuera de la lista simplemente no devuelve filas.
     rubro: firstValue(sp.rubro).slice(0, 40),
     verificados: firstValue(sp.verificados) === "1",
+    cerca: firstValue(sp.cerca) === "1",
+    abiertos: firstValue(sp.abiertos) === "1",
+    destacados: firstValue(sp.destacados) === "1",
+    calificacion: calificacion === "4" || calificacion === "3" ? calificacion : "",
   };
+}
+
+function hayFiltros(filters: Filters): boolean {
+  return Boolean(
+    filters.q ||
+      filters.rubro ||
+      filters.verificados ||
+      filters.cerca ||
+      filters.abiertos ||
+      filters.destacados ||
+      filters.calificacion,
+  );
+}
+
+/** Los que la base no puede responder sola. Ver el docblock de `Filters`. */
+function hayPostFiltros(filters: Filters): boolean {
+  return filters.abiertos || filters.destacados || Boolean(filters.calificacion);
 }
 
 const CATEGORY_OPTIONS: FilterOption[] = [
   { value: "", label: t("sections", "businessCategoryAny") },
   ...BUSINESS_CATEGORIES.map((option) => ({ value: option.value, label: option.label })),
 ];
+
+const RATING_OPTIONS: FilterOption[] = [
+  { value: "", label: COPY.filtroCalificacionCualquiera },
+  { value: "4", label: COPY.filtroCalificacionCuatro },
+  { value: "3", label: COPY.filtroCalificacionTres },
+];
+
+/**
+ * La zona del perfil, lista para un `ILIKE`. `%` y `_` son comodines y `\` es el
+ * escape: una zona escrita como "Corona %" tiene que buscar ese texto, no todo.
+ * Se recorta además a 60 caracteres — un `area_label` es un barrio, no un ensayo.
+ */
+function paraIlike(areaLabel: string): string {
+  return areaLabel.trim().slice(0, 60).replace(/[\\%_]/g, (char) => `\\${char}`);
+}
 
 /** Solo estas columnas de `trust_scores` alimentan el badge (over-fetch §perf). */
 type OwnerTrustRow = Pick<Tables<"trust_scores">, "score" | "level" | "signals">;
@@ -104,130 +220,22 @@ function buildOwnerTrust(
 }
 
 export default async function NegociosPage({ searchParams }: { searchParams: SearchParams }) {
-  const filters = parseFilters(await searchParams);
+  const sp = await searchParams;
+  const tab = parseBusinessTab(firstValue(sp.t));
+  const filters = parseFilters(sp);
+  const postsCursor = decodeCursor(firstValue(sp.pcursor) || undefined);
+  const ofertasCursor = parseOfertasCursor(firstValue(sp.ocursor) || undefined);
 
-  // Streaming (§5.2): el shell + banners se pintan ya; el listado (que depende de
-  // la DB) llega por Suspense sin bloquear el resto de la página. La key remonta
-  // el Suspense en cada cambio de filtro para que vuelva el skeleton.
-  return (
-    <Suspense key={JSON.stringify(filters)} fallback={<NegociosSkeleton />}>
-      <NegociosContent filters={filters} />
-    </Suspense>
-  );
-}
+  const tabItems: NavTabItem[] = BUSINESS_TAB_IDS.map((id) => ({
+    id,
+    label: BUSINESS_TAB_LABELS[id],
+    href: businessTabHref(id),
+  }));
 
-// ---------------------------------------------------------------------------
-// Contenido (streamed): datos reales con RLS del usuario
-// ---------------------------------------------------------------------------
-
-async function NegociosContent({ filters }: { filters: Filters }) {
-  // createClient() NO hace red (solo lee cookies): lo creamos primero y así
-  // solapamos el round-trip a DB de getTenant() con el de Auth (getUser()).
-  const supabase = await createClient();
-  const [
-    tenant,
-    {
-      data: { user },
-    },
-  ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
-
-  const LISTING_COLUMNS =
-    "id, title, description, area_label, attrs, photos, publisher_name, created_by, published_at, created_at, store_verified";
-
-  let query = supabase
-    .from("listings")
-    .select(LISTING_COLUMNS)
-    .eq("tenant_id", tenant.id)
-    .eq("kind", "business")
-    .eq("status", "published");
-
-  if (filters.q) {
-    // Mismo índice FTS que /propiedades y /marketplace (listings.search, 0004).
-    query = query.textSearch("search", filters.q, { type: "websearch", config: "spanish" });
-  }
-  // `attrs->>category` y no `attrs->category`: `->>` devuelve TEXTO, que es lo
-  // que se compara. Con `->` la comparación sería contra un json y `"belleza"`
-  // (con comillas) nunca sería igual a `belleza`.
-  if (filters.rubro) query = query.eq("attrs->>category", filters.rubro);
-  if (filters.verificados) query = query.eq("store_verified", true);
-
-  const { data: negocios } = await query
-    .order("published_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(30);
-
-  const rows = negocios ?? [];
-  const filtering = Boolean(filters.q || filters.rubro || filters.verificados);
-
-  // -------------------------------------------------------------------------
-  // Boost (§7): mismo patrón que /propiedades — los negocios con boost activo
-  // van primero, SIEMPRE con el chip "Patrocinado" (misma palabra que
-  // vivienda/feed/reel; una divulgación que cambia de nombre según la pantalla
-  // deja de leerse como divulgación). A diferencia de vivienda, negocios no
-  // pagina por cursor (trae hasta 30 de una), así que el boost corre siempre
-  // y no solo "en la primera página". Pagar visibilidad no toca Trust Score
-  // ni `store_verified`.
-  // -------------------------------------------------------------------------
-  //
-  // ALCANCE GEOGRÁFICO (0092): un impulso `local` sólo ocupa lugar para quien
-  // está en su zona; `nacional` y `global`, para toda la comunidad. Negocios no
-  // tiene filtro de zona, así que la zona del espectador sale de su perfil.
-  let boostedExtra: typeof rows = [];
-  const sinFiltros = !filters.q && !filters.rubro && !filters.verificados;
-
-  const viewer = await resolveViewerGeo(supabase, {
-    tenantId: tenant.id,
-    userId: user?.id ?? null,
-  });
-  const placement = await selectOwnBoosts(supabase, { tenantId: tenant.id, viewer });
-  const boostedIds = placement.listingIds;
-  // Se sirvieron: se cuentan (0092). Best-effort y ruidoso ante la falla.
-  await recordBoostImpressions(placement.boostIds);
-
-  // Destacados que no entraron en las 30 filas de la query principal: solo se
-  // inyectan en la vista SIN filtros — con filtros activos jamás se cuela un
-  // resultado que no matchea (un negocio patrocinado de otro rubro no entra).
-  const missingIds = [...boostedIds].filter((id) => !rows.some((row) => row.id === id));
-  if (sinFiltros && missingIds.length > 0) {
-    const { data: extra } = await supabase
-      .from("listings")
-      .select(LISTING_COLUMNS)
-      .eq("tenant_id", tenant.id)
-      .eq("kind", "business")
-      .eq("status", "published")
-      .in("id", missingIds);
-    boostedExtra = extra ?? [];
-  }
-
-  // Boosted-first estable: destacados arriba, el resto en su orden natural.
-  const orderedRows = [
-    ...boostedExtra,
-    ...rows.filter((row) => boostedIds.has(row.id)),
-    ...rows.filter((row) => !boostedIds.has(row.id)),
-  ];
-
-  // Trust Score del dueño (si el negocio tiene dueño con score computado).
-  const ownerIds = Array.from(
-    new Set(orderedRows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
-  );
-  const trustByOwner = new Map<string, OwnerTrustRow>();
-  const nameByOwner = new Map<string, string>();
-  const verifiedByOwner = new Map<string, boolean>();
-  if (ownerIds.length > 0) {
-    const [{ data: scores }, { data: owners }] = await Promise.all([
-      supabase
-        .from("trust_scores")
-        .select("profile_id, score, level, signals")
-        .in("profile_id", ownerIds),
-      supabase.from("profiles").select("id, display_name, identity_verified").in("id", ownerIds),
-    ]);
-    for (const score of scores ?? []) trustByOwner.set(score.profile_id, score);
-    for (const owner of owners ?? []) {
-      nameByOwner.set(owner.id, owner.display_name);
-      verifiedByOwner.set(owner.id, owner.identity_verified ?? false);
-    }
-  }
-
+  // Cabecera y burbuja de publicar son comunes a las tres pestañas, así que
+  // viven ACÁ arriba (sync, sin Suspense): ni se duplican en cada fallback ni
+  // parpadean al cambiar de pestaña. Streaming (§5.2): el contenido de cada
+  // pestaña —que depende de la DB— llega por Suspense sin bloquear el resto.
   return (
     <>
       <SectionHeading
@@ -247,6 +255,213 @@ async function NegociosContent({ filters }: { filters: Filters }) {
         className="mt-3"
       />
 
+      <NavTabs items={tabItems} active={tab} label={COPY.tabsLabel} className="mb-1 mt-5" />
+
+      {tab === "publicaciones" ? (
+        <Suspense
+          key={postsCursor ? postsCursor.id : "publicaciones"}
+          fallback={<ListaDePublicacionesSkeleton />}
+        >
+          <PublicacionesContent cursor={postsCursor} />
+        </Suspense>
+      ) : tab === "ofertas" ? (
+        <Suspense
+          key={ofertasCursor ? ofertasCursor.postId : "ofertas"}
+          fallback={<ListaDePublicacionesSkeleton count={2} />}
+        >
+          <OfertasContent cursor={ofertasCursor} />
+        </Suspense>
+      ) : (
+        <Suspense key={JSON.stringify(filters)} fallback={<DirectorioSkeleton />}>
+          <NegociosContent filters={filters} />
+        </Suspense>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pestaña "Negocios": el directorio (datos reales con RLS del usuario)
+// ---------------------------------------------------------------------------
+
+async function NegociosContent({ filters }: { filters: Filters }) {
+  // createClient() NO hace red (solo lee cookies): lo creamos primero y así
+  // solapamos el round-trip a DB de getTenant() con el de Auth (getUser()).
+  const supabase = await createClient();
+  const [
+    tenant,
+    {
+      data: { user },
+    },
+  ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
+
+  // La zona de quien mira se resuelve UNA vez y sirve para dos cosas: el filtro
+  // "Cerca de mí" y el alcance geográfico de los impulsos (0092). Antes se
+  // pedía después de la query principal; subirla acá la vuelve un dato del
+  // request y no un paso más en la cadena.
+  const viewer = await resolveViewerGeo(supabase, {
+    tenantId: tenant.id,
+    userId: user?.id ?? null,
+  });
+  const zonaPropia = viewer.areaLabel?.trim() || null;
+  // "Cerca de mí" sólo filtra si hay zona declarada. Sin zona el chip no se
+  // dibuja (abajo), y si alguien fuerza `?cerca=1` en la URL, se ignora en vez
+  // de devolver cero resultados sin explicación.
+  const cercaActivo = filters.cerca && Boolean(zonaPropia);
+
+  const LISTING_COLUMNS =
+    "id, title, description, area_label, attrs, photos, publisher_name, created_by, published_at, created_at, store_verified, tier, cta_phone, cta_address";
+
+  const postFiltrando = hayPostFiltros(filters);
+  const limite = postFiltrando ? OVERFETCH_POSTFILTRO : PAGE_SIZE;
+
+  let query = supabase
+    .from("listings")
+    .select(LISTING_COLUMNS)
+    .eq("tenant_id", tenant.id)
+    .eq("kind", "business")
+    .eq("status", "published");
+
+  if (filters.q) {
+    // Mismo índice FTS que /propiedades y /marketplace (listings.search, 0004).
+    query = query.textSearch("search", filters.q, { type: "websearch", config: "spanish" });
+  }
+  // `attrs->>category` y no `attrs->category`: `->>` devuelve TEXTO, que es lo
+  // que se compara. Con `->` la comparación sería contra un json y `"belleza"`
+  // (con comillas) nunca sería igual a `belleza`.
+  if (filters.rubro) query = query.eq("attrs->>category", filters.rubro);
+  if (filters.verificados) query = query.eq("store_verified", true);
+  if (cercaActivo && zonaPropia) {
+    query = query.ilike("area_label", `%${paraIlike(zonaPropia)}%`);
+  }
+
+  const { data: negocios } = await query
+    .order("published_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limite);
+
+  const rows = negocios ?? [];
+  const filtering = hayFiltros(filters);
+
+  // -------------------------------------------------------------------------
+  // Boost (§7): mismo patrón que /propiedades — los negocios con boost activo
+  // van primero, SIEMPRE con el chip "Patrocinado" (misma palabra que
+  // vivienda/feed/reel; una divulgación que cambia de nombre según la pantalla
+  // deja de leerse como divulgación). A diferencia de vivienda, negocios no
+  // pagina por cursor, así que el boost corre siempre y no solo "en la primera
+  // página". Pagar visibilidad no toca Trust Score ni `store_verified`.
+  // -------------------------------------------------------------------------
+  //
+  // ALCANCE GEOGRÁFICO (0092): un impulso `local` sólo ocupa lugar para quien
+  // está en su zona; `nacional` y `global`, para toda la comunidad.
+  let boostedExtra: typeof rows = [];
+  const sinFiltros = !filtering;
+
+  const placement = await selectOwnBoosts(supabase, { tenantId: tenant.id, viewer });
+  const boostedIds = placement.listingIds;
+  // Se sirvieron: se cuentan (0092). Best-effort y ruidoso ante la falla.
+  await recordBoostImpressions(placement.boostIds);
+
+  // Impulsados que no entraron en la query principal: solo se inyectan en la
+  // vista SIN filtros — con filtros activos jamás se cuela un resultado que no
+  // matchea (un negocio patrocinado de otro rubro, o cerrado cuando se pidió
+  // "abiertos ahora", no entra).
+  const missingIds = [...boostedIds].filter((id) => !rows.some((row) => row.id === id));
+  if (sinFiltros && missingIds.length > 0) {
+    const { data: extra } = await supabase
+      .from("listings")
+      .select(LISTING_COLUMNS)
+      .eq("tenant_id", tenant.id)
+      .eq("kind", "business")
+      .eq("status", "published")
+      .in("id", missingIds);
+    boostedExtra = extra ?? [];
+  }
+
+  // Boosted-first estable: impulsados arriba, el resto en su orden natural.
+  const orderedRows = [
+    ...boostedExtra,
+    ...rows.filter((row) => boostedIds.has(row.id)),
+    ...rows.filter((row) => !boostedIds.has(row.id)),
+  ];
+
+  // -------------------------------------------------------------------------
+  // TODO lo que la tarjeta necesita, EN LOTE. Cuatro consultas para N negocios,
+  // nunca cuatro por negocio: dueños + Trust Score, calificaciones y horarios.
+  // -------------------------------------------------------------------------
+  const listingIds = orderedRows.map((row) => row.id);
+  const ownerIds = Array.from(
+    new Set(orderedRows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
+  );
+
+  const [scoresResult, ownersResult, ratings, horarios] = await Promise.all([
+    ownerIds.length > 0
+      ? supabase
+          .from("trust_scores")
+          .select("profile_id, score, level, signals")
+          .in("profile_id", ownerIds)
+      : Promise.resolve({ data: [] as null | { profile_id: string }[] }),
+    ownerIds.length > 0
+      ? supabase.from("profiles").select("id, display_name, identity_verified").in("id", ownerIds)
+      : Promise.resolve({ data: [] as null | { id: string }[] }),
+    // Calificaciones: `listing_review_stats` (0093), UN `.in(...)` para toda la
+    // página. La función es la del módulo hermano de Profesionales — la lectura
+    // es idéntica y duplicarla habría sido tener dos versiones del mismo `.in()`.
+    fetchListingRatings(supabase, listingIds),
+    // Horarios: dos consultas por lote (cabecera + tramos), nunca dos por card.
+    fetchHorariosDeNegocios(supabase, listingIds),
+  ]);
+
+  const trustByOwner = new Map<string, OwnerTrustRow>();
+  const nameByOwner = new Map<string, string>();
+  const verifiedByOwner = new Map<string, boolean>();
+  const levelByOwner = new Map<string, string | null>();
+  for (const score of (scoresResult.data ?? []) as Array<
+    OwnerTrustRow & { profile_id: string }
+  >) {
+    trustByOwner.set(score.profile_id, score);
+    levelByOwner.set(score.profile_id, (score.level as string | null) ?? null);
+  }
+  for (const owner of (ownersResult.data ?? []) as Array<{
+    id: string;
+    display_name: string;
+    identity_verified: boolean | null;
+  }>) {
+    nameByOwner.set(owner.id, owner.display_name);
+    verifiedByOwner.set(owner.id, owner.identity_verified ?? false);
+  }
+
+  // El instante es UNO para toda la página: con `new Date()` por tarjeta, dos
+  // negocios con el mismo horario podrían quedar uno "abierto" y otro "cerrado"
+  // por el milisegundo en que se los evaluó.
+  const ahora = new Date();
+  const aperturas = estadosDeApertura(horarios, ahora);
+
+  // -------------------------------------------------------------------------
+  // Los tres filtros que la base no puede responder (ver `Filters`).
+  // -------------------------------------------------------------------------
+  const minimoPuntaje = filters.calificacion ? Number(filters.calificacion) : null;
+  const visibles = orderedRows
+    .filter((row) => {
+      if (filters.abiertos && !estaAbiertoAhora(aperturas.get(row.id))) return false;
+      if (minimoPuntaje !== null) {
+        const resumen = ratings.get(row.id);
+        // Sin reseñas NO entra en "4 estrellas o más": no se sabe nada de ese
+        // negocio, que es distinto de que esté bien puntuado.
+        if (!resumen || resumen.cantidad === 0 || (resumen.promedio ?? 0) < minimoPuntaje) {
+          return false;
+        }
+      }
+      if (filters.destacados) {
+        const level = row.created_by ? levelByOwner.get(row.created_by) : null;
+        if (level !== "destacado") return false;
+      }
+      return true;
+    })
+    .slice(0, PAGE_SIZE);
+
+  return (
+    <>
       {/* Buscador y filtros ARRIBA de los dos banners: los banners son
           promoción y el buscador es la tarea. Quien entra a /negocios busca un
           negocio; enterrarle el campo debajo de dos tarjetas de venta es
@@ -263,20 +478,63 @@ async function NegociosContent({ filters }: { filters: Filters }) {
             options={CATEGORY_OPTIONS}
             className="flex-1"
           />
+          <ModuleFilterSelect
+            param="calificacion"
+            label={COPY.filtroCalificacionLabel}
+            options={RATING_OPTIONS}
+            className="flex-1"
+          />
+        </div>
+        {/* Los cuatro sí/no en una fila que se desliza. A 375px no entran los
+            cuatro a la vez y colapsarlos en un "Más" escondería justo lo que el
+            cliente pidió ver. El scroll es HORIZONTAL y local a esta fila: la
+            página nunca se mueve de costado (§5). */}
+        <div
+          role="group"
+          aria-label={COPY.filtrosLabel}
+          className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]"
+        >
+          {/* Sin zona declarada NO se dibuja: un filtro que no puede filtrar es
+              un botón que no hace nada. Quien quiera usarlo la carga en su
+              perfil, que es donde vive el dato. */}
+          {zonaPropia && (
+            <ModuleFilterToggle
+              param="cerca"
+              label={COPY.filtroCerca}
+              icon={<MapPinLine />}
+            />
+          )}
           <ModuleFilterToggle
             param="verificados"
             label={t("sections", "businessVerifiedFilter")}
             icon={<SealCheck weight="fill" />}
           />
+          <ModuleFilterToggle param="abiertos" label={COPY.filtroAbiertos} icon={<Clock />} />
+          <ModuleFilterToggle
+            param="destacados"
+            label={COPY.filtroReputacion}
+            icon={<Trophy />}
+          />
         </div>
+        {/* La nota aparece SOLO con el filtro puesto, y dice exactamente qué
+            ordena. "Destacado" es el nivel más alto del Trust Score —reputación
+            ganada— y la app nunca lo usa para pauta: lo pago se llama
+            "Patrocinado" y se marca en la tarjeta. Sin esta línea, "destacados"
+            se lee como "los que pagaron". */}
+        {filters.destacados && (
+          <p className="text-xs leading-relaxed text-foreground-muted">
+            {COPY.filtroReputacionNota}
+          </p>
+        )}
+        {filters.cerca && zonaPropia && (
+          <p className="text-xs leading-relaxed text-foreground-muted">
+            {COPY.filtroCercaNota(zonaPropia)}
+          </p>
+        )}
       </div>
 
       {/* Banner premium para dueños de negocio → Presencia Verificada (§7) */}
-      <BezelCard
-        variant="featured"
-        className="mt-4"
-        coreClassName="flex flex-col gap-3 p-5"
-      >
+      <BezelCard variant="featured" className="mt-4" coreClassName="flex flex-col gap-3 p-5">
         <div className="flex items-start gap-3">
           <span
             aria-hidden="true"
@@ -313,9 +571,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
               <p className="font-display text-base font-semibold text-foreground">
                 {COPY.copilotoTitulo}
               </p>
-              <p className="mt-0.5 text-sm text-foreground-secondary">
-                {COPY.copilotoTexto}
-              </p>
+              <p className="mt-0.5 text-sm text-foreground-secondary">{COPY.copilotoTexto}</p>
             </div>
           </div>
           <Link
@@ -332,7 +588,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
           Si no hay ninguno, el componente no renderiza nada. */}
       {!filtering && <ImpulsosDeOtrasComunidades className="mt-6" kind="business" />}
 
-      {orderedRows.length === 0 ? (
+      {visibles.length === 0 ? (
         filtering ? (
           /* Buscó y no hay ⇒ mensaje de búsqueda, no el de sección vacía. Decir
              "todavía no hay negocios publicados" cuando en realidad hay pero
@@ -369,7 +625,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
         )
       ) : (
         <div className="mt-6 flex flex-col gap-4">
-          {orderedRows.map((negocio) => {
+          {visibles.map((negocio) => {
             const ownerName = negocio.created_by
               ? (nameByOwner.get(negocio.created_by) ?? negocio.publisher_name ?? "")
               : "";
@@ -382,6 +638,26 @@ async function NegociosContent({ filters }: { filters: Filters }) {
                 )
               : null;
 
+            // "Llamar" y "Cómo llegar" pasan por los MISMOS dos filtros que en
+            // la ficha: plan con botones habilitados (son una feature paga de la
+            // 0048) y valor cargado y saneado. Sin los dos, el botón no existe —
+            // ni gris, ni con candado, ni vendiendo.
+            const acciones: AccionRapida[] = [];
+            if (canUseActionButtons(negocio.tier)) {
+              const telefono = ctaHref("phone", negocio.cta_phone);
+              if (telefono) {
+                acciones.push({ kind: "phone", href: telefono.href, display: telefono.display });
+              }
+              const direccion = ctaHref("directions", negocio.cta_address);
+              if (direccion) {
+                acciones.push({
+                  kind: "directions",
+                  href: direccion.href,
+                  display: direccion.display,
+                });
+              }
+            }
+
             const business: BusinessCardModel = {
               id: negocio.id,
               title: negocio.title,
@@ -390,11 +666,21 @@ async function NegociosContent({ filters }: { filters: Filters }) {
               areaLabel: negocio.area_label,
               photoUrl: firstPhotoUrl(negocio.photos),
               // Tocar la foto abre el visor con todas; "Ver negocio" sigue
-              // abriendo la hoja (feedback 2026-07-26).
+              // abriendo la ficha (feedback 2026-07-26).
               photos: allPhotoUrls(negocio.photos),
               ownerTrust,
               publisherName: negocio.publisher_name,
               storeVerified: negocio.store_verified,
+              // Sin fila en `listing_review_stats` = todavía nadie opinó. Se
+              // pasa `promedio: null`, NUNCA un 0: "sin reseñas" y "mal
+              // puntuado" no son lo mismo y la tarjeta los dice distinto.
+              rating: ratings.get(negocio.id) ?? SIN_RESENAS,
+              apertura: aperturas.get(negocio.id) ?? null,
+              acciones,
+              puedeRecibirMensajes: Boolean(
+                negocio.created_by && negocio.created_by !== user?.id,
+              ),
+              isLoggedIn: Boolean(user),
             };
 
             return boostedIds.has(business.id) ? (
@@ -424,5 +710,94 @@ async function NegociosContent({ filters }: { filters: Filters }) {
         </div>
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pestaña "Publicaciones": el newsfeed comercial
+// ---------------------------------------------------------------------------
+
+async function PublicacionesContent({
+  cursor,
+}: {
+  cursor: { createdAt: string; id: string } | null;
+}) {
+  const supabase = await createClient();
+  const [
+    tenant,
+    {
+      data: { user },
+    },
+  ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
+
+  const page = await fetchBusinessPostsPage(supabase, {
+    tenantId: tenant.id,
+    viewerId: user?.id ?? null,
+    cursor,
+  });
+
+  return (
+    <PublicacionesPanel
+      className="mt-6"
+      posts={page.items}
+      tenantId={tenant.id}
+      viewerId={user?.id ?? null}
+      nextHref={page.nextCursor ? `/negocios?t=publicaciones&pcursor=${page.nextCursor}` : null}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pestaña "Ofertas": `post_offers ⋈ posts` (0106)
+// ---------------------------------------------------------------------------
+
+async function OfertasContent({
+  cursor,
+}: {
+  cursor: { expiresAt: string; postId: string } | null;
+}) {
+  const supabase = await createClient();
+  const [
+    tenant,
+    {
+      data: { user },
+    },
+  ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
+
+  const page = await fetchOfertasVigentes(supabase, {
+    tenantId: tenant.id,
+    ahora: new Date(),
+    cursor,
+  });
+
+  // Qué ya guardó quien mira: UNA consulta para toda la página, con los ids que
+  // ya están en memoria. Sin esto, cada botón "Guardar" nacería en "no guardada"
+  // aunque la persona la hubiera guardado ayer desde el feed.
+  const guardadas = new Set<string>();
+  if (user && page.items.length > 0) {
+    const { data } = await supabase
+      .from("saves")
+      .select("subject_id")
+      .eq("profile_id", user.id)
+      .eq("subject_kind", "post")
+      .in(
+        "subject_id",
+        page.items.map((oferta) => oferta.postId),
+      );
+    for (const fila of data ?? []) guardadas.add(fila.subject_id);
+  }
+
+  return (
+    <OfertasPanel
+      className="mt-6"
+      ofertas={page.items}
+      viewerId={user?.id ?? null}
+      guardadas={guardadas}
+      nextHref={
+        page.nextCursor
+          ? `/negocios?t=ofertas&ocursor=${encodeURIComponent(encodeOfertasCursor(page.nextCursor))}`
+          : null
+      }
+    />
   );
 }

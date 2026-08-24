@@ -116,6 +116,14 @@ export interface ComposerSheetProps {
    */
   finishingLabel?: string | null;
   isPending: boolean;
+  /**
+   * Apaga Publicar por un motivo que NO es "falta contenido": hoy, que el
+   * servidor todavía no dijo con qué firmas se puede publicar (0023). No es lo
+   * mismo que `isPending` —no hay nada en vuelo que mostrar— así que el botón
+   * se apaga sin spinner, y quien lo apaga es responsable de decir por qué en
+   * la hoja (lo hace `autoriaSlot`). Un botón apagado y mudo es un botón roto.
+   */
+  publishBlocked?: boolean;
   onPublish: () => void;
   /**
    * RANURAS PARA OTROS DOS FRENTES (contrato, no un extra). "Etiquetar
@@ -129,6 +137,20 @@ export interface ComposerSheetProps {
    */
   tagSlot?: React.ReactNode;
   musicSlot?: React.ReactNode;
+  /**
+   * A NOMBRE DE QUIÉN SALE ESTA PUBLICACIÓN (`posts.entity_listing_id`, 0023).
+   *
+   * Va PRIMERO, arriba de todo, y no es una preferencia de maquetación: quien
+   * tiene un negocio o una ficha profesional necesita ver con qué nombre va a
+   * salir ANTES de escribir, no después de publicar. Debajo del pie sería
+   * exactamente igual de cierto y llegaría igual de tarde.
+   *
+   * `undefined` = no hay nada que decir (la persona sólo tiene su perfil) y no
+   * se pinta ni el espacio — mismo contrato que `tagSlot` y `musicSlot`. Lo
+   * llena `PostComposerHost`, que es quien sabe con qué firmas se puede
+   * publicar; esta hoja sigue sin conocer la base de datos.
+   */
+  autoriaSlot?: React.ReactNode;
 }
 
 /**
@@ -413,9 +435,11 @@ export function ComposerSheet({
   bakingProgress = null,
   finishingLabel = null,
   isPending,
+  publishBlocked = false,
   onPublish,
   tagSlot,
   musicSlot,
+  autoriaSlot,
 }: ComposerSheetProps) {
   const isQuestion = mode === "question";
   const isText = mode === "text";
@@ -471,7 +495,8 @@ export function ComposerSheet({
    * que la action rechaza, la persona vería un error sin entender por qué.
    */
   const bodyOk = trimmed.length === 0 ? !exemptFromMedia : trimmed.length >= 2;
-  const canPublish = bodyOk && !isPending && (exemptFromMedia || hasMedia);
+  const canPublish =
+    bodyOk && !isPending && !publishBlocked && (exemptFromMedia || hasMedia);
   const bodyPlaceholder = isQuestion
     ? COPY.composer.compose.questionPlaceholder
     : isText
@@ -527,6 +552,10 @@ export function ComposerSheet({
               PreviewFrame). Todo lo demás va `shrink-0` — el campo de texto y el
               pie no se achican para hacerle lugar a una maqueta. */}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-4 pt-3">
+            {/* CON QUÉ NOMBRE VA A SALIR — lo primero de la hoja, arriba del
+                medio y del pie. Ver el docblock de `autoriaSlot`. */}
+            {autoriaSlot && <div className="mb-3 shrink-0">{autoriaSlot}</div>}
+
             {isQuestion ? (
               <>
                 {/* La pregunta ya se ve como va a salir: mismo componente que el

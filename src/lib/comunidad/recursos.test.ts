@@ -49,7 +49,7 @@ describe("isSafeHttpUrl", () => {
 });
 
 describe("isResourceTopic", () => {
-  it("acepta los nueve temas conocidos, incluido voluntariado (0099)", () => {
+  it("acepta los diez temas conocidos, incluidos voluntariado (0099) y acopio (0105)", () => {
     for (const topic of RESOURCE_TOPICS) {
       expect(isResourceTopic(topic)).toBe(true);
     }
@@ -58,6 +58,7 @@ describe("isResourceTopic", () => {
   it("rechaza cualquier otra cosa, incluido lo que puede llegar por un ?tema= a mano", () => {
     expect(isResourceTopic("salud-mental")).toBe(false);
     expect(isResourceTopic("VOLUNTARIADO")).toBe(false);
+    expect(isResourceTopic("ACOPIO")).toBe(false);
     expect(isResourceTopic("")).toBe(false);
     expect(isResourceTopic(null)).toBe(false);
     expect(isResourceTopic(undefined)).toBe(false);
@@ -165,7 +166,7 @@ describe("groupResourcesByTopic", () => {
     expect(groupResourcesByTopic([]).length).toBe(0);
   });
 
-  it("voluntariado (0099) agrupa igual que cualquier otro tema, y va último", () => {
+  it("voluntariado (0099) agrupa igual que cualquier otro tema, y va después de las urgencias", () => {
     const conVoluntarios = [
       ...recursos,
       toCommunityResource(
@@ -174,7 +175,19 @@ describe("groupResourcesByTopic", () => {
     ];
     const temas = groupResourcesByTopic(conVoluntarios).map((grupo) => grupo.topic);
     expect(temas).toEqual(["salud", "comida", "voluntariado"]);
-    expect(RESOURCE_TOPICS.indexOf("voluntariado")).toBe(RESOURCE_TOPICS.length - 1);
+  });
+
+  it("acopio (0105) agrupa igual que cualquier otro tema, y va último de todos — después de voluntariado", () => {
+    const conAcopio = [
+      ...recursos,
+      toCommunityResource(
+        fila({ id: "4", topic: "voluntariado", name: "Comedor Esperanza — voluntariado" }),
+      )!,
+      toCommunityResource(fila({ id: "5", topic: "acopio", name: "Centro de Acopio Ejemplo" }))!,
+    ];
+    const temas = groupResourcesByTopic(conAcopio).map((grupo) => grupo.topic);
+    expect(temas).toEqual(["salud", "comida", "voluntariado", "acopio"]);
+    expect(RESOURCE_TOPICS.indexOf("acopio")).toBe(RESOURCE_TOPICS.length - 1);
   });
 });
 

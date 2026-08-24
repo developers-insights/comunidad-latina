@@ -1,5 +1,6 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { DAY_MS, limit } from "@/lib/rate-limit";
 import { isVisionConfigured } from "@/lib/config/services";
@@ -18,8 +19,28 @@ import {
   JOB_PAY_PERIODS,
   jobQuestionsSchema,
   parseJobAttrs,
+  type JobQuestion,
 } from "@/components/empleos/helpers";
 import { COPY } from "@/components/empleos/copy";
+import { WORK_MODES, requiresArea } from "@/lib/creators/work-mode";
+import {
+  APPLY_BY_ATTR,
+  EXPERIENCE_ATTR,
+  JOB_EXPERIENCE_LEVELS,
+  LANGUAGES_ATTR,
+  MAX_SALARY,
+  MAX_SCHEDULE_LENGTH,
+  SALARY_MAX_ATTR,
+  SCHEDULE_ATTR,
+  STARTS_ON_ATTR,
+  WORK_DAYS_ATTR,
+  isJobLanguage,
+  isWorkDay,
+  normalizeJobDate,
+  normalizeLanguages,
+  normalizeWorkDays,
+  resolveSalaryRange,
+} from "@/lib/empleos/detalles";
 
 /**
  * Server actions de /empleos/publicar — publicar un EMPLEO comunitario
@@ -43,6 +64,20 @@ import { COPY } from "@/components/empleos/copy";
  *  - attrs = { employment_type, questions }: las preguntas al postulante viven
  *    en el aviso (contrato de components/empleos/helpers.ts, jobQuestionsSchema)
  *    y se validan de nuevo acá — el cliente puede mandar cualquier cosa.
+ *
+ * QUÉ SE SUMÓ CON LOS CAMPOS DE LA SPEC, Y DÓNDE VA CADA COSA:
+ *  - `attrs`: techo del rango salarial, días, horario, experiencia, idiomas,
+ *    fecha de inicio y fecha límite. Contrato en @/lib/empleos/detalles.
+ *  - COLUMNA `listings.work_mode` (0087, ya existía): presencial / a distancia /
+ *    mixto. Se REUSA en vez de inventar `attrs.work_mode` — el mismo hecho en
+ *    dos lugares se termina contradiciendo. Además gobierna si la zona es
+ *    obligatoria, vía `requiresArea()`.
+ *  - COLUMNA `listings.business_listing_id` (0107, nueva): el negocio al que
+ *    pertenece el puesto. Necesita FK e índice, así que no podía ir a `attrs`;
+ *    el porqué completo está en el docblock de esa migración.
+ *  - EL PISO DEL SALARIO SIGUE EN `price_amount`. Sólo el techo va a `attrs`:
+ *    `price_amount` es lo que ordena, filtra y formatea toda la app, y mover el
+ *    salario a `attrs` para que "quepa" el rango sacaría a los empleos de todo eso.
  */
 
 const C = COPY.publish;
@@ -51,17 +86,70 @@ const C = COPY.publish;
 // Borrador
 // ===========================================================================
 
-const jobDraftSchema = z.object({
-  title: z.string().trim().min(8).max(120),
-  description: z.string().trim().min(30).max(4000),
-  /** Obligatorio: no hay empleo sin salario a la vista. */
-  salaryAmount: z.number().positive().max(1_000_000),
-  payPeriod: z.enum(JOB_PAY_PERIODS),
-  employmentType: z.enum(EMPLOYMENT_TYPES),
-  areaLabel: z.string().trim().min(3).max(80),
-  /** Contrato compartido: hasta 5, sí/no u opción múltiple con 2–6 opciones. */
-  questions: jobQuestionsSchema,
-});
+const jobDraftSchema = z
+  .object({
+    title: z.string().trim().min(8).max(120),
+    description: z.string().trim().min(30).max(4000),
+    /** Obligatorio: no hay empleo sin salario a la vista. Es el PISO del rango. */
+    salaryAmount: z.number().positive().max(MAX_SALARY),
+    /**
+     * Techo del rango. OPCIONAL: el aviso de monto único sigue siendo el caso
+     * más común y no se le agrega un paso a nadie. El piso va a la columna
+     * `price_amount` (lo que ordena y formatea toda la app) y sólo el techo a
+     * `attrs` — ver el docblock de @/lib/empleos/detalles.
+     */
+    salaryMax: z.number().positive().max(MAX_SALARY).nullish(),
+    payPeriod: z.enum(JOB_PAY_PERIODS),
+    employmentType: z.enum(EMPLOYMENT_TYPES),
+    /**
+     * Modalidad → COLUMNA `listings.work_mode` (0087), no `attrs`. Ya existe con
+     * su CHECK y su índice parcial; hoy sólo la usaba Creadores. Crear un
+     * `attrs.work_mode` paralelo sería el mismo hecho escrito dos veces.
+     */
+    workMode: z.enum(WORK_MODES).nullish(),
+    /**
+     * Zona. Deja de ser obligatoria SIEMPRE: con `work_mode = 'remoto'` no hay
+     * zona que declarar, y exigirla obligaba a escribir "Remoto" en un campo de
+     * ubicación (que es exactamente el texto libre que la 0087 vino a
+     * reemplazar). La regla vive en `requiresArea()`, una sola vez.
+     */
+    areaLabel: z.string().trim().max(80).nullish(),
+    /** Contrato compartido: hasta 5, sí/no u opción múltiple con 2–6 opciones. */
+    questions: jobQuestionsSchema,
+    // ---- Ficha del puesto (contrato: @/lib/empleos/detalles) --------------
+    // Todo opcional: son los datos que hoy se preguntan por chat, no requisitos
+    // para poder publicar.
+    days: z.array(z.string()).max(7).nullish(),
+    schedule: z.string().trim().max(MAX_SCHEDULE_LENGTH).nullish(),
+    experience: z.enum(JOB_EXPERIENCE_LEVELS.map((level) => level.value)).nullish(),
+    languages: z.array(z.string()).max(10).nullish(),
+    startsOn: z.string().trim().max(10).nullish(),
+    applyBy: z.string().trim().max(10).nullish(),
+    /**
+     * Negocio vinculado → COLUMNA `listings.business_listing_id` (0107). Acá
+     * sólo se valida la FORMA (uuid); la pertenencia —mismo tenant, kind
+     * business, mismo dueño— la impone `app.check_business_listing_link()` en
+     * la base, que es el único lugar donde no se puede saltear.
+     */
+    businessListingId: z.uuid().nullish(),
+  })
+  .superRefine((value, ctx) => {
+    if (requiresArea(value.workMode ?? null) && (value.areaLabel ?? "").trim().length < 3) {
+      ctx.addIssue({ code: "custom", path: ["areaLabel"], message: C.errors.areaShort });
+    }
+    // Techo menor que piso: contradicción, no dato incompleto. Elegir cuál gana
+    // sería inventar qué quiso decir la persona.
+    if (!resolveSalaryRange(value.salaryAmount, value.salaryMax ?? null).ok) {
+      ctx.addIssue({ code: "custom", path: ["salaryMax"], message: C.errors.salaryRangeInvalid });
+    }
+    // Fecha límite anterior al inicio: un aviso al que hay que postularse
+    // después de que el trabajo empezó no le sirve a nadie.
+    const startsOn = normalizeJobDate(value.startsOn);
+    const applyBy = normalizeJobDate(value.applyBy);
+    if (startsOn && applyBy && applyBy > startsOn) {
+      ctx.addIssue({ code: "custom", path: ["applyBy"], message: C.errors.applyByAfterStart });
+    }
+  });
 
 export type JobDraftInput = z.input<typeof jobDraftSchema>;
 
@@ -69,13 +157,26 @@ export type CreateJobDraftResult =
   | { ok: true; listingId: string }
   | { ok: false; error: string; needsAuth?: boolean };
 
+/**
+ * Los mensajes del esquema que SÍ se le muestran a la persona tal cual. El
+ * resto de los issues de zod son internos ("string demasiado corto", "uuid
+ * inválido"): nombran campos y formatos, no dicen qué hacer, y se resumen en el
+ * genérico. Mismo criterio que USER_FACING_ISSUES de /publicar.
+ */
+const USER_FACING_ISSUES = new Set<string>([
+  C.errors.areaShort,
+  C.errors.salaryRangeInvalid,
+  C.errors.applyByAfterStart,
+]);
+
 export async function createJobDraft(
   rawInput: JobDraftInput,
 ): Promise<CreateJobDraftResult> {
   // Zod PURO primero (sin I/O): un payload roto no consume guard ni cuota.
   const parsed = jobDraftSchema.safeParse(rawInput);
   if (!parsed.success) {
-    return { ok: false, error: C.errors.generic };
+    const explicit = parsed.error.issues.find((issue) => USER_FACING_ISSUES.has(issue.message));
+    return { ok: false, error: explicit?.message ?? C.errors.generic };
   }
   const input = parsed.data;
 
@@ -95,12 +196,49 @@ export async function createJobDraft(
     return { ok: false, error: C.errors.generic };
   }
 
-  const attrs = {
+  // El rango ya se validó en el esquema; acá sólo se traduce a lo que se
+  // guarda. `max: null` significa monto único, que es lo mismo que devuelve
+  // cuando el techo es igual al piso — un "rango" de $18 a $18 no es un rango.
+  const salary = resolveSalaryRange(input.salaryAmount, input.salaryMax ?? null);
+  const salaryMax = salary.ok ? salary.max : null;
+
+  // `attrs` sólo lleva lo DECLARADO. Una clave ausente se lee como "no lo dijo"
+  // (readJobDetails), y escribir un arreglo vacío o un string en blanco
+  // convertiría ese silencio en una afirmación.
+  // El tipo se anota estrecho (y no `unknown`) porque `listings.attrs` es
+  // `Json` en los tipos generados: un `Record<string, unknown>` no encaja ahí y
+  // el error aparecería recién en el insert, lejos de donde se arma el objeto.
+  const attrs: Record<string, string | number | string[] | JobQuestion[]> = {
     employment_type: input.employmentType,
     questions: input.questions,
   };
+  if (salaryMax !== null) attrs[SALARY_MAX_ATTR] = salaryMax;
+  // Los catálogos se re-filtran en el servidor: el formulario manda slugs de
+  // una lista cerrada, pero esta action es pública.
+  const days = normalizeWorkDays((input.days ?? []).filter(isWorkDay));
+  if (days.length > 0) attrs[WORK_DAYS_ATTR] = days;
+  if (input.schedule) attrs[SCHEDULE_ATTR] = input.schedule;
+  if (input.experience) attrs[EXPERIENCE_ATTR] = input.experience;
+  const languages = normalizeLanguages((input.languages ?? []).filter(isJobLanguage));
+  if (languages.length > 0) attrs[LANGUAGES_ATTR] = languages;
+  const startsOn = normalizeJobDate(input.startsOn);
+  if (startsOn) attrs[STARTS_ON_ATTR] = startsOn;
+  const applyBy = normalizeJobDate(input.applyBy);
+  if (applyBy) attrs[APPLY_BY_ATTR] = applyBy;
 
-  const { data: created, error } = await supabase
+  const workMode = input.workMode ?? null;
+  // Con modalidad "a distancia" la zona no se pide y no se inventa. Se guarda
+  // NULL y no un string vacío —mismo criterio que `createGigDraft`—: la
+  // ausencia del dato tiene que poder distinguirse de "escribió nada". El texto
+  // libre "Remoto" en un campo de ubicación es justo lo que la 0087 reemplazó.
+  const areaLabel = requiresArea(workMode) ? (input.areaLabel ?? "").trim() || null : null;
+
+  // `work_mode` (0087) y `business_listing_id` (0107) existen en la base con su
+  // CHECK / su FK, pero `database.types.ts` se regenera aparte y todavía no las
+  // lista. El cast es por el TIPO generado, no por el contrato — mismo patrón
+  // que ya usa `createGigDraft` con `work_mode`.
+  const open = supabase as unknown as SupabaseClient;
+  const { data: created, error } = await open
     .from("listings")
     .insert({
       tenant_id: tenant.id,
@@ -111,16 +249,25 @@ export async function createJobDraft(
       price_currency: tenant.currency,
       price_period: input.payPeriod,
       attrs,
-      area_label: input.areaLabel,
+      area_label: areaLabel,
+      work_mode: workMode,
+      business_listing_id: input.businessListingId ?? null,
       status: "draft",
       created_by: user.id,
     })
     .select("id")
+    .returns<{ id: string }[]>()
     .single();
 
   if (error || !created) {
     console.warn("[empleos] insert de borrador falló", { code: error?.code });
-    return { ok: false, error: C.errors.generic };
+    // El trigger app.check_business_listing_link() (0107) rechaza un vínculo
+    // que no es del usuario con VINCULO_INVALIDO. Se distingue del error
+    // genérico porque es accionable: la persona puede elegir otro negocio o
+    // ninguno, y "probá de nuevo en un ratito" la dejaría reintentando algo que
+    // nunca va a funcionar.
+    const isLinkError = typeof error?.message === "string" && error.message.includes("VINCULO_INVALIDO");
+    return { ok: false, error: isLinkError ? C.errors.businessLinkInvalid : C.errors.generic };
   }
 
   return { ok: true, listingId: created.id };

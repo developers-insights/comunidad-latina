@@ -87,10 +87,12 @@ function createAdminStub(config: AdminConfig = {}) {
         return builder;
       });
     }
-    builder.eq = vi.fn((...args: unknown[]) => {
-      calls.push({ table, method: "eq", args });
-      return builder;
-    });
+    for (const method of ["eq", "or"] as const) {
+      builder[method] = vi.fn((...args: unknown[]) => {
+        calls.push({ table, method, args });
+        return builder;
+      });
+    }
     builder.maybeSingle = vi.fn(async () => result());
     builder.single = vi.fn(async () => result());
     builder.then = (resolve: (v: OpResult) => unknown, reject: (e: unknown) => unknown) =>
@@ -119,6 +121,29 @@ const OWNER = "owner-1";
 
 /** El aviso tal como lo ve el webhook al correlacionar. */
 const LISTING_ROW = { id: LISTING, tenant_id: TENANT, created_by: OWNER };
+
+/**
+ * `listing_premiums` en el ALTA, tal como la ve `concederUnaSolaVez`:
+ *
+ *  · `update` = el RECLAMO, que no matchea porque el aviso todavía no tiene fila;
+ *  · `insert` = el alta propiamente dicha, que entra;
+ *  · `select` = la relectura desambiguadora, que en este camino no se usa.
+ *
+ * El `upsert` a ciegas que había antes acá se fue en la auditoría de pagos:
+ * escribía siempre y seguía de largo hasta la notificación y la auditoría, así
+ * que la segunda entrega del mismo pago duplicaba las dos. Ver
+ * `lib/monetization/concesion.ts`.
+ */
+const ALTA_LIMPIA = {
+  update: { data: [], error: null },
+  insert: { error: null },
+  select: { data: null, error: null },
+};
+
+/** El 23505 con el que la base rebota un alta cuando la fila del aviso ya existe. */
+const CHOQUE_UNIQUE = {
+  error: { code: "23505", message: "duplicate key value violates unique constraint" },
+};
 
 function checkoutEvent(sessionOverrides: Record<string, unknown> = {}) {
   return {
@@ -208,15 +233,15 @@ describe("premium — verificación de firma con HMAC real", () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: LISTING_ROW, error: null } },
-      listing_premiums: { select: { data: null, error: null }, upsert: { error: null } },
+      listing_premiums: ALTA_LIMPIA,
     });
 
     const res = await POST(signedRequest(checkoutEvent()));
 
     expect(res.status).toBe(200);
-    const upserts = callsTo(stub, "listing_premiums", "upsert");
-    expect(upserts).toHaveLength(1);
-    expect(upserts[0].args[0]).toMatchObject({
+    const altas = callsTo(stub, "listing_premiums", "insert");
+    expect(altas).toHaveLength(1);
+    expect(altas[0].args[0]).toMatchObject({
       tenant_id: TENANT,
       listing_id: LISTING,
       owner_id: OWNER,
@@ -233,7 +258,7 @@ describe("premium — verificación de firma con HMAC real", () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: LISTING_ROW, error: null } },
-      listing_premiums: { upsert: { error: null } },
+      listing_premiums: ALTA_LIMPIA,
     });
 
     // Se firma el evento honesto y se manda otro cuerpo: el ataque de manual.
@@ -253,7 +278,7 @@ describe("premium — correlación (fiscal R3)", () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: LISTING_ROW, error: null } },
-      listing_premiums: { select: { data: { price_cents: 900 }, error: null }, upsert: { error: null } },
+      listing_premiums: { ...ALTA_LIMPIA, select: { data: { price_cents: 900 }, error: null } },
     });
 
     const res = await POST(signedRequest(checkoutEvent({ amount_total: 100 })));
@@ -261,7 +286,7 @@ describe("premium — correlación (fiscal R3)", () => {
     // 200 para que Stripe no reintente: reintentar no arregla una discrepancia
     // de monto. Queda el payload en payment_events para reconciliar a mano.
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "listing_premiums", "insert")).toHaveLength(0);
     expect(errorSpy).toHaveBeenCalled();
   });
 
@@ -269,13 +294,13 @@ describe("premium — correlación (fiscal R3)", () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: { ...LISTING_ROW, created_by: "otro" }, error: null } },
-      listing_premiums: { upsert: { error: null } },
+      listing_premiums: ALTA_LIMPIA,
     });
 
     const res = await POST(signedRequest(checkoutEvent()));
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "listing_premiums", "insert")).toHaveLength(0);
     expect(errorSpy).toHaveBeenCalled();
   });
 
@@ -283,27 +308,27 @@ describe("premium — correlación (fiscal R3)", () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: null, error: null } },
-      listing_premiums: { upsert: { error: null } },
+      listing_premiums: ALTA_LIMPIA,
     });
 
     const res = await POST(signedRequest(checkoutEvent()));
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "listing_premiums", "insert")).toHaveLength(0);
   });
 
   it("un checkout sin pagar (método async) todavía no concede nada", async () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: LISTING_ROW, error: null } },
-      listing_premiums: { upsert: { error: null } },
+      listing_premiums: ALTA_LIMPIA,
     });
 
     const res = await POST(signedRequest(checkoutEvent({ payment_status: "unpaid" })));
 
     expect(res.status).toBe(200);
     // Espera a checkout.session.async_payment_succeeded.
-    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "listing_premiums", "insert")).toHaveLength(0);
   });
 });
 
@@ -328,7 +353,7 @@ describe("premium — precio por comunidad", () => {
     return useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: LISTING_ROW, error: null } },
-      listing_premiums: { select: { data: null, error: null }, upsert: { error: null } },
+      listing_premiums: ALTA_LIMPIA,
     });
   }
 
@@ -358,7 +383,7 @@ describe("premium — precio por comunidad", () => {
     );
 
     expect(res.status).toBe(200);
-    const upserts = callsTo(stub, "listing_premiums", "upsert");
+    const upserts = callsTo(stub, "listing_premiums", "insert");
     expect(upserts).toHaveLength(1);
     // Y lo cobrado queda escrito en la fila: la pantalla del dueño no puede
     // mostrar el default de la columna cuando se pagaron USD 15.
@@ -378,7 +403,7 @@ describe("premium — precio por comunidad", () => {
     const res = await POST(signedRequest(checkoutEvent({ amount_total: 1_500 })));
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "listing_premiums", "insert")).toHaveLength(0);
     expect(loggedErrors()).toContain("1500");
   });
 
@@ -400,7 +425,7 @@ describe("premium — precio por comunidad", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "listing_premiums", "insert")).toHaveLength(0);
     // Nada de fallar en silencio: con el log + el payload que quedó en
     // `payment_events` se puede reconciliar sin abrir el Dashboard a ciegas.
     const logged = loggedErrors();
@@ -428,7 +453,7 @@ describe("premium — precio por comunidad", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "listing_premiums", "insert")).toHaveLength(0);
     expect(errorSpy).toHaveBeenCalled();
   });
 
@@ -455,7 +480,7 @@ describe("premium — precio por comunidad", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "listing_premiums", "insert")).toHaveLength(0);
     expect(loggedErrors()).toContain("ars");
   });
 });
@@ -470,7 +495,7 @@ describe("premium — idempotencia", () => {
         select: { data: { processed: true }, error: null },
       },
       listings: { select: { data: LISTING_ROW, error: null } },
-      listing_premiums: { upsert: { error: null } },
+      listing_premiums: ALTA_LIMPIA,
     });
 
     const res = await POST(signedRequest(checkoutEvent()));
@@ -478,7 +503,7 @@ describe("premium — idempotencia", () => {
 
     expect(res.status).toBe(200);
     expect(body.duplicated).toBe(true);
-    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "listing_premiums", "insert")).toHaveLength(0);
     expect(mocks.createNotification).not.toHaveBeenCalled();
   });
 
@@ -489,42 +514,43 @@ describe("premium — idempotencia", () => {
         select: { data: { processed: false }, error: null },
       },
       listings: { select: { data: LISTING_ROW, error: null } },
-      listing_premiums: { select: { data: null, error: null }, upsert: { error: null } },
+      listing_premiums: ALTA_LIMPIA,
     });
 
     const res = await POST(signedRequest(checkoutEvent()));
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(1);
+    expect(callsTo(stub, "listing_premiums", "insert")).toHaveLength(1);
   });
 });
 
-/* ------------- 5. bis. Session ya vinculada a OTRO aviso ------------------ */
+/* ------------- 5. bis. UNA concesión por pago, y una sola ----------------- */
 
 describe("premium — una session no puede encender dos avisos", () => {
   /**
    * `listing_premiums_checkout_session_uniq` y `..._subscription_uniq` (0054)
-   * rebotan cuando la session/suscripción del evento YA está en la fila de otro
-   * aviso. El upsert va con `onConflict: listing_id`, así que ese choque NO lo
-   * resuelve solo: vuelve como 23505.
+   * rebotan cuando la session/suscripción del evento YA está en la fila de OTRO
+   * aviso: un solo pago intentando encender un segundo premium.
    *
    * La decisión: no conceder + log + 200. Dejarlo lanzar daba un 500 y Stripe
    * reintentaba tres días un evento que nunca iba a poder aplicarse.
+   *
+   * Cómo se reconoce el caso, desde la auditoría de pagos: el RECLAMO no matchea
+   * (este aviso no tiene fila), el alta choca 23505 y la relectura confirma que
+   * el aviso SIGUE sin fila ⇒ el choque fue contra el unique del PAGO. Antes esto
+   * se deducía con un regex sobre el nombre del índice en el texto del error, que
+   * fallaba ABIERTA: renombrar el índice en una migración convertía un error
+   * permanente en tres días de reintentos.
    */
-  it("un 23505 del índice de checkout session NO se concede, pero responde 200 (no reintentar)", async () => {
+  it("un pago ya vinculado a otro aviso NO se concede, pero responde 200 (no reintentar)", async () => {
     const stub = useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: LISTING_ROW, error: null } },
       listing_premiums: {
+        update: { data: [], error: null },
+        insert: CHOQUE_UNIQUE,
+        // La relectura: este aviso sigue sin fila.
         select: { data: null, error: null },
-        upsert: {
-          error: {
-            code: "23505",
-            message: "duplicate key value violates unique constraint",
-            details:
-              'Key (stripe_checkout_session_id)=(cs_test_premium_1) already exists in listing_premiums_checkout_session_uniq.',
-          },
-        },
       },
     });
 
@@ -538,18 +564,32 @@ describe("premium — una session no puede encender dos avisos", () => {
     expect(errorSpy).toHaveBeenCalled();
   });
 
-  it("un 23505 del índice de suscripción se trata igual", async () => {
-    useAdmin({
+  /**
+   * EL CASO QUE ESTE MÓDULO EXISTE PARA CUBRIR.
+   *
+   * `checkout.session.completed` y `checkout.session.async_payment_succeeded`
+   * traen la MISMA Session con `event.id` distintos, así que el UNIQUE sobre
+   * `payment_events.event_id` los deja pasar a los dos; y ante un intento previo
+   * con `processed=false` el route reprocesa a propósito. En las dos situaciones
+   * este handler corre dos veces sobre el mismo pago.
+   *
+   * Con el `upsert` a ciegas de antes, la segunda pasada mandaba un segundo
+   * comprobante "tu publicación ya es premium" y escribía una segunda fila de
+   * `audit_log` por un solo pago. Ahora el token del pago está en el `WHERE`: la
+   * fila ya lo lleva, el reclamo no matchea, y se corta antes de notificar.
+   */
+  it("la SEGUNDA entrega del mismo pago no notifica ni audita de nuevo", async () => {
+    const stub = useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: LISTING_ROW, error: null } },
       listing_premiums: {
-        select: { data: null, error: null },
-        upsert: {
-          error: {
-            code: "23505",
-            message: "duplicate key value violates unique constraint",
-            details: "Key already exists in listing_premiums_subscription_uniq.",
-          },
+        // El reclamo no matchea: la fila ya lleva ESTA session.
+        update: { data: [], error: null },
+        insert: CHOQUE_UNIQUE,
+        // La relectura lo confirma.
+        select: {
+          data: { stripe_checkout_session_id: "cs_test_premium_1" },
+          error: null,
         },
       },
     });
@@ -558,6 +598,29 @@ describe("premium — una session no puede encender dos avisos", () => {
 
     expect(res.status).toBe(200);
     expect(mocks.createNotification).not.toHaveBeenCalled();
+    expect(callsTo(stub, "audit_log", "insert")).toHaveLength(0);
+  });
+
+  it("el token del pago viaja en el WHERE del reclamo, no en un if", async () => {
+    // Sin el predicado, dos entregas concurrentes matchean las dos filas y las
+    // dos notifican. Con él, Postgres serializa y la segunda no toca nada.
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      listings: { select: { data: LISTING_ROW, error: null } },
+      listing_premiums: ALTA_LIMPIA,
+    });
+
+    await POST(signedRequest(checkoutEvent()));
+
+    expect(callsTo(stub, "listing_premiums", "or")).toEqual([
+      {
+        table: "listing_premiums",
+        method: "or",
+        args: [
+          "stripe_checkout_session_id.is.null,stripe_checkout_session_id.neq.cs_test_premium_1",
+        ],
+      },
+    ]);
   });
 
   it("cualquier OTRO error de escritura sigue dando 500 para que Stripe reintente", async () => {
@@ -566,8 +629,7 @@ describe("premium — una session no puede encender dos avisos", () => {
       payment_events: { insert: { error: null } },
       listings: { select: { data: LISTING_ROW, error: null } },
       listing_premiums: {
-        select: { data: null, error: null },
-        upsert: { error: { code: "57014", message: "canceling statement due to timeout" } },
+        update: { error: { code: "57014", message: "canceling statement due to timeout" } },
       },
     });
 
@@ -576,19 +638,13 @@ describe("premium — una session no puede encender dos avisos", () => {
     expect(res.status).toBe(500);
   });
 
-  it("un 23505 que NO es de esos dos índices tampoco se traga", async () => {
+  it("un alta que falla por algo que no es 23505 tampoco se traga", async () => {
     useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: LISTING_ROW, error: null } },
       listing_premiums: {
-        select: { data: null, error: null },
-        upsert: {
-          error: {
-            code: "23505",
-            message: "duplicate key value violates unique constraint",
-            details: "Key (id)=(...) already exists in listing_premiums_pkey.",
-          },
-        },
+        update: { data: [], error: null },
+        insert: { error: { code: "23514", message: "check constraint violated" } },
       },
     });
 
@@ -708,8 +764,8 @@ describe("premium — aislamiento de los otros productos", () => {
       // dueño de la metadata. Sin esta fila el test pasaría por el motivo
       // equivocado (la membresía rechazaría por correlación, no por aislamiento).
       listings: { select: { data: LISTING_ROW, error: null } },
-      store_memberships: { select: { data: null, error: null }, upsert: { error: null } },
-      listing_premiums: { upsert: { error: null }, update: { data: null, error: null } },
+      store_memberships: { update: { data: [], error: null }, insert: { error: null }, select: { data: null, error: null } },
+      listing_premiums: { ...ALTA_LIMPIA, update: { data: null, error: null } },
     });
 
     // Metadata y monto REALES de una tienda (USD 10, `store_id` en vez de
@@ -732,7 +788,7 @@ describe("premium — aislamiento de los otros productos", () => {
       ),
     );
 
-    expect(callsTo(stub, "listing_premiums", "upsert")).toHaveLength(0);
-    expect(callsTo(stub, "store_memberships", "upsert")).toHaveLength(1);
+    expect(callsTo(stub, "listing_premiums", "insert")).toHaveLength(0);
+    expect(callsTo(stub, "store_memberships", "insert")).toHaveLength(1);
   });
 });

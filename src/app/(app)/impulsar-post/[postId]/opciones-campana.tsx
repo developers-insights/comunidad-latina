@@ -3,7 +3,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Megaphone, Star, Users, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
-import { Badge, BezelCard, Button, Field, Input, useToast } from "@/components/ui";
+import {
+  Badge,
+  BezelCard,
+  BottomSheet,
+  Button,
+  Field,
+  Input,
+  ProximamentePremium,
+  useToast,
+} from "@/components/ui";
 import { formatCents, type ResolvedPrice } from "@/lib/pricing";
 import type { PostPromoId, PostPromoPackage } from "@/lib/stripe";
 import { cn } from "@/lib/utils";
@@ -30,6 +39,8 @@ const COPY = {
   needZone: "Elegí al menos una zona, o promocioná a toda la comunidad.",
   pagoUnico: "pago único",
   recomendado: "El más elegido",
+  ariaProximamente: "Las campañas, muy pronto",
+  proximamenteFeature: "las campañas de publicaciones",
   demoSeal: "Modo demostración",
   demoHint: "Se activa al instante, sin cobro — para probar cómo funciona.",
   promoteWith: (nombre: string) => `Promocionar por ${nombre}`,
@@ -58,6 +69,7 @@ export function OpcionesCampana({
   precios,
   zones,
   stripeConfigured,
+  demoPermitido,
 }: {
   postId: string;
   paquetes: PostPromoPackage[];
@@ -69,6 +81,14 @@ export function OpcionesCampana({
   precios: Partial<Record<PostPromoId, ResolvedPrice>>;
   zones: string[];
   stripeConfigured: boolean;
+  /**
+   * ¿El modo demostración está habilitado? Sin Stripe Y sin deploy de por medio.
+   *
+   * NO alcanza con `!stripeConfigured`: producción sin `STRIPE_SECRET_KEY` no
+   * puede regalar campañas, tiene que decir "muy pronto" como los otros seis
+   * productos. Ver `isPagosDemoPermitido` en `lib/config/services.ts`.
+   */
+  demoPermitido: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -77,6 +97,7 @@ export function OpcionesCampana({
   const [whatsapp, setWhatsapp] = useState("");
   const [whatsappError, setWhatsappError] = useState<string | null>(null);
   const [loadingPaquete, setLoadingPaquete] = useState<PostPromoId | null>(null);
+  const [proximamenteOpen, setProximamenteOpen] = useState(false);
 
   const hasZones = zones.length > 0;
 
@@ -124,6 +145,13 @@ export function OpcionesCampana({
       if (result.status === "demo_activada") {
         toast({ title: COPY.demoDone, variant: "success" });
         router.refresh(); // la página pasa a mostrar el estado "campaña activa"
+        return;
+      }
+      if (result.status === "no_configurado") {
+        // Estado premium, NUNCA un error técnico (§5.6) — igual que los otros
+        // seis productos.
+        setProximamenteOpen(true);
+        setLoadingPaquete(null);
         return;
       }
       if (result.status === "sin_sesion") {
@@ -235,7 +263,7 @@ export function OpcionesCampana({
 
       {/* Paquetes */}
       <section className="flex flex-col gap-4">
-        {!stripeConfigured && (
+        {demoPermitido && (
           <div className="flex items-center gap-2 rounded-lg bg-surface-subtle px-3.5 py-2.5">
             <Badge variant="warning" className="shrink-0">
               {COPY.demoSeal}
@@ -288,14 +316,23 @@ export function OpcionesCampana({
               onClick={() => elegir(paquete.id)}
             >
               <Megaphone size={18} weight="fill" aria-hidden="true" />
-              {stripeConfigured
-                ? COPY.promoteWith(paquete.nombre)
-                : COPY.activateDemo(paquete.nombre)}
+              {demoPermitido
+                ? COPY.activateDemo(paquete.nombre)
+                : COPY.promoteWith(paquete.nombre)}
             </Button>
           </BezelCard>
           );
         })}
       </section>
+
+      {/* Stripe sin configurar en un entorno publicado → estado premium. */}
+      <BottomSheet
+        open={proximamenteOpen}
+        onClose={() => setProximamenteOpen(false)}
+        ariaLabel={COPY.ariaProximamente}
+      >
+        <ProximamentePremium feature={COPY.proximamenteFeature} />
+      </BottomSheet>
     </div>
   );
 }

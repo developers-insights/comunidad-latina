@@ -2,7 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { isStripeConfigured } from "@/lib/config/services";
+import { isPagosDemoPermitido, isStripeConfigured } from "@/lib/config/services";
 import { createNotification } from "@/lib/notifications/notify";
 import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
@@ -84,8 +84,14 @@ const campanaSchema = z.object({
 });
 
 export type CrearCampanaResult =
-  /** Modo demo (sin Stripe): la campaña quedó activa ya mismo. */
+  /** Modo demo (sin Stripe y SIN deploy de por medio): la campaña quedó activa ya mismo. */
   | { status: "demo_activada"; endsAt: string }
+  /**
+   * Sin Stripe, pero publicado: el cliente muestra `<ProximamentePremium>`, igual
+   * que los otros seis productos. Ver `isPagosDemoPermitido` en
+   * `lib/config/services.ts` para el porqué de la diferencia.
+   */
+  | { status: "no_configurado" }
   /** Sin sesión: el cliente redirige a /entrar. */
   | { status: "sin_sesion" }
   | { status: "error"; message: string }
@@ -173,8 +179,23 @@ export async function crearCampanaPost(
     // patrón que assistant_queries). El resto del archivo sigue tipado.
     const adminOpen = admin as unknown as SupabaseClient;
 
-    // 3a. MODO DEMO (Stripe sin configurar): activación directa, sin cobro.
-    if (!isStripeConfigured) {
+    // 3a. SIN STRIPE Y PUBLICADO: se degrada como los otros seis productos.
+    //
+    // Este camino ANTES no existía: la única condición era `!isStripeConfigured`
+    // y caía derecho al modo demo de abajo. O sea que producción sin
+    // `STRIPE_SECRET_KEY` —una variable borrada, un env mal armado, una rotación
+    // a medias— le REGALABA la campaña a cualquiera, con notificación de éxito y
+    // fila de auditoría, sin un solo error en los logs. Ver
+    // `isPagosDemoPermitido` en `lib/config/services.ts`.
+    if (!isStripeConfigured && !isPagosDemoPermitido) {
+      console.error(
+        `[post-promo] Stripe sin configurar en un entorno PUBLICADO — tenant=${tenant.slug}. No se activa nada y la persona ve "muy pronto". Cargar STRIPE_SECRET_KEY.`,
+      );
+      return { status: "no_configurado" };
+    }
+
+    // 3b. MODO DEMO (sin Stripe y sin deploy): activación directa, sin cobro.
+    if (isPagosDemoPermitido) {
       const startsAt = new Date();
       const endsAt = new Date(startsAt.getTime() + promo.dias * 86_400_000);
       const { data: created, error: insertError } = await adminOpen
@@ -234,7 +255,7 @@ export async function crearCampanaPost(
       return { status: "demo_activada", endsAt: endsAt.toISOString() };
     }
 
-    // 3b. CON Stripe: fila pending_payment vía admin (RLS write=false a propósito).
+    // 3c. CON Stripe: fila pending_payment vía admin (RLS write=false a propósito).
     const { data: created, error: insertError } = await adminOpen
       .from("post_promotions")
       .insert({

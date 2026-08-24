@@ -16,6 +16,62 @@ import { isStripeConfigured } from "@/lib/config/services";
 let stripeSingleton: Stripe | null = null;
 
 /**
+ * En qué modo de Stripe está corriendo la app, leído del PREFIJO de la clave.
+ *
+ * `null` = sin configurar. Es lo mismo que dice `isStripeConfigured`, pero con
+ * un dato más que hace falta y que hasta ahora no existía en ninguna parte: si
+ * la plata que entra es de verdad o no.
+ *
+ * POR QUÉ IMPORTA TENERLO ESCRITO EN ALGÚN LADO
+ *   Una app apuntada a claves `sk_test_` acepta la 4242 4242 4242 4242 y devuelve
+ *   éxito, activa el beneficio, manda el comprobante y no cobra un centavo. Desde
+ *   adentro es INDISTINGUIBLE de haber vendido. Ese es el modo correcto mientras
+ *   se prueba —y por eso acá no se bloquea— pero el día que se pase a `sk_live_`,
+ *   confundirse de dirección cuesta en las dos: en test se regala el producto, en
+ *   live se le cobra de verdad a alguien que estaba probando.
+ *
+ * NO SE VALIDA CONTRA LA CLAVE PÚBLICA porque no hay ninguna: todos los cobros
+ * son por Checkout hospedado (redirect) e Identity con `return_url`, así que
+ * `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` no se usa en `src/` — ver docs/STRIPE.md.
+ */
+export type StripeMode = "test" | "live";
+
+export function getStripeMode(): StripeMode | null {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  if (key.startsWith("sk_live_") || key.startsWith("rk_live_")) return "live";
+  if (key.startsWith("sk_test_") || key.startsWith("rk_test_")) return "test";
+  return null;
+}
+
+/**
+ * Aviso de una sola vez cuando un deploy PUBLICADO corre en modo de prueba.
+ *
+ * No bloquea a propósito: probar contra `sk_test_` en un preview —o en producción
+ * antes de abrir la venta— es exactamente lo que hay que hacer primero, y un
+ * throw acá haría imposible el paso que el runbook pide dar. Lo que sí hace es
+ * que el hecho quede escrito: sin esta línea, "estamos en test" y "estamos
+ * vendiendo" se ven igual en los logs.
+ */
+let modoAvisado = false;
+function avisarModo(): void {
+  if (modoAvisado) return;
+  modoAvisado = true;
+  const modo = getStripeMode();
+  if (modo === null) {
+    console.warn(
+      "[pagos] STRIPE_SECRET_KEY no arranca con sk_test_ ni sk_live_ — no se puede saber si los cobros son reales. Revisar que la clave esté completa y sin comillas.",
+    );
+    return;
+  }
+  if (modo === "test" && process.env.VERCEL_ENV) {
+    console.warn(
+      `[pagos] Stripe en modo TEST sobre un deploy publicado (VERCEL_ENV=${process.env.VERCEL_ENV}). Los pagos NO cobran plata de verdad y las tarjetas de prueba se aceptan. Correcto mientras se prueba; antes de abrir la venta hay que pasar a sk_live_ y regenerar el STRIPE_WEBHOOK_SECRET del endpoint LIVE.`,
+    );
+  }
+}
+
+/**
  * Factory server-only del cliente Stripe.
  *
  * Lanza un error claro si falta STRIPE_SECRET_KEY — este error es para el
@@ -30,6 +86,7 @@ export function getStripe(): Stripe {
     );
   }
   if (!stripeSingleton) {
+    avisarModo();
     stripeSingleton = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
       typescript: true,
     });

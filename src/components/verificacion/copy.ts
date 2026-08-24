@@ -46,6 +46,14 @@ export const COPY_VERIFICACION = {
     gestionar: "Gestionar mi suscripción",
     cancelarNota:
       "Cancelás cuando quieras desde tu panel de facturación. La insignia se queda hasta que termine el mes que pagaste.",
+    /**
+     * Nota de contexto en la tarjeta del plan que coincide con la identidad
+     * ACTIVA ahora mismo (`tierDeIdentidadActiva`, perfil-activo). No es una
+     * restricción — cualquier escalón se sigue pudiendo elegir, ver el
+     * docblock de esa función — así que el texto describe un hecho, no una
+     * regla.
+     */
+    coincideConTuCuenta: "Es el perfil con el que estás actuando ahora.",
   },
 
   /* ------------------------------------------------- Qué es y qué no es */
@@ -112,6 +120,24 @@ export const COPY_VERIFICACION = {
      */
     tooltip:
       "Identidad confirmada con documento y suscripción al día. No es una recomendación de la plataforma.",
+  },
+
+  /**
+   * ---------------------------------------------------------------------
+   * El OTRO "verificado": creador de contenido
+   * ---------------------------------------------------------------------
+   * Pedido textual del cliente, en la MISMA frase que pidió este check: «el
+   * verificado de tipo para que sean creadores de contenido». Es un camino
+   * distinto — sus propios requisitos, en `/creadores/solicitud` — y no algo
+   * que se activa acá. Se linkea y no se explica en detalle: repetir la lista
+   * de requisitos en dos lugares es cómo se termina con dos listas que dicen
+   * cosas distintas (la real vive en `src/lib/creators/eligibility.ts`, y ese
+   * módulo entero existe para no tener que hacerlo).
+   */
+  creadores: {
+    title: "¿Buscabas el verificado de creador de contenido?",
+    body: "Es otro camino, con sus propios requisitos —portafolio, seguidores, videos—. No se activa con el check azul.",
+    cta: "Ver los requisitos para creadores",
   },
 
   /* ------------------------------------------------------------- Errores */

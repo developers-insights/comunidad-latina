@@ -105,21 +105,21 @@ export async function selectPremiumByListing(
   return { data: (data as ListingPremiumRow | null) ?? null, error };
 }
 
-/**
- * Alta o reactivación. `onConflict: listing_id` (unique en 0054): un aviso que
- * ya tuvo premium y venció vuelve a `active` en la MISMA fila, sin duplicar
- * historial. Idempotente por construcción — un reintento de Stripe reescribe los
- * mismos valores y el trigger del espejo no hace nada porque nada cambió.
+/*
+ * `upsertPremium` vivía acá y se borró en la auditoría de pagos 2026-08-24.
+ *
+ * Era un `upsert(onConflict: listing_id)` que escribía SIEMPRE, y su docblock
+ * afirmaba ser "idempotente por construcción — un reintento reescribe los mismos
+ * valores". Eso es cierto de la FILA y falso de todo lo demás: el handler seguía
+ * de largo hasta la notificación y la auditoría, así que la segunda entrega del
+ * mismo pago mandaba un segundo comprobante y escribía una segunda fila de
+ * `audit_log`. Y no reescribía "los mismos valores" cuando la suscripción se
+ * había cancelado entre medio: la resucitaba a `active`.
+ *
+ * El alta la hace ahora `concederUnaSolaVez` (./concesion.ts), que pone el token
+ * del pago en el `WHERE` — el mismo patrón que `activateBoost` ya usaba con el
+ * estado. `ListingPremiumUpsert` se queda: es el tipo de la fila que se escribe.
  */
-export async function upsertPremium(
-  admin: unknown,
-  values: ListingPremiumUpsert,
-): Promise<{ error: DbError | null }> {
-  const { error } = await untyped(admin)
-    .from(TABLE)
-    .upsert(values, { onConflict: "listing_id" });
-  return { error };
-}
 
 /**
  * Sincroniza por `stripe_subscription_id`, que es la correlación real: NO se

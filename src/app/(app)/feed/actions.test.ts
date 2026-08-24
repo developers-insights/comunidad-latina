@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   registerUploadedMedia: vi.fn(),
   notifyPostComment: vi.fn(),
   notifyPostReaction: vi.fn(),
+  puedeFirmarComo: vi.fn(),
 }));
 
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
@@ -65,6 +66,14 @@ vi.mock("@/lib/integrity", () => ({
 vi.mock("@/lib/integrity/source-host", () => ({
   currentSourceHost: async (fallback: string) => fallback,
 }));
+/**
+ * LA FIRMA DE LA PUBLICACIÓN (`entity_listing_id`, 0023). Se aísla en su borde
+ * —tiene sus propios tests en `src/lib/feed/autoria.test.ts`— y acá lo que se
+ * prueba es el CABLEADO: que la action pregunte antes de persistir, que un "no"
+ * corte la publicación entera, y que sin firma NI SIQUIERA pregunte (un post
+ * personal no tiene nada que validar).
+ */
+vi.mock("@/lib/feed/autoria", () => ({ puedeFirmarComo: mocks.puedeFirmarComo }));
 vi.mock("./social-notifications", () => ({
   notifyPostComment: mocks.notifyPostComment,
   notifyPostReaction: mocks.notifyPostReaction,
@@ -199,6 +208,10 @@ beforeEach(() => {
     reasons: [],
     assetIds: [],
   });
+  // Por default la ficha es propia y está publicada: los tests que prueban el
+  // rechazo lo invierten. Nunca se deja `undefined` — una promesa sin resolver
+  // colgaría la action a mitad de camino y el fallo sería un timeout mudo.
+  mocks.puedeFirmarComo.mockResolvedValue(true);
 });
 
 /* ------------------- Cupo y peso de las fotos (2026-08-11) ---------------- */
@@ -378,6 +391,59 @@ describe("createPostAction — con foto o video el texto es OPCIONAL", () => {
     );
 
     expect(result).toEqual({ ok: false, code: "invalid" });
+  });
+});
+
+/* -------- El path del video acepta el mismo catálogo que el composer ------ */
+
+/**
+ * EL BUG QUE ESTO CIERRA: `isOwnVideoPath` tenía su propia regex
+ * `(mp4|webm)` mientras el composer ya declaraba (o iba a declarar) un
+ * `accept` más amplio. El picker dejaba ELEGIR un .mov de iPhone y esta
+ * action lo rechazaba recién al publicar, con un `code: "photo"` genérico
+ * que no explicaba nada — exactamente el síntoma "no te deja subir cualquier
+ * tipo de video" del feedback del cliente. Ahora la regex sale de
+ * `VIDEO_FILENAME_PATTERN` (`@/lib/media/video-upload-limits`), el mismo
+ * módulo que arma el `accept` del input.
+ *
+ * EL CATÁLOGO FINAL ES SÓLO mp4/mov/webm (no mkv/avi/mpeg/3gp/3g2: el bucket
+ * `post-media` no los permite subir y ningún navegador los reproduce nativo
+ * en `<video>` — ver el docblock de `video-upload-limits.ts`). Esta action
+ * los sigue rechazando por la misma razón defensa-en-profundidad de siempre:
+ * un cliente modificado no puede colar un path con esa extensión.
+ */
+describe("createPostAction — el path del video acepta el mismo catálogo que el composer", () => {
+  it("acepta un .mov (el caso reportado: video grabado en iPhone)", async () => {
+    const stub = useGuardOk();
+    const path = `${TENANT_ID}/${USER_ID}/video-abc.mov`;
+
+    const result = await createPostAction(postForm({ body: "", videoPaths: [path] }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect((insertedPost(stub)?.media as string[])[0]).toBe(path);
+  });
+
+  it("acepta un .webm — el resto del catálogo final", async () => {
+    const stub = useGuardOk();
+    const path = `${TENANT_ID}/${USER_ID}/video-abc.webm`;
+
+    const result = await createPostAction(postForm({ body: "", videoPaths: [path] }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect((insertedPost(stub)?.media as string[])[0]).toBe(path);
+  });
+
+  it.each(["mkv", "avi", "mpeg", "3gp", "3g2", "exe"])(
+    "sigue rechazando .%s — fuera del catálogo a propósito (defensa en profundidad)",
+    async (extension) => {
+      const stub = useGuardOk();
+
+      const result = await createPostAction(
+        postForm({ body: "", videoPaths: [`${TENANT_ID}/${USER_ID}/video-abc.${extension}`] }),
+      );
+
+      expect(result).toEqual({ ok: false, code: "photo" });
+      expect(insertedPost(stub)).toBeUndefined();
   });
 });
 
@@ -590,5 +656,93 @@ describe("createPostAction — el filtro del video se valida contra el catálogo
     await createPostAction(postForm({ body: "", photos: [photo()] }));
 
     expect(insertedPost(stub)?.media_filters).toEqual({});
+  });
+});
+
+/* ------- A nombre de quién sale la publicación (entity_listing_id, 0023) --- */
+
+/**
+ * ESTA ES LA FRONTERA, no el composer.
+ *
+ * `entityId` llega por el body de la server action, y el `listings.id` de una
+ * ficha es público (está en su propia URL). Persistirlo sin comprobar que la
+ * ficha es de quien firma es dejar que cualquiera con un token de la comunidad
+ * publique a nombre del negocio de otro. La policy `posts_insert` (0023) ya lo
+ * rechazaría; esto corta antes, para no gastar Storage ni la llamada de
+ * moderación y para poder devolver un motivo que la UI sepa explicar.
+ */
+const LISTING_PROPIO = "44444444-4444-4444-8444-444444444444";
+
+function postFormComoEntidad(entityId: string): FormData {
+  const data = postForm({ body: "Abrimos también los domingos.", kind: "text" });
+  data.set("entityId", entityId);
+  return data;
+}
+
+describe("createPostAction — publicar COMO una entidad", () => {
+  it("con una ficha propia y publicada, el post persiste entity_listing_id", async () => {
+    const stub = useGuardOk();
+    mocks.puedeFirmarComo.mockResolvedValue(true);
+
+    const result = await createPostAction(postFormComoEntidad(LISTING_PROPIO));
+
+    expect(result).toMatchObject({ ok: true, entity: true });
+    expect(insertedPost(stub)?.entity_listing_id).toBe(LISTING_PROPIO);
+    // Se preguntó con el tenant y el usuario del GUARD, nunca con lo que vino
+    // en el body: el cliente no elige contra quién se lo compara.
+    expect(mocks.puedeFirmarComo).toHaveBeenCalledWith(stub.client, {
+      tenantId: TENANT_ID,
+      userId: USER_ID,
+      listingId: LISTING_PROPIO,
+    });
+  });
+
+  it("una ficha AJENA se rechaza y no se inserta nada", async () => {
+    const stub = useGuardOk();
+    mocks.puedeFirmarComo.mockResolvedValue(false);
+
+    const result = await createPostAction(
+      postFormComoEntidad("55555555-5555-4555-8555-555555555555"),
+    );
+
+    expect(result).toEqual({ ok: false, code: "entity" });
+    // Ni el INSERT, ni la moderación, ni Storage: se corta antes de gastar nada.
+    expect(insertedPost(stub)).toBeUndefined();
+    expect(mocks.moderateText).not.toHaveBeenCalled();
+    expect(stub.uploads.length).toBe(0);
+  });
+
+  it("`entity` es un código PROPIO, no `invalid`: son dos arreglos distintos", async () => {
+    useGuardOk();
+    mocks.puedeFirmarComo.mockResolvedValue(false);
+
+    const result = await createPostAction(postFormComoEntidad(LISTING_PROPIO));
+
+    // Si esto fuera `invalid`, el composer mostraría "Contanos un poquito más"
+    // a alguien cuyo texto está perfecto y cuyo problema es otro.
+    expect(result).not.toMatchObject({ code: "invalid" });
+  });
+
+  it("un entityId que no es un uuid ni llega a preguntarse: rebota en el esquema", async () => {
+    useGuardOk();
+
+    const data = postForm({ body: "Hola comunidad", kind: "text" });
+    data.set("entityId", "no-soy-un-uuid");
+    const result = await createPostAction(data);
+
+    expect(result).toEqual({ ok: false, code: "invalid" });
+    expect(mocks.puedeFirmarComo).not.toHaveBeenCalled();
+  });
+
+  it("CERO REGRESIÓN: sin entityId el post es personal y no se pregunta nada", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({ body: "Hoy hubo feria en la plaza.", kind: "text" }),
+    );
+
+    expect(result).toMatchObject({ ok: true, entity: false });
+    expect(insertedPost(stub)?.entity_listing_id).toBeNull();
+    expect(mocks.puedeFirmarComo).not.toHaveBeenCalled();
   });
 });

@@ -59,3 +59,8 @@ next-env.d.ts
 *.png
 !public/**/*.png
 !assets-source/**/*.png
+
+# Artefactos locales del CLI de Supabase (cache de versión, credenciales de link).
+# No son del proyecto: los genera cualquiera que corra `supabase` en su máquina.
+supabase/.temp/
+supabase/.branches/

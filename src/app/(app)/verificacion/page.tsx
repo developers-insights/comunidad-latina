@@ -1,8 +1,19 @@
 import Link from "next/link";
-import { Info, Rocket, SealCheck, ShieldCheck, Warning } from "@phosphor-icons/react/dist/ssr";
+import {
+  Check,
+  Info,
+  Rocket,
+  SealCheck,
+  ShieldCheck,
+  Sparkle,
+  Warning,
+} from "@phosphor-icons/react/dist/ssr";
 import { Badge, Banner, BezelCard, buttonVariants } from "@/components/ui";
 import { CheckAzul } from "@/components/verificacion/check-azul";
 import { COPY_VERIFICACION } from "@/components/verificacion/copy";
+import { moduleAvailability } from "@/components/shell/module-access";
+import { getIdentidadActiva } from "@/lib/perfil-activo/identidad";
+import { tierDeIdentidadActiva } from "@/lib/perfil-activo/tier-sugerido";
 import { formatCents } from "@/lib/pricing";
 import { getTenantPrices } from "@/lib/pricing/read";
 import { findPrice } from "@/lib/pricing/catalog";
@@ -98,11 +109,15 @@ export default async function VerificacionPage({
   let identidadVerificada = false;
   let creditos: CreditoVista[] = [];
   let avisos: AvisoCanjeable[] = [];
+  // Con qué escalón coincide la identidad activa AHORA (perfil-activo, 0103).
+  // Es una nota de contexto en la tarjeta, nunca una restricción — ver el
+  // docblock de `tierDeIdentidadActiva`.
+  let sugerido: VerificacionTier | null = null;
 
   if (user) {
     const cliente = supabaseSinTiparVerificacion(supabase);
 
-    const [perfilRes, subRes, grantRes, listRes] = await Promise.all([
+    const [perfilRes, subRes, grantRes, listRes, identidad] = await Promise.all([
       supabase.from("profiles").select("identity_verified").eq("id", user.id).maybeSingle(),
       cliente
         .from("verification_subscriptions")
@@ -123,6 +138,7 @@ export default async function VerificacionPage({
         .eq("status", "published")
         .order("created_at", { ascending: false })
         .limit(50),
+      getIdentidadActiva(),
     ]);
 
     identidadVerificada = perfilRes.data?.identity_verified === true;
@@ -131,11 +147,16 @@ export default async function VerificacionPage({
       grantEsCanjeable(grant),
     );
     avisos = (listRes.data ?? []) as AvisoCanjeable[];
+    sugerido = tierDeIdentidadActiva(identidad);
   }
 
   const activa = llevaCheckAzul(suscripcion);
   const tieneFacturacion = Boolean(suscripcion?.stripe_customer_id);
   const credito = creditos[0] ?? null;
+  // Mismo gate que Ajustes: sin esto, la nota de "creador de contenido" abriría
+  // una ruta que no existe (o que todavía no abre) en comunidades sin ese módulo.
+  const creadoresActivo =
+    moduleAvailability("creadores", tenant.modules, tenant.modulesSoon) === "active";
 
   return (
     <div className="pb-10">
@@ -238,6 +259,7 @@ export default async function VerificacionPage({
               activa={activa}
               esElContratado={suscripcion?.subject_type === tier && activa}
               tieneFacturacion={tieneFacturacion}
+              coincideConTuCuenta={!activa && sugerido === tier}
             />
           ))}
         </div>
@@ -290,6 +312,37 @@ export default async function VerificacionPage({
           </div>
         </BezelCard>
       </section>
+
+      {/* ---------------------------------- El otro "verificado": creadores */}
+      {/* Va AL FINAL a propósito: primero se explica el check azul entero
+          —incluidos sus límites—, y recién después se ofrece la salida para
+          quien en realidad buscaba otra cosa. Pedido textual del cliente, en
+          la misma frase que pidió este check (ver el docblock de
+          `C.creadores` en components/verificacion/copy.ts). */}
+      {creadoresActivo && (
+        <section className="mt-8">
+          <BezelCard coreClassName="flex items-start gap-3 p-4">
+            <Sparkle
+              size={22}
+              weight="fill"
+              aria-hidden="true"
+              className="mt-0.5 shrink-0 text-foreground-muted"
+            />
+            <div className="min-w-0">
+              <h2 className="font-display text-base font-bold text-foreground">
+                {C.creadores.title}
+              </h2>
+              <p className="mt-1 text-sm text-foreground-muted">{C.creadores.body}</p>
+              <Link
+                href="/creadores/solicitud"
+                className={`${buttonVariants({ variant: "outline", size: "sm" })} mt-3`}
+              >
+                {C.creadores.cta}
+              </Link>
+            </div>
+          </BezelCard>
+        </section>
+      )}
     </div>
   );
 }
@@ -315,12 +368,15 @@ function PlanCard({
   activa,
   esElContratado,
   tieneFacturacion,
+  coincideConTuCuenta,
 }: {
   tier: VerificacionTier;
   precioLabel: string;
   activa: boolean;
   esElContratado: boolean;
   tieneFacturacion: boolean;
+  /** Coincide con la identidad activa ahora — nota de contexto, no un gate. */
+  coincideConTuCuenta: boolean;
 }) {
   const plan = VERIFICACION_PLANES[tier];
 
@@ -336,6 +392,12 @@ function PlanCard({
       </div>
 
       <p className="mt-1 text-sm text-foreground-muted">{plan.paraQuien}</p>
+      {coincideConTuCuenta && (
+        <p className="mt-1 flex items-center gap-1 text-xs font-medium text-brand-ink">
+          <Check size={12} weight="bold" aria-hidden="true" />
+          {C.page.coincideConTuCuenta}
+        </p>
+      )}
 
       <p className="mt-3">
         <span className="font-display text-2xl font-bold text-foreground">{precio}</span>{" "}

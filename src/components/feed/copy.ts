@@ -78,8 +78,16 @@ export const COPY = {
     addVideo: "Agregar video",
     removeVideo: "Quitar video",
     videoChip: "Video",
-    videoTooBig: "Ese video es muy pesado — probá con uno de menos de 60 MB.",
-    videoWrongType: "Solo podemos subir videos MP4 o WebM.",
+    /**
+     * Acá vivían `videoTooBig` y `videoWrongType`. Se fueron el 2026-08-24: el
+     * peso máximo y la lista de formatos aceptados los decide
+     * `@/lib/media/video-upload-limits`, y desde que ese módulo arma los dos
+     * mensajes con SUS números (`formatVideoTooBigMessage`,
+     * `VIDEO_WRONG_TYPE_MESSAGE`) estas dos líneas eran una segunda versión que
+     * ya nadie mostraba — y que decía "MP4 o WebM" cuando el input hace rato
+     * acepta también .mov. Un copy huérfano no molesta hasta el día que alguien
+     * lo vuelve a usar y contradice al que manda.
+     */
     videoLimit: "Por ahora va un video por publicación.",
     videoUploading: (percent: number) => `Subiendo tu video… ${percent}%`,
     videoUploadErrorTitle: "No pudimos subir el video",
@@ -159,6 +167,55 @@ export const COPY = {
     // copy (COPY.post.questionChip); esta es la del composer, antes de publicar.
     questionModeChip: "Pregunta",
     questionModeRemove: "Salir del modo pregunta",
+
+    /**
+     * A NOMBRE DE QUIÉN SALE ESTA PUBLICACIÓN (`posts.entity_listing_id`, 0023).
+     *
+     * No es un detalle de formulario: es la diferencia entre contar algo vos y
+     * decirlo con el nombre de tu negocio, y una publicación firmada por el
+     * negocio además llega distinto (sólo a quien lo sigue — ver
+     * `feedPostVisibilityFilter`). Por eso el copy AFIRMA en presente —"Vas a
+     * publicar como"— en vez de preguntar: quien no toca nada tiene que
+     * enterarse igual, sin leer una etiqueta de campo.
+     *
+     * Nada de esto se muestra cuando la persona sólo tiene su perfil: un
+     * selector de una sola opción estorba (mismo criterio que el cambiador del
+     * header, identity-switcher.tsx).
+     */
+    autoria: {
+      /** Encabezado de la fila, siempre en presente y sin signos de pregunta. */
+      label: "Vas a publicar como",
+      /** Segunda línea de la fila cuando no se eligió ninguna ficha. */
+      personal: "Tu perfil personal",
+      /** Qué es cada ficha, en una palabra, debajo de su nombre. */
+      kindLabel: { business: "Tu negocio", professional: "Tu ficha profesional" },
+      /** Acción de la fila. El control es toda la fila; esto la nombra. */
+      change: "Cambiar",
+      /** `aria-label` de la fila cerrada: dice el estado Y la acción. */
+      changeLabel: (nombre: string) => `Vas a publicar como ${nombre}. Cambiar de perfil`,
+      /** Título del grupo de opciones que se despliega. */
+      chooseLabel: "Elegí con qué perfil publicar",
+      /**
+       * Mientras el servidor contesta con qué fichas se puede firmar. Publicar
+       * queda apagado ese ratito a propósito: si saliera antes de la
+       * respuesta, saldría a nombre de quien no eligió nadie.
+       */
+      loading: "Viendo con qué perfiles podés publicar…",
+      /**
+       * No se pudo preguntar. Se dice lo ÚNICO que le importa a la persona —con
+       * qué nombre va a salir— en vez de un "error de conexión" que la deja
+       * adivinando.
+       */
+      failed: "No pudimos ver tus otros perfiles. Esta publicación va a salir con tu nombre.",
+      /**
+       * El servidor rechazó la ficha (`code: "entity"` de `createPostAction`).
+       * Pasa cuando la ficha dejó de estar publicada entre que se abrió el
+       * composer y se tocó Publicar — o cuando alguien mandó una ajena.
+       */
+      rejectedTitle: "No pudimos publicar con ese perfil",
+      rejectedBody:
+        "Puede que la ficha ya no esté publicada. Elegí otro perfil y probá de nuevo.",
+    },
 
     /**
      * PASO DE TEXTO (rediseño 2026-07-27, feedback del cliente: "no está el
@@ -322,7 +379,14 @@ export const COPY = {
         },
         property: {
           title: "Propiedad",
-          description: "Publicá un alquiler o una venta.",
+          /**
+           * SÓLO ALQUILERES (decisión de producto, 2026-08-24). El tile decía
+           * "un alquiler o una venta" y la venta ya no se puede publicar: el
+           * formulario no la ofrece. Nombrar las tres formas de alquiler que sí
+           * existen es además lo que la gente busca — "cuarto" y "vivienda
+           * compartida" son la mitad del catálogo real de la comunidad.
+           */
+          description: "Publicá un alquiler: departamento, cuarto o vivienda compartida.",
         },
         business: {
           title: "Negocio",

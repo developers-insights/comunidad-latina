@@ -61,14 +61,41 @@ export const COPY = {
         title: "Salario y modalidad",
         intro:
           "Acá el pago no es opcional: los avisos que dicen cuánto pagan reciben muchas más postulaciones.",
-        amountLabel: "Cuánto pagás",
+        amountLabel: "Desde",
         amountPlaceholder: "18",
         amountHelp: "Solo el número.",
+        /**
+         * "Hasta" y no "Máximo": el que publica está diciendo hasta cuánto
+         * puede pagar, no poniendo un techo a la persona. Y queda al lado de
+         * "Desde", que se lee de corrido como el rango que es.
+         */
+        amountMaxLabel: "Hasta",
+        amountMaxPlaceholder: "22",
+        amountMaxHelp: "Si pagás un monto fijo, dejalo vacío.",
         periodLabel: "Cada cuánto",
         periodHelp: "Cómo se calcula ese pago.",
         previewLabel: "Así se va a ver en tu aviso",
         typeLegend: "Dedicación",
         typeHelp: "Elegí lo que más se parezca a la carga horaria.",
+        modeLegend: "Dónde se trabaja",
+        modeHelp: "Si es a distancia, después no hace falta poner una zona.",
+
+        // ---- Bloque plegado: la ficha del puesto -------------------------
+        // Seis campos que hoy se preguntan por chat. Van PLEGADOS a propósito:
+        // son útiles, no obligatorios, y desplegados convertirían un paso de
+        // tres controles en una planilla que nadie termina en un teléfono.
+        moreTitle: "Más detalles del puesto",
+        moreHint: "Opcional — ayuda a que se postule la gente correcta",
+        daysLabel: "Días",
+        daysHelp: "Tocá los días que se trabaja.",
+        scheduleLabel: "Horario",
+        schedulePlaceholder: "Ej.: de 9 a 17, con una hora de almuerzo",
+        experienceLabel: "Experiencia que pedís",
+        experiencePlaceholder: "Sin preferencia",
+        languagesLabel: "Idiomas necesarios",
+        languagesHelp: "Marcá todos los que hagan falta para el puesto.",
+        startsOnLabel: "Cuándo empieza",
+        applyByLabel: "Hasta cuándo se puede postular",
       },
 
       // ---------------------------------------------------------------- 3/4
@@ -118,7 +145,22 @@ export const COPY = {
         intro: "Último paso: dónde se trabaja y, si querés, una foto del lugar.",
         areaLabel: "Zona",
         areaPlaceholder: "Ej.: Washington Heights, NYC",
-        areaHelp: "Dónde se trabaja. Si es a distancia, poné “Remoto”.",
+        /**
+         * Ya NO dice «si es a distancia, poné "Remoto"»: eso lo declara ahora la
+         * modalidad del paso anterior, y pedir que además se escriba a mano era
+         * exactamente el texto libre que la 0087 vino a reemplazar. Con
+         * modalidad "a distancia" este campo directamente no se muestra.
+         */
+        areaHelp: "El barrio o la ciudad donde se trabaja.",
+        areaRemoteTitle: "Este trabajo es a distancia",
+        areaRemoteBody:
+          "Como se hace desde donde esté la persona, no hace falta poner una zona.",
+
+        // ---- Negocio vinculado (listings.business_listing_id, 0107) -------
+        businessLabel: "Publicar como negocio",
+        businessHelp:
+          "El aviso va a mostrar tu ficha, y el puesto aparece también en la página del negocio.",
+        businessPersonal: "A nombre personal",
         photosTitle: "Fotos del lugar",
         photosHelp:
           "Opcional: hasta 4 fotos. Un aviso sin fotos se publica igual, no pasa nada.",
@@ -151,7 +193,12 @@ export const COPY = {
       titleShort: "Escribí el puesto con un poco más de detalle (al menos 8 caracteres).",
       descriptionShort: "Contanos un poco más del trabajo — al menos 30 caracteres.",
       salaryRequired: "Poné cuánto pagás. Es lo primero que mira la gente.",
+      salaryRangeInvalid: "El máximo no puede ser menor que el mínimo. Revisá los dos montos.",
       areaShort: "Decinos la zona (al menos 3 caracteres).",
+      applyByAfterStart:
+        "La fecha límite para postularse tiene que ser antes de que empiece el trabajo.",
+      businessLinkInvalid:
+        "No pudimos vincular el aviso a ese negocio. Elegí uno tuyo o publicalo a nombre personal.",
       questionLabelShort: "Escribí la pregunta completa.",
       questionOptionsShort: "Una pregunta de opción múltiple necesita al menos 2 opciones.",
       questionOptionEmpty: "Completá todas las opciones o quitá las que sobran.",

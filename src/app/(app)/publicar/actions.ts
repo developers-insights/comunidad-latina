@@ -22,12 +22,50 @@ import {
 } from "@/lib/integrity";
 import { currentSourceHost } from "@/lib/integrity/source-host";
 import {
+  DEFAULT_PUBLISHABLE_OPERATION,
   PROPERTY_OPERATIONS,
   PROPERTY_OPERATION_ATTR,
   PROPERTY_TYPES,
   PROPERTY_TYPE_ATTR,
+  PUBLISHABLE_PROPERTY_OPERATIONS,
+  isPublishableOperation,
   resolvePricePeriod,
 } from "@/lib/propiedades/tipos";
+import {
+  AVAILABLE_FROM_ATTR,
+  DEPOSIT_ATTR,
+  EXTRA_FEES_ATTR,
+  FURNISHED_ATTR,
+  FURNISHED_STATES,
+  MAX_DEPOSIT,
+  MAX_EXTRA_FEES_LENGTH,
+  REQUIREMENTS_ATTR,
+  UTILITIES_ATTR,
+  isRentalRequirement,
+  isRentalUtility,
+  normalizeAvailableFrom,
+  normalizeRequirements,
+  normalizeUtilities,
+} from "@/lib/propiedades/alquiler";
+import { isEventAudience, isEventCategory } from "@/lib/eventos/categorias";
+import {
+  EVENT_AUDIENCE_ATTR,
+  EVENT_CAPACITY_ATTR,
+  EVENT_CATEGORY_ATTR,
+  EVENT_ENDS_ATTR,
+  EVENT_FREE_ATTR,
+  EVENT_MODES,
+  EVENT_MODE_ATTR,
+  EVENT_ONLINE_URL_ATTR,
+  EVENT_STARTS_ATTR,
+  EVENT_TICKETS_URL_ATTR,
+  EVENT_VENUE_AREA_ATTR,
+  MAX_EVENT_CAPACITY,
+  normalizeCapacity,
+  normalizeEventUrl,
+  requiresVenue,
+  resolveEventDates,
+} from "@/lib/eventos/detalles";
 
 /**
  * Server actions de /publicar.
@@ -74,6 +112,24 @@ const COPY = {
   propertyTypeRequired: "Elegí qué tipo de propiedad estás publicando.",
   operationRequired: "Decinos si la propiedad se alquila o se vende.",
   /**
+   * La venta dejó de aceptarse (spec: «No se incluirán propiedades en venta ni
+   * Open Houses»). El mensaje explica la política en vez de decir "valor
+   * inválido": quien manda `venta` no se equivocó de tipeo, está intentando
+   * hacer algo que la comunidad decidió no ofrecer todavía, y merece saberlo.
+   * El formulario ya no ofrece la opción, así que esto sólo aparece con un
+   * payload armado a mano o con una pestaña abierta desde antes del cambio.
+   */
+  saleNotAccepted:
+    "Por ahora en Comunidad Latina se publican solo alquileres. La venta de propiedades no está disponible.",
+  /** Contradicción de fechas: un evento no puede terminar antes de empezar. */
+  eventEndsBeforeStart:
+    "La hora de cierre tiene que ser posterior a la de inicio. Revisá las dos fechas.",
+  eventModeRequired: "Decinos si el evento es en un lugar o en línea.",
+  eventOnlineUrlRequired:
+    "Pegá el enlace por donde se entra al evento (tiene que empezar con https://).",
+  eventTicketsUrlInvalid:
+    "Ese enlace de entradas no se entiende. Copialo completo, con https:// adelante.",
+  /**
    * Contradicción, no dato faltante: "en venta" y "por mes" no pueden ser
    * ciertos a la vez, y elegir cuál gana sería inventar lo que la persona quiso
    * decir. El formulario hace inalcanzable este estado (al elegir Venta se
@@ -97,6 +153,11 @@ const USER_FACING_ISSUES = new Set<string>([
   COPY.propertyTypeRequired,
   COPY.operationRequired,
   COPY.saleWithFrequency,
+  COPY.saleNotAccepted,
+  COPY.eventEndsBeforeStart,
+  COPY.eventModeRequired,
+  COPY.eventOnlineUrlRequired,
+  COPY.eventTicketsUrlInvalid,
 ]);
 
 const draftSchema = z
@@ -110,10 +171,30 @@ const draftSchema = z
     // bedrooms/sqft — sin migración. El catálogo y las reglas de coherencia
     // viven en @/lib/propiedades/tipos, que también usan el form y el listado.
     propertyType: z.enum(PROPERTY_TYPES).nullish(),
+    /**
+     * Se sigue ACEPTANDO el vocabulario completo (`alquiler` y `venta`) aunque
+     * sólo uno sea publicable. Si el enum se recortara a `["alquiler"]`, un
+     * payload con `venta` moriría con el issue genérico de zod ("valor
+     * inválido") y la persona vería "Revisá los datos del aviso". Dejándolo
+     * pasar el enum, el `superRefine` de abajo puede rechazarlo con el motivo
+     * real: la venta no está disponible todavía. El dato nunca llega a la base
+     * en ninguno de los dos caminos.
+     */
     operation: z.enum(PROPERTY_OPERATIONS).nullish(),
     bedrooms: z.number().int().min(0).max(20).nullish(),
     bathrooms: z.number().int().min(0).max(20).nullish(),
     sqft: z.number().int().min(1).max(100_000).nullish(),
+    // ---- Condiciones del alquiler (contrato: @/lib/propiedades/alquiler) ----
+    // Todas OPCIONALES. Un aviso sin ellas es un aviso incompleto, no uno
+    // inválido: obligarlas dejaría fuera al que sólo quiere publicar rápido, que
+    // es la mitad del vertical. `deposit` admite 0 —"no pido depósito" es una
+    // afirmación que merece poder hacerse— y por eso es `min(0)` y no `positive`.
+    deposit: z.number().min(0).max(MAX_DEPOSIT).nullish(),
+    extraFees: z.string().trim().max(MAX_EXTRA_FEES_LENGTH).nullish(),
+    utilities: z.array(z.string()).max(20).nullish(),
+    requirements: z.array(z.string()).max(20).nullish(),
+    furnished: z.enum(FURNISHED_STATES).nullish(),
+    availableFrom: z.string().trim().max(10).nullish(),
     areaLabel: z.string().trim().min(3).max(80),
     exactAddress: z.string().trim().max(200).nullish(),
     // Campos específicos de professional/event (módulo DIRECTORIOS)
@@ -125,6 +206,21 @@ const draftSchema = z
       .max(40)
       .refine((value) => !Number.isNaN(new Date(value).getTime()), "fecha inválida")
       .nullish(),
+    // ---- Resto del evento (contrato: @/lib/eventos/*) ----------------------
+    eventEndsAt: z.string().trim().max(40).nullish(),
+    eventCategory: z.string().trim().max(40).nullish(),
+    eventMode: z.enum(EVENT_MODES).nullish(),
+    eventOnlineUrl: z.string().trim().max(500).nullish(),
+    eventTicketsUrl: z.string().trim().max(500).nullish(),
+    /**
+     * Tres estados. `null` (no declaró) NO es lo mismo que `false` (declaró que
+     * cobra): el formulario obliga a elegir, pero un cliente viejo que no manda
+     * el campo tiene que poder seguir publicando sin que le inventemos que su
+     * evento es pago.
+     */
+    eventFree: z.boolean().nullish(),
+    eventCapacity: z.number().int().min(1).max(MAX_EVENT_CAPACITY).nullish(),
+    eventAudience: z.string().trim().max(40).nullish(),
   })
   .superRefine((value, ctx) => {
     if (value.kind === "property" && (value.priceAmount === null || value.priceAmount === undefined)) {
@@ -138,8 +234,31 @@ const draftSchema = z
           message: COPY.propertyTypeRequired,
         });
       }
-      if (!value.operation) {
+      // La operación sólo se EXIGE si de verdad hay algo que elegir. Con una
+      // sola publicable, la ausencia no es un dato faltante: es la única
+      // lectura posible de lo que ya se dijo, y asumirla no pone nada en boca
+      // de nadie (mismo criterio que la regla 2 de `resolvePricePeriod`).
+      // Pedirla igual le daría un error de "campo obligatorio" a un cliente
+      // viejo por un campo que el formulario ni siquiera muestra.
+      if (!value.operation && PUBLISHABLE_PROPERTY_OPERATIONS.length > 1) {
         ctx.addIssue({ code: "custom", path: ["operation"], message: COPY.operationRequired });
+      }
+      // -----------------------------------------------------------------
+      // LA VENTA YA NO SE PUBLICA (spec). Se frena ACÁ, en el borde del
+      // servidor, y no sólo en el formulario: el formulario ya no ofrece la
+      // opción, pero una pestaña abierta desde antes del cambio —o cualquier
+      // llamada directa a la action— sigue pudiendo mandarla.
+      //
+      // Nótese qué NO se hace: NO se reescribe `venta` a `alquiler`. Corregir
+      // en silencio una operación convertiría la venta de $450.000 que alguien
+      // quiso publicar en un alquiler de $450.000. Se rechaza y se explica.
+      // -----------------------------------------------------------------
+      if (value.operation && !isPublishableOperation(value.operation)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["operation"],
+          message: COPY.saleNotAccepted,
+        });
       }
       // Coherencia operación ↔ período: la regla completa (y su porqué) está
       // en resolvePricePeriod. Se valida ACÁ, en el borde, para que la fila que
@@ -156,8 +275,44 @@ const draftSchema = z
     if (value.kind === "professional" && !value.category) {
       ctx.addIssue({ code: "custom", path: ["category"], message: "rubro requerido" });
     }
-    if (value.kind === "event" && !value.eventStartsAt) {
-      ctx.addIssue({ code: "custom", path: ["eventStartsAt"], message: "fecha requerida" });
+    if (value.kind === "event") {
+      if (!value.eventStartsAt) {
+        ctx.addIssue({ code: "custom", path: ["eventStartsAt"], message: "fecha requerida" });
+      } else {
+        // Fin antes del inicio: contradicción, no dato incompleto. Descartar el
+        // fin en silencio dejaría a la persona publicando convencida de haber
+        // puesto una hora de cierre que nadie va a ver.
+        const dates = resolveEventDates(value.eventStartsAt, value.eventEndsAt);
+        if (!dates.ok && dates.reason === "fin_antes_del_inicio") {
+          ctx.addIssue({
+            code: "custom",
+            path: ["eventEndsAt"],
+            message: COPY.eventEndsBeforeStart,
+          });
+        }
+      }
+      // Dirección física O enlace virtual: la spec pide que la elección sea
+      // EXPLÍCITA, así que la modalidad es obligatoria. Un evento en línea sin
+      // enlace no es un evento en línea: es una promesa sin puerta.
+      if (!value.eventMode) {
+        ctx.addIssue({ code: "custom", path: ["eventMode"], message: COPY.eventModeRequired });
+      } else if (!requiresVenue(value.eventMode) && !normalizeEventUrl(value.eventOnlineUrl)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["eventOnlineUrl"],
+          message: COPY.eventOnlineUrlRequired,
+        });
+      }
+      // El enlace de entradas es opcional, pero si vino y no se entiende se
+      // avisa en vez de tragárselo: un botón que no aparece sin explicación es
+      // la clase de silencio que después se reporta como "no me guardó nada".
+      if (value.eventTicketsUrl?.trim() && !normalizeEventUrl(value.eventTicketsUrl)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["eventTicketsUrl"],
+          message: COPY.eventTicketsUrlInvalid,
+        });
+      }
     }
   });
 
@@ -199,27 +354,80 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
     return { ok: false, error: COPY.tooManyToday };
   }
 
-  const attrs: Record<string, string | number> = {};
+  const attrs: Record<string, string | number | boolean | string[]> = {};
   if (input.kind === "property") {
     // Sólo se escribe lo declarado: una clave ausente significa "no declarado",
     // y ésa es la lectura que hace readPropertyFacts. Escribir un valor vacío o
     // un default convertiría un silencio en una afirmación.
     if (input.propertyType) attrs[PROPERTY_TYPE_ATTR] = input.propertyType;
-    if (input.operation) attrs[PROPERTY_OPERATION_ATTR] = input.operation;
+    // La operación se escribe SIEMPRE, aunque hoy sólo haya una publicable: el
+    // aviso tiene que decir qué es por sí mismo. El filtro del listado y el chip
+    // del detalle leen el dato guardado, no la política que regía el día que se
+    // publicó — un alquiler sin `operation` sería invisible para el filtro.
+    attrs[PROPERTY_OPERATION_ATTR] = input.operation ?? DEFAULT_PUBLISHABLE_OPERATION;
     if (input.bedrooms !== null && input.bedrooms !== undefined) attrs.bedrooms = input.bedrooms;
     if (input.bathrooms !== null && input.bathrooms !== undefined) attrs.bathrooms = input.bathrooms;
     if (input.sqft !== null && input.sqft !== undefined) attrs.sqft = input.sqft;
+
+    // ---- Condiciones del alquiler --------------------------------------
+    // Cada una entra sólo si se declaró. El depósito se compara contra
+    // null/undefined y NO con un truthy: `0` es falsy y es justamente el valor
+    // que más importa conservar ("no pido depósito").
+    if (input.deposit !== null && input.deposit !== undefined) {
+      attrs[DEPOSIT_ATTR] = input.deposit;
+    }
+    if (input.extraFees) attrs[EXTRA_FEES_ATTR] = input.extraFees;
+    // Los catálogos se filtran del lado del servidor: el formulario manda
+    // slugs de una lista cerrada, pero esta action es pública y puede recibir
+    // cualquier arreglo de strings. Se guarda lo reconocible y se descarta el
+    // resto (a diferencia de una contradicción, un slug inventado no cambia el
+    // sentido de nada — sólo sobra).
+    const utilities = normalizeUtilities((input.utilities ?? []).filter(isRentalUtility));
+    if (utilities.length > 0) attrs[UTILITIES_ATTR] = utilities;
+    const requirements = normalizeRequirements(
+      (input.requirements ?? []).filter(isRentalRequirement),
+    );
+    if (requirements.length > 0) attrs[REQUIREMENTS_ATTR] = requirements;
+    if (input.furnished) attrs[FURNISHED_ATTR] = input.furnished;
+    const availableFrom = normalizeAvailableFrom(input.availableFrom);
+    if (availableFrom) attrs[AVAILABLE_FROM_ATTR] = availableFrom;
   }
   if (input.kind === "professional") {
     if (input.category) attrs.category = input.category;
     if (input.credentials) attrs.credentials = input.credentials;
   }
   if (input.kind === "event") {
-    if (input.eventStartsAt) {
-      // Canónico ISO (mismo formato que el seed: attrs.starts_at)
-      attrs.starts_at = new Date(input.eventStartsAt).toISOString();
+    // Fechas por el resolutor compartido: devuelve ISO canónico (el mismo
+    // formato que el seed y que lee parseEventAttrs) y ya rechazó el fin
+    // anterior al inicio en el esquema.
+    const dates = resolveEventDates(input.eventStartsAt, input.eventEndsAt);
+    if (dates.ok) {
+      attrs[EVENT_STARTS_ATTR] = dates.startsAt;
+      if (dates.endsAt) attrs[EVENT_ENDS_ATTR] = dates.endsAt;
     }
-    attrs.venue_area = input.areaLabel;
+    if (isEventCategory(input.eventCategory)) attrs[EVENT_CATEGORY_ATTR] = input.eventCategory;
+    if (input.eventMode) attrs[EVENT_MODE_ATTR] = input.eventMode;
+    const onlineUrl = normalizeEventUrl(input.eventOnlineUrl);
+    // El enlace virtual sólo se guarda si el evento ES virtual: dejarlo pegado
+    // a uno presencial pondría un botón "entrar" en un evento al que hay que ir.
+    if (onlineUrl && input.eventMode && !requiresVenue(input.eventMode)) {
+      attrs[EVENT_ONLINE_URL_ATTR] = onlineUrl;
+    }
+    // Enlace BASE de entradas (gratis, para todos). El premium vive en la
+    // columna cta_tickets_url, que la 0048 le prohíbe a un aviso free —y un
+    // aviso NACE free—, así que no puede escribirse desde acá aunque quisiera.
+    // La regla de precedencia entre los dos está en resolveEventTicketsUrl().
+    const ticketsUrl = normalizeEventUrl(input.eventTicketsUrl);
+    if (ticketsUrl) attrs[EVENT_TICKETS_URL_ATTR] = ticketsUrl;
+    // Gratis o pago: se escribe el booleano tal cual vino. Hasta hoy esta clave
+    // sólo la escribían los scripts de seed y `parseEventAttrs` la leía sin que
+    // ningún formulario la produjera nunca — el chip "Gratis" existía y no
+    // aparecía jamás en un evento real.
+    if (typeof input.eventFree === "boolean") attrs[EVENT_FREE_ATTR] = input.eventFree;
+    const capacity = normalizeCapacity(input.eventCapacity);
+    if (capacity !== null) attrs[EVENT_CAPACITY_ATTR] = capacity;
+    if (isEventAudience(input.eventAudience)) attrs[EVENT_AUDIENCE_ATTR] = input.eventAudience;
+    attrs[EVENT_VENUE_AREA_ATTR] = input.areaLabel;
   }
 
   // -------------------------------------------------------------------------
@@ -231,7 +439,14 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
   // otra cosa, así el precio nunca se muestra con un "/mes" que nadie quiso.
   // El caso contradictorio ya lo frenó el esquema; acá sólo queda el defensivo.
   // -------------------------------------------------------------------------
-  let pricePeriod: "month" | "week" | "day" | "one_time" | null = input.priceAmount
+  // Un evento declarado GRATIS no lleva precio, punto. Se fuerza acá y no se
+  // confía en que el formulario haya limpiado el campo: se puede escribir un
+  // precio, volver atrás y marcar "gratis", y el estado del input sobrevive.
+  // Publicar "Gratis · $25" sería mentirle a quien lee.
+  const isFreeEvent = input.kind === "event" && input.eventFree === true;
+  const priceAmount = isFreeEvent ? null : (input.priceAmount ?? null);
+
+  let pricePeriod: "month" | "week" | "day" | "one_time" | null = priceAmount
     ? (input.pricePeriod ?? "month")
     : null;
   if (input.kind === "property") {
@@ -249,7 +464,7 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
       kind: input.kind,
       title: input.title,
       description: input.description,
-      price_amount: input.priceAmount ?? null,
+      price_amount: priceAmount,
       price_currency: tenant.currency,
       price_period: pricePeriod,
       attrs,

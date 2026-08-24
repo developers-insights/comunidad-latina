@@ -10,11 +10,9 @@ import {
   BroadcastCard,
   CategoryTabs,
   CriticalNotification,
-  INBOX_PANEL_ID,
   InboxFilters,
   MarkAllRead,
   NotificationItem,
-  inboxTabId,
   notificationsCopy as COPY,
   type BroadcastCardData,
   type NotificationItemData,
@@ -26,7 +24,9 @@ import {
   type NotificationCategory,
 } from "@/lib/notifications/categories";
 import {
+  INBOX_PANEL_ID,
   inboxHref,
+  inboxTabId,
   parseInboxQuery,
   type InboxQuery,
 } from "@/lib/notifications/href";

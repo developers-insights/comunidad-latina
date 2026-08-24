@@ -7,25 +7,46 @@ export const COPY = {
   /**
    * Vendedor: desde el split tiendas/particulares (call con el cliente
    * 2026-07-24) un producto puede venir de una TIENDA (attrs.store_listing_id
-   * apunta a un listing kind='business') o de una PERSONA. El chip lo dice de
-   * frente en la card y en el detalle; "Verificada" es el plan Presencia
-   * Verificada (business_accounts.verified_presence), que hasta hoy no se
-   * mostraba en ningún lado.
+   * apunta a un listing kind='business') o de una PERSONA.
+   *
+   * DOS INSIGNIAS, DOS HECHOS DISTINTOS (fix 2026-08-24 — bug reportado por el
+   * cliente: la insignia "Verificada" vivía atada SOLO a `verified` —
+   * business_accounts.verified_presence, el plan PAGO "Presencia Verificada"—
+   * y sólo se ofrecía a tiendas. Un particular con identidad verificada no
+   * tenía ninguna insignia, y la que sí existía sonaba a "confirmamos quién
+   * es" cuando en realidad decía "pagó una suscripción". Mismo criterio que ya
+   * resuelve el perfil (IdentityBadge = escudo verde gratis vs. CheckAzul =
+   * sello azul pago, src/components/verificacion/check-azul.tsx) y que ya usa
+   * el propio Marketplace para no llamarle "Destacado" a lo pago
+   * (lib/monetization/copy.ts): nombre y estilo distintos por insignia.
    */
   seller: {
     storeLabel: "Tienda",
     privateLabel: "Particular",
-    verifiedLabel: "Verificada",
-    verifiedStoreLabel: "Tienda verificada",
     fallbackStoreName: "Tienda de la comunidad",
     fallbackPrivateName: "Miembro de la comunidad",
     storeAriaLabel: (name: string) => `Tienda ${name} — ver su vidriera`,
     privateAriaLabel: (name: string) => `Vendido por ${name}, particular`,
-    verifiedAriaLabel: "Tienda verificada: confirmó su identidad y su plan con la comunidad",
+
+    /** Identidad verificada (profiles.identity_verified) — GRATIS, de
+     *  CUALQUIER vendedor: tienda o particular. Escudo verde, como en el perfil. */
+    identityLabel: "Identidad verificada",
+    identityAriaLabel: "Identidad verificada: confirmó su documento ante Comunidad Latina",
+
+    /** Presencia Verificada (business_accounts.verified_presence) — PLAN PAGO,
+     *  solo tiendas. Mismo nombre que ya usa /negocios para el mismo flag: "el
+     *  badge de la card usa el nombre real de la feature, no un genérico
+     *  'Verificado'" (negocios/business-card.tsx). Sello azul, nunca verde: el
+     *  verde queda reservado para la identidad, arriba. */
+    presenceVerifiedLabel: "Presencia verificada",
+    presenceVerifiedAriaLabel:
+      "Presencia verificada: la tienda tiene el plan pago de Comunidad Latina — no es una verificación de identidad",
   },
   list: {
     title: "Marketplace",
     subtitle: "Lo que vende tu comunidad: tiendas y personas",
+    /** Nombre accesible de la barra Tiendas/Artículos (NavTabs). */
+    tabsLabel: "Secciones del marketplace",
     categoryFilterLabel: "Filtrar por categoría",
     categoryAll: "Todas",
     searchLabel: "Buscar productos en el marketplace",
@@ -55,6 +76,9 @@ export const COPY = {
     priceLabel: "Precio",
     categoryLabel: "Categoría",
     conditionLabel: "Estado",
+    /** Disponibilidad (spec cliente) — derivada de `status`: todo lo que se
+     *  ve acá está a la venta. Ver la nota en marketplace/[id]/page.tsx. */
+    availableLabel: "Disponible",
     descriptionTitle: "Descripción",
     storeTitle: "Vendido por",
     visitStore: "Ver tienda",
@@ -88,6 +112,13 @@ export const COPY = {
     // Tocar la foto de la tienda la abre en el visor; a la vidriera se entra
     // con "Ver tienda" (feedback 2026-07-26).
     openPhotos: (name: string) => `Ver fotos de ${name}`,
+    /** Directorio de tiendas: "cantidad de artículos activos" (spec cliente). */
+    activeListingCount: (n: number) =>
+      n === 0
+        ? "Sin artículos activos por ahora"
+        : n === 1
+          ? "1 artículo activo"
+          : `${n.toLocaleString("es-US")} artículos activos`,
     messageTitle: "¿Querés preguntarle algo?",
     messageCta: "Escribirle a la tienda",
     messagePlaceholder: "Hola, quería consultarles por…",
@@ -104,6 +135,22 @@ export const COPY = {
     offOwnerMessage:
       "Tus productos siguen guardados: nada se borró. Reactivá tu membresía y tu tienda vuelve tal como estaba.",
     offOwnerCta: "Reactivar mi tienda",
+  },
+
+  // -------------------------------------------------------------------------
+  // DIRECTORIO DE TIENDAS — pestaña "Tiendas" (spec cliente). El listado
+  // completo de vendedoras/es comerciales, navegable — antes sólo se llegaba a
+  // una tienda puntual desde el chip de vendedor de un producto.
+  // -------------------------------------------------------------------------
+  storesList: {
+    searchLabel: "Buscar tiendas en el marketplace",
+    searchPlaceholder: "Buscá una tienda…",
+    loadMore: "Ver más tiendas",
+    emptyTitle: "Todavía no hay tiendas",
+    emptyMessage:
+      "Acá vas a ver los negocios de la comunidad que venden en el Marketplace. ¿Tenés uno? Podés abrir el tuyo cuando quieras.",
+    emptySearchTitle: (q: string) => `No encontramos tiendas con "${q}"`,
+    emptySearchMessage: "Probá con otro nombre o mirá todas las tiendas disponibles.",
   },
 
   // -------------------------------------------------------------------------
@@ -190,6 +237,14 @@ export const COPY = {
     needLoginMessage:
       "Publicar es gratis. Necesitamos que entres a tu cuenta para saber quién vende.",
     needLoginCta: "Entrar a mi cuenta",
+    // --- Gate de identidad (spec cliente: "todos los vendedores deben
+    // completar la verificación de identidad antes de publicar") — tienda o
+    // particular, sin excepción. Se muestra ANTES del formulario, nunca un
+    // botón "Publicar" que el servidor va a rechazar. -----------------------
+    needIdentityTitle: "Verificá tu identidad para vender acá",
+    needIdentityMessage:
+      "Sea que vendas desde una tienda o como particular, primero necesitamos confirmar que sos una persona real. Es gratis, es una sola vez y toma un par de minutos con un documento.",
+    needIdentityCta: "Verificar mi identidad",
     // --- Split tiendas/particulares (call cliente 2026-07-24) ----------------
     // Tener un negocio dejó de ser un requisito: cualquiera de la comunidad
     // puede vender lo suyo. Quien SÍ tiene tiendas elige desde cuál publica.
@@ -213,6 +268,8 @@ export const COPY = {
     conditionLegend: "Estado del producto",
     conditionNew: "Nuevo",
     conditionUsed: "Usado",
+    fulfillmentLegend: "¿Cómo lo recibe quien compra?",
+    fulfillmentHelp: "Elegí al menos una opción — podés marcar varias.",
     photosTitle: "Fotos del producto",
     photosHelp: "Hasta 4 fotos. Los productos con fotos reciben muchas más consultas.",
     addPhotoLabel: "Agregar foto",
@@ -235,6 +292,7 @@ export const COPY = {
       priceRequired: "Poné un precio para tu producto.",
       categoryRequired: "Elegí una categoría.",
       conditionRequired: "Decinos si es nuevo o usado.",
+      fulfillmentRequired: "Elegí al menos una forma de recibirlo: envío, entrega o recogida.",
       uploadFailed: "No pudimos subir las fotos — revisá tu conexión e intentá de nuevo.",
       generic: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo en un ratito.",
     },

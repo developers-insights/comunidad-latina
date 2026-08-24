@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  businessCategoryDisplayLabel,
   categoryLabel,
   categoryShortLabel,
   conditionLabel,
   followerCountLabel,
   formatProductPrice,
+  fulfillmentLabel,
+  isFulfillmentMethod,
   isProductCategory,
   isProductCondition,
   parseProductAttrs,
@@ -13,42 +16,89 @@ import {
 } from "./helpers";
 
 describe("parseProductAttrs", () => {
-  it("lee store_listing_id, category y condition de un attrs válido", () => {
+  it("lee store_listing_id, category, condition y fulfillment de un attrs válido", () => {
     expect(
       parseProductAttrs({
         store_listing_id: "11111111-1111-4111-8111-111111111111",
         category: "hogar",
         condition: "usado",
+        fulfillment: ["envio", "recogida"],
       }),
     ).toEqual({
       storeListingId: "11111111-1111-4111-8111-111111111111",
       category: "hogar",
       condition: "usado",
+      fulfillment: ["envio", "recogida"],
     });
   });
 
-  it("degrada a null en vez de tirar con attrs vacío, null o con forma rara", () => {
+  it("degrada a null/[] en vez de tirar con attrs vacío, null o con forma rara", () => {
     expect(parseProductAttrs({})).toEqual({
       storeListingId: null,
       category: null,
       condition: null,
+      fulfillment: [],
     });
     expect(parseProductAttrs(null)).toEqual({
       storeListingId: null,
       category: null,
       condition: null,
+      fulfillment: [],
     });
     expect(parseProductAttrs(["no", "es", "un", "objeto"])).toEqual({
       storeListingId: null,
       category: null,
       condition: null,
+      fulfillment: [],
     });
   });
 
   it("ignora campos que no son string (nunca revienta con un número o un objeto)", () => {
     expect(
       parseProductAttrs({ store_listing_id: 123, category: { raro: true }, condition: "" }),
-    ).toEqual({ storeListingId: null, category: null, condition: null });
+    ).toEqual({ storeListingId: null, category: null, condition: null, fulfillment: [] });
+  });
+
+  it("fulfillment: descarta valores fuera del catálogo, ordena por el catálogo y nunca duplica", () => {
+    expect(
+      parseProductAttrs({ fulfillment: ["recogida", "envio", "en_dron", "envio"] }).fulfillment,
+    ).toEqual(["envio", "recogida"]);
+  });
+
+  it("fulfillment: un attrs sin ese campo (avisos viejos) degrada a array vacío, no a error", () => {
+    expect(parseProductAttrs({ category: "hogar" }).fulfillment).toEqual([]);
+  });
+});
+
+describe("isFulfillmentMethod / fulfillmentLabel", () => {
+  it("acepta sólo envío, entrega y recogida", () => {
+    expect(isFulfillmentMethod("envio")).toBe(true);
+    expect(isFulfillmentMethod("entrega")).toBe(true);
+    expect(isFulfillmentMethod("recogida")).toBe(true);
+    expect(isFulfillmentMethod("teletransporte")).toBe(false);
+  });
+
+  it("traduce cada valor a su etiqueta legible", () => {
+    expect(fulfillmentLabel("envio")).toBe("Envío");
+    expect(fulfillmentLabel("entrega")).toBe("Entrega en mano");
+    expect(fulfillmentLabel("recogida")).toBe("Recogida en persona");
+  });
+
+  it("devuelve null para un valor fuera del catálogo", () => {
+    expect(fulfillmentLabel("dron")).toBeNull();
+  });
+});
+
+describe("businessCategoryDisplayLabel", () => {
+  it("capitaliza la primera letra y cambia guiones bajos por espacios", () => {
+    expect(businessCategoryDisplayLabel("comida_bebidas")).toBe("Comida bebidas");
+    expect(businessCategoryDisplayLabel("belleza")).toBe("Belleza");
+  });
+
+  it("null o vacío devuelve null (nunca un chip vacío)", () => {
+    expect(businessCategoryDisplayLabel(null)).toBeNull();
+    expect(businessCategoryDisplayLabel("")).toBeNull();
+    expect(businessCategoryDisplayLabel("   ")).toBeNull();
   });
 });
 

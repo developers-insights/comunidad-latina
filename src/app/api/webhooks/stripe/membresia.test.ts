@@ -78,10 +78,12 @@ function createAdminStub(config: AdminConfig = {}) {
         return builder;
       });
     }
-    builder.eq = vi.fn((...args: unknown[]) => {
-      calls.push({ table, method: "eq", args });
-      return builder;
-    });
+    for (const method of ["eq", "or"] as const) {
+      builder[method] = vi.fn((...args: unknown[]) => {
+        calls.push({ table, method, args });
+        return builder;
+      });
+    }
     builder.maybeSingle = vi.fn(async () => result());
     builder.single = vi.fn(async () => result());
     builder.then = (resolve: (v: OpResult) => unknown, reject: (e: unknown) => unknown) =>
@@ -110,6 +112,27 @@ const OWNER = "owner-1";
 
 /** La tienda (un `listing kind='business'`) tal como la ve el webhook. */
 const STORE_ROW = { id: STORE, tenant_id: TENANT, created_by: OWNER };
+
+/**
+ * `store_memberships` en el ALTA, tal como la ve `concederUnaSolaVez`:
+ *
+ *  · `update` = el RECLAMO, que no matchea porque la tienda todavía no tiene fila;
+ *  · `insert` = el alta propiamente dicha, que entra;
+ *  · `select` = la relectura desambiguadora, que en este camino no se usa.
+ *
+ * El `upsert` a ciegas que había acá escribía siempre y seguía de largo hasta la
+ * notificación y la auditoría. Ver `lib/monetization/concesion.ts`.
+ */
+const ALTA_LIMPIA = {
+  update: { data: [], error: null },
+  insert: { error: null },
+  select: { data: null, error: null },
+};
+
+/** El 23505 con el que la base rebota un alta cuando ya hay fila. */
+const CHOQUE_UNIQUE = {
+  error: { code: "23505", message: "duplicate key value violates unique constraint" },
+};
 
 function membershipMetadata(overrides: Record<string, string> = {}) {
   return {
@@ -236,7 +259,7 @@ describe("membresía — alta legítima", () => {
     return useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: STORE_ROW, error: null } },
-      store_memberships: { select: { data: null, error: null }, upsert: { error: null } },
+      store_memberships: ALTA_LIMPIA,
     });
   }
 
@@ -246,9 +269,9 @@ describe("membresía — alta legítima", () => {
     const res = await POST(signedRequest(checkoutEvent()));
 
     expect(res.status).toBe(200);
-    const upserts = callsTo(stub, "store_memberships", "upsert");
-    expect(upserts).toHaveLength(1);
-    expect(upserts[0].args[0]).toMatchObject({
+    const altas = callsTo(stub, "store_memberships", "insert");
+    expect(altas).toHaveLength(1);
+    expect(altas[0].args[0]).toMatchObject({
       tenant_id: TENANT,
       store_id: STORE,
       owner_id: OWNER,
@@ -275,11 +298,11 @@ describe("membresía — alta legítima", () => {
     );
 
     expect(res.status).toBe(200);
-    const upserts = callsTo(stub, "store_memberships", "upsert");
-    expect(upserts).toHaveLength(1);
+    const altas = callsTo(stub, "store_memberships", "insert");
+    expect(altas).toHaveLength(1);
     // Y lo cobrado queda ESCRITO en la fila: la pantalla del dueño no puede
     // mostrar el default de la columna cuando se pagaron USD 25.
-    expect(upserts[0].args[0]).toMatchObject({ price_cents: 2_500, currency: "usd" });
+    expect(altas[0].args[0]).toMatchObject({ price_cents: 2_500, currency: "usd" });
   });
 
   it("la MONEDA se compara normalizada: metadata en mayúsculas, Stripe en minúsculas", async () => {
@@ -290,7 +313,107 @@ describe("membresía — alta legítima", () => {
     const res = await POST(signedRequest(checkoutEvent({ currency: "usd" })));
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "store_memberships", "upsert")).toHaveLength(1);
+    expect(callsTo(stub, "store_memberships", "insert")).toHaveLength(1);
+  });
+});
+
+/* --------------- 1. bis. UNA concesión por pago, y una sola --------------- */
+
+/**
+ * EL HUECO QUE ESTOS TESTS FIJAN
+ *
+ * El alta era un `upsert(onConflict: store_id)` que escribía SIEMPRE y seguía de
+ * largo hasta la notificación y la fila de `audit_log`. Este handler corre dos
+ * veces sobre el mismo pago en dos situaciones normales:
+ *
+ *  · `checkout.session.completed` y `checkout.session.async_payment_succeeded`
+ *    traen la MISMA Session con `event.id` distintos, así que el UNIQUE de
+ *    `payment_events.event_id` los deja pasar a los dos;
+ *  · ante un intento previo con `processed=false`, el route reprocesa a propósito.
+ *
+ * Resultado viejo: segundo comprobante "tu tienda ya está en el Marketplace" y
+ * segunda fila de auditoría por un solo pago. Y con una cancelación en el medio,
+ * una entrega demorada del alta resucitaba la membresía a `active`.
+ */
+describe("membresía — una concesión por pago", () => {
+  it("la SEGUNDA entrega del mismo pago no notifica ni audita de nuevo", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      listings: { select: { data: STORE_ROW, error: null } },
+      store_memberships: {
+        // El reclamo no matchea: la fila ya lleva ESTA suscripción.
+        update: { data: [], error: null },
+        insert: CHOQUE_UNIQUE,
+        select: { data: { stripe_subscription_id: "sub_membresia_1" }, error: null },
+      },
+    });
+
+    const res = await POST(signedRequest(checkoutEvent()));
+
+    expect(res.status).toBe(200);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+    expect(callsTo(stub, "audit_log", "insert")).toHaveLength(0);
+  });
+
+  it("el token del pago viaja en el WHERE del reclamo, no en un if", async () => {
+    // Sin el predicado, dos entregas CONCURRENTES leen las dos el mismo estado y
+    // las dos notifican. Con él, Postgres serializa y la segunda no toca nada.
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      listings: { select: { data: STORE_ROW, error: null } },
+      store_memberships: ALTA_LIMPIA,
+    });
+
+    await POST(signedRequest(checkoutEvent()));
+
+    expect(callsTo(stub, "store_memberships", "or")).toEqual([
+      {
+        table: "store_memberships",
+        method: "or",
+        args: ["stripe_subscription_id.is.null,stripe_subscription_id.neq.sub_membresia_1"],
+      },
+    ]);
+  });
+
+  /**
+   * `store_memberships_subscription_uniq` (0048) rebota cuando la suscripción ya
+   * está en la fila de OTRA tienda. ANTES esto era un `throw` sin excepción
+   * ninguna: 500 → Stripe reintentando tres días un evento condenado, porque el
+   * choque va a ser idéntico en el reintento número mil. El premium de aviso ya
+   * tenía la salida correcta y acá nunca se había portado.
+   */
+  it("un pago ya vinculado a otra tienda NO activa, y responde 200 (no reintentar)", async () => {
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      listings: { select: { data: STORE_ROW, error: null } },
+      store_memberships: {
+        update: { data: [], error: null },
+        insert: CHOQUE_UNIQUE,
+        // La relectura: esta tienda sigue sin fila ⇒ el choque fue del PAGO.
+        select: { data: null, error: null },
+      },
+    });
+
+    const res = await POST(signedRequest(checkoutEvent()));
+
+    expect(res.status).toBe(200);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+    expect(callsTo(stub, "audit_log", "insert")).toHaveLength(0);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("un fallo transitorio SÍ da 500, para que Stripe reintente", async () => {
+    useAdmin({
+      payment_events: { insert: { error: null } },
+      listings: { select: { data: STORE_ROW, error: null } },
+      store_memberships: {
+        update: { error: { code: "57014", message: "canceling statement due to timeout" } },
+      },
+    });
+
+    const res = await POST(signedRequest(checkoutEvent()));
+
+    expect(res.status).toBe(500);
   });
 });
 
@@ -312,7 +435,7 @@ describe("membresía — correlación con la tienda", () => {
     return useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: row, error: null } },
-      store_memberships: { select: { data: null, error: null }, upsert: { error: null } },
+      store_memberships: ALTA_LIMPIA,
     });
   }
 
@@ -324,7 +447,7 @@ describe("membresía — correlación con la tienda", () => {
     // 200 para que Stripe no reintente: reintentar no hace aparecer una tienda
     // borrada. El payload queda en `payment_events` para reconciliar a mano.
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "store_memberships", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "store_memberships", "insert")).toHaveLength(0);
     expect(mocks.createNotification).not.toHaveBeenCalled();
     expect(logged(errorSpy)).toContain(STORE);
   });
@@ -335,7 +458,7 @@ describe("membresía — correlación con la tienda", () => {
     const res = await POST(signedRequest(checkoutEvent()));
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "store_memberships", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "store_memberships", "insert")).toHaveLength(0);
     expect(errorSpy).toHaveBeenCalled();
   });
 
@@ -347,7 +470,7 @@ describe("membresía — correlación con la tienda", () => {
     // Si esto concediera, la membresía se le daría al dueño VIEJO: la fila lleva
     // `owner_id` de la metadata, no el dueño real de la tienda.
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "store_memberships", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "store_memberships", "insert")).toHaveLength(0);
     expect(errorSpy).toHaveBeenCalled();
   });
 
@@ -357,7 +480,7 @@ describe("membresía — correlación con la tienda", () => {
     useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: null, error: { code: "57014" } } },
-      store_memberships: { select: { data: null, error: null }, upsert: { error: null } },
+      store_memberships: ALTA_LIMPIA,
     });
 
     const res = await POST(signedRequest(checkoutEvent()));
@@ -373,7 +496,7 @@ describe("membresía — monto y moneda", () => {
     return useAdmin({
       payment_events: { insert: { error: null } },
       listings: { select: { data: STORE_ROW, error: null } },
-      store_memberships: { select: { data: null, error: null }, upsert: { error: null } },
+      store_memberships: ALTA_LIMPIA,
     });
   }
 
@@ -383,7 +506,7 @@ describe("membresía — monto y moneda", () => {
     const res = await POST(signedRequest(checkoutEvent({ amount_total: 1 })));
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "store_memberships", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "store_memberships", "insert")).toHaveLength(0);
   });
 
   it("NO concede si la MONEDA no es la pactada, aunque el número coincida", async () => {
@@ -392,7 +515,7 @@ describe("membresía — monto y moneda", () => {
     const res = await POST(signedRequest(checkoutEvent({ currency: "ars" })));
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "store_memberships", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "store_memberships", "insert")).toHaveLength(0);
     expect(logged(errorSpy)).toContain("ars");
   });
 
@@ -402,7 +525,7 @@ describe("membresía — monto y moneda", () => {
     const res = await POST(signedRequest(checkoutEvent({ payment_status: "unpaid" })));
 
     expect(res.status).toBe(200);
-    expect(callsTo(stub, "store_memberships", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "store_memberships", "insert")).toHaveLength(0);
   });
 });
 
@@ -430,7 +553,7 @@ describe("membresía — una renovación nunca apaga la tienda", () => {
 
     expect(res.status).toBe(200);
     expect(callsTo(stub, "store_memberships", "update")).toHaveLength(0);
-    expect(callsTo(stub, "store_memberships", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "store_memberships", "insert")).toHaveLength(0);
     expect(mocks.createNotification).not.toHaveBeenCalled();
   });
 
@@ -444,7 +567,7 @@ describe("membresía — una renovación nunca apaga la tienda", () => {
 
     expect(res.status).toBe(200);
     expect(callsTo(stub, "store_memberships", "update")).toHaveLength(0);
-    expect(callsTo(stub, "store_memberships", "upsert")).toHaveLength(0);
+    expect(callsTo(stub, "store_memberships", "insert")).toHaveLength(0);
   });
 
   it("una renovación en otra MONEDA tampoco apaga nada", async () => {

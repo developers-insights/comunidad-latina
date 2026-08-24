@@ -43,4 +43,14 @@ export const PERFIL_ACTIVO_COPY = {
 
   /** Etiqueta accesible del control del header. */
   switcherLabel: (nombre: string) => `Estás como ${nombre}. Tocá para cambiar de perfil.`,
+
+  /**
+   * La puerta de /perfil, junto a "Editar perfil" / "Verificar" / "Compartir
+   * perfil" — donde el cliente lo fue a buscar. Con negocios abre esta MISMA
+   * hoja (`sheet` de arriba); sin ninguno, ofrece crear el primero con
+   * `sheet.createBusiness` / `createBusinessHint`.
+   */
+  profileDoor: {
+    switchLabel: "Cambiar de perfil",
+  },
 } as const;

@@ -1,9 +1,9 @@
-import { MapPin } from "@phosphor-icons/react/dist/ssr";
-import { CardMedia } from "@/components/ui";
+import { MapPin, Tag } from "@phosphor-icons/react/dist/ssr";
+import { CardMedia, Chip } from "@/components/ui";
 import { FollowButton } from "@/components/social/follow-button";
 import { COPY } from "./copy";
 import { followerCountLabel } from "./helpers";
-import { SellerVerifiedBadge } from "./seller-chip";
+import { PresenciaVerificadaBadge, SellerIdentityBadge } from "./seller-chip";
 
 /** Sin foto propia: misma composición de marca que usa la card de producto. */
 const FALLBACK_PHOTO = "/images/og-default.png";
@@ -16,8 +16,12 @@ export interface StoreHeaderModel {
   followerCount: number;
   /** Resuelto en el server — null cuando no hay sesión (FollowButton invita a entrar). */
   initialFollowing: boolean;
-  /** business_accounts.verified_presence del negocio (plan "Presencia Verificada"). */
+  /** business_accounts.verified_presence del negocio (plan "Presencia Verificada") — PAGO. */
   verified?: boolean;
+  /** profiles.identity_verified de quien administra la tienda — GRATIS. Ver seller-chip.tsx. */
+  identityVerified?: boolean;
+  /** attrs.category de la tienda, ya traducida a etiqueta legible. */
+  categoryLabel?: string | null;
 }
 
 /**
@@ -35,11 +39,20 @@ export function StoreHeader({ store }: { store: StoreHeaderModel }) {
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           {store.name}
         </h1>
-        {store.verified && (
-          <div className="mt-2">
-            <SellerVerifiedBadge label={COPY.seller.verifiedStoreLabel} />
+
+        {(store.identityVerified || store.verified) && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {store.identityVerified && <SellerIdentityBadge />}
+            {store.verified && <PresenciaVerificadaBadge />}
           </div>
         )}
+
+        {store.categoryLabel && (
+          <Chip icon={<Tag />} className="mt-2">
+            {store.categoryLabel}
+          </Chip>
+        )}
+
         {store.areaLabel && (
           <p className="mt-1 flex items-center gap-1.5 text-sm text-foreground-secondary">
             <MapPin size={16} aria-hidden="true" className="shrink-0" />

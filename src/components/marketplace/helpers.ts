@@ -71,6 +71,58 @@ export function conditionLabel(value: string | null): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Envío / entrega / recogida — cómo llega el artículo a quien compra.
+//
+// Vive en `attrs.fulfillment` (jsonb, mismo lugar que category/condition) y NO
+// en una migración: no hay nada acá que necesite ser consultable por columna
+// (no se filtra por método de entrega, sólo se MUESTRA), así que agregar
+// columnas y un CHECK nuevo habría sido superficie de esquema por una lista de
+// hasta 3 strings. Un producto puede ofrecer más de uno a la vez (envío Y
+// recogida, por ejemplo) — por eso es array y no un enum simple como condition.
+// ---------------------------------------------------------------------------
+
+export const FULFILLMENT_METHODS = [
+  { value: "envio", label: "Envío", shortLabel: "Envío" },
+  { value: "entrega", label: "Entrega en mano", shortLabel: "Entrega" },
+  { value: "recogida", label: "Recogida en persona", shortLabel: "Recogida" },
+] as const;
+
+export type FulfillmentMethod = (typeof FULFILLMENT_METHODS)[number]["value"];
+
+export function isFulfillmentMethod(value: string): value is FulfillmentMethod {
+  return FULFILLMENT_METHODS.some((option) => option.value === value);
+}
+
+export function fulfillmentLabel(value: string): string | null {
+  return FULFILLMENT_METHODS.find((option) => option.value === value)?.label ?? null;
+}
+
+/** Sólo los valores del set curado, sin duplicados y en el orden del catálogo — nunca lo que mande el cliente tal cual. */
+function sanitizeFulfillment(values: unknown): FulfillmentMethod[] {
+  if (!Array.isArray(values)) return [];
+  const known = new Set(values.filter((v): v is string => typeof v === "string"));
+  return FULFILLMENT_METHODS.map((option) => option.value).filter((value) => known.has(value));
+}
+
+// ---------------------------------------------------------------------------
+// Categoría de TIENDA (listings kind='business', attrs.category) — a
+// diferencia de PRODUCT_CATEGORIES, acá no hay un set curado propio: la
+// categoría de negocio la define el módulo Negocios (rubro libre) y este
+// módulo sólo la MUESTRA en el directorio de Tiendas. Mismo fallback que
+// categoryLabel para categorías fuera de cualquier lista: capitalizar en vez
+// de mostrar el value crudo (`comida_bebidas` → `Comida_bebidas` sería peor
+// que no mostrar nada, pero mostrar el texto tal cual con la primera en
+// mayúscula alcanza para un directorio).
+// ---------------------------------------------------------------------------
+
+export function businessCategoryDisplayLabel(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).replace(/_/g, " ");
+}
+
+// ---------------------------------------------------------------------------
 // attrs de producto — patrón parsePropertyAttrs (listings/helpers.ts)
 // ---------------------------------------------------------------------------
 
@@ -79,6 +131,8 @@ export interface ProductAttrs {
   storeListingId: string | null;
   category: string | null;
   condition: string | null;
+  /** Cómo llega el producto a quien compra — 0 a 3 valores del catálogo. */
+  fulfillment: FulfillmentMethod[];
 }
 
 function asNonEmptyString(value: unknown): string | null {
@@ -94,6 +148,7 @@ export function parseProductAttrs(attrs: Json): ProductAttrs {
     storeListingId: asNonEmptyString(record.store_listing_id),
     category: asNonEmptyString(record.category),
     condition: asNonEmptyString(record.condition),
+    fulfillment: sanitizeFulfillment(record.fulfillment),
   };
 }
 

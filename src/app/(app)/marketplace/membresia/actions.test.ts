@@ -182,6 +182,16 @@ describe("activarMembresiaTienda — de dónde sale el monto", () => {
 const STORE_ROW = { id: STORE, tenant_id: "tenant-1", created_by: USER };
 
 /** Admin client mínimo: recuerda el upsert y responde vacío a todo lo demás. */
+/**
+ * ⚠️ `captured.upsert` conserva el nombre por comodidad, pero el alta YA NO ES UN
+ * `upsert`: desde la auditoría de pagos 2026-08-24 es un RECLAMO (`update` con el
+ * token del pago en el `WHERE`) y, si no matchea, un `insert`. Lo que estos tests
+ * miran —qué fila se escribe y con qué valores— no cambió; el camino sí. El
+ * porqué está en `lib/monetization/concesion.ts`.
+ *
+ * Este doble simula "la tienda todavía no tiene fila": el reclamo devuelve cero
+ * filas y el alta entra por el `insert`.
+ */
 function adminSpy(
   captured: { upsert: Record<string, unknown> | null },
   storeRow: unknown = STORE_ROW,
@@ -189,12 +199,34 @@ function adminSpy(
   const builder = {
     select: () => builder,
     eq: () => builder,
+    or: () => builder,
     maybeSingle: async () => ({ data: null, error: null }),
+    // El RECLAMO: `update().eq().or().select()` se espera al final de la cadena.
+    update: (values: Record<string, unknown>) => {
+      const reclamo = {
+        eq: () => reclamo,
+        or: () => reclamo,
+        // Cero filas ⇒ no había fila que reclamar ⇒ sigue el alta.
+        select: async () => ({ data: [], error: null }),
+        then: (resolve: (v: { data: unknown[]; error: null }) => unknown) =>
+          resolve({ data: [], error: null }),
+      };
+      void values;
+      return reclamo;
+    },
     upsert: async (values: Record<string, unknown>) => {
       captured.upsert = values;
       return { error: null };
     },
-    insert: async () => ({ error: null }),
+    insert: async (values: Record<string, unknown>) => {
+      // El alta de `store_memberships` trae `store_id`; la fila de `audit_log`,
+      // no. Sin distinguirlas, la auditoría pisaba lo capturado y el
+      // `toMatchObject({ status: "active" })` fallaba por el motivo equivocado.
+      if (values && typeof values === "object" && "store_id" in values) {
+        captured.upsert = values;
+      }
+      return { error: null };
+    },
   };
   const listings = {
     select: () => listings,

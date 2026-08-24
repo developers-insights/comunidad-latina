@@ -6,9 +6,13 @@ import {
   MapPin,
   RocketLaunch,
   Storefront,
+  Translate,
   UserGear,
 } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui";
+import { IdentityBadge } from "@/components/auth/identity-badge";
+import { fetchLanguagesByProfile } from "@/lib/profesionales/languages";
+import { languageLabels } from "@/lib/profile/catalogs";
 
 import {
   DetailTopBar,
@@ -151,31 +155,47 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
   // Publicador: perfil + trust score + cuántos avisos publicó
   // ---------------------------------------------------------------------
   let publisherCard: React.ReactNode = null;
+  // Idiomas (spec cliente) — fuera del `if` de abajo porque la sección que los
+  // dibuja va aparte de la card del publicador, más arriba en la página.
+  let languages: string[] = [];
   if (listing.created_by) {
-    const [{ data: profile }, { data: trust }, { count: publishedCount }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, display_name, avatar_url, identity_verified")
-        .eq("id", listing.created_by)
-        .maybeSingle(),
-      supabase
-        .from("trust_scores")
-        .select("score, level, signals")
-        .eq("profile_id", listing.created_by)
-        .maybeSingle(),
-      supabase
-        .from("listings")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenant.id)
-        .eq("created_by", listing.created_by)
-        .eq("status", "published"),
-    ]);
+    const [{ data: profile }, { data: trust }, { count: publishedCount }, languagesByProfile] =
+      await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, display_name, avatar_url, identity_verified")
+          .eq("id", listing.created_by)
+          .maybeSingle(),
+        supabase
+          .from("trust_scores")
+          .select("score, level, signals")
+          .eq("profile_id", listing.created_by)
+          .maybeSingle(),
+        supabase
+          .from("listings")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenant.id)
+          .eq("created_by", listing.created_by)
+          .eq("status", "published"),
+        // profiles_private.languages (0062) sólo lo abre profile_card() (0063) —
+        // ver el comentario largo de lib/profesionales/languages.ts.
+        fetchLanguagesByProfile(supabase, [listing.created_by]),
+      ]);
+    languages = languagesByProfile.get(listing.created_by) ?? [];
 
     const displayName = profile?.display_name ?? C.communityMember;
     publisherCard = (
       <BezelCard coreClassName="flex flex-col gap-3 p-4">
         <div className="flex items-center gap-3">
-          <Avatar src={profile?.avatar_url} name={displayName} size="lg" />
+          <Avatar
+            src={profile?.avatar_url}
+            name={displayName}
+            size="lg"
+            // Identidad verificada — insignia PROPIA sobre el avatar, distinta
+            // de la banda de credenciales de arriba (VerificationBand): son dos
+            // hechos distintos y tienen que leerse distintos (spec cliente).
+            badge={profile?.identity_verified ? <IdentityBadge /> : undefined}
+          />
           <div className="min-w-0">
             <p className="truncate font-display text-base font-bold text-foreground">
               {displayName}
@@ -278,6 +298,25 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
             {attrs.credentials.map((credential) => (
               <Chip key={credential} icon={<Certificate />}>
                 {credential}
+              </Chip>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Idiomas (spec cliente) — mismo Chip que Credenciales, mismo ícono que
+          la pestaña "Información" del perfil (Translate), así se lee igual en
+          toda la app. Sólo aparece si la privacidad del profesional lo permite
+          (profile_card, 0063) y si de verdad habla alguno declarado. */}
+      {languages.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-2 text-sm font-semibold text-foreground-secondary">
+            Idiomas
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {languageLabels(languages).map((label) => (
+              <Chip key={label} icon={<Translate />}>
+                {label}
               </Chip>
             ))}
           </div>

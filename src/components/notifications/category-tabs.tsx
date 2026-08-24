@@ -11,15 +11,16 @@ import {
   PRIMARY_TAB_CATEGORIES,
   type NotificationCategory,
 } from "@/lib/notifications/categories";
-import { inboxHref, type InboxFilter, type InboxTab } from "@/lib/notifications/href";
+import {
+  INBOX_PANEL_ID,
+  inboxHref,
+  inboxTabId,
+  type InboxFilter,
+  type InboxTab,
+} from "@/lib/notifications/href";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "./category-icon";
 import { COPY } from "./copy";
-
-/** El panel que estas pestañas gobiernan; la página lo rotula con este id. */
-export const INBOX_PANEL_ID = "notificaciones-panel";
-
-export const inboxTabId = (tab: InboxTab) => `notificaciones-tab-${tab}`;
 
 export type CategoryTabsProps = {
   active: InboxTab;

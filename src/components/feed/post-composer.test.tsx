@@ -30,6 +30,7 @@ import type {
 
 const {
   createPostAction,
+  getAutoriasAction,
   prepareMediaUploadAction,
   bakePhoto,
   saveTagsAction,
@@ -38,6 +39,17 @@ const {
   searchTaggableMembersAction,
 } = vi.hoisted(() => ({
   createPostAction: vi.fn(),
+  /**
+   * "¿Con qué perfiles podés publicar?" (0023). El DEFAULT es "sólo vos": es el
+   * escenario de la enorme mayoría y el que tiene que dejar el composer
+   * exactamente como estaba antes de que existiera la firma de entidad. Los
+   * tests que prueban publicar como negocio lo sobrescriben.
+   */
+  getAutoriasAction: vi.fn(async () => ({
+    personal: { displayName: "Ana Gómez", avatarUrl: null },
+    entidades: [] as { listingId: string; nombre: string; kind: "business" | "professional" }[],
+    porDefecto: null as string | null,
+  })),
   prepareMediaUploadAction: vi.fn(),
   // Los dos pasos que corren DESPUÉS de publicar (necesitan el postId).
   // Los tipos de resultado van EXPLÍCITOS: sin eso TypeScript infiere el caso
@@ -104,6 +116,7 @@ vi.mock("@/app/(app)/feed/actions", () => ({
   createPostAction,
   prepareMediaUploadAction,
 }));
+vi.mock("@/app/(app)/feed/autoria-actions", () => ({ getAutoriasAction }));
 
 // Etiquetas (0089) y música (0090): el composer las monta y las guarda después
 // de publicar. Acá sólo se verifica el CABLEADO — que se llamen con el postId
@@ -202,6 +215,12 @@ function sheetBody(): HTMLTextAreaElement {
 afterEach(() => {
   cleanup();
   createPostAction.mockReset();
+  getAutoriasAction.mockReset();
+  getAutoriasAction.mockResolvedValue({
+    personal: { displayName: "Ana Gómez", avatarUrl: null },
+    entidades: [],
+    porDefecto: null,
+  });
   prepareMediaUploadAction.mockReset();
   bakePhoto.mockReset();
   bakePhoto.mockImplementation(async (file: File) => file);
@@ -865,5 +884,165 @@ describe("PostComposer — música y etiquetas montadas en la hoja", () => {
       postId: "22222222-2222-4222-8222-222222222222",
       profileIds: ["33333333-3333-4333-8333-333333333333"],
     });
+  });
+});
+
+/**
+ * =============================================================================
+ * A NOMBRE DE QUIÉN SALE LA PUBLICACIÓN (`posts.entity_listing_id`, 0023)
+ * =============================================================================
+ *
+ * La columna existe desde la 0023 y hasta hoy ninguna pantalla la escribía. Lo
+ * que este bloque ancla:
+ *
+ *  1. CERO REGRESIÓN. Sin fichas propias no aparece nada nuevo en la hoja y el
+ *     FormData sale exactamente como salía: sin `entityId`.
+ *  2. Con una ficha, la hoja DICE con qué nombre va a salir antes de publicar.
+ *  3. Se puede cambiar ahí mismo, sin salir a otra pantalla, en los dos
+ *     sentidos (negocio → vos, y vos → negocio).
+ *  4. Una ficha PROFESIONAL entra por la misma puerta que un negocio.
+ *  5. Si el servidor rechaza la ficha, se explica qué hacer — no un
+ *     "no se pudo publicar" genérico.
+ *
+ * Lo que NO se prueba acá y no es un olvido: que la ficha sea de quien firma.
+ * Eso no lo decide esta UI (que sólo manda el id elegido) sino
+ * `createPostAction` + la policy `posts_insert` — está en
+ * `app/(app)/feed/actions.test.ts` y en `lib/feed/autoria.test.ts`.
+ */
+const NEGOCIO = {
+  listingId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  nombre: "Panadería La Esperanza",
+  kind: "business" as const,
+};
+const PROFESIONAL = {
+  listingId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  nombre: "Ana Gómez — Contadora",
+  kind: "professional" as const,
+};
+
+/** El servidor contesta con estas fichas y con esta firma por defecto. */
+function conAutorias(
+  entidades: Array<typeof NEGOCIO | typeof PROFESIONAL>,
+  porDefecto: string | null,
+) {
+  getAutoriasAction.mockResolvedValue({
+    personal: { displayName: "Ana Gómez", avatarUrl: null },
+    entidades,
+    porDefecto,
+  });
+}
+
+/** Abre la hoja de Texto, que es el camino más corto hasta Publicar. */
+async function abrirHojaDeTexto() {
+  await openMenu();
+  fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.text.title));
+  return screen.findByLabelText(COPY.composer.compose.textPlaceholder);
+}
+
+describe("PostComposer — con qué perfil se publica", () => {
+  it("sin ninguna ficha propia no hay selector y el post sale personal", async () => {
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    const body = await abrirHojaDeTexto();
+
+    // Ni la fila, ni el aviso de carga, ni el de falla: la hoja es la de antes.
+    expect(screen.queryByText(COPY.composer.autoria.label)).toBeNull();
+    expect(screen.queryByText(COPY.composer.autoria.loading)).toBeNull();
+    expect(screen.queryByText(COPY.composer.autoria.failed)).toBeNull();
+
+    fireEvent.change(body, { target: { value: "Hoy hubo feria en la plaza." } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect(sent.get("entityId")).toBeNull();
+  });
+
+  it("actuando como negocio, la hoja lo dice y el post sale firmado por la ficha", async () => {
+    conAutorias([NEGOCIO], NEGOCIO.listingId);
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    const body = await abrirHojaDeTexto();
+
+    // Lo dice ANTES de publicar, con todas las letras.
+    await screen.findByText(COPY.composer.autoria.label);
+    expect(screen.getAllByText(NEGOCIO.nombre).length).toBeGreaterThan(0);
+
+    fireEvent.change(body, { target: { value: "Abrimos también los domingos." } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect(sent.get("entityId")).toBe(NEGOCIO.listingId);
+  });
+
+  it("se puede volver al perfil personal desde el composer, sin salir de la hoja", async () => {
+    conAutorias([NEGOCIO], NEGOCIO.listingId);
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    const body = await abrirHojaDeTexto();
+    await screen.findByText(COPY.composer.autoria.label);
+
+    // El grupo de opciones es de radios REALES: se eligen por su nombre.
+    const opciones = screen.getAllByRole("radio") as HTMLInputElement[];
+    expect(opciones.length).toBe(2);
+    fireEvent.click(opciones[0]);
+
+    fireEvent.change(body, { target: { value: "Fui a la feria y estaba llenísima." } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect(sent.get("entityId")).toBeNull();
+  });
+
+  it("una ficha PROFESIONAL se puede elegir igual que un negocio", async () => {
+    conAutorias([PROFESIONAL], null);
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    const body = await abrirHojaDeTexto();
+    await screen.findByText(COPY.composer.autoria.label);
+
+    const opciones = screen.getAllByRole("radio") as HTMLInputElement[];
+    // Arranca en personal (`porDefecto: null`) y se cambia a la ficha.
+    expect(opciones[0].checked).toBe(true);
+    fireEvent.click(opciones[1]);
+
+    fireEvent.change(body, { target: { value: "Atiendo consultas los martes." } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect(sent.get("entityId")).toBe(PROFESIONAL.listingId);
+  });
+
+  it("si el servidor rechaza la ficha, se explica qué hacer", async () => {
+    conAutorias([NEGOCIO], NEGOCIO.listingId);
+    createPostAction.mockResolvedValue({ ok: false, code: "entity" });
+    mount();
+    const body = await abrirHojaDeTexto();
+    await screen.findByText(COPY.composer.autoria.label);
+
+    fireEvent.change(body, { target: { value: "Tenemos pan recién salido." } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await screen.findByText(COPY.composer.autoria.rejectedTitle);
+    expect(screen.getByText(COPY.composer.autoria.rejectedBody)).toBeTruthy();
+  });
+
+  it("si no se puede preguntar, se avisa que sale con el nombre propio y se publica igual", async () => {
+    getAutoriasAction.mockRejectedValue(new Error("sin red"));
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    const body = await abrirHojaDeTexto();
+
+    await screen.findByText(COPY.composer.autoria.failed);
+
+    fireEvent.change(body, { target: { value: "Probando desde el subte." } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect(sent.get("entityId")).toBeNull();
   });
 });

@@ -56,6 +56,12 @@ export const PROPERTY_OPERATION_ATTR = "operation";
  * · `cuarto` es el caso más frecuente y por eso tiene entrada propia — el
  *   alquiler de una habitación dentro de una casa compartida es el pan de cada
  *   día del vertical, y meterlo dentro de "casa" lo volvería infiltrable.
+ * · `vivienda_compartida` NO es lo mismo que `cuarto` y por eso son dos: en un
+ *   cuarto se alquila UNA habitación con nombre y precio propios; en una
+ *   vivienda compartida se ofrece un lugar en una casa que ya está habitada, y
+ *   lo que define el aviso es con quiénes se convive, no qué metro cuadrado se
+ *   ocupa. La spec las nombra por separado ("cuartos en alquiler y viviendas
+ *   compartidas aprobadas") justamente porque se moderan distinto.
  * · `townhouse` se queda en inglés A PROPÓSITO: es la palabra que usa el
  *   listado real, el contrato y el vecino. "Casa adosada" sería más correcta
  *   en un diccionario y menos reconocible en Queens.
@@ -67,6 +73,7 @@ export const PROPERTY_TYPES = [
   "casa",
   "departamento",
   "cuarto",
+  "vivienda_compartida",
   "estudio",
   "townhouse",
   "local_comercial",
@@ -81,6 +88,7 @@ export const PROPERTY_TYPE_LABEL: Record<PropertyType, string> = {
   casa: "Casa",
   departamento: "Departamento",
   cuarto: "Cuarto o habitación",
+  vivienda_compartida: "Vivienda compartida",
   estudio: "Estudio",
   townhouse: "Townhouse",
   local_comercial: "Local comercial",
@@ -102,9 +110,57 @@ export const PROPERTY_TYPE_OPTIONS: readonly PropertyTypeOption[] = PROPERTY_TYP
 // Catálogo de operaciones
 // ---------------------------------------------------------------------------
 
+/**
+ * VOCABULARIO DE LECTURA. Todo lo que la app tiene que poder ENTENDER.
+ *
+ * Sigue teniendo `venta` y va a seguir teniéndola: hay avisos publicados con
+ * `attrs.operation = 'venta'` y borrarla de acá no los borraría a ellos — los
+ * volvería ilegibles. `normalizePropertyOperation` devolvería `null`, el chip
+ * "Venta" desaparecería del detalle y el filtro por operación dejaría de
+ * encontrarlos, todo sin un solo error. Un aviso que existe y no se puede leer
+ * es peor que un aviso que no se puede crear.
+ */
 export const PROPERTY_OPERATIONS = ["alquiler", "venta"] as const;
 
 export type PropertyOperation = (typeof PROPERTY_OPERATIONS)[number];
+
+/**
+ * VOCABULARIO DE ESCRITURA. Lo único que se puede publicar HOY.
+ *
+ * La spec es literal: «Inicialmente, Comunidad Latina solamente aceptará
+ * apartamentos en alquiler, cuartos en alquiler y viviendas compartidas
+ * aprobadas. No se incluirán propiedades en venta ni Open Houses.»
+ *
+ * POR QUÉ DOS LISTAS Y NO UNA RECORTADA. Lo que cambia es la POLÍTICA de qué se
+ * acepta hoy, no el significado de la palabra "venta". Separar lectura de
+ * escritura deja las dos verdades escritas al mismo tiempo: no se crean ventas
+ * nuevas, y las que ya están se siguen mostrando enteras hasta que venzan solas
+ * por el ciclo de la 0098. Cuando la comunidad decida abrir la venta, este
+ * arreglo vuelve a tener dos elementos y no hay que tocar nada más.
+ *
+ * ES LA FUENTE ÚNICA de esa política: la usan el esquema de la server action
+ * (`createListingDraft`) y el formulario. El filtro del listado y el detalle
+ * siguen leyendo `PROPERTY_OPERATIONS`, que es lo correcto — filtran sobre lo
+ * publicado, no sobre lo publicable.
+ */
+export const PUBLISHABLE_PROPERTY_OPERATIONS = ["alquiler"] as const;
+
+export type PublishablePropertyOperation =
+  (typeof PUBLISHABLE_PROPERTY_OPERATIONS)[number];
+
+const PUBLISHABLE_OPERATION_SET = new Set<string>(PUBLISHABLE_PROPERTY_OPERATIONS);
+
+/**
+ * ¿Se puede crear un aviso nuevo con esta operación?
+ *
+ * Recibe `unknown` y no `PropertyOperation` a propósito: el punto donde se
+ * pregunta esto es el borde del servidor, donde el valor todavía no es de
+ * confianza. Un valor irreconocible NO es publicable — falla cerrado.
+ */
+export function isPublishableOperation(value: unknown): boolean {
+  const operation = normalizePropertyOperation(value);
+  return operation !== null && PUBLISHABLE_OPERATION_SET.has(operation);
+}
 
 /**
  * "Alquiler" y no "Renta" como etiqueta canónica (el resto del módulo ya habla
@@ -128,6 +184,33 @@ export const PROPERTY_OPERATION_OPTIONS: readonly PropertyOperationOption[] = [
   { value: "alquiler", label: "Alquiler", hint: "Se paga por mes, semana o día" },
   { value: "venta", label: "Venta", hint: "Un precio único por la propiedad" },
 ];
+
+/**
+ * Las opciones que el FORMULARIO puede ofrecer hoy. Derivadas —no escritas de
+ * nuevo— para que no puedan desincronizarse de la política ni de las etiquetas.
+ *
+ * Hoy tiene un solo elemento, y el formulario está escrito para reaccionar a
+ * eso: con una sola operación no dibuja un grupo de opciones (elegir entre una
+ * cosa no es elegir), la asume y lo dice en una línea. Si mañana vuelve a haber
+ * dos, el grupo reaparece solo.
+ */
+export const PUBLISHABLE_PROPERTY_OPERATION_OPTIONS: readonly PropertyOperationOption[] =
+  // Se filtra contra el SET y no con `isPublishableOperation`: esta constante se
+  // evalúa al cargar el módulo, y esa función pasa por `normalizePropertyOperation`,
+  // que usa un `const` declarado más abajo. El `const` no se hoistea como una
+  // función, así que llamarla acá reventaba el módulo entero con un
+  // "Cannot access before initialization" al importarlo. Los valores de este
+  // arreglo ya son canónicos —salen del catálogo, no de una entrada externa—,
+  // así que el normalizador no aportaba nada.
+  PROPERTY_OPERATION_OPTIONS.filter((option) => PUBLISHABLE_OPERATION_SET.has(option.value));
+
+/**
+ * La operación que se asume cuando hay una sola publicable. Se sigue ESCRIBIENDO
+ * en `attrs.operation`: el aviso tiene que decir qué es por sí mismo, porque el
+ * filtro y el detalle leen el dato, no la política vigente el día que se creó.
+ */
+export const DEFAULT_PUBLISHABLE_OPERATION: PropertyOperation =
+  PUBLISHABLE_PROPERTY_OPERATION_OPTIONS[0]?.value ?? "alquiler";
 
 // ---------------------------------------------------------------------------
 // Normalizadores — NUNCA lanzan, devuelven null ante cualquier basura

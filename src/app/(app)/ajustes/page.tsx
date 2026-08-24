@@ -11,6 +11,7 @@ import {
   PencilSimple,
   Prohibit,
   Scales,
+  SealCheck,
   ShieldCheck,
   ShieldStar,
   SignIn,
@@ -31,6 +32,7 @@ import {
   getIdentidadActiva,
   listarIdentidadesDeNegocio,
 } from "@/lib/perfil-activo/identidad";
+import { leerCheckAzul } from "@/lib/verificacion/read";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import { signOutAction } from "../perfil/actions";
@@ -84,17 +86,27 @@ export default async function AjustesPage() {
   let identityVerified = false;
   let timeZone: string | null = null;
   let phoneVerified = false;
+  let checkAzul = false;
   if (user) {
     // Lista explícita: `profiles` es pública y un `*` acá traería rol, estado de
     // cuenta y sanciones para pintar tres filas de ajustes.
-    const { data } = await supabase
-      .from("profiles")
-      .select("identity_verified, timezone, phone_verified")
-      .eq("id", user.id)
-      .maybeSingle();
+    //
+    // El check azul se pregunta por `leerCheckAzul` y NO se agrega a este mismo
+    // `select` (aunque `verified_badge` es una columna más de `profiles`): es la
+    // única función pública para leer esa insignia (src/lib/verificacion/read.ts)
+    // y repetir la consulta a mano acá sería una segunda fuente de verdad.
+    const [{ data }, badge] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("identity_verified, timezone, phone_verified")
+        .eq("id", user.id)
+        .maybeSingle(),
+      leerCheckAzul(supabase, user.id),
+    ]);
     identityVerified = Boolean(data?.identity_verified);
     timeZone = data?.timezone ?? null;
     phoneVerified = Boolean(data?.phone_verified);
+    checkAzul = badge;
   }
 
   const unreadBadge = shell.unread > 0 ? (shell.unread > 9 ? "9+" : String(shell.unread)) : null;
@@ -214,6 +226,18 @@ export default async function AjustesPage() {
             ) : (
               <Row href="/perfil/verificar" icon={ShieldCheck} {...COPY.rows.verify} />
             )}
+            {/* La fila que le faltaba a esta pantalla: el cliente pidió "para
+                qué tipo de perfil puedan aplicar el tick, el verificado azul"
+                estando ACÁ, y hasta hoy no había ningún camino de Ajustes a
+                /verificacion. Va justo después de la identidad porque ese es
+                el orden real: primero se verifica (gratis), recién después se
+                puede pedir el check azul (pago) — /verificacion lo explica. No
+                lleva gate de módulo: el check azul no depende de uno. */}
+            <Row
+              href="/verificacion"
+              icon={SealCheck}
+              {...(checkAzul ? COPY.rows.checkAzulActivo : COPY.rows.checkAzul)}
+            />
             {/* La fila del teléfono sólo existe con el gate legal abierto
                 (PHONE_VERIFICATION_ENABLED). La ruta también devuelve 404 por su
                 cuenta: ofrecer un enlace a algo que no se puede usar es peor que

@@ -328,3 +328,163 @@ describe("Publicación", () => {
     expect(screen.getByText(C.steps.pay.title)).toBeTruthy();
   });
 });
+
+/* ===========================================================================
+ * Campos de la spec en el wizard: rango, modalidad, ficha plegada y negocio
+ * =========================================================================== */
+
+/** Completa el paso 1 y deja el wizard parado en el paso 2 (pago y condiciones). */
+function goToPay() {
+  fireEvent.change(screen.getByLabelText(C.steps.role.titleLabel), {
+    target: { value: A_TITLE },
+  });
+  fireEvent.change(screen.getByLabelText(C.steps.role.descriptionLabel), {
+    target: { value: A_DESCRIPTION },
+  });
+  clickNext();
+}
+
+/** Del paso 2 al 4 (zona, negocio y fotos), saltando el builder. */
+function goToWhere() {
+  goToPay();
+  fireEvent.change(screen.getByLabelText(C.steps.pay.amountLabel), { target: { value: "18" } });
+  clickNext();
+  clickNext();
+}
+
+describe("Paso 2 — pago, modalidad y la ficha plegada", () => {
+  it("ofrece un rango: 'Desde' y 'Hasta'", () => {
+    mount();
+    goToPay();
+    expect(screen.getByLabelText(C.steps.pay.amountLabel)).toBeTruthy();
+    expect(screen.getByLabelText(C.steps.pay.amountMaxLabel)).toBeTruthy();
+  });
+
+  it("la vista previa muestra el rango completo, con el formato del listado", () => {
+    mount();
+    goToPay();
+    fireEvent.change(screen.getByLabelText(C.steps.pay.amountLabel), { target: { value: "18" } });
+    fireEvent.change(screen.getByLabelText(C.steps.pay.amountMaxLabel), {
+      target: { value: "22" },
+    });
+    // El guion largo lo pone el wizard; los números y el sufijo salen de
+    // formatListingPrice, el mismo que pinta la tarjeta publicada.
+    expect(screen.getByText(/18.*–.*22/)).toBeTruthy();
+  });
+
+  it("no deja avanzar con un máximo menor que el mínimo", () => {
+    mount();
+    goToPay();
+    fireEvent.change(screen.getByLabelText(C.steps.pay.amountLabel), { target: { value: "22" } });
+    fireEvent.change(screen.getByLabelText(C.steps.pay.amountMaxLabel), {
+      target: { value: "18" },
+    });
+    clickNext();
+    expect(screen.getByRole("alert").textContent).toMatch(/menor que el mínimo/i);
+  });
+
+  it("ofrece las tres modalidades de trabajo", () => {
+    mount();
+    goToPay();
+    expect(screen.getByRole("radio", { name: /Presencial/ })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /A distancia/ })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /Mixto/ })).toBeTruthy();
+  });
+
+  /**
+   * La regla del wizard: obligatorio a la vista, opcional a un toque. Seis
+   * campos más desplegados convertirían este paso en una planilla.
+   */
+  it("mantiene la ficha del puesto plegada hasta que se abre", () => {
+    mount();
+    goToPay();
+    const bloque = screen.getByText(C.steps.pay.moreTitle).closest("details");
+    expect(bloque).toBeTruthy();
+    expect((bloque as HTMLDetailsElement).open).toBe(false);
+    // Y adentro está todo lo que la spec pedía y no existía.
+    expect(screen.getByLabelText(C.steps.pay.scheduleLabel)).toBeTruthy();
+    expect(screen.getByLabelText(C.steps.pay.experienceLabel)).toBeTruthy();
+    expect(screen.getByLabelText(C.steps.pay.startsOnLabel)).toBeTruthy();
+    expect(screen.getByLabelText(C.steps.pay.applyByLabel)).toBeTruthy();
+  });
+});
+
+describe("Paso 4 — zona según modalidad y negocio vinculado", () => {
+  it("pide la zona cuando el trabajo es presencial", () => {
+    mount();
+    goToWhere();
+    expect(screen.getByLabelText(C.steps.where.areaLabel)).toBeTruthy();
+  });
+
+  /**
+   * Con "a distancia" no hay zona que declarar, y se EXPLICA por qué: un campo
+   * que desaparece sin decir nada se lee como un error de la app. Antes había
+   * que escribir "Remoto" en un campo de ubicación, que es justo el texto libre
+   * que la 0087 vino a reemplazar.
+   */
+  it("a distancia no pide zona y dice por qué", () => {
+    mount();
+    goToPay();
+    fireEvent.click(screen.getByRole("radio", { name: /A distancia/ }));
+    fireEvent.change(screen.getByLabelText(C.steps.pay.amountLabel), { target: { value: "18" } });
+    clickNext();
+    clickNext();
+
+    expect(screen.queryByLabelText(C.steps.where.areaLabel)).toBeNull();
+    expect(screen.getByText(C.steps.where.areaRemoteTitle)).toBeTruthy();
+  });
+
+  it("a distancia deja publicar sin haber escrito ninguna zona", async () => {
+    mount();
+    goToPay();
+    fireEvent.click(screen.getByRole("radio", { name: /A distancia/ }));
+    fireEvent.change(screen.getByLabelText(C.steps.pay.amountLabel), { target: { value: "18" } });
+    clickNext();
+    clickNext();
+    fireEvent.click(screen.getByRole("button", { name: C.nav.submit }));
+
+    await waitFor(() => expect(mocks.createJobDraft).toHaveBeenCalled());
+    expect(mocks.createJobDraft.mock.calls[0][0]).toMatchObject({
+      workMode: "remoto",
+      areaLabel: null,
+    });
+  });
+
+  /**
+   * Sin fichas propias el desplegable NO se dibuja: una pregunta con una sola
+   * respuesta posible ("a nombre personal") no es una pregunta.
+   */
+  it("sin negocios propios no muestra el desplegable", () => {
+    mount();
+    goToWhere();
+    expect(screen.queryByLabelText(C.steps.where.businessLabel)).toBeNull();
+  });
+
+  it("con negocios propios ofrece vincular, y por defecto va a nombre personal", async () => {
+    render(
+      <ToastProvider>
+        <JobPublishForm
+          tenantId="tenant-1"
+          currency="USD"
+          businesses={[{ id: "22222222-2222-4222-8222-222222222222", title: "Panadería La Espiga" }]}
+        />
+      </ToastProvider>,
+    );
+    goToWhere();
+
+    const select = screen.getByLabelText(C.steps.where.businessLabel) as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(screen.getByText("Panadería La Espiga")).toBeTruthy();
+
+    fireEvent.change(select, { target: { value: "22222222-2222-4222-8222-222222222222" } });
+    fireEvent.change(screen.getByLabelText(C.steps.where.areaLabel), {
+      target: { value: "Washington Heights, NYC" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: C.nav.submit }));
+
+    await waitFor(() => expect(mocks.createJobDraft).toHaveBeenCalled());
+    expect(mocks.createJobDraft.mock.calls[0][0]).toMatchObject({
+      businessListingId: "22222222-2222-4222-8222-222222222222",
+    });
+  });
+});

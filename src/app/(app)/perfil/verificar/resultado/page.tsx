@@ -33,6 +33,8 @@ const COPY = {
     "No pudimos completar la verificación — pasa seguido con fotos movidas o con poca luz. No es tu culpa: probá de nuevo con buena luz y el documento completo en el encuadre.",
   reintentar: "Intentar de nuevo",
   irPerfil: "Ir a tu perfil",
+  /** Mismo paso siguiente que /perfil/verificar — ver el copy de esa pantalla. */
+  verCheckAzul: "Ver el check azul",
   // §11: nunca "verificado" a secas.
   disclaimer:
     "Verificar tu identidad confirma que tu documento es real — no garantiza la conducta de nadie. Nunca envíes dinero por adelantado.",
@@ -105,12 +107,24 @@ export default async function ResultadoVerificacionPage() {
           <p className="max-w-[44ch] text-sm text-foreground-secondary">
             {COPY.verificadaCuerpo(fechaVerificada)}
           </p>
-          <Link
-            href="/perfil"
-            className={cn(buttonVariants({ variant: "primary", size: "md" }), "mt-1")}
-          >
-            {COPY.irPerfil}
-          </Link>
+          <div className="mt-1 flex w-full flex-col gap-2">
+            <Link
+              href="/perfil"
+              className={buttonVariants({ variant: "primary", size: "md" })}
+            >
+              {COPY.irPerfil}
+            </Link>
+            {/* Secundario a propósito: este es el momento de la celebración
+                ("¡Tu identidad quedó verificada!"), no el de vender — ver
+                también /perfil/verificar, donde SÍ es el CTA primario porque
+                ahí la persona ya viene por otra razón. */}
+            <Link
+              href="/verificacion"
+              className={buttonVariants({ variant: "outline", size: "md" })}
+            >
+              {COPY.verCheckAzul}
+            </Link>
+          </div>
         </BezelCard>
       )}
 

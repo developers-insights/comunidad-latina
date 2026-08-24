@@ -11,7 +11,7 @@ import { BezelCard, ProximamentePremium, buttonVariants } from "@/components/ui"
 import { isStripeConfigured } from "@/lib/config/services";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { cn, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { VerificarCta } from "./verificar-cta";
 
 export const metadata = { title: "Verificá tu identidad" };
@@ -46,6 +46,14 @@ const COPY = {
     fecha
       ? `Documento validado por Stripe Identity el ${fecha}. El tilde ya aparece en tu perfil.`
       : "Documento validado por Stripe Identity. El tilde ya aparece en tu perfil.",
+  /**
+   * El paso siguiente, ahora que existe la puerta (2026-08-24): con la
+   * identidad confirmada ya se puede pedir el check azul —la insignia PAGA,
+   * otra cosa distinta de este tilde gratis—. Se dice "si querés" porque es
+   * eso: un paso más, no el siguiente obligatorio.
+   */
+  siguientePasoHint: "Con esto ya podés sumar el check azul —la insignia paga—, si querés.",
+  verCheckAzul: "Ver el check azul",
 } as const;
 
 export default async function VerificarIdentidadPage() {
@@ -99,12 +107,24 @@ export default async function VerificarIdentidadPage() {
                 : null,
             )}
           </p>
-          <Link
-            href="/perfil"
-            className={cn(buttonVariants({ variant: "outline", size: "md" }), "mt-1")}
-          >
-            {COPY.volver}
-          </Link>
+          <p className="max-w-[44ch] text-xs text-foreground-muted">
+            {COPY.siguientePasoHint}
+          </p>
+          <div className="mt-1 flex w-full flex-col gap-2">
+            <Link
+              href="/verificacion"
+              className={buttonVariants({ variant: "primary", size: "md" })}
+            >
+              <SealCheck size={16} weight="fill" aria-hidden="true" />
+              {COPY.verCheckAzul}
+            </Link>
+            <Link
+              href="/perfil"
+              className={buttonVariants({ variant: "outline", size: "md" })}
+            >
+              {COPY.volver}
+            </Link>
+          </div>
         </BezelCard>
       ) : (
         <>

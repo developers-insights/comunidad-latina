@@ -10,12 +10,10 @@ export {
 } from "./notification-item";
 export { CriticalNotification } from "./critical-notification";
 export { CategoryIcon } from "./category-icon";
-export {
-  CategoryTabs,
-  INBOX_PANEL_ID,
-  inboxTabId,
-  type CategoryTabsProps,
-} from "./category-tabs";
+// Sólo el componente: `INBOX_PANEL_ID` e `inboxTabId` son de
+// `@/lib/notifications/href`. Reexportarlos desde acá volvía a esconder que el
+// origen es un archivo `"use client"` — que es exactamente cómo se coló el bug.
+export { CategoryTabs, type CategoryTabsProps } from "./category-tabs";
 export { InboxFilters } from "./inbox-filters";
 export { PrefRow } from "./pref-row";
 export { MarkAllRead } from "./mark-all-read";

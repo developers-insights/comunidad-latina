@@ -1,5 +1,84 @@
 # PROGRESS — Comunidad Latina
 
+## El Loom de Nacho + la spec de módulos, en diez frentes (✅ 2026-08-24)
+
+**El Loom era anterior al deploy del 22-ago.** Producción corre `7fafc69`, que
+ya incluía "feedback completo de Nacho". De los nueve pedidos, cuatro ya estaban
+hechos (filtros de foto, botón Aplicar en la tarjeta de empleo, "Convertite en
+creador" en Ajustes, y el cambiador de perfil). Antes de rehacer nada conviene
+comparar el sha del deploy contra `main`; se pierde medio día si no.
+
+**Los videos: eran DOS bugs, no uno.** El `accept` del input aceptaba sólo
+mp4/webm —de ahí el `.mov` del iPhone en gris—, pero además `isOwnVideoPath` en
+`feed/actions.ts` tenía su propia regex con la misma lista. Ampliar sólo el input
+habría movido la falla al momento de publicar, con un código de error genérico.
+El catálogo quedó en mp4 + webm + quicktime y **hay un test que lo ancla contra
+`storage.buckets.allowed_mime_types`**, que es exactamente lo que el bucket
+permite (tope real: 80 MB). MKV/AVI/MPEG quedan afuera a propósito: el bucket los
+rechaza y además no se reproducen en `<video>`.
+
+**Notificaciones no era la base: era el límite `"use client"`.** La página es un
+Server Component y llamaba a `inboxTabId()`, una función que nacía dentro de un
+módulo `"use client"`, importada a través de un barril sin directiva. Next
+devuelve una referencia al cliente, no el valor, y llamarla tira.
+
+**Y el mismo tipo de bug apareció una segunda vez el mismo día, al revés**: el
+build de producción se cayó porque `store-card.tsx` tomaba `Estrellas` del barril
+`@/components/resenas`, que reexporta un módulo `server-only`, y ese barril
+terminaba en el grafo de un formulario `"use client"`. Ni `tsc` ni los 4.347
+tests lo veían — es una propiedad del grafo de webpack. Ahora hay un test por
+cada dirección: `components/notifications/client-boundary.test.ts` y
+`test/server-only-boundary.test.ts`.
+
+**La llave de toda la spec era una columna que ya existía.**
+`posts.entity_listing_id` (0023) vincula publicación ↔ ficha, `createPostAction`
+ya la persistía, y **ninguna UI la escribía**. Cablearla encendió de una vez las
+pestañas Publicaciones de Negocios y Profesionales y la regla de que lo comercial
+no se derrama a "Para ti" (que estaba implementada y nunca se ejercitaba).
+
+**Lo que NO se aplicó, y por qué importa.** La 0106 traía el gate de identidad
+para publicar alquiler, artículo, empleo y evento pago — correcto contra la spec.
+Medido antes de aplicarla: **0 identidades verificadas sobre 20 perfiles**, y
+verificarse depende de Stripe Identity, que está sin claves. Aplicarlo habría
+dejado a todos sin poder publicar, con un `42501` crudo y sin forma de
+destrabarse. Se separó a `supabase/migraciones-en-espera/0109_...`, **fuera de
+`migrations/`**: una migración diferida dentro de la cola la aplica el próximo
+`db:migrate` sin que nadie lo decida. Sus tres condiciones de activación están en
+el encabezado del archivo.
+
+**Stripe: el código estaba entero, faltaban las claves — y había un agujero.**
+`/impulsar-post` entraba en modo demo con la sola condición `!isStripeConfigured`,
+así que en producción (sin claves) **regalaba campañas pagas** con notificación de
+éxito y sin un error en los logs. Aparte, los tres productos por suscripción no
+tenían idempotencia real: `checkout.session.completed` y `.async_payment_succeeded`
+son dos `event.id`, así que un pago mandaba dos comprobantes; y una factura fuera
+de orden retrocedía `current_period_end`, con lo que **una insignia paga se
+apagaba sola**. Runbook completo en `docs/STRIPE.md`. Ningún pago corrió nunca,
+ni de prueba.
+
+**Datos inventados que no llegaron a producción.** El agente de Comunidad sembró
+tres centros de acopio ficticios *publicados* "para que la pantalla no nazca
+vacía". En una app para migrantes eso es alguien cargando bolsas hasta una puerta
+que no existe. Pasaron a `draft`: sirven de plantilla en el panel y la pantalla
+dice la verdad.
+
+**Estado del árbol:** typecheck 0 errores · lint 0 errores (147 warnings, contra
+77 de base; casi todas son props de framer-motion sin usar en mocks de tests) ·
+**4.428 tests en verde, 0 rojos** (eran 3.881) · build de producción verde ·
+`check:rls` **GATE VERDE con 97 superficies**.
+
+**Migraciones aplicadas:** 0105 (centro de acopio), 0106 (ofertas + funciones del
+gate + una ficha por negocio), 0107 (campos de alquiler/evento/empleo +
+`business_listing_id`), 0108 (`search_path` de `vertical_exige_identidad`, lo pidió
+el linter). Advisors: 51 lints, sólo uno nuevo y era ése.
+
+**Lo que quedó afuera y por qué** está en
+[`docs/PLAN_MODULOS_2026-08-24.md`](PLAN_MODULOS_2026-08-24.md): el feed
+Siguiendo/Para ti (choca con el techo de 8 KB de URL, necesita el RPC), "Tu zona"
+(transversal a las queries de todos los módulos), la pestaña Agentes y
+propietarios de Propiedades, y el estado "Alquilado".
+
+
 ## Auditoría completa del programa + endurecimiento (✅ 2026-08-13, tarde)
 
 Barrido de los ~1.035 archivos de `src/` (193k líneas) y las 104 migraciones en

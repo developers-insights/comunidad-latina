@@ -1,16 +1,21 @@
 export { COPY } from "./copy";
 export {
+  FULFILLMENT_METHODS,
   PRODUCT_CATEGORIES,
   PRODUCT_CONDITIONS,
+  businessCategoryDisplayLabel,
   categoryLabel,
   categoryShortLabel,
   conditionLabel,
   followerCountLabel,
   formatProductPrice,
+  fulfillmentLabel,
+  isFulfillmentMethod,
   isProductCategory,
   isProductCondition,
   parseProductAttrs,
   sanitizeSearchQuery,
+  type FulfillmentMethod,
   type ProductAttrs,
   type ProductCategory,
   type ProductCondition,
@@ -48,7 +53,13 @@ export { MarketplaceSearchBar } from "./marketplace-search-bar";
 export { ProductCard, type ProductCardModel } from "./product-card";
 export { ProductGallery, type ProductGalleryProps } from "./product-gallery";
 export { ProductCardSkeleton, ProductGridSkeleton } from "./product-skeletons";
-export { SellerChip, SellerVerifiedBadge, type SellerView } from "./seller-chip";
+export { StoreCardSkeleton, StoreListSkeleton } from "./store-skeletons";
+export {
+  PresenciaVerificadaBadge,
+  SellerChip,
+  SellerIdentityBadge,
+  type SellerView,
+} from "./seller-chip";
 export { StoreCard, type StoreCardModel } from "./store-card";
 export { StoreHeader, type StoreHeaderModel } from "./store-header";
 // `./engagement-queries` NO se re-exporta: sólo corre en el server (recibe el

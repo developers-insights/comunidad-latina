@@ -5,11 +5,13 @@ import {
   HandHeart,
   Lifebuoy,
   MagnifyingGlass,
+  Package,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
 import { Skeleton, SquareTile } from "@/components/ui";
 import {
   COMUNIDAD_ACCENT,
+  COMUNIDAD_ACCENT_ACOPIO,
   COMUNIDAD_ACCENT_COMIDA,
   COMUNIDAD_ACCENT_GUIAS,
   COMUNIDAD_ACCENT_PERDIDOS,
@@ -67,6 +69,21 @@ const C = COMUNIDAD_COPY.index;
  *     publicación de dos fases entero (borrador → moderación → publicado,
  *     como Perdido y encontrado) para algo que el directorio curado ya
  *     resuelve con cero tablas nuevas.
+ *
+ * ── SEXTA CATEGORÍA: CENTRO DE ACOPIO (0105) ─────────────────────────────────
+ * Mismo criterio que Voluntarios: tema NUEVO (`acopio`, migración 0105) de
+ * `community_resources`, ficha curada con fuente obligatoria, cero tabla
+ * nueva. Es DISTINTO de "Bancos de comida" aunque las dos tarjetas terminen
+ * en la misma pantalla filtrada: en un banco de comida la persona RECIBE, acá
+ * la persona DEJA una donación (ropa, alimentos, artículos de emergencia) y de
+ * paso puede ver qué hace falta en cada lugar ahora mismo — la definición
+ * completa y por qué no se puede confundir con `comida` está en el docblock
+ * de `0105_centro_de_acopio.sql`.
+ *
+ * Su acento (`COMUNIDAD_ACCENT_ACOPIO` → `--accent-comunidad-acopio`) está
+ * declarado en `globals.css` junto a sus cinco hermanas, sin excepciones ni
+ * `style` inline: es un fucsia 700, el matiz que más se separa de los otros
+ * cinco acentos que conviven en ESTA grilla.
  */
 export default async function ComunidadPage() {
   return (
@@ -135,6 +152,15 @@ export default async function ComunidadPage() {
               accent={COMUNIDAD_ACCENT_VOLUNTARIOS}
             />
           </li>
+          <li>
+            <SquareTile
+              href="/comunidad/recursos?tema=acopio"
+              label={C.cards.acopio.title}
+              hint={C.cards.acopio.hint}
+              icon={<Package size={28} weight="fill" aria-hidden="true" />}
+              accent={COMUNIDAD_ACCENT_ACOPIO}
+            />
+          </li>
         </ul>
       </nav>
     </>
@@ -143,9 +169,9 @@ export default async function ComunidadPage() {
 
 /**
  * El contador va en su propio Suspense: es lo único de esta pantalla que
- * consulta la base, y no puede retrasar el render de cinco tarjetas que ya se
- * conocen. Si la consulta falla, el contador no aparece — nunca un cero que
- * mienta diciendo que no hay casos.
+ * consulta la base, y no puede retrasar el render de las seis tarjetas que ya
+ * se conocen. Si la consulta falla, el contador no aparece — nunca un cero
+ * que mienta diciendo que no hay casos.
  */
 async function CasosAbiertos() {
   const tenant = await getTenant();

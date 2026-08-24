@@ -17,6 +17,17 @@ export const COMUNIDAD_ACCENT_GUIAS = "var(--accent-comunidad-guias)";
 export const COMUNIDAD_ACCENT_PERDIDOS = "var(--accent-comunidad-perdidos)";
 export const COMUNIDAD_ACCENT_COMIDA = "var(--accent-comunidad-comida)";
 export const COMUNIDAD_ACCENT_VOLUNTARIOS = "var(--accent-comunidad-voluntarios)";
+/**
+ * Acopio (0105) — sexto sub-acento, fucsia-700, elegido por ser el que más se
+ * separa en matiz de los otros cinco de ESTA grilla (index/page.tsx): a
+ * ~50-60° de cada vecino, contra ~50° del par más ajustado que ya conviven
+ * hoy (ámbar/rosa). Es la MISMA convención que sus hermanas (un tono "700" de
+ * la paleta, fijo con el tema, nunca theming).
+ *
+ * `--accent-comunidad-acopio` se declara en `globals.css` junto a las otras
+ * cinco, igual que ellas y sin excepciones.
+ */
+export const COMUNIDAD_ACCENT_ACOPIO = "var(--accent-comunidad-acopio)";
 
 export interface ComunidadHeadingProps {
   /** Ícono Phosphor de la pantalla, ya instanciado (28px). Decorativo. */

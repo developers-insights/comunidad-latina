@@ -45,12 +45,14 @@ import { productDraftSchema, type DraftInput } from "./schema";
 
 export type CreateDraftResult =
   | { ok: true; listingId: string }
-  | { ok: false; error: string; needsAuth?: boolean };
+  | { ok: false; error: string; needsAuth?: boolean; needsIdentity?: boolean };
 
 const COPY = {
   invalid: "Revisá los datos del producto — hay algo incompleto.",
   needsAuth: "Para publicar necesitás entrar a tu cuenta.",
   storeInvalid: "Elegí una tienda válida — puede que ya no esté disponible.",
+  identityRequired:
+    "Para vender en el Marketplace primero necesitás verificar tu identidad. Es gratis y toma un par de minutos.",
   tooManyToday:
     "Ya publicaste varios productos hoy. Para cuidar la calidad del marketplace, esperá hasta mañana para publicar otro.",
   genericError:
@@ -79,6 +81,27 @@ export async function createProductDraft(rawInput: DraftInput): Promise<CreateDr
   }
   const { tenant, supabase, user } = guard;
 
+  // GATE DE IDENTIDAD (spec cliente: "todos los vendedores deben completar la
+  // verificación de identidad antes de publicar" — tienda o particular, sin
+  // excepción). Va ACÁ, antes del rate limit y de cualquier efecto, con el
+  // mismo criterio que el guard de tenant de arriba: no quemamos cuota ni
+  // tocamos storage por una escritura que no podía prosperar.
+  //
+  // Esto es la SUPERFICIE (defensa en profundidad en el archivo que ya es
+  // nuestro), no EL gate: el gate reusable de la base vive en
+  // src/lib/verificacion/ (otro agente, no se toca desde acá). Se consulta
+  // `profiles.identity_verified` directo, igual que ya lo hace medio esquema
+  // (negocios/(lista)/page.tsx, marketplace/[id]/page.tsx, etc.) — "la UI sola
+  // no es una defensa", y este action tampoco lo es solo: es una capa más.
+  const { data: sellerProfile, error: profileError } = await supabase
+    .from("profiles")
+    .select("identity_verified")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileError || !sellerProfile?.identity_verified) {
+    return { ok: false, error: COPY.identityRequired, needsIdentity: true };
+  }
+
   if (!limit(`marketplace-publicar:${user.id}`, 10, DAY_MS).ok) {
     return { ok: false, error: COPY.tooManyToday };
   }
@@ -90,7 +113,7 @@ export async function createProductDraft(rawInput: DraftInput): Promise<CreateDr
   // Si SÍ viene: attrs.store_listing_id es jsonb SIN foreign key — sin este
   // chequeo cualquier uuid ajeno pasaría como "mi tienda". Tiene que ser un
   // negocio propio y publicado, mismo criterio que ofrece el <Select> del form.
-  const attrs: Record<string, string> = { category: input.category };
+  const attrs: Record<string, string | string[]> = { category: input.category };
 
   if (input.storeListingId) {
     const { data: store, error: storeError } = await supabase
@@ -110,6 +133,12 @@ export async function createProductDraft(rawInput: DraftInput): Promise<CreateDr
   }
 
   if (input.condition) attrs.condition = input.condition;
+  // Envío/entrega/recogida: 0 a 3 valores del catálogo (schema.ts ya los
+  // validó). Sin este campo, `parseProductAttrs` degrada a `[]` — un aviso sin
+  // fulfillment no se rompe, sólo no muestra la sección.
+  if (input.fulfillment && input.fulfillment.length > 0) {
+    attrs.fulfillment = input.fulfillment;
+  }
 
   const { data: created, error } = await supabase
     .from("listings")

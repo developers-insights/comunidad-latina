@@ -18,9 +18,12 @@ import { createClient } from "@/lib/supabase/client";
 import { Celebration, useCelebration } from "@/components/motion";
 import {
   COPY,
+  FULFILLMENT_METHODS,
   PRODUCT_CATEGORIES,
   PRODUCT_CONDITIONS,
+  isFulfillmentMethod,
   isProductCondition,
+  type FulfillmentMethod,
 } from "@/components/marketplace";
 import {
   EMPTY_DECLARATION_VALUE,
@@ -95,6 +98,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
   const [condition, setCondition] = useState("");
+  const [fulfillment, setFulfillment] = useState<FulfillmentMethod[]>([]);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   // Declaración de originalidad y licencia (pliego / Content Integrity).
   const [declaration, setDeclaration] = useState<DeclarationValue>(EMPTY_DECLARATION_VALUE);
@@ -134,6 +138,12 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
     });
   }
 
+  function toggleFulfillment(value: FulfillmentMethod) {
+    setFulfillment((current) =>
+      current.includes(value) ? current.filter((v) => v !== value) : [...current, value],
+    );
+  }
+
   function validate(): string | null {
     // Sin chequeo de tienda: publicar como particular es válido.
     if (title.trim().length < 8) return C.errors.titleShort;
@@ -142,6 +152,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
     if (!Number.isFinite(amount) || amount <= 0) return C.errors.priceRequired;
     if (!category) return C.errors.categoryRequired;
     if (!condition) return C.errors.conditionRequired;
+    if (fulfillment.length === 0) return C.errors.fulfillmentRequired;
     return null;
   }
 
@@ -152,6 +163,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
     setPrice("");
     setCategory("");
     setCondition("");
+    setFulfillment([]);
     setPhotos([]);
     setDeclaration(EMPTY_DECLARATION_VALUE);
     setDraftId(null);
@@ -178,6 +190,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
           priceAmount: Number(price),
           category,
           condition: isProductCondition(condition) ? condition : null,
+          fulfillment,
         });
         if (!result.ok) {
           setError(result.error);
@@ -386,6 +399,40 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
                 )}
               >
                 {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      {/* Envío / entrega / recogida — checkboxes (multi-select, a diferencia
+          del estado que es uno solo): un mismo producto puede ofrecer más de
+          una forma de llegar a quien compra. */}
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-1 text-sm font-semibold text-foreground">
+          {C.fulfillmentLegend}
+        </legend>
+        <p className="-mt-1 mb-1 text-xs text-foreground-muted">{C.fulfillmentHelp}</p>
+        <div className="grid grid-cols-3 gap-2">
+          {FULFILLMENT_METHODS.map((option) => {
+            const selected = fulfillment.includes(option.value);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="checkbox"
+                aria-checked={selected}
+                onClick={() => toggleFulfillment(option.value)}
+                className={cn(
+                  "min-h-11 rounded-md border px-2 text-sm font-semibold",
+                  "transition-[border-color,background-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
+                  "active:scale-[0.97] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+                  selected
+                    ? "border-brand bg-brand-tint text-brand-ink"
+                    : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
+                )}
+              >
+                {option.shortLabel}
               </button>
             );
           })}

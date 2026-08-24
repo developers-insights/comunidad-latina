@@ -53,4 +53,31 @@ describe("productDraftSchema", () => {
     expect(productDraftSchema.safeParse({ ...VALID, category: "inventada" }).success).toBe(false);
     expect(productDraftSchema.safeParse({ ...VALID, condition: "roto" }).success).toBe(false);
   });
+
+  describe("fulfillment (envío/entrega/recogida)", () => {
+    it("acepta uno o varios métodos del catálogo", () => {
+      const parsed = productDraftSchema.safeParse({ ...VALID, fulfillment: ["envio", "recogida"] });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) expect(parsed.data.fulfillment).toEqual(["envio", "recogida"]);
+    });
+
+    it("sin la clave (avisos viejos) sigue siendo válido — opcional a nivel schema", () => {
+      expect(productDraftSchema.safeParse(VALID).success).toBe(true);
+    });
+
+    it("rechaza un método fuera del catálogo", () => {
+      expect(
+        productDraftSchema.safeParse({ ...VALID, fulfillment: ["teletransporte"] }).success,
+      ).toBe(false);
+    });
+
+    it("rechaza más de 3 métodos", () => {
+      expect(
+        productDraftSchema.safeParse({
+          ...VALID,
+          fulfillment: ["envio", "entrega", "recogida", "envio"],
+        }).success,
+      ).toBe(false);
+    });
+  });
 });
