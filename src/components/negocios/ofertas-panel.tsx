@@ -10,11 +10,17 @@ import { OfertaCard } from "./oferta-card";
  * limitado, menús y paquetes).
  *
  * ── EL VACÍO CUENTA QUÉ VA A APARECER, Y NO PROMETE UN BOTÓN QUE NO EXISTE ──
- * Hoy la pestaña nace vacía por dos motivos distintos y los dos legítimos: la
- * migración 0106 todavía no está aplicada, y el composer que escribe una oferta
- * se está cableando en paralelo. El estado vacío explica de qué se va a llenar y
- * ofrece el único camino que SÍ existe hoy para un dueño de negocio —su ficha—
- * en vez de un "Publicar oferta" que no llevaría a ningún lado.
+ * Queda UN motivo, no dos. La migración 0106 SÍ está en el repo
+ * (`0106_ofertas_y_verificacion.sql`) y `post_offers` existe con su RLS y su
+ * índice de vigencia — lo único que sigue sin regenerarse es
+ * `database.types.ts`, y por eso la lectura pasa por `supabaseSinTipar()` (ver
+ * `lib/negocios/ofertas.ts`). Lo que todavía no existe es el composer que
+ * ESCRIBE una oferta: nada inserta en `post_offers` hoy, así que con datos
+ * reales la pestaña nace vacía igual.
+ *
+ * El estado vacío explica de qué se va a llenar y ofrece el único camino que SÍ
+ * existe hoy para un dueño de negocio —su ficha— en vez de un "Publicar oferta"
+ * que no llevaría a ningún lado.
  *
  * Y nunca dice "no hay ofertas" cuando lo que pasa es que todas vencieron: la
  * consulta ya filtra por vigencia, así que este vacío es honesto en los dos

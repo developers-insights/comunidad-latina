@@ -152,8 +152,13 @@ export function VideoReels({
         ];
       });
       setCursor(page.nextCursor);
-    } catch {
+    } catch (error) {
       // Falla de red: cortamos el scroll infinito en vez de reintentar en loop.
+      // Se LOGUEA: cortar el cursor y quedarse mudo es indistinguible de "no hay
+      // más videos", y esa confusión ya costó una sesión de debug a ciegas.
+      console.warn("[videos] no se pudo traer la próxima tanda del reel", {
+        message: error instanceof Error ? error.message : String(error),
+      });
       setCursor(null);
     } finally {
       loadingRef.current = false;
@@ -186,6 +191,19 @@ export function VideoReels({
   }, [activeIndex, items]);
 
   const isEmpty = items.length === 0 && !cursor && !loadingMore;
+
+  /**
+   * SE ACABÓ EL SCROLL, Y HAY QUE DECIRLO.
+   *
+   * `VIDEOS_COPY.endOfFeed` estaba escrita desde el sprint de reels y no la
+   * mostraba nadie: al llegar al último video el scroll simplemente dejaba de
+   * traer, sin una sola señal. En un scroll vertical infinito eso no se lee
+   * como "no hay más" sino como "se colgó", y el reflejo es tirar hacia arriba
+   * otra vez. Se anuncia sólo parado en el ÚLTIMO slide y con el cursor ya
+   * agotado — nunca mientras todavía queda algo por traer.
+   */
+  const atEnd =
+    !cursor && !loadingMore && items.length > 0 && activeIndex >= items.length - 1;
 
   // PORTAL a <body> (mismo patrón que MediaViewer): el template de página
   // anima con transform y un ancestro transformado convierte `fixed` en un
@@ -231,12 +249,12 @@ export function VideoReels({
         </div>
       )}
 
-      {loadingMore && (
+      {(loadingMore || atEnd) && (
         <p
           role="status"
-          className="absolute bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-20 -translate-x-1/2 rounded-full bg-media-scrim px-3.5 py-1.5 text-xs font-medium text-on-media"
+          className="absolute bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-20 max-w-[85%] -translate-x-1/2 rounded-full bg-media-scrim px-3.5 py-1.5 text-center text-xs font-medium text-on-media"
         >
-          {VIDEOS_COPY.loadingMore}
+          {loadingMore ? VIDEOS_COPY.loadingMore : VIDEOS_COPY.endOfFeed}
         </p>
       )}
     </div>,

@@ -122,7 +122,13 @@ export async function fetchBusinessPostsPage(
 
   // Alcance "para vos" (los ids salen de la DB, no del cliente). PostgREST
   // AND-ea cada `.or()` de nivel superior con los demás filtros.
-  query = query.or(feedPostVisibilityFilter(followedListingIds, [...promotedPostIds]));
+  //
+  // El TERCER argumento no es opcional en la práctica: el dueño NO se sigue
+  // a sí mismo, así que sin `viewerId` su propia publicación no entra por
+  // ninguna de las otras ramas y la pestaña "Publicaciones" de su ficha le
+  // aparece vacía — justo la pantalla donde va a mirar primero después de
+  // publicar.
+  query = query.or(feedPostVisibilityFilter(followedListingIds, [...promotedPostIds], args.viewerId));
 
   // Fuera lo que su autor ocultó del feed (0097).
   query = query.or(VISIBLE_POSTS_FILTER);

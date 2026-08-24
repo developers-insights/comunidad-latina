@@ -435,6 +435,19 @@ function toggleInList<T>(list: T[], value: T): T[] {
 export interface PublishFormProps {
   tenantId: string;
   /**
+   * Los verticales que ESTE tenant tiene prendidos, ya resueltos por el
+   * servidor (`page.tsx`, vía `moduleAvailability`). Sin la lista, el wizard
+   * ofrece los cinco.
+   *
+   * El menú "+" ya filtra sus tiles por módulo, pero esta pantalla —el destino
+   * de esos tiles, y una URL que se puede escribir a mano o llegar por un link
+   * viejo— los ofrecía TODOS. O sea que una comunidad con Eventos apagado no
+   * veía el tile de Evento y sin embargo podía publicar uno: el aviso nacía en
+   * un módulo que después no lo muestra en ningún lado. La promesa y la entrega
+   * tienen que salir de la misma fuente.
+   */
+  allowedKinds?: readonly Kind[];
+  /**
    * Preselect por query param (?kind=, menú crear-post del feed — page.tsx ya
    * lo validó). Con un kind fijado, el wizard arranca en el paso 1 (el
    * selector del paso 0 queda salteado); "Cambiar tipo" vuelve a mostrarlo.
@@ -443,7 +456,21 @@ export interface PublishFormProps {
   initialKind?: Kind | null;
 }
 
-export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) {
+export function PublishForm({
+  tenantId,
+  initialKind = null,
+  allowedKinds,
+}: PublishFormProps) {
+  // Orden del catálogo, no el que venga en la prop: el selector se lee siempre
+  // igual. Nunca queda vacío — con los cinco módulos apagados este componente
+  // ni se monta (page.tsx corta con un estado vacío antes), así que la lista
+  // completa es la degradación correcta para el resto de los casos raros.
+  const kindOptions = (() => {
+    if (!allowedKinds || allowedKinds.length === 0) return KIND_OPTIONS;
+    const filtered = KIND_OPTIONS.filter((option) => allowedKinds.includes(option.value));
+    return filtered.length > 0 ? filtered : KIND_OPTIONS;
+  })();
+
   const { toast } = useToast();
   const { celebrating, celebrate } = useCelebration();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -923,7 +950,7 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
           </legend>
           <p className="-mt-1 text-sm text-foreground-secondary">{C.steps.kind.help}</p>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            {KIND_OPTIONS.map(({ value, label, Icon }) => {
+            {kindOptions.map(({ value, label, Icon }) => {
               const selected = kind === value;
               return (
                 <button

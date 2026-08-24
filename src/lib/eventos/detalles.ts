@@ -233,6 +233,31 @@ export function resolveEventTicketsUrl(
 }
 
 // ---------------------------------------------------------------------------
+// Copy de la ficha del evento
+// ---------------------------------------------------------------------------
+
+/**
+ * Rótulos con los que el detalle muestra estos datos.
+ *
+ * Viven acá, junto a los catálogos, por el mismo motivo que en `alquiler.ts`:
+ * agregar un dato y olvidarse de cómo se anuncia deja de ser posible cuando el
+ * valor, la etiqueta y el rótulo se tocan en un solo archivo.
+ */
+export const EVENT_DETAILS_COPY = {
+  title: "Detalles del evento",
+  category: "Tipo de evento",
+  endsAt: "Termina",
+  audience: "Para quién es",
+  capacity: "Cupo",
+  capacityValue: (n: number) => `${n.toLocaleString("es-US")} lugares`,
+  onlineTitle: "Se entra por acá",
+  onlineCta: "Abrir el enlace del evento",
+  ticketsCta: "Sacar boletos",
+  /** El botón sale de la app: se avisa antes de tocarlo, no después. */
+  externalHint: "Se abre en otra pestaña, fuera de Comunidad Latina.",
+} as const;
+
+// ---------------------------------------------------------------------------
 // Lectura desde attrs
 // ---------------------------------------------------------------------------
 

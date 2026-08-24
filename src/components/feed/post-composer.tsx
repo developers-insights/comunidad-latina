@@ -882,10 +882,20 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
 
         resetForm();
         if (result.status === "published") {
+          // `result.entity` lo devuelve `createPostAction` justamente para esto:
+          // una publicación firmada por una ficha NO llega a toda la comunidad
+          // (`feedPostVisibilityFilter`), así que no puede recibir el mismo
+          // "ya está visible para la comunidad" que una personal. Hasta hoy el
+          // campo volvía y nadie lo leía — el negocio publicaba al vacío el día
+          // uno y la app le decía que había llegado a todos.
           toast({
             title: COPY.composer.successTitle,
-            description: COPY.composer.successBody,
+            description: result.entity
+              ? COPY.composer.successEntityBody
+              : COPY.composer.successBody,
             variant: "success",
+            // Dice algo accionable (Boost), no sólo "listo": necesita leerse.
+            ...(result.entity ? { duration: 7000 } : {}),
           });
         } else {
           toast({

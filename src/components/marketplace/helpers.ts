@@ -1,5 +1,11 @@
 import type { Json } from "@/lib/types/database.types";
 import { formatListingPrice } from "@/components/listings";
+// La taxonomía de RUBROS es de Negocios, no de Marketplace. Módulo puro (sólo
+// un `import type`), así que traerlo acá no arrastra nada de servidor.
+import {
+  businessCategoryLabel,
+  isBusinessCategory,
+} from "@/app/(app)/negocios/categories";
 
 /**
  * Helpers puros del módulo MARKETPLACE. Sin dependencias de servidor:
@@ -105,20 +111,29 @@ function sanitizeFulfillment(values: unknown): FulfillmentMethod[] {
 }
 
 // ---------------------------------------------------------------------------
-// Categoría de TIENDA (listings kind='business', attrs.category) — a
-// diferencia de PRODUCT_CATEGORIES, acá no hay un set curado propio: la
-// categoría de negocio la define el módulo Negocios (rubro libre) y este
-// módulo sólo la MUESTRA en el directorio de Tiendas. Mismo fallback que
-// categoryLabel para categorías fuera de cualquier lista: capitalizar en vez
-// de mostrar el value crudo (`comida_bebidas` → `Comida_bebidas` sería peor
-// que no mostrar nada, pero mostrar el texto tal cual con la primera en
-// mayúscula alcanza para un directorio).
+// Categoría de TIENDA (listings kind='business', attrs.category)
+//
+// Una tienda del Marketplace ES un `listings` kind='business', o sea la MISMA
+// entidad que lista el módulo Negocios y con la misma clave `attrs.category`.
+// Acá se mostraba con una capitalización genérica propia, así que el mismo
+// negocio se leía "Envios" en el directorio de Tiendas y "Envíos" en Negocios
+// —sin acento de un lado y con acento del otro— porque este archivo no
+// consultaba el set curado.
+//
+// Ahora sí lo consulta: `BUSINESS_CATEGORIES` es la fuente única del rubro y
+// esta función es sólo la capa de PRESENTACIÓN de Marketplace sobre ella.
+//
+// El fallback propio se conserva a propósito y no se delega a
+// `businessCategoryLabel`: `attrs.category` es texto libre en la base, y un
+// valor importado tipo `comida_bebidas` se lee mejor como "Comida bebidas"
+// que como "Comida_bebidas". Ése es el único aporte de esta función.
 // ---------------------------------------------------------------------------
 
 export function businessCategoryDisplayLabel(value: string | null): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
+  if (isBusinessCategory(trimmed)) return businessCategoryLabel(trimmed);
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).replace(/_/g, " ");
 }
 

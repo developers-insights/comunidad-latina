@@ -39,6 +39,55 @@ export const TENANT_COOKIE = "cl-tenant";
 export const TENANT_SLUG_HEADER = "x-tenant-slug";
 
 /**
+ * Nombre del parámetro de query que lleva la PISTA DE TENANT en desarrollo.
+ *
+ * ── POR QUÉ SE LLAMA ASÍ Y NO `t` ────────────────────────────────────────────
+ * Hasta el 2026-08-24 esto era `?t=`. El problema no era el nombre: era que
+ * `?t=` YA SIGNIFICABA OTRA COSA. Los módulos que estrenaron el patrón
+ * `NavTabs` —Perfil, Negocios, Profesionales y Marketplace— usan `?t=<pestaña>`
+ * para decir en qué pestaña está la persona (`/negocios?t=ofertas`,
+ * `/marketplace?t=tiendas`, …). Un solo parámetro, dos significados, y el
+ * proxy leyendo el que no era.
+ *
+ * El daño, reproducido en local: abrir `/negocios?t=ofertas` hacía que el proxy
+ * entendiera "servime la comunidad `ofertas`". Como `resolveTenantSlug` acepta
+ * A PROPÓSITO cualquier slug no reservado —así una comunidad recién creada
+ * resuelve sin deploy— el slug pasaba, `getTenant()` no encontraba la fila y
+ * degradaba al fallback, y de ahí en más TODAS las pantallas quedaban vacías,
+ * sin un solo error en consola. Peor: el paso 7 del proxy PERSISTÍA esa pista
+ * en la cookie `cl-tenant` por 30 días, así que el destrozo sobrevivía a sacar
+ * el `?t=` de la URL. Nadie adivina eso.
+ *
+ * Se renombró la pista y NO las pestañas, en ese orden de importancia: la pista
+ * es una ayuda de desarrollo que se escribe a mano tres veces por semana; las
+ * pestañas son URLs que ve y comparte quien usa la app, ya están en cuatro
+ * módulos y tienen tests propios. El que se mueve es el barato.
+ *
+ * Se eligió el MISMO nombre que la cookie (`cl-tenant`) para que las dos mitades
+ * del mecanismo se llamen igual y el prefijo `cl-` deje claro que es de la
+ * plataforma, no de una pantalla. Ningún módulo puede volver a chocarlo por
+ * accidente: una pestaña llamada `cl-tenant` no existe.
+ *
+ * Sigue apagado en producción y en previews — ver `clientTenantHintsAllowed()`,
+ * que es una decisión de SEGURIDAD y no de comodidad. Renombrar no la afloja.
+ */
+export const TENANT_QUERY_PARAM = "cl-tenant";
+
+/**
+ * La pista de tenant que trae la query, o `null`.
+ *
+ * Existe como función —y no como un `searchParams.get(...)` suelto en el
+ * proxy— para que el contrato "el parámetro de pestaña NO mueve el tenant"
+ * se pueda testear sin levantar un `NextRequest`. Es el test que ancla la
+ * regresión: ver `./query-hint.test.ts`.
+ */
+export function tenantHintFromSearchParams(
+  searchParams: Pick<URLSearchParams, "get">,
+): string | null {
+  return searchParams.get(TENANT_QUERY_PARAM);
+}
+
+/**
  * Slugs reservados de MARCA/legal — NUNCA se resuelven como comunidad pública,
  * aunque tengan su propia fila en `tenants` y su propio dominio.
  *
@@ -59,7 +108,8 @@ export const TENANT_SLUG_HEADER = "x-tenant-slug";
  * revés (allowlist de UN solo slug activo): eso "resolvía" bien a
  * `comunidadlatina`, pero de yapa clampeaba a la comunidad por defecto a
  * CUALQUIER tenant nuevo — ninguna comunidad nacida después de `dominicanos`
- * iba a ser alcanzable ni siquiera con `?t=<slug>` sin editar este archivo y
+ * iba a ser alcanzable ni siquiera con la pista de query (`?cl-tenant=<slug>`)
+ * sin editar este archivo y
  * redeployar, que es exactamente el "todavía hay que reprogramar" que el
  * playbook de nacimiento de tenant (`docs/PLAYBOOK-TENANT.md`) viene a cerrar.
  * Sumar un slug ACÁ sigue siendo una decisión de marca/legal explícita sobre
@@ -267,7 +317,8 @@ function sanitizeSlug(value: string | null | undefined): string | null {
 }
 
 /**
- * ¿Se pueden honrar las PISTAS DEL CLIENTE (`?t=` y la cookie `cl-tenant`)?
+ * ¿Se pueden honrar las PISTAS DEL CLIENTE (`?cl-tenant=` y la cookie
+ * `cl-tenant`)?
  * Solo FUERA de producción.
  *
  * Por qué existe esta función (auditoría 2026-08-02, reproducido en vivo):
@@ -275,7 +326,8 @@ function sanitizeSlug(value: string | null | undefined): string | null {
  * cierto para un host que estuviera en `DOMAIN_TENANTS`. El host REAL de
  * producción hoy es `comunidad-latina-sigma.vercel.app` (único dominio del
  * proyecto en Vercel) y NO está en ese mapa — así que producción caía al
- * `?t=`/cookie, que los escribe quien visita. O sea: la pista de desarrollo
+ * la pista de query/cookie, que las escribe quien visita. O sea: la pista de
+ * desarrollo
  * gobernaba el tenant en producción.
  *
  * Por qué eso era crítico y no cosmético: el Asistente atiende a visitantes
@@ -284,13 +336,15 @@ function sanitizeSlug(value: string | null | undefined): string | null {
  * por su argumento `p_tenant_id` (verificado con `pg_get_functiondef`: es
  * SECURITY DEFINER y no revalida nada contra el JWT). Un anónimo no tiene JWT,
  * así que abajo no hay red de contención: quien controla el slug controla qué
- * comunidad se lee. Con `?t=<otra-comunidad>` se leían sus `rag_chunks`.
+ * comunidad se lee. Con la pista apuntando a otra comunidad se leían sus
+ * `rag_chunks`.
  *
- * El corte va acá y no en el asistente a propósito: `?t=`/cookie alimentan el
+ * El corte va acá y no en el asistente a propósito: pista y cookie alimentan el
  * tenant de TODA la app, no solo del RAG. Se arregla en el origen.
  *
  * TRADE-OFF, para que nadie lo reabra sin querer: en producción una comunidad
- * SIN dominio propio no es alcanzable por `?t=`; necesita SU dominio. Desde la
+ * SIN dominio propio no es alcanzable por la pista de query; necesita SU
+ * dominio. Desde la
  * migración 0060 eso es una fila en `public.tenant_domains` (la escribe
  * `scripts/new-tenant.mjs --domain=…`), no una línea de código: el paso de
  * deploy que este trade-off costaba ya no existe.
@@ -299,7 +353,7 @@ function sanitizeSlug(value: string | null | undefined): string | null {
  * `NODE_ENV=production`, así que el primer término ya corta y los previews
  * TAMBIÉN quedan bloqueados. Es a propósito y no se afloja: un preview es una
  * URL pública apuntando a la MISMA base de producción, o sea que ahí `?t=`
- * sería el mismo agujero con otra puerta. `?t=` queda vivo sólo en local
+ * sería el mismo agujero con otra puerta. La pista queda viva sólo en local
  * (`NODE_ENV=development`) y en los tests, que es donde de verdad hace falta.
  */
 export function clientTenantHintsAllowed(): boolean {
@@ -320,10 +374,11 @@ export function clientTenantHintsAllowed(): boolean {
  * dev siguen siendo lo correcto.
  *
  * - Producción: manda el HOST y NADA MÁS. Host en el respaldo `DOMAIN_TENANTS`
- *   → su comunidad; cualquier otro host → la comunidad por defecto. `?t=` y la
+ *   → su comunidad; cualquier otro host → la comunidad por defecto. La pista de
+ *   query y la
  *   cookie se IGNORAN (ver `clientTenantHintsAllowed`: son entrada del cliente y
  *   el RAG del asistente las consumía con service_role).
- * - Dev / previews: `?t=<slug>` > cookie `cl-tenant` > 'dominicanos', como
+ * - Dev / previews: `?cl-tenant=<slug>` > cookie `cl-tenant` > 'dominicanos', como
  *   siempre — ahí sí son un ayudante de desarrollo legítimo.
  *
  * `allowClientHints` se puede pasar explícito para testear las dos ramas sin

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, CheckCircle, X } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Badge, Button, buttonVariants, useToast, type BadgeProps } from "@/components/ui";
-import { IdentityBadge } from "@/components/auth/identity-badge";
+import { InsigniaDePerfil } from "@/components/verificacion/check-azul";
 import { PublisherTrust } from "@/components/listings";
 import type { TrustLevel, TrustSignal } from "@/components/trust";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,8 @@ export interface ApplicationCreator {
   displayName: string;
   avatarUrl: string | null;
   identityVerified: boolean;
+  /** `profiles.verified_badge` (0101). Gana sobre `identityVerified` en el avatar — ver `InsigniaDePerfil`. */
+  checkAzul: boolean;
   headline: string | null;
   ratingAvg: number | null;
   ratingCount: number;
@@ -92,7 +94,11 @@ export function ApplicationRow({ application, creator, gigTitle, gigBudgetCents 
           size="md"
           src={creator.avatarUrl}
           name={creator.displayName}
-          badge={creator.identityVerified ? <IdentityBadge /> : undefined}
+          badge={
+            creator.checkAzul || creator.identityVerified ? (
+              <InsigniaDePerfil checkAzul={creator.checkAzul} identityVerified={creator.identityVerified} />
+            ) : undefined
+          }
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">

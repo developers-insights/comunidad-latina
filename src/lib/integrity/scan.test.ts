@@ -89,9 +89,9 @@ describe("la app delega en la función de la base y no reimplementa nada", () =>
     // app NO mande un número es la propiedad que se prueba acá.
     expect(stub.rpc).toHaveBeenCalledWith("scan_content_asset", {
       p_asset_id: ASSET,
-      p_max_distance: null,
-      p_max_distance_video: null,
-      p_max_distance_audio: null,
+      p_max_distance: undefined,
+      p_max_distance_video: undefined,
+      p_max_distance_audio: undefined,
     });
     expect(result).toEqual({ ok: true, openAlerts: 1 });
   });
@@ -107,8 +107,8 @@ describe("la app delega en la función de la base y no reimplementa nada", () =>
     expect(stub.rpc).toHaveBeenCalledWith("scan_content_asset", {
       p_asset_id: ASSET,
       p_max_distance: 4,
-      p_max_distance_video: null,
-      p_max_distance_audio: null,
+      p_max_distance_video: undefined,
+      p_max_distance_audio: undefined,
     });
   });
 

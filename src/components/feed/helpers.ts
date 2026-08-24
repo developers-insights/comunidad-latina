@@ -515,19 +515,46 @@ export function canPromotePost(
 
 /**
  * Filtro `.or()` de PostgREST para la VISIBILIDAD de posts del feed "para vos":
- * un post entra si es personal (entity_listing_id null), si es de una entidad
- * que el viewer SIGUE, o si tiene una promoción activa (llega a todos).
+ * un post entra si es personal (entity_listing_id null), si es PROPIO, si es de
+ * una entidad que el viewer SIGUE, o si tiene una promoción activa (llega a
+ * todos).
  *
  * Se combina por AND con los otros `.or()` de la query (bloqueados, keyset):
  * PostgREST trata cada `.or()` como un grupo AND de nivel superior. Los ids son
- * uuids que vienen de la DB (follows/post_promotions) — no hay input de usuario
- * que interpolar, mismo patrón que el filtro de bloqueados.
+ * uuids que vienen de la DB (follows/post_promotions) o del JWT del viewer — no
+ * hay input de usuario que interpolar, mismo patrón que el filtro de bloqueados.
+ *
+ * ── LA CUARTA RAMA, `viewerId`, Y POR QUÉ NO ES UN LUJO ─────────────────────
+ * Hasta el 2026-08-24 ninguna pantalla escribía `posts.entity_listing_id`, así
+ * que esta regla existía sin ejercitarse. El día que el composer empezó a
+ * firmar publicaciones con la ficha del negocio, se activó — y con ella un
+ * agujero que sólo se ve cuando la regla corre de verdad: el DUEÑO del negocio
+ * no sigue su propia ficha (seguirse a uno mismo no es algo que nadie haga), así
+ * que su primera publicación comercial no aparecía NI EN SU PROPIO feed. Con
+ * cero seguidores el día uno, eso se lee como "no se publicó", y el reflejo
+ * inmediato es publicar de nuevo.
+ *
+ * La excepción no se inventa acá: es la MISMA tercera excepción que
+ * `recommendedFeedListingFilter` (lib/monetization/feed.ts) ya hacía para los
+ * avisos, con el mismo argumento escrito en su docblock. Las dos reglas de
+ * alcance del feed tienen que tratar igual "lo mío": si no, el aviso propio
+ * aparece y la publicación propia no, en la misma pantalla.
+ *
+ * Cuesta un `author_id.eq.<uuid>`: 46 bytes fijos de URL, no una lista — no
+ * mueve la aguja del presupuesto de 8 KB (ver `feed/queries.ts`).
+ *
+ * `viewerId` es OPCIONAL para no romper a los llamadores que todavía no lo
+ * pasan; sin él, el comportamiento es exactamente el de antes.
  */
 export function feedPostVisibilityFilter(
   followedListingIds: readonly string[],
   promotedPostIds: readonly string[],
+  viewerId?: string | null,
 ): string {
   const parts = ["entity_listing_id.is.null"];
+  if (viewerId) {
+    parts.push(`author_id.eq.${viewerId}`);
+  }
   if (followedListingIds.length > 0) {
     parts.push(`entity_listing_id.in.(${followedListingIds.join(",")})`);
   }

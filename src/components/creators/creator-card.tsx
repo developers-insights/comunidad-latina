@@ -1,6 +1,6 @@
 import { Camera, CheckCircle } from "@phosphor-icons/react/dist/ssr";
 import { AccentLink, Avatar, BezelCard, CardMedia, MediaScrimBottom } from "@/components/ui";
-import { IdentityBadge } from "@/components/auth/identity-badge";
+import { InsigniaDePerfil } from "@/components/verificacion/check-azul";
 import { FollowButton } from "@/components/social/follow-button";
 import { PhotoTap } from "@/components/media/photo-tap";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,8 @@ export interface CreatorCardModel {
   displayName: string;
   avatarUrl: string | null;
   identityVerified: boolean;
+  /** `profiles.verified_badge` (0101). Gana sobre `identityVerified` en el avatar — ver `InsigniaDePerfil`. */
+  checkAzul: boolean;
   headline: string;
   skills: string[];
   /** Primera foto del portfolio (post-media) o null → hero violeta. */
@@ -69,7 +71,11 @@ export function CreatorCard({ creator }: { creator: CreatorCardModel }) {
         size="md"
         src={creator.avatarUrl}
         name={creator.displayName}
-        badge={creator.identityVerified ? <IdentityBadge /> : undefined}
+        badge={
+          creator.checkAzul || creator.identityVerified ? (
+            <InsigniaDePerfil checkAzul={creator.checkAzul} identityVerified={creator.identityVerified} />
+          ) : undefined
+        }
         className="ring-2 ring-on-media/40"
       />
       <div className="min-w-0">

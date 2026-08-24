@@ -61,7 +61,8 @@ export interface TenantRoutingInput {
   lookup: TenantDomainLookup;
   /**
    * Lo que devuelve el resolver histórico `resolveTenantSlug(...)`: respaldo
-   * `DOMAIN_TENANTS` + pistas de dev (`?t=`, cookie) + comunidad por defecto.
+   * `DOMAIN_TENANTS` + pistas de dev (`?cl-tenant=`, cookie `cl-tenant`) +
+   * comunidad por defecto.
    * Se calcula afuera para que esta función siga siendo pura.
    */
   hintSlug: string;
@@ -188,6 +189,7 @@ background:Canvas;color:CanvasText}
 main{max-width:32rem;text-align:center}
 h1{font-size:1.375rem;line-height:1.3;margin:0 0 .75rem;font-weight:600}
 p{margin:0;opacity:.75}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em}
 </style>
 </head>
 <body><main><h1>${title}</h1><p>${body}</p></main></body>
@@ -229,3 +231,52 @@ export const DOMAIN_UNAVAILABLE_PAGE: ProxyErrorPage = {
     "Es un problema nuestro, no tuyo. Probá de nuevo en un minuto.",
   ),
 };
+
+/**
+ * Escapa lo que se interpola en el HTML de arriba.
+ *
+ * El slug llega ya saneado por `sanitizeSlug` (`[a-z0-9-]{1,40}`), así que hoy
+ * no puede traer nada peligroso. Se escapa igual: la garantía vive en OTRO
+ * archivo, y el día que ese regex se afloje nadie va a venir a mirar acá. Es
+ * la misma razón por la que estas páginas nunca reflejan el `Host`.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * LA PISTA DE DESARROLLO APUNTA A UNA COMUNIDAD QUE NO EXISTE.
+ *
+ * Sólo se sirve en desarrollo, que es donde las pistas del cliente están
+ * habilitadas (`clientTenantHintsAllowed()`), y sólo cuando la base CONTESTÓ
+ * que no hay fila con ese slug (ver `./slug-lookup`).
+ *
+ * Existe porque el modo de falla anterior era el peor posible: la app entera se
+ * veía vacía, sin un solo error, y la causa —una cookie `cl-tenant` de 30 días
+ * escrita por un `?t=ofertas` que en realidad era el nombre de una pestaña— era
+ * literalmente inadivinable. Un error honesto y ruidoso a los tres segundos
+ * vale más que una app muda.
+ *
+ * El proxy que sirve esta página BORRA además la cookie, así que recargar
+ * alcanza para volver a la normalidad. El texto lo dice, porque una acción que
+ * ya pasó y no se cuenta no le sirve a nadie.
+ */
+export function unknownTenantHintPage(slug: string): ProxyErrorPage {
+  const seguro = escapeHtml(slug);
+  return {
+    status: 404,
+    headers: BASE_HEADERS,
+    html: page(
+      `No existe la comunidad “${seguro}”`,
+      `La pista de desarrollo pedía la comunidad <code>${seguro}</code> y en la base no hay ninguna con ese nombre. ` +
+        `Sin esto la app se vería entera vacía y sin errores, que es peor. ` +
+        `Ya te borré la cookie <code>cl-tenant</code>: recargá y volvés a la comunidad por defecto. ` +
+        `Si querías otra, la pista se pasa como <code>?cl-tenant=&lt;slug&gt;</code> — ` +
+        `<code>?t=</code> es el parámetro de las PESTAÑAS de cada módulo y no toca el tenant.`,
+    ),
+  };
+}

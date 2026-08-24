@@ -49,16 +49,7 @@ import { moduleAvailability } from "./module-access";
  * Manuel 2026-08-11: el tile pasa a llamarse Boost, igual que la octava
  * sección de /buscar — un solo nombre para la misma compra en toda la app).
  *
- * TODO(integración): mover a feed/copy.ts. `COPY.composer.createMenu.tiles`
- * es la fuente que consumen los demás tiles, pero ese archivo lo está
- * editando otro agente en simultáneo — se declara acá para no pisarle el
- * merge, con la misma forma `{ title, description }` que ya usan los tiles
- * de `copy.ts`.
  */
-const IMPULSAR_TILE_COPY = {
-  title: "Boost",
-  description: "Pagá para que tu aviso o tu publicación lleguen a más gente.",
-} as const;
 
 export type QuickPostKind = "photo" | "video" | "text" | "question";
 
@@ -164,7 +155,7 @@ const CREATE_MENU_TILES: CreateMenuTile[] = [
   },
   {
     key: "impulsar",
-    ...IMPULSAR_TILE_COPY,
+    ...COPY.composer.createMenu.tiles.boost,
     // Dorado de contenido patrocinado (§ globals.css --color-sponsored): esta
     // fila ES publicidad paga, así que se tiñe con el mismo acento que el
     // contorno/chip que ve el resto de la comunidad — nunca uno de los

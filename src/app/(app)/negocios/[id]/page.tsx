@@ -21,12 +21,10 @@ import {
   HorarioSeccion,
 } from "@/components/negocios";
 import { PostSheetTrigger } from "@/components/feed";
-import {
-  ResenaForm,
-  ResenasLista,
-  ResumenPuntajeCard,
-  fetchResenasDeAviso,
-} from "@/components/resenas";
+import { ResenaForm, ResenasLista, ResumenPuntajeCard } from "@/components/resenas";
+// Import DIRECTO: el barril no puede reexportar esto sin arrastrar
+// `server-only` al bundle de sus consumidores cliente (ver su encabezado).
+import { fetchResenasDeAviso } from "@/components/resenas/queries";
 import { fetchPuestosDelNegocio } from "@/lib/negocios/empleos";
 import { puedeOfrecerseElFormulario } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";

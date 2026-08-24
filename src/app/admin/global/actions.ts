@@ -150,7 +150,12 @@ export async function createTenant(
   revalidatePath("/admin/global");
   return {
     status: "success",
-    message: `"${input.name}" ya está viva. Entrá con ?t=${created.slug} para verla.`,
+    // `?cl-tenant=` y no `?t=`: el segundo es el parámetro de las pestañas de
+    // los módulos y ya no mueve el tenant (ver TENANT_QUERY_PARAM en
+    // src/lib/tenant/resolve.ts). Y sólo funciona en local: en producción y en
+    // previews la pista está apagada a propósito, ahí la comunidad se alcanza
+    // por su dominio.
+    message: `"${input.name}" ya está viva. En local la ves con ?cl-tenant=${created.slug}; en producción, por su dominio.`,
   };
 }
 

@@ -25,6 +25,7 @@ import {
   sanitizeSearchQuery,
   type FilterOption,
 } from "@/components/search";
+import { EVENT_CATEGORIES, isEventCategory } from "@/lib/eventos/categorias";
 import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -56,11 +57,22 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
  *   · `q`       → `listings.search`, el mismo índice FTS español que usan
  *                 /propiedades y /marketplace (migración 0004).
  *
- * NO se implementa el filtro por CATEGORÍA de evento que pide la spec: no hay
- * columna ni convención en `attrs` para eso, y los eventos ya publicados no la
- * traen. Inventar un desplegable que filtra sobre un campo vacío es peor que no
- * tenerlo — quedaría siempre en cero y parecería que no hay eventos. Anotado
- * como pendiente de base en la entrega.
+ *   · `categoria` → `attrs.category` + el catálogo de `EVENT_CATEGORIES`.
+ *
+ * El filtro por categoría estuvo sin implementar un tiempo y este mismo bloque
+ * decía que era imposible "porque no hay convención en attrs". Ya la hay
+ * (`src/lib/eventos/categorias.ts`, misma clave y mismo criterio que la
+ * taxonomía de negocios), así que se implementó. Se deja escrito porque la
+ * razón original sigue siendo buena y sigue aplicando al REVÉS: sólo se
+ * ofrecen valores del catálogo, y cualquier otra cosa que llegue por la URL se
+ * descarta en vez de filtrar sobre un valor que ninguna opción del desplegable
+ * puede haber puesto — un filtro que devuelve cero y del que no se puede salir
+ * es exactamente lo que se quería evitar.
+ *
+ * La categoría se filtra en SQL y no en memoria, al revés que `entrada`: acá el
+ * valor es un texto presente o ausente (no un booleano cuya ausencia significa
+ * algo), así que `eq` sobre `attrs->>category` dice justo lo que se quiere y
+ * deja que la base descarte filas antes del tope de 40.
  */
 type When = "" | "mes" | "pasados";
 type Ticket = "" | "gratis" | "pago";
@@ -70,6 +82,7 @@ interface Filters {
   cuando: When;
   entrada: Ticket;
   ciudad: string;
+  categoria: string;
 }
 
 /** Tarjeta + la fecha CRUDA, que `EventCardModel.date` ya no conserva. */
@@ -85,6 +98,7 @@ function firstValue(value: string | string[] | undefined): string {
 function parseFilters(sp: Record<string, string | string[] | undefined>): Filters {
   const cuando = firstValue(sp.cuando);
   const entrada = firstValue(sp.entrada);
+  const categoria = firstValue(sp.categoria);
   return {
     q: sanitizeSearchQuery(firstValue(sp.q)),
     cuando: cuando === "mes" || cuando === "pasados" ? cuando : "",
@@ -93,6 +107,9 @@ function parseFilters(sp: Record<string, string | string[] | undefined>): Filter
     // libre y una ciudad que no exista devuelve cero resultados, que es la
     // respuesta correcta y no un error.
     ciudad: firstValue(sp.ciudad).slice(0, 80),
+    // La categoría SÍ se valida: al revés que la ciudad, es un catálogo cerrado
+    // y un valor inventado sólo puede venir de una URL a mano.
+    categoria: isEventCategory(categoria) ? categoria : "",
   };
 }
 
@@ -100,6 +117,11 @@ const WHEN_OPTIONS: FilterOption[] = [
   { value: "", label: t("sections", "eventsWhenUpcoming") },
   { value: "mes", label: t("sections", "eventsWhenMonth") },
   { value: "pasados", label: t("sections", "eventsWhenPast") },
+];
+
+const CATEGORY_OPTIONS: FilterOption[] = [
+  { value: "", label: t("sections", "eventsCategoryAny") },
+  ...EVENT_CATEGORIES.map((option) => ({ value: option.value, label: option.label })),
 ];
 
 const TICKET_OPTIONS: FilterOption[] = [
@@ -147,6 +169,7 @@ async function EventosContent({ filters }: { filters: Filters }) {
     query = query.textSearch("search", filters.q, { type: "websearch", config: "spanish" });
   }
   if (filters.ciudad) query = query.eq("area_label", filters.ciudad);
+  if (filters.categoria) query = query.eq("attrs->>category", filters.categoria);
 
   // Boosts activos del tenant en PARALELO con el listado: `boosts` no filtra
   // por `kind` (es agnóstica — cualquier listing se puede impulsar, /impulsar
@@ -255,7 +278,9 @@ async function EventosContent({ filters }: { filters: Filters }) {
   );
   const { upcoming, past } = splitByWhen(filtered, filters.cuando);
   const isEmpty = upcoming.length === 0 && past.length === 0;
-  const filtering = Boolean(filters.q || filters.cuando || filters.entrada || filters.ciudad);
+  const filtering = Boolean(
+    filters.q || filters.cuando || filters.entrada || filters.ciudad || filters.categoria,
+  );
 
   // Patrocinados: se sacan de `upcoming`/`past` — que ya son el resultado de
   // aplicar q/entrada/ciudad (arriba) y `cuando` (recién, en splitByWhen) —
@@ -390,12 +415,21 @@ function Filters({ cities }: { cities: FilterOption[] }) {
         label={t("sections", "eventsWhenLabel")}
         options={WHEN_OPTIONS}
       />
-      <div className="flex gap-2">
+      {/* Tres desplegables que envuelven en vez de apretarse: en un teléfono
+          angosto quedan 2 + 1 y cada uno conserva ancho legible, en cuanto hay
+          espacio se acomodan en una sola fila. */}
+      <div className="flex flex-wrap gap-2">
+        <ModuleFilterSelect
+          param="categoria"
+          label={t("sections", "eventsCategoryLabel")}
+          options={CATEGORY_OPTIONS}
+          className="min-w-36 flex-1"
+        />
         <ModuleFilterSelect
           param="entrada"
           label={t("sections", "eventsPriceLabel")}
           options={TICKET_OPTIONS}
-          className="flex-1"
+          className="min-w-36 flex-1"
         />
         {/* La ciudad sólo aparece cuando hay más de una: un desplegable con una
             única opción es una decisión que no existe. */}
@@ -404,7 +438,7 @@ function Filters({ cities }: { cities: FilterOption[] }) {
             param="ciudad"
             label={t("sections", "eventsCityLabel")}
             options={cities}
-            className="flex-1"
+            className="min-w-36 flex-1"
           />
         )}
       </div>

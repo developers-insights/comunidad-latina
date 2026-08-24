@@ -243,6 +243,32 @@ export function resolveSalaryRange(
 }
 
 // ---------------------------------------------------------------------------
+// Copy de la ficha del puesto
+// ---------------------------------------------------------------------------
+
+/**
+ * Rótulos de la ficha del puesto en el detalle.
+ *
+ * Mismo criterio que `propiedades/alquiler.ts` y `eventos/detalles.ts`: el
+ * valor, su etiqueta y el rótulo de la fila viven en el mismo archivo, así que
+ * no se puede agregar un dato y olvidarse de mostrarlo.
+ *
+ * Escritos en segunda persona, como los leería quien está decidiendo si
+ * postularse: "Te van a pedir" en vez de "Requisitos de idioma".
+ */
+export const JOB_DETAILS_COPY = {
+  title: "El puesto en detalle",
+  days: "Días",
+  schedule: "Horario",
+  experience: "Experiencia",
+  languages: "Idiomas",
+  startsOn: "Empieza",
+  applyBy: "Postulate antes del",
+  /** Se dice una vez y al pie: aplica a todas las filas de la ficha. */
+  footnote: "Lo declara quien publica el aviso.",
+} as const;
+
+// ---------------------------------------------------------------------------
 // Lectura desde attrs
 // ---------------------------------------------------------------------------
 

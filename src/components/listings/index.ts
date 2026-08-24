@@ -5,6 +5,11 @@ export {
   type ListingActionsProps,
 } from "./contact-cta";
 export { COPY } from "./copy";
+export {
+  DetailFacts,
+  type DetailFact,
+  type DetailFactsProps,
+} from "./detail-facts";
 export { DetailTopBar } from "./detail-top-bar";
 export { ListingGallery, type ListingGalleryProps } from "./gallery";
 export {

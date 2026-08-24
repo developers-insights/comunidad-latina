@@ -80,7 +80,6 @@ export const TAGGER_COPY = {
   save: {
     /** La publicación salió pero las etiquetas no se guardaron. */
     partial: "Publicamos tu contenido, pero no pudimos guardar las etiquetas.",
-    partialCta: "Reintentar",
     /** Se reintentó y volvió a fallar. */
     partialGiveUp:
       "Tu publicación ya está en el feed. Podés etiquetar a las personas desde ahí cuando quieras.",

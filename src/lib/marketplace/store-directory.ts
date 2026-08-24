@@ -63,8 +63,8 @@ export async function fetchStoreRatings(
  *
  * `attrs.store_listing_id` es jsonb SIN foreign key (mismo motivo que en
  * marketplace/(lista)/page.tsx y marketplace/tienda/[storeId]/page.tsx), así
- * que un `GROUP BY` real del lado de Postgres pediría una función nueva — y
- * este agente tiene prohibido escribir migraciones por su cuenta. En su lugar:
+ * que un `GROUP BY` real del lado de Postgres pediría una función nueva. En su
+ * lugar:
  * se trae UNA vez el conjunto de productos activos que pertenecen a ALGUNA de
  * estas tiendas (sólo `id` + `attrs`, la misma columna que ya se lee en el
  * listado de Artículos) y se cuenta en JS. Sigue siendo UNA consulta total —
@@ -74,8 +74,8 @@ export async function fetchStoreRatings(
  * esta consulta escanea todos los productos publicados del tenant que caigan
  * en el filtro `in(...)`. Con pocos miles de productos por comunidad no pesa;
  * si el volumen crece, un índice de expresión (o una columna propia en vez de
- * jsonb) lo resuelve sin tocar esta función — ver el DDL propuesto en el
- * retorno de esta tarea.
+ * jsonb) lo resuelve sin tocar esta función. El índice todavía NO existe: la
+ * migración está pendiente, no aplicada.
  */
 export async function fetchActiveListingCounts(
   supabase: ServerClient,

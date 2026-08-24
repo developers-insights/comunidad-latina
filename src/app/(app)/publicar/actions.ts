@@ -670,7 +670,11 @@ export async function finalizeListing(rawInput: {
         finalStatus = "published";
       }
     } catch {
-      // Admin no configurado — el aviso queda en revisión, nunca rompemos.
+      // Admin no configurado — el aviso queda en revisión, nunca rompemos. Se
+      // loguea igual que su hermano de la cola de moderación treinta líneas
+      // abajo: sin la línea, "el aviso quedó en revisión" no distingue entre la
+      // moderación haciendo su trabajo y el cliente admin sin configurar.
+      console.warn("[vivienda] admin client no disponible para auto-aprobar");
     }
   }
 

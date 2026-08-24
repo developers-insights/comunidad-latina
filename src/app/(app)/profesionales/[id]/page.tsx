@@ -40,12 +40,10 @@ import { fetchViewerSavedListingIds } from "@/app/(app)/feed/queries";
 // Profesionales monta exactamente los mismos componentes que Negocios. La query
 // vive una sola vez en `components/resenas` por la misma razón que los guardados
 // viven en FEED: si se copia, se desincroniza.
-import {
-  ResenaForm,
-  ResenasLista,
-  ResumenPuntajeCard,
-  fetchResenasDeAviso,
-} from "@/components/resenas";
+import { ResenaForm, ResenasLista, ResumenPuntajeCard } from "@/components/resenas";
+// Import DIRECTO: el barril no puede reexportar esto sin arrastrar
+// `server-only` al bundle de sus consumidores cliente (ver su encabezado).
+import { fetchResenasDeAviso } from "@/components/resenas/queries";
 import { RESENAS_COPY, puedeOfrecerseElFormulario } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";

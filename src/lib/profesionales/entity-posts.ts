@@ -104,7 +104,7 @@ export async function fetchProfessionalPostsPage(
 
   // Alcance "para vos" (los ids vienen de la DB, no del usuario). PostgREST
   // AND-ea cada `.or()` de nivel superior con los demás filtros.
-  query = query.or(feedPostVisibilityFilter(followedListingIds, [...promotedPostIds]));
+  query = query.or(feedPostVisibilityFilter(followedListingIds, [...promotedPostIds], args.viewerId));
 
   // Fuera lo que su autor ocultó del feed (0097) — misma regla que el feed y
   // /videos: esta pestaña también es una superficie de descubrimiento.

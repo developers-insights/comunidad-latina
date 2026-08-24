@@ -44,6 +44,17 @@ import { formatDate } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
+/**
+ * Cuánto vale un reclamo de `payment_events.claimed_at` antes de que otra
+ * entrega pueda volver a tomarlo (0111).
+ *
+ * Cinco minutos, contra el techo de 300 s de una función de Vercel: si el
+ * proceso que lo reclamó todavía estuviera vivo, ya se habría pasado del tiempo
+ * que la plataforma le da. Un reclamo sin vencimiento cambiaría un duplicado
+ * por un evento que nadie procesa nunca, que con plata de por medio es peor.
+ */
+const RECLAMO_VENCE_MS = 5 * 60 * 1000;
+
 /** Estados de suscripción de Stripe que mantienen la presencia activa. */
 const ACTIVE_SUB_STATUSES: ReadonlyArray<Stripe.Subscription.Status> = [
   "active",
@@ -102,27 +113,53 @@ export async function POST(request: Request) {
   const tenantId = metadataString(objeto.metadata, "tenant_id");
 
   // 2. Idempotencia: insert con event_id UNIQUE. Conflicto → ya lo vimos.
+  //    `claimed_at` va desde el INSERT: quien gana la carrera queda marcado como
+  //    el que lo está procesando, que es justo lo que la rama del 23505 de abajo
+  //    necesita poder distinguir.
   const { error: insertError } = await admin.from("payment_events").insert({
     provider: "stripe",
     event_id: event.id,
     event_type: event.type,
     payload: JSON.parse(rawBody) as Json,
     tenant_id: tenantId,
+    claimed_at: new Date().toISOString(),
   });
 
   if (insertError) {
     if (insertError.code === "23505") {
-      // Reintento de Stripe: solo reprocesar si el intento anterior falló.
-      const { data: previo } = await admin
+      /**
+       * Perdimos la carrera del INSERT: alguien más ya registró este evento.
+       * La pregunta no es "¿ya se procesó?" sino "¿hay alguien procesándolo
+       * AHORA?" — y `processed=false` no distingue una cosa de la otra: es el
+       * estado tanto del intento que murió a mitad como del que está vivo y
+       * trabajando. Leerlo y seguir de largo, que es lo que se hacía acá,
+       * hacía que dos entregas simultáneas procesaran las dos.
+       *
+       * El reclamo lo resuelve en un solo UPDATE atómico: se lo lleva quien
+       * encuentre la fila libre (`claimed_at` nulo) o con un reclamo vencido
+       * —más de 5 minutos, o sea un proceso que ya no puede estar vivo contra
+       * el techo de 300 s de Vercel—. Cero filas devueltas ⇒ hay alguien
+       * adentro, o ya terminó: respondemos 200 y no tocamos nada.
+       *
+       * Ver `supabase/migrations/0111_reclamo_de_evento_de_pago.sql` para por
+       * qué no alcanzaba con un UPDATE sobre `processed` ni con un advisory
+       * lock.
+       */
+      const vencimientoDelReclamo = new Date(Date.now() - RECLAMO_VENCE_MS).toISOString();
+      const { data: reclamado } = await admin
         .from("payment_events")
-        .select("processed")
+        .update({ claimed_at: new Date().toISOString() })
         .eq("provider", "stripe")
         .eq("event_id", event.id)
+        .eq("processed", false)
+        .or(`claimed_at.is.null,claimed_at.lt.${vencimientoDelReclamo}`)
+        .select("id")
         .maybeSingle();
-      if (previo?.processed) {
+
+      if (!reclamado) {
         return NextResponse.json({ received: true, duplicated: true });
       }
-      // processed=false → el intento anterior murió a mitad: seguimos.
+      // Nos lo llevamos: el intento anterior murió a mitad. Seguimos.
     } else {
       console.error(
         `[pagos:webhook] No se pudo registrar payment_event ${event.id} — code=${insertError.code}`,

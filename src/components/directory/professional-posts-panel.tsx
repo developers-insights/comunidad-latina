@@ -13,12 +13,16 @@ import { cn } from "@/lib/utils";
  * nueva inventada para leer un post, y cualquier mejora futura de la tarjeta
  * (encuestas, música, menú ⋯) llega acá gratis.
  *
- * ── EL VACÍO ES ESPERADO HOY, Y ESTÁ BIEN ────────────────────────────────────
- * Ningún composer escribe todavía `posts.entity_listing_id` (se está cableando
- * en paralelo), así que con datos reales esta pestaña nace vacía. El vacío
- * cuenta qué va a aparecer ahí — nunca promete un botón que hoy no hace lo que
- * dice: publicar "como" un profesional todavía no es un camino que exista en
- * ninguna pantalla, así que este estado no ofrece ese atajo.
+ * ── EL VACÍO SIGUE SIENDO POSIBLE, PERO YA NO ES ESTRUCTURAL ────────────────
+ * Este bloque decía que ningún composer escribía `posts.entity_listing_id` y
+ * que publicar "como" profesional no existía en ninguna pantalla. Ya no es así:
+ * el selector de autoría del composer permite firmar con una ficha propia,
+ * `AUTORIA_KINDS` (`lib/feed/autoria.ts`) incluye `professional`, y `crearPost`
+ * guarda el vínculo después de verificar contra la base que la ficha es tuya.
+ *
+ * El vacío se mantiene porque una comunidad nueva lo va a ver de todos modos, y
+ * sigue sin ofrecer el atajo de publicar: el composer vive en el feed y esa
+ * firma sólo aparece para quien administra una ficha.
  */
 
 const COPY = {

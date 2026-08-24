@@ -2,15 +2,21 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
   Briefcase,
+  CalendarCheck,
+  CalendarDots,
   CaretRight,
   Clock,
+  GraduationCap,
+  Hourglass,
   MapPin,
   Question,
   Storefront,
+  Translate,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Badge, Banner, BezelCard, buttonVariants } from "@/components/ui";
 import {
+  DetailFacts,
   DetailTopBar,
   PublisherTrust,
   buildTrustSignals,
@@ -18,6 +24,7 @@ import {
   formatListingPrice,
   listingPhotoUrl,
   toTrustLevel,
+  type DetailFact,
 } from "@/components/listings";
 // Lectura de `saves` (migración 0038): genérica por listingId, sirve igual para
 // un empleo aunque el helper viva en el paquete de marketplace.
@@ -28,9 +35,16 @@ import { COPY } from "@/components/empleos/copy";
 import { EMPLOYMENT_TYPE_LABEL, parseJobAttrs, type JobQuestion } from "@/components/empleos/helpers";
 import { JobApplicationStatus } from "@/components/empleos/job-application-status";
 import { JobApplySheet } from "@/components/empleos/job-apply-sheet";
+import {
+  JOB_DETAILS_COPY,
+  jobExperienceLabel,
+  jobLanguageLabel,
+  readJobDetails,
+  workDayLabel,
+} from "@/lib/empleos/detalles";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import {
   fetchApplicantProfilePreview,
   fetchJobApplicationCounts,
@@ -92,6 +106,83 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
   const employmentLabel = attrs.employmentType
     ? EMPLOYMENT_TYPE_LABEL[attrs.employmentType]
     : C.employmentUnknown;
+
+  /**
+   * La ficha del puesto: días, horario, experiencia, idiomas, desde cuándo y
+   * hasta cuándo se puede postular.
+   *
+   * `readJobDetails` ya existía y esta pantalla usaba UNA sola cosa de él
+   * —`salaryMax`, y encima desde `queries.ts` para la tarjeta del listado—:
+   * todo lo demás se guardaba al publicar y no se veía en ningún lado. Es el
+   * mismo agujero que Propiedades y Eventos, y se cierra igual: una fila por
+   * dato DECLARADO, ninguna por dato ausente.
+   *
+   * `applyBy` es el único con carga emocional: es una fecha límite, así que va
+   * último y con su rótulo en imperativo. No se pinta en rojo ni se compara
+   * contra hoy — un aviso vencido lo cierra la consulta, no un color de alarma
+   * sobre algo que la persona no puede cambiar.
+   */
+  const details = readJobDetails(listing.attrs);
+  const jobFacts: DetailFact[] = [];
+  if (details.days.length > 0) {
+    jobFacts.push({
+      id: "days",
+      icon: CalendarDots,
+      label: JOB_DETAILS_COPY.days,
+      value: details.days
+        .map((day) => workDayLabel(day))
+        .filter(Boolean)
+        .join(" · "),
+    });
+  }
+  if (details.schedule) {
+    jobFacts.push({
+      id: "schedule",
+      icon: Clock,
+      label: JOB_DETAILS_COPY.schedule,
+      value: details.schedule,
+    });
+  }
+  if (details.experience) {
+    const experience = jobExperienceLabel(details.experience);
+    if (experience) {
+      jobFacts.push({
+        id: "experience",
+        icon: GraduationCap,
+        label: JOB_DETAILS_COPY.experience,
+        value: experience,
+      });
+    }
+  }
+  if (details.languages.length > 0) {
+    jobFacts.push({
+      id: "languages",
+      icon: Translate,
+      label: JOB_DETAILS_COPY.languages,
+      value: details.languages
+        .map((language) => jobLanguageLabel(language))
+        .filter(Boolean)
+        .join(" · "),
+    });
+  }
+  if (details.startsOn) {
+    jobFacts.push({
+      id: "starts-on",
+      icon: CalendarCheck,
+      label: JOB_DETAILS_COPY.startsOn,
+      // `YYYY-MM-DD` sin hora: `formatDate` lo detecta y lo formatea en UTC
+      // para que no se corra un día al oeste de Greenwich.
+      value: formatDate(details.startsOn, { locale: tenant.locale, style: "long" }),
+    });
+  }
+  if (details.applyBy) {
+    jobFacts.push({
+      id: "apply-by",
+      icon: Hourglass,
+      label: JOB_DETAILS_COPY.applyBy,
+      value: formatDate(details.applyBy, { locale: tenant.locale, style: "long" }),
+    });
+  }
 
   // ¿Ya lo guardé? (`saves`, 0038 — false si la migración todavía no corrió.)
   const initialSaved = await fetchListingSaved(supabase, tenant.id, listing.id, user?.id);
@@ -208,6 +299,15 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
           </p>
         </section>
       )}
+
+      {/* La ficha del puesto va entre la descripción y las preguntas: primero
+          de qué se trata el trabajo, después las condiciones concretas, y
+          recién ahí lo que te van a preguntar para entrar. */}
+      <DetailFacts
+        title={JOB_DETAILS_COPY.title}
+        facts={jobFacts}
+        footnote={JOB_DETAILS_COPY.footnote}
+      />
 
       {/* Transparencia: las preguntas del aviso se ven ANTES de postularse.
           Nadie abre la hoja para descubrir que le piden cosas que no puede dar. */}

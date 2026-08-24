@@ -87,6 +87,12 @@ function createAdminStub(config: AdminConfig = {}) {
       calls.push({ table, method: "eq", args });
       return builder;
     });
+    // `or` lo usa el RECLAMO del evento de pago (0111): se toma la fila si
+    // `claimed_at` está en null o ya venció.
+    builder.or = vi.fn((...args: unknown[]) => {
+      calls.push({ table, method: "or", args });
+      return builder;
+    });
     builder.maybeSingle = vi.fn(async () => result());
     builder.single = vi.fn(async () => result());
     builder.then = (resolve: (v: OpResult) => unknown, reject: (e: unknown) => unknown) =>
@@ -563,7 +569,10 @@ describe("presencia — idempotencia", () => {
     const stub = useAdmin({
       payment_events: {
         insert: { error: { code: "23505" } },
-        select: { data: { processed: true }, error: null },
+        // Desde la 0111 lo que decide es el RECLAMO, no leer `processed`: el
+        // UPDATE condicional no se lleva ninguna fila porque el evento ya está
+        // procesado, así que el route corta con "duplicado".
+        update: { data: null, error: null },
       },
       business_accounts: {
         select: { data: ACCOUNT_ROW, error: null },

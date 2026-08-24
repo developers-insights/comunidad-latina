@@ -38,7 +38,8 @@ export const isStripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY);
  * base que producción. Mientras exista la variable, hay un deploy de por medio y
  * el demo no corre. Queda vivo exactamente donde hace falta: en local y en los
  * tests. Es el mismo criterio y la misma forma que `clientTenantHintsAllowed()`
- * en `lib/tenant/resolve.ts`, que ya resolvió esta discusión para `?t=`.
+ * en `lib/tenant/resolve.ts`, que ya resolvió esta discusión para la pista de
+ * tenant (`?cl-tenant=`).
  */
 export const isPagosDemoPermitido =
   !isStripeConfigured &&

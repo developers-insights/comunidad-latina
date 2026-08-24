@@ -433,15 +433,15 @@ async function registerOne(
   };
 
   /**
-   * `commercial_intent` llega con la 0086 y `database.types.ts` se regenera
-   * aparte, así que todavía no figura en los tipos generados. El cast es por el
-   * TIPO, no por el contrato: la columna existe en la base y tiene su default.
-   * Mismo patrón que `./scan.ts` con `scan_content_asset` desde la 0070.
+   * `commercial_intent` (0086) ya está en los tipos generados desde la
+   * regeneración del 2026-08-24, así que esto es un objeto tipado y no un cast:
+   * si mañana la columna se renombra en la base, el typecheck lo va a decir acá
+   * en vez de fallar recién en runtime.
    */
-  const rowConIntencion = {
+  const rowConIntencion: TablesInsert<"content_assets"> = {
     ...row,
     commercial_intent: input.commercialIntent === true,
-  } as TablesInsert<"content_assets">;
+  };
 
   const { data, error } = await admin
     .from("content_assets")

@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { allPhotoUrls, firstPhotoUrl } from "@/components/listings";
 import { InlineMessageCta } from "@/components/listings/inline-message-cta";
-import { ResumenPuntajeCard, fetchResenasDeAviso } from "@/components/resenas";
+import { ResumenPuntajeCard } from "@/components/resenas";
+// Import DIRECTO y no por el barril: `./queries` abre con `import "server-only"`
+// y el barril reexporta MÓDULOS, no nombres sueltos — pasar por él arrastra
+// `server-only` a cualquier consumidor cliente y rompe el build de producción
+// (ver el encabezado de `components/resenas/index.ts`).
+import { fetchResenasDeAviso } from "@/components/resenas/queries";
 import { RESENAS_COPY } from "@/lib/resenas";
 import {
   COPY,

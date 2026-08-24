@@ -119,6 +119,8 @@ export const sections = {
   eventsPricePaid: "Con entrada",
   eventsCityLabel: "Ciudad",
   eventsCityAny: "Todas las ciudades",
+  eventsCategoryLabel: "Tipo de evento",
+  eventsCategoryAny: "Todos los tipos",
 
   // Filtros de Negocios
   businessCategoryLabel: "Rubro",

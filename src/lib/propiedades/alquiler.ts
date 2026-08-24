@@ -306,6 +306,36 @@ export function isEmptyRentalTerms(terms: RentalTerms): boolean {
  * `null` / `[]`. La UI muestra ausencia; nadie escribe "Sin amueblar" en un
  * aviso cuyo dueño nunca lo dijo.
  */
+// ---------------------------------------------------------------------------
+// Copy de la ficha de condiciones
+// ---------------------------------------------------------------------------
+
+/**
+ * Los rótulos con los que el detalle muestra estas condiciones.
+ *
+ * Viven ACÁ y no en `components/listings/copy.ts` por la misma razón que los
+ * catálogos: son la otra mitad del mismo contrato. Si mañana se agrega un
+ * requisito, el valor, la etiqueta y el rótulo de la fila se tocan en un solo
+ * archivo — y no hay forma de agregar un dato y olvidarse de cómo se anuncia.
+ *
+ * Están escritos como los diría una persona, no como los nombraría un
+ * formulario: "Qué piden para alquilar" en vez de "Requisitos", porque es
+ * literalmente la pregunta que alguien hace por chat.
+ */
+export const RENTAL_TERMS_COPY = {
+  title: "Condiciones del alquiler",
+  deposit: "Depósito",
+  /** Declarar 0 es una afirmación fuerte y se muestra como tal, no como "$0". */
+  noDeposit: "No pide depósito",
+  extraFees: "Se paga aparte",
+  utilities: "Incluye",
+  requirements: "Qué te van a pedir",
+  furnished: "Muebles",
+  availableFrom: "Te podés mudar desde",
+  footnote:
+    "Esto lo declara quien publica el aviso. Confirmalo por chat antes de entregar dinero.",
+} as const;
+
 export function readRentalTerms(attrs: unknown): RentalTerms {
   const record =
     attrs !== null && typeof attrs === "object" && !Array.isArray(attrs)

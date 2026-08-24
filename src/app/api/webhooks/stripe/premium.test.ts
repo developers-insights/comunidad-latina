@@ -507,11 +507,14 @@ describe("premium — idempotencia", () => {
     expect(mocks.createNotification).not.toHaveBeenCalled();
   });
 
-  it("un intento previo que murió a mitad (processed=false) SÍ se completa", async () => {
+  it("un intento previo que murió a mitad se puede reclamar y SÍ se completa", async () => {
     const stub = useAdmin({
       payment_events: {
         insert: { error: { code: "23505" } },
-        select: { data: { processed: false }, error: null },
+        // Desde la 0111 lo que decide es el RECLAMO, no leer `processed`:
+        // devolver fila = nos llevamos el evento (nadie vivo lo está
+        // trabajando) y se completa la concesión.
+        update: { data: { id: "pe-1" }, error: null },
       },
       listings: { select: { data: LISTING_ROW, error: null } },
       listing_premiums: ALTA_LIMPIA,

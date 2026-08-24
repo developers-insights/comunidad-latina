@@ -54,7 +54,6 @@ export const COPY = {
     addMorePhotos: "Sumar otra foto",
     /** Tile "+" de la grilla (composer premium 2026-08-11): mismo cupo, ahora visible. */
     addPhotoTile: "Agregar foto",
-    changePhoto: "Cambiar foto",
     removePhoto: "Quitar foto",
     /** Botón sobre la miniatura: abre el editor de filtro y texto de esa foto. */
     editPhoto: "Editar foto",
@@ -67,13 +66,6 @@ export const COPY = {
     photoLimit: `Podés subir hasta ${MAX_PHOTOS} fotos por publicación.`,
     /** Contador discreto bajo la grilla: "3 de 10 fotos". */
     photoCount: (count: number, max: number): string => `${count} de ${max} fotos`,
-    // Algún medio sigue siendo obligatorio (feed visual, no periódico): si
-    // aprietan Publicar sin foto NI video, este aviso cálido los lleva al
-    // recuadro en vez de un botón muerto.
-    photoMissingTitle: "Te falta la foto",
-    photoMissingBody: "Sumá una imagen y ya podés publicar tu post.",
-    mediaMissingTitle: "Te falta la foto o el video",
-    mediaMissingBody: "Sumá al menos una foto o un video y ya podés publicar.",
     // Video (sprint reels): 1 por publicación, MP4/WebM, hasta 60 MB.
     addVideo: "Agregar video",
     removeVideo: "Quitar video",
@@ -147,6 +139,21 @@ export const COPY = {
     publishing: "Publicando…",
     successTitle: "¡Publicado!",
     successBody: "Tu publicación ya está visible para la comunidad.",
+    /**
+     * LA MISMA PUBLICACIÓN, FIRMADA POR UNA FICHA, NO LLEGA AL MISMO LUGAR.
+     *
+     * Con `entity_listing_id` puesto, `feedPostVisibilityFilter` la reparte solo
+     * a quien sigue la ficha (y a todos si hay campaña paga). El copy de arriba
+     * —"ya está visible para la comunidad"— sería FALSO ahí, y es la clase de
+     * mentira que más caro sale: el negocio publica al vacío el día uno, ve el
+     * "¡Publicado!" de siempre, y concluye que la app no funciona.
+     *
+     * Se dice el alcance real en positivo (dónde SÍ está) y se nombra la salida
+     * —Boost— sin convertir el éxito en una venta: primero la buena noticia,
+     * después qué se puede hacer.
+     */
+    successEntityBody:
+      "Ya está en tu ficha y en el feed de quien te sigue. Con Boost la ve toda la comunidad.",
     reviewTitle: "Tu publicación está en revisión",
     reviewBody:
       "El equipo la va a mirar en breve. Apenas esté aprobada, la va a ver toda la comunidad.",
@@ -162,11 +169,6 @@ export const COPY = {
     rateLimitedTitle: "Publicaste muchas cosas seguidas",
     rateLimitedBody: "Esperá un rato y seguí publicando. Tu cuenta está bien.",
     tooShort: "Contanos un poquito más — al menos un par de palabras.",
-    // Modo pregunta (menú crear-post, rediseño 2026-07-26): chip removible que
-    // marca el kind='question' — el post visible en la card usa su PROPIO
-    // copy (COPY.post.questionChip); esta es la del composer, antes de publicar.
-    questionModeChip: "Pregunta",
-    questionModeRemove: "Salir del modo pregunta",
 
     /**
      * A NOMBRE DE QUIÉN SALE ESTA PUBLICACIÓN (`posts.entity_listing_id`, 0023).
@@ -412,6 +414,13 @@ export const COPY = {
           title: "Servicio de creador",
           description: "Contratá a un creador de contenido para tu negocio.",
         },
+        // "Boost" y no "Impulsar": es el mismo nombre que usan la octava
+        // sección de /buscar y la pantalla de /impulsar. Un solo nombre para la
+        // misma compra en toda la app — antes cambiaba al tocar el botón.
+        boost: {
+          title: "Boost",
+          description: "Pagá para que tu aviso o tu publicación lleguen a más gente.",
+        },
       },
     },
   },
@@ -472,7 +481,6 @@ export const COPY = {
      * si no, el corte parece un video roto.
      */
     previewChip: "Vista previa",
-    previewHint: "Tocá para verlo completo",
     /** Nombre accesible del toque cuando lo que se ve es sólo un anticipo. */
     playFullVideo: "Ver el video completo",
     /** "· por {nombre}" bajo el nombre de la entidad. */
@@ -574,7 +582,6 @@ export const COPY = {
     externalPublisher: (name: string) => `Publicado por ${name}`,
     communityMember: "Alguien de la comunidad",
     sheetPublishedBy: "Publicado por",
-    sheetDirectoryCta: "Ver el directorio de negocios",
     sheetClose: "Cerrar",
     sheetSafety:
       "Nunca envíes dinero por adelantado sin verificar en persona o por video con quién estás tratando.",
@@ -602,8 +609,8 @@ export const COPY = {
     loadMoreErrorTitle: "No pudimos cargar más publicaciones",
     loadMoreErrorBody: "Puede ser un ratito de conexión floja — no es tu culpa.",
     retry: "Reintentar",
-    // Pull-to-refresh (solo táctil, arriba del todo del feed).
-    pullToRefreshHint: "Deslizá hacia abajo para actualizar",
+    // Pull-to-refresh (solo táctil, arriba del todo del feed). El indicador es
+    // visual; estas dos son lo que anuncia el lector de pantalla.
     pullToRefreshRelease: "Soltá para actualizar",
     refreshing: "Actualizando tu feed…",
   },

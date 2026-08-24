@@ -671,7 +671,11 @@ async function runCreate(input) {
 
   // --- 6. Resumen ---------------------------------------------------------------
   console.log(`\n✔ "${input.name}" está viva (tenant_id ${tenantId}).\n`);
-  console.log(`  Verificar en dev/preview:  http://localhost:3000/?t=${input.slug}`);
+  // `?cl-tenant=` y NO `?t=`: desde el 2026-08-24 la pista de tenant tiene su
+  // propio nombre, porque `?t=` es el parámetro de las PESTAÑAS de Perfil,
+  // Negocios, Profesionales y Marketplace y las dos cosas se pisaban. Ver el
+  // docblock de TENANT_QUERY_PARAM en src/lib/tenant/resolve.ts.
+  console.log(`  Verificar en LOCAL:        http://localhost:3000/?cl-tenant=${input.slug}`);
   if (input.domain) {
     console.log(`  Dominio canónico en DB:    ${input.domain} (active, is_primary)`);
   }

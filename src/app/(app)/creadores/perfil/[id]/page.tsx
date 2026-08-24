@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ChatCircle, CheckCircle, MapPin, Star } from "@phosphor-icons/react/dist/ssr";
 import { z } from "zod";
 import { Avatar, buttonVariants } from "@/components/ui";
-import { IdentityBadge } from "@/components/auth/identity-badge";
+import { InsigniaDePerfil } from "@/components/verificacion/check-azul";
 import { MessageCta } from "@/components/auth/message-cta";
 import { FollowButton } from "@/components/social/follow-button";
 import {
@@ -22,6 +22,7 @@ import {
 } from "@/components/creators";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { leerCheckAzul } from "@/lib/verificacion/read";
 import { cn, formatDate } from "@/lib/utils";
 import { fetchServicePackages } from "../queries";
 
@@ -56,6 +57,7 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
     { data: trust },
     { data: reviews },
     servicePackages,
+    checkAzul,
   ] = await Promise.all([
     supabase
       .from("creator_profiles")
@@ -74,6 +76,7 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
     // SELECT (0102) además no se los devolvería a un visitante aunque los
     // pidiéramos — esto evita traer filas que igual se descartan.
     fetchServicePackages(supabase, id, { activeOnly: true }),
+    leerCheckAzul(supabase, id),
   ]);
 
   if (!creator) {
@@ -144,7 +147,11 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
           size="xl"
           src={profile?.avatar_url ?? null}
           name={displayName}
-          badge={profile?.identity_verified ? <IdentityBadge /> : undefined}
+          badge={
+            checkAzul || profile?.identity_verified ? (
+              <InsigniaDePerfil checkAzul={checkAzul} identityVerified={profile?.identity_verified ?? false} />
+            ) : undefined
+          }
         />
         <div className="flex flex-col gap-0.5">
           <h1 className="font-display text-xl font-bold text-foreground">{displayName}</h1>

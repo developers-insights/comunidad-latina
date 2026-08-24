@@ -15,12 +15,20 @@ import { cn } from "@/lib/utils";
  * vinculada de un post, y cualquier mejora futura de esa tarjeta aparece acá sin
  * que nadie la porte.
  *
- * ── EL VACÍO ES ESPERADO HOY, Y ESTÁ BIEN ────────────────────────────────────
- * El composer que escribe `posts.entity_listing_id` desde un negocio se está
- * cableando en paralelo, así que con datos reales esta pestaña nace vacía. El
- * vacío cuenta qué va a aparecer ahí y ofrece el camino que SÍ existe hoy —el
- * directorio— en vez de prometer un "Publicar como mi negocio" que todavía no
- * es una pantalla.
+ * ── EL VACÍO SIGUE SIENDO POSIBLE, PERO YA NO ES ESTRUCTURAL ────────────────
+ * Este bloque decía que el composer que escribe `posts.entity_listing_id` "se
+ * estaba cableando en paralelo" y que publicar como negocio "todavía no es una
+ * pantalla". Las dos cosas dejaron de ser ciertas: el selector de autoría del
+ * composer (`components/feed/autoria-selector.tsx`) ofrece firmar como negocio,
+ * `AUTORIA_KINDS` incluye `business` y `crearPost` persiste el vínculo tras
+ * validarlo contra la base. O sea que esta pestaña se llena sola en cuanto un
+ * dueño publica firmando con su ficha.
+ *
+ * El vacío se conserva igual, porque una comunidad recién arrancada sí lo va a
+ * ver: cuenta qué va a aparecer acá y manda al directorio. Lo que NO hace es
+ * ofrecer "Publicar como mi negocio" como atajo — el composer vive en el feed
+ * y esa firma sólo existe para quien administra una ficha, así que un botón
+ * acá llevaría a la mayoría a una pantalla donde la opción no aparece.
  */
 
 const COPY = {

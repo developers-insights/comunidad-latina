@@ -206,7 +206,15 @@ export const listarAutoriasDelComposer = cache(
         entidades,
         porDefecto,
       };
-    } catch {
+    } catch (error) {
+      // Degradar a "sólo tu perfil" es correcto; hacerlo EN SILENCIO no. El
+      // síntoma que produce —el selector de autoría desaparece y el negocio no
+      // puede firmar con su ficha— es indistinguible de "esta persona no tiene
+      // fichas", que es el caso normal. Sin esta línea no hay forma de saber
+      // cuál de los dos está pasando.
+      console.warn("[autoria] no se pudieron listar las firmas del composer", {
+        message: error instanceof Error ? error.message : String(error),
+      });
       return SIN_AUTORIAS;
     }
   },
@@ -242,9 +250,21 @@ export async function puedeFirmarComo(
       .eq("status", "published")
       .in("kind", [...AUTORIA_KINDS])
       .maybeSingle();
-    if (error) return false;
+    if (error) {
+      console.warn("[autoria] no se pudo verificar la firma contra la base", {
+        code: error.code,
+      });
+      return false;
+    }
     return Boolean((data as { id?: string } | null)?.id);
-  } catch {
+  } catch (error) {
+    // Fail-closed es lo correcto (si no se puede comprobar que la ficha es
+    // tuya, no es tuya), pero la persona recibe "no pudimos publicar con ese
+    // perfil" y del lado del servidor no queda nada: el rechazo legítimo y el
+    // hipo de red se ven exactamente igual.
+    console.warn("[autoria] la verificación de la firma falló", {
+      message: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 }

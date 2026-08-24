@@ -98,6 +98,13 @@ function createAdminStub(config: AdminConfig = {}) {
         calls.push({ table, method: "eq", args });
         return builder;
       }),
+      // `or` lo usa el RECLAMO del evento de pago (0111): la fila se toma si
+      // `claimed_at` está en null o ya venció. Sin este método el builder
+      // devolvía undefined y el route reventaba antes de decidir nada.
+      or: vi.fn((...args: unknown[]) => {
+        calls.push({ table, method: "or", args });
+        return builder;
+      }),
       maybeSingle: vi.fn(async () => result()),
       single: vi.fn(async () => result()),
       then: (resolve: (v: OpResult) => unknown, reject: (e: unknown) => unknown) =>
@@ -294,11 +301,23 @@ describe("webhook stripe — verificación de firma", () => {
 /* ------------------------------ 2. Idempotencia --------------------------- */
 
 describe("webhook stripe — idempotencia / replay", () => {
-  it("un event_id ya procesado (insert 23505 + processed=true) es no-op: no re-activa el boost", async () => {
+  /**
+   * Desde la 0111 el que decide NO es `processed`, es el RECLAMO
+   * (`payment_events.claimed_at`). El UPDATE condicional del route se lleva la
+   * fila sólo si está libre o con un reclamo vencido; cero filas devueltas
+   * significa "ya lo procesó alguien, o lo está procesando ahora mismo".
+   *
+   * Por eso estos tests stubean `payment_events.update` y no `select`: leer
+   * `processed` no distinguía "murió a mitad" de "está trabajando", y esas dos
+   * entregas simultáneas procesaban las dos.
+   */
+  it("un event_id que ya se procesó no vuelve a activar el boost", async () => {
     const stub = useAdmin({
       payment_events: {
         insert: { error: { code: "23505" } },
-        select: { data: { processed: true }, error: null },
+        // El reclamo no se lleva nada: la fila ya está processed=true, así que
+        // el `.eq("processed", false)` del UPDATE no matchea.
+        update: { data: null, error: null },
       },
       // boosts se configura pero NO debe consultarse: el replay corta antes.
       boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
@@ -313,11 +332,13 @@ describe("webhook stripe — idempotencia / replay", () => {
     expect(touched(stub, "boosts")).toBe(false);
   });
 
-  it("un event_id previo que murió a mitad (processed=false) SÍ se reprocesa y activa el boost", async () => {
+  it("un intento previo que murió a mitad se puede reclamar y SÍ se reprocesa", async () => {
     const stub = useAdmin({
       payment_events: {
         insert: { error: { code: "23505" } },
-        select: { data: { processed: false }, error: null },
+        // Reclamo exitoso: la fila seguía en processed=false y su claimed_at
+        // ya venció (nadie vivo la está trabajando).
+        update: { data: { id: "pe-1" }, error: null },
       },
       boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
     });
@@ -325,8 +346,29 @@ describe("webhook stripe — idempotencia / replay", () => {
     const res = await POST(validRequestFor(boostEvent()));
 
     expect(res.status).toBe(200);
-    // processed=false ⇒ el intento anterior no terminó ⇒ se completa la activación.
     expect(touched(stub, "boosts", "update")).toBe(true);
+  });
+
+  it("una segunda entrega SIMULTÁNEA no procesa mientras la primera trabaja", async () => {
+    // Ésta es la garantía nueva y la razón de ser de la 0111. Antes acá se leía
+    // `processed=false` —que es el estado MIENTRAS la primera está adentro— y
+    // se procesaba igual, duplicando comprobante y auditoría.
+    const stub = useAdmin({
+      payment_events: {
+        insert: { error: { code: "23505" } },
+        // La primera entrega tiene el reclamo fresco, así que el UPDATE de la
+        // segunda no encuentra fila que llevarse.
+        update: { data: null, error: null },
+      },
+      boosts: { select: { data: BOOST_ROW, error: null }, update: BOOST_ACTIVADO },
+    });
+
+    const res = await POST(validRequestFor(boostEvent()));
+    const body = (await res.json()) as { duplicated?: boolean };
+
+    expect(res.status).toBe(200);
+    expect(body.duplicated).toBe(true);
+    expect(touched(stub, "boosts")).toBe(false);
   });
 });
 

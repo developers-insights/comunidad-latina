@@ -25,7 +25,7 @@ describe("resolveTenantSlug — comunidades nuevas resuelven sin tocar código",
     expect(resolveTenantSlug("www.dominicanos.com", null, null)).toBe("dominicanos");
   });
 
-  it("?t=comunidadlatina NO cruza: sigue reservado, cae a dominicanos", () => {
+  it("?cl-tenant=comunidadlatina NO cruza: sigue reservado, cae a dominicanos", () => {
     expect(
       resolveTenantSlug("comunidad-latina.vercel.app", "comunidadlatina", null),
     ).toBe("dominicanos");
@@ -58,8 +58,8 @@ describe("resolveTenantSlug — comunidades nuevas resuelven sin tocar código",
     // nace no está en ningún mapa hardcodeado, y aun así pasa — getTenant()
     // decide después, contra la DB, si existe de verdad.
     //
-    // OJO: esto vale en DEV/PREVIEW (4º argumento en true). En producción `?t=`
-    // se ignora — ver el describe "producción ignora las pistas del cliente".
+    // OJO: esto vale en DEV/PREVIEW (4º argumento en true). En producción la
+    // pista se ignora — ver el describe "producción ignora las pistas del cliente".
     expect(
       resolveTenantSlug("comunidad-latina.vercel.app", "colombianos-miami", null, true),
     ).toBe("colombianos-miami");
@@ -88,25 +88,32 @@ describe("resolveTenantSlug — comunidades nuevas resuelven sin tocar código",
  * Reproducida en vivo antes de arreglarla, contra la base real y simulando
  * producción: parado en el host de producción (`comunidad-latina-sigma.vercel.app`,
  * el ÚNICO dominio del proyecto en Vercel y que NO está en `DOMAIN_TENANTS`),
- * agregar `?t=<otra-comunidad>` movía el tenant del request, y el Asistente
+ * agregar la pista de tenant apuntando a otra comunidad movía el tenant del
+ * request, y el Asistente
  * —que atiende ANÓNIMOS y busca en el RAG con `service_role`, o sea con la RLS
  * salteada— devolvía los `rag_chunks` de esa otra comunidad. La RPC
  * `match_chunks_fts` es SECURITY DEFINER y filtra SOLO por su argumento
  * `p_tenant_id`: no hay nada debajo que lo frene, y un anónimo no tiene JWT.
  *
+ * (La pista se llamaba `?t=` cuando esto se reprodujo. Desde el 2026-08-24 se
+ * llama `?cl-tenant=`, porque `?t=` ya era el parámetro de las pestañas de los
+ * módulos y las dos cosas se pisaban — ver `./query-hint.test.ts`. El rename no
+ * afloja NADA de lo que fija este bloque: la pista sigue apagada en producción
+ * y en previews.)
+ *
  * El contrato que fijan estos tests: en producción el HOST es la única fuente
- * del tenant. Si estos tests se ponen en rojo porque "hay que poder pasar ?t=
- * en prod", la respuesta correcta es sumar el dominio de esa comunidad a
+ * del tenant. Si estos tests se ponen en rojo porque "hay que poder pasar la
+ * pista en prod", la respuesta correcta es sumar el dominio de esa comunidad a
  * `DOMAIN_TENANTS`, no aflojar esto.
  */
-describe("producción ignora las pistas del cliente (?t= y cookie cl-tenant)", () => {
+describe("producción ignora las pistas del cliente (?cl-tenant= y su cookie)", () => {
   // `vi.stubEnv` y no asignación directa: @types/node declara NODE_ENV como
   // read-only, y stubEnv además restaura solo con unstubAllEnvs.
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  it("EL ATAQUE: ?t=<otra-comunidad> desde el host de producción NO mueve el tenant", () => {
+  it("EL ATAQUE: la pista a otra comunidad desde el host de producción NO mueve el tenant", () => {
     expect(
       resolveTenantSlug("comunidad-latina-sigma.vercel.app", "barrio-vecino", null, false),
     ).toBe(DEFAULT_TENANT_SLUG);
@@ -118,7 +125,7 @@ describe("producción ignora las pistas del cliente (?t= y cookie cl-tenant)", (
     ).toBe(DEFAULT_TENANT_SLUG);
   });
 
-  it("en producción el dominio mapeado sigue mandando, y ?t= no lo puede pisar", () => {
+  it("en producción el dominio mapeado sigue mandando, y la pista no lo puede pisar", () => {
     expect(resolveTenantSlug("dominicanos.com", null, null, false)).toBe("dominicanos");
     // Aunque el atacante insista con el param, gana el host:
     expect(resolveTenantSlug("dominicanos.com", "barrio-vecino", null, false)).toBe(

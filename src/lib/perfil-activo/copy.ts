@@ -25,13 +25,6 @@ export const PERFIL_ACTIVO_COPY = {
     negocio: (nombre: string) => `Listo, ahora estás como ${nombre}.`,
   },
 
-  /** Aviso permanente mientras se actúa como negocio. */
-  banner: {
-    title: (nombre: string) => `Estás usando la app como ${nombre}`,
-    body: "Lo que publiques va a salir con el nombre del negocio.",
-    switchBack: "Volver a tu perfil",
-  },
-
   /** Nombre del rol, para que "administrador" no aparezca en crudo. */
   roles: {
     propietario: "Dueño",

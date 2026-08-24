@@ -14,8 +14,7 @@
     "typecheck": "tsc --noEmit",
     "check:rls": "node scripts/rls-enumerator.mjs",
     "db:seed": "node scripts/seed.mjs",
-    "db:migrate": "node scripts/apply-migrations.mjs",
-    "rag:embed": "node scripts/embed-content.mjs"
+    "db:migrate": "node scripts/apply-migrations.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

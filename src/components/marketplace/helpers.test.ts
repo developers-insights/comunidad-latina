@@ -95,6 +95,15 @@ describe("businessCategoryDisplayLabel", () => {
     expect(businessCategoryDisplayLabel("belleza")).toBe("Belleza");
   });
 
+  it("usa la etiqueta CURADA de Negocios, con sus acentos, y no una capitalización propia", () => {
+    // El bug que esto cierra: la misma tienda se leía "Envios" en el directorio
+    // de Marketplace y "Envíos" en Negocios, porque acá se capitalizaba el slug
+    // en vez de consultar BUSINESS_CATEGORIES.
+    expect(businessCategoryDisplayLabel("envios")).toBe("Envíos");
+    expect(businessCategoryDisplayLabel("mecanica")).toBe("Mecánica");
+    expect(businessCategoryDisplayLabel("restaurante")).toBe("Restaurante");
+  });
+
   it("null o vacío devuelve null (nunca un chip vacío)", () => {
     expect(businessCategoryDisplayLabel(null)).toBeNull();
     expect(businessCategoryDisplayLabel("")).toBeNull();

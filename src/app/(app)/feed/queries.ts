@@ -72,11 +72,25 @@ type Supabase = SupabaseClient<Database>;
  *
  * LOS TRES TOPES COMPARTEN UNA SOLA URL, y sumados NO entran en 8 KB
  * (150 + 200 + 200 ids ≈ 21 KB). No son la solución: son la cota que vuelve la
- * falla acotada y predecible en lugar de abierta. LA SOLUCIÓN de fondo es mover
- * el filtro DENTRO de la base — un RPC `security definer` que devuelva la página
- * del feed ya resuelta contra follows / post_promotions / user_blocks, sin que
- * un solo id viaje por la URL. Mientras ese RPC no exista, estos números no se
- * suben: subirlos es acercar el 414, no dar más alcance.
+ * falla acotada y predecible en lugar de abierta.
+ *
+ * ── LA SOLUCIÓN YA ESTÁ ESCRITA: `feed-rpc.ts` ──────────────────────────────
+ * `feed_posts_page()` / `feed_listings_page()` resuelven la página CONTRA
+ * follows / post_promotions / user_blocks adentro de Postgres, y por la URL no
+ * viaja un solo id. `loadParaTiPage` (load-more.ts) ya las llama primero y sólo
+ * cae a este camino cuando el RPC todavía no existe en el entorno.
+ *
+ * Resultó `security invoker`, no `definer` como decía esta nota: con invoker las
+ * policies se siguen evaluando sobre el JWT de quien pregunta, así que el RPC no
+ * puede devolver una fila que la query de hoy no devolvería — mover el filtro de
+ * lugar y mover la frontera de seguridad son dos cosas distintas, y sólo una
+ * estaba rota. Mismo criterio que `global_search()` (0044/0052). El porqué
+ * completo está en el encabezado de `feed-rpc.ts`.
+ *
+ * Mientras el fallback siga existiendo, estos números NO se suben: subirlos es
+ * acercar el 414, no dar más alcance. Cuando la migración esté en todos los
+ * entornos, lo que se borra es el fallback (y con él estas tres constantes), no
+ * los topes.
  */
 
 /** Campañas vigentes que se inyectan en la visibilidad (~5,8 KB de URL). */
@@ -533,6 +547,24 @@ export function fetchViewerSavedListingIds(
  * con estos ids se arma el `.or()` de visibilidad del feed (patrón exacto del
  * filtro de bloqueados). Vacío si no hay sesión.
  *
+ * ── POR QUÉ FILTRA `target_kind = 'listing'` Y NO TAMBIÉN `'profile'` ───────
+ * `follows` es polimórfica desde la 0023 y acepta las dos, así que a primera
+ * vista esto parece la mitad de la lectura: seguir a una PERSONA no cambiaría
+ * nada en el feed. Se revisó, y no es un olvido — es que hoy no hay nada que
+ * cambiar. El alcance de un post depende de `entity_listing_id`:
+ *
+ *   · con ficha (`entity_listing_id` no nulo) → sólo seguidores de ESA FICHA;
+ *     el seguimiento es a la ficha, que es de kind 'listing'.
+ *   · sin ficha (post personal) → ya llega a TODA la comunidad, se siga o no a
+ *     su autor. No hay nada que un follow de perfil pueda desbloquear.
+ *
+ * O sea que seguir un perfil no queda sin efecto (alimenta el contador de
+ * seguidores, el ranking de creadores y la notificación de "te empezó a
+ * seguir"): simplemente no tiene por dónde tocar el reparto del feed, porque lo
+ * que repartiría ya es público. Hacerlo contar acá exigiría antes decidir en la
+ * spec que un post personal DEJE de ser universal, que es un cambio de producto
+ * y no un arreglo — y uno que hoy vaciaría el feed de todo el mundo.
+ *
  * TOPE de FOLLOWED_LISTINGS_CAP: estos ids se inlinean en
  * `entity_listing_id.in.(…)` y viajan por la URL (ver «el presupuesto de 8 KB»).
  * `created_at desc` para que, pasado el tope, sobrevivan los seguimientos MÁS
@@ -629,6 +661,70 @@ export async function fetchActivePromotions(
     if (phone) whatsappByPostId.set(row.post_id, phone);
   }
   return { postIds, whatsappByPostId };
+}
+
+/**
+ * Las promociones vigentes de UNA LISTA ACOTADA de posts — los de la página que
+ * se está por pintar, nunca más de `PAGE_SIZE`.
+ *
+ * Es la contracara de `fetchActivePromotions`, y la diferencia importa: aquella
+ * trae las campañas del TENANT porque las necesita para DECIDIR QUÉ ENTRA al
+ * feed (`feedPostVisibilityFilter`), y por eso carga con el tope de 150 y con el
+ * 414 que le pega a todo el mundo a la vez. Esta sólo responde "de estos ocho
+ * posts, ¿cuáles van con chip Publicidad y cuál ofrece WhatsApp?" — una
+ * pregunta que se hace DESPUÉS de tener la página, sobre una lista que por
+ * construcción no crece.
+ *
+ * Cuando el feed pasa por el RPC (`feed-rpc.ts`), la decisión de alcance ya la
+ * tomó la base y esta es la ÚNICA lectura de campañas que queda: ocho uuids de
+ * querystring en vez de ciento cincuenta.
+ */
+export async function fetchPromotionsForPosts(
+  supabase: Supabase,
+  tenantId: string,
+  postIds: string[],
+): Promise<ActivePromotions> {
+  const ids = [...new Set(postIds.filter(Boolean))];
+  if (ids.length === 0) {
+    return { postIds: new Set(), whatsappByPostId: new Map() };
+  }
+
+  const open = supabase as unknown as SupabaseClient;
+  const scopedQuery = (columns: string) =>
+    open
+      .from("post_promotions")
+      .select(columns)
+      .eq("tenant_id", tenantId)
+      .eq("status", "active")
+      .gt("ends_at", new Date().toISOString())
+      .in("post_id", ids);
+
+  // Mismo reintento que `fetchActivePromotions`: un entorno sin `cta_whatsapp`
+  // (0038) pierde el botón, nunca el chip.
+  let { data, error } = await scopedQuery("post_id, cta_whatsapp");
+  if (error) {
+    console.warn("[feed] campañas de la página sin cta_whatsapp", { code: error.code });
+    ({ data, error } = await scopedQuery("post_id"));
+  }
+  if (error) {
+    console.warn("[feed] no se pudieron leer las campañas de la página", {
+      code: error.code,
+    });
+    return { postIds: new Set(), whatsappByPostId: new Map() };
+  }
+
+  const rows = (data ?? []) as unknown as Array<{
+    post_id: string;
+    cta_whatsapp?: string | null;
+  }>;
+  const promotedIds = new Set<string>();
+  const whatsappByPostId = new Map<string, string>();
+  for (const row of rows) {
+    promotedIds.add(row.post_id);
+    const phone = row.cta_whatsapp?.trim();
+    if (phone) whatsappByPostId.set(row.post_id, phone);
+  }
+  return { postIds: promotedIds, whatsappByPostId };
 }
 
 /**
