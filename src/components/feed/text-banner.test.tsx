@@ -39,26 +39,9 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("motion/react", () => {
-  const passthrough = (Tag: "p" | "span") =>
-    function Stub({
-      children,
-      ...props
-    }: Record<string, unknown> & { children?: React.ReactNode }) {
-      const domProps = Object.fromEntries(
-        Object.entries(props).filter(
-          ([key]) => !["initial", "animate", "exit", "transition", "layout"].includes(key),
-        ),
-      );
-      return <Tag {...domProps}>{children}</Tag>;
-    };
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    m: { p: passthrough("p"), span: passthrough("span") },
-    motion: { p: passthrough("p"), span: passthrough("span") },
-    useReducedMotion: () => false,
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock({ reducedMotion: false }),
+);
 
 vi.mock("@/components/ui", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/components/ui")>();

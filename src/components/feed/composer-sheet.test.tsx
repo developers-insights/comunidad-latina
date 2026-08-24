@@ -22,49 +22,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
  *    los números salieron de medir el DOM real.
  */
 
-vi.mock("motion/react", () => {
-  const filter = (props: Record<string, unknown>) => {
-    const {
-      layout,
-      initial,
-      animate,
-      exit,
-      transition,
-      drag,
-      dragConstraints,
-      dragElastic,
-      onDragEnd,
-      whileTap,
-      whileHover,
-      ...rest
-    } = props;
-    return rest;
-  };
-  const div = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => (
-    <div {...filter(props)}>{children}</div>
-  );
-  const span = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => (
-    <span {...filter(props)}>{children}</span>
-  );
-  const p = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => (
-    <p {...filter(props)}>{children}</p>
-  );
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    m: { div, span, p },
-    motion: { div, span, p },
-    useReducedMotion: () => false,
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock({ reducedMotion: false }),
+);
 
 import { ComposerSheet, type ComposerMediaItem, type ComposerSheetProps } from "./composer-sheet";
 import { EMPTY_DECLARATION_VALUE } from "@/components/integrity/originality-fields";

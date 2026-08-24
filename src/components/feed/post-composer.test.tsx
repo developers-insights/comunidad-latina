@@ -135,49 +135,9 @@ vi.mock("@/app/(app)/feed/music-actions", () => ({
 
 // motion neutralizado: el DOM refleja el estado del BottomSheet al instante
 // (mismo patrón que toast.test.tsx / comments-sheet.test.tsx).
-vi.mock("motion/react", () => {
-  const filter = (props: Record<string, unknown>) => {
-    const {
-      layout,
-      initial,
-      animate,
-      exit,
-      transition,
-      drag,
-      dragConstraints,
-      dragElastic,
-      onDragEnd,
-      whileTap,
-      whileHover,
-      ...rest
-    } = props;
-    return rest;
-  };
-  const div = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => (
-    <div {...filter(props)}>{children}</div>
-  );
-  const span = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => (
-    <span {...filter(props)}>{children}</span>
-  );
-  const p = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => (
-    <p {...filter(props)}>{children}</p>
-  );
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    m: { div, span, p },
-    motion: { div, span, p },
-    useReducedMotion: () => false,
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock({ reducedMotion: false }),
+);
 
 import { PostComposerHost } from "./post-composer";
 import { ComposerTrigger } from "./composer-trigger";

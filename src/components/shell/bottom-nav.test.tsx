@@ -47,24 +47,9 @@ vi.mock("next/link", () => ({
 }));
 
 /** El "+" anima su rotación; acá se testea la barra, no la animación. */
-vi.mock("motion/react", () => {
-  const passthrough = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => {
-    const domProps = Object.fromEntries(
-      Object.entries(props).filter(
-        ([key]) => !["initial", "animate", "exit", "transition", "whileTap"].includes(key),
-      ),
-    );
-    return <span {...domProps}>{children}</span>;
-  };
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    m: { span: passthrough, div: passthrough },
-    useReducedMotion: () => true,
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock(),
+);
 
 /** Todos los módulos prendidos: el estado normal de la app. */
 const TODO_PRENDIDO = { feed: true, videos: true, mensajes: true };

@@ -19,7 +19,12 @@ export const TRUST_LEVELS: readonly TrustLevel[] = [
   { id: "nuevo", min: 0, max: 29, label: "Nuevo" },
   { id: "activo", min: 30, max: 49, label: "Activo" },
   { id: "confiable", min: 50, max: 69, label: "Confiable" },
-  { id: "verificado", min: 70, max: 84, label: "Verificado" },
+  // El `id` es el valor que guarda `trust_scores.level` y no se toca sin
+  // migración; el LABEL sí, y no puede ser "Verificado" a secas (§11): este
+  // peldaño se alcanza con antigüedad, transacciones y avales, sin haber
+  // verificado ningún documento. La capa visual usa el mismo texto — ver
+  // `components/trust/levels.ts`, que es la fuente de lo que se dibuja.
+  { id: "verificado", min: 70, max: 84, label: "Reconocido" },
   { id: "destacado", min: 85, max: 100, label: "Destacado" },
 ] as const;
 

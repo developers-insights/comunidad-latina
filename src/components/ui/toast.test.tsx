@@ -8,29 +8,9 @@ import { ToastProvider, useToast, type ToastOptions } from "./toast";
  * desmontaje real (AnimatePresence). Acá se testea el RELOJ del toast, no la
  * animación: neutralizamos motion para que el DOM refleje el estado al instante.
  */
-vi.mock("motion/react", () => {
-  // Dentro del factory: vi.mock se hoistea y no puede tocar variables del módulo.
-  const stub = {
-    div: ({
-      children,
-      ...props
-    }: Record<string, unknown> & { children?: React.ReactNode }) => {
-      const domProps = Object.fromEntries(
-        Object.entries(props).filter(
-          ([key]) => !["layout", "initial", "animate", "exit", "transition"].includes(key),
-        ),
-      );
-      return <div {...domProps}>{children}</div>;
-    },
-  };
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    // El componente real usa `m` (LazyMotion strict); `motion` queda por si
-    // algún import viejo lo pide en tests.
-    m: stub,
-    motion: stub,
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock(),
+);
 
 function Trigger({ options }: { options: ToastOptions }) {
   const { toast } = useToast();

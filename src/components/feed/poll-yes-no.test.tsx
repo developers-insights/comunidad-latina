@@ -29,25 +29,9 @@ vi.mock("@/components/ui", async (importOriginal) => {
   return { ...actual, useToast: () => ({ toast }) };
 });
 
-vi.mock("motion/react", () => {
-  const Stub = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => {
-    const domProps = Object.fromEntries(
-      Object.entries(props).filter(
-        ([key]) => !["initial", "animate", "exit", "transition", "layout"].includes(key),
-      ),
-    );
-    return <span {...domProps}>{children}</span>;
-  };
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    m: { span: Stub },
-    motion: { span: Stub },
-    useReducedMotion: () => false,
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock({ reducedMotion: false }),
+);
 
 const votePostPollAction = vi.fn();
 vi.mock("@/app/(app)/feed/engagement-actions", () => ({
