@@ -87,7 +87,7 @@ Esto es trabajo real, fuera del alcance de un script — son pasos operativos en
 
 El middleware (la pieza que decide "qué comunidad sos" en cada visita) resuelve el dominio **consultando la base de datos** — la tabla `public.tenant_domains` vía el RPC `public.resolve_tenant_domain`, con caché en memoria para no pegarle en cada visita. Por eso:
 
-- **Sin dominio propio**, la comunidad nueva ya es 100% alcanzable hoy, sin tocar nada: `https://comunidad-latina-sigma.vercel.app/?t=colombianos-miami` (o `?t=colombianos-miami` en cualquier preview/local).
+- **Sin dominio propio**, la comunidad nueva ya es 100% alcanzable hoy, sin tocar nada: `https://comunidad-latina-sigma.vercel.app/?t=colombianos-miami` (o `?t=colombianos-miami` en cualquier preview/local). Lo único que `?t=` exige es que **la fila exista** — la crea el paso 2 de este playbook, así que llega gratis. Un slug inventado ya no resuelve a nada: se ignora (ver `src/lib/tenant/slug-lookup.ts`).
 - **Con dominio propio**, además de los tres pasos de arriba (registrar, DNS, Vercel), alcanza con un comando:
   ```bash
   node scripts/new-tenant.mjs --domain-for=colombianos-miami --domain=colombianosmiami.com
@@ -153,6 +153,8 @@ Checklist después de correr el script (o después de agregar el dominio en Verc
 4. Confirmar que se borró — **por la base, no por la app** (ver nota abajo) — y que `npm run check:rls` sigue en verde.
 
 > **Ojo con la caché después de borrar.** La marca de cada comunidad se cachea 5 minutos (`unstable_cache`, tag `"tenants"`) para no pegarle a la base en cada visita — es una optimización de velocidad ya existente, no algo de este script. El alta la invalida sola (`revalidatePath` desde `/admin/global`), pero el **borrado por este script no puede**: `revalidateTag` es una función que solo existe dentro de una request de Next.js, y el script corre por afuera, directo contra Supabase. Efecto práctico: recién borrada, la comunidad puede seguir "viéndose" en la app (con su nombre y color) hasta 5 minutos — **aunque ya no exista en la base**. Verificado en la práctica: tras borrar `pruebatenant`, `?t=pruebatenant` siguió mostrando "Prueba Tenant" incluso en una pestaña nueva sin cookies y con el servidor reiniciado, porque la caché de Next persiste en `.next/cache` (no es solo memoria). Para confirmar un borrado al toque, mirá la base (Supabase → Table Editor → `tenants`, buscá el slug) en vez de la app; si necesitás que la app se ponga al día ya mismo, esperá los 5 minutos o reiniciá el servidor DESPUÉS de que la caché haya expirado.
+>
+> **Desde 2026-08-24 esto se corta antes** (`src/lib/tenant/slug-lookup.ts`): el `?t=` de una comunidad borrada deja de resolver apenas expira la caché de confirmación —5 minutos, en MEMORIA del proceso, así que un reinicio del servidor también la limpia— y a partir de ahí ves la comunidad por defecto en vez del fantasma. La caché de marca en `.next/cache` sigue como dice el párrafo de arriba; lo que cambió es que ya no alcanza para que un slug muerto siga gobernando el tenant.
 
 ---
 

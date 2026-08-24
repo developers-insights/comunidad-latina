@@ -101,3 +101,6 @@ Según Plan Maestro §5.2 / §14.4 — el repo llega "listo para este gate", per
 | `comunidadlatina` | comunidadlatina.com | Segundo tenant para probar white-label |
 
 En dev: `http://localhost:3000?t=comunidadlatina` (queda en cookie `cl-tenant`).
+
+El `?t=` sólo se honra si ese slug **es una comunidad de verdad** en la base: uno inventado
+—o el `?t=fotos` de las pestañas del perfil— se ignora y no ensucia la cookie.

@@ -127,7 +127,7 @@ export function resolveTenantSlug(host, searchParamT, cookieT): string {
 ```
 
 - **Producción:** el header `Host` manda, contra un mapa **hardcodeado en código** `DOMAIN_TENANTS` (`resolve.ts:73-78`), hoy con exactamente 4 entradas (`dominicanos.com`, `www.dominicanos.com`, `comunidadlatina.com`, `www.comunidadlatina.com`).
-- **Dev/preview:** `?t=<slug>` → cookie `cl-tenant` → default `"dominicanos"` — un atajo explícitamente de desarrollo, no un modo soportado en producción.
+- **Dev/preview:** `?t=<slug>` → cookie `cl-tenant` → default `"dominicanos"` — un atajo explícitamente de desarrollo, no un modo soportado en producción. Desde 2026-08-24 la pista se **confirma contra la base** antes de honrarse (`src/lib/tenant/slug-lookup.ts`): si el slug no es una comunidad real, se ignora y no se persiste en la cookie. `?t=` también es el parámetro de pestaña del perfil (`/perfil?t=fotos`), así que sin ese chequeo un click normal en la UI secuestraba el tenant de toda la app.
 - `getTenant()` (`resolve.ts:140-172`) usa ese slug para buscar la fila real en la tabla `tenants` vía Supabase, con fallback a `DEFAULT_TENANTS` (placeholders hardcodeados) si la DB no responde.
 
 ### 3.2 Discrepancia documentada entre la documentación y el código (señalada explícitamente, no resuelta de oficio)

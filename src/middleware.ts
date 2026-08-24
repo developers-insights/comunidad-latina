@@ -11,6 +11,7 @@ import {
   lookupTenantDomain,
   normalizeHost,
 } from "@/lib/tenant/domain-lookup";
+import { confirmClientTenantHints } from "@/lib/tenant/slug-lookup";
 import {
   decideTenantRouting,
   DOMAIN_UNAVAILABLE_PAGE,
@@ -42,11 +43,21 @@ export async function middleware(request: NextRequest) {
   const tParam = request.nextUrl.searchParams.get("t");
   const cookieTenant = request.cookies.get(TENANT_COOKIE)?.value ?? null;
 
+  // Las pistas del cliente (`?t=`, cookie) se CONFIRMAN contra la base antes de
+  // mirarlas: `?t=` también es el parámetro de pestaña del perfil
+  // (`/perfil?t=fotos`), así que sin confirmar, un click normal en la UI
+  // secuestraba el tenant de toda la app. El porqué completo, en
+  // `@/lib/tenant/slug-lookup`. En producción esto no consulta nada.
+  const [lookup, hints] = await Promise.all([
+    lookupTenantDomain(hostname),
+    confirmClientTenantHints(tParam, cookieTenant),
+  ]);
+
   const routing = decideTenantRouting({
     hostname,
     isPlatform: isPlatformHost(hostname),
-    lookup: await lookupTenantDomain(hostname),
-    hintSlug: resolveTenantSlug(hostname, tParam, cookieTenant),
+    lookup,
+    hintSlug: resolveTenantSlug(hostname, hints.tParam, hints.cookie),
     method: request.method,
     pathname: request.nextUrl.pathname,
     search: request.nextUrl.search,
@@ -89,17 +100,29 @@ export async function middleware(request: NextRequest) {
   //
   //    Se compara contra `routing.slug` (el que de verdad se va a servir): si el
   //    host mandó y ganó la base, el `?t=` no se persiste, porque no se honró.
+  //
+  //    Y se usa `hints.tParam`, no el `?t=` crudo: sólo llega acá un slug que la
+  //    base CONFIRMÓ como comunidad. Ésa es la línea que impide que
+  //    `/perfil?t=fotos` —la pestaña Fotos, un click normal— deje una cookie de
+  //    30 días apuntando a una comunidad que no existe.
   if (
     clientTenantHintsAllowed() &&
-    tParam &&
-    tParam === routing.slug &&
-    tParam !== cookieTenant
+    hints.tParam &&
+    hints.tParam === routing.slug &&
+    hints.tParam !== cookieTenant
   ) {
     response.cookies.set(TENANT_COOKIE, routing.slug, {
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
       sameSite: "lax",
     });
+  } else if (hints.discardCookie) {
+    // La cookie que ya estaba escrita no es una comunidad: la base lo dijo. Se
+    // borra sola — quien quedó atascado con `cl-tenant=ofertas` antes de este
+    // fix no tiene por qué abrir las devtools para desatascarse. Sólo con un
+    // veredicto: con la base caída (`unknown`) no se toca (ver
+    // `decideClientHints`).
+    response.cookies.set(TENANT_COOKIE, "", { path: "/", maxAge: 0 });
   }
 
   return response;

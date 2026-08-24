@@ -1,5 +1,55 @@
 # PROGRESS — Comunidad Latina
 
+## `?t=` significaba dos cosas y se envenenaban entre sí (✅ 2026-08-24)
+
+**El síntoma era el peor de todos: la app entera vacía, sin un solo error.**
+Navegar a `/negocios?t=ofertas` en local dejaba la cookie `cl-tenant=ofertas` por
+30 días, y desde ahí TODO resolvía a una comunidad inexistente. La única salida
+era borrar la cookie a mano.
+
+**No hacía falta escribir la URL a mano.** `?t=` tenía dos significados que
+chocaban: pista de comunidad para el proxy, y parámetro de PESTAÑA del perfil —
+`profileTabHref()` genera `/perfil?t=fotos`, `?t=seguidores`, `?t=resenas`. Un
+click normal en la UI bastaba. Del reporte original conviene corregir un dato: en
+`main` **sólo `perfil` usa `?t=` como pestaña** (`negocios`, `marketplace` y
+`profesionales` no leen ese parámetro), lo que hace al bug más chico de alcance y
+más fácil de disparar.
+
+Las tres piezas tenían que alinearse para que doliera: el proxy PERSISTE la pista
+cuando coincide con el slug servido (`middleware.ts`); `resolveTenantSlug` acepta
+**cualquier** slug que no esté en `RESERVED_BRAND_SLUGS` —a propósito, para que
+una comunidad recién creada resuelva sin deploy—; y "fotos" pasa ese filtro tal
+cual.
+
+**El fix: la pista se honra sólo si la BASE confirma que ese slug es una
+comunidad** (`src/lib/tenant/slug-lookup.ts`, hermano de `domain-lookup.ts` y con
+las mismas decisiones de caché). Contra la base y **no** contra `DOMAIN_TENANTS`
+ni `DEFAULT_TENANTS`, que era la versión barata: chequear contra un mapa
+hardcodeado habría reabierto exactamente el problema que documenta
+`RESERVED_BRAND_SLUGS` — ninguna comunidad nacida después del último deploy
+sería alcanzable. Tampoco se renombró el parámetro a `?tenant=`: es más limpio en
+el papel, pero toca el playbook de tenants, la guía de dominios y el manual de
+súper admin sin arreglar nada que esto no arregle.
+
+Dos asimetrías del diseño que parecen detalle y no lo son:
+
+- Una pista se honra **sólo** con `exists`. Con la base caída (`unknown`) no
+  alcanza: honrar sin confirmar es justamente lo que rompía.
+- Pero la cookie se borra **sólo** con un veredicto (`missing`/`invalid`), nunca
+  con `unknown`. Mismo criterio que el 503 de `domain-routing` y que
+  `classifyTenantMatch`: ante una caída de infra nunca afirmamos de más. Con la
+  base tosiendo perdés el `?t=` un rato; no perdés tu comunidad para siempre.
+
+De yapa: el proxy ya no puede escribir una cookie basura, y las que ya estaban
+escritas **se descartan solas** — nadie más tiene que abrir las devtools para
+desatascarse. **Costo en producción: cero** — `clientTenantHintsAllowed()` corta
+antes de consultar, así que esto vive sólo en local y en los tests.
+
+Anclado en `src/lib/tenant/slug-lookup.test.ts` (la regla, sin mocks) y en
+`src/middleware.test.ts` (el síntoma de punta a punta). Verificado que los 4
+tests del síntoma **fallan** al revertir el fix: un test que pasa en ambos
+mundos no ancla nada.
+
 ## Auditoría completa del programa + endurecimiento (✅ 2026-08-13, tarde)
 
 Barrido de los ~1.035 archivos de `src/` (193k líneas) y las 104 migraciones en
