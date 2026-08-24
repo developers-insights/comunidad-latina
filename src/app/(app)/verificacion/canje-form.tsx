@@ -51,9 +51,20 @@ export function CanjeForm({
     startTransition(async () => {
       const result = await canjearImpulsoDeRegalo({ grantId, listingId });
       if (result.status === "ok") {
-        // `refresh()` y no un estado local de "listo": lo que cambió lo sabe el
-        // servidor (el crédito ya no está, el aviso quedó impulsado) y pintarlo
-        // de memoria en el cliente es cómo se muestra un estado que no existe.
+        // El estado nuevo lo sabe el SERVIDOR (el crédito ya no está, el aviso
+        // quedó impulsado), así que se vuelve a pedir la pantalla en vez de
+        // pintar de memoria algo que no existe.
+        //
+        // Y la confirmación viaja por la URL, no por un estado local: al
+        // recargar, el crédito ya no existe y la página deja de renderizar este
+        // formulario — un `useState("listo")` se desmontaría antes de que nadie
+        // lo leyera. Con `?estado=impulsado` la persona ve QUÉ pasó y HASTA
+        // CUÁNDO dura, que es lo que acaba de gastar. Es el mismo mecanismo que
+        // ya usa el Checkout (`?estado=exito`).
+        router.replace(
+          `/verificacion?estado=impulsado&hasta=${encodeURIComponent(result.endsAt)}`,
+          { scroll: false },
+        );
         router.refresh();
         return;
       }

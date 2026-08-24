@@ -5,6 +5,7 @@ import {
   IdentificationCard,
   LockKey,
   SealCheck,
+  ShieldCheck,
   TrendUp,
 } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, ProximamentePremium, buttonVariants } from "@/components/ui";
@@ -16,12 +17,23 @@ import { VerificarCta } from "./verificar-cta";
 
 export const metadata = { title: "Verificá tu identidad" };
 
-/** Copy local del módulo IDENTIDAD — no toca src/lib/i18n (compartido). */
+/**
+ * Copy local del módulo IDENTIDAD — no toca src/lib/i18n (compartido).
+ *
+ * ⚠️ ACÁ NO SE DICE "EL TILDE" Y NO SE DIBUJA UN SELLO. Lo que esta pantalla
+ * entrega es el ESCUDO VERDE (`IdentityBadge`): identidad confirmada con
+ * documento, gratis. "El tilde" es como todo el mundo llama al check azul, que
+ * es OTRA insignia —paga, en /verificacion— y ni siquiera tiene esta forma.
+ * Prometer un tilde y entregar un escudo hacía dos cosas malas de una: dejaba a
+ * la persona buscando una marca que nunca iba a aparecer, y le sugería que lo
+ * gratis y lo pago son lo mismo. El sello (`SealCheck`) sólo se usa más abajo,
+ * en el enlace que lleva al check azul, que sí es lo que ese ícono significa.
+ */
 const COPY = {
   volver: "Volver a tu perfil",
   titulo: "Verificá tu identidad",
   subtitulo:
-    "Un tilde que le dice a tu comunidad que detrás de tu perfil hay una persona real.",
+    "Un escudo verde en tu perfil que le dice a tu comunidad que detrás hay una persona real.",
   privacidadTitulo: "Tu documento nunca lo guardamos nosotros",
   privacidadCuerpo:
     "Tu documento lo procesa Stripe y NUNCA se guarda en nuestra base — nosotros solo recibimos un sí/no. Ni la foto, ni el número, ni tu nombre legal tocan nuestros servidores. Así, aunque alguien quisiera robar esos datos, acá no hay nada para robar.",
@@ -29,11 +41,14 @@ const COPY = {
   pasos: [
     "Sacale una foto a tu documento (cédula, pasaporte o licencia) desde tu teléfono.",
     "Stripe lo revisa al instante — suele tardar menos de un minuto.",
-    "Listo: el tilde aparece en tu perfil y tu Trust Score sube.",
+    "Listo: el escudo verde aparece en tu perfil y tu Trust Score sube.",
   ],
   beneficiosTitulo: "Qué ganás",
   beneficios: [
-    { icon: SealCheck, texto: "El tilde de identidad verificada en tu perfil y tus publicaciones." },
+    {
+      icon: ShieldCheck,
+      texto: "El escudo verde de identidad verificada, en tu perfil y en tus publicaciones.",
+    },
     { icon: TrendUp, texto: "Tu Trust Score sube — la gente confía más al contactarte." },
     { icon: LockKey, texto: "Cero datos sensibles nuevos en la plataforma: solo un sí/no." },
   ],
@@ -44,12 +59,12 @@ const COPY = {
   yaVerificadoTitulo: "Tu identidad ya está verificada",
   yaVerificadoCuerpo: (fecha: string | null) =>
     fecha
-      ? `Documento validado por Stripe Identity el ${fecha}. El tilde ya aparece en tu perfil.`
-      : "Documento validado por Stripe Identity. El tilde ya aparece en tu perfil.",
+      ? `Documento validado por Stripe Identity el ${fecha}. El escudo verde ya aparece en tu perfil.`
+      : "Documento validado por Stripe Identity. El escudo verde ya aparece en tu perfil.",
   /**
    * El paso siguiente, ahora que existe la puerta (2026-08-24): con la
    * identidad confirmada ya se puede pedir el check azul —la insignia PAGA,
-   * otra cosa distinta de este tilde gratis—. Se dice "si querés" porque es
+   * otra cosa distinta de este escudo gratis—. Se dice "si querés" porque es
    * eso: un paso más, no el siguiente obligatorio.
    */
   siguientePasoHint: "Con esto ya podés sumar el check azul —la insignia paga—, si querés.",
@@ -93,7 +108,10 @@ export default async function VerificarIdentidadPage() {
           coreClassName="flex flex-col items-center gap-3 px-6 py-8 text-center"
           role="status"
         >
-          <SealCheck size={48} weight="fill" aria-hidden="true" className="text-success" />
+          {/* El escudo, que es exactamente la marca que la persona acaba de
+              conseguir (`IdentityBadge`). Antes había un sello: la forma del
+              plan pago, pintada del verde de lo gratis. */}
+          <ShieldCheck size={48} weight="fill" aria-hidden="true" className="text-success" />
           <p className="font-display text-xl font-bold text-foreground">
             {COPY.yaVerificadoTitulo}
           </p>

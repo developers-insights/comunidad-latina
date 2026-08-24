@@ -33,7 +33,7 @@ export type CrearSesionIdentidadResult =
   | { status: "no_configurado" }
   /** Sin sesión: el cliente redirige a /entrar. */
   | { status: "sin_sesion" }
-  /** Ya tiene el tilde — no se crea otra sesión de Stripe. */
+  /** Ya tiene el escudo verde — no se crea otra sesión de Stripe. */
   | { status: "ya_verificado" }
   | { status: "error"; message: string }
   /** Sesión creada: el cliente navega a la URL hosteada por Stripe. */

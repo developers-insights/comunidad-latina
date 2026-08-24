@@ -68,7 +68,6 @@ export function OpcionesCampana({
   paquetes,
   precios,
   zones,
-  stripeConfigured,
   demoPermitido,
 }: {
   postId: string;
@@ -80,7 +79,6 @@ export function OpcionesCampana({
    */
   precios: Partial<Record<PostPromoId, ResolvedPrice>>;
   zones: string[];
-  stripeConfigured: boolean;
   /**
    * ¿El modo demostración está habilitado? Sin Stripe Y sin deploy de por medio.
    *

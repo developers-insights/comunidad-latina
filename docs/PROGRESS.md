@@ -1,5 +1,76 @@
 # PROGRESS — Comunidad Latina
 
+## La ronda de auditoría — cinco frentes sobre el lote anterior (✅ 2026-08-24, noche)
+
+Cinco auditores en paralelo sobre lo que acababan de dejar los diez del lote de
+módulos. Encontraron más de lo que se les pidió, y eso es el punto: **las
+fronteras de archivo que hacen posible el paralelismo dejan costuras**, y la
+costura es donde vive el defecto.
+
+**La insignia que se compraba.** Tres lugares distintos vestían de "verificado"
+algo que sólo dice "suscripción al día": el badge de vendedor de Marketplace
+(que además un particular verificado NUNCA podía tener), la tarjeta de Negocios,
+y —el peor— el **peldaño "Activo" del Trust Score**, 30 puntos sobre 100, que
+usaba glifo por glifo el sello azul del plan pago. La lista de seguidores
+también pintaba ese sello sobre la verificación de identidad, que es gratis.
+Regla que quedó: **verde + escudo = un hecho verificado de la persona; azul +
+sello = un plan contratado.** Hay un test de contrato que la ancla
+(`components/trust/insignias-reservadas.test.ts`) y se comprobó que muerde.
+
+**Dos bugs de límite de módulo, el mismo día, en direcciones opuestas.** Uno
+tenía Notificaciones caída en producción (un Server Component llamando a una
+función que nacía en un módulo `"use client"`, escondida detrás de un barril);
+el otro tiró el build (un barril reexportando `server-only` hacia el grafo de un
+formulario cliente). Ni `tsc` ni los 4.400 tests veían ninguno: son propiedades
+del grafo que arma el bundler. Ahora hay un test por cada dirección.
+
+**El techo de 8 KB del feed, cerrado de verdad** (0113). Estaba documentado
+desde agosto y sólo acotado. El detalle que lo volvía urgente: la lista de
+campañas es del TENANT, así que el 414 le pegaba a todos a la vez y lo disparaba
+el negocio de publicidad funcionando bien. El RPC salió `security invoker` y no
+`definer` — mover el filtro de lugar y mover la frontera de seguridad son cosas
+distintas, y sólo una estaba rota.
+
+**El negocio era invisible el día uno.** El dueño no se sigue a sí mismo, así
+que su primera publicación comercial no aparecía ni en su feed ni en la pestaña
+"Publicaciones" de su propia ficha. Tres archivos, el mismo bug.
+
+**Notificaciones se tragaba sus errores.** Las tres consultas descartaban el
+`error` y caían al estado vacío: un fallo de lectura se mostraba como "Por ahora,
+todo tranquilo" en la pantalla donde viven las alertas de seguridad y los avisos
+de pago.
+
+**`?t=` significaba dos cosas** — la pista de tenant y las pestañas de módulo. En
+local, `/negocios?t=ofertas` dejaba la app entera vacía sin un solo error. Se
+renombró la pista, que es dev-only, no las pestañas, que están en cuatro
+módulos. El test además escanea el middleware: sin eso, los casos seguirían
+verdes mientras el bug vuelve.
+
+**Datos que se guardaban y nadie veía**, en tres pantallas (Propiedades, Eventos,
+Empleos). En Eventos había además un bug caro: el botón de boletos leía la
+columna PREMIUM, así que el enlace gratuito que el formulario pide no se mostraba
+nunca.
+
+**Lint: de 148 warnings a CERO.** 147 eran un solo patrón — 16 archivos de test
+copiando el mismo mock de `motion/react` y descartando props por destructuring.
+Un ruido de ese tamaño no es cosmético: tenía escondidos los seis warnings
+reales, entre ellos una prop muerta que quedó del arreglo del modo demo de
+Stripe. La config ahora honra el prefijo `_`, que el código ya usaba y el linter
+ignoraba.
+
+**Lo que NO se aplicó, y es la decisión más importante del día.** La 0106 traía
+el gate de identidad para publicar. Medido antes: **0 identidades verificadas
+sobre 20 perfiles**, y verificarse depende de Stripe Identity, que está sin
+claves. Habría dejado a todos sin poder publicar, con un `42501` crudo y sin
+forma de destrabarse. Vive en `supabase/migraciones-en-espera/`, **fuera de la
+cola de `db:migrate`**: una migración diferida dentro de `migrations/` la aplica
+el próximo que corra el script sin decidirlo.
+
+**Estado:** typecheck 0 · **lint 0 errores y 0 warnings** (eran 148) · 4.46x
+tests verdes · build verde · `check:rls` GATE VERDE con 97 superficies · nueve
+migraciones aplicadas y verificadas contra la base (0105-0108, 0110-0113).
+
+
 ## El Loom de Nacho + la spec de módulos, en diez frentes (✅ 2026-08-24)
 
 **El Loom era anterior al deploy del 22-ago.** Producción corre `7fafc69`, que

@@ -8,6 +8,7 @@ import {
   DeviceMobile,
   FileText,
   Lifebuoy,
+  LockKey,
   PencilSimple,
   Prohibit,
   Scales,
@@ -284,7 +285,11 @@ export default async function AjustesPage() {
           tiene para querer mirarlos antes de dar su correo. "Cuentas
           bloqueadas" sí necesita sesión, así que es lo único condicionado. */}
       <Group title={COPY.groups.privacy}>
-        <Row href="/ajustes/privacidad" icon={ShieldCheck} {...COPY.rows.privacy_data} />
+        {/* Candado y no escudo: en esta misma pantalla `ShieldCheck` es la
+            marca de la identidad verificada (dos filas más arriba). Prestárselo
+            a privacidad la gasta — la insignia de un hecho comprobado no puede
+            ser también el ícono genérico de "acá hay algo seguro". */}
+        <Row href="/ajustes/privacidad" icon={LockKey} {...COPY.rows.privacy_data} />
         {shell.user && (
           <Row href="/perfil/bloqueados" icon={Prohibit} {...COPY.rows.blocked} />
         )}
@@ -309,7 +314,8 @@ export default async function AjustesPage() {
       <Group title={COPY.groups.help}>
         <Row href="/legal/normas" icon={Scales} {...COPY.rows.rules} />
         <Row href="/legal/terminos" icon={FileText} {...COPY.rows.terms} />
-        <Row href="/legal/privacidad" icon={ShieldCheck} {...COPY.rows.privacy} />
+        {/* Un documento legal, como los otros dos de este grupo. */}
+        <Row href="/legal/privacidad" icon={FileText} {...COPY.rows.privacy} />
         <Row href="/ajustes/soporte" icon={Lifebuoy} {...COPY.rows.support} />
       </Group>
 

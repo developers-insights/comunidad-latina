@@ -90,6 +90,15 @@ export default async function VerificacionPage({
 }) {
   const sp = await searchParams;
   const estado = (Array.isArray(sp.estado) ? sp.estado[0] : sp.estado) ?? "";
+  // Fecha de fin del impulso recién canjeado, que `CanjeForm` manda por la URL
+  // (ver su docblock). Es COSMÉTICA: lo que vale ya está escrito en `boosts`, y
+  // acá sólo decide qué día se muestra. Por eso alcanza con verificar que sea
+  // una fecha parseable — si no lo es, se muestra la confirmación sin el día en
+  // vez de un "Invalid Date".
+  const hastaCrudo = (Array.isArray(sp.hasta) ? sp.hasta[0] : sp.hasta) ?? "";
+  const hasta = hastaCrudo ? new Date(hastaCrudo) : null;
+  const hastaLabel =
+    hasta && !Number.isNaN(hasta.getTime()) ? formatDate(hasta, { style: "long" }) : null;
 
   const tenant = await getTenant();
   const supabase = await createClient();
@@ -171,13 +180,25 @@ export default async function VerificacionPage({
 
       {estado === "exito" && (
         <Banner variant="info" className="mt-4">
-          Gracias. En cuanto Stripe nos confirme el pago, el check aparece al lado de tu
-          nombre.
+          {C.page.pagoEnCamino}
         </Banner>
       )}
       {estado === "cancelado" && (
         <Banner variant="info" className="mt-4">
-          No se cobró nada. Podés activarlo cuando quieras.
+          {C.page.pagoCancelado}
+        </Banner>
+      )}
+      {/* Confirmación del canje del impulso. Va acá arriba, no dentro de la
+          tarjeta del regalo: para cuando esta pantalla se vuelve a pintar, el
+          crédito ya no existe y esa tarjeta pasó a decir "te llega uno nuevo el
+          mes que viene". Sin este cartel, el único rastro de haber gastado el
+          regalo era que el formulario desapareció. */}
+      {estado === "impulsado" && (
+        <Banner variant="info" className="mt-4">
+          <p className="font-semibold text-foreground">{C.regalo.canjeadoTitle}</p>
+          <p className="text-foreground-secondary">
+            {hastaLabel ? C.regalo.canjeadoBody(hastaLabel) : C.regalo.canjeadoBodySinFecha}
+          </p>
         </Banner>
       )}
 
@@ -266,8 +287,9 @@ export default async function VerificacionPage({
 
         {activa && suscripcion?.current_period_end && (
           <p className="mt-3 text-xs text-foreground-muted">
-            Tu mes actual está pago hasta el{" "}
-            {formatDate(new Date(suscripcion.current_period_end), { style: "long" })}.
+            {C.page.pagoHasta(
+              formatDate(new Date(suscripcion.current_period_end), { style: "long" }),
+            )}
           </p>
         )}
         <p className="mt-2 text-xs text-foreground-muted">{C.page.cancelarNota}</p>
@@ -385,9 +407,9 @@ function PlanCard({
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-display text-base font-bold text-foreground">{plan.nombre}</h3>
         {esElContratado ? (
-          <Badge variant="info">Tu plan</Badge>
+          <Badge variant="info">{C.page.tuPlan}</Badge>
         ) : (
-          plan.destacado && !activa && <Badge variant="brand">Más elegido</Badge>
+          plan.destacado && !activa && <Badge variant="brand">{C.page.masElegido}</Badge>
         )}
       </div>
 

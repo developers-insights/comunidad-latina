@@ -42,20 +42,9 @@ const LABEL = {
  * en el layout. Se reemplaza por un <span> pelado; el resto de motion/react
  * (`useReducedMotion`, `AnimatePresence`, que usa BottomSheet) queda real.
  */
-vi.mock("motion/react", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("motion/react")>();
-  return {
-    ...actual,
-    m: {
-      ...actual.m,
-      span: ({
-        layoutId: _layoutId,
-        transition: _transition,
-        ...props
-      }: Record<string, unknown>) => <span {...props} />,
-    },
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock(),
+);
 
 const COUNTS = { mensajes: 3, trabajos: 12, pagos: 1 } as const;
 

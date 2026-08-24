@@ -125,7 +125,19 @@ export const sections = {
   // Filtros de Negocios
   businessCategoryLabel: "Rubro",
   businessCategoryAny: "Todos los rubros",
-  businessVerifiedFilter: "Verificados",
+  /**
+   * "Con Presencia Verificada" y no "Verificados" a secas.
+   *
+   * Este filtro consulta `listings.store_verified`, que es el espejo público de
+   * `business_accounts.verified_presence` — o sea, **quién paga el plan**. Un
+   * chip rotulado "Verificados" que devuelve suscriptores le dice a quien busca
+   * que se comprobó algo del negocio cuando lo único comprobado es la factura.
+   *
+   * El filtro hermano de Profesionales sí devuelve hechos (una licencia
+   * contrastada contra un registro oficial), y por eso ése sí puede llamarse
+   * verificación. Misma regla que separa el verde del azul en las insignias.
+   */
+  businessVerifiedFilter: "Con Presencia Verificada",
 
   // Estado vacío compartido de "busqué y no hay"
   moduleNoMatchTitle: "No encontramos nada con eso",

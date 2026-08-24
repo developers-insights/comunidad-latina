@@ -28,7 +28,17 @@ export const EMBLEM_SOURCES = {
   "sello-x": "/brand/emblems/sello-x.webp",
   /** Brote: nivel "Nuevo". */
   "nivel-nuevo": "/brand/emblems/nivel-nuevo.webp",
-  /** Sello azul: nivel "Verificado". */
+  /**
+   * Sello azul: peldaño 2 del ladder (re-key §7: ahora el nivel "Activo").
+   *
+   * ⚠️ El nombre del archivo quedó viejo y el raster también: un sello azul con
+   * tilde es, glifo por glifo, la insignia del check azul PAGO. Acá marca un
+   * score de 30 a 49 puntos, que no se compra ni se verifica. Sólo se muestra
+   * de 28px para arriba y siempre con "Nivel: Activo" escrito al lado, así que
+   * no llega a leerse como una insignia suelta — pero el raster habría que
+   * reemplazarlo por uno que sugiera progreso, no certificación. Mismo caso que
+   * `nivel-confiable`. Ver la cabecera de `components/trust/levels.ts`.
+   */
   "nivel-verificado": "/brand/emblems/nivel-verificado.webp",
   /** Estrella dorada: peldaño 4 del ladder (re-key §7: ahora el nivel "Verificado"). */
   "nivel-premium": "/brand/emblems/nivel-premium.webp",

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import {
   ArrowClockwise,
   HourglassMedium,
-  SealCheck,
+  ShieldCheck,
 } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, buttonVariants } from "@/components/ui";
 import { isStripeConfigured } from "@/lib/config/services";
@@ -23,8 +23,8 @@ const COPY = {
   verificadaTitulo: "¡Tu identidad quedó verificada!",
   verificadaCuerpo: (fecha: string | null) =>
     fecha
-      ? `Documento validado por Stripe Identity el ${fecha}. El tilde ya aparece en tu perfil.`
-      : "Documento validado por Stripe Identity. El tilde aparece en tu perfil en unos minutos.",
+      ? `Documento validado por Stripe Identity el ${fecha}. El escudo verde ya aparece en tu perfil.`
+      : "Documento validado por Stripe Identity. El escudo verde aparece en tu perfil en unos minutos.",
   procesandoTitulo: "Estamos procesando tu verificación",
   procesandoCuerpo:
     "Stripe está revisando tu documento — suele tardar menos de un minuto. Te avisamos con una notificación apenas esté listo. Podés seguir usando la app tranquilo.",
@@ -100,7 +100,10 @@ export default async function ResultadoVerificacionPage() {
           role="status"
         >
           <IdentityCelebration message={COPY.verificadaTitulo} />
-          <SealCheck size={56} weight="fill" aria-hidden="true" className="text-success" />
+          {/* Escudo y no sello: es la insignia que se acaba de ganar. El
+              sello con tilde es la del check azul, que se paga — abajo, en su
+              enlace, sí corresponde. Ver el ⚠️ de /perfil/verificar. */}
+          <ShieldCheck size={56} weight="fill" aria-hidden="true" className="text-success" />
           <p className="font-display text-xl font-bold text-foreground">
             {COPY.verificadaTitulo}
           </p>

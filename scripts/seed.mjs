@@ -159,7 +159,10 @@ async function upsertTenant(def) {
       );
     }
   } else {
-    const { domain, ...row } = def;
+    // `_domain` y no `domain`: se desestructura para SACARLO de `row` (la
+    // columna no existe en `tenants`; los dominios van en `tenant_domains`).
+    // El prefijo dice que no usarlo es la intencion, no un olvido.
+    const { domain: _domain, ...row } = def;
     const { data, error } = await supabase.from('tenants').insert(row).select('id').single();
     if (error) die(`creando tenant ${def.slug}`, error);
     tenantId = data.id;

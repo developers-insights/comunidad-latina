@@ -47,6 +47,20 @@ export const COPY_VERIFICACION = {
     cancelarNota:
       "Cancelás cuando quieras desde tu panel de facturación. La insignia se queda hasta que termine el mes que pagaste.",
     /**
+     * Vuelta del Checkout. Vivían sueltos en el JSX de la página; el texto que
+     * lee una persona no puede estar en un lugar distinto al resto del copy,
+     * porque es el que nadie encuentra cuando hay que corregirlo.
+     */
+    pagoEnCamino:
+      "Gracias. En cuanto Stripe nos confirme el pago, el check aparece al lado de tu nombre.",
+    pagoCancelado: "No se cobró nada. Podés activarlo cuando quieras.",
+    /** Nota bajo los planes cuando la suscripción está activa. */
+    pagoHasta: (fecha: string) => `Tu mes actual está pago hasta el ${fecha}.`,
+    /** Insignia de la tarjeta del plan que la persona tiene contratado. */
+    tuPlan: "Tu plan",
+    /** Insignia del plan sugerido del catálogo (`plan.destacado`). */
+    masElegido: "Más elegido",
+    /**
      * Nota de contexto en la tarjeta del plan que coincide con la identidad
      * ACTIVA ahora mismo (`tierDeIdentidadActiva`, perfil-activo). No es una
      * restricción — cualquier escalón se sigue pudiendo elegir, ver el
@@ -104,16 +118,33 @@ export const COPY_VERIFICACION = {
     sinAvisos:
       "Todavía no tenés avisos publicados. Publicá uno y volvé acá para usar tu impulso.",
     canjear: "Usar mi impulso acá",
+    /**
+     * Confirmación del canje. Hasta este cambio no la mostraba nadie: la acción
+     * devolvía la fecha de fin y el formulario la tiraba, así que tocar "Usar
+     * mi impulso acá" hacía desaparecer la tarjeta sin decir qué había pasado.
+     * Un regalo que se gasta en silencio se lee como un botón roto.
+     */
     canjeadoTitle: "¡Listo! Tu aviso ya está impulsado",
     canjeadoBody: (fecha: string) =>
       `Aparece primero en tu zona, marcado como "Patrocinado", hasta el ${fecha}.`,
+    /** Sin fecha parseable: se confirma igual, sin inventar un día. */
+    canjeadoBodySinFecha:
+      'Aparece primero en tu zona, marcado como "Patrocinado", por los próximos días.',
     sinRegalo: "Cuando se cobre tu próximo mes, te va a esperar acá un impulso nuevo.",
   },
 
   /* --------------------------------------------------------- La insignia */
   insignia: {
-    /** `aria-label` de la insignia paga. Dice las dos cosas, sin adornos. */
-    ariaLabel: "Cuenta verificada con suscripción activa",
+    /**
+     * `aria-label` de la insignia paga. Dice las dos cosas, sin adornos.
+     *
+     * NO empieza por "Cuenta verificada": esa frase es justo la ambigüedad que
+     * este módulo existe para evitar (¿verificó qué?), y quien navega con
+     * lector de pantalla escucha el principio y sigue. Empieza nombrando la
+     * insignia y después los dos hechos, en orden: primero el que se comprueba,
+     * después el que se paga.
+     */
+    ariaLabel: "Check azul: identidad confirmada con documento y suscripción al día",
     /**
      * Tooltip / texto de apoyo. Es lo único que va a leer la mayoría, así que
      * tiene que caber la advertencia en una frase.

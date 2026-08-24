@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Megaphone, SealCheck } from "@phosphor-icons/react/dist/ssr";
 import { Banner, BezelCard } from "@/components/ui";
-import { isPagosDemoPermitido, isStripeConfigured } from "@/lib/config/services";
+import { isPagosDemoPermitido } from "@/lib/config/services";
 import { findPrice, type ResolvedPrice } from "@/lib/pricing";
 import { getTenantPrices } from "@/lib/pricing/read";
 import { POST_PROMO_IDS, POST_PROMO_PACKAGES, type PostPromoId } from "@/lib/stripe";
@@ -196,7 +196,6 @@ export default async function ImpulsarPostPage({
             paquetes={POST_PROMO_IDS.map((id) => POST_PROMO_PACKAGES[id])}
             precios={preciosPromo}
             zones={zones}
-            stripeConfigured={isStripeConfigured}
             demoPermitido={isPagosDemoPermitido}
           />
         </>

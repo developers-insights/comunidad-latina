@@ -1,12 +1,12 @@
 import {
   ArrowSquareOut,
+  Buildings,
   Clock,
   CurrencyDollar,
   Globe,
   MapPin,
   NavigationArrow,
   Phone,
-  SealCheck,
   Translate,
   WarningCircle,
 } from "@phosphor-icons/react/dist/ssr";
@@ -186,7 +186,14 @@ export function RecursoCard({ recurso }: { recurso: CommunityResource }) {
       {/* PROCEDENCIA — nunca condicional. Ver la cabecera del archivo. */}
       <footer className="border-t border-border-subtle pt-3">
         <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-xs leading-relaxed text-foreground-muted">
-          <SealCheck
+          {/* `Buildings` y NO `SealCheck`. El sello con tilde es, en toda la
+              app, la marca de un plan contratado (el check azul, la Presencia
+              Verificada), y esta línea no certifica nada: dice quién publicó el
+              recurso y cuándo lo miramos nosotros. Un sello acá contradecía la
+              promesa de la card —que no se confunda lo que dice el recurso con
+              lo que dice la plataforma— justo en el renglón que existe para
+              cumplirla. Una institución es lo que la línea nombra. */}
+          <Buildings
             size={14}
             weight="fill"
             aria-hidden="true"

@@ -1013,7 +1013,11 @@ async function handleIdentityVerified(
     // siquiera consulta preferencias (0045).
     category: "cuenta",
     title: "Tu identidad quedó verificada ✓",
-    body: "El tilde ya aparece en tu perfil y tu Trust Score subió. Gracias por hacer tu comunidad más segura.",
+    // "El escudo verde" y no "el tilde": el tilde es como todo el mundo llama
+    // al check azul, que es OTRA cosa y se paga. Lo que se entrega acá es el
+    // escudo verde de `IdentityBadge`, gratis. Prometer el tilde acá deja a la
+    // persona buscando en su perfil algo que no compró.
+    body: "El escudo verde ya aparece en tu perfil y tu Trust Score subió. Gracias por hacer tu comunidad más segura.",
     href: "/perfil",
     dedupeUnread: true,
   });

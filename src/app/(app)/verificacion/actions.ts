@@ -381,6 +381,36 @@ export async function canjearImpulsoDeRegalo(input: unknown): Promise<CanjeResul
     return { status: "error", message: COPY_VERIFICACION.errors.regaloVencido };
   }
 
+  // 2.5. EL ALCANCE, ANTES DE GASTAR NADA.
+  //
+  // ALCANCE 'local' Y NO 'nacional'/'global': el regalo es el impulso base, no
+  // el paquete con el recargo de alcance más caro (que se cobra aparte, 0092).
+  // Si el aviso no declara zona, no hay "local" posible y cae a 'nacional' con
+  // el país de la comunidad — que es lo que exige el CHECK de coherencia.
+  //
+  // POR QUÉ SE RESUELVE ACÁ Y NO DESPUÉS DE RECLAMAR EL CRÉDITO. Porque puede
+  // fallar: un aviso sin zona en una comunidad sin `country_focus` no tiene
+  // ningún alcance válido, y el insert de `boosts` rebotaría contra el CHECK.
+  // Calculado después del reclamo, eso dejaba el crédito consumido y un
+  // "no pudimos" genérico — el regalo perdido por un dato que la persona puede
+  // arreglar en dos toques. Ahora se corta antes y se dice qué arreglar.
+  const zona = typeof listing.area_label === "string" ? listing.area_label.trim() : "";
+  const scopeArea: string | null = zona.length > 0 ? zona : null;
+  let scope: "local" | "nacional" = "local";
+  let scopeCountry: string | null = null;
+  if (!scopeArea) {
+    scope = "nacional";
+    const { data: t } = await supabase
+      .from("tenants")
+      .select("country_focus")
+      .eq("id", tenant.id)
+      .maybeSingle();
+    scopeCountry = t?.country_focus ?? null;
+    if (!scopeCountry) {
+      return { status: "error", message: COPY_VERIFICACION.errors.tenantSinAlcance };
+    }
+  }
+
   // 3. RECLAMAR EL CRÉDITO — el update condicional que es su propio candado.
   // Va por el admin client porque las 3 policies de escritura están en false;
   // está GATEADO por todo lo de arriba, igual que el insert de `boosts` en
@@ -411,26 +441,7 @@ export async function canjearImpulsoDeRegalo(input: unknown): Promise<CanjeResul
   // 4. EL IMPULSO. Un boost NORMAL —mismo motor, mismo ranking, mismo chip
   // "Patrocinado"— con `amount_cents = 0` y `origin = 'verificacion'`, que es lo
   // que el CHECK de 0101 exige y lo que permite que el tablero de ingresos no
-  // cuente un regalo como facturación.
-  //
-  // ALCANCE 'local' Y NO 'nacional'/'global': el regalo es el impulso base, no
-  // el paquete con el recargo de alcance más caro (que se cobra aparte, 0092).
-  // Si el aviso no declara zona, no hay "local" posible y cae a 'nacional' con
-  // el país de la comunidad — que es lo que exige el CHECK de coherencia.
-  const zona = typeof listing.area_label === "string" ? listing.area_label.trim() : "";
-  const scopeArea: string | null = zona.length > 0 ? zona : null;
-  let scope: "local" | "nacional" = "local";
-  let scopeCountry: string | null = null;
-  if (!scopeArea) {
-    scope = "nacional";
-    const { data: t } = await supabase
-      .from("tenants")
-      .select("country_focus")
-      .eq("id", tenant.id)
-      .maybeSingle();
-    scopeCountry = t?.country_focus ?? null;
-  }
-
+  // cuente un regalo como facturación. El alcance ya quedó resuelto en 2.5.
   const dias = grant.duration_days ?? VERIFICACION_BOOST_DIAS;
   const endsAt = new Date(ahora.getTime() + dias * 86_400_000);
 

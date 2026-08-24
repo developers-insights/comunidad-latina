@@ -21,7 +21,6 @@ import {
   FULFILLMENT_METHODS,
   PRODUCT_CATEGORIES,
   PRODUCT_CONDITIONS,
-  isFulfillmentMethod,
   isProductCondition,
   type FulfillmentMethod,
 } from "@/components/marketplace";
