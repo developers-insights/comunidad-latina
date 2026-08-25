@@ -1,5 +1,61 @@
 # PROGRESS — Comunidad Latina
 
+## "Tu zona" — el último pedido del Loom (✅ 2026-08-25)
+
+Era lo único del Loom que quedaba sin hacer: el control del header abría un
+toast que decía "muy pronto".
+
+**Es una preferencia de VISTA, no un cambio de perfil.** Alguien puede vivir en
+Corona y querer mirar Jackson Heights porque se está por mudar; escribir eso en
+`profiles.area_label` sería pisarle un dato suyo para resolver una consulta
+pasajera. Va en la cookie `cl-zona`, leída **en el servidor**, así que el primer
+render ya sale filtrado y no hay parpadeo.
+
+**Precedencia:** `?zona=` de la URL › cookie › `profiles.area_label` › toda la
+comunidad. La URL gana sobre la cookie a propósito — un enlace compartido tiene
+que mostrar lo que promete, no lo que el que lo abre tenía guardado.
+
+Casi todo ya existía suelto y se reusó en vez de reescribirse: el catálogo sale
+de `distinct listings.area_label` (el patrón estaba copiado dos veces, ahora se
+extrajo), el match usa `sameZoneLabel` —laxo, sin acentos, "corona" encuentra
+"Corona, Queens"— y `resolveViewerGeo()` ya aceptaba una zona elegida.
+
+**Lo respetan** los seis módulos de directorio, `resolveViewerGeo` y el corte de
+inyección de impulsados. **NO lo respeta Marketplace › Artículos**, y es a
+propósito: su formulario no pide zona, así que `area_label` viene null y filtrar
+ahí no mostraría menos artículos — no mostraría ninguno.
+
+**Tres cosas que corregí sobre la primera entrega, midiendo en el navegador:**
+
+1. El reporte decía que la marca se truncaba a "Comuni…" y la zona a "Coron…".
+   Medido: la marca tenía **41 px de los 135** que necesita y la zona **38**.
+   Dos rótulos cortados a tres letras son peor que uno bien puesto. Se invirtió
+   la prioridad: con zona activa cede el wordmark (el isotipo ya identifica la
+   app), sin zona cede la zona — o sea que quien no toca nada ve lo de siempre.
+2. Aun así la etiqueta completa pedía 110 px y tenía 86. Ahora va la **forma
+   corta** ("Corona"), en todos los anchos: el header está topeado en `max-w-lg`
+   y no entra cómoda ni en escritorio. El valor completo sigue en el
+   `aria-label`, en la hoja, y —lo que importa— en lo que se guarda y se compara.
+3. La cookie estaba bien clasificada como imprescindible, pero el resumen de esa
+   categoría decía "sin esto no podrías entrar a tu cuenta", que no describe una
+   preferencia de vista. Ampliado, y explicado por qué "Tus preferencias" no
+   servía: esa categoría promete que el dato "se queda en este teléfono", y una
+   cookie viaja al servidor en cada request por definición.
+
+**Verificado en pantalla a 375 px** (midiendo el DOM: el pane embebido no puede
+componer capturas): "Corona" sin cortar, botón de 44 px, sin scroll horizontal,
+la hoja lista las zonas reales con la activa marcada, y en una zona sin
+contenido aparece *"Todavía no hay nada en Astoria, Queens"* con **[Ver toda la
+comunidad]** en un toque.
+
+**Dato de los datos, no del código:** conviven `"Jackson Heights, Queens"` y
+`"Jackson heights. Queens"` — la misma zona escrita de dos formas. Conviene
+limpiarlo desde el panel.
+
+**Estado:** typecheck 0 · lint 0 errores y 0 warnings · **4.493 tests verdes** ·
+build verde.
+
+
 ## La ronda de auditoría — cinco frentes sobre el lote anterior (✅ 2026-08-24, noche)
 
 Cinco auditores en paralelo sobre lo que acababan de dejar los diez del lote de

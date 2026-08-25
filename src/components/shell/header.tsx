@@ -8,6 +8,7 @@ import { HeaderActions } from "@/components/shell/header-actions";
 import { IdentitySwitcher } from "@/components/shell/identity-switcher";
 import { NotificationBell } from "@/components/notifications";
 import { getShellContext } from "@/components/shell/shell-context";
+import { getZonaActiva } from "@/lib/zona/server";
 import {
   getIdentidadActiva,
   listarIdentidadesDeNegocio,
@@ -31,8 +32,11 @@ function isOptimizableSrc(src: string): boolean {
 
 /**
  * Header del shell autenticado: zona de logo del tenant (única zona de marca
- * masiva permitida), selector de ubicación (placeholder, lo cablea SOCIAL),
- * Mensajes y el avatar de perfil.
+ * masiva permitida), el selector de "Tu zona", Mensajes y el avatar de perfil.
+ *
+ * El selector de zona dejó de ser un placeholder el 2026-08-25: elige de verdad
+ * qué zona ver y los seis módulos de directorio la respetan. Ver
+ * `header-actions.tsx` y `@/lib/zona`.
  *
  * Historia de esta esquina derecha, porque cambió dos veces:
  *  · 2026-07-20 — el rail de módulos, el toggle de tema y la campana se fueron
@@ -48,6 +52,10 @@ function isOptimizableSrc(src: string): boolean {
  * El `sticky top-0 z-40` vive en el wrapper de `(app)/layout.tsx`, NO acá.
  */
 export async function Header({ tenant, className }: { tenant: Tenant; className?: string }) {
+  // `cache()`-eada por request y compartida con <HeaderActions>: no agrega
+  // consulta, sólo decide quién se queda con el ancho a 375px.
+  const zonaActiva = await getZonaActiva();
+  const hayZona = zonaActiva.label !== null;
   // La identidad activa se resuelve en el SERVIDOR (0103): el cliente no elige
   // con qué nombre publica, solo pide el cambio. Las tres lecturas están
   // `cache()`-eadas por request, así que Ajustes las reusa sin repetir consultas.
@@ -66,11 +74,35 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
   return (
     <header className={headerClass}>
       <div className="mx-auto flex h-14 w-full max-w-lg items-center gap-2 px-4">
-        {/* min-w-0 + truncate: el nombre del tenant es lo que cede a 375px,
-            nunca el layout. */}
+        {/* El LOGO no cede nunca: `min-w-8` es exactamente su ancho, así que el
+            isotipo sigue entero pase lo que pase. Antes acá había `min-w-0` y,
+            con "Tu zona" mostrando una etiqueta a la derecha, este link se
+            comprimía a 26px y recortaba el propio logo.
+
+            ── QUIÉN CEDE EL TEXTO A 375px, Y POR QUÉ CAMBIÓ ──────────────────
+            "Los dos ceden un poco" sonaba justo y medido dio lo contrario: con
+            una zona activa, el nombre de la marca quedaba en 41px de los 135
+            que necesita y la etiqueta de zona en 38px. Dos rótulos cortados a
+            tres letras cada uno son peor que uno solo bien puesto — y encima
+            ninguno de los dos se puede leer.
+
+            Ahora la prioridad se invierte según haya zona elegida o no:
+
+              · CON zona activa, el wordmark se esconde (`max-sm:hidden`) y la
+                zona se queda con el ancho. El isotipo ya dice de qué app se
+                trata —está a la izquierda, es la marca— mientras que la zona es
+                un estado que la persona acaba de elegir y que no puede leer en
+                ningún otro lado de la pantalla.
+              · SIN zona (toda la comunidad, el default), manda el wordmark y es
+                la etiqueta de zona la que se colapsa a su ícono. O sea: quien
+                no toca nada ve exactamente lo de siempre. Cero regresión.
+
+            La regla vieja —"la marca tiene prioridad sobre el rótulo de un
+            placeholder"— era correcta cuando eso era un placeholder de "muy
+            pronto". Dejó de serlo. */}
         <Link
           href="/feed"
-          className="flex min-h-11 min-w-0 items-center gap-2 rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+          className="flex min-h-11 min-w-8 items-center gap-2 rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           aria-label={BRAND_NAME}
         >
           {isOptimizableSrc(logoSrc) ? (
@@ -92,7 +124,11 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
           {/* La MARCA, no el nombre del tenant: el header dice siempre
               "Comunidad Latina", sirva la comunidad que sirva. Ver
               @/lib/brand. */}
-          <span className="truncate text-base font-bold tracking-tight text-brand-ink">
+          <span
+            className={`truncate text-base font-bold tracking-tight text-brand-ink${
+              hayZona ? " max-sm:hidden" : ""
+            }`}
+          >
             {BRAND_NAME}
           </span>
         </Link>

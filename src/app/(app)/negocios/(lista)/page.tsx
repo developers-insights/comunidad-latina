@@ -29,6 +29,7 @@ import {
   type NavTabItem,
 } from "@/components/ui";
 import { ImpulsosDeOtrasComunidades } from "@/components/boosts";
+import { ZonaVacia } from "@/components/zona";
 import {
   recordBoostImpressions,
   resolveViewerGeo,
@@ -52,6 +53,7 @@ import { fetchListingRatings } from "@/lib/profesionales/ratings";
 import type { ResumenPuntaje } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { resolverVistaZona } from "@/lib/zona/server";
 import { toTrustProps } from "@/lib/trust/signals";
 import type { Tables } from "@/lib/types/database.types";
 import { cn } from "@/lib/utils";
@@ -299,15 +301,35 @@ async function NegociosContent({ filters }: { filters: Filters }) {
   // "Cerca de mí" y el alcance geográfico de los impulsos (0092). Antes se
   // pedía después de la query principal; subirla acá la vuelve un dato del
   // request y no un paso más en la cadena.
+  // "Tu zona": Negocios no tiene `?zona=` propio, así que acá la zona sale
+  // siempre de la preferencia (cookie › perfil).
+  const vistaZona = await resolverVistaZona(tenant.id, null);
   const viewer = await resolveViewerGeo(supabase, {
     tenantId: tenant.id,
     userId: user?.id ?? null,
+    // La zona ELEGIDA pesa más que la del perfil para el alcance de los
+    // impulsos, y `resolveViewerGeo` ya sabe caer al perfil cuando es `null`.
+    zoneFilter: vistaZona.zona.label,
   });
   const zonaPropia = viewer.areaLabel?.trim() || null;
-  // "Cerca de mí" sólo filtra si hay zona declarada. Sin zona el chip no se
-  // dibuja (abajo), y si alguien fuerza `?cerca=1` en la URL, se ignora en vez
-  // de devolver cero resultados sin explicación.
-  const cercaActivo = filters.cerca && Boolean(zonaPropia);
+  /** ¿Manda "Tu zona" sobre este listado? */
+  const filtraZona = vistaZona.areaLabels.length > 0;
+
+  /**
+   * "CERCA DE MÍ" DEJÓ DE SER UN CHIP QUE HAY QUE APRETAR.
+   *
+   * Con "Tu zona" activa el listado YA sale recortado a esa zona, y con mejor
+   * criterio que el chip: el `.in()` usa el match laxo de `sameZoneLabel`
+   * ("Corona" alcanza "Corona, Queens") y el chip un `ILIKE` que no lo hace.
+   * Dejar los dos sería un botón que no cambia nada — justo lo que el propio
+   * comentario del chip llama "un filtro que no puede filtrar".
+   *
+   * Vuelve a tener sentido en UN caso, y por eso no se borró: cuando la persona
+   * eligió ver TODA la comunidad. Ahí el listado no está recortado y el chip es
+   * la forma de acotar sólo esta pantalla a su barrio, sin abandonar la vista
+   * amplia en el resto de la app.
+   */
+  const cercaActivo = !filtraZona && filters.cerca && Boolean(zonaPropia);
 
   const LISTING_COLUMNS =
     "id, title, description, area_label, attrs, photos, publisher_name, created_by, published_at, created_at, store_verified, tier, cta_phone, cta_address";
@@ -333,6 +355,8 @@ async function NegociosContent({ filters }: { filters: Filters }) {
   if (filters.verificados) query = query.eq("store_verified", true);
   if (cercaActivo && zonaPropia) {
     query = query.ilike("area_label", `%${paraIlike(zonaPropia)}%`);
+  } else if (filtraZona) {
+    query = query.in("area_label", vistaZona.areaLabels);
   }
 
   const { data: negocios } = await query
@@ -355,7 +379,10 @@ async function NegociosContent({ filters }: { filters: Filters }) {
   // ALCANCE GEOGRÁFICO (0092): un impulso `local` sólo ocupa lugar para quien
   // está en su zona; `nacional` y `global`, para toda la comunidad.
   let boostedExtra: typeof rows = [];
-  const sinFiltros = !filtering;
+  // "Tu zona" es un recorte aunque no esté en la URL: con una zona puesta no se
+  // inyectan impulsados de otros barrios en una pantalla que dice el nombre de
+  // un barrio.
+  const sinFiltros = !filtering && !filtraZona;
 
   const placement = await selectOwnBoosts(supabase, { tenantId: tenant.id, viewer });
   const boostedIds = placement.listingIds;
@@ -497,7 +524,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
           {/* Sin zona declarada NO se dibuja: un filtro que no puede filtrar es
               un botón que no hace nada. Quien quiera usarlo la carga en su
               perfil, que es donde vive el dato. */}
-          {zonaPropia && (
+          {zonaPropia && !filtraZona && (
             <ModuleFilterToggle
               param="cerca"
               label={COPY.filtroCerca}
@@ -526,7 +553,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
             {COPY.filtroReputacionNota}
           </p>
         )}
-        {filters.cerca && zonaPropia && (
+        {cercaActivo && zonaPropia && (
           <p className="text-xs leading-relaxed text-foreground-muted">
             {COPY.filtroCercaNota(zonaPropia)}
           </p>
@@ -586,10 +613,14 @@ async function NegociosContent({ filters }: { filters: Filters }) {
       {/* Impulsos con alcance nacional/global comprados en OTRAS comunidades
           (0092). Sólo sin filtros: la publicidad no desplaza lo que se buscó.
           Si no hay ninguno, el componente no renderiza nada. */}
-      {!filtering && <ImpulsosDeOtrasComunidades className="mt-6" kind="business" />}
+      {sinFiltros && <ImpulsosDeOtrasComunidades className="mt-6" kind="business" />}
 
       {visibles.length === 0 ? (
-        filtering ? (
+        // Vacío por "Tu zona" y sin ningún filtro puesto: se nombra la zona y se
+        // ofrece volver a toda la comunidad en un toque.
+        !filtering && filtraZona && vistaZona.zona.label ? (
+          <ZonaVacia className="mt-4" zona={vistaZona.zona.label} />
+        ) : filtering ? (
           /* Buscó y no hay ⇒ mensaje de búsqueda, no el de sección vacía. Decir
              "todavía no hay negocios publicados" cuando en realidad hay pero
              ninguno matchea es información falsa sobre la comunidad. */

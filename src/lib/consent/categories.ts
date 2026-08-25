@@ -57,8 +57,24 @@ export const CATEGORY_META: Readonly<Record<ConsentCategory, CategoryMeta>> = {
     id: "necesarias",
     policy: "siempre",
     label: "Imprescindibles",
+    /**
+     * El resumen cubre DOS cosas, no una, porque acá viven dos clases de dato y
+     * antes sólo se nombraba la primera: lo que sostiene la sesión, y lo que
+     * guarda una elección que la persona hizo a propósito (`cl-tenant`,
+     * `cl-zona`). Decir sólo "sin esto no podrías entrar a tu cuenta" describía
+     * mal a la segunda y la dejaba pareciendo fuera de lugar en su propia
+     * categoría.
+     *
+     * Y es la categoría correcta para las dos: una cookie que guarda una
+     * elección explícita no se puede ofrecer como opcional sin volver la
+     * elección misma imposible de recordar. La alternativa —"Tus
+     * preferencias"— promete por escrito que el dato "se queda en este
+     * teléfono y no viaja a ningún lado", y una cookie viaja al servidor en
+     * cada request por definición. Meterla ahí sería mentir en la línea que
+     * justamente existe para no mentir.
+     */
     summary:
-      "Mantienen tu sesión abierta y la app en pie. Sin esto no podrías entrar a tu cuenta.",
+      "Mantienen tu sesión abierta, la app en pie, y recuerdan lo que elegiste ver. Sin esto no podrías entrar a tu cuenta.",
   },
   preferencias: {
     id: "preferencias",
@@ -138,6 +154,16 @@ export const TRACKERS: readonly TrackerEntry[] = [
     firstParty: true,
     purpose: "Recuerda en qué comunidad estás para mostrarte el contenido correcto.",
     duration: "30 días",
+  },
+  {
+    name: "cl-zona",
+    kind: "cookie",
+    category: "necesarias",
+    owner: "Comunidad Latina",
+    firstParty: true,
+    purpose:
+      "Recuerda la zona que elegiste mirar para que la app te la muestre desde el primer momento, sin que se vea otra cosa un segundo. Podés volver a toda la comunidad cuando quieras, desde el mismo botón.",
+    duration: "180 días",
   },
   {
     name: "cl-asst",

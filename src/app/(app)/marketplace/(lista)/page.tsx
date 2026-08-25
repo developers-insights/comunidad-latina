@@ -33,6 +33,8 @@ import { fetchActiveListingCounts, fetchStoreRatings } from "@/lib/marketplace/s
 import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { ZonaVacia } from "@/components/zona";
+import { resolverVistaZona } from "@/lib/zona/server";
 import { cn } from "@/lib/utils";
 import {
   MARKETPLACE_TAB_IDS,
@@ -159,6 +161,24 @@ function MarketplaceTopBar({ tab }: { tab: MarketplaceTabId }) {
 
 async function MarketplaceContent({ filters }: { filters: Filters }) {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+
+  /*
+   * ── "TU ZONA" NO SE APLICA A ARTÍCULOS, Y ES DELIBERADO ───────────────────
+   *
+   * Verificado contra el código, no supuesto: `crearBorradorProducto`
+   * (marketplace/publicar/actions.ts) inserta el listing SIN `area_label` —
+   * no hay campo de zona en el formulario ni en su schema. O sea que HOY todos
+   * los productos tienen `area_label` en NULL.
+   *
+   * Filtrar por zona acá no mostraría "menos artículos": no mostraría NINGUNO,
+   * en todas las zonas, para todo el mundo que tenga una elegida. Un filtro que
+   * vacía la pantalla entera no es un filtro, es una pantalla rota.
+   *
+   * La pestaña TIENDAS sí lo respeta: un `kind='business'` nace desde
+   * /publicar, que sí pide la zona. Cuando el formulario de producto la pida,
+   * la línea que falta acá es un `.in("area_label", vistaZona.areaLabels)`
+   * igual al de las otras cinco verticales.
+   */
 
   const {
     data: { user },
@@ -467,6 +487,12 @@ async function MarketplaceStoresContent({ filters }: { filters: StoreFilters }) 
     data: { user },
   } = await supabase.auth.getUser();
 
+  // "Tu zona": el directorio de tiendas no tiene filtro de zona propio en la
+  // URL, así que manda la preferencia (cookie › perfil). Una tienda es un
+  // `kind='business'` nacido en /publicar, que sí pide la zona — a diferencia
+  // de los artículos, ver la nota en `MarketplaceContent`.
+  const vistaZona = await resolverVistaZona(tenant.id, null);
+
   let query = supabase
     .from("listings")
     .select(
@@ -485,6 +511,9 @@ async function MarketplaceStoresContent({ filters }: { filters: StoreFilters }) 
 
   if (filters.q) {
     query = query.textSearch("search", filters.q, { type: "websearch", config: "spanish" });
+  }
+  if (vistaZona.areaLabels.length > 0) {
+    query = query.in("area_label", vistaZona.areaLabels);
   }
   const cursor = decodeCursor(filters.cursor || undefined);
   if (cursor) {
@@ -577,11 +606,17 @@ async function MarketplaceStoresContent({ filters }: { filters: StoreFilters }) 
           post-fetch de Artículos), así que `cards` siempre iguala 1:1 a
           `pageRows` — "vacío pero con más páginas" no puede pasar acá. */}
       {cards.length === 0 ? (
-        <EmptyState
-          illustration="/images/empty-state-search.png"
-          title={isSearching ? CS.emptySearchTitle(filters.q) : CS.emptyTitle}
-          message={isSearching ? CS.emptySearchMessage : CS.emptyMessage}
-        />
+        // Vacío por "Tu zona" y sin búsqueda encima: se nombra la zona y se
+        // ofrece volver a toda la comunidad en un toque.
+        !isSearching && vistaZona.filtraPorPreferencia && vistaZona.zona.label ? (
+          <ZonaVacia zona={vistaZona.zona.label} />
+        ) : (
+          <EmptyState
+            illustration="/images/empty-state-search.png"
+            title={isSearching ? CS.emptySearchTitle(filters.q) : CS.emptyTitle}
+            message={isSearching ? CS.emptySearchMessage : CS.emptyMessage}
+          />
+        )
       ) : (
         <div className="flex flex-col gap-4">
           {cards.map((card) => (

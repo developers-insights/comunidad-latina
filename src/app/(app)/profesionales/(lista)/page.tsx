@@ -52,6 +52,8 @@ import { t } from "@/lib/i18n";
 import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
+import { ZonaVacia } from "@/components/zona";
+import { resolverVistaZona } from "@/lib/zona/server";
 import { cn } from "@/lib/utils";
 import {
   PROFESSIONALS_TAB_IDS,
@@ -197,6 +199,10 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
   // found_active vigente. Se resuelve ANTES de la query principal para poder
   // acotarla con `.in("id", …)` — server-side de verdad, nunca "traer todo y
   // filtrar en memoria".
+  // "Tu zona": Profesionales no tiene filtro de zona propio en la URL, así que
+  // acá manda siempre la preferencia (cookie › perfil).
+  const vistaZona = await resolverVistaZona(tenant.id, null);
+
   let verifiedListingIds: string[] | null = null;
   if (filters.verificado) {
     verifiedListingIds = await fetchVerifiedProfessionalListingIds(supabase, tenant.id);
@@ -226,6 +232,11 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
   }
   if (verifiedListingIds) {
     query = query.in("id", verifiedListingIds);
+  }
+  if (vistaZona.areaLabels.length > 0) {
+    // Etiquetas exactas ya resueltas contra el catálogo de la comunidad: el
+    // recorte lo hace SQL y la paginación por cursor sigue intacta.
+    query = query.in("area_label", vistaZona.areaLabels);
   }
   const cursor = decodeCursor(filters.cursor || undefined);
   if (cursor) {
@@ -267,11 +278,16 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
   // vive UNA vez en `src/lib/boosts`, no copiada en cada listado.
   let boostedIds = new Set<string>();
   let boostedExtra: typeof pageRows = [];
-  const sinFiltros = !filters.q && !filters.rubro && !filters.verificado;
+  const sinFiltrosPropios = !filters.q && !filters.rubro && !filters.verificado;
+  // "Tu zona" recorta aunque no esté en la URL: no se inyecta un impulsado de
+  // otro barrio adentro de una pantalla que dice el nombre de un barrio.
+  const sinFiltros = sinFiltrosPropios && !vistaZona.filtraPorPreferencia;
   if (!cursor) {
     const viewer = await resolveViewerGeo(supabase, {
       tenantId: tenant.id,
       userId: authUserId,
+      // La zona elegida en el header pesa más que la del perfil (0092).
+      zoneFilter: vistaZona.zona.label,
     });
     const placement = await selectOwnBoosts(supabase, { tenantId: tenant.id, viewer });
     boostedIds = placement.listingIds;
@@ -443,7 +459,11 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
       {!cursor && sinFiltros && <ImpulsosDeOtrasComunidades kind="professional" />}
 
       {cards.length === 0 ? (
-        filtering ? (
+        // Vacío por "Tu zona" y sin ningún filtro puesto: el cartel nombra la
+        // zona y ofrece volver a toda la comunidad en un toque.
+        !filtering && vistaZona.filtraPorPreferencia && vistaZona.zona.label ? (
+          <ZonaVacia zona={vistaZona.zona.label} />
+        ) : filtering ? (
           <EmptyState
             illustration="/images/empty-state-search.png"
             title={t("sections", "moduleNoMatchTitle")}

@@ -25,11 +25,13 @@ import {
   sanitizeSearchQuery,
   type FilterOption,
 } from "@/components/search";
+import { ZonaVacia } from "@/components/zona";
 import { EVENT_CATEGORIES, isEventCategory } from "@/lib/eventos/categorias";
 import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
+import { resolverVistaZona } from "@/lib/zona/server";
 
 export const metadata = { title: "Eventos" };
 
@@ -155,6 +157,10 @@ async function EventosContent({ filters }: { filters: Filters }) {
     getViewerTimeZone(),
   ]);
 
+  // "Tu zona": manda el `?ciudad=` de la URL si está puesto (un enlace
+  // compartido muestra lo que promete) y si no, la zona elegida en el header.
+  const vistaZona = await resolverVistaZona(tenant.id, filters.ciudad);
+
   // Orden cronológico por fecha del evento (attrs.starts_at); los sin fecha
   // van al final. El volumen de eventos activos es chico — sin cursor.
   let query = supabase
@@ -169,6 +175,12 @@ async function EventosContent({ filters }: { filters: Filters }) {
     query = query.textSearch("search", filters.q, { type: "websearch", config: "spanish" });
   }
   if (filters.ciudad) query = query.eq("area_label", filters.ciudad);
+  // Sin ciudad en la URL manda "Tu zona", ya resuelta a etiquetas exactas. Va
+  // en SQL y no en memoria para que el tope de 40 filas traiga 40 eventos DE LA
+  // ZONA, y no los 40 primeros de la comunidad recortados después a tres.
+  else if (vistaZona.areaLabels.length > 0) {
+    query = query.in("area_label", vistaZona.areaLabels);
+  }
   if (filters.categoria) query = query.eq("attrs->>category", filters.categoria);
 
   // Boosts activos del tenant en PARALELO con el listado: `boosts` no filtra
@@ -310,7 +322,12 @@ async function EventosContent({ filters }: { filters: Filters }) {
       <Filters cities={cityOptions(allEvents, filters.ciudad)} />
 
       {isEmpty ? (
-        filtering ? (
+        // Vacío por "Tu zona" y sin ningún filtro puesto: el cartel dice el
+        // nombre de la zona y ofrece salir en un toque. Sin esto, la sección
+        // parece muerta cuando en realidad hay eventos en otros barrios.
+        !filtering && vistaZona.filtraPorPreferencia && vistaZona.zona.label ? (
+          <ZonaVacia className="mt-5" zona={vistaZona.zona.label} />
+        ) : filtering ? (
           /* Buscó y no hay: se dice qué probar y se ofrece salir de los filtros
              — no el mismo cartel de "todavía no hay eventos", que sería mentira
              y dejaría a la persona pensando que la sección está vacía. */
@@ -451,10 +468,12 @@ function Filters({ cities }: { cities: FilterOption[] }) {
  * está filtrada ahora mismo aunque su resultado sea cero (si no, elegir una
  * ciudad sin eventos la borraría del desplegable y no habría forma de salir).
  *
- * Ojo: la lista sale de las filas YA filtradas por `?ciudad=`, así que al
- * elegir una ciudad el desplegable se reduce a esa. Es el precio de no pagar
- * una segunda query sólo para poblar un `<select>` en un listado de 40 filas;
- * la opción "Todas las ciudades" siempre está y devuelve la lista completa.
+ * Ojo: la lista sale de las filas YA filtradas por `?ciudad=` —y, desde "Tu
+ * zona", también por la zona elegida en el header—, así que con un recorte
+ * puesto el desplegable se reduce a lo que hay adentro de ese recorte. Es el
+ * precio de no pagar una segunda query sólo para poblar un `<select>` en un
+ * listado de 40 filas. Siempre hay salida: "Todas las ciudades" limpia el
+ * `?ciudad=`, y el selector del header devuelve toda la comunidad.
  */
 function cityOptions(events: readonly EventRow[], active: string): FilterOption[] {
   const cities = new Set<string>();

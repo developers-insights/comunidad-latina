@@ -27,6 +27,7 @@ import {
   type VerificationView,
 } from "@/components/listings";
 import { ImpulsosDeOtrasComunidades } from "@/components/boosts";
+import { ZonaVacia } from "@/components/zona";
 import {
   recordBoostImpressions,
   resolveViewerGeo,
@@ -43,6 +44,7 @@ import {
 } from "@/lib/propiedades/tipos";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { getAreaLabelDelPerfil, resolverVistaZona } from "@/lib/zona/server";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { cn } from "@/lib/utils";
 
@@ -113,25 +115,22 @@ export default async function PropiedadesPage({
 
 async function PropiedadesContent({ filters }: { filters: Filters }) {
   // createClient() NO hace red (solo lee cookies): lo creamos primero y así
-  // solapamos el round-trip a DB de getTenant() con el de Auth (getUser()).
+  // solapamos su construcción con el round-trip a DB de getTenant().
   const supabase = await createClient();
-  const [
-    tenant,
-    {
-      data: { user },
-    },
-  ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
+  const tenant = await getTenant();
 
-  // Área del usuario para el header de sección (si tiene perfil con zona).
-  let userArea: string | null = null;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("area_label")
-      .eq("id", user.id)
-      .maybeSingle();
-    userArea = profile?.area_label ?? null;
-  }
+  // "TU ZONA". La que gobierna esta pantalla sale de la cookie `cl-zona` o, sin
+  // cookie, del perfil — salvo que el `?zona=` de la URL diga otra cosa, y ahí
+  // manda la URL: un enlace compartido tiene que mostrar lo que promete.
+  //
+  // Las dos lecturas están cache()-eadas por request, así que el header y este
+  // listado las resuelven UNA vez entre los dos; la del perfil ni siquiera corre
+  // si la cookie ya dijo algo. Antes acá había un `select area_label` a mano
+  // para el subtítulo: es el mismo dato y ahora sale del mismo lugar.
+  const [vistaZona, userArea] = await Promise.all([
+    resolverVistaZona(tenant.id, filters.zona),
+    getAreaLabelDelPerfil(),
+  ]);
 
   // -------------------------------------------------------------------------
   // Query principal: keyset pagination (created_at,id), filtros por searchParams
@@ -184,6 +183,12 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
   }
   if (filters.zona) {
     query = query.eq("area_label", filters.zona);
+  } else if (vistaZona.areaLabels.length > 0) {
+    // Sin `?zona=` explícito manda "Tu zona". Llega como etiquetas EXACTAS
+    // (`zonasCoincidentes` ya resolvió el match laxo contra el catálogo de la
+    // comunidad) para que el recorte lo haga SQL: filtrar en memoria después
+    // del `limit` devolvería páginas de tamaño impredecible.
+    query = query.in("area_label", vistaZona.areaLabels);
   }
   const cursor = decodeCursor(filters.cursor || undefined);
   if (cursor) {
@@ -225,11 +230,20 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
     filters.tipo === null &&
     filters.operacion === null &&
     !filters.zona;
+  /**
+   * "Tu zona" también es un recorte, aunque no se vea en la URL: con una zona
+   * puesta NO se inyectan destacados que no matchean, igual que con cualquier
+   * otro filtro. Inyectarlos sería mostrar avisos de otro barrio adentro de una
+   * pantalla que dice el nombre de un barrio.
+   */
+  const sinRecorte = sinFiltros && !vistaZona.filtraPorPreferencia;
   if (!cursor) {
     const viewer = await resolveViewerGeo(supabase, {
       tenantId: tenant.id,
       profileArea: userArea,
-      zoneFilter: filters.zona || null,
+      // La zona ELEGIDA, no sólo la del `?zona=`: si alguien está mirando
+      // Corona desde el header, el impulso local de Corona le aplica igual.
+      zoneFilter: vistaZona.zona.label,
     });
     const placement = await selectOwnBoosts(supabase, { tenantId: tenant.id, viewer });
     boostedIds = placement.listingIds;
@@ -242,7 +256,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
     const missingIds = [...boostedIds].filter(
       (id) => !pageRows.some((row) => row.id === id),
     );
-    if (sinFiltros && missingIds.length > 0) {
+    if (sinRecorte && missingIds.length > 0) {
       const { data: extra } = await supabase
         .from("listings")
         .select(
@@ -402,7 +416,11 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
         accent={SECCION.accent}
         image={SECCION.image}
         title={COPY.list.title}
-        subtitle={userArea ? COPY.list.subtitleNearArea(userArea) : COPY.list.subtitleDefault}
+        subtitle={
+          vistaZona.zona.label
+            ? COPY.list.subtitleNearArea(vistaZona.zona.label)
+            : COPY.list.subtitleDefault
+        }
       />
 
       <SectionCta
@@ -425,9 +443,16 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
           (0092). Va sólo en la primera página y sin filtros activos: es
           publicidad, y la publicidad no puede desplazar a lo que alguien
           buscó. Si no hay ninguno, el componente no renderiza nada. */}
-      {!cursor && sinFiltros && <ImpulsosDeOtrasComunidades kind="property" />}
+      {!cursor && sinRecorte && <ImpulsosDeOtrasComunidades kind="property" />}
 
       {cards.length === 0 ? (
+        // El vacío de una ZONA no es el vacío de la sección: sin decir dónde
+        // está mirando, quien llega concluye que la app está vacía. Sólo cuando
+        // no hay ningún otro filtro puesto — con una búsqueda encima, el cartel
+        // correcto es el de la búsqueda.
+        sinFiltros && vistaZona.filtraPorPreferencia && vistaZona.zona.label ? (
+          <ZonaVacia zona={vistaZona.zona.label} />
+        ) : (
         <EmptyState
           illustration="/images/empty-state-search.png"
           title={isSearching ? COPY.list.emptySearchTitle : COPY.list.emptyTitle}
@@ -442,6 +467,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
             </Link>
           }
         />
+        )
       ) : (
         <div className="flex flex-col gap-4">
           {cards.map((card) =>

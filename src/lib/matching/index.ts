@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/types/database.types";
+import { sameZoneLabel } from "@/lib/boosts/scope";
 
 /**
  * =============================================================================
@@ -87,22 +88,20 @@ function parseNeeds(value: Json): NeedId[] {
   );
 }
 
-/** Normaliza etiquetas de zona para comparar ("Corona, Queens" ~ "corona"). */
-function normalizeArea(label: string | null | undefined): string {
-  return (label ?? "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .trim();
-}
-
-function sameZone(userArea: string, itemArea: string | null): boolean {
-  if (!userArea || !itemArea) return false;
-  const item = normalizeArea(itemArea);
-  if (!item) return false;
-  // Match laxo por token: "corona" ∈ "Corona, Queens" y viceversa.
-  return item.includes(userArea) || userArea.includes(item);
-}
+/*
+ * La comparación de zonas ya NO vive acá.
+ *
+ * Este archivo tenía su propio `normalizeArea` + `sameZone`, gemelos exactos de
+ * `normalizeGeoLabel` + `sameZoneLabel` de `@/lib/boosts/scope` — dos copias del
+ * mismo criterio, cada una con sus tests, listas para divergir en el primer
+ * ajuste que alguien hiciera en una sola. Se borraron: la fuente es una y es
+ * aquella, que además es la que usan los impulsos y "Tu zona".
+ *
+ * Ojo con el CONTRATO al leer el uso de abajo: `sameZoneLabel` normaliza sus DOS
+ * argumentos, así que se le pasan las etiquetas CRUDAS. El `sameZone` viejo
+ * esperaba el primer argumento ya normalizado, que es justo el detalle que hacía
+ * imposible intercambiarlas sin mirar.
+ */
 
 function recencyBonus(createdAt: string, now: number): number {
   const age = now - new Date(createdAt).getTime();
@@ -178,8 +177,7 @@ export async function getMatches(
     if (needs.length === 0) return { status: "no-needs" };
 
     const userAreaLabel = profileResult.data?.area_label ?? null;
-    const userArea = normalizeArea(userAreaLabel);
-
+  
     // Candidatos: listings por kind + guías por topic, en paralelo.
     const listingKinds = needs
       .map((need) => NEED_TO_LISTING_KIND[need])
@@ -258,7 +256,7 @@ export async function getMatches(
     for (const row of listingRows) {
       const need = kindToNeed.get(row.kind);
       if (!need) continue;
-      const inZone = sameZone(userArea, row.area_label);
+      const inZone = sameZoneLabel(userAreaLabel, row.area_label);
       const verified = verifiedIds.has(row.id);
       const score =
         (inZone ? 2 : 0) + (verified ? 1 : 0) + recencyBonus(row.created_at, now);

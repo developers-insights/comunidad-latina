@@ -193,6 +193,20 @@ export async function fetchJobsPage(input: {
   /** Término de búsqueda (?q=) ya sanitizado por el caller (sanitizeSearchQuery). */
   q?: string | null;
   cursor?: string | null;
+  /**
+   * "Tu zona", ya resuelta a etiquetas EXACTAS de `area_label` por
+   * `resolverVistaZona` (@/lib/zona/server). Vacío o ausente = sin recorte
+   * geográfico.
+   *
+   * Llega resuelta y no como una etiqueta suelta a propósito: el match de zonas
+   * es laxo y sin acentos (`sameZoneLabel`), algo que PostgREST no sabe hacer.
+   * Traducirlo a un `.in()` ANTES de la query es lo que deja que el recorte lo
+   * haga SQL y que la paginación por cursor siga trayendo páginas del tamaño
+   * que promete.
+   */
+  areaLabels?: readonly string[] | null;
+  /** La zona elegida, cruda, para el alcance geográfico de los impulsos (0092). */
+  zoneFilter?: string | null;
 }): Promise<JobsPage> {
   const supabase = await createClient();
 
@@ -214,6 +228,10 @@ export async function fetchJobsPage(input: {
     // Mismo índice FTS que /propiedades y /negocios (listings.search, 0004) —
     // kind='job' está indexado (confirmado contra 0044_global_search.sql).
     query = query.textSearch("search", input.q, { type: "websearch", config: "spanish" });
+  }
+  const zonaLabels = input.areaLabels ?? [];
+  if (zonaLabels.length > 0) {
+    query = query.in("area_label", [...zonaLabels]);
   }
 
   const cursor = decodeCursor(input.cursor || undefined);
@@ -244,11 +262,15 @@ export async function fetchJobsPage(input: {
   // vive UNA vez en `src/lib/boosts`, no copiada en cada listado.
   let boostedIds = new Set<string>();
   let boostedExtra: JobListingRow[] = [];
-  const sinFiltros = !input.employmentType && !input.q;
+  // "Tu zona" cuenta como filtro para la inyección de impulsados: un aviso
+  // patrocinado de otro barrio no se cuela en una pantalla recortada a un barrio.
+  const sinFiltros = !input.employmentType && !input.q && zonaLabels.length === 0;
   if (!cursor) {
     const viewer = await resolveViewerGeo(supabase, {
       tenantId: input.tenantId,
       userId: await getAuthUserId(),
+      // La zona elegida en el header pesa más que la del perfil (0092).
+      zoneFilter: input.zoneFilter ?? null,
     });
     const placement = await selectOwnBoosts(supabase, { tenantId: input.tenantId, viewer });
     boostedIds = placement.listingIds;

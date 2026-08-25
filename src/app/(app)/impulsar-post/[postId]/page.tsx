@@ -8,6 +8,7 @@ import { getTenantPrices } from "@/lib/pricing/read";
 import { POST_PROMO_IDS, POST_PROMO_PACKAGES, type PostPromoId } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { listarZonasDelTenant } from "@/lib/zona/server";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { OpcionesCampana } from "./opciones-campana";
 
@@ -75,7 +76,13 @@ export default async function ImpulsarPostPage({
   }
 
   // Campaña activa vigente (si la hay) + zonas para segmentar la audiencia.
-  const [{ data: campanaActiva }, { data: zoneRows }] = await Promise.all([
+  //
+  // El catálogo de zonas sale de `listarZonasDelTenant` (@/lib/zona/server) y ya
+  // no de un `select area_label` escrito acá: es exactamente la misma consulta
+  // que necesitaba el selector de "Tu zona", y tenerla dos veces garantizaba que
+  // el día que una cambie de tope o de criterio la otra se quede vieja. Además
+  // viene cache()-eada por request.
+  const [{ data: campanaActiva }, zones] = await Promise.all([
     supabase
       .from("post_promotions")
       .select("ends_at")
@@ -85,22 +92,8 @@ export default async function ImpulsarPostPage({
       .order("ends_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
-      .from("listings")
-      .select("area_label")
-      .eq("tenant_id", tenant.id)
-      .eq("status", "published")
-      .not("area_label", "is", null)
-      .limit(200),
+    listarZonasDelTenant(tenant.id),
   ]);
-
-  const zones = [
-    ...new Set(
-      (zoneRows ?? [])
-        .map((row) => row.area_label)
-        .filter((label): label is string => Boolean(label)),
-    ),
-  ].sort((a, b) => a.localeCompare(b, "es"));
 
   const excerpt =
     post.body.length > EXCERPT_MAX ? `${post.body.slice(0, EXCERPT_MAX)}…` : post.body;

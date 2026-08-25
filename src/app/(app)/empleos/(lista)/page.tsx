@@ -21,6 +21,8 @@ import { JobCard } from "@/components/empleos/job-card";
 import { JobListSkeleton } from "@/components/empleos/job-skeletons";
 import { t } from "@/lib/i18n";
 import { getTenant } from "@/lib/tenant/resolve";
+import { ZonaVacia } from "@/components/zona";
+import { resolverVistaZona } from "@/lib/zona/server";
 import { cn } from "@/lib/utils";
 import { ImpulsosDeOtrasComunidades } from "@/components/boosts";
 import { fetchJobsPage } from "../queries";
@@ -81,11 +83,17 @@ export default async function EmpleosPage({ searchParams }: { searchParams: Sear
 async function EmpleosContent({ filters }: { filters: Filters }) {
   const tenant = await getTenant();
 
+  // "Tu zona": Empleos no tiene filtro de zona propio en la URL, así que manda
+  // la preferencia (cookie › perfil).
+  const vistaZona = await resolverVistaZona(tenant.id, null);
+
   const { items, nextCursor } = await fetchJobsPage({
     tenantId: tenant.id,
     employmentType: filters.tipo || null,
     q: filters.q || null,
     cursor: filters.cursor || null,
+    areaLabels: vistaZona.areaLabels,
+    zoneFilter: vistaZona.zona.label,
   });
 
   const nextParams = new URLSearchParams();
@@ -98,6 +106,8 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
 
   /** Hay filtro activo si se buscó texto O se eligió una jornada. */
   const hayFiltro = Boolean(filters.q || filters.tipo);
+  /** "Tu zona" también recorta, aunque no se vea en la URL. */
+  const sinRecorte = !hayFiltro && !vistaZona.filtraPorPreferencia;
 
   return (
     <>
@@ -155,23 +165,31 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
       {/* Impulsos con alcance nacional/global comprados en OTRAS comunidades
           (0092). Sólo en la primera página y sin filtros: la publicidad no
           desplaza lo que alguien buscó. Sin resultados no renderiza nada. */}
-      {!filters.cursor && !hayFiltro && <ImpulsosDeOtrasComunidades className="mb-4" kind="job" />}
+      {!filters.cursor && sinRecorte && <ImpulsosDeOtrasComunidades className="mb-4" kind="job" />}
 
       {items.length === 0 ? (
-        <EmptyState
-          illustration="/images/empty-state-search.png"
-          title={hayFiltro ? C.emptyFilteredTitle : C.emptyTitle}
-          message={hayFiltro ? C.emptyFilteredMessage : C.emptyMessage}
-          action={
-            <Link
-              href="/empleos/publicar"
-              className={buttonVariants({ variant: "primary", size: "md" })}
-            >
-              <Plus size={18} aria-hidden="true" />
-              {C.emptyPublishCta}
-            </Link>
-          }
-        />
+        // Vacío por "Tu zona" y sin ningún filtro puesto: el cartel nombra la
+        // zona y ofrece volver a toda la comunidad en un toque. Sin esto,
+        // Empleos parece muerto cuando lo único que pasa es que no hay avisos
+        // en ese barrio.
+        !hayFiltro && vistaZona.filtraPorPreferencia && vistaZona.zona.label ? (
+          <ZonaVacia zona={vistaZona.zona.label} />
+        ) : (
+          <EmptyState
+            illustration="/images/empty-state-search.png"
+            title={hayFiltro ? C.emptyFilteredTitle : C.emptyTitle}
+            message={hayFiltro ? C.emptyFilteredMessage : C.emptyMessage}
+            action={
+              <Link
+                href="/empleos/publicar"
+                className={buttonVariants({ variant: "primary", size: "md" })}
+              >
+                <Plus size={18} aria-hidden="true" />
+                {C.emptyPublishCta}
+              </Link>
+            }
+          />
+        )
       ) : (
         <div className="flex flex-col gap-4">
           {/* El shell de la app está capado en max-w-lg, así que una tercera
