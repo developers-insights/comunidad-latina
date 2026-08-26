@@ -27,6 +27,7 @@ import {
   type PostPollView,
 } from "@/components/feed";
 import { mediaFilterCssByPath } from "@/lib/media/photo-filters";
+import { zonasDeCampana, type ZonasDeCampana } from "@/lib/zona/campanas";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { timeAgo } from "@/lib/utils";
 import type { TaggedProfile } from "@/lib/social/post-tags";
@@ -601,16 +602,26 @@ export interface ActivePromotions {
   postIds: Set<string>;
   /** postId → teléfono del botón de WhatsApp que ofrece ESA campaña. */
   whatsappByPostId: Map<string, string>;
+  /**
+   * postId → zonas que compró esa campaña (`null` = toda la comunidad).
+   *
+   * Es el `audience` de la 0023, que hasta la 0115 nadie leía. Lo usa el feed
+   * con "Tu zona" activa para no achicarle el alcance a una campaña que pagó
+   * llegar a todos, ni ampliárselo a una que eligió barrios.
+   */
+  zonasByPostId: Map<string, ZonasDeCampana>;
 }
 
 /**
  * Promociones ACTIVAS vigentes del tenant. Una campaña paga lleva el post al
- * feed de TODOS (según audience) — acá resolvemos el set para (a) inyectarlo en
- * la visibilidad, (b) marcar el chip "Publicidad" y (c) saber si la campaña
- * ofrece un WhatsApp de contacto (cta_whatsapp, 0038).
+ * feed de todos los que alcanza — acá resolvemos el set para (a) inyectarlo en
+ * la visibilidad, (b) marcar el chip "Publicidad", (c) saber si la campaña
+ * ofrece un WhatsApp de contacto (cta_whatsapp, 0038) y (d) hasta qué zonas
+ * compró llegar.
  *
- * `audience` (scope all | zones) se guarda para segmentación geográfica futura;
- * hoy toda campaña activa alcanza a la comunidad entera (single-community).
+ * `audience` (scope all | zones) dejó de ser "para el futuro" con la 0115: es
+ * lo que decide si una campaña sobrevive al filtro de "Tu zona". Ver
+ * `@/lib/zona/campanas`.
  *
  * cta_whatsapp llega con la 0038 y todavía no está en database.types.ts →
  * cliente de schema abierto. Si la columna aún no existe (entorno sin migrar),
@@ -641,10 +652,10 @@ export async function fetchActivePromotions(
       .order("ends_at", { ascending: false })
       .limit(ACTIVE_PROMOTIONS_CAP);
 
-  let { data, error } = await activeQuery("post_id, cta_whatsapp");
+  let { data, error } = await activeQuery("post_id, cta_whatsapp, audience");
   if (error) {
     console.warn("[feed] campañas activas sin cta_whatsapp", { code: error.code });
-    ({ data, error } = await activeQuery("post_id"));
+    ({ data, error } = await activeQuery("post_id, audience"));
   }
 
   // El cliente abierto no puede derivar la forma de la fila (el select es una
@@ -652,15 +663,18 @@ export async function fetchActivePromotions(
   const rows = (data ?? []) as unknown as Array<{
     post_id: string;
     cta_whatsapp?: string | null;
+    audience?: unknown;
   }>;
   const postIds = new Set<string>();
   const whatsappByPostId = new Map<string, string>();
+  const zonasByPostId = new Map<string, ZonasDeCampana>();
   for (const row of rows) {
     postIds.add(row.post_id);
     const phone = row.cta_whatsapp?.trim();
     if (phone) whatsappByPostId.set(row.post_id, phone);
+    zonasByPostId.set(row.post_id, zonasDeCampana(row.audience));
   }
-  return { postIds, whatsappByPostId };
+  return { postIds, whatsappByPostId, zonasByPostId };
 }
 
 /**
@@ -686,7 +700,7 @@ export async function fetchPromotionsForPosts(
 ): Promise<ActivePromotions> {
   const ids = [...new Set(postIds.filter(Boolean))];
   if (ids.length === 0) {
-    return { postIds: new Set(), whatsappByPostId: new Map() };
+    return { postIds: new Set(), whatsappByPostId: new Map(), zonasByPostId: new Map() };
   }
 
   const open = supabase as unknown as SupabaseClient;
@@ -701,30 +715,33 @@ export async function fetchPromotionsForPosts(
 
   // Mismo reintento que `fetchActivePromotions`: un entorno sin `cta_whatsapp`
   // (0038) pierde el botón, nunca el chip.
-  let { data, error } = await scopedQuery("post_id, cta_whatsapp");
+  let { data, error } = await scopedQuery("post_id, cta_whatsapp, audience");
   if (error) {
     console.warn("[feed] campañas de la página sin cta_whatsapp", { code: error.code });
-    ({ data, error } = await scopedQuery("post_id"));
+    ({ data, error } = await scopedQuery("post_id, audience"));
   }
   if (error) {
     console.warn("[feed] no se pudieron leer las campañas de la página", {
       code: error.code,
     });
-    return { postIds: new Set(), whatsappByPostId: new Map() };
+    return { postIds: new Set(), whatsappByPostId: new Map(), zonasByPostId: new Map() };
   }
 
   const rows = (data ?? []) as unknown as Array<{
     post_id: string;
     cta_whatsapp?: string | null;
+    audience?: unknown;
   }>;
   const promotedIds = new Set<string>();
   const whatsappByPostId = new Map<string, string>();
+  const zonasByPostId = new Map<string, ZonasDeCampana>();
   for (const row of rows) {
     promotedIds.add(row.post_id);
     const phone = row.cta_whatsapp?.trim();
     if (phone) whatsappByPostId.set(row.post_id, phone);
+    zonasByPostId.set(row.post_id, zonasDeCampana(row.audience));
   }
-  return { postIds: promotedIds, whatsappByPostId };
+  return { postIds: promotedIds, whatsappByPostId, zonasByPostId };
 }
 
 /**

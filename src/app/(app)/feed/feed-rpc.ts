@@ -61,6 +61,21 @@ export interface FeedRpcArgs {
   cursor: { createdAt: string; id: string } | null;
   /** Cuántas filas pedir (el llamador ya suma el +1 de "hay más"). */
   limit: number;
+  /**
+   * Las etiquetas EXACTAS de "Tu zona" (0115), ya resueltas por
+   * `zonasCoincidentes` con el match laxo. Lista vacía o ausente = sin zona
+   * elegida ⇒ el RPC recibe `null` y no filtra.
+   *
+   * Vacío NUNCA significa "no hay nada": con una zona elegida siempre hay al
+   * menos una etiqueta (la propia zona). Mandar `[]` como si fuera un filtro
+   * dejaría el feed en blanco, que es el peor modo de falla de esta feature.
+   */
+  areaLabels?: readonly string[] | null;
+}
+
+/** `[]`/`null` ⇒ `null` (no filtrar). Ver `areaLabels` arriba. */
+function zonaParam(areaLabels: readonly string[] | null | undefined): string[] | null {
+  return areaLabels && areaLabels.length > 0 ? [...areaLabels] : null;
 }
 
 /**
@@ -86,7 +101,8 @@ function rpcFailed(scope: string, error: { code?: string; message?: string }): n
 
 /**
  * Una página de POSTS del feed "Para ti", ya filtrada por alcance (personal +
- * propio + seguido + promocionado), por bloqueos, por `hidden_at` y por keyset.
+ * propio + seguido + promocionado), por ZONA (0115), por bloqueos, por
+ * `hidden_at` y por keyset.
  *
  * `null` = el RPC no está disponible; el llamador tiene que caer al camino de
  * los `.in(…)`.
@@ -108,6 +124,7 @@ export async function fetchFeedPostsPageViaRpc(
     p_cursor_id: args.cursor?.id ?? null,
     p_limit: args.limit,
     p_entity_kind: args.entityKind ?? null,
+    p_area_labels: zonaParam(args.areaLabels),
   });
 
   if (error) return rpcFailed("posts", error);
@@ -118,7 +135,7 @@ export async function fetchFeedPostsPageViaRpc(
 /**
  * Una página de LISTINGS del feed "Para ti", ya filtrada por la regla de
  * distribución premium (`recommendedFeedListingFilter`: premium + seguidos +
- * propios), por bloqueos y por keyset.
+ * propios), por ZONA (0115), por bloqueos y por keyset.
  *
  * Va aparte del de posts —y no un solo RPC que devuelva la mezcla— porque las
  * dos listas se mezclan por `(created_at, id)` EN LA APP y esa mezcla es la que
@@ -136,6 +153,7 @@ export async function fetchFeedListingsPageViaRpc(
     p_cursor_created_at: args.cursor?.createdAt ?? null,
     p_cursor_id: args.cursor?.id ?? null,
     p_limit: args.limit,
+    p_area_labels: zonaParam(args.areaLabels),
   });
 
   if (error) return rpcFailed("listings", error);

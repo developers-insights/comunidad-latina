@@ -8,11 +8,14 @@ import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { decodeCursor, encodeCursor } from "@/components/listings";
 import {
   feedPostVisibilityFilter,
+  feedZoneFilter,
   parseTab,
   type FeedItem,
   type FeedTabId,
   type GuideCardModel,
 } from "@/components/feed";
+import { campanaAlcanzaZona } from "@/lib/zona";
+import { resolverVistaZona } from "@/lib/zona/server";
 import {
   LISTING_COLUMNS,
   POST_COLUMNS,
@@ -102,6 +105,20 @@ export async function fetchFeedPageAction(input: {
   // latencia en CADA scroll — mismo criterio que notificaciones/entrar.
   const viewerId = await getAuthUserId();
 
+  /**
+   * "Tu zona" (0115). Se resuelve ACÁ, en la puerta única del feed, y no en
+   * cada camino: el scroll infinito entra por esta misma action, así que si la
+   * zona se resolviera más adentro habría que acordarse de hacerlo en los dos
+   * lugares — y el día que uno se olvide, la página 2 traería la comunidad
+   * entera arriba de una página 1 filtrada.
+   *
+   * `urlZona` va en `null` a propósito: el feed no tiene filtro propio de zona
+   * en la URL, así que acá manda siempre la preferencia (cookie > perfil).
+   * `resolverVistaZona` está `cache()`-eada por request: la pantalla ya la pidió
+   * para el encabezado y esta llamada no vuelve a tocar la base.
+   */
+  const { areaLabels } = await resolverVistaZona(tenant.id, null);
+
   if (tab === "para-ti") {
     return loadParaTiPage({
       supabase,
@@ -109,6 +126,7 @@ export async function fetchFeedPageAction(input: {
       locale: tenant.locale,
       viewerId,
       cursor,
+      areaLabels,
     });
   }
   return loadListingsPage({
@@ -118,6 +136,7 @@ export async function fetchFeedPageAction(input: {
     locale: tenant.locale,
     viewerId,
     cursor,
+    areaLabels,
   });
 }
 
@@ -133,12 +152,15 @@ async function loadParaTiPage({
   locale,
   viewerId,
   cursor,
+  areaLabels,
 }: {
   supabase: Supabase;
   tenantId: string;
   locale: string;
   viewerId: string | null;
   cursor: Cursor;
+  /** Etiquetas exactas de "Tu zona". Vacío = sin zona elegida, no filtra. */
+  areaLabels: readonly string[];
 }): Promise<FeedPageResult> {
   const isFirstPage = !cursor;
 
@@ -161,7 +183,7 @@ async function loadParaTiPage({
    * todo el tenant a la vez) deja de existir. Es el camino bueno; el de abajo
    * queda sólo mientras la migración no esté aplicada en todos los entornos.
    */
-  const rpcArgs = { tenantId, cursor, limit: PAGE_SIZE + 1 };
+  const rpcArgs = { tenantId, cursor, limit: PAGE_SIZE + 1, areaLabels };
   const [rpcPosts, rpcListings] = await Promise.all([
     fetchFeedPostsPageViaRpc(supabase, rpcArgs),
     fetchFeedListingsPageViaRpc(supabase, rpcArgs),
@@ -223,6 +245,22 @@ async function loadParaTiPage({
     );
   }
 
+  /**
+   * ZONA (0115) — el espejo en PostgREST de la rama ZONA de `feed_posts_page`.
+   *
+   * Lo orgánico se recorta a la zona; lo promocionado la esquiva SÓLO hasta
+   * donde llega el `audience` que compró (`campanaAlcanzaZona`). Que las dos
+   * listas se calculen acá y no adentro del filtro es lo que deja ver, leyendo
+   * cuatro líneas, que el camino legado decide igual que el RPC.
+   */
+  const promocionadosQueAlcanzan = [...promotedPostIds].filter((postId) =>
+    campanaAlcanzaZona(promotions.zonasByPostId.get(postId) ?? null, areaLabels),
+  );
+  const filtroZonaPosts = feedZoneFilter(areaLabels, promocionadosQueAlcanzan);
+  if (filtroZonaPosts) {
+    postsQuery = postsQuery.or(filtroZonaPosts);
+  }
+
   let listingsQuery = supabase
     .from("listings")
     .select(LISTING_COLUMNS)
@@ -245,6 +283,14 @@ async function loadParaTiPage({
     listingsQuery = listingsQuery.or(
       `created_by.is.null,created_by.not.in.(${[...blockedIds].join(",")})`,
     );
+  }
+
+  // Los avisos no tienen la excepción de la campaña: el impulso compra ORDEN
+  // adentro de una comunidad, no domicilio en otro barrio (mismo criterio que
+  // los seis módulos). `.in()` de supabase-js entrecomilla solo los valores con
+  // coma, que es exactamente la forma de la mitad de estas etiquetas.
+  if (areaLabels.length > 0) {
+    listingsQuery = listingsQuery.in("area_label", [...areaLabels]);
   }
 
   if (cursor) {
@@ -478,6 +524,7 @@ async function loadListingsPage({
   locale,
   viewerId,
   cursor,
+  areaLabels,
 }: {
   supabase: Supabase;
   tab: FeedTabId;
@@ -485,6 +532,8 @@ async function loadListingsPage({
   locale: string;
   viewerId: string | null;
   cursor: Cursor;
+  /** Etiquetas exactas de "Tu zona". Vacío = sin zona elegida, no filtra. */
+  areaLabels: readonly string[];
 }): Promise<FeedPageResult> {
   const kind = TAB_KIND[tab] ?? "property";
   const blockedIds = await fetchBlockedIds(supabase, viewerId);
@@ -503,6 +552,15 @@ async function loadListingsPage({
     query = query.or(
       `created_by.is.null,created_by.not.in.(${[...blockedIds].join(",")})`,
     );
+  }
+
+  // ZONA (0115): el MISMO `.in("area_label", …)` con el que Vivienda, Empleos,
+  // Negocios, Profesionales, Marketplace y Eventos ya respetan "Tu zona". Estos
+  // cuatro tabs son esos mismos avisos vistos desde el feed: filtrar acá distinto
+  // que allá sería que la misma publicación esté y no esté según por dónde se
+  // entra.
+  if (areaLabels.length > 0) {
+    query = query.in("area_label", [...areaLabels]);
   }
 
   if (cursor) {

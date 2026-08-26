@@ -39,6 +39,7 @@ describe("fetchFeedPostsPageViaRpc", () => {
       p_cursor_id: "p9",
       p_limit: 9,
       p_entity_kind: null,
+      p_area_labels: null,
     });
   });
 
@@ -95,6 +96,7 @@ describe("fetchFeedListingsPageViaRpc", () => {
       p_cursor_created_at: null,
       p_cursor_id: null,
       p_limit: 9,
+      p_area_labels: null,
     });
   });
 
@@ -104,5 +106,50 @@ describe("fetchFeedListingsPageViaRpc", () => {
     expect(
       await fetchFeedListingsPageViaRpc(supabase, { tenantId: "t1", cursor: null, limit: 9 }),
     ).toBeNull();
+  });
+});
+
+/**
+ * "Tu zona" (0115) viaja como array de etiquetas EXACTAS, y el caso que
+ * importa es el borde: `[]` NO es un filtro que no matchea nada, es "no hay
+ * zona elegida". Mandarlo como `[]` dejaría el feed en blanco para todo el
+ * mundo — el peor modo de falla de esta feature.
+ */
+describe("Tu zona → p_area_labels", () => {
+  it("con zona elegida: las etiquetas viajan tal cual", async () => {
+    const { supabase, rpc } = clientWith({ data: [] });
+    await fetchFeedPostsPageViaRpc(supabase, {
+      tenantId: "t1",
+      cursor: null,
+      limit: 9,
+      areaLabels: ["Bronx", "The Bronx, NY"],
+    });
+    expect(rpc.mock.calls[0][1]).toMatchObject({
+      p_area_labels: ["Bronx", "The Bronx, NY"],
+    });
+  });
+
+  it("lista vacía ⇒ null (no filtrar), nunca un filtro imposible", async () => {
+    const { supabase, rpc } = clientWith({ data: [] });
+    await fetchFeedPostsPageViaRpc(supabase, {
+      tenantId: "t1",
+      cursor: null,
+      limit: 9,
+      areaLabels: [],
+    });
+    expect(rpc.mock.calls[0][1]).toMatchObject({ p_area_labels: null });
+  });
+
+  it("el carril de avisos manda la misma zona", async () => {
+    const { supabase, rpc } = clientWith({ data: [] });
+    await fetchFeedListingsPageViaRpc(supabase, {
+      tenantId: "t1",
+      cursor: null,
+      limit: 9,
+      areaLabels: ["Corona, Queens"],
+    });
+    expect(rpc.mock.calls[0][1]).toMatchObject({
+      p_area_labels: ["Corona, Queens"],
+    });
   });
 });

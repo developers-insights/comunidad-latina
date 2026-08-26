@@ -162,6 +162,18 @@ export async function getMatches(
   supabase: Supabase,
   userId: string,
   tenant: MatchingTenant,
+  /**
+   * "Tu zona" (0115), cuando quien mira eligió una.
+   *
+   * `areaLabels` recorta los candidatos y `label` reemplaza a la zona del
+   * perfil en el puntaje y en la razón visible. Los dos van juntos a propósito:
+   * recomendar Corona adentro de un feed que dice "estás viendo Bronx" es la
+   * misma contradicción que esta feature vino a arreglar, y una razón que diga
+   * "en Corona" arriba de una card del Bronx es peor todavía.
+   *
+   * Sin zona elegida queda todo como estaba: manda `profiles.area_label`.
+   */
+  zona?: { label: string | null; areaLabels: readonly string[] } | null,
 ): Promise<MatchesResult> {
   try {
     const [privateResult, profileResult] = await Promise.all([
@@ -176,7 +188,10 @@ export async function getMatches(
     const needs = parseNeeds(privateResult.data?.needs ?? null);
     if (needs.length === 0) return { status: "no-needs" };
 
-    const userAreaLabel = profileResult.data?.area_label ?? null;
+    // La zona ELEGIDA pesa más que la del perfil — mismo criterio con el que
+    // `resolveViewerGeo` decide el alcance de los impulsos en los listados.
+    const userAreaLabel = zona?.label ?? profileResult.data?.area_label ?? null;
+    const areaLabels = zona?.areaLabels ?? [];
   
     // Candidatos: listings por kind + guías por topic, en paralelo.
     const listingKinds = needs
@@ -186,16 +201,26 @@ export async function getMatches(
 
     const [listingsResult, guidesResult] = await Promise.all([
       listingKinds.length > 0
-        ? supabase
-            .from("listings")
-            .select(
-              "id, kind, title, area_label, price_amount, price_currency, price_period, photos, created_at",
-            )
-            .eq("tenant_id", tenant.id)
-            .eq("status", "published")
-            .in("kind", listingKinds)
-            .order("created_at", { ascending: false })
-            .limit(CANDIDATES_PER_QUERY)
+        ? (() => {
+            let query = supabase
+              .from("listings")
+              .select(
+                "id, kind, title, area_label, price_amount, price_currency, price_period, photos, created_at",
+              )
+              .eq("tenant_id", tenant.id)
+              .eq("status", "published")
+              .in("kind", listingKinds);
+            // Con zona elegida, "Para vos" recomienda DENTRO de esa zona. Es un
+            // recorte y no un empujón de puntaje: la sección vive adentro del
+            // feed, que ya salió filtrado, y una recomendación de otro barrio
+            // ahí adentro se lee como que el filtro no funciona.
+            if (areaLabels.length > 0) {
+              query = query.in("area_label", [...areaLabels]);
+            }
+            return query
+              .order("created_at", { ascending: false })
+              .limit(CANDIDATES_PER_QUERY);
+          })()
         : Promise.resolve({ data: [], error: null }),
       guideTopics.length > 0
         ? supabase
