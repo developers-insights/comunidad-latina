@@ -255,27 +255,7 @@ export default async function AjustesPage() {
                 }
               />
             )}
-            {/* Las dos puertas que faltaban. La de creador NO rehace nada: el
-                flujo entero ya existía en /creadores/solicitud y no había forma
-                de llegar desde acá. La de negocio abre el segundo perfil. */}
-            {creadoresActivo && (
-              <Row
-                href="/creadores/solicitud"
-                icon={Sparkle}
-                {...COPY.rows.becomeCreator}
-              />
-            )}
-            {negociosActivo && (
-              <Row
-                href="/negocios/cuenta"
-                icon={Storefront}
-                {...(negocios.length > 0
-                  ? COPY.rows.businessAccount
-                  : COPY.rows.createBusiness)}
-              />
-            )}
           </Group>
-
         </>
       )}
 
@@ -310,6 +290,34 @@ export default async function AjustesPage() {
         {shell.user && <TimeZoneRow initial={timeZone} />}
         <ThemeRow />
       </Group>
+
+      {/* GANÁ CON LA COMUNIDAD. Las dos puertas que abren un ingreso —creador y
+          negocio— tienen grupo propio y viven acá abajo, pegadas a los legales,
+          porque el cliente las pidió parado en esta parte de la pantalla (25/8)
+          y porque en "Tu cuenta" quedaban perdidas entre la verificación y el
+          teléfono: son lo único de Ajustes que no configura nada, sino que te
+          da de trabajar.
+
+          Ninguna de las dos rehace flujo: /creadores/solicitud y /negocios/cuenta
+          existen enteras desde antes. Acá sólo está la puerta.
+
+          El grupo entero desaparece si la comunidad tiene los dos módulos
+          apagados: un título sin filas es peor que no estar (mismo criterio que
+          cada Row de esta pantalla — no se ofrece un camino a un 404). */}
+      {shell.user && (creadoresActivo || negociosActivo) && (
+        <Group title={COPY.groups.work}>
+          {creadoresActivo && (
+            <Row href="/creadores/solicitud" icon={Sparkle} {...COPY.rows.becomeCreator} />
+          )}
+          {negociosActivo && (
+            <Row
+              href="/negocios/cuenta"
+              icon={Storefront}
+              {...(negocios.length > 0 ? COPY.rows.businessAccount : COPY.rows.createBusiness)}
+            />
+          )}
+        </Group>
+      )}
 
       <Group title={COPY.groups.help}>
         <Row href="/legal/normas" icon={Scales} {...COPY.rows.rules} />

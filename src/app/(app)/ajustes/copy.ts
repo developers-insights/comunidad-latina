@@ -27,6 +27,15 @@ export const COPY = {
     account: "Tu cuenta",
     privacy: "Privacidad y seguridad",
     preferences: "Preferencias",
+    /**
+     * Grupo propio para las dos puertas que dan de ganar dinero (pedido del
+     * cliente, 25/8: «quieren agregar convertirte en creador» señalando el
+     * final de Ajustes). Antes vivían sueltas dentro de "Tu cuenta", entre la
+     * verificación y el teléfono, y ahí no las encontraba nadie: son lo único
+     * de esta pantalla que abre una fuente de ingresos, no un ajuste de la
+     * cuenta. Van juntas y con nombre propio, justo antes de los legales.
+     */
+    work: "Ganá con la comunidad",
     help: "Ayuda y comunidad",
     admin: "Administración",
     session: "Sesión",
@@ -86,7 +95,11 @@ export const COPY = {
      * huérfana. Acá sólo se agrega la puerta.
      */
     becomeCreator: {
-      title: "Recibí trabajos como creador",
+      // El cliente pidió esta fila por su nombre —«convertirte en creador»— y
+      // ese es el título: la persona que la busca busca esas palabras, no una
+      // descripción del beneficio. El beneficio va abajo, que es donde se lee
+      // después de reconocer la fila.
+      title: "Convertite en creador",
       description: "Postulate a los trabajos que publican los negocios y cobrá por ellos.",
     },
     createBusiness: {
