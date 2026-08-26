@@ -650,17 +650,21 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-on-surface-inverse"],
     cobertura: "cl-print-hide",
   },
-  // Campana del header (nueva): el número del badge de sin-leer se apoya en
+  // Campana del header: el número del badge de sin-leer se apoya en
   // `bg-danger`, así que su tinta clara necesita relleno impreso o queda en
-  // 1.00:1. NO es "control": el badge vive dentro de un <Link> (un <a>), no de
-  // un <button> — la campana entera abre `/notificaciones` con un toque, no
-  // hay un botón separado que envuelva sólo el número. Tampoco es "nav": el
-  // header del shell no es un `<nav>`. Lo que sí es, literalmente, es
-  // `<header>` — y es el header STICKY del shell autenticado
-  // (`components/shell/header.tsx`), que vive ANTES de `<main>` en
+  // 1.00:1. NO es "control": el badge no es un botón, es un adorno dentro del
+  // botón que abre la gaveta (`aria-hidden`; el conteo se anuncia en el
+  // `aria-label`). Tampoco es "nav": el header del shell no es un `<nav>`. Lo
+  // que sí es, literalmente, es `<header>` — y es el header STICKY del shell
+  // autenticado (`components/shell/header.tsx`), que vive ANTES de `<main>` en
   // `(app)/layout.tsx`, así que cae bajo `header:not(main header)` del bloque
   // print: el header entero desaparece en papel, campana incluida.
-  "src/components/notifications/notification-bell.tsx": {
+  //
+  // El PANEL que cuelga de esa campana se portala a `document.body`, así que en
+  // papel no lo cubriría ese selector — pero tampoco hace falta: sólo existe
+  // mientras está abierto, y nadie imprime con la gaveta abierta. Adentro del
+  // panel no se escribe ninguna tinta `on-*`.
+  "src/components/notifications/notification-panel.tsx": {
     inks: ["text-on-danger"],
     cobertura: "header",
     prueba: {
