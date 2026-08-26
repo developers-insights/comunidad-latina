@@ -117,11 +117,11 @@ export async function getIntegritySettings(
   client: SupabaseClient<Database>,
 ): Promise<IntegritySettings> {
   try {
-    // `get_content_integrity_settings` llega con la 0086 y `database.types.ts` se
-    // regenera aparte: el cast es por el TIPO generado, no por el contrato. Mismo
-    // patrón que usa `./scan.ts` con `scan_content_asset` desde la 0070.
-    const open = client as unknown as SupabaseClient;
-    const { data, error } = await open.rpc("get_content_integrity_settings");
+    // Sin cast: `get_content_integrity_settings` (0086) quedó tipada en la
+    // regeneración de `database.types.ts` del 2026-08-24. Antes acá había un
+    // `client as unknown as SupabaseClient` porque los tipos estaban clavados
+    // en la 0076.
+    const { data, error } = await client.rpc("get_content_integrity_settings");
     if (error) {
       console.warn("[integrity] no se pudieron leer los umbrales; van los defaults", {
         code: error.code,

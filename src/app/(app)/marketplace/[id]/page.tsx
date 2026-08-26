@@ -1,7 +1,17 @@
 import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Package, RocketLaunch, Tag, User } from "@phosphor-icons/react/dist/ssr";
+import {
+  CheckCircle,
+  Handshake,
+  MapPinLine,
+  Package,
+  RocketLaunch,
+  Tag,
+  Truck,
+  User,
+} from "@phosphor-icons/react/dist/ssr";
+import type { Icon } from "@phosphor-icons/react";
 import { Avatar, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui";
 import {
   DetailTopBar,
@@ -26,6 +36,7 @@ import {
   categoryLabel,
   conditionLabel,
   formatProductPrice,
+  fulfillmentLabel,
   parseProductAttrs,
   type SellerView,
   type StoreCardModel,
@@ -39,6 +50,13 @@ import { cn } from "@/lib/utils";
 type Params = Promise<{ id: string }>;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Un ícono propio por método — "envío" no se lee igual que "recogida en persona". */
+const FULFILLMENT_ICON: Record<string, Icon> = {
+  envio: Truck,
+  entrega: Handshake,
+  recogida: MapPinLine,
+};
 
 /**
  * Lectura del producto, cache()-eada por request (patrón propiedades/[id]):
@@ -150,6 +168,11 @@ export default async function ProductoDetallePage({ params }: { params: Params }
     // considera apagada: sin poder verificar que está activa, no se muestra.
     storeOff = !store || store.store_active !== true;
 
+    // Identidad de quien ADMINISTRA la tienda (fix badge 2026-08-24): mismo
+    // dato que ya se pedía para `buildTrustSignals`, reusado acá para el badge
+    // de identidad de SellerChip — sin consulta extra.
+    let storeOwnerIdentityVerified = false;
+
     if (store) {
       let trust: StoreCardModel["trust"] = null;
       if (store.created_by) {
@@ -166,6 +189,7 @@ export default async function ProductoDetallePage({ params }: { params: Params }
             .maybeSingle(),
         ]);
         const displayName = profile?.display_name ?? COPY.detail.communityMember;
+        storeOwnerIdentityVerified = profile?.identity_verified ?? false;
         trust = {
           displayName,
           firstName: firstNameOf(displayName),
@@ -190,6 +214,7 @@ export default async function ProductoDetallePage({ params }: { params: Params }
         initialFollowing: Boolean(myFollow),
         trust,
         verified,
+        identityVerified: storeOwnerIdentityVerified,
       };
     }
 
@@ -198,6 +223,7 @@ export default async function ProductoDetallePage({ params }: { params: Params }
       name: store?.title ?? null,
       storeId,
       verified,
+      identityVerified: storeOwnerIdentityVerified,
     };
   } else if (product.created_by) {
     const [{ data: profile }, { data: trustScore }] = await Promise.all([
@@ -225,7 +251,13 @@ export default async function ProductoDetallePage({ params }: { params: Params }
         profileId: product.created_by,
       },
     };
-    seller = { kind: "private", name: displayName };
+    // Particular: la identidad es SUYA, no la de una tienda — es el caso que
+    // antes no tenía ninguna insignia (bug reportado por el cliente).
+    seller = {
+      kind: "private",
+      name: displayName,
+      identityVerified: profile?.identity_verified ?? false,
+    };
   }
 
   // Tienda apagada: el producto deja de existir para la comunidad. Se corta
@@ -278,10 +310,32 @@ export default async function ProductoDetallePage({ params }: { params: Params }
           el precio (§ split tiendas/particulares). */}
       <SellerChip seller={seller} className="mt-3" />
 
-      {(attrs.category || attrs.condition) && (
+      {(attrs.category ||
+        attrs.condition ||
+        attrs.fulfillment.length > 0 ||
+        product.status === "published") && (
         <div className="mt-3 flex flex-wrap gap-2">
           {attrs.category && <Chip icon={<Tag />}>{categoryLabel(attrs.category)}</Chip>}
           {attrs.condition && <Chip icon={<Package />}>{conditionLabel(attrs.condition)}</Chip>}
+          {/* Disponibilidad: derivada de `status`, no un campo propio — todo lo
+              que se muestra acá (status published) YA está a la venta; un
+              "vendido" explícito sería una feature nueva (marcar como vendido),
+              no contemplada hoy. Ver el retorno de esta tarea. */}
+          {product.status === "published" && (
+            <Chip variant="success" icon={<CheckCircle weight="fill" />}>
+              {COPY.detail.availableLabel}
+            </Chip>
+          )}
+          {/* Envío / entrega / recogida (spec cliente) — 0 a 3 chips, uno por
+              método que el vendedor marcó al publicar. */}
+          {attrs.fulfillment.map((method) => {
+            const FulfillmentIcon = FULFILLMENT_ICON[method];
+            return (
+              <Chip key={method} icon={FulfillmentIcon ? <FulfillmentIcon /> : undefined}>
+                {fulfillmentLabel(method)}
+              </Chip>
+            );
+          })}
         </div>
       )}
 

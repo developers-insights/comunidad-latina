@@ -95,8 +95,9 @@ export function CheckAzulInline({ className = "" }: { className?: string }) {
  *
  * POR QUÉ ESO NO ESCONDE INFORMACIÓN. Porque el check azul IMPLICA la identidad
  * verificada —es su requisito previo (0101)— y su `aria-label` lo dice entero:
- * "Cuenta verificada con suscripción activa", con el tooltip explicando las dos
- * partes. No se pierde nada: se dice lo mismo con una sola marca en vez de dos.
+ * "Check azul: identidad confirmada con documento y suscripción al día", con el
+ * tooltip explicando las dos partes. No se pierde nada: se dice lo mismo con una
+ * sola marca en vez de dos.
  *
  * POR QUÉ NO SE APILAN LAS DOS. Porque no entran: dos círculos de 24px en la
  * misma esquina se superponen o empujan el avatar. Y porque dos marcas de

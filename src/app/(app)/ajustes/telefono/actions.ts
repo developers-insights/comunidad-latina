@@ -12,7 +12,6 @@ import {
   canSend,
   consumeCode,
   issueCode,
-  CODE_TTL_MINUTES,
   MAX_ATTEMPTS,
 } from "@/lib/phone/verification";
 import type { ActionResult } from "@/components/auth/action-result";

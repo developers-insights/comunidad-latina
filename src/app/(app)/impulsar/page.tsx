@@ -22,7 +22,7 @@ import {
   type ImpulsarItem,
 } from "./impulsar-items";
 
-export const metadata = { title: "Impulsar" };
+export const metadata = { title: "Boost" };
 
 /**
  * Copy local del índice (feedback cliente Geovanny, 2026-08-05: falta un
@@ -33,7 +33,16 @@ export const metadata = { title: "Impulsar" };
  * agente en simultáneo, se declara acá para no pisarle el merge.
  */
 const COPY = {
-  title: "Impulsar",
+  /**
+   * "Boost" y no "Impulsar" (pedido Manuel 2026-08-11: un solo nombre para la
+   * misma compra en toda la app). El bottom nav ya dice Boost
+   * (`i18n/es/nav.ts: moduleBoost`) y el tile del "+" también; esta pantalla
+   * —la que los dos abren— era la única que seguía llamándose de otra manera,
+   * así que el nombre cambiaba justo al tocar el botón. La RUTA sigue siendo
+   * /impulsar: renombrarla rompería los links ya compartidos y los `next=` de
+   * los redirect a /entrar, y no gana nada que la persona vea.
+   */
+  title: "Boost",
   subtitle: "Pagá para que un aviso o una publicación tuya llegue a más gente en tu zona.",
   listingsHeading: "Tus avisos",
   postsHeading: "Tus publicaciones",

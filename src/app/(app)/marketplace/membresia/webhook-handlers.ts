@@ -1,6 +1,7 @@
 import "server-only";
 
 import type Stripe from "stripe";
+import { concederUnaSolaVez } from "@/lib/monetization/concesion";
 import {
   diagnosticoDeCobro,
   metadataString,
@@ -192,8 +193,35 @@ async function activateFromCheckout(
       ? session.subscription
       : (session.subscription?.id ?? null);
 
-  const { error } = await admin.from("store_memberships").upsert(
-    {
+  // LA CONCESIÓN SE GATEA EN EL `WHERE`, NO EN UN `upsert` A CIEGAS.
+  //
+  // Este handler es alcanzable DOS veces por el mismo pago: `completed` y
+  // `async_payment_succeeded` traen la misma Session con `event.id` distintos, y
+  // el route reprocesa a propósito cuando `processed=false`. El `upsert` que
+  // había acá escribía siempre y seguía de largo, así que la segunda pasada
+  // mandaba un segundo "tu tienda ya está en el Marketplace" y escribía una
+  // segunda fila de auditoría por un solo pago —y una entrega demorada del alta
+  // resucitaba a `active` una membresía cancelada entre medio, con el trigger
+  // espejo de 0048 volviendo a encender la tienda.
+  //
+  // EL TOKEN ACÁ ES LA SUSCRIPCIÓN, no la Session: esta tabla no tiene columna
+  // de checkout session (0048), y sirve igual porque cada Checkout de alta crea
+  // una suscripción NUEVA — una reactivación legítima trae otro id y sí matchea.
+  // Ver `lib/monetization/concesion.ts`.
+  if (!subscriptionId) {
+    // No debería pasar en `mode: "subscription"` ya cobrado, pero si pasa no hay
+    // con qué distinguir dos entregas: se deja rastro en vez de fingir que sí.
+    console.warn(
+      `[marketplace:membresia:webhook] la session ${session.id} (tienda ${storeId}) no trae suscripción — se concede sin poder detectar una re-entrega.`,
+    );
+  }
+  const concesion = await concederUnaSolaVez(admin, {
+    tabla: "store_memberships",
+    columnaSujeto: "store_id",
+    sujeto: storeId,
+    columnaPago: "stripe_subscription_id",
+    pago: subscriptionId,
+    valores: {
       tenant_id: tenantId,
       store_id: storeId,
       owner_id: ownerId,
@@ -207,9 +235,38 @@ async function activateFromCheckout(
       stripe_customer_id: customerId(session.customer),
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "store_id" },
-  );
-  if (error) throw new Error(`upsert store_memberships: ${error.code}`);
+  });
+
+  if (concesion.estado === "error") {
+    // Un fallo transitorio SÍ lo arregla el reintento de Stripe: se lanza.
+    throw new Error(`concesión store_memberships: ${concesion.codigo}`);
+  }
+  if (concesion.estado === "pago_ya_usado") {
+    // ESA suscripción ya está en la fila de OTRA tienda: un solo pago intentando
+    // encender dos vidrieras, que es lo que `store_memberships_subscription_uniq`
+    // (0048) existe para frenar.
+    //
+    // ANTES ESTO ERA UN `throw` SIN EXCEPCIÓN NINGUNA, o sea un 500 → Stripe
+    // reintentando tres días un evento condenado: el choque va a ser idéntico en
+    // el reintento número mil. El premium de aviso ya tenía la salida correcta y
+    // acá nunca se había portado. No conceder, ALERTA para reconciliar, y 200.
+    console.error(
+      `[marketplace:membresia:webhook] ALERTA: la session ${session.id} (tienda ${storeId}, suscripción ${
+        subscriptionId ?? "—"
+      }) ya está vinculada a OTRA membresía — NO se activa, para no dar dos tiendas con un pago. ${diagnosticoDeCobro(
+        session,
+      )}. Reconciliar a mano en el Dashboard.`,
+    );
+    return;
+  }
+  if (concesion.estado === "duplicado") {
+    // No es un error: otra entrega del mismo pago llegó primero. La membresía ya
+    // está activa; lo único que se evita es el segundo comprobante.
+    console.warn(
+      `[marketplace:membresia:webhook] la tienda ${storeId} ya había quedado activa por otra entrega del pago (${session.id}) — no se duplican notificación ni auditoría.`,
+    );
+    return;
+  }
 
   // `current_period_end` llega en el evento de la suscripción, no acá: la
   // Session no lo trae. El cron no toca filas con NULL, así que la ventana
@@ -227,7 +284,9 @@ async function activateFromCheckout(
     body: "Tu vidriera y tus productos aparecen en las búsquedas de la comunidad. Podés cancelar cuando quieras.",
     href: "/marketplace/membresia",
   });
-  await admin.from("audit_log").insert({
+  // Best-effort SÍ, mudo NO: si la auditoría de un alta paga se pierde, el
+  // rastro de por qué esa tienda está activa desaparece sin dejar señal.
+  const { error: auditError } = await admin.from("audit_log").insert({
     tenant_id: tenantId,
     actor_id: ownerId,
     action: "store_membership_activated",
@@ -235,6 +294,11 @@ async function activateFromCheckout(
     subject_id: storeId,
     meta: { via: "stripe_checkout" },
   });
+  if (auditError) {
+    console.error(
+      `[marketplace:membresia:webhook] la tienda ${storeId} quedó ACTIVA pero no se pudo auditar — code=${auditError.code}. El alta es válida; falta el rastro.`,
+    );
+  }
 }
 
 /* -------------------------------------------------------------------------- */

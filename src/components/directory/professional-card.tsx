@@ -1,4 +1,4 @@
-import { MapPin, ShieldCheck, UserGear } from "@phosphor-icons/react/dist/ssr";
+import { Certificate, MapPin, Translate, UserGear } from "@phosphor-icons/react/dist/ssr";
 import { AccentLink, Avatar, Badge, BezelCard } from "@/components/ui";
 import {
   PublisherTrust,
@@ -6,10 +6,15 @@ import {
   type PublisherView,
   type VerificationView,
 } from "@/components/listings";
+import { IdentityBadge } from "@/components/auth/identity-badge";
 import { PhotoTap } from "@/components/media/photo-tap";
+import { Estrellas } from "@/components/resenas";
+import { RESENAS_COPY, formatearPromedio, type ResumenPuntaje } from "@/lib/resenas";
+import { languageLabels } from "@/lib/profile/catalogs";
 import { COPY } from "./copy";
 import { categoryLabel } from "./helpers";
 import { DirectoryMedia } from "./module-media";
+import { ProfessionalContactCta } from "./professional-contact-cta";
 
 export interface ProfessionalCardModel {
   id: string;
@@ -25,8 +30,24 @@ export interface ProfessionalCardModel {
    * Opcional: quien todavía no lo manda cae a `photoUrl`.
    */
   photos?: string[];
-  /** SOLO presente si hay verification_check found_active vinculado (regla estricta). */
+  /** SOLO presente si hay verification_check found_active vinculado (regla estricta): credenciales/matrícula. */
   verification: VerificationView | null;
+  /**
+   * `profiles.identity_verified` del publicador — SIEMPRE presente cuando hay
+   * cuenta, aunque no aplique la verificación de credenciales de arriba.
+   *
+   * Es su PROPIO campo y no una señal más adentro de `publisher.signals` a
+   * propósito (spec cliente: "estado de verificación de identidad" y "estado de
+   * verificación de credenciales" son DOS cosas y tienen que leerse distintas de
+   * un vistazo). Ligarla al desglose del Trust Score la habría dejado a un tap
+   * de distancia, enterrada junto a señales que no son verificación de nada
+   * (antigüedad, transacciones, avales).
+   */
+  identityVerified: boolean;
+  /** Códigos de idioma (profiles_private.languages vía profile_card, 0062/0063) del publicador con cuenta. Vacío si no hay o es fuente externa. */
+  languages: string[];
+  /** Resumen de calificaciones del aviso (listing_review_stats, 0093). cantidad=0 ⇒ "Sin reseñas todavía", nunca un cero. */
+  rating: ResumenPuntaje;
   publisher: PublisherView;
 }
 
@@ -41,10 +62,23 @@ const ACCENT = "var(--accent-profesionales)";
  * píldora con el acento teal del módulo.
  *
  * DOS destinos, uno por gesto (feedback 2026-07-26): tocar la FOTO abre el visor
- * con el portfolio; la píldora "Ver perfil" es la única que navega.
+ * con el portfolio; la píldora "Ver perfil" es la única que navega. "Contactar"
+ * (spec cliente) es la tercera acción: ni navega ni abre el visor — abre el
+ * mensaje ahí mismo (ver professional-contact-cta.tsx).
  */
-export function ProfessionalCard({ professional }: { professional: ProfessionalCardModel }) {
+export function ProfessionalCard({
+  professional,
+  isLoggedIn,
+}: {
+  professional: ProfessionalCardModel;
+  /**
+   * Misma sesión para las 12+ cards de la página — se resuelve UNA vez arriba
+   * (page.tsx) y se pasa, en vez de que cada card pregunte por su cuenta.
+   */
+  isLoggedIn: boolean;
+}) {
   const isMember = professional.publisher?.type === "member";
+  const isExternal = professional.publisher?.type === "external";
   const avatarSrc = professional.publisher?.type === "member" ? professional.publisher.avatarUrl : null;
   const avatarName =
     professional.publisher?.type === "member" ? professional.publisher.displayName : professional.title;
@@ -53,6 +87,8 @@ export function ProfessionalCard({ professional }: { professional: ProfessionalC
     : professional.photoUrl
       ? [professional.photoUrl]
       : [];
+  const spokenLanguages = languageLabels(professional.languages);
+  const ratingPromedio = formatearPromedio(professional.rating.promedio);
 
   return (
     <BezelCard variant={professional.verification ? "success" : "default"} coreClassName="overflow-hidden p-0">
@@ -69,13 +105,29 @@ export function ProfessionalCard({ professional }: { professional: ProfessionalC
             aspect="portrait"
             overlayTopLeft={
               isMember ? (
-                <Avatar src={avatarSrc} name={avatarName} size="md" className="ring-2 ring-surface shadow-md" />
+                <Avatar
+                  src={avatarSrc}
+                  name={avatarName}
+                  size="md"
+                  className="ring-2 ring-surface shadow-md"
+                  // Identidad verificada (Stripe Identity, gratis) — insignia
+                  // PROPIA sobre el avatar, mismo lugar y mismo componente que
+                  // ProfileHeader. Deliberadamente distinta de la credencial de
+                  // abajo: círculo sobre la persona, no una píldora con texto.
+                  badge={professional.identityVerified ? <IdentityBadge /> : undefined}
+                />
               ) : undefined
             }
             overlayTopRight={
               professional.verification ? (
                 <Badge variant="success">
-                  <ShieldCheck size={13} weight="fill" aria-hidden="true" />
+                  {/* Certificate y no ShieldCheck (el de IdentityBadge, arriba a
+                      la izquierda): dos insignias de verificación en la MISMA
+                      card tienen que distinguirse por FORMA, no sólo por texto
+                      — mismo criterio que separa el escudo de IdentityBadge del
+                      sello de CheckAzul en verificacion/check-azul.tsx. Este es
+                      el ícono que ya usa el detalle para "Credenciales". */}
+                  <Certificate size={13} weight="fill" aria-hidden="true" />
                   {COPY.professionals.verifiedChip(professional.verification.dateLabel)}
                 </Badge>
               ) : undefined
@@ -102,10 +154,39 @@ export function ProfessionalCard({ professional }: { professional: ProfessionalC
         </PhotoTap>
 
         <div className="flex flex-col gap-2.5 p-4">
+          {/* Idiomas (spec cliente: campo propio de cada perfil, no un detalle
+              secundario) — mismo ícono que la pestaña "Información" del perfil
+              (ProfileInfoPanel), así "Habla español" se lee igual en toda la app. */}
+          {spokenLanguages.length > 0 && (
+            <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
+              <Translate size={15} aria-hidden="true" className="shrink-0 text-foreground-muted" />
+              <span className="line-clamp-1">{spokenLanguages.join(" · ")}</span>
+            </p>
+          )}
+
           {professional.credentials.length > 0 && (
             <p className="line-clamp-1 text-sm text-foreground-secondary">
               {professional.credentials.join(" · ")}
             </p>
+          )}
+
+          {/* Calificaciones (spec cliente). "Sin reseñas todavía" y NO un cero:
+              un profesional nuevo no vale menos que uno con mala calificación,
+              y estrellas vacías + "0,0" leerían justo eso (mismo criterio que
+              ResumenPuntajeCard). */}
+          {professional.rating.cantidad > 0 ? (
+            <div className="flex items-center gap-1.5">
+              <Estrellas
+                valor={professional.rating.promedio}
+                size={14}
+                etiqueta={RESENAS_COPY.promedioAria(ratingPromedio ?? "", professional.rating.cantidad)}
+              />
+              <span className="numeric text-sm text-foreground-secondary">
+                {ratingPromedio} ({professional.rating.cantidad})
+              </span>
+            </div>
+          ) : (
+            <p className="text-sm text-foreground-muted">{RESENAS_COPY.sinPuntaje}</p>
           )}
 
           {professional.publisher?.type === "member" ? (
@@ -134,6 +215,18 @@ export function ProfessionalCard({ professional }: { professional: ProfessionalC
           >
             {COPY.professionals.viewProfile}
           </AccentLink>
+
+          {/* "Contactar" (spec cliente): la SEGUNDA acción de la card, además de
+              "Ver perfil". Nunca navega — abre el mensaje acá mismo. */}
+          <ProfessionalContactCta
+            listingId={professional.id}
+            title={professional.title}
+            isLoggedIn={isLoggedIn}
+            isExternal={isExternal}
+            externalName={
+              professional.publisher?.type === "external" ? professional.publisher.name : null
+            }
+          />
         </div>
       </article>
     </BezelCard>

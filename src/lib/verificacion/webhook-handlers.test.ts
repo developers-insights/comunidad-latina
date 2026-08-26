@@ -43,6 +43,8 @@ const SUB_ID = "sub_azul_1";
 /* -------------------------------------------------------------------------- */
 
 interface Captura {
+  /** El ALTA de la suscripción — antes un `upsert` a ciegas, hoy un insert gateado. */
+  altas: Record<string, unknown>[];
   upserts: Record<string, unknown>[];
   updates: Record<string, unknown>[];
   grants: Record<string, unknown>[];
@@ -63,6 +65,8 @@ function fakeAdmin(opts: {
   suscripcion?: Record<string, unknown> | null;
   /** Código de error que devuelve el insert del crédito (23505 = ya existía). */
   grantInsertError?: string | null;
+  /** Código de error que devuelve el ALTA (23505 = la fila del perfil ya existe). */
+  altaInsertError?: string | null;
 }) {
   const { captura } = opts;
 
@@ -77,6 +81,7 @@ function fakeAdmin(opts: {
     const chain = {
       select: () => chain,
       eq: () => chain,
+      or: () => chain,
       lt: () => chain,
       maybeSingle: async () => ({ data: datos(), error: null }),
       single: async () => ({ data: datos(), error: null }),
@@ -98,6 +103,10 @@ function fakeAdmin(opts: {
           }
           captura.grants.push(values);
           return { error: null };
+        }
+        if (nombre === "verification_subscriptions") {
+          captura.altas.push({ tabla: nombre, ...values });
+          return { error: opts.altaInsertError ? { code: opts.altaInsertError } : null };
         }
         captura.auditoria.push(values);
         return { error: null };
@@ -166,7 +175,7 @@ const PERFIL_OK = { id: PROFILE, tenant_id: TENANT, identity_verified: true };
 const SUB_ROW = { id: "row-1", tenant_id: TENANT, profile_id: PROFILE, status: "active" };
 
 function nuevaCaptura(): Captura {
-  return { upserts: [], updates: [], grants: [], auditoria: [] };
+  return { altas: [], upserts: [], updates: [], grants: [], auditoria: [] };
 }
 
 beforeEach(() => {
@@ -232,8 +241,8 @@ describe("alta: sólo se enciende con plata verificada y con derecho", () => {
       checkoutEvent(),
     );
 
-    expect(captura.upserts).toHaveLength(1);
-    expect(captura.upserts[0]).toMatchObject({
+    expect(captura.altas).toHaveLength(1);
+    expect(captura.altas[0]).toMatchObject({
       tabla: "verification_subscriptions",
       profile_id: PROFILE,
       tenant_id: TENANT,
@@ -245,18 +254,48 @@ describe("alta: sólo se enciende con plata verificada y con derecho", () => {
     });
   });
 
-  it("un evento REPETIDO no crea una segunda suscripción: upsert por profile_id", async () => {
+  /**
+   * LA SEGUNDA ENTREGA NO CONCEDE — y esto antes NO era así.
+   *
+   * El alta era un `upsert(onConflict: profile_id)` y el test que había acá
+   * afirmaba, correctamente para ese código, que el reintento hacía "dos upserts
+   * idénticos". El problema era todo lo que venía DESPUÉS del upsert: la
+   * notificación y la fila de `audit_log` se escribían las dos veces, y el
+   * upsert además pisaba `started_at` con el reloj de cada pasada y limpiaba
+   * `canceled_at`. Con el token del pago en el `WHERE`, la segunda entrega no
+   * reclama ninguna fila y se corta antes de notificar.
+   *
+   * Y esto NO es un caso raro: `checkout.session.completed` y
+   * `checkout.session.async_payment_succeeded` traen la misma Session con
+   * `event.id` distintos, así que el UNIQUE de `payment_events` los deja pasar a
+   * los dos.
+   */
+  it("la SEGUNDA entrega del mismo pago no concede ni vuelve a avisar", async () => {
     const captura = nuevaCaptura();
-    const admin = fakeAdmin({ captura, profile: PERFIL_OK });
 
-    await handleVerificacionEvent(admin, checkoutEvent());
-    await handleVerificacionEvent(admin, checkoutEvent());
+    // Primera entrega: no hay fila, el alta entra.
+    await handleVerificacionEvent(
+      fakeAdmin({ captura, profile: PERFIL_OK }),
+      checkoutEvent(),
+    );
+    expect(captura.altas).toHaveLength(1);
+    expect(mocks.createNotification).toHaveBeenCalledTimes(1);
 
-    // Dos upserts idénticos sobre la MISMA clave. La base los colapsa en una
-    // fila (unique profile_id) — lo que se prueba acá es que el handler no
-    // cambia de estrategia en el reintento: mismos valores, misma clave.
-    expect(captura.upserts).toHaveLength(2);
-    expect(captura.upserts[0]).toEqual(captura.upserts[1]);
+    // Segunda entrega: la fila ya lleva ESTA suscripción, así que el reclamo no
+    // matchea y el alta rebota con 23505.
+    const captura2 = nuevaCaptura();
+    await handleVerificacionEvent(
+      fakeAdmin({
+        captura: captura2,
+        profile: PERFIL_OK,
+        altaInsertError: "23505",
+        suscripcion: { stripe_subscription_id: SUB_ID },
+      }),
+      checkoutEvent(),
+    );
+
+    expect(mocks.createNotification).toHaveBeenCalledTimes(1);
+    expect(captura2.auditoria).toHaveLength(0);
   });
 
   it("SIN identidad verificada NO se concede — la insignia no puede ser mentira", async () => {
@@ -266,7 +305,7 @@ describe("alta: sólo se enciende con plata verificada y con derecho", () => {
       checkoutEvent(),
     );
 
-    expect(captura.upserts).toHaveLength(0);
+    expect(captura.altas).toHaveLength(0);
     expect(mocks.createNotification).not.toHaveBeenCalled();
   });
 
@@ -276,7 +315,7 @@ describe("alta: sólo se enciende con plata verificada y con derecho", () => {
       fakeAdmin({ captura, profile: { ...PERFIL_OK, tenant_id: OTRO_TENANT } }),
       checkoutEvent(),
     );
-    expect(captura.upserts).toHaveLength(0);
+    expect(captura.altas).toHaveLength(0);
   });
 
   it("pagar de MENOS que lo pactado NO se concede", async () => {
@@ -285,7 +324,7 @@ describe("alta: sólo se enciende con plata verificada y con derecho", () => {
       fakeAdmin({ captura, profile: PERFIL_OK }),
       checkoutEvent({ amount_total: 1 }),
     );
-    expect(captura.upserts).toHaveLength(0);
+    expect(captura.altas).toHaveLength(0);
   });
 
   it("pagar en OTRA MONEDA el mismo número NO se concede", async () => {
@@ -294,7 +333,7 @@ describe("alta: sólo se enciende con plata verificada y con derecho", () => {
       fakeAdmin({ captura, profile: PERFIL_OK }),
       checkoutEvent({ currency: "ars" }),
     );
-    expect(captura.upserts).toHaveLength(0);
+    expect(captura.altas).toHaveLength(0);
   });
 
   it("sin plata adentro (pago diferido) espera, no concede", async () => {
@@ -306,7 +345,7 @@ describe("alta: sólo se enciende con plata verificada y con derecho", () => {
 
     // Lo maneja (es suyo) pero no concede: espera al async_payment_succeeded.
     expect(manejado).toBe(true);
-    expect(captura.upserts).toHaveLength(0);
+    expect(captura.altas).toHaveLength(0);
   });
 
   it("un subject_type inventado NO se concede: no hay escalón fuera del enum", async () => {
@@ -317,7 +356,7 @@ describe("alta: sólo se enciende con plata verificada y con derecho", () => {
         metadata: { ...METADATA_OK, subject_type: "gratis" } as Stripe.Metadata,
       }),
     );
-    expect(captura.upserts).toHaveLength(0);
+    expect(captura.altas).toHaveLength(0);
   });
 });
 
@@ -374,6 +413,60 @@ describe("el regalo mensual: un período, un impulso", () => {
 
     expect(captura.grants).toHaveLength(1);
     expect(mocks.createNotification).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * `status` se traía en el `select` y en el tipo de la fila desde el día uno, y
+   * no se consultaba en ninguna parte: un gate que alguien pensó y se perdió. El
+   * regalo es del mes que se está pagando; una factura demorada —o la última de
+   * un ciclo que se canceló— le regalaba un impulso REAL y canjeable a una
+   * insignia que ya no estaba activa.
+   */
+  it("una factura de una verificación CANCELADA no otorga regalo", async () => {
+    const captura = nuevaCaptura();
+
+    const resultado = await handleVerificacionEvent(
+      fakeAdmin({ captura, suscripcion: { ...SUB_ROW, status: "canceled" } }),
+      invoiceEvent(1_756_684_800, 1_759_276_800),
+    );
+
+    // Sigue siendo "este evento es mío y ya lo atendí" — 200, sin reintentos.
+    expect(resultado).toBe(true);
+    expect(captura.grants).toHaveLength(0);
+    expect(captura.updates).toHaveLength(0);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
+
+  /**
+   * EL CICLO SÓLO AVANZA. Stripe no garantiza el orden de entrega: la factura
+   * del mes 1 puede llegar DESPUÉS de la del mes 2. Sin el predicado en el
+   * `WHERE`, esa factura vieja pisaba `current_period_end` con una fecha ya
+   * pasada — y esa columna es la que lee el cron de expiración de 0101, así que
+   * una insignia PAGA se apagaba sola por un evento fuera de orden.
+   */
+  it("el período se escribe con la guarda de monotonía en el WHERE", async () => {
+    const captura = nuevaCaptura();
+    const fin = 1_759_276_800;
+    const filtros: string[] = [];
+
+    const admin = fakeAdmin({ captura, suscripcion: SUB_ROW });
+    // Se espía el `.or()` del período: es lo único que impide el retroceso.
+    const original = admin as unknown as { from: (n: string) => Record<string, unknown> };
+    const from = original.from.bind(original);
+    (original as { from: (n: string) => unknown }).from = (n: string) => {
+      const chain = from(n) as Record<string, unknown> & { or: (f: string) => unknown };
+      const orOriginal = chain.or;
+      chain.or = (filtro: string) => {
+        filtros.push(filtro);
+        return orOriginal.call(chain, filtro);
+      };
+      return chain;
+    };
+
+    await handleVerificacionEvent(admin, invoiceEvent(1_756_684_800, fin));
+
+    const esperado = new Date(fin * 1000).toISOString();
+    expect(filtros).toContain(`current_period_end.is.null,current_period_end.lt.${esperado}`);
   });
 
   it("un error REAL de la base sí lanza, para que Stripe reintente", async () => {

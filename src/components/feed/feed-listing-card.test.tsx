@@ -118,37 +118,9 @@ vi.mock("next/link", () => ({
 }));
 
 // motion neutralizado: el DOM refleja el estado de la hoja al instante.
-vi.mock("motion/react", () => {
-  const filter = (props: Record<string, unknown>) => {
-    const {
-      layout,
-      initial,
-      animate,
-      exit,
-      transition,
-      drag,
-      dragConstraints,
-      dragElastic,
-      onDragEnd,
-      whileTap,
-      whileHover,
-      ...rest
-    } = props;
-    return rest;
-  };
-  const div = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => (
-    <div {...filter(props)}>{children}</div>
-  );
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    m: { div },
-    motion: { div },
-    useReducedMotion: () => true,
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock(),
+);
 
 const { FeedListingCard } = await import("./feed-listing-card");
 

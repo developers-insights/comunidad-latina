@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { CheckCircle, PaperPlaneTilt, Warning } from "@phosphor-icons/react/dist/ssr";
 import { Button } from "@/components/ui";
 import { JobApplySheet } from "./job-apply-sheet";
@@ -58,7 +57,6 @@ export interface JobApplyInlineProps {
 }
 
 export function JobApplyInline({ jobId, jobTitle }: JobApplyInlineProps) {
-  const router = useRouter();
   const requireAuth = useRequireAuth();
   const [sheet, setSheet] = useState<SheetContext | null>(null);
   const [applied, setApplied] = useState(false);

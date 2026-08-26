@@ -26,10 +26,11 @@ const C = COMUNIDAD_COPY.recursos;
 /**
  * DIRECTORIO DE AYUDA — agrupado por tema, con la fuente de cada ficha.
  *
- * ── `?tema=` (0099, rediseño de la portada) ─────────────────────────────────
- * Dos tarjetas de la grilla de `/comunidad` ("Bancos de comida", "Voluntarios")
- * apuntan ACÁ con `?tema=comida` / `?tema=voluntariado` en vez de llevar a una
- * pantalla propia: es la misma lectura (`fetchResourceGroups`), filtrada. Un
+ * ── `?tema=` (0099, rediseño de la portada; sumó `acopio` la 0105) ──────────
+ * Tres tarjetas de la grilla de `/comunidad` ("Bancos de comida", "Voluntarios",
+ * "Centro de acopio") apuntan ACÁ con `?tema=comida` / `?tema=voluntariado` /
+ * `?tema=acopio` en vez de llevar a una pantalla propia: es la misma lectura
+ * (`fetchResourceGroups`), filtrada. Un
  * `tema` válido angosta el título, la bajada y la lista a UN grupo; sin `tema`
  * (o con uno que no exista) esta pantalla se comporta exactamente como antes.
  * `isResourceTopic` es la MISMA guarda que decide si una fila de la base se
@@ -174,14 +175,15 @@ function GrupoDeRecursos({ grupo }: { grupo: ResourceGroup }) {
 }
 
 /**
- * Copy del vacío ESPECÍFICO de un tema — sólo existe para los dos temas que
- * tienen entrada propia en la grilla de la portada (comida, voluntariado). El
- * resto de los ocho temas se navegan desde la lista completa, que ya resuelve
- * su propio vacío con `C.emptyTitle`/`C.emptyMessage`; si algún día alguno de
- * ellos suma su propia tarjeta, agrega su caso acá.
+ * Copy del vacío ESPECÍFICO de un tema — sólo existe para los temas que
+ * tienen entrada propia en la grilla de la portada (comida, voluntariado,
+ * acopio — 0105). El resto de los temas se navegan desde la lista completa,
+ * que ya resuelve su propio vacío con `C.emptyTitle`/`C.emptyMessage`; si
+ * algún día alguno de ellos suma su propia tarjeta, agrega su caso acá.
  */
 function topicEmptyCopy(topic: ResourceTopic): { title: string; message: string } | null {
   if (topic === "comida") return C.emptyTopic.comida;
   if (topic === "voluntariado") return C.emptyTopic.voluntariado;
+  if (topic === "acopio") return C.emptyTopic.acopio;
   return null;
 }

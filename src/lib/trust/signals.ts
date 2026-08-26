@@ -1,4 +1,5 @@
 import type { Json, Tables } from "@/lib/types/database.types";
+import { getTrustLevel } from "@/lib/trust/levels";
 import type { TrustLevel, TrustSignal } from "@/components/trust";
 
 /**
@@ -14,6 +15,21 @@ import type { TrustLevel, TrustSignal } from "@/components/trust";
  *
  * Las señales pendientes van SIEMPRE en positivo ("todavía no"), nunca en
  * castigo (§4.c: ausencia, jamás un negativo).
+ *
+ * -----------------------------------------------------------------------------
+ * ESTE DOCBLOCK DECÍA "FUENTE ÚNICA" Y NO LO ERA (arreglado acá)
+ *
+ * Existía una segunda implementación —`trustSignalsFrom`, en
+ * components/auth/trust-signals.ts— que usaban /perfil y /perfil/[id]. La misma
+ * persona mostraba una hoja de Trust Score distinta según por dónde se la
+ * abriera: "Identidad verificada (documento)" en el feed contra "Identidad
+ * verificada con documento" en su perfil, "En la comunidad hace 3 meses" contra
+ * "3 meses en la comunidad", y una quinta señal (los reportes) que sólo existía
+ * en el perfil. Un número que se explica de dos maneras distintas es un número
+ * en el que no se puede confiar, que es exactamente lo contrario de para lo que
+ * está. Ahora `trustSignalsFrom` reexporta esto y la señal de reportes —que era
+ * la buena idea de la otra versión— vive acá, para todas las superficies.
+ * -----------------------------------------------------------------------------
  */
 
 const TRUST_LEVEL_IDS = new Set<string>([
@@ -24,9 +40,20 @@ const TRUST_LEVEL_IDS = new Set<string>([
   "destacado",
 ]);
 
-/** Normaliza el `level` crudo de la DB; si viene raro degrada a "nuevo". */
-export function toTrustLevel(level: string | null | undefined): TrustLevel {
-  return level && TRUST_LEVEL_IDS.has(level) ? (level as TrustLevel) : "nuevo";
+/**
+ * Normaliza el `level` crudo de la DB.
+ *
+ * Con `scoreFallback`, un valor corrupto se deriva del score (el canon de
+ * `lib/trust/levels.ts`); sin él, degrada a "nuevo". Los dos caminos existían
+ * sueltos en dos archivos distintos y no coincidían: una fila con el `level`
+ * roto y 90 puntos se leía "Nuevo" en el feed y "Destacado" en el perfil.
+ */
+export function toTrustLevel(
+  level: string | null | undefined,
+  scoreFallback?: number,
+): TrustLevel {
+  if (level && TRUST_LEVEL_IDS.has(level)) return level as TrustLevel;
+  return scoreFallback === undefined ? "nuevo" : getTrustLevel(scoreFallback).id;
 }
 
 function asFiniteNumber(value: unknown): number | null {
@@ -52,6 +79,7 @@ export function buildTrustSignals(
   const months = asFiniteNumber(record.months_in_community) ?? 0;
   const transactions = asFiniteNumber(record.transactions_ok) ?? 0;
   const endorsements = asFiniteNumber(record.endorsements_count) ?? 0;
+  const reportsUpheld = asFiniteNumber(record.reports_upheld) ?? 0;
 
   const monthsLabel =
     months >= 12
@@ -74,12 +102,26 @@ export function buildTrustSignals(
       achieved: transactions > 0,
     },
     {
+      // "de la comunidad" y NO "verificados": `endorsements_count` es un
+      // contador crudo (0003 §5.4 — a propósito no hay grafo de quién avaló a
+      // quién), así que no sabemos si esas personas verificaron su identidad.
+      // Afirmarlo era usar la palabra más cargada de la app sobre un dato que
+      // no la respalda.
       label:
         endorsements > 0
-          ? `${endorsements} ${endorsements === 1 ? "vecino verificado la avala" : "vecinos verificados la avalan"}`
-          : "Avales de vecinos verificados",
+          ? `${endorsements} ${endorsements === 1 ? "vecino de la comunidad la avala" : "vecinos de la comunidad la avalan"}`
+          : "Avales de vecinos de la comunidad",
       achieved: endorsements > 0,
     },
+    // La quinta señal, que antes sólo veía quien abría un perfil. Va en los dos
+    // sentidos: sin reportes es un logro que se muestra, y con reportes es el
+    // dato que más le importa a quien está por mandar plata.
+    reportsUpheld > 0
+      ? {
+          label: `${reportsUpheld} ${reportsUpheld === 1 ? "reporte confirmado" : "reportes confirmados"} de la comunidad`,
+          achieved: false,
+        }
+      : { label: "Sin reportes confirmados", achieved: true },
   ];
 }
 

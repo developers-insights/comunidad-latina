@@ -1,16 +1,19 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { SellerChip, SellerVerifiedBadge } from "./seller-chip";
+import { PresenciaVerificadaBadge, SellerChip, SellerIdentityBadge } from "./seller-chip";
 import { COPY } from "./copy";
 
 const C = COPY.seller;
 
 /**
  * El chip de vendedor es la señal que separa TIENDAS de PARTICULARES (call con
- * el cliente 2026-07-24). Lo que se fija acá: qué palabra se lee, si lleva a la
- * vidriera y cuándo aparece "Verificada" — el badge del plan Presencia
- * Verificada, que hasta ahora no se mostraba en ningún lado.
+ * el cliente 2026-07-24) — y, desde el fix del 2026-08-24, también la señal
+ * que separa DOS insignias distintas: identidad verificada (gratis, cualquier
+ * vendedor) y Presencia Verificada (plan pago, solo tiendas). Antes del fix,
+ * "Verificada" vivía atada SOLO al plan pago y un particular con identidad
+ * confirmada no tenía ninguna insignia — lo que se fija acá es exactamente
+ * eso: que ahora la tiene, y que las dos insignias nunca se confunden entre sí.
  */
 describe("SellerChip", () => {
   afterEach(cleanup);
@@ -44,32 +47,100 @@ describe("SellerChip", () => {
     expect(screen.getByText(new RegExp(C.fallbackStoreName))).toBeTruthy();
   });
 
-  it("badge 'Verificada' sólo cuando la tienda tiene Presencia Verificada", () => {
-    const { unmount } = render(
-      <SellerChip seller={{ kind: "store", name: "Tienda Ana", storeId: "s1", verified: false }} />,
-    );
-    expect(screen.queryByText(C.verifiedLabel)).toBeNull();
-    unmount();
+  describe("Presencia Verificada — el plan PAGO, solo tiendas", () => {
+    it("no aparece sin business_accounts.verified_presence", () => {
+      render(
+        <SellerChip
+          seller={{ kind: "store", name: "Tienda Ana", storeId: "s1", verified: false }}
+        />,
+      );
+      expect(screen.queryByText(C.presenceVerifiedLabel)).toBeNull();
+    });
 
-    render(
-      <SellerChip seller={{ kind: "store", name: "Tienda Ana", storeId: "s1", verified: true }} />,
-    );
-    expect(screen.getByText(C.verifiedLabel)).toBeTruthy();
+    it("aparece cuando la tienda tiene Presencia Verificada", () => {
+      render(
+        <SellerChip seller={{ kind: "store", name: "Tienda Ana", storeId: "s1", verified: true }} />,
+      );
+      expect(screen.getByText(C.presenceVerifiedLabel)).toBeTruthy();
+    });
+
+    it("un particular NUNCA la muestra, aunque le llegue el flag por error", () => {
+      render(<SellerChip seller={{ kind: "private", name: "Juan", verified: true }} />);
+      // El plan es de negocios: si se colara acá, el badge dejaría de
+      // significar "pagó una suscripción" y volvería a leerse como identidad.
+      expect(screen.queryByText(C.presenceVerifiedLabel)).toBeNull();
+    });
   });
 
-  it("un particular nunca se muestra como verificado, aunque le llegue el flag", () => {
-    render(<SellerChip seller={{ kind: "private", name: "Juan", verified: true }} />);
-    // "Verificada" es de tiendas (business_accounts). Si se colara acá, el badge
-    // dejaría de significar lo que dice.
-    expect(screen.queryByText(C.verifiedLabel)).toBeNull();
+  describe("Identidad verificada — GRATIS, cualquier vendedor (el bug que se arregló)", () => {
+    it("un particular con identidad verificada SÍ tiene insignia — antes no tenía ninguna", () => {
+      render(
+        <SellerChip seller={{ kind: "private", name: "Juan", identityVerified: true }} />,
+      );
+      expect(screen.getByText(C.identityLabel)).toBeTruthy();
+    });
+
+    it("una tienda con identidad verificada también la muestra", () => {
+      render(
+        <SellerChip
+          seller={{ kind: "store", name: "Tienda Ana", storeId: "s1", identityVerified: true }}
+        />,
+      );
+      expect(screen.getByText(C.identityLabel)).toBeTruthy();
+    });
+
+    it("sin identidad verificada, no aparece (ni para tienda ni para particular)", () => {
+      const { unmount } = render(
+        <SellerChip seller={{ kind: "private", name: "Juan", identityVerified: false }} />,
+      );
+      expect(screen.queryByText(C.identityLabel)).toBeNull();
+      unmount();
+
+      render(
+        <SellerChip
+          seller={{ kind: "store", name: "Tienda Ana", storeId: "s1", identityVerified: false }}
+        />,
+      );
+      expect(screen.queryByText(C.identityLabel)).toBeNull();
+    });
+  });
+
+  it("una tienda con identidad Y plan pago muestra las DOS insignias a la vez, nunca fusionadas", () => {
+    render(
+      <SellerChip
+        seller={{
+          kind: "store",
+          name: "Tienda Ana",
+          storeId: "s1",
+          verified: true,
+          identityVerified: true,
+        }}
+      />,
+    );
+    expect(screen.getByText(C.identityLabel)).toBeTruthy();
+    expect(screen.getByText(C.presenceVerifiedLabel)).toBeTruthy();
   });
 });
 
-describe("SellerVerifiedBadge", () => {
+describe("SellerIdentityBadge", () => {
   afterEach(cleanup);
 
-  it("acepta el label largo para la cabecera de la vidriera", () => {
-    render(<SellerVerifiedBadge label={C.verifiedStoreLabel} />);
-    expect(screen.getByText(C.verifiedStoreLabel)).toBeTruthy();
+  it("lleva su propio aria-label, distinto del de Presencia Verificada", () => {
+    render(<SellerIdentityBadge />);
+    expect(screen.getByLabelText(C.identityAriaLabel)).toBeTruthy();
+  });
+});
+
+describe("PresenciaVerificadaBadge", () => {
+  afterEach(cleanup);
+
+  it("acepta un label distinto por contexto (cabecera de la vidriera vs. card)", () => {
+    render(<PresenciaVerificadaBadge label="Tienda con presencia verificada" />);
+    expect(screen.getByText("Tienda con presencia verificada")).toBeTruthy();
+  });
+
+  it("por default usa el nombre real de la feature, nunca un 'Verificado' genérico", () => {
+    render(<PresenciaVerificadaBadge />);
+    expect(screen.getByText(C.presenceVerifiedLabel)).toBeTruthy();
   });
 });

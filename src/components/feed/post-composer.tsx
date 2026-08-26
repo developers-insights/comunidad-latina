@@ -1,6 +1,13 @@
 "use client";
 
-import { useId, useRef, useState, useTransition, type ReactNode } from "react";
+import {
+  useCallback,
+  useId,
+  useRef,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
@@ -16,6 +23,12 @@ import {
   type VideoCategory,
 } from "@/lib/media/video-policy";
 import {
+  VIDEO_ACCEPT_ATTR,
+  VIDEO_WRONG_TYPE_MESSAGE,
+  checkVideoFile,
+  formatVideoTooBigMessage,
+} from "@/lib/media/video-upload-limits";
+import {
   EMPTY_DECLARATION_VALUE,
   type DeclarationValue,
 } from "@/components/integrity/originality-fields";
@@ -23,11 +36,26 @@ import {
   createPostAction,
   prepareMediaUploadAction,
 } from "@/app/(app)/feed/actions";
+import { getAutoriasAction } from "@/app/(app)/feed/autoria-actions";
+/**
+ * SÓLO EL TIPO, y no es un detalle de estilo: `@/lib/feed/autoria` abre con
+ * `server-only`, y cualquier camino de imports que lo alcance desde un archivo
+ * `"use client"` tira abajo el build de producción (lo vigila
+ * `src/test/server-only-boundary.test.ts`). Una importación de tipos se borra
+ * al compilar y no entra al grafo del bundler; el único puente REAL con ese
+ * módulo es la server action de la línea de arriba.
+ */
+import type { AutoriasDelComposer } from "@/lib/feed/autoria";
 import { bakePhoto } from "@/lib/media/bake-photo";
 import { saveTagsAction } from "@/app/(app)/feed/tag-actions";
 import { attachPostMusicAction } from "@/app/(app)/feed/music-actions";
 import type { TaggedProfile } from "@/lib/social/post-tags";
 import type { PickedTrack } from "@/lib/media/audio-track";
+import {
+  AutoriaCargando,
+  AutoriaNoDisponible,
+  AutoriaSelector,
+} from "./autoria-selector";
 import { PeopleTagger } from "./people-tagger";
 import { MusicPicker } from "./music-picker";
 import { TAGGER_COPY } from "./people-tagger-copy";
@@ -51,12 +79,17 @@ import {
 import { DEFAULT_PHOTO_EDIT, photoEditFilterCss, type PhotoEdit } from "./photo-editor";
 import { COPY } from "./copy";
 
-const MAX_VIDEO_BYTES = 60 * 1024 * 1024;
 const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const VIDEO_TYPES: Record<string, string> = {
-  "video/mp4": "mp4",
-  "video/webm": "webm",
-};
+/**
+ * FORMATO Y PESO DE VIDEO: importados de `@/lib/media/video-upload-limits`,
+ * nunca escritos acá. Antes este archivo declaraba su propio mapa MIME→
+ * extensión con sólo mp4/webm, y el `accept` del input reflejaba ese mismo
+ * mapa recortado — un iPhone graba .mov (`video/quicktime`) y el selector de
+ * archivos lo mostraba EN GRIS, sin explicación (feedback cliente). Que el
+ * composer y la server action (`isOwnVideoPath` en `feed/actions.ts`) lean
+ * del mismo módulo es lo que evita que el input acepte un formato que el
+ * servidor después rechaza en silencio.
+ */
 
 /**
  * El menú "crear publicación" (§b, feedback cliente 2026-07-24) vive en
@@ -79,6 +112,17 @@ interface PickedMedia {
    * que este valor es el contrato entre lo que se subió y lo que se dice.
    */
   durationSeconds?: number;
+  /**
+   * Extensión y Content-Type CANÓNICOS del video (sólo en `kind: "video"`),
+   * resueltos UNA vez en `selectVideo` con `checkVideoFile`. Se guardan acá en
+   * vez de recalcularlos al publicar para que el nombre del archivo en el
+   * bucket y el header `Content-Type` de la subida sean SIEMPRE el mismo
+   * resultado que ya aprobó la validación — nunca una segunda lectura de
+   * `file.type`, que en algunos navegadores viene vacío para formatos poco
+   * comunes (ver `video-upload-limits.ts`).
+   */
+  videoExtension?: string;
+  videoContentType?: string;
   /**
    * Filtro (+ texto, sólo en foto) elegidos en el editor. Arranca en
    * `DEFAULT_PHOTO_EDIT` (sin filtro, sin texto) apenas se elige el archivo —
@@ -180,11 +224,94 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
   const [bakingProgress, setBakingProgress] = useState<{ done: number; total: number } | null>(
     null,
   );
+  /**
+   * ---- A NOMBRE DE QUIÉN SALE ESTA PUBLICACIÓN (0023) ---------------------
+   *
+   * `autorias` es lo que contestó el SERVIDOR: con qué fichas propias y
+   * publicadas se puede firmar, y cuál viene elegida según la identidad activa
+   * (`active_identities`, 0103). `null` = todavía no se preguntó nunca.
+   *
+   * `entityId` es la elección de ESTA publicación — `null` = perfil personal.
+   * No es un segundo "perfil activo": no se persiste, no toca el header y
+   * muere con la publicación. Ver el encabezado de `@/lib/feed/autoria`.
+   */
+  const [autorias, setAutorias] = useState<AutoriasDelComposer | null>(null);
+  const [cargandoAutorias, setCargandoAutorias] = useState(false);
+  const [autoriasFallaron, setAutoriasFallaron] = useState(false);
+  const [entityId, setEntityId] = useState<string | null>(null);
+  /**
+   * ¿La persona eligió la firma A MANO en esta sesión del composer? Si sí, un
+   * refresco que llega después NO puede pisarle la elección — sería cambiarle
+   * a nombre de quién publica mientras escribe. Se resetea al abrir el menú.
+   */
+  const autoriaTocada = useRef(false);
+  /**
+   * Espejo de `autorias` para leerlo DENTRO del callback del fetch sin meterlo
+   * en las dependencias de `cargarAutorias`: con `autorias` en el arreglo de
+   * deps, `openMenu` cambia de identidad cada vez que llega una respuesta y con
+   * él el valor del `ComposerMenuProvider` — o sea que la tarjeta del feed y el
+   * "+" del bottom nav se vuelven a renderizar por una consulta que no les
+   * cambió nada.
+   */
+  const autoriasRef = useRef<AutoriasDelComposer | null>(null);
   const [isPending, startTransition] = useTransition();
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   /** Id estable de esta sesión: fija la variante de la vista previa del banner. */
   const previewId = useId();
+
+  /**
+   * Pregunta al servidor con qué firmas se puede publicar. UNA vez por apertura
+   * del composer — nunca por render, y nunca desde las pantallas que no
+   * publican nada (ver el docblock de `feed/autoria-actions.ts`).
+   *
+   * Se vuelve a preguntar en CADA apertura a propósito: si alguien cambió de
+   * identidad en el header hace diez segundos, la respuesta de hace diez
+   * segundos ya miente. Mientras la primera respuesta no llegue, Publicar queda
+   * apagado (`autoriaBloquea`): una publicación que sale antes de saber la
+   * respuesta sale a nombre de quien nadie eligió.
+   *
+   * Una falla NO deja el composer inservible: si nunca hubo respuesta se avisa
+   * y se publica como uno mismo (el comportamiento de siempre); si ya había una
+   * lista, se queda con la que tenía en vez de borrarla por un corte de red.
+   */
+  const cargarAutorias = useCallback(() => {
+    autoriaTocada.current = false;
+    setCargandoAutorias(true);
+    void getAutoriasAction()
+      .then((resultado) => {
+        autoriasRef.current = resultado;
+        setAutorias(resultado);
+        setAutoriasFallaron(false);
+        // El default lo decide el servidor. Si la persona ya eligió a mano en
+        // esta sesión, manda su elección.
+        if (!autoriaTocada.current) setEntityId(resultado.porDefecto);
+      })
+      .catch(() => {
+        // Con una lista previa no se borra nada: un corte de red no puede
+        // hacerle perder la firma con la que venía publicando.
+        if (autoriasRef.current !== null) return;
+        setAutoriasFallaron(true);
+        if (!autoriaTocada.current) setEntityId(null);
+      })
+      .finally(() => setCargandoAutorias(false));
+  }, []);
+
+  const openMenu = useCallback(() => {
+    setMenuOpen(true);
+    cargarAutorias();
+  }, [cargarAutorias]);
+
+  /**
+   * ¿Hay que esperar antes de dejar publicar? Sólo cuando la respuesta importa:
+   *  · no llegó ninguna todavía → nadie sabe con qué nombre saldría;
+   *  · la anterior traía fichas → esta persona SÍ elige, y elegir con datos
+   *    viejos es publicar con el nombre equivocado.
+   * Para quien sólo tiene su perfil personal —la enorme mayoría— esto es
+   * siempre `false`: publicar sigue siendo exactamente lo que era.
+   */
+  const autoriaBloquea =
+    cargandoAutorias && (autorias === null || autorias.entidades.length > 0);
 
   const photos = media.filter((item) => item.kind === "photo");
   const video = media.find((item) => item.kind === "video") ?? null;
@@ -258,12 +385,21 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
     input.value = "";
     if (!file) return;
 
-    if (!VIDEO_TYPES[file.type]) {
-      toast({ title: COPY.composer.videoWrongType, variant: "warning" });
-      return;
-    }
-    if (file.size > MAX_VIDEO_BYTES) {
-      toast({ title: COPY.composer.videoTooBig, variant: "warning" });
+    // MISMA función que corre el servidor (`isOwnVideoPath` en
+    // `feed/actions.ts` valida contra el mismo catálogo de extensiones): un
+    // formato o un peso que el picker deja elegir pero la validación rechaza
+    // le gastaría los datos a la persona para terminar diciéndole que no.
+    const fileCheck = checkVideoFile(file);
+    if (!fileCheck.ok) {
+      if (fileCheck.reason === "type") {
+        toast({ title: VIDEO_WRONG_TYPE_MESSAGE, variant: "warning", duration: 8000 });
+      } else {
+        toast({
+          title: formatVideoTooBigMessage(file.size),
+          variant: "warning",
+          duration: 8000,
+        });
+      }
       return;
     }
     if (video) {
@@ -304,6 +440,8 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         file,
         preview: URL.createObjectURL(file),
         durationSeconds: duration.seconds,
+        videoExtension: fileCheck.extension,
+        videoContentType: fileCheck.mimeType,
         // Igual que la foto: el borrador arranca en "sin filtro" apenas se
         // elige el archivo, así el editor y el envío siempre tienen algo que
         // leer, se haya abierto el editor o no.
@@ -379,6 +517,14 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
     const needsBody = isQuestion || isText;
     const bodyOk = trimmed.length === 0 ? !needsBody : trimmed.length >= 2;
     if (!bodyOk || isPending) return;
+    /**
+     * Todavía no sabemos con qué firmas se puede publicar (ver
+     * `autoriaBloquea`). El botón ya está apagado en ComposerSheet; esto es la
+     * misma regla del lado de quien publica, para que ningún otro camino —un
+     * atajo de teclado, un test, un futuro disparador— mande una publicación
+     * sin decidir a nombre de quién sale.
+     */
+    if (autoriaBloquea) return;
 
     // Regla "todo post lleva imagen" (trigger MEDIA_REQUIRED 0023, exenta para
     // pregunta y texto): acá no hace falta reaccionar — ComposerSheet ya
@@ -428,14 +574,24 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
           return;
         }
 
-        const extension = VIDEO_TYPES[video.file.type];
+        // `videoExtension` ya salió de `checkVideoFile` en `selectVideo` — no
+        // se vuelve a leer `video.file.type` acá (puede venir vacío en
+        // algunos navegadores para formatos poco comunes; ver
+        // `video-upload-limits.ts`). Todo video en `media` pasó ese chequeo,
+        // así que el campo siempre está.
+        const extension = video.videoExtension ?? "mp4";
         videoPath = `${prepared.tenantId}/${prepared.userId}/video-${crypto.randomUUID()}.${extension}`;
         setUploadPct(0);
         // El muestreo va en paralelo con la subida: son dos trabajos
         // independientes sobre el mismo archivo y encadenarlos le sumaría un
         // par de segundos a la espera por nada.
         const [uploaded, frames, audioPcm] = await Promise.all([
-          uploadVideoWithProgress(video.file, videoPath, setUploadPct),
+          uploadVideoWithProgress(
+            video.file,
+            videoPath,
+            setUploadPct,
+            video.videoContentType ?? video.file.type,
+          ),
           sampleVideoLumaFrames(video.file),
           // La pista de audio es una huella independiente de la imagen: quien
           // recorta el video pero deja el sonido intacto matchea por acá. Va en
@@ -572,6 +728,14 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
       formData.set("kind", isQuestion ? "question" : isText ? "text" : "post");
       // Solo una pregunta puede llevar encuesta; el server lo re-valida igual.
       if (isQuestion && pollEnabled) formData.set("pollKind", "yes_no");
+      /**
+       * LA FIRMA (`posts.entity_listing_id`, 0023). Sólo viaja cuando hay una
+       * ficha elegida: su ausencia ES "publico como yo", igual que el `null` de
+       * la columna. El servidor NO confía en este campo — vuelve a comprobar
+       * contra la base que la ficha sea propia y esté publicada
+       * (`puedeFirmarComo`), y detrás sigue estando la policy `posts_insert`.
+       */
+      if (entityId) formData.set("entityId", entityId);
       for (const item of media) {
         if (item.kind === "photo") {
           formData.append("photos", bakedByPhotoId.get(item.id) ?? item.file);
@@ -718,10 +882,20 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
 
         resetForm();
         if (result.status === "published") {
+          // `result.entity` lo devuelve `createPostAction` justamente para esto:
+          // una publicación firmada por una ficha NO llega a toda la comunidad
+          // (`feedPostVisibilityFilter`), así que no puede recibir el mismo
+          // "ya está visible para la comunidad" que una personal. Hasta hoy el
+          // campo volvía y nadie lo leía — el negocio publicaba al vacío el día
+          // uno y la app le decía que había llegado a todos.
           toast({
             title: COPY.composer.successTitle,
-            description: COPY.composer.successBody,
+            description: result.entity
+              ? COPY.composer.successEntityBody
+              : COPY.composer.successBody,
             variant: "success",
+            // Dice algo accionable (Boost), no sólo "listo": necesita leerse.
+            ...(result.entity ? { duration: 7000 } : {}),
           });
         } else {
           toast({
@@ -807,6 +981,20 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         );
         return;
       }
+      if (result.code === "entity") {
+        // La ficha dejó de servir entre que se abrió el composer y se tocó
+        // Publicar (la despublicaron, la pausaron), o alguien mandó una ajena.
+        // Se vuelve a preguntar: la lista de arriba tiene que dejar de ofrecer
+        // lo que la base acaba de rechazar.
+        cargarAutorias();
+        toast({
+          title: COPY.composer.autoria.rejectedTitle,
+          description: COPY.composer.autoria.rejectedBody,
+          variant: "warning",
+          duration: 9000,
+        });
+        return;
+      }
       if (result.code === "invalid") {
         toast({ title: COPY.composer.tooShort, variant: "warning" });
         return;
@@ -830,7 +1018,7 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
   }
 
   return (
-    <ComposerMenuProvider value={{ open: menuOpen, openMenu: () => setMenuOpen(true) }}>
+    <ComposerMenuProvider value={{ open: menuOpen, openMenu }}>
       {children}
 
       {/*
@@ -857,7 +1045,7 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
       <input
         ref={videoInputRef}
         type="file"
-        accept="video/mp4,video/webm"
+        accept={VIDEO_ACCEPT_ATTR}
         className="sr-only"
         tabIndex={-1}
         aria-hidden="true"
@@ -903,7 +1091,37 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         bakingProgress={bakingProgress}
         finishingLabel={finishingLabel}
         isPending={isPending}
+        publishBlocked={autoriaBloquea}
         onPublish={submit}
+        /**
+         * CON QUÉ NOMBRE VA A SALIR (0023). Lo primero de la hoja. Las cuatro
+         * situaciones, en orden:
+         *  · todavía sin respuesta que importe → una línea que explica por qué
+         *    Publicar está apagado;
+         *  · no se pudo preguntar → se avisa que sale con el nombre propio;
+         *  · sin ninguna ficha propia publicada → NADA (ni el espacio): un
+         *    selector de una sola opción estorba, y para esta persona publicar
+         *    tiene que seguir siendo exactamente lo que era;
+         *  · con fichas → el selector, con la firma activa a la vista.
+         */
+        autoriaSlot={
+          autoriaBloquea ? (
+            <AutoriaCargando />
+          ) : autoriasFallaron ? (
+            <AutoriaNoDisponible />
+          ) : autorias && autorias.entidades.length > 0 ? (
+            <AutoriaSelector
+              personal={autorias.personal}
+              entidades={autorias.entidades}
+              value={entityId}
+              onChange={(listingId) => {
+                autoriaTocada.current = true;
+                setEntityId(listingId);
+              }}
+              disabled={isPending}
+            />
+          ) : undefined
+        }
         /**
          * ETIQUETAR PERSONAS (0089) — en los TRES modos. Una pregunta o un
          * texto también pueden hablar de alguien, y `post_tags` no pide medio
@@ -943,6 +1161,13 @@ async function uploadVideoWithProgress(
   file: File,
   path: string,
   onProgress: (pct: number) => void,
+  /**
+   * Content-Type CANÓNICO del contenedor (ver `checkVideoFile` en
+   * `video-upload-limits.ts`), no `file.type` crudo: algunos navegadores
+   * reportan vacío para formatos poco comunes (.3gp, .mkv en ciertos
+   * Android), y mandar ese vacío mentiría sobre qué es el archivo en Storage.
+   */
+  contentType: string,
 ): Promise<boolean> {
   const supabase = createClient();
   const {
@@ -959,7 +1184,7 @@ async function uploadVideoWithProgress(
     xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
     xhr.setRequestHeader("apikey", anonKey);
     xhr.setRequestHeader("x-upsert", "false");
-    xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+    xhr.setRequestHeader("Content-Type", contentType || "application/octet-stream");
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && event.total > 0) {
         onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));

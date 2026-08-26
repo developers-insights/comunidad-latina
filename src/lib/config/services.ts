@@ -14,6 +14,38 @@ import "server-only";
 
 export const isStripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY);
 
+/**
+ * ¿Se puede ENTREGAR un producto pago sin cobrarlo, para poder probar el flujo?
+ *
+ * ⚠️ ESTO NO ES UN FLAG DE FEATURE: ES UNA COMPUERTA CONTRA UN ERROR DE DEPLOY.
+ *
+ * La campaña de una publicación (`impulsar-post`) tiene un MODO DEMO: sin Stripe
+ * configurado activa la campaña de una, gratis, para poder recorrer el flujo en
+ * local. Es útil y se queda. El problema era su condición: `!isStripeConfigured`
+ * a secas. O sea que el día que producción se quede sin `STRIPE_SECRET_KEY` —una
+ * variable borrada, un deploy con el env mal armado, una rotación a medias— la
+ * app no muestra "muy pronto" como hacen los otros seis productos: le REGALA la
+ * campaña a todo el mundo, con notificación de éxito y fila de auditoría, sin un
+ * solo error en los logs. Es la versión local del clásico "las tarjetas de
+ * prueba se aceptan en el sitio en vivo".
+ *
+ * Por eso el demo pide DOS cosas y no una: que no haya Stripe Y que no estemos
+ * publicados en ningún lado.
+ *
+ * VERCEL_ENV SE MIRA APARTE, Y NO ES REDUNDANTE. Vercel corre los PREVIEWS con
+ * `NODE_ENV=production`, así que el primer término ya los cubriría — pero
+ * también corre así los deploys de `development`, y un preview apunta a la MISMA
+ * base que producción. Mientras exista la variable, hay un deploy de por medio y
+ * el demo no corre. Queda vivo exactamente donde hace falta: en local y en los
+ * tests. Es el mismo criterio y la misma forma que `clientTenantHintsAllowed()`
+ * en `lib/tenant/resolve.ts`, que ya resolvió esta discusión para la pista de
+ * tenant (`?cl-tenant=`).
+ */
+export const isPagosDemoPermitido =
+  !isStripeConfigured &&
+  process.env.NODE_ENV !== "production" &&
+  !process.env.VERCEL_ENV;
+
 export const isResendConfigured = Boolean(process.env.RESEND_API_KEY);
 
 export const isVisionConfigured = Boolean(

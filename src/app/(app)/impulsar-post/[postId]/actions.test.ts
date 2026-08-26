@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * forma de moverlo entre tests es que el mock lo exponga como propiedad viva.
  */
 
-const state = vi.hoisted(() => ({ stripeConfigured: true }));
+const state = vi.hoisted(() => ({ stripeConfigured: true, demoPermitido: false }));
 const mocks = vi.hoisted(() => ({
   requireTenantMatch: vi.fn(),
   getTenant: vi.fn(),
@@ -31,6 +31,15 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/config/services", () => ({
   get isStripeConfigured() {
     return state.stripeConfigured;
+  },
+  /**
+   * El modo demo pide DOS cosas: que no haya Stripe Y que no estemos publicados.
+   * Se expone aparte para poder probar el tercer estado —sin Stripe pero en
+   * producción— que antes no existía y regalaba la campaña. Ver
+   * `isPagosDemoPermitido` en el módulo real.
+   */
+  get isPagosDemoPermitido() {
+    return !state.stripeConfigured && state.demoPermitido;
   },
 }));
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
@@ -181,6 +190,7 @@ async function lanzar(options: {
 beforeEach(() => {
   vi.clearAllMocks();
   state.stripeConfigured = true;
+  state.demoPermitido = false;
   mocks.limit.mockReturnValue({ ok: true });
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -229,9 +239,11 @@ describe("crearCampanaPost — con Stripe configurado", () => {
   });
 });
 
-describe("crearCampanaPost — modo demostración (sin clave de Stripe)", () => {
+describe("crearCampanaPost — modo demostración (sin clave de Stripe, en local)", () => {
   beforeEach(() => {
     state.stripeConfigured = false;
+    // En local no hay deploy de por medio, así que el demo corre.
+    state.demoPermitido = true;
   });
 
   it("sigue activando al instante y sin cobrar — la degradación no se rompió", async () => {
@@ -252,5 +264,42 @@ describe("crearCampanaPost — modo demostración (sin clave de Stripe)", () => 
     const { fila } = await lanzar({ rows: [] });
 
     expect(fila?.amount_cents).toBe(postPromoMontoCentavos(POST_PROMO_PACKAGES["14d"]));
+  });
+});
+
+/**
+ * EL TERCER ESTADO, QUE ANTES NO EXISTÍA.
+ *
+ * La única condición del modo demo era `!isStripeConfigured`. O sea que el día
+ * que producción se quedara sin `STRIPE_SECRET_KEY` —una variable borrada, un
+ * env mal armado, una rotación a medias— la app no decía "muy pronto" como los
+ * otros seis productos: le REGALABA la campaña a todo el mundo, con notificación
+ * de éxito y fila de auditoría, sin un solo error en los logs. Es la versión
+ * local del clásico "las tarjetas de prueba se aceptan en el sitio en vivo".
+ */
+describe("crearCampanaPost — sin clave de Stripe pero PUBLICADO", () => {
+  beforeEach(() => {
+    state.stripeConfigured = false;
+    state.demoPermitido = false;
+  });
+
+  it("NO regala la campaña: degrada como los otros productos", async () => {
+    const { result, fila } = await lanzar({ rows: [priceRow("14d", 3_300)] });
+
+    expect(result).toEqual({ status: "no_configurado" });
+    // Nada escrito, nada cobrado, nada prometido.
+    expect(fila ?? null).toBeNull();
+    expect(mocks.sessionsCreate).not.toHaveBeenCalled();
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
+
+  it("deja el rastro para el que tenga que arreglar el env", async () => {
+    const errorSpy = vi.spyOn(console, "error");
+
+    await lanzar({ rows: [priceRow("14d", 3_300)] });
+
+    // Que la persona vea "muy pronto" es lo correcto; que nadie se entere de que
+    // falta la clave, no.
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("STRIPE_SECRET_KEY"));
   });
 });

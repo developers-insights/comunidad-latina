@@ -7,7 +7,7 @@ import {
   Globe,
   Lock,
   MapPin,
-  SealCheck,
+  ShieldCheck,
   Star,
   Translate,
   UsersThree,
@@ -46,7 +46,9 @@ const COPY = {
   infoLanguages: "Habla",
   infoMemberSince: "Miembro desde",
   infoVerified: "Identidad verificada",
-  infoVerifiedYes: "Sí, verificada",
+  infoVerifiedYes: "Sí, con documento",
+  /** Nombre accesible del escudito que va al lado de un nombre en las listas. */
+  personIdentityVerified: "Identidad verificada con documento",
   infoBioEmpty: "Todavía no escribió una presentación.",
   infoBioEmptyOwn: "Contale a la comunidad quién sos: se edita desde «Editar perfil».",
 
@@ -159,7 +161,10 @@ export function ProfileInfoPanel({
       value: memberSince,
     },
     identityVerified && {
-      icon: <SealCheck size={18} />,
+      // Escudo y no sello: el sello con tilde es la insignia PAGA (el check
+      // azul). Esta fila habla de la verificación de identidad, que es gratis
+      // y es un hecho comprobado — le corresponde el escudo de `IdentityBadge`.
+      icon: <ShieldCheck size={18} />,
       label: COPY.infoVerified,
       value: COPY.infoVerifiedYes,
     },
@@ -283,8 +288,28 @@ export function ProfilePeoplePanel({ people, direction, isOwn }: ProfilePeoplePa
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1 truncate text-sm font-semibold text-foreground">
                   {person.displayName}
+                  {/*
+                    ESCUDO VERDE, no sello azul.
+
+                    Hasta este cambio esta lista dibujaba un `SealCheck` en
+                    `text-info` para `identity_verified`: o sea, exactamente el
+                    check azul pago (`CheckAzulInline`, mismo ícono, mismo
+                    azul, 14px contra 16px) para una verificación GRATIS. En la
+                    lista de seguidores las dos cosas eran la misma marca, y la
+                    gratuita se hacía pasar por la comprada.
+
+                    Y llevaba `aria-hidden`: quien navega con lector de
+                    pantalla no se enteraba de nada. Ahora tiene nombre propio
+                    y dice qué se verificó.
+                  */}
                   {person.identityVerified && (
-                    <SealCheck size={14} weight="fill" aria-hidden="true" className="shrink-0 text-info" />
+                    <ShieldCheck
+                      size={14}
+                      weight="fill"
+                      role="img"
+                      aria-label={COPY.personIdentityVerified}
+                      className="shrink-0 text-success-ink"
+                    />
                   )}
                 </span>
                 {person.areaLabel && (

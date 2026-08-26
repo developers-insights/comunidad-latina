@@ -77,7 +77,10 @@ export const COPY = {
     message: "Abrir el chat",
     job_application: "Ver la postulación",
     job_application_update: "Ver el aviso",
-    identity: "Ver mi verificación",
+    // "de identidad" y no "Ver mi verificación" a secas: en la app hay tres
+    // cosas que se llaman verificación (identidad, check azul, Presencia
+    // Verificada) y este aviso es siempre de la primera.
+    identity: "Ver mi verificación de identidad",
     payment_failed: "Revisar el pago",
     security_alert: "Revisar mi cuenta",
     account_suspended: "Ver el detalle",
@@ -86,11 +89,35 @@ export const COPY = {
     listing_question: "Responder",
   } as Record<string, string | undefined>,
 
+  /**
+   * ERROR DE CARGA — distinto del vacío A PROPÓSITO.
+   *
+   * Hasta este cambio la bandeja descartaba el `error` de sus tres consultas y
+   * caía en `empty.allTitle`: una lectura que fallaba se le mostraba a la
+   * persona como "Por ahora, todo tranquilo". Es la peor confusión posible en
+   * esta pantalla, porque acá viven los avisos de seguridad y de pagos: quien
+   * tenía una alerta sin leer veía que no tenía nada. Mismo patrón que
+   * /perfil/guardados, por el mismo motivo.
+   */
+  error: {
+    title: "No pudimos cargar tus avisos",
+    body: "Puede ser la conexión — no es nada que hayas hecho. Volvé a intentar.",
+    retry: "Reintentar",
+  },
+
   empty: {
     allTitle: "Por ahora, todo tranquilo",
     allMessage:
       "Cuando alguien quiera contactarte o te escriba, el aviso te espera acá.",
-    allCta: "Mirar propiedades",
+    /**
+     * Al feed y NO a /propiedades. Propiedades es un módulo que cada comunidad
+     * puede tener apagado (`tenant.modules`), así que el único botón de esta
+     * pantalla podía llevar a una ruta que no existe. `feed` y `mensajes` son
+     * los dos que siempre están (ALWAYS_ON_MODULE_KEYS). Y es mejor destino:
+     * la bandeja se llena cuando pasa algo en la comunidad, no cuando alguien
+     * mira avisos de alquiler.
+     */
+    allCta: "Ver qué pasa en la comunidad",
     unreadTitle: "Estás al día",
     unreadMessage: "No te queda ningún aviso sin leer.",
     importantTitle: "Nada urgente",

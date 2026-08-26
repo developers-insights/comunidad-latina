@@ -158,7 +158,6 @@ export function AuthSheetPanel({
         oauthProviders={[]}
         hideHeader
         onSuccess={onAuthenticated}
-        onGoRegister={() => onStepChange("register")}
       />
     </div>
   );

@@ -49,13 +49,34 @@ export const COPY = {
       title: "Editar tu perfil",
       description: "Tu nombre, tu foto, tu zona y tu bio.",
     },
+    /**
+     * Se nombra la insignia CONCRETA —el escudo verde— y no "la insignia" a
+     * secas. En la app hay tres marcas distintas que la gente lee como
+     * "verificado" y la fila de abajo ofrece otra: sin decir cuál es cuál, esta
+     * fila y la del check azul prometen lo mismo con dos precios.
+     */
     verify: {
       title: "Verificar tu identidad",
-      description: "La insignia que le da confianza a quien te contacta.",
+      description: "El escudo verde de tu perfil. Es gratis y confirma que hay una persona real.",
     },
     verified: {
       title: "Identidad verificada",
-      description: "Ya tenés tu insignia. Gracias por cuidar a la comunidad.",
+      description: "Ya tenés tu escudo verde. Gracias por cuidar a la comunidad.",
+    },
+    /**
+     * La fila que faltaba: el cliente pidió "para qué tipo de perfil puedan
+     * aplicar el tick, el verificado azul" parado en ESTA pantalla, y no había
+     * ningún camino de acá a /verificacion. Es OTRA insignia que `verify`/
+     * `verified` de arriba (esa es Stripe Identity, gratis) — por eso nunca
+     * comparten fila ni copy, aunque las dos empiecen con "verificar".
+     */
+    checkAzul: {
+      title: "El check azul",
+      description: "La insignia paga junto a tu nombre. Primero hace falta verificar tu identidad.",
+    },
+    checkAzulActivo: {
+      title: "Tu check azul",
+      description: "Ya está activo. Administrá tu plan o tu impulso de regalo.",
     },
     /**
      * Las dos entradas que faltaban (pedido del cliente: «agregar el botón de

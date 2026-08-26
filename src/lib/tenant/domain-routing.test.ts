@@ -232,7 +232,7 @@ describe("la base no responde — respaldo, nunca la comunidad equivocada", () =
     });
   });
 
-  it("un host de la plataforma cae a las pistas de siempre (?t=, cookie, default)", () => {
+  it("un host de la plataforma cae a las pistas de siempre (?cl-tenant=, cookie, default)", () => {
     expect(
       decide({
         hostname: "comunidad-latina-sigma.vercel.app",

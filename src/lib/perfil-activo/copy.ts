@@ -25,13 +25,6 @@ export const PERFIL_ACTIVO_COPY = {
     negocio: (nombre: string) => `Listo, ahora estás como ${nombre}.`,
   },
 
-  /** Aviso permanente mientras se actúa como negocio. */
-  banner: {
-    title: (nombre: string) => `Estás usando la app como ${nombre}`,
-    body: "Lo que publiques va a salir con el nombre del negocio.",
-    switchBack: "Volver a tu perfil",
-  },
-
   /** Nombre del rol, para que "administrador" no aparezca en crudo. */
   roles: {
     propietario: "Dueño",
@@ -43,4 +36,14 @@ export const PERFIL_ACTIVO_COPY = {
 
   /** Etiqueta accesible del control del header. */
   switcherLabel: (nombre: string) => `Estás como ${nombre}. Tocá para cambiar de perfil.`,
+
+  /**
+   * La puerta de /perfil, junto a "Editar perfil" / "Verificar" / "Compartir
+   * perfil" — donde el cliente lo fue a buscar. Con negocios abre esta MISMA
+   * hoja (`sheet` de arriba); sin ninguno, ofrece crear el primero con
+   * `sheet.createBusiness` / `createBusinessHint`.
+   */
+  profileDoor: {
+    switchLabel: "Cambiar de perfil",
+  },
 } as const;

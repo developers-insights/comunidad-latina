@@ -199,7 +199,7 @@ export async function fetchVideoReelsPage({
     // Alcance "para vos" (los ids vienen de la DB, no del usuario — mismo
     // patrón que el feed). PostgREST AND-ea cada .or() de nivel superior.
     query = query.or(
-      feedPostVisibilityFilter(followedListingIds, [...promotedPostIds]),
+      feedPostVisibilityFilter(followedListingIds, [...promotedPostIds], viewerId),
     );
 
     // Fuera lo que su autor ocultó del feed (0097). El scroll de Videos Cortos

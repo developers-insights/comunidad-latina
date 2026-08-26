@@ -5,6 +5,7 @@ import { DirectoryMedia } from "@/components/directory";
 import { PhotoTap } from "@/components/media/photo-tap";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import type { JobCardModel } from "@/app/(app)/empleos/queries";
+import { workModeLabel } from "@/lib/creators/work-mode";
 import { cn } from "@/lib/utils";
 import { JobApplyInline } from "./job-apply-inline";
 import { EMPLOYMENT_TYPE_LABEL } from "./helpers";
@@ -35,8 +36,44 @@ const C = COPY.list;
  * batch por `fetchJobsPage`; publicador externo (seed/API sin cuenta) muestra
  * solo el nombre, sin badge que no tiene detrás con qué respaldarse.
  */
-export function JobCard({ job }: { job: JobCardModel }) {
+/**
+ * DOS DATOS QUE LA SPEC PIDE EN LA TARJETA Y `JobCardModel` TODAVÍA NO TRAE.
+ *
+ * Los dos existen en la base desde hace rato y sólo faltaba subirlos hasta acá:
+ *
+ *   · `salaryRangeLabel` — el rango completo ("US$ 18 a US$ 22/hora"). El piso
+ *     está en `listings.price_amount` y el techo en `attrs.salary_max` (ver el
+ *     docblock de `lib/empleos/detalles.ts`, que explica por qué NO se movió el
+ *     salario entero a `attrs`). La línea que los junta es
+ *     `etiquetaDeSalario()` de `lib/empleos/salario.ts`, ya escrita y pura.
+ *   · `workMode` — la COLUMNA `listings.work_mode` (0087), cruda. La etiqueta la
+ *     resuelve `workModeLabel`, el vocabulario canónico ("A distancia", no
+ *     "Remoto"): un segundo mapa acá sería el mismo hecho con dos nombres.
+ *
+ * OPCIONALES A PROPÓSITO. Quien arma el modelo es `app/(app)/empleos/queries.ts`
+ * —otro dueño en este lote—, así que la tarjeta se prepara para recibirlos sin
+ * romper a nadie mientras tanto: sin ellos se comporta exactamente como antes.
+ * Las dos líneas que faltan en `toJobCardModel` son:
+ *
+ *     salaryRangeLabel: etiquetaDeSalario(
+ *       row.price_amount, row.price_currency, row.price_period,
+ *       readJobDetails(row.attrs).salaryMax,
+ *     ),
+ *     workMode: row.work_mode,          // + sumar "work_mode" a JOB_LISTING_COLUMNS
+ */
+export interface JobCardExtras {
+  /** Rango ya compuesto. Cuando viene, MANDA sobre `salaryLabel` (que es el piso solo). */
+  salaryRangeLabel?: string | null;
+  /** `listings.work_mode` crudo: remoto | presencial | hibrido (0087). */
+  workMode?: string | null;
+}
+
+export function JobCard({ job }: { job: JobCardModel & JobCardExtras }) {
   const typeLabel = job.employmentType ? EMPLOYMENT_TYPE_LABEL[job.employmentType] : null;
+  const modeLabel = workModeLabel(job.workMode);
+  // El rango manda sobre el monto único: "US$ 18/hora" cuando el aviso declaró
+  // hasta 22 estaría diciendo menos de lo que paga.
+  const salary = job.salaryRangeLabel ?? job.salaryLabel;
   const photos = job.photos?.length ? job.photos : job.photoUrl ? [job.photoUrl] : [];
 
   const card = (
@@ -62,16 +99,45 @@ export function JobCard({ job }: { job: JobCardModel }) {
                     columnas y cada card se angosta. Con 2xl fijo, "US$ 1.200/mes"
                     partía en dos renglones. `truncate` es el último seguro: un
                     monto largo se corta, nunca desarma la franja. */}
-                <p className="numeric truncate font-display text-2xl font-bold leading-none sm:text-xl">
-                  {job.salaryLabel ?? C.salaryToAgree}
+                {/* El rango puede ser casi el doble de largo que un monto
+                    único ("US$ 18 a US$ 22/hora"), así que a 375px baja un
+                    escalón de tamaño en vez de partirse: sigue siendo lo
+                    primero que se lee, pero entra en un renglón. */}
+                <p
+                  className={cn(
+                    "numeric truncate font-display font-bold leading-none",
+                    job.salaryRangeLabel ? "text-xl sm:text-lg" : "text-2xl sm:text-xl",
+                  )}
+                >
+                  {salary ?? C.salaryToAgree}
                 </p>
                 <h3 className="mt-1.5 font-display text-base font-bold leading-snug line-clamp-2">
                   {job.title}
                 </h3>
-                {job.areaLabel && (
-                  <p className="mt-1 flex items-center gap-1.5 text-sm opacity-90">
-                    <MapPin size={14} aria-hidden="true" className="shrink-0" />
-                    <span className="min-w-0 truncate">{job.areaLabel}</span>
+                {(job.areaLabel || modeLabel) && (
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm opacity-90">
+                    {job.areaLabel && (
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <MapPin size={14} aria-hidden="true" className="shrink-0" />
+                        <span className="min-w-0 truncate">{job.areaLabel}</span>
+                      </span>
+                    )}
+                    {/* La MODALIDAD al lado de la zona y no en un chip aparte:
+                        "Corona, Queens · A distancia" son la misma pregunta
+                        (¿dónde tengo que estar?) y separarlas obligaba a
+                        buscar la respuesta en dos lugares de la tarjeta.
+                        Sin declarar (aviso anterior a la 0087) no se muestra
+                        nada — nunca un "Presencial" por defecto. */}
+                    {modeLabel && (
+                      <span className="flex items-center gap-2">
+                        {job.areaLabel && (
+                          <span aria-hidden="true" className="opacity-60">
+                            ·
+                          </span>
+                        )}
+                        <span className="whitespace-nowrap font-semibold">{modeLabel}</span>
+                      </span>
+                    )}
                   </p>
                 )}
               </div>

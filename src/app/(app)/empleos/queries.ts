@@ -17,6 +17,8 @@ import {
   type PublisherView,
 } from "@/components/listings";
 import { COPY } from "@/components/empleos/copy";
+import { readJobDetails } from "@/lib/empleos/detalles";
+import { etiquetaDeSalario } from "@/lib/empleos/salario";
 import {
   labelJobAnswers,
   parseJobAttrs,
@@ -61,6 +63,14 @@ export type JobCardModel = {
   title: string;
   /** Ej.: "US$ 18/hora" — armado con formatListingPrice (PERIOD_SUFFIX ya sabe /hora). */
   salaryLabel: string | null;
+  /**
+   * El salario con RANGO cuando lo hay ("US$ 18 a US$ 22/hora"). El piso vive
+   * en `price_amount` y sólo el techo en `attrs.salary_max` (0107). Sin techo,
+   * `etiquetaDeSalario` devuelve lo mismo que `salaryLabel`.
+   */
+  salaryRangeLabel: string | null;
+  /** `listings.work_mode` cruda (0087). La etiqueta la resuelve `workModeLabel`. */
+  workMode: string | null;
   employmentType: EmploymentType | null;
   areaLabel: string | null;
   photoUrl: string | null;
@@ -102,7 +112,18 @@ type JobListingRow = Pick<
   | "created_at"
   | "created_by"
   | "publisher_name"
->;
+> & {
+  /**
+   * `listings.work_mode` (migración 0087: presencial / híbrido / a distancia).
+   *
+   * Se declara a mano en vez de salir del `Pick<Tables<"listings">>` porque
+   * `src/lib/types/database.types.ts` está generado a la altura de la 0076 y
+   * todavía no conoce esta columna — el mismo motivo por el que `identidad.ts`
+   * y las lecturas de `post_offers` usan sus propios escapes. Cuando se
+   * regeneren los tipos, esta línea se borra y la columna vuelve al `Pick`.
+   */
+  work_mode: string | null;
+};
 
 /** Solo las columnas que alimentan el badge (over-fetch §perf, mismo criterio que /negocios). */
 type PublisherProfileRow = Pick<
@@ -112,7 +133,7 @@ type PublisherProfileRow = Pick<
 type PublisherTrustRow = Pick<Tables<"trust_scores">, "profile_id" | "score" | "level" | "signals">;
 
 const JOB_LISTING_COLUMNS =
-  "id, title, price_amount, price_currency, price_period, area_label, attrs, photos, created_at, created_by, publisher_name";
+  "id, title, price_amount, price_currency, price_period, area_label, attrs, photos, created_at, created_by, publisher_name, work_mode";
 
 /**
  * Mapeo puro fila → card. Publicador: perfil + Trust Score si el aviso es de
@@ -146,6 +167,17 @@ export function toJobCardModel(
     id: row.id,
     title: row.title,
     salaryLabel: formatListingPrice(row.price_amount, row.price_currency, row.price_period),
+    // El PISO vive en `price_amount` (es lo que ordena y filtra toda la app) y
+    // sólo el TECHO en `attrs.salary_max` — ver `lib/empleos/salario.ts`.
+    // `salaryLabel` queda como respaldo: si no hay techo, `etiquetaDeSalario`
+    // devuelve exactamente lo mismo.
+    salaryRangeLabel: etiquetaDeSalario(
+      row.price_amount,
+      row.price_currency,
+      row.price_period,
+      readJobDetails(row.attrs).salaryMax,
+    ),
+    workMode: row.work_mode,
     employmentType: parseJobAttrs(row.attrs).employmentType,
     areaLabel: row.area_label,
     photoUrl: firstPhotoUrl(row.photos),
@@ -161,6 +193,20 @@ export async function fetchJobsPage(input: {
   /** Término de búsqueda (?q=) ya sanitizado por el caller (sanitizeSearchQuery). */
   q?: string | null;
   cursor?: string | null;
+  /**
+   * "Tu zona", ya resuelta a etiquetas EXACTAS de `area_label` por
+   * `resolverVistaZona` (@/lib/zona/server). Vacío o ausente = sin recorte
+   * geográfico.
+   *
+   * Llega resuelta y no como una etiqueta suelta a propósito: el match de zonas
+   * es laxo y sin acentos (`sameZoneLabel`), algo que PostgREST no sabe hacer.
+   * Traducirlo a un `.in()` ANTES de la query es lo que deja que el recorte lo
+   * haga SQL y que la paginación por cursor siga trayendo páginas del tamaño
+   * que promete.
+   */
+  areaLabels?: readonly string[] | null;
+  /** La zona elegida, cruda, para el alcance geográfico de los impulsos (0092). */
+  zoneFilter?: string | null;
 }): Promise<JobsPage> {
   const supabase = await createClient();
 
@@ -183,6 +229,10 @@ export async function fetchJobsPage(input: {
     // kind='job' está indexado (confirmado contra 0044_global_search.sql).
     query = query.textSearch("search", input.q, { type: "websearch", config: "spanish" });
   }
+  const zonaLabels = input.areaLabels ?? [];
+  if (zonaLabels.length > 0) {
+    query = query.in("area_label", [...zonaLabels]);
+  }
 
   const cursor = decodeCursor(input.cursor || undefined);
   if (cursor) {
@@ -197,7 +247,7 @@ export async function fetchJobsPage(input: {
     return { items: [], nextCursor: null };
   }
 
-  const pageRows = (rows ?? []) as JobListingRow[];
+  const pageRows = (rows ?? []) as unknown as JobListingRow[];
   const trimmedRows = pageRows.slice(0, PAGE_SIZE);
   const hasMore = pageRows.length > PAGE_SIZE;
 
@@ -212,11 +262,15 @@ export async function fetchJobsPage(input: {
   // vive UNA vez en `src/lib/boosts`, no copiada en cada listado.
   let boostedIds = new Set<string>();
   let boostedExtra: JobListingRow[] = [];
-  const sinFiltros = !input.employmentType && !input.q;
+  // "Tu zona" cuenta como filtro para la inyección de impulsados: un aviso
+  // patrocinado de otro barrio no se cuela en una pantalla recortada a un barrio.
+  const sinFiltros = !input.employmentType && !input.q && zonaLabels.length === 0;
   if (!cursor) {
     const viewer = await resolveViewerGeo(supabase, {
       tenantId: input.tenantId,
       userId: await getAuthUserId(),
+      // La zona elegida en el header pesa más que la del perfil (0092).
+      zoneFilter: input.zoneFilter ?? null,
     });
     const placement = await selectOwnBoosts(supabase, { tenantId: input.tenantId, viewer });
     boostedIds = placement.listingIds;
@@ -236,7 +290,7 @@ export async function fetchJobsPage(input: {
         .eq("kind", "job")
         .eq("status", "published")
         .in("id", missingIds);
-      boostedExtra = (extra ?? []) as JobListingRow[];
+      boostedExtra = (extra ?? []) as unknown as JobListingRow[];
     }
   }
 

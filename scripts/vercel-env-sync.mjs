@@ -57,7 +57,6 @@ const CLASS = {
   OPENAI_API_KEY: { scope: 'prod', why: 'moderación de texto y asistente RAG' },
   STRIPE_SECRET_KEY: { scope: 'prod', why: 'cobros' },
   STRIPE_WEBHOOK_SECRET: { scope: 'prod', why: 'valida la firma del webhook de Stripe' },
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: { scope: 'prod', why: 'checkout del lado del navegador' },
   GOOGLE_VISION_API_KEY: { scope: 'prod', why: 'moderación de imagen' },
   GEMINI_API_KEY: { scope: 'unused', why: 'sin consumidor en el código hoy' },
 
@@ -78,7 +77,6 @@ const SHAPE = {
   RESEND_API_KEY: /^re_/,
   STRIPE_SECRET_KEY: /^sk_(test|live)_/,
   STRIPE_WEBHOOK_SECRET: /^whsec_/,
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: /^pk_(test|live)_/,
   NEXT_PUBLIC_SENTRY_DSN: /^https:\/\//,
   NEXT_PUBLIC_SUPABASE_URL: /^https:\/\//,
 }

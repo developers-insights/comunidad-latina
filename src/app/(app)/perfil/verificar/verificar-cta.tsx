@@ -15,7 +15,10 @@ const COPY = {
   cta: "Verificar mi identidad",
   ariaProximamente: "Verificación disponible muy pronto",
   proximamenteFeature: "la verificación de identidad",
-  yaVerificado: "¡Tu identidad ya está verificada! Recargá la página para ver el tilde.",
+  // "el escudo verde" y no "el tilde": es la insignia que esta pantalla
+  // entrega. Ver el ⚠️ del copy de page.tsx.
+  yaVerificado:
+    "¡Tu identidad ya está verificada! Recargá la página para ver el escudo verde.",
   errorGenerico:
     "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo en un momento.",
 } as const;

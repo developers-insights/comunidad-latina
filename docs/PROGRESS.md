@@ -1,5 +1,211 @@
 # PROGRESS — Comunidad Latina
 
+## "Tu zona" — el último pedido del Loom (✅ 2026-08-25)
+
+Era lo único del Loom que quedaba sin hacer: el control del header abría un
+toast que decía "muy pronto".
+
+**Es una preferencia de VISTA, no un cambio de perfil.** Alguien puede vivir en
+Corona y querer mirar Jackson Heights porque se está por mudar; escribir eso en
+`profiles.area_label` sería pisarle un dato suyo para resolver una consulta
+pasajera. Va en la cookie `cl-zona`, leída **en el servidor**, así que el primer
+render ya sale filtrado y no hay parpadeo.
+
+**Precedencia:** `?zona=` de la URL › cookie › `profiles.area_label` › toda la
+comunidad. La URL gana sobre la cookie a propósito — un enlace compartido tiene
+que mostrar lo que promete, no lo que el que lo abre tenía guardado.
+
+Casi todo ya existía suelto y se reusó en vez de reescribirse: el catálogo sale
+de `distinct listings.area_label` (el patrón estaba copiado dos veces, ahora se
+extrajo), el match usa `sameZoneLabel` —laxo, sin acentos, "corona" encuentra
+"Corona, Queens"— y `resolveViewerGeo()` ya aceptaba una zona elegida.
+
+**Lo respetan** los seis módulos de directorio, `resolveViewerGeo` y el corte de
+inyección de impulsados. **NO lo respeta Marketplace › Artículos**, y es a
+propósito: su formulario no pide zona, así que `area_label` viene null y filtrar
+ahí no mostraría menos artículos — no mostraría ninguno.
+
+**Tres cosas que corregí sobre la primera entrega, midiendo en el navegador:**
+
+1. El reporte decía que la marca se truncaba a "Comuni…" y la zona a "Coron…".
+   Medido: la marca tenía **41 px de los 135** que necesita y la zona **38**.
+   Dos rótulos cortados a tres letras son peor que uno bien puesto. Se invirtió
+   la prioridad: con zona activa cede el wordmark (el isotipo ya identifica la
+   app), sin zona cede la zona — o sea que quien no toca nada ve lo de siempre.
+2. Aun así la etiqueta completa pedía 110 px y tenía 86. Ahora va la **forma
+   corta** ("Corona"), en todos los anchos: el header está topeado en `max-w-lg`
+   y no entra cómoda ni en escritorio. El valor completo sigue en el
+   `aria-label`, en la hoja, y —lo que importa— en lo que se guarda y se compara.
+3. La cookie estaba bien clasificada como imprescindible, pero el resumen de esa
+   categoría decía "sin esto no podrías entrar a tu cuenta", que no describe una
+   preferencia de vista. Ampliado, y explicado por qué "Tus preferencias" no
+   servía: esa categoría promete que el dato "se queda en este teléfono", y una
+   cookie viaja al servidor en cada request por definición.
+
+**Verificado en pantalla a 375 px** (midiendo el DOM: el pane embebido no puede
+componer capturas): "Corona" sin cortar, botón de 44 px, sin scroll horizontal,
+la hoja lista las zonas reales con la activa marcada, y en una zona sin
+contenido aparece *"Todavía no hay nada en Astoria, Queens"* con **[Ver toda la
+comunidad]** en un toque.
+
+**Dato de los datos, no del código:** conviven `"Jackson Heights, Queens"` y
+`"Jackson heights. Queens"` — la misma zona escrita de dos formas. Conviene
+limpiarlo desde el panel.
+
+**Estado:** typecheck 0 · lint 0 errores y 0 warnings · **4.493 tests verdes** ·
+build verde.
+
+
+## La ronda de auditoría — cinco frentes sobre el lote anterior (✅ 2026-08-24, noche)
+
+Cinco auditores en paralelo sobre lo que acababan de dejar los diez del lote de
+módulos. Encontraron más de lo que se les pidió, y eso es el punto: **las
+fronteras de archivo que hacen posible el paralelismo dejan costuras**, y la
+costura es donde vive el defecto.
+
+**La insignia que se compraba.** Tres lugares distintos vestían de "verificado"
+algo que sólo dice "suscripción al día": el badge de vendedor de Marketplace
+(que además un particular verificado NUNCA podía tener), la tarjeta de Negocios,
+y —el peor— el **peldaño "Activo" del Trust Score**, 30 puntos sobre 100, que
+usaba glifo por glifo el sello azul del plan pago. La lista de seguidores
+también pintaba ese sello sobre la verificación de identidad, que es gratis.
+Regla que quedó: **verde + escudo = un hecho verificado de la persona; azul +
+sello = un plan contratado.** Hay un test de contrato que la ancla
+(`components/trust/insignias-reservadas.test.ts`) y se comprobó que muerde.
+
+**Dos bugs de límite de módulo, el mismo día, en direcciones opuestas.** Uno
+tenía Notificaciones caída en producción (un Server Component llamando a una
+función que nacía en un módulo `"use client"`, escondida detrás de un barril);
+el otro tiró el build (un barril reexportando `server-only` hacia el grafo de un
+formulario cliente). Ni `tsc` ni los 4.400 tests veían ninguno: son propiedades
+del grafo que arma el bundler. Ahora hay un test por cada dirección.
+
+**El techo de 8 KB del feed, cerrado de verdad** (0113). Estaba documentado
+desde agosto y sólo acotado. El detalle que lo volvía urgente: la lista de
+campañas es del TENANT, así que el 414 le pegaba a todos a la vez y lo disparaba
+el negocio de publicidad funcionando bien. El RPC salió `security invoker` y no
+`definer` — mover el filtro de lugar y mover la frontera de seguridad son cosas
+distintas, y sólo una estaba rota.
+
+**El negocio era invisible el día uno.** El dueño no se sigue a sí mismo, así
+que su primera publicación comercial no aparecía ni en su feed ni en la pestaña
+"Publicaciones" de su propia ficha. Tres archivos, el mismo bug.
+
+**Notificaciones se tragaba sus errores.** Las tres consultas descartaban el
+`error` y caían al estado vacío: un fallo de lectura se mostraba como "Por ahora,
+todo tranquilo" en la pantalla donde viven las alertas de seguridad y los avisos
+de pago.
+
+**`?t=` significaba dos cosas** — la pista de tenant y las pestañas de módulo. En
+local, `/negocios?t=ofertas` dejaba la app entera vacía sin un solo error. Se
+renombró la pista, que es dev-only, no las pestañas, que están en cuatro
+módulos. El test además escanea el middleware: sin eso, los casos seguirían
+verdes mientras el bug vuelve.
+
+**Datos que se guardaban y nadie veía**, en tres pantallas (Propiedades, Eventos,
+Empleos). En Eventos había además un bug caro: el botón de boletos leía la
+columna PREMIUM, así que el enlace gratuito que el formulario pide no se mostraba
+nunca.
+
+**Lint: de 148 warnings a CERO.** 147 eran un solo patrón — 16 archivos de test
+copiando el mismo mock de `motion/react` y descartando props por destructuring.
+Un ruido de ese tamaño no es cosmético: tenía escondidos los seis warnings
+reales, entre ellos una prop muerta que quedó del arreglo del modo demo de
+Stripe. La config ahora honra el prefijo `_`, que el código ya usaba y el linter
+ignoraba.
+
+**Lo que NO se aplicó, y es la decisión más importante del día.** La 0106 traía
+el gate de identidad para publicar. Medido antes: **0 identidades verificadas
+sobre 20 perfiles**, y verificarse depende de Stripe Identity, que está sin
+claves. Habría dejado a todos sin poder publicar, con un `42501` crudo y sin
+forma de destrabarse. Vive en `supabase/migraciones-en-espera/`, **fuera de la
+cola de `db:migrate`**: una migración diferida dentro de `migrations/` la aplica
+el próximo que corra el script sin decidirlo.
+
+**Estado:** typecheck 0 · **lint 0 errores y 0 warnings** (eran 148) · 4.46x
+tests verdes · build verde · `check:rls` GATE VERDE con 97 superficies · nueve
+migraciones aplicadas y verificadas contra la base (0105-0108, 0110-0113).
+
+
+## El Loom de Nacho + la spec de módulos, en diez frentes (✅ 2026-08-24)
+
+**El Loom era anterior al deploy del 22-ago.** Producción corre `7fafc69`, que
+ya incluía "feedback completo de Nacho". De los nueve pedidos, cuatro ya estaban
+hechos (filtros de foto, botón Aplicar en la tarjeta de empleo, "Convertite en
+creador" en Ajustes, y el cambiador de perfil). Antes de rehacer nada conviene
+comparar el sha del deploy contra `main`; se pierde medio día si no.
+
+**Los videos: eran DOS bugs, no uno.** El `accept` del input aceptaba sólo
+mp4/webm —de ahí el `.mov` del iPhone en gris—, pero además `isOwnVideoPath` en
+`feed/actions.ts` tenía su propia regex con la misma lista. Ampliar sólo el input
+habría movido la falla al momento de publicar, con un código de error genérico.
+El catálogo quedó en mp4 + webm + quicktime y **hay un test que lo ancla contra
+`storage.buckets.allowed_mime_types`**, que es exactamente lo que el bucket
+permite (tope real: 80 MB). MKV/AVI/MPEG quedan afuera a propósito: el bucket los
+rechaza y además no se reproducen en `<video>`.
+
+**Notificaciones no era la base: era el límite `"use client"`.** La página es un
+Server Component y llamaba a `inboxTabId()`, una función que nacía dentro de un
+módulo `"use client"`, importada a través de un barril sin directiva. Next
+devuelve una referencia al cliente, no el valor, y llamarla tira.
+
+**Y el mismo tipo de bug apareció una segunda vez el mismo día, al revés**: el
+build de producción se cayó porque `store-card.tsx` tomaba `Estrellas` del barril
+`@/components/resenas`, que reexporta un módulo `server-only`, y ese barril
+terminaba en el grafo de un formulario `"use client"`. Ni `tsc` ni los 4.347
+tests lo veían — es una propiedad del grafo de webpack. Ahora hay un test por
+cada dirección: `components/notifications/client-boundary.test.ts` y
+`test/server-only-boundary.test.ts`.
+
+**La llave de toda la spec era una columna que ya existía.**
+`posts.entity_listing_id` (0023) vincula publicación ↔ ficha, `createPostAction`
+ya la persistía, y **ninguna UI la escribía**. Cablearla encendió de una vez las
+pestañas Publicaciones de Negocios y Profesionales y la regla de que lo comercial
+no se derrama a "Para ti" (que estaba implementada y nunca se ejercitaba).
+
+**Lo que NO se aplicó, y por qué importa.** La 0106 traía el gate de identidad
+para publicar alquiler, artículo, empleo y evento pago — correcto contra la spec.
+Medido antes de aplicarla: **0 identidades verificadas sobre 20 perfiles**, y
+verificarse depende de Stripe Identity, que está sin claves. Aplicarlo habría
+dejado a todos sin poder publicar, con un `42501` crudo y sin forma de
+destrabarse. Se separó a `supabase/migraciones-en-espera/0109_...`, **fuera de
+`migrations/`**: una migración diferida dentro de la cola la aplica el próximo
+`db:migrate` sin que nadie lo decida. Sus tres condiciones de activación están en
+el encabezado del archivo.
+
+**Stripe: el código estaba entero, faltaban las claves — y había un agujero.**
+`/impulsar-post` entraba en modo demo con la sola condición `!isStripeConfigured`,
+así que en producción (sin claves) **regalaba campañas pagas** con notificación de
+éxito y sin un error en los logs. Aparte, los tres productos por suscripción no
+tenían idempotencia real: `checkout.session.completed` y `.async_payment_succeeded`
+son dos `event.id`, así que un pago mandaba dos comprobantes; y una factura fuera
+de orden retrocedía `current_period_end`, con lo que **una insignia paga se
+apagaba sola**. Runbook completo en `docs/STRIPE.md`. Ningún pago corrió nunca,
+ni de prueba.
+
+**Datos inventados que no llegaron a producción.** El agente de Comunidad sembró
+tres centros de acopio ficticios *publicados* "para que la pantalla no nazca
+vacía". En una app para migrantes eso es alguien cargando bolsas hasta una puerta
+que no existe. Pasaron a `draft`: sirven de plantilla en el panel y la pantalla
+dice la verdad.
+
+**Estado del árbol:** typecheck 0 errores · lint 0 errores (147 warnings, contra
+77 de base; casi todas son props de framer-motion sin usar en mocks de tests) ·
+**4.428 tests en verde, 0 rojos** (eran 3.881) · build de producción verde ·
+`check:rls` **GATE VERDE con 97 superficies**.
+
+**Migraciones aplicadas:** 0105 (centro de acopio), 0106 (ofertas + funciones del
+gate + una ficha por negocio), 0107 (campos de alquiler/evento/empleo +
+`business_listing_id`), 0108 (`search_path` de `vertical_exige_identidad`, lo pidió
+el linter). Advisors: 51 lints, sólo uno nuevo y era ése.
+
+**Lo que quedó afuera y por qué** está en
+[`docs/PLAN_MODULOS_2026-08-24.md`](PLAN_MODULOS_2026-08-24.md): el feed
+Siguiendo/Para ti (choca con el techo de 8 KB de URL, necesita el RPC), "Tu zona"
+(transversal a las queries de todos los módulos), la pestaña Agentes y
+propietarios de Propiedades, y el estado "Alquilado".
+
+
 ## Auditoría completa del programa + endurecimiento (✅ 2026-08-13, tarde)
 
 Barrido de los ~1.035 archivos de `src/` (193k líneas) y las 104 migraciones en

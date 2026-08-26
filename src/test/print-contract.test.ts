@@ -262,7 +262,7 @@ const INVENTARIO: Record<string, Entrada> = {
   // <img> se imprime siempre (lo que el navegador omite es `background-*`). Fuera
   // de alcance de este defecto: el usuario está revisando el hero aparte.
   "src/app/(marketing)/page.tsx": {
-    inks: Array<string>(6).fill("text-on-media"),
+    inks: Array<string>(5).fill("text-on-media"),
     cobertura: "sobre <img>",
     prueba: { archivo: "src/components/marketing/hero-backdrop.tsx", contiene: ["<img"] },
   },
@@ -297,6 +297,15 @@ const INVENTARIO: Record<string, Entrada> = {
     cobertura: "control",
   },
   "src/components/admin/admin-nav.tsx": { inks: ["text-brand-foreground"], cobertura: "nav" },
+  // Insignia redonda del selector de autoría del composer: dice con qué
+  // identidad vas a publicar. Es una tinta clara sobre `bg-brand`, y el relleno
+  // no se imprime — así que lleva `cl-print-hide` en su propio className, igual
+  // que la insignia del header. No necesita `prueba` apuntando a otro archivo:
+  // el hook está en la misma línea que la tinta.
+  "src/components/feed/autoria-selector.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
   // Único portador que no es control: escudo verde sobre el avatar.
   "src/components/auth/identity-badge.tsx": {
     inks: ["text-on-success"],

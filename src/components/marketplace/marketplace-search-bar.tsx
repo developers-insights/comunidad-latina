@@ -23,7 +23,16 @@ const C = COPY.list;
  * único submit es Enter). Acá el cliente pidió poder buscar tocando la
  * lupa también, así que es un <button type="submit"> real.
  */
-export function MarketplaceSearchBar({ className }: { className?: string }) {
+export function MarketplaceSearchBar({
+  className,
+  label = C.searchLabel,
+  placeholder = C.searchPlaceholder,
+}: {
+  className?: string;
+  /** Override de copy — la pestaña Tiendas busca tiendas, no productos. */
+  label?: string;
+  placeholder?: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -72,8 +81,8 @@ export function MarketplaceSearchBar({ className }: { className?: string }) {
         type="search"
         inputMode="search"
         enterKeyHint="search"
-        aria-label={C.searchLabel}
-        placeholder={C.searchPlaceholder}
+        aria-label={label}
+        placeholder={placeholder}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         // El botón de borrar propio reemplaza al nativo del input type="search"

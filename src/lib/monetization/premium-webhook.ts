@@ -15,7 +15,8 @@ import {
   motivoDeDiscrepancia,
   pactadoFromMetadata,
 } from "./pactado";
-import { updatePremiumBySubscription, upsertPremium } from "./premium-db";
+import { concederUnaSolaVez } from "./concesion";
+import { updatePremiumBySubscription, type ListingPremiumUpsert } from "./premium-db";
 
 /**
  * =============================================================================
@@ -156,7 +157,7 @@ async function activateFromCheckout(
       ? session.subscription
       : (session.subscription?.id ?? null);
 
-  const { error } = await upsertPremium(admin, {
+  const valores: ListingPremiumUpsert = {
     tenant_id: tenantId,
     listing_id: listingId,
     owner_id: ownerId,
@@ -175,40 +176,62 @@ async function activateFromCheckout(
     stripe_customer_id: customerId(session.customer),
     stripe_checkout_session_id: session.id,
     updated_at: new Date().toISOString(),
-  });
-  if (error) {
-    // CHOQUE CONTRA OTRO ÍNDICE UNIQUE, no contra `listing_id`.
-    //
-    // El upsert resuelve `listing_id` por sí solo (`onConflict`), pero la tabla
-    // tiene otros dos uniques parciales (0054): `stripe_checkout_session_id` y
-    // `stripe_subscription_id`. Los dos significan lo mismo: ESA session (o esa
-    // suscripción) YA está vinculada a OTRO aviso. Es decir, un solo pago
-    // intentando encender un segundo premium — exactamente lo que esos índices
-    // existen para frenar.
-    //
-    // POR QUÉ SE TRAGA Y NO SE DEJA REVENTAR
-    // Reintentar no lo arregla: la session va a seguir vinculada al otro aviso
-    // en el reintento número mil. Dejar que lance daba un 500, y con `processed`
-    // en false Stripe reintenta durante tres días un evento que NUNCA va a poder
-    // aplicarse; de paso el premium tampoco se concedía y el ruido tapaba fallas
-    // reales. Conceder igual no es opción: sería el doble premium con un pago.
-    // Queda entonces la misma salida que una discrepancia de monto: no conceder,
-    // log de ALERTA con todo lo necesario para reconciliar, y 200.
-    //
-    // SÓLO ESTE CASO SE TRAGA. Cualquier otro error de escritura sigue lanzando,
-    // porque un fallo transitorio SÍ se arregla con el reintento de Stripe.
-    const detalle = `${error.message ?? ""} ${error.details ?? ""}`;
-    const esSessionYaUsada =
-      error.code === "23505" &&
-      /checkout_session_uniq|listing_premiums_subscription_uniq/.test(detalle);
-    if (!esSessionYaUsada) throw new Error(`upsert listing_premiums: ${error.code}`);
+  };
 
+  // LA CONCESIÓN SE GATEA EN EL `WHERE`, NO EN UN `upsert` A CIEGAS.
+  //
+  // Antes acá había un `upsert(onConflict: listing_id)` que escribía siempre y
+  // seguía de largo hasta la notificación y la auditoría. Como este handler es
+  // alcanzable DOS veces por el mismo pago —`checkout.session.completed` y
+  // `checkout.session.async_payment_succeeded` son dos `event.id` distintos, y
+  // el route reprocesa a propósito cuando `processed=false`—, la segunda pasada
+  // mandaba un segundo "tu publicación ya es premium", escribía una segunda fila
+  // de auditoría por un solo pago y, en el caso caro, resucitaba a `active` una
+  // suscripción cancelada entre medio (con el trigger espejo de 0054 volviendo a
+  // subir `listings.tier`). Es el mismo agujero que `activateBoost` ya tenía
+  // tapado con `.eq("status","pending_payment")`; acá el predicado es el token
+  // del pago, porque en una suscripción `active` es también el estado de partida
+  // de una reactivación legítima. Ver `lib/monetization/concesion.ts`.
+  //
+  // De paso desaparece el reconocimiento del "pago ya usado" por regex sobre el
+  // texto del error: los nombres de índice cambian con una migración y esa
+  // detección fallaba ABIERTA (un rename convertía un error permanente en tres
+  // días de reintentos). Ahora se releen los hechos.
+  const concesion = await concederUnaSolaVez(admin, {
+    tabla: "listing_premiums",
+    columnaSujeto: "listing_id",
+    sujeto: listingId,
+    columnaPago: "stripe_checkout_session_id",
+    pago: session.id,
+    valores: valores as unknown as Record<string, unknown>,
+  });
+
+  if (concesion.estado === "error") {
+    // Un fallo transitorio SÍ lo arregla el reintento de Stripe: se lanza.
+    throw new Error(`concesión listing_premiums: ${concesion.codigo}`);
+  }
+  if (concesion.estado === "pago_ya_usado") {
+    // ESA session (o esa suscripción) ya está vinculada a OTRO aviso: un solo
+    // pago intentando encender un segundo premium, que es justo lo que los
+    // uniques parciales de 0054 existen para frenar. Reintentar no lo arregla
+    // —va a seguir vinculada en el reintento número mil— y conceder igual sería
+    // el doble premium con un pago. Misma salida que una discrepancia de monto:
+    // no conceder, ALERTA con todo lo necesario para reconciliar, y 200.
     console.error(
       `[monetizacion:premium:webhook] ALERTA: la session ${session.id} (aviso ${listingId}, suscripción ${
         subscriptionId ?? "—"
       }) ya está vinculada a OTRO premium — NO se concede, para no dar dos premium con un pago. ${diagnosticoDeCobro(
         session,
       )}. Reconciliar a mano en el Dashboard.`,
+    );
+    return;
+  }
+  if (concesion.estado === "duplicado") {
+    // No es un error: es "otra entrega del mismo pago llegó primero". El premium
+    // ya está concedido; lo único que se evita acá es la segunda notificación y
+    // la segunda fila de auditoría.
+    console.warn(
+      `[monetizacion:premium:webhook] el aviso ${listingId} ya había quedado premium por otra entrega del pago (${session.id}) — no se duplican notificación ni auditoría.`,
     );
     return;
   }
@@ -229,7 +252,9 @@ async function activateFromCheckout(
     body: "Ya podés subir hasta 20 fotos, un video más largo y agregar tus botones de contacto.",
     href: `/impulsar/${listingId}/botones`,
   });
-  await admin.from("audit_log").insert({
+  // Best-effort SÍ, mudo NO: si la auditoría de una concesión paga se pierde, el
+  // rastro de por qué ese aviso es premium desaparece sin dejar señal.
+  const { error: auditError } = await admin.from("audit_log").insert({
     tenant_id: tenantId,
     actor_id: ownerId,
     action: "listing_premium_activated",
@@ -237,6 +262,11 @@ async function activateFromCheckout(
     subject_id: listingId,
     meta: { via: "stripe_checkout" },
   });
+  if (auditError) {
+    console.error(
+      `[monetizacion:premium:webhook] el aviso ${listingId} quedó PREMIUM pero no se pudo auditar — code=${auditError.code}. La concesión es válida; falta el rastro.`,
+    );
+  }
 }
 
 /* -------------------------------------------------------------------------- */

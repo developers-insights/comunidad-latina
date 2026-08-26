@@ -57,37 +57,9 @@ vi.mock("next/link", () => ({
 }));
 
 // motion neutralizado: el DOM refleja el estado al instante (patrón del repo).
-vi.mock("motion/react", () => {
-  const filter = (props: Record<string, unknown>) => {
-    const {
-      layout,
-      initial,
-      animate,
-      exit,
-      transition,
-      drag,
-      dragConstraints,
-      dragElastic,
-      onDragEnd,
-      whileTap,
-      whileHover,
-      ...rest
-    } = props;
-    return rest;
-  };
-  const div = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => (
-    <div {...filter(props)}>{children}</div>
-  );
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    m: { div },
-    motion: { div },
-    useReducedMotion: () => true,
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock(),
+);
 
 // El panel de auth trae los dos formularios y sus server actions: acá sólo
 // importa CUÁNDO se monta su hoja, no qué hay adentro.

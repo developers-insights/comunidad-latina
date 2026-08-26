@@ -256,6 +256,12 @@ function PostSheetBody({ postId }: { postId: string }) {
     }
     // `sessionNonce` no se usa adentro a propósito: está en las dependencias
     // para que entrar desde la hoja vuelva a pedir la publicación. Ver arriba.
+    //
+    // La regla lo marca como dependencia "innecesaria" porque no aparece en el
+    // cuerpo, y acá se equivoca: ése es justamente el mecanismo. Sacarla haría
+    // que después de iniciar sesión la hoja siguiera mostrando lo que se ve sin
+    // sesión hasta que la persona la cierre y la vuelva a abrir.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId, sessionNonce]);
 
   useEffect(() => {

@@ -7,7 +7,8 @@
  *
  * Contexto (ARQUITECTURA §3 y §4):
  * - El tenant del REQUEST sale del header `x-tenant-slug` que inyecta el
- *   middleware (Host en prod; `?t=` o cookie `cl-tenant` en dev/previews).
+ *   middleware (Host en prod; `?cl-tenant=` o la cookie del mismo nombre en
+ *   dev/previews).
  * - El tenant del USUARIO vive en el JWT (`app_metadata.tenant_id`) y es lo
  *   ÚNICO que gobierna la RLS, vía `app.current_tenant_id()`.
  * - Cuando divergen, la lectura de contenido publicado sigue funcionando
@@ -15,7 +16,7 @@
  *   escritura RLS-scoped rebota contra el `with check`.
  *
  * En producción la divergencia es inalcanzable porque `resolveTenantSlug`
- * IGNORA `?t=` y la cookie `cl-tenant` fuera de dev/preview: el tenant sale
+ * IGNORA la pista `?cl-tenant=` y su cookie fuera de dev/preview: el tenant sale
  * del Host y el visitante no lo puede mover. (Antes esto se justificaba con
  * "los dominios son registrables distintos, así que las cookies no cruzan" —
  * era falso: el deploy real vive en un único host `.vercel.app`, y por ahí se

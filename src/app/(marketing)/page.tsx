@@ -127,16 +127,7 @@ export default async function MarketingHome() {
           </Reveal>
 
           <Reveal delay={0.24} className="mt-9 flex flex-wrap items-center gap-3">
-            <Link href="/registro" className={buttonVariants({ variant: "primary", size: "lg" })}>
-              {COPY.hero.ctaPrimary}
-            </Link>
-            <Link
-              href="/propiedades"
-              className={cn(
-                buttonVariants({ variant: "outline", size: "lg" }),
-                "border-on-media/40 text-on-media hover:bg-on-media/10",
-              )}
-            >
+            <Link href="/propiedades" className={buttonVariants({ variant: "primary", size: "lg" })}>
               {COPY.hero.ctaSecondary}
             </Link>
           </Reveal>

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isProductCategory } from "@/components/marketplace/helpers";
+import { isFulfillmentMethod, isProductCategory } from "@/components/marketplace/helpers";
 
 /**
  * Schema del borrador de producto.
@@ -25,6 +25,17 @@ export const productDraftSchema = z.object({
   priceAmount: z.number().positive().max(1_000_000),
   category: z.string().refine(isProductCategory, "categoría inválida"),
   condition: z.enum(PRODUCT_CONDITION_VALUES).nullish(),
+  /**
+   * Envío / entrega / recogida (§ spec cliente: "todos los vendedores deben
+   * completar…"). Opcional al nivel del schema —igual que `condition`— para no
+   * romper avisos ya publicados sin este campo; el formulario SÍ lo exige
+   * antes de dejar enviar (ver publish-form.tsx). Hasta 3: son todos los
+   * valores que existen en el catálogo, así que más que eso es basura.
+   */
+  fulfillment: z
+    .array(z.string().refine(isFulfillmentMethod, "método de entrega inválido"))
+    .max(3)
+    .nullish(),
 });
 
 export type DraftInput = z.input<typeof productDraftSchema>;

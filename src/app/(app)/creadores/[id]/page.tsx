@@ -10,7 +10,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { z } from "zod";
 import { Avatar, BezelCard, CardMedia, buttonVariants } from "@/components/ui";
-import { IdentityBadge } from "@/components/auth/identity-badge";
+import { InsigniaDePerfil } from "@/components/verificacion/check-azul";
 import {
   PublisherTrust,
   buildTrustSignals,
@@ -32,6 +32,7 @@ import {
 } from "@/components/creators";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { leerCheckAzul, leerChecksAzules } from "@/lib/verificacion/read";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Trabajo" };
@@ -73,9 +74,10 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
   // Publicador (el negocio) con Trust Score.
   let publisherBlock: React.ReactNode = null;
   if (gig.created_by) {
-    const [{ data: profile }, { data: trust }] = await Promise.all([
+    const [{ data: profile }, { data: trust }, checkAzul] = await Promise.all([
       supabase.from("profiles").select("id, display_name, avatar_url, identity_verified").eq("id", gig.created_by).maybeSingle(),
       supabase.from("trust_scores").select("score, level, signals").eq("profile_id", gig.created_by).maybeSingle(),
+      leerCheckAzul(supabase, gig.created_by),
     ]);
     const name = profile?.display_name ?? "Negocio de la comunidad";
     publisherBlock = (
@@ -84,7 +86,11 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
           size="md"
           src={profile?.avatar_url ?? null}
           name={name}
-          badge={profile?.identity_verified ? <IdentityBadge /> : undefined}
+          badge={
+            checkAzul || profile?.identity_verified ? (
+              <InsigniaDePerfil checkAzul={checkAzul} identityVerified={profile?.identity_verified ?? false} />
+            ) : undefined
+          }
         />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-foreground">{name}</p>
@@ -292,7 +298,7 @@ async function OwnerApplications({
   const rows = applications ?? [];
   const creatorIds = [...new Set(rows.map((row) => row.creator_id))];
 
-  const [{ data: profiles }, { data: trusts }, { data: creatorProfiles }] = await Promise.all([
+  const [{ data: profiles }, { data: trusts }, { data: creatorProfiles }, checksAzules] = await Promise.all([
     creatorIds.length
       ? supabase.from("profiles").select("id, display_name, avatar_url, identity_verified").in("id", creatorIds)
       : Promise.resolve({ data: [] as never[] }),
@@ -305,6 +311,7 @@ async function OwnerApplications({
           .select("profile_id, headline, rating_avg, rating_count, completed_jobs")
           .in("profile_id", creatorIds)
       : Promise.resolve({ data: [] as never[] }),
+    leerChecksAzules(supabase, creatorIds),
   ]);
 
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
@@ -344,6 +351,7 @@ async function OwnerApplications({
               displayName: name,
               avatarUrl: profile?.avatar_url ?? null,
               identityVerified: profile?.identity_verified ?? false,
+              checkAzul: checksAzules.has(row.creator_id),
               headline: cp?.headline ?? null,
               ratingAvg: cp?.rating_avg ?? null,
               ratingCount: cp?.rating_count ?? 0,

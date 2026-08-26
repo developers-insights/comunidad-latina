@@ -124,3 +124,113 @@ describe("PublishForm — copy del paso texto según kind (feedback Geovanny)", 
     for (const title of titles) expect(title).not.toBe("Contanos sobre tu aviso");
   });
 });
+
+/* ===========================================================================
+ * Campos nuevos en el wizard: la venta ya no se ofrece, y lo opcional está
+ * plegado.
+ * =========================================================================== */
+
+/** Avanza del paso 0 (tipo) al paso 2 (precio y detalles) para un kind dado. */
+function irAlPasoDePrecio(kind: "property" | "event") {
+  mount(kind);
+  fireEvent.change(screen.getByLabelText(C.steps.text.titleLabel), {
+    target: { value: "Cuarto amplio en casa compartida" },
+  });
+  fireEvent.change(screen.getByLabelText(C.steps.text.descriptionLabel), {
+    target: {
+      value:
+        "Cuarto con placard en casa tranquila, a tres cuadras del tren. Servicios incluidos.",
+    },
+  });
+  fireEvent.click(screen.getByText(C.nav.next));
+}
+
+describe("PublishForm — vivienda: la venta salió del formulario", () => {
+  /**
+   * No alcanza con que el servidor la rechace: si la opción sigue en pantalla,
+   * alguien la elige, llena el aviso entero y recién al final se entera de que
+   * no se puede. Acá se verifica que ni siquiera se ofrezca.
+   */
+  it("no ofrece la opción 'Venta'", () => {
+    irAlPasoDePrecio("property");
+    expect(screen.queryByText("Venta")).toBeNull();
+    expect(screen.queryByText("Un precio único por la propiedad")).toBeNull();
+  });
+
+  /**
+   * Y en su lugar EXPLICA por qué. Un campo que desaparece sin decir nada se
+   * lee como un error de la app, no como una decisión.
+   */
+  it("dice en una línea que por ahora sólo se publican alquileres", () => {
+    irAlPasoDePrecio("property");
+    expect(screen.getByText(/Publicás un alquiler/i)).toBeTruthy();
+    expect(screen.getByText(/solo alquileres/i)).toBeTruthy();
+  });
+
+  it("ofrece el tipo 'Vivienda compartida' que pide la spec", () => {
+    irAlPasoDePrecio("property");
+    const select = screen.getByLabelText(C.steps.price.typeLabel) as HTMLSelectElement;
+    const opciones = Array.from(select.options).map((option) => option.value);
+    expect(opciones).toContain("vivienda_compartida");
+    expect(opciones).toContain("cuarto");
+  });
+
+  /**
+   * El DEPÓSITO queda a la vista y no plegado: después del alquiler es la
+   * pregunta que más se hace, y esconderla la dejaría sin contestar en casi
+   * todos los avisos.
+   */
+  it("muestra el depósito sin tener que abrir nada", () => {
+    irAlPasoDePrecio("property");
+    expect(screen.getByLabelText("Depósito")).toBeTruthy();
+  });
+
+  /**
+   * El resto de las condiciones vive PLEGADO. La regla del wizard es
+   * "obligatorio a la vista, opcional a un toque": cinco controles más
+   * desplegados convertirían el paso en una planilla que nadie termina en un
+   * teléfono.
+   */
+  it("mantiene el resto de las condiciones plegadas hasta que se abren", () => {
+    irAlPasoDePrecio("property");
+    const bloque = screen.getByText("Condiciones del alquiler").closest("details");
+    expect(bloque).toBeTruthy();
+    expect((bloque as HTMLDetailsElement).open).toBe(false);
+  });
+});
+
+describe("PublishForm — evento: los campos que faltaban", () => {
+  it("pide categoría, entrada y modalidad, todo a la vista", () => {
+    irAlPasoDePrecio("event");
+    expect(screen.getByLabelText("Categoría")).toBeTruthy();
+    expect(screen.getByText("Entrada")).toBeTruthy();
+    expect(screen.getByText("Gratis")).toBeTruthy();
+    expect(screen.getByText("¿Dónde es?")).toBeTruthy();
+    expect(screen.getByText("En línea")).toBeTruthy();
+  });
+
+  /**
+   * Un evento gratis no tiene precio. El campo no se "deshabilita": se va. Un
+   * input vacío y apagado sigue invitando a preguntarse qué habría que poner.
+   */
+  it("al marcar 'Gratis' desaparece el campo de precio", () => {
+    irAlPasoDePrecio("event");
+    expect(screen.queryByLabelText(C.steps.price.priceLabel)).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Gratis"));
+
+    expect(screen.queryByLabelText(C.steps.price.priceLabel)).toBeNull();
+  });
+
+  it("deja el enlace de entradas disponible sin pagar nada", () => {
+    irAlPasoDePrecio("event");
+    expect(screen.getByLabelText("Enlace de entradas o inscripción")).toBeTruthy();
+  });
+
+  it("capacidad y público quedan plegados", () => {
+    irAlPasoDePrecio("event");
+    const bloque = screen.getByText("Más datos del evento").closest("details");
+    expect(bloque).toBeTruthy();
+    expect((bloque as HTMLDetailsElement).open).toBe(false);
+  });
+});

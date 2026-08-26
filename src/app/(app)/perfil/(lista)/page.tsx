@@ -18,8 +18,14 @@ import {
   normalizeTrustLevel,
   trustSignalsFrom,
 } from "@/components/auth/trust-signals";
+import { moduleAvailability } from "@/components/shell/module-access";
+import { PerfilCambiarIdentidad } from "@/components/shell/identity-switcher";
 import { cn } from "@/lib/utils";
 import { leerCheckAzul } from "@/lib/verificacion/read";
+import {
+  getIdentidadActiva,
+  listarIdentidadesDeNegocio,
+} from "@/lib/perfil-activo/identidad";
 import { ProfileHeader } from "../profile-header";
 import { ShareProfileButton } from "../share-profile-button";
 import { ProfileTabSection } from "../profile-tab-section";
@@ -96,7 +102,7 @@ export default async function PerfilPage({
    * (no se le concede a `anon` a propósito, 0067) y sólo la usa el propio
    * usuario para formatear sus fechas.
    */
-  const [card, { data: trust }, counts, { count: contractsCount }] =
+  const [card, { data: trust }, counts, { count: contractsCount }, negociosDisponibles, identidadActiva] =
     await Promise.all([
       fetchProfileCard(supabase, user.id),
       supabase
@@ -113,6 +119,11 @@ export default async function PerfilPage({
         .select("*", { count: "exact", head: true })
         .eq("tenant_id", tenant.id)
         .or(`client_id.eq.${user.id},creator_id.eq.${user.id}`),
+      // Para la puerta del cambiador de perfil, junto a Editar/Verificar/
+      // Compartir. `cache()`-eadas (perfil-activo/identidad.ts): el header ya
+      // las pide en este mismo request, así que esto no repite la consulta.
+      listarIdentidadesDeNegocio(),
+      getIdentidadActiva(),
     ]);
 
   // Cuenta sin perfil (edge raro) → que complete el onboarding.
@@ -134,6 +145,12 @@ export default async function PerfilPage({
   // privado —es lo que ve cualquiera al lado del nombre—, así que meterla ahí
   // habría sido cambiar la firma de la función para nada.
   const checkAzul = await leerCheckAzul(supabase, card.id);
+
+  // Mismo gate que Ajustes: si la comunidad tiene Negocios apagado o "muy
+  // pronto", la puerta no se pinta — ofrecer un atajo a una ruta que 404 o que
+  // todavía no abre es peor que no ofrecerlo.
+  const negociosActivo =
+    moduleAvailability("negocios", tenant.modules, tenant.modulesSoon) === "active";
 
   return (
     <div className="flex flex-col gap-8">
@@ -185,6 +202,27 @@ export default async function PerfilPage({
               path={`/perfil/${card.id}`}
               displayName={card.displayName}
             />
+            {/* La puerta del cambiador de perfil (pedido cliente: "que haya una
+                chance... de cambiar de perfil como en Instagram", dicho
+                mirando ESTA pantalla). Reusa el mismo componente que el avatar
+                del header — nunca un segundo cambiador — y decide sola entre
+                "cambiar" y "crear tu primera cuenta de negocio" según
+                `negociosDisponibles`. Ver identity-switcher.tsx. */}
+            {negociosActivo && (
+              <PerfilCambiarIdentidad
+                personal={{ displayName: card.displayName, avatarUrl: card.avatarUrl }}
+                negocios={negociosDisponibles.map((negocio) => ({
+                  businessId: negocio.businessId,
+                  nombre: negocio.nombre,
+                  rol: negocio.rol,
+                }))}
+                activeBusinessId={
+                  identidadActiva.tipo === "negocio"
+                    ? identidadActiva.negocio.businessId
+                    : null
+                }
+              />
+            )}
           </div>
         }
       />

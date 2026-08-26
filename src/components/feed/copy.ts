@@ -54,7 +54,6 @@ export const COPY = {
     addMorePhotos: "Sumar otra foto",
     /** Tile "+" de la grilla (composer premium 2026-08-11): mismo cupo, ahora visible. */
     addPhotoTile: "Agregar foto",
-    changePhoto: "Cambiar foto",
     removePhoto: "Quitar foto",
     /** Botón sobre la miniatura: abre el editor de filtro y texto de esa foto. */
     editPhoto: "Editar foto",
@@ -67,19 +66,20 @@ export const COPY = {
     photoLimit: `Podés subir hasta ${MAX_PHOTOS} fotos por publicación.`,
     /** Contador discreto bajo la grilla: "3 de 10 fotos". */
     photoCount: (count: number, max: number): string => `${count} de ${max} fotos`,
-    // Algún medio sigue siendo obligatorio (feed visual, no periódico): si
-    // aprietan Publicar sin foto NI video, este aviso cálido los lleva al
-    // recuadro en vez de un botón muerto.
-    photoMissingTitle: "Te falta la foto",
-    photoMissingBody: "Sumá una imagen y ya podés publicar tu post.",
-    mediaMissingTitle: "Te falta la foto o el video",
-    mediaMissingBody: "Sumá al menos una foto o un video y ya podés publicar.",
     // Video (sprint reels): 1 por publicación, MP4/WebM, hasta 60 MB.
     addVideo: "Agregar video",
     removeVideo: "Quitar video",
     videoChip: "Video",
-    videoTooBig: "Ese video es muy pesado — probá con uno de menos de 60 MB.",
-    videoWrongType: "Solo podemos subir videos MP4 o WebM.",
+    /**
+     * Acá vivían `videoTooBig` y `videoWrongType`. Se fueron el 2026-08-24: el
+     * peso máximo y la lista de formatos aceptados los decide
+     * `@/lib/media/video-upload-limits`, y desde que ese módulo arma los dos
+     * mensajes con SUS números (`formatVideoTooBigMessage`,
+     * `VIDEO_WRONG_TYPE_MESSAGE`) estas dos líneas eran una segunda versión que
+     * ya nadie mostraba — y que decía "MP4 o WebM" cuando el input hace rato
+     * acepta también .mov. Un copy huérfano no molesta hasta el día que alguien
+     * lo vuelve a usar y contradice al que manda.
+     */
     videoLimit: "Por ahora va un video por publicación.",
     videoUploading: (percent: number) => `Subiendo tu video… ${percent}%`,
     videoUploadErrorTitle: "No pudimos subir el video",
@@ -139,6 +139,21 @@ export const COPY = {
     publishing: "Publicando…",
     successTitle: "¡Publicado!",
     successBody: "Tu publicación ya está visible para la comunidad.",
+    /**
+     * LA MISMA PUBLICACIÓN, FIRMADA POR UNA FICHA, NO LLEGA AL MISMO LUGAR.
+     *
+     * Con `entity_listing_id` puesto, `feedPostVisibilityFilter` la reparte solo
+     * a quien sigue la ficha (y a todos si hay campaña paga). El copy de arriba
+     * —"ya está visible para la comunidad"— sería FALSO ahí, y es la clase de
+     * mentira que más caro sale: el negocio publica al vacío el día uno, ve el
+     * "¡Publicado!" de siempre, y concluye que la app no funciona.
+     *
+     * Se dice el alcance real en positivo (dónde SÍ está) y se nombra la salida
+     * —Boost— sin convertir el éxito en una venta: primero la buena noticia,
+     * después qué se puede hacer.
+     */
+    successEntityBody:
+      "Ya está en tu ficha y en el feed de quien te sigue. Con Boost la ve toda la comunidad.",
     reviewTitle: "Tu publicación está en revisión",
     reviewBody:
       "El equipo la va a mirar en breve. Apenas esté aprobada, la va a ver toda la comunidad.",
@@ -154,11 +169,55 @@ export const COPY = {
     rateLimitedTitle: "Publicaste muchas cosas seguidas",
     rateLimitedBody: "Esperá un rato y seguí publicando. Tu cuenta está bien.",
     tooShort: "Contanos un poquito más — al menos un par de palabras.",
-    // Modo pregunta (menú crear-post, rediseño 2026-07-26): chip removible que
-    // marca el kind='question' — el post visible en la card usa su PROPIO
-    // copy (COPY.post.questionChip); esta es la del composer, antes de publicar.
-    questionModeChip: "Pregunta",
-    questionModeRemove: "Salir del modo pregunta",
+
+    /**
+     * A NOMBRE DE QUIÉN SALE ESTA PUBLICACIÓN (`posts.entity_listing_id`, 0023).
+     *
+     * No es un detalle de formulario: es la diferencia entre contar algo vos y
+     * decirlo con el nombre de tu negocio, y una publicación firmada por el
+     * negocio además llega distinto (sólo a quien lo sigue — ver
+     * `feedPostVisibilityFilter`). Por eso el copy AFIRMA en presente —"Vas a
+     * publicar como"— en vez de preguntar: quien no toca nada tiene que
+     * enterarse igual, sin leer una etiqueta de campo.
+     *
+     * Nada de esto se muestra cuando la persona sólo tiene su perfil: un
+     * selector de una sola opción estorba (mismo criterio que el cambiador del
+     * header, identity-switcher.tsx).
+     */
+    autoria: {
+      /** Encabezado de la fila, siempre en presente y sin signos de pregunta. */
+      label: "Vas a publicar como",
+      /** Segunda línea de la fila cuando no se eligió ninguna ficha. */
+      personal: "Tu perfil personal",
+      /** Qué es cada ficha, en una palabra, debajo de su nombre. */
+      kindLabel: { business: "Tu negocio", professional: "Tu ficha profesional" },
+      /** Acción de la fila. El control es toda la fila; esto la nombra. */
+      change: "Cambiar",
+      /** `aria-label` de la fila cerrada: dice el estado Y la acción. */
+      changeLabel: (nombre: string) => `Vas a publicar como ${nombre}. Cambiar de perfil`,
+      /** Título del grupo de opciones que se despliega. */
+      chooseLabel: "Elegí con qué perfil publicar",
+      /**
+       * Mientras el servidor contesta con qué fichas se puede firmar. Publicar
+       * queda apagado ese ratito a propósito: si saliera antes de la
+       * respuesta, saldría a nombre de quien no eligió nadie.
+       */
+      loading: "Viendo con qué perfiles podés publicar…",
+      /**
+       * No se pudo preguntar. Se dice lo ÚNICO que le importa a la persona —con
+       * qué nombre va a salir— en vez de un "error de conexión" que la deja
+       * adivinando.
+       */
+      failed: "No pudimos ver tus otros perfiles. Esta publicación va a salir con tu nombre.",
+      /**
+       * El servidor rechazó la ficha (`code: "entity"` de `createPostAction`).
+       * Pasa cuando la ficha dejó de estar publicada entre que se abrió el
+       * composer y se tocó Publicar — o cuando alguien mandó una ajena.
+       */
+      rejectedTitle: "No pudimos publicar con ese perfil",
+      rejectedBody:
+        "Puede que la ficha ya no esté publicada. Elegí otro perfil y probá de nuevo.",
+    },
 
     /**
      * PASO DE TEXTO (rediseño 2026-07-27, feedback del cliente: "no está el
@@ -322,7 +381,14 @@ export const COPY = {
         },
         property: {
           title: "Propiedad",
-          description: "Publicá un alquiler o una venta.",
+          /**
+           * SÓLO ALQUILERES (decisión de producto, 2026-08-24). El tile decía
+           * "un alquiler o una venta" y la venta ya no se puede publicar: el
+           * formulario no la ofrece. Nombrar las tres formas de alquiler que sí
+           * existen es además lo que la gente busca — "cuarto" y "vivienda
+           * compartida" son la mitad del catálogo real de la comunidad.
+           */
+          description: "Publicá un alquiler: departamento, cuarto o vivienda compartida.",
         },
         business: {
           title: "Negocio",
@@ -348,15 +414,23 @@ export const COPY = {
           title: "Servicio de creador",
           description: "Contratá a un creador de contenido para tu negocio.",
         },
+        // "Boost" y no "Impulsar": es el mismo nombre que usan la octava
+        // sección de /buscar y la pantalla de /impulsar. Un solo nombre para la
+        // misma compra en toda la app — antes cambiaba al tocar el botón.
+        boost: {
+          title: "Boost",
+          description: "Pagá para que tu aviso o tu publicación lleguen a más gente.",
+        },
       },
     },
   },
 
   inviteCard: {
     title: "Unite a la conversación",
-    body: "Con tu cuenta podés publicar, preguntar y responderle a tus vecinos. Te toma un minuto.",
-    cta: "Crear mi cuenta",
-    secondary: "Ya tengo cuenta",
+    body: "Con tu cuenta podés publicar, preguntar y responderle a tus vecinos.",
+    // El alta de cuentas está en pausa (todavía nadie puede crear una): queda
+    // un solo botón, el de entrar con una cuenta que ya existe.
+    cta: "Entrá a tu cuenta",
   },
 
   post: {
@@ -407,7 +481,6 @@ export const COPY = {
      * si no, el corte parece un video roto.
      */
     previewChip: "Vista previa",
-    previewHint: "Tocá para verlo completo",
     /** Nombre accesible del toque cuando lo que se ve es sólo un anticipo. */
     playFullVideo: "Ver el video completo",
     /** "· por {nombre}" bajo el nombre de la entidad. */
@@ -509,7 +582,6 @@ export const COPY = {
     externalPublisher: (name: string) => `Publicado por ${name}`,
     communityMember: "Alguien de la comunidad",
     sheetPublishedBy: "Publicado por",
-    sheetDirectoryCta: "Ver el directorio de negocios",
     sheetClose: "Cerrar",
     sheetSafety:
       "Nunca envíes dinero por adelantado sin verificar en persona o por video con quién estás tratando.",
@@ -537,8 +609,8 @@ export const COPY = {
     loadMoreErrorTitle: "No pudimos cargar más publicaciones",
     loadMoreErrorBody: "Puede ser un ratito de conexión floja — no es tu culpa.",
     retry: "Reintentar",
-    // Pull-to-refresh (solo táctil, arriba del todo del feed).
-    pullToRefreshHint: "Deslizá hacia abajo para actualizar",
+    // Pull-to-refresh (solo táctil, arriba del todo del feed). El indicador es
+    // visual; estas dos son lo que anuncia el lector de pantalla.
     pullToRefreshRelease: "Soltá para actualizar",
     refreshing: "Actualizando tu feed…",
   },

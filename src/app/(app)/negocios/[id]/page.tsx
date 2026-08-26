@@ -15,14 +15,17 @@ import {
 import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
 import { ACCENT_CHIP_CLASS, DirectoryDetailHero, FollowRow } from "@/components/directory";
-import { HorarioSeccion } from "@/components/negocios";
-import { PostSheetTrigger } from "@/components/feed";
 import {
-  ResenaForm,
-  ResenasLista,
-  ResumenPuntajeCard,
-  fetchResenasDeAviso,
-} from "@/components/resenas";
+  EMPLEOS_DEL_NEGOCIO_TITULO,
+  EmpleosDelNegocio,
+  HorarioSeccion,
+} from "@/components/negocios";
+import { PostSheetTrigger } from "@/components/feed";
+import { ResenaForm, ResenasLista, ResumenPuntajeCard } from "@/components/resenas";
+// Import DIRECTO: el barril no puede reexportar esto sin arrastrar
+// `server-only` al bundle de sus consumidores cliente (ver su encabezado).
+import { fetchResenasDeAviso } from "@/components/resenas/queries";
+import { fetchPuestosDelNegocio } from "@/lib/negocios/empleos";
 import { puedeOfrecerseElFormulario } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -54,6 +57,9 @@ import { BUSINESS_PROFILE_COPY as C } from "./copy";
  *
  *   · horarios       → listing_hours + listing_hours_slots (0093)
  *   · reseñas        → listing_reviews + listing_review_stats (0093)
+ *   · puestos        → listings.business_listing_id (0107) — los empleos que
+ *                      este comercio publicó. Hasta esa migración el negocio y
+ *                      sus vacantes eran dos avisos sin nada que los uniera.
  *
  * HORARIOS Y RESEÑAS YA EXISTEN (migración 0093). Hasta esa migración ninguna
  * tabla del esquema los guardaba y las dos secciones se mostraban con un vacío
@@ -130,8 +136,14 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
 
   // Seguidores + publicaciones del negocio + guardado: independientes, en
   // paralelo. Ninguna es bloqueante — si alguna falla, la sección cae a vacío.
-  const [{ count: followerCount }, myFollowResult, postsResult, initialSaved, resenas] =
-    await Promise.all([
+  const [
+    { count: followerCount },
+    myFollowResult,
+    postsResult,
+    initialSaved,
+    resenas,
+    puestos,
+  ] = await Promise.all([
       listing.created_by
         ? supabase
             .from("follows")
@@ -162,6 +174,12 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
       // Reseñas: resumen + página + si administro este aviso. Tolerante a
       // errores por dentro — si algo falla, la sección cae a vacío como el resto.
       fetchResenasDeAviso(supabase, listing.id, user?.id ?? null),
+      // Puestos abiertos (0107). Tolerante también: en un entorno sin la
+      // migración aplicada devuelve [] y la sección no se dibuja.
+      fetchPuestosDelNegocio(supabase, {
+        tenantId: tenant.id,
+        businessListingId: listing.id,
+      }),
     ]);
 
   const posts = (postsResult.data ?? []).map((post) => {
@@ -269,7 +287,12 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
             <Chip className={ACCENT_CHIP_CLASS.negocios}>{categoryLabel}</Chip>
           )}
           {listing.store_verified && (
-            <Badge variant="success">
+            // Azul y no verde, igual que la card (negocios/business-card.tsx) y
+            // que Marketplace (PresenciaVerificadaBadge): `store_verified` es el
+            // espejo de un PLAN PAGO, y el verde queda reservado para lo que se
+            // verifica de la persona (IdentityBadge). La misma tienda no puede
+            // verse azul en un módulo y verde en otro por el mismo hecho.
+            <Badge variant="info">
               <SealCheck size={14} weight="fill" aria-hidden="true" />
               {C.verified}
             </Badge>
@@ -442,6 +465,19 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
           <SectionEmpty icon={<Storefront size={20} />}>{C.postsEmpty}</SectionEmpty>
         )}
       </section>
+
+      {/* PUESTOS ABIERTOS (0107). Va DESPUÉS de las publicaciones y ANTES de
+          las reseñas: quien llegó hasta acá ya sabe qué hace el negocio, y una
+          vacante es una llamada a la acción — no puede quedar debajo de una
+          lista de reseñas que puede medir dos pantallas. Sin puestos abiertos
+          la sección entera no existe (el componente devuelve null): "este
+          negocio no está contratando" no le sirve a nadie. */}
+      {puestos.length > 0 && (
+        <section className="mt-6">
+          <SectionTitle>{EMPLEOS_DEL_NEGOCIO_TITULO}</SectionTitle>
+          <EmpleosDelNegocio puestos={puestos} />
+        </section>
+      )}
 
       {/* RESEÑAS (0093). El formulario se ofrece SOLO a quien la base va a
           dejar escribir: sin sesión no aparece, y al dueño ni a su equipo

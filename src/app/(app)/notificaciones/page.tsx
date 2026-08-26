@@ -2,19 +2,17 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BellSimple, SlidersHorizontal } from "@phosphor-icons/react/dist/ssr";
+import { BellSimple, CloudSlash, SlidersHorizontal } from "@phosphor-icons/react/dist/ssr";
 import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/utils";
-import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
+import { Banner, EmptyState, Skeleton, buttonVariants } from "@/components/ui";
 import {
   BroadcastCard,
   CategoryTabs,
   CriticalNotification,
-  INBOX_PANEL_ID,
   InboxFilters,
   MarkAllRead,
   NotificationItem,
-  inboxTabId,
   notificationsCopy as COPY,
   type BroadcastCardData,
   type NotificationItemData,
@@ -26,7 +24,9 @@ import {
   type NotificationCategory,
 } from "@/lib/notifications/categories";
 import {
+  INBOX_PANEL_ID,
   inboxHref,
+  inboxTabId,
   parseInboxQuery,
   type InboxQuery,
 } from "@/lib/notifications/href";
@@ -113,7 +113,14 @@ export default async function NotificacionesPage({
   if (!userId) redirect("/entrar?next=/notificaciones");
 
   const supabase = await createClient();
-  const { data: countsData } = await supabase.rpc("notification_counts");
+  const { data: countsData, error: countsError } = await supabase.rpc("notification_counts");
+
+  // El contador que falla NO tumba la pantalla —la lista se pide aparte y puede
+  // venir bien— pero tampoco se traga en silencio: sin esta línea, unas pestañas
+  // sin globito y un "Estás al día" falso eran indistinguibles de la verdad.
+  if (countsError) {
+    console.error("[notificaciones] notification_counts falló:", countsError.message);
+  }
 
   const counts: Partial<Record<NotificationCategory, number>> = {};
   for (const row of countsData ?? []) {
@@ -128,9 +135,15 @@ export default async function NotificacionesPage({
           <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
             {COPY.title}
           </h1>
-          <p className="mt-1 text-sm text-foreground-secondary">
-            {totalUnread > 0 ? COPY.header.unread(totalUnread) : COPY.header.allRead}
-          </p>
+          {/* Con el contador caído, `totalUnread` es 0 por defecto y "Estás al
+              día" pasaría a ser una afirmación inventada sobre avisos de
+              seguridad. Callarse es lo correcto: la lista de abajo dice la
+              verdad por su cuenta. */}
+          {!countsError && (
+            <p className="mt-1 text-sm text-foreground-secondary">
+              {totalUnread > 0 ? COPY.header.unread(totalUnread) : COPY.header.allRead}
+            </p>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
@@ -199,7 +212,10 @@ async function InboxList({ query, userId }: { query: InboxQuery; userId: string 
   // pestaña sería el mismo cartel siete veces.
   const showBroadcasts = query.tab === "todas" || query.tab === "plataforma";
 
-  const [{ data: notificationsData }, { data: broadcastsData }] = await Promise.all([
+  const [
+    { data: notificationsData, error: notificationsError },
+    { data: broadcastsData, error: broadcastsError },
+  ] = await Promise.all([
     notificationsQuery,
     showBroadcasts
       ? supabase
@@ -207,8 +223,21 @@ async function InboxList({ query, userId }: { query: InboxQuery; userId: string 
           .select("id, title, body, cta_url, starts_at")
           .order("starts_at", { ascending: false })
           .limit(10)
-      : Promise.resolve({ data: [] as BroadcastRow[] }),
+      : Promise.resolve({ data: [] as BroadcastRow[], error: null }),
   ]);
+
+  // La lista es lo único que esta pantalla tiene para decir: si no se pudo leer,
+  // NO se cae al estado vacío. Un `data` en null y un "no tenés nada" son
+  // indistinguibles para quien mira, y acá viven las alertas de seguridad y los
+  // pagos fallidos — el precio de confundirlos es que alguien no se entere.
+  if (notificationsError) {
+    console.error("[notificaciones] lectura de la bandeja falló:", notificationsError.message);
+    return <InboxError />;
+  }
+  // El broadcast que falla no oculta la bandeja personal: se loguea y sigue.
+  if (broadcastsError) {
+    console.error("[notificaciones] lectura de broadcasts falló:", broadcastsError.message);
+  }
 
   const rows = (notificationsData ?? []) as NotificationRow[];
   const broadcasts = (broadcastsData ?? []) as BroadcastRow[];
@@ -219,7 +248,7 @@ async function InboxList({ query, userId }: { query: InboxQuery; userId: string 
     // lee con `profile_id = auth.uid() OR is_global_admin()`, así que sin esto
     // un global_admin se trae los acuses de TODA la comunidad y cualquier
     // broadcast que otro ya cerró le desaparece a él sin haberlo visto.
-    const { data: receiptsData } = await supabase
+    const { data: receiptsData, error: receiptsError } = await supabase
       .from("broadcast_receipts")
       .select("broadcast_id")
       .eq("profile_id", userId)
@@ -227,6 +256,14 @@ async function InboxList({ query, userId }: { query: InboxQuery; userId: string 
         "broadcast_id",
         broadcasts.map((b) => b.id),
       );
+    // Sin acuses no se esconde nada: un broadcast ya cerrado vuelve a aparecer.
+    // Molesto, no grave — pero queda en el log para que no parezca un capricho.
+    if (receiptsError) {
+      console.warn(
+        "[notificaciones] acuses de broadcast no leídos, pueden reaparecer:",
+        receiptsError.message,
+      );
+    }
     const seen = new Set((receiptsData ?? []).map((r) => r.broadcast_id));
     pendingBroadcasts = broadcasts
       .filter((b) => !seen.has(b.id))
@@ -290,6 +327,35 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * ERROR DE LECTURA — nunca el estado vacío.
+ *
+ * Un `Banner variant="warning"` y no un `EmptyState`: el vacío de esta bandeja
+ * es una buena noticia ("Por ahora, todo tranquilo") y tiene la misma forma en
+ * pantalla que el resto de los vacíos del producto. Un fallo de lectura no
+ * puede compartir esa forma ni ese tono. Mismo componente, mismo ícono y mismo
+ * texto que /perfil/guardados, que resuelve el mismo problema.
+ */
+function InboxError() {
+  return (
+    <Banner
+      variant="warning"
+      icon={<CloudSlash size={20} aria-hidden="true" />}
+      action={
+        <Link
+          href="/notificaciones"
+          className={buttonVariants({ variant: "secondary", size: "sm" })}
+        >
+          {COPY.error.retry}
+        </Link>
+      }
+    >
+      <p className="font-semibold text-foreground">{COPY.error.title}</p>
+      <p className="text-foreground-secondary">{COPY.error.body}</p>
+    </Banner>
+  );
+}
+
+/**
  * Vacío que EXPLICA. Tres situaciones distintas y tres mensajes distintos: no es
  * lo mismo "no te pasó nada todavía" que "filtraste y no quedó nada" — el
  * segundo necesita una salida, y es el enlace para sacar el filtro.
@@ -334,7 +400,7 @@ function InboxEmpty({ query }: { query: InboxQuery }) {
       title={COPY.empty.allTitle}
       message={COPY.empty.allMessage}
       action={
-        <Link href="/propiedades" className={buttonVariants({ variant: "secondary", size: "md" })}>
+        <Link href="/feed" className={buttonVariants({ variant: "secondary", size: "md" })}>
           {COPY.empty.allCta}
         </Link>
       }

@@ -18,6 +18,7 @@ import {
   MAX_VIDEOS,
   checkPhotoPayload,
 } from "@/lib/media/post-media-limits";
+import { VIDEO_FILENAME_PATTERN } from "@/lib/media/video-upload-limits";
 import { parseMediaFilterRef, type MediaFilterRef } from "@/lib/media/photo-filters";
 import {
   TIER_HUMAN,
@@ -33,6 +34,7 @@ import {
   type MediaItem,
 } from "@/lib/integrity";
 import { currentSourceHost } from "@/lib/integrity/source-host";
+import { puedeFirmarComo } from "@/lib/feed/autoria";
 import { notifyPostComment, notifyPostReaction } from "./social-notifications";
 
 /**
@@ -121,13 +123,19 @@ const PHOTO_TYPES: Record<string, string> = {
 
 /**
  * Path de video en post-media que este server ACEPTA en posts.media:
- * exactamente {tenant}/{user}/{archivo}.(mp4|webm), sin traversal posible.
+ * exactamente {tenant}/{user}/{archivo}.{extensión}, sin traversal posible.
  * El prefijo se valida contra el tenant del guard y el user del JWT — el
  * cliente no puede colar un path ajeno (y la policy 0025 ya lo habría
  * rechazado al subir; esto es defensa en profundidad al PERSISTIR).
+ *
+ * Las extensiones válidas salen de `VIDEO_FILENAME_PATTERN`
+ * (`@/lib/media/video-upload-limits`) — el MISMO catálogo que decide qué
+ * deja elegir el `accept` del composer. Estuvo hardcodeado acá como
+ * `(mp4|webm)` mientras el composer ya aceptaba más formatos (.mov de
+ * iPhone, entre otros): el picker dejaba elegir el archivo y esta regex lo
+ * rechazaba en silencio recién al publicar, con un `code: "photo"` genérico
+ * que no explicaba nada.
  */
-const VIDEO_FILENAME_RE = /^[A-Za-z0-9._-]+\.(mp4|webm)$/i;
-
 function isOwnVideoPath(path: string, tenantId: string, userId: string): boolean {
   const segments = path.split("/");
   if (segments.length !== 3) return false;
@@ -135,7 +143,7 @@ function isOwnVideoPath(path: string, tenantId: string, userId: string): boolean
   return (
     tenantSegment === tenantId &&
     userSegment === userId &&
-    VIDEO_FILENAME_RE.test(filename) &&
+    VIDEO_FILENAME_PATTERN.test(filename) &&
     !filename.includes("..")
   );
 }
@@ -194,7 +202,21 @@ export type CreatePostResult =
     }
   | {
       ok: false;
-      code: "invalid" | "unauthenticated" | "photo" | "error" | "rate-limited";
+      /**
+       * `entity`: se pidió firmar la publicación con una ficha que no es de
+       * quien firma, que no está publicada o que no es de esta comunidad (ver
+       * `puedeFirmarComo`). Es un código PROPIO y no `invalid` a propósito: son
+       * dos arreglos distintos —uno se arregla escribiendo más, el otro
+       * eligiendo otro perfil— y un solo código obligaría al composer a
+       * adivinar cuál de los dos mensajes mostrar.
+       */
+      code:
+        | "invalid"
+        | "unauthenticated"
+        | "photo"
+        | "entity"
+        | "error"
+        | "rate-limited";
     }
   /**
    * El video no cumple la política de duración (`src/lib/media/video-policy.ts`).
@@ -453,6 +475,35 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // ya lo habría rechazado al subir; esto es la misma regla al guardar).
   if (videoPaths.some((path) => !isOwnVideoPath(path, tenant.id, user.id))) {
     return { ok: false, code: "photo" };
+  }
+
+  /**
+   * ---- LA FIRMA DE LA PUBLICACIÓN (`entity_listing_id`, 0023) --------------
+   *
+   * MISMA CATEGORÍA QUE LA LÍNEA DE ARRIBA: el cliente dice "esto es mío" y el
+   * servidor lo comprueba contra la base. `entityId` llega por el body, así que
+   * persistirlo sin validar es dejar que cualquiera con un token de la
+   * comunidad publique a nombre del negocio de otro — el `listings.id` de una
+   * ficha es público, está en su propia URL.
+   *
+   * La policy `posts_insert` ya lo rechazaría. Esto corta ANTES, por dos
+   * motivos: para no gastar Storage ni la llamada de moderación en algo que no
+   * se va a poder guardar, y para poder devolver un motivo que el composer sepa
+   * explicar en vez de un código de PostgREST.
+   */
+  if (entityId) {
+    const puede = await puedeFirmarComo(supabase, {
+      tenantId: tenant.id,
+      userId: user.id,
+      listingId: entityId,
+    });
+    if (!puede) {
+      // Sin PII: no se registra qué ficha se intentó usar ni desde qué cuenta.
+      console.warn("[feed] intento de publicar con una ficha no disponible", {
+        tenant: tenant.slug,
+      });
+      return { ok: false, code: "entity" };
+    }
   }
 
   // Techo de publicación, ANTES de la moderación y de tocar Storage. Es el

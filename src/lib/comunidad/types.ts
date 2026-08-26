@@ -104,12 +104,17 @@ export interface LostFoundCase {
  * los grupos en pantalla, y no es alfabético: arriba lo que la gente busca
  * cuando algo se puso urgente.
  *
- * `voluntariado` (migración 0099) va AL FINAL a propósito, separado de los
- * ocho anteriores: los primeros ocho son "necesito ayuda", éste es "quiero
- * darla" — el único tema del directorio que no es una urgencia. Sigue siendo
+ * `voluntariado` (migración 0099) y `acopio` (migración 0105) van AL FINAL a
+ * propósito, separados de los ocho anteriores: los primeros ocho son "necesito
+ * ayuda", estos dos son "quiero darla" —de tiempo uno, de bienes materiales el
+ * otro— y ninguno es una urgencia propia. Los dos siguen siendo
  * `community_resources` (organizaciones curadas, con fuente obligatoria) y NO
  * un tablón donde cualquiera publica su convocatoria: ver la portada de
  * Comunidad (`(indice)/page.tsx`) para la decisión completa.
+ *
+ * OJO: `acopio` (dejar una donación) no es lo mismo que `comida` (recibir
+ * comida) — son direcciones opuestas de la misma ayuda. La distinción
+ * completa está en el docblock de `0105_centro_de_acopio.sql`.
  */
 export const RESOURCE_TOPICS = [
   "emergencias",
@@ -121,6 +126,7 @@ export const RESOURCE_TOPICS = [
   "vivienda",
   "educacion",
   "voluntariado",
+  "acopio",
 ] as const;
 export type ResourceTopic = (typeof RESOURCE_TOPICS)[number];
 

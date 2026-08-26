@@ -2,12 +2,18 @@ import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  Armchair,
   Bathtub,
   Bed,
+  CalendarCheck,
   ChartBar,
   House,
   Key,
+  Lightning,
+  ListChecks,
   MapPin,
+  Money,
+  Receipt,
   RocketLaunch,
   Ruler,
   Storefront,
@@ -18,6 +24,7 @@ import { Avatar, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui
 import {
   COPY,
   ContactCta,
+  DetailFacts,
   DetailTopBar,
   ListingActions,
   ListingGallery,
@@ -41,8 +48,16 @@ import {
   PROPERTY_TYPE_LABEL,
   readPropertyFacts,
 } from "@/lib/propiedades/tipos";
+import {
+  FURNISHED_LABEL,
+  RENTAL_TERMS_COPY,
+  readRentalTerms,
+  rentalRequirementLabel,
+  rentalUtilityLabel,
+} from "@/lib/propiedades/alquiler";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { cn } from "@/lib/utils";
+import type { DetailFact } from "@/components/listings";
 
 type Params = Promise<{ id: string }>;
 
@@ -221,6 +236,87 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
   const photos = (listing.photos ?? []).map(listingPhotoUrl);
   const isOwner = Boolean(user && listing.created_by === user.id);
 
+  /**
+   * Condiciones del alquiler (`readRentalTerms`) — depósito, cargos aparte,
+   * servicios incluidos, requisitos, muebles y desde cuándo.
+   *
+   * El formulario de publicar ya capturaba las seis y el detalle no mostraba
+   * NINGUNA: la persona las cargaba y después igual contestaba las mismas seis
+   * preguntas por chat. Cada fila se agrega SÓLO si el aviso la declaró — un
+   * aviso viejo no dice "sin amueblar" porque nunca lo dijo (ver el docblock de
+   * `alquiler.ts`), y una ficha sin filas no renderiza la sección.
+   *
+   * El depósito en CERO sí se muestra, y con su propia frase: "no pido
+   * depósito" es una afirmación fuerte y buena para quien alquila, y colapsarla
+   * a "US$ 0" la haría parecer un campo sin completar.
+   */
+  const rental = readRentalTerms(listing.attrs);
+  const rentalFacts: DetailFact[] = [];
+  if (rental.deposit !== null) {
+    rentalFacts.push({
+      id: "deposit",
+      icon: Money,
+      label: RENTAL_TERMS_COPY.deposit,
+      value:
+        rental.deposit === 0
+          ? RENTAL_TERMS_COPY.noDeposit
+          : (formatListingPrice(rental.deposit, listing.price_currency, null, tenant.locale) ??
+            RENTAL_TERMS_COPY.noDeposit),
+    });
+  }
+  if (rental.extraFees) {
+    rentalFacts.push({
+      id: "extra-fees",
+      icon: Receipt,
+      label: RENTAL_TERMS_COPY.extraFees,
+      value: rental.extraFees,
+    });
+  }
+  if (rental.utilities.length > 0) {
+    rentalFacts.push({
+      id: "utilities",
+      icon: Lightning,
+      label: RENTAL_TERMS_COPY.utilities,
+      // `rentalUtilityLabel` sólo devuelve null para un valor fuera del
+      // catálogo, y `normalizeUtilities` ya descartó ésos: el filtro es la red
+      // de contención del tipo, no un caso esperado.
+      value: rental.utilities
+        .map((slug) => rentalUtilityLabel(slug))
+        .filter(Boolean)
+        .join(" · "),
+    });
+  }
+  if (rental.requirements.length > 0) {
+    rentalFacts.push({
+      id: "requirements",
+      icon: ListChecks,
+      label: RENTAL_TERMS_COPY.requirements,
+      value: rental.requirements
+        .map((slug) => rentalRequirementLabel(slug))
+        .filter(Boolean)
+        .join(" · "),
+    });
+  }
+  if (rental.furnished !== null) {
+    rentalFacts.push({
+      id: "furnished",
+      icon: Armchair,
+      label: RENTAL_TERMS_COPY.furnished,
+      value: FURNISHED_LABEL[rental.furnished],
+    });
+  }
+  if (rental.availableFrom) {
+    rentalFacts.push({
+      id: "available-from",
+      icon: CalendarCheck,
+      label: RENTAL_TERMS_COPY.availableFrom,
+      // `formatDate` detecta el formato `YYYY-MM-DD` y lo formatea en UTC: una
+      // fecha sin hora no es un instante, y pasarla por la zona del lector le
+      // restaría un día a cualquiera al oeste de Greenwich.
+      value: formatDate(rental.availableFrom, { locale: tenant.locale, style: "long" }),
+    });
+  }
+
   return (
     // pb-40: el CTA "Contactar" es `fixed` sobre el bottom-nav (3.5rem) y se
     // eleva con env(safe-area-inset-bottom) en equipos con notch/home indicator.
@@ -350,6 +446,15 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
           </p>
         </section>
       )}
+
+      {/* Condiciones del alquiler — después de la descripción y ANTES de la
+          ubicación: es lo que se pregunta apenas el aviso convence, y la zona
+          aproximada ya la anticipó el chip de arriba. */}
+      <DetailFacts
+        title={RENTAL_TERMS_COPY.title}
+        facts={rentalFacts}
+        footnote={RENTAL_TERMS_COPY.footnote}
+      />
 
       <section className="mt-6">
         <h2 className="mb-2 text-sm font-semibold text-foreground-secondary">

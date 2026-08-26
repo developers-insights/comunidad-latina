@@ -12,6 +12,7 @@ import {
 } from "@/components/creators";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { leerChecksAzules } from "@/lib/verificacion/read";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Buscar creadores" };
@@ -48,7 +49,7 @@ async function DirectoryContent() {
   const profileRows = rows ?? [];
   const profileIds = profileRows.map((row) => row.profile_id);
 
-  const [profilesResult, followsResult, myProfileResult] = await Promise.all([
+  const [profilesResult, followsResult, myProfileResult, checksAzules] = await Promise.all([
     profileIds.length > 0
       ? supabase.from("profiles").select("id, display_name, avatar_url, identity_verified").in("id", profileIds)
       : Promise.resolve({ data: [] as never[] }),
@@ -63,6 +64,7 @@ async function DirectoryContent() {
     user
       ? supabase.from("creator_profiles").select("profile_id").eq("profile_id", user.id).maybeSingle()
       : Promise.resolve({ data: null }),
+    leerChecksAzules(supabase, profileIds),
   ]);
 
   const profileById = new Map((profilesResult.data ?? []).map((p) => [p.id, p]));
@@ -75,6 +77,7 @@ async function DirectoryContent() {
       displayName: profile?.display_name ?? "Creador de la comunidad",
       avatarUrl: profile?.avatar_url ?? null,
       identityVerified: profile?.identity_verified ?? false,
+      checkAzul: checksAzules.has(row.profile_id),
       headline: row.headline,
       skills: row.skills ?? [],
       portfolioUrl: firstPortfolioUrl(row.portfolio_photos),

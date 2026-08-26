@@ -25,6 +25,7 @@ import {
   fetchListingExtras,
   fetchPostMusic,
   fetchPostPolls,
+  fetchPromotionsForPosts,
   fetchViewerLikes,
   fetchViewerSaves,
   toFeedListingModel,
@@ -34,6 +35,7 @@ import {
   type PostRow,
 } from "./queries";
 import { fetchPostTags } from "@/lib/social/post-tags";
+import { fetchFeedListingsPageViaRpc, fetchFeedPostsPageViaRpc } from "./feed-rpc";
 
 /**
  * Módulo FLUIDEZ — paginación del feed como server action.
@@ -70,6 +72,12 @@ const TAB_KIND: Partial<Record<FeedTabId, string>> = {
 
 type Supabase = SupabaseClient<Database>;
 type Cursor = { createdAt: string; id: string } | null;
+type GuideRow = {
+  slug: string;
+  title: string;
+  summary: string | null;
+  reading_minutes: number | null;
+};
 
 export interface FeedPageResult {
   items: FeedItem[];
@@ -134,6 +142,50 @@ async function loadParaTiPage({
 }): Promise<FeedPageResult> {
   const isFirstPage = !cursor;
 
+  const guidePromise =
+    isFirstPage && GUIDES_IN_FEED_ENABLED
+      ? supabase
+          .from("guides")
+          .select("slug, title, summary, reading_minutes")
+          .eq("status", "published")
+          .or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
+          .order("published_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null });
+
+  /**
+   * CAMINO 1 — la página resuelta DENTRO de la base (`feed-rpc.ts`).
+   *
+   * Ni un id viaja por la URL, así que el techo de 8 KB (y el 414 que le pega a
+   * todo el tenant a la vez) deja de existir. Es el camino bueno; el de abajo
+   * queda sólo mientras la migración no esté aplicada en todos los entornos.
+   */
+  const rpcArgs = { tenantId, cursor, limit: PAGE_SIZE + 1 };
+  const [rpcPosts, rpcListings] = await Promise.all([
+    fetchFeedPostsPageViaRpc(supabase, rpcArgs),
+    fetchFeedListingsPageViaRpc(supabase, rpcArgs),
+  ]);
+
+  if (rpcPosts && rpcListings) {
+    return assembleParaTiPage({
+      supabase,
+      tenantId,
+      locale,
+      viewerId,
+      postRows: rpcPosts,
+      listingRows: rpcListings,
+      guideResult: await guidePromise,
+    });
+  }
+
+  /**
+   * CAMINO 2 (legado) — los mismos filtros, pero con los ids inlineados en el
+   * querystring y por lo tanto con los topes de `queries.ts` encima. Se conserva
+   * entero, sin recortes, para que un entorno sin la migración se comporte
+   * EXACTAMENTE como antes: un fallback que además cambia el resultado es un
+   * bug esperando el deploy que lo despierte.
+   */
   const [blockedIds, followedListingIds, promotions] = await Promise.all([
     fetchBlockedIds(supabase, viewerId),
     fetchFollowedListingIds(supabase, viewerId),
@@ -154,7 +206,7 @@ async function loadParaTiPage({
   // promocionados (a todos). PostgREST AND-ea cada `.or()` de nivel superior, así
   // que este grupo convive con el de bloqueados y el keyset.
   postsQuery = postsQuery.or(
-    feedPostVisibilityFilter(followedListingIds, [...promotedPostIds]),
+    feedPostVisibilityFilter(followedListingIds, [...promotedPostIds], viewerId),
   );
 
   // Fuera lo que su autor OCULTÓ del feed (0097). No es moderación ni borrado:
@@ -204,16 +256,7 @@ async function loadParaTiPage({
   const [postsResult, listingsResult, guideResult] = await Promise.all([
     postsQuery,
     listingsQuery,
-    isFirstPage && GUIDES_IN_FEED_ENABLED
-      ? supabase
-          .from("guides")
-          .select("slug, title, summary, reading_minutes")
-          .eq("status", "published")
-          .or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
-          .order("published_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+    guidePromise,
   ]);
 
   if (postsResult.error) {
@@ -223,9 +266,44 @@ async function loadParaTiPage({
     console.warn("[feed] query de listings falló", { code: listingsResult.error.code });
   }
 
-  const postRows = (postsResult.data ?? []) as PostRow[];
-  const listingRows = (listingsResult.data ?? []) as ListingRow[];
+  return assembleParaTiPage({
+    supabase,
+    tenantId,
+    locale,
+    viewerId,
+    // El RPC puede haber contestado UNA de las dos: se aprovecha la que vino.
+    postRows: rpcPosts ?? ((postsResult.data ?? []) as PostRow[]),
+    listingRows: rpcListings ?? ((listingsResult.data ?? []) as ListingRow[]),
+    guideResult,
+  });
+}
 
+/**
+ * De dos listas de filas a una página de `FeedItem`: mezcla por (created_at,
+ * id), corte de página, y los batches de datos anexos.
+ *
+ * Está aparte de la query A PROPÓSITO: es lo único que los dos caminos de
+ * arriba —el RPC y el legado con topes de URL— comparten sin poder
+ * desincronizarse. Si la mezcla viviera dentro de cada camino, el fallback
+ * podría empezar a devolver un feed distinto sin que nadie lo note.
+ */
+async function assembleParaTiPage({
+  supabase,
+  tenantId,
+  locale,
+  viewerId,
+  postRows,
+  listingRows,
+  guideResult,
+}: {
+  supabase: Supabase;
+  tenantId: string;
+  locale: string;
+  viewerId: string | null;
+  postRows: PostRow[];
+  listingRows: ListingRow[];
+  guideResult: { data: GuideRow | null };
+}): Promise<FeedPageResult> {
   // Merge por (created_at, id) desc — ids uuid_v7, el desempate es estable.
   const merged: Array<
     | { type: "post"; createdAt: string; id: string; row: PostRow }
@@ -280,6 +358,7 @@ async function loadParaTiPage({
     entityById,
     tagsByPostId,
     musicByPostId,
+    promotions,
   ] = await Promise.all([
     fetchAuthorViews(
       supabase,
@@ -310,7 +389,16 @@ async function loadParaTiPage({
       supabase,
       visiblePosts.map((entry) => entry.id),
     ),
+    // El chip "Publicidad" y el WhatsApp de la campaña se resuelven sobre los
+    // posts QUE SE VAN A PINTAR, no sobre las 150 campañas del tenant: la
+    // decisión de alcance ya la tomó la query (o el RPC) más arriba.
+    fetchPromotionsForPosts(
+      supabase,
+      tenantId,
+      visiblePosts.map((entry) => entry.id),
+    ),
   ]);
+  const promotedPostIds = promotions.postIds;
 
   const items: FeedItem[] = pageEntries.map((entry) => {
     if (entry.type === "post") {

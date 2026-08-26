@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Eye, EyeSlash, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
+import { Eye, EyeSlash, LockKey } from "@phosphor-icons/react/dist/ssr";
 import {
   updateProfileAction,
   type UpdateProfileInput,
@@ -395,7 +395,11 @@ export function EditProfileForm({ initial }: { initial: EditProfileInitial }) {
               href="/ajustes/privacidad#perfil"
               className="inline-flex min-h-11 items-center gap-1.5 self-start text-sm font-semibold text-brand-ink underline decoration-brand-subtle underline-offset-4 hover:decoration-brand-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
             >
-              <ShieldCheck size={16} aria-hidden="true" />
+              {/* `LockKey` y no `ShieldCheck`: el escudo es la insignia de
+                  identidad verificada en toda la app, y este enlace va a los
+                  controles de privacidad. Un candado dice lo que el enlace
+                  hace sin pedirle prestado el significado a otra marca. */}
+              <LockKey size={16} aria-hidden="true" />
               {COPY.privacyLink}
             </Link>
 

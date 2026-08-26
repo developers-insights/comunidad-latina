@@ -77,20 +77,35 @@ export async function scanContentAsset(
   thresholds: ScanThresholds = {},
 ): Promise<ScanOutcome> {
   try {
-    // `scan_content_asset` llegó con la 0070 y `database.types.ts` se regenera
-    // aparte, así que todavía no figura en los tipos: el cast es por el TIPO
-    // generado, no por el contrato — la función existe en la base y su EXECUTE
-    // es de `service_role`, que es justo el cliente que llega acá. Mismo patrón
-    // que `engagement-actions.ts` usa con las columnas recién migradas.
-    const open = admin as unknown as SupabaseClient;
     // `null` en cada umbral = "usá el de la comunidad". No se manda un número
     // por las dudas: eso volvería a poner en la app una decisión que la 0088
     // puso, a propósito, en un solo lugar.
-    const { error } = await open.rpc("scan_content_asset", {
+    //
+    // Acá vivía un `admin as unknown as SupabaseClient`: `scan_content_asset`
+    // llegó con la 0070 y los tipos generados estaban clavados en la 0076. Con
+    // la regeneración del 2026-08-24 la función está tipada y la llamada es
+    // directa — si algún día vuelve a hacer falta un cast así, lo que hay que
+    // regenerar es `database.types.ts`, no agregar el cast.
+    // `undefined` y no `null`, y significan lo mismo: los tres umbrales están
+    // declarados `integer default null` en la 0088, así que OMITIR el argumento
+    // le deja aplicar ese default. El generador de tipos de Supabase modela
+    // "tiene default" como opcional y no modela que además acepte null, así que
+    // pasarle `null` explícito no compila aunque la base lo aceptaría. Se
+    // alinea el código con la firma generada en vez de castear.
+    //
+    // ⚠️ ESTO SERÍA UN BUG si `scan_content_asset` estuviera SOBRECARGADA.
+    // supabase-js serializa con JSON.stringify, que **borra las claves
+    // `undefined`**, y PostgREST elige la sobrecarga por el CONJUNTO DE NOMBRES
+    // que recibe: con dos versiones vivas, omitir argumentos llamaría a la
+    // equivocada en silencio. Acá no pasa —se verificó contra `pg_proc` el
+    // 2026-08-24: existe una sola, la de cuatro parámetros; la de dos que creó
+    // la 0070 ya no está—. Si alguna vez se agrega otra firma con este nombre,
+    // hay que volver a mandar los tres explícitos y castear.
+    const { error } = await admin.rpc("scan_content_asset", {
       p_asset_id: assetId,
-      p_max_distance: thresholds.image ?? null,
-      p_max_distance_video: thresholds.video ?? null,
-      p_max_distance_audio: thresholds.audio ?? null,
+      p_max_distance: thresholds.image ?? undefined,
+      p_max_distance_video: thresholds.video ?? undefined,
+      p_max_distance_audio: thresholds.audio ?? undefined,
     });
 
     if (error) {

@@ -1,6 +1,7 @@
 import "server-only";
 
 import type Stripe from "stripe";
+import { concederUnaSolaVez } from "@/lib/monetization/concesion";
 import {
   diagnosticoDeCobro,
   metadataString,
@@ -173,10 +174,32 @@ async function activarDesdeCheckout(
       ? session.subscription
       : (session.subscription?.id ?? null);
 
-  const { error } = await supabaseSinTiparVerificacion(admin)
-    .from("verification_subscriptions")
-    .upsert(
-      {
+  // LA CONCESIÓN SE GATEA EN EL `WHERE`, NO EN UN `upsert` A CIEGAS.
+  //
+  // Este handler es alcanzable DOS veces por el mismo pago (`completed` y
+  // `async_payment_succeeded` traen la misma Session con `event.id` distintos, y
+  // el route reprocesa a propósito cuando `processed=false`). El `upsert` que
+  // había acá escribía siempre y seguía de largo hasta la notificación y la
+  // auditoría — y encima reescribía `started_at` con el reloj de CADA pasada y
+  // limpiaba `canceled_at`, así que una entrega demorada corría la fecha de alta
+  // hacia adelante y borraba una baja que ya había ocurrido.
+  //
+  // El token es la SUSCRIPCIÓN: esta tabla no tiene columna de checkout session
+  // (0101), y sirve igual porque cada Checkout de alta crea una suscripción
+  // nueva — una reactivación legítima trae otro id y sí matchea. Ver
+  // `lib/monetization/concesion.ts`.
+  if (!subscriptionId) {
+    console.warn(
+      `[verificacion:webhook] la session ${session.id} (perfil ${profileId}) no trae suscripción — se concede sin poder detectar una re-entrega.`,
+    );
+  }
+  const concesion = await concederUnaSolaVez(supabaseSinTiparVerificacion(admin), {
+    tabla: "verification_subscriptions",
+    columnaSujeto: "profile_id",
+    sujeto: profileId,
+    columnaPago: "stripe_subscription_id",
+    pago: subscriptionId,
+    valores: {
         tenant_id: tenantId,
         profile_id: profileId,
         subject_type: subjectType,
@@ -203,10 +226,40 @@ async function activarDesdeCheckout(
         // justo cuando acaba de volver.
         canceled_at: null,
         updated_at: new Date().toISOString(),
-      },
-      { onConflict: "profile_id" },
+    },
+  });
+
+  if (concesion.estado === "error") {
+    // Un fallo transitorio SÍ lo arregla el reintento de Stripe: se lanza.
+    throw new Error(`concesión verification_subscriptions: ${concesion.codigo}`);
+  }
+  if (concesion.estado === "pago_ya_usado") {
+    // ESA suscripción ya está en la fila de OTRO perfil
+    // (`verification_subscriptions_stripe_sub_uniq`, 0101): un solo pago
+    // intentando encender dos insignias.
+    //
+    // ANTES ESTO ERA UN `throw` PELADO, y este archivo ya documenta lo que eso
+    // cuesta: un CHECK violado hizo que el upsert lanzara, el handler devolviera
+    // 500 y Stripe reintentara tres días el mismo evento condenado — cobrado y
+    // sin insignia, para TODAS las altas. El error cambió; la forma de fallar
+    // era la misma. No conceder, ALERTA para reconciliar, y 200.
+    console.error(
+      `[verificacion:webhook] ALERTA: la session ${session.id} (perfil ${profileId}, suscripción ${
+        subscriptionId ?? "—"
+      }) ya está vinculada a OTRA verificación — NO se concede, para no dar dos insignias con un pago. ${diagnosticoDeCobro(
+        session,
+      )}. Reconciliar a mano en el Dashboard.`,
     );
-  if (error) throw new Error(`upsert verification_subscriptions: ${error.code}`);
+    return;
+  }
+  if (concesion.estado === "duplicado") {
+    // No es un error: otra entrega del mismo pago llegó primero. La insignia ya
+    // está concedida; lo único que se evita es el segundo comprobante.
+    console.warn(
+      `[verificacion:webhook] el perfil ${profileId} ya había quedado verificado por otra entrega del pago (${session.id}) — no se duplican notificación ni auditoría.`,
+    );
+    return;
+  }
 
   // El período (y con él, el primer impulso de regalo) llega en `invoice.paid`,
   // que Stripe emite junto con el alta. La Session no trae fechas de ciclo, y el
@@ -371,6 +424,23 @@ async function otorgarRegalo(
     status: VerificacionStatus;
   };
 
+  // EL ESTADO SE MIRA, NO SÓLO SE LEE.
+  //
+  // `status` venía en el `select` y en el tipo de `fila` desde el día uno, y no
+  // se consultaba en ninguna parte: una columna de estado que se trae y nunca se
+  // chequea es un gate que alguien pensó y se perdió en el camino. Consecuencia
+  // concreta: un `invoice.paid` demorado (o el de la última factura de un ciclo
+  // que se cancela) le regalaba un impulso —un beneficio REAL y canjeable, que
+  // 0101 convierte en una fila de `boosts`— a una suscripción ya cancelada o
+  // vencida. El regalo es del mes que se está pagando; si la insignia no está
+  // activa, no hay mes que regalar.
+  if (fila.status !== "active") {
+    console.warn(
+      `[verificacion:webhook] la factura ${invoice.id} (suscripción ${subscriptionId}) llegó con la verificación en "${fila.status}" — no se otorga el impulso de regalo.`,
+    );
+    return;
+  }
+
   const periodo = periodFromInvoice(invoice);
   if (!periodo) {
     // Sin período legible no se inventa uno: una fecha adivinada acá es un
@@ -385,6 +455,14 @@ async function otorgarRegalo(
   // El ciclo, en la fila. Lo escribe también `customer.subscription.updated`,
   // pero el orden de llegada de los dos eventos no está garantizado y el cron de
   // red necesita estas dos fechas para poder actuar.
+  //
+  // EL CICLO SÓLO AVANZA, NUNCA RETROCEDE — y el predicado va en el `WHERE`.
+  // Stripe no garantiza el orden de entrega: la factura del mes 1 puede llegar
+  // DESPUÉS de la del mes 2 (reintento tras un 500, o dos entregas cruzadas). Sin
+  // esta condición, esa factura vieja pisaba `current_period_end` con una fecha
+  // ya pasada, y esa columna es justo la que lee el cron de expiración de 0101:
+  // una insignia PAGA se apagaba sola por un evento fuera de orden. `is.null`
+  // cubre el alta, donde todavía no hay ciclo escrito.
   const { error: updateError } = await cliente
     .from("verification_subscriptions")
     .update({
@@ -392,7 +470,8 @@ async function otorgarRegalo(
       current_period_end: periodo.end,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", fila.id);
+    .eq("id", fila.id)
+    .or(`current_period_end.is.null,current_period_end.lt.${periodo.end}`);
   if (updateError) throw new Error(`update verification_subscriptions: ${updateError.code}`);
 
   const { error: insertError } = await cliente

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import {
   ArrowClockwise,
   HourglassMedium,
-  SealCheck,
+  ShieldCheck,
 } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, buttonVariants } from "@/components/ui";
 import { isStripeConfigured } from "@/lib/config/services";
@@ -23,8 +23,8 @@ const COPY = {
   verificadaTitulo: "¡Tu identidad quedó verificada!",
   verificadaCuerpo: (fecha: string | null) =>
     fecha
-      ? `Documento validado por Stripe Identity el ${fecha}. El tilde ya aparece en tu perfil.`
-      : "Documento validado por Stripe Identity. El tilde aparece en tu perfil en unos minutos.",
+      ? `Documento validado por Stripe Identity el ${fecha}. El escudo verde ya aparece en tu perfil.`
+      : "Documento validado por Stripe Identity. El escudo verde aparece en tu perfil en unos minutos.",
   procesandoTitulo: "Estamos procesando tu verificación",
   procesandoCuerpo:
     "Stripe está revisando tu documento — suele tardar menos de un minuto. Te avisamos con una notificación apenas esté listo. Podés seguir usando la app tranquilo.",
@@ -33,6 +33,8 @@ const COPY = {
     "No pudimos completar la verificación — pasa seguido con fotos movidas o con poca luz. No es tu culpa: probá de nuevo con buena luz y el documento completo en el encuadre.",
   reintentar: "Intentar de nuevo",
   irPerfil: "Ir a tu perfil",
+  /** Mismo paso siguiente que /perfil/verificar — ver el copy de esa pantalla. */
+  verCheckAzul: "Ver el check azul",
   // §11: nunca "verificado" a secas.
   disclaimer:
     "Verificar tu identidad confirma que tu documento es real — no garantiza la conducta de nadie. Nunca envíes dinero por adelantado.",
@@ -98,19 +100,34 @@ export default async function ResultadoVerificacionPage() {
           role="status"
         >
           <IdentityCelebration message={COPY.verificadaTitulo} />
-          <SealCheck size={56} weight="fill" aria-hidden="true" className="text-success" />
+          {/* Escudo y no sello: es la insignia que se acaba de ganar. El
+              sello con tilde es la del check azul, que se paga — abajo, en su
+              enlace, sí corresponde. Ver el ⚠️ de /perfil/verificar. */}
+          <ShieldCheck size={56} weight="fill" aria-hidden="true" className="text-success" />
           <p className="font-display text-xl font-bold text-foreground">
             {COPY.verificadaTitulo}
           </p>
           <p className="max-w-[44ch] text-sm text-foreground-secondary">
             {COPY.verificadaCuerpo(fechaVerificada)}
           </p>
-          <Link
-            href="/perfil"
-            className={cn(buttonVariants({ variant: "primary", size: "md" }), "mt-1")}
-          >
-            {COPY.irPerfil}
-          </Link>
+          <div className="mt-1 flex w-full flex-col gap-2">
+            <Link
+              href="/perfil"
+              className={buttonVariants({ variant: "primary", size: "md" })}
+            >
+              {COPY.irPerfil}
+            </Link>
+            {/* Secundario a propósito: este es el momento de la celebración
+                ("¡Tu identidad quedó verificada!"), no el de vender — ver
+                también /perfil/verificar, donde SÍ es el CTA primario porque
+                ahí la persona ya viene por otra razón. */}
+            <Link
+              href="/verificacion"
+              className={buttonVariants({ variant: "outline", size: "md" })}
+            >
+              {COPY.verCheckAzul}
+            </Link>
+          </div>
         </BezelCard>
       )}
 

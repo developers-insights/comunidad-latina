@@ -25,3 +25,11 @@ export {
 } from "./helpers";
 export { DirectoryMedia, ModuleFallbackBox, type DirectoryMediaProps } from "./module-media";
 export { ProfessionalCard, type ProfessionalCardModel } from "./professional-card";
+export {
+  ProfessionalContactCta,
+  type ProfessionalContactCtaProps,
+} from "./professional-contact-cta";
+export {
+  ProfessionalPostsPanel,
+  type ProfessionalPostsPanelProps,
+} from "./professional-posts-panel";

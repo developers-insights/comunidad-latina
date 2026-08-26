@@ -49,6 +49,32 @@ describe("feedPostVisibilityFilter", () => {
     const parts = feedPostVisibilityFilter(["e1"], ["p1"]).split(",");
     expect(parts[0]).toBe("entity_listing_id.is.null");
   });
+
+  /**
+   * El dueño de un negocio no sigue su propia ficha: sin esta rama, su primera
+   * publicación comercial no aparecía ni en su propio feed. Misma excepción que
+   * `recommendedFeedListingFilter` ya hacía para los avisos.
+   */
+  it("el viewer siempre ve LO PROPIO, aunque no siga su ficha", () => {
+    expect(feedPostVisibilityFilter([], [], "yo")).toBe(
+      "entity_listing_id.is.null,author_id.eq.yo",
+    );
+  });
+
+  it("lo propio convive con seguidos y promocionados en el mismo grupo OR", () => {
+    expect(feedPostVisibilityFilter(["e1"], ["p1"], "yo")).toBe(
+      "entity_listing_id.is.null,author_id.eq.yo,entity_listing_id.in.(e1),id.in.(p1)",
+    );
+  });
+
+  it("sin sesión no agrega la rama de autoría (nada que interpolar)", () => {
+    expect(feedPostVisibilityFilter(["e1"], [], null)).toBe(
+      "entity_listing_id.is.null,entity_listing_id.in.(e1)",
+    );
+    expect(feedPostVisibilityFilter(["e1"], [], undefined)).toBe(
+      "entity_listing_id.is.null,entity_listing_id.in.(e1)",
+    );
+  });
 });
 
 describe("canPromotePost", () => {

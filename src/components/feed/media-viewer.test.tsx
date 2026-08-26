@@ -12,39 +12,9 @@ import {
  * cerrar), no la animación: motion se neutraliza para que el DOM refleje el
  * estado al instante (mismo patrón que toast.test.tsx).
  */
-vi.mock("motion/react", () => {
-  const stub = {
-    div: ({
-      children,
-      ...props
-    }: Record<string, unknown> & { children?: React.ReactNode }) => {
-      const domProps = Object.fromEntries(
-        Object.entries(props).filter(
-          ([key]) =>
-            ![
-              "layout",
-              "initial",
-              "animate",
-              "exit",
-              "transition",
-              // Props del arrastre-para-cerrar: son de motion, no del DOM.
-              "drag",
-              "dragConstraints",
-              "dragElastic",
-              "onDragEnd",
-            ].includes(key),
-        ),
-      );
-      return <div {...domProps}>{children}</div>;
-    },
-  };
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    m: stub,
-    motion: stub,
-    useReducedMotion: () => false,
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock({ reducedMotion: false }),
+);
 
 function Trigger({ args }: { args: OpenMediaViewerArgs }) {
   const viewer = useMediaViewer();

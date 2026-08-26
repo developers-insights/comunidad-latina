@@ -70,6 +70,10 @@ export const COMUNIDAD_COPY = {
         title: "Voluntarios",
         hint: "Organizaciones que reciben manos voluntarias para su trabajo comunitario.",
       },
+      acopio: {
+        title: "Centro de acopio",
+        hint: "Dejá tu donación de ropa, comida o insumos de emergencia: no es para recibir comida, es para darla.",
+      },
     },
   },
 
@@ -115,10 +119,11 @@ export const COMUNIDAD_COPY = {
      * Vacío de UN tema filtrado (`?tema=`, ver recursos/page.tsx) — distinto
      * del vacío de arriba, que es "no hay nada en todo el directorio". Acá
      * puede haber decenas de fichas en otros temas y cero en éste, así que el
-     * mensaje no puede sonar a que la sección entera está vacía. Sólo los dos
-     * temas con entrada propia en la grilla (comida, voluntariado) necesitan
-     * el suyo: el resto de los ocho temas se navegan desde la lista completa,
-     * que ya resuelve su propio vacío con `emptyTitle`/`emptyMessage`.
+     * mensaje no puede sonar a que la sección entera está vacía. Sólo los
+     * tres temas con entrada propia en la grilla (comida, voluntariado,
+     * acopio) necesitan el suyo: el resto de los temas se navegan desde la
+     * lista completa, que ya resuelve su propio vacío con
+     * `emptyTitle`/`emptyMessage`.
      */
     emptyTopic: {
       comida: {
@@ -130,6 +135,11 @@ export const COMUNIDAD_COPY = {
         title: "Todavía no hay grupos de voluntarios cargados",
         message:
           "Estamos armando este directorio. Mientras tanto, mirá el resto de la ayuda disponible.",
+      },
+      acopio: {
+        title: "Todavía no hay centros de acopio cargados",
+        message:
+          "Estamos sumando puntos de acopio de tu comunidad. Mientras tanto, mirá el resto de la ayuda disponible.",
       },
     },
     /** Vuelve a la lista completa — visible con y sin resultados en el tema. */
@@ -284,7 +294,7 @@ export const COMUNIDAD_COPY = {
 // Etiquetas de los valores cerrados
 // ---------------------------------------------------------------------------
 
-/** Los ocho temas del directorio, en voz de quien busca. */
+/** Los diez temas del directorio, en voz de quien busca. */
 export const RESOURCE_TOPIC_LABEL: Record<ResourceTopic, string> = {
   emergencias: "Emergencias",
   migracion: "Migración y trámites",
@@ -295,6 +305,7 @@ export const RESOURCE_TOPIC_LABEL: Record<ResourceTopic, string> = {
   vivienda: "Vivienda y refugio",
   educacion: "Educación e idioma",
   voluntariado: "Grupos de voluntarios",
+  acopio: "Centro de acopio",
 };
 
 /** Una línea por tema: qué vas a encontrar ahí adentro. */
@@ -308,6 +319,7 @@ export const RESOURCE_TOPIC_HINT: Record<ResourceTopic, string> = {
   vivienda: "Refugios y programas de ayuda con la vivienda.",
   educacion: "Clases de inglés, terminar la secundaria, formación.",
   voluntariado: "Organizaciones que suman voluntarios para comedores, refugios y otras tareas del barrio.",
+  acopio: "Adónde llevar ropa, comida o insumos para donar, y qué hace falta en cada lugar ahora mismo.",
 };
 
 export const LOST_FOUND_TYPE_LABEL: Record<LostFoundType, string> = {

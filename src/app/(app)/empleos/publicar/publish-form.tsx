@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Briefcase,
+  CaretDown,
   CheckCircle,
   Clock,
   ImageSquare,
@@ -44,19 +45,54 @@ import {
   type JobQuestion,
 } from "@/components/empleos/helpers";
 import { COPY } from "@/components/empleos/copy";
+import {
+  WORK_MODES,
+  WORK_MODE_HELP,
+  WORK_MODE_LABEL,
+  requiresArea,
+  type WorkMode,
+} from "@/lib/creators/work-mode";
+import {
+  JOB_EXPERIENCE_LEVELS,
+  JOB_LANGUAGES,
+  MAX_SALARY,
+  MAX_SCHEDULE_LENGTH,
+  WORK_DAYS,
+  type JobExperience,
+  type JobLanguage,
+  type WorkDay,
+} from "@/lib/empleos/detalles";
 import { createJobDraft, finalizeJob } from "./actions";
 
 /**
  * Wizard de /empleos/publicar — 4 pasos, mobile-first.
  *
  *   1. El puesto (título + detalles)
- *   2. Salario y modalidad (monto OBLIGATORIO + período + jornada)
+ *   2. Pago y condiciones (rango OBLIGATORIO en su piso + período + jornada +
+ *      modalidad, y la ficha del puesto PLEGADA)
  *   3. Preguntas al postulante  ← la pieza propia de este módulo
- *   4. Zona y fotos (opcionales) → publicar
+ *   4. Zona, negocio vinculado y fotos (opcionales) → publicar
  *
  * Flujo de guardado idéntico al de Creadores/Marketplace (lo dictan la RLS de
  * listings y la policy de storage): createJobDraft → subir fotos al bucket
  * listing-photos con el path {tenant}/{listing}/… → finalizeJob.
+ *
+ * ── CÓMO SE REPARTIERON LOS CAMPOS NUEVOS ───────────────────────────────────
+ * La spec sumó nueve datos. Ponerlos todos a la vista habría convertido un
+ * wizard de cuatro pantallas cortas en un formulario que nadie termina en un
+ * teléfono, así que la regla fue: OBLIGATORIO A LA VISTA, OPCIONAL A UN TOQUE.
+ *
+ *   · A la vista (paso 2): el techo del rango salarial, al lado del piso, y la
+ *     modalidad. La modalidad no es opcional porque DECIDE otra pregunta —con
+ *     "a distancia" el paso 4 deja de pedir zona.
+ *   · Plegados (paso 2, <details>): días, horario, experiencia, idiomas, fecha
+ *     de inicio y fecha límite. Seis campos que hoy se preguntan por chat.
+ *   · A la vista (paso 4): el negocio vinculado, y SÓLO si la persona tiene
+ *     fichas propias publicadas.
+ *
+ * Ningún campo nuevo es obligatorio. Lo único que se exigía antes —puesto,
+ * descripción, salario— se sigue exigiendo igual, y lo único que se relajó es
+ * la zona: dejó de pedirse cuando el trabajo es a distancia.
  */
 
 const C = COPY.publish;
@@ -198,6 +234,137 @@ async function preparePhoto(file: File): Promise<{ blob: Blob; ext: string }> {
 }
 
 // ---------------------------------------------------------------------------
+// Controles del wizard
+//
+// Duplicados a propósito respecto de los del wizard genérico (/publicar): cada
+// ruta de publicación de este repo es autocontenida —mismo criterio que
+// `preparePhoto`— y además éstos NO son iguales: usan el acento del módulo
+// Empleos (--accent-empleos) para el estado seleccionado, igual que las
+// tarjetas de dedicación que ya estaban. Unificarlos obligaría a parametrizar
+// el color y a que un cambio en Empleos pudiera repintar Vivienda.
+// ---------------------------------------------------------------------------
+
+/**
+ * Bloque plegable de campos opcionales.
+ *
+ * `<details>` NATIVO: el navegador ya le da el toggle con teclado, el estado
+ * expandido al lector de pantalla y —lo que más importa— la posibilidad de que
+ * el buscador del navegador lo abra para encontrar texto adentro.
+ *
+ * La regla del wizard es: obligatorio a la vista, opcional a un toque. Seis
+ * campos más desplegados convertirían el paso del salario en una planilla que
+ * nadie termina en un teléfono; plegados ocupan una fila.
+ */
+function OptionalSection({
+  title,
+  hint,
+  icon,
+  children,
+}: {
+  title: string;
+  hint: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group rounded-md border border-border-subtle bg-surface-subtle">
+      <summary
+        className={cn(
+          "flex min-h-11 cursor-pointer list-none items-center gap-2.5 px-4 py-3",
+          "rounded-md transition-colors duration-(--duration-fast)",
+          "hover:bg-surface focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          "[&::-webkit-details-marker]:hidden",
+        )}
+      >
+        <span aria-hidden="true" className="shrink-0 [&>svg]:size-[18px]" style={{ color: ACCENT }}>
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-foreground">{title}</span>
+          <span className="mt-0.5 block text-xs leading-snug text-foreground-muted">{hint}</span>
+        </span>
+        <CaretDown
+          size={16}
+          aria-hidden="true"
+          className={cn(
+            "shrink-0 text-foreground-muted",
+            "transition-transform duration-(--duration-fast) ease-(--ease-spring)",
+            "group-open:rotate-180",
+          )}
+        />
+      </summary>
+      <div className="flex flex-col gap-4 border-t border-border-subtle px-4 pb-4 pt-4">
+        {children}
+      </div>
+    </details>
+  );
+}
+
+/**
+ * Chips de selección múltiple con el acento del módulo.
+ *
+ * `min-h-11` en cada chip: 44px es el mínimo táctil y no se negocia por
+ * estética, ni siquiera en un control opcional que vive plegado. Los días usan
+ * además `w-11` para quedar cuadrados — siete cuadraditos "L M X J V S D" en una
+ * fila se leen como un calendario y se marcan sin apuntar.
+ */
+function ToggleChips<T extends string>({
+  legend,
+  help,
+  options,
+  selected,
+  onToggle,
+  square = false,
+}: {
+  legend: string;
+  help?: string;
+  options: readonly { value: T; label: string; ariaLabel?: string }[];
+  selected: readonly T[];
+  onToggle: (value: T) => void;
+  square?: boolean;
+}) {
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-1.5 text-sm font-semibold text-foreground">{legend}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const active = selected.includes(option.value);
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={active}
+              aria-label={option.ariaLabel}
+              onClick={() => onToggle(option.value)}
+              style={
+                active ? { borderColor: ACCENT_EDGE, backgroundColor: ACCENT_TINT } : undefined
+              }
+              className={cn(
+                "min-h-11 rounded-full border text-sm font-semibold",
+                square ? "w-11 px-0 text-center" : "px-3.5",
+                "transition-[background-color,border-color,color,transform] duration-(--duration-fast) ease-(--ease-spring)",
+                "active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+                active
+                  ? "text-foreground"
+                  : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      {help && <p className="text-sm text-foreground-muted">{help}</p>}
+    </fieldset>
+  );
+}
+
+/** Alterna un valor dentro de una lista, sin mutar. */
+function toggleInList<T>(list: T[], value: T): T[] {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+// ---------------------------------------------------------------------------
 // Cabecera de paso (cintillo + título)
 // ---------------------------------------------------------------------------
 
@@ -231,13 +398,27 @@ function StepHeader({
 
 // ===========================================================================
 
+/** Ficha de negocio propia y publicada, para el vínculo del paso 4. */
+export interface BusinessOption {
+  id: string;
+  title: string;
+}
+
 export function JobPublishForm({
   tenantId,
   currency,
+  businesses = [],
 }: {
   tenantId: string;
   /** Moneda del tenant — solo para la vista previa del salario. */
   currency: string;
+  /**
+   * Fichas de negocio del usuario (ya filtradas por el server: propias,
+   * publicadas, de este tenant). Si viene vacío el campo NO se dibuja: un
+   * desplegable con una sola opción que dice "a nombre personal" es una
+   * pregunta sin respuestas posibles.
+   */
+  businesses?: readonly BusinessOption[];
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -254,12 +435,31 @@ export function JobPublishForm({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [salary, setSalary] = useState("");
+  /** Techo del rango. Vacío = monto único, que sigue siendo el caso más común. */
+  const [salaryMax, setSalaryMax] = useState("");
   const [payPeriod, setPayPeriod] = useState<JobPayPeriod>("hour");
   const [employmentType, setEmploymentType] = useState<EmploymentType>("full_time");
+  /**
+   * Modalidad. Arranca en "presencial" y no vacío: es el caso de la enorme
+   * mayoría de los empleos de esta comunidad (niñera, mesera, construcción), y
+   * dejar el campo sin elegir sólo agregaría un toque obligatorio al 95% para
+   * no dar por sentado el 5%. Quien trabaja a distancia lo cambia de un toque, y
+   * al hacerlo desaparece el pedido de zona.
+   */
+  const [workMode, setWorkMode] = useState<WorkMode>("presencial");
   const [questions, setQuestions] = useState<DraftQuestion[]>([]);
   const [questionErrors, setQuestionErrors] = useState<Record<string, string>>({});
   const [areaLabel, setAreaLabel] = useState("");
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  // Ficha del puesto — todo opcional, todo plegado en el paso 2.
+  const [days, setDays] = useState<WorkDay[]>([]);
+  const [schedule, setSchedule] = useState("");
+  const [experience, setExperience] = useState<JobExperience | "">("");
+  const [languages, setLanguages] = useState<JobLanguage[]>([]);
+  const [startsOn, setStartsOn] = useState("");
+  const [applyBy, setApplyBy] = useState("");
+  /** "" = a nombre personal. Cualquier otro valor es el id de una ficha propia. */
+  const [businessListingId, setBusinessListingId] = useState("");
 
   // Al agregar una pregunta, el cursor cae donde hay que escribir: sin esto el
   // botón "agregar" deja una tarjeta vacía y el pulgar tiene que ir a buscarla.
@@ -390,24 +590,42 @@ export function JobPublishForm({
   // ------------------------------------------------------------- navegación
   const salaryAmount = Number(salary);
   const salaryValid = Number.isFinite(salaryAmount) && salaryAmount > 0;
-  const salaryPreview = formatListingPrice(
-    salaryValid ? salaryAmount : null,
-    currency,
-    payPeriod,
-  );
+  const salaryMaxAmount = salaryMax === "" ? null : Number(salaryMax);
+  const salaryMaxValid =
+    salaryMaxAmount !== null && Number.isFinite(salaryMaxAmount) && salaryMaxAmount > 0;
+  /**
+   * Vista previa del RANGO. Se arma con el mismo formateador que la tarjeta del
+   * listado —`formatListingPrice`— llamado dos veces y unido con un guion, en
+   * vez de concatenar números a mano: así el símbolo, los decimales y el sufijo
+   * ("/hora") son exactamente los del aviso publicado. Al techo se le saca el
+   * sufijo porque decir "$18/hora – $22/hora" repite lo mismo dos veces.
+   */
+  const salaryPreview = formatListingPrice(salaryValid ? salaryAmount : null, currency, payPeriod);
+  const salaryMaxPreview =
+    salaryValid && salaryMaxValid && salaryMaxAmount > salaryAmount
+      ? formatListingPrice(salaryMaxAmount, currency, "one_time")
+      : null;
+
+  /** Con modalidad "a distancia" no hay zona que declarar (0087, `requiresArea`). */
+  const needsArea = requiresArea(workMode);
 
   function validateStep(current: number): string | null {
     if (current === 0) {
       if (title.trim().length < 8) return C.errors.titleShort;
       if (description.trim().length < 30) return C.errors.descriptionShort;
     }
-    if (current === 1 && !salaryValid) return C.errors.salaryRequired;
+    if (current === 1) {
+      if (!salaryValid) return C.errors.salaryRequired;
+      // Techo menor que piso: contradicción, no dato incompleto.
+      if (salaryMaxValid && salaryMaxAmount < salaryAmount) return C.errors.salaryRangeInvalid;
+      if (startsOn && applyBy && applyBy > startsOn) return C.errors.applyByAfterStart;
+    }
     if (current === 2) {
       const errors = collectQuestionErrors();
       setQuestionErrors(errors);
       if (Object.keys(errors).length > 0) return C.errors.questionsInvalid;
     }
-    if (current === 3 && areaLabel.trim().length < 3) return C.errors.areaShort;
+    if (current === 3 && needsArea && areaLabel.trim().length < 3) return C.errors.areaShort;
     return null;
   }
 
@@ -478,10 +696,21 @@ export function JobPublishForm({
           title: title.trim(),
           description: description.trim(),
           salaryAmount,
+          salaryMax: salaryMaxValid ? salaryMaxAmount : null,
           payPeriod,
           employmentType,
-          areaLabel: areaLabel.trim(),
+          workMode,
+          // A distancia no se manda zona: el servidor la guarda como NULL y el
+          // aviso se describe por su modalidad, que es un dato real.
+          areaLabel: needsArea ? areaLabel.trim() : null,
           questions: buildQuestionsPayload(),
+          days,
+          schedule: schedule.trim() || null,
+          experience: experience || null,
+          languages,
+          startsOn: startsOn || null,
+          applyBy: applyBy || null,
+          businessListingId: businessListingId || null,
         });
         if (!result.ok) {
           if (result.needsAuth) {
@@ -556,12 +785,21 @@ export function JobPublishForm({
     setTitle("");
     setDescription("");
     setSalary("");
+    setSalaryMax("");
     setPayPeriod("hour");
     setEmploymentType("full_time");
+    setWorkMode("presencial");
     setQuestions([]);
     setQuestionErrors({});
     setAreaLabel("");
     setPhotos([]);
+    setDays([]);
+    setSchedule("");
+    setExperience("");
+    setLanguages([]);
+    setStartsOn("");
+    setApplyBy("");
+    setBusinessListingId("");
     setDraftId(null);
     setDone(null);
     setError(null);
@@ -664,6 +902,9 @@ export function JobPublishForm({
               icon={<Money weight="fill" />}
             />
 
+            {/* RANGO. "Desde" y "Hasta" en la misma fila para que se lea de
+                corrido como lo que es; el período abajo, ocupando el ancho, para
+                que no queden tres controles apretados en una fila de teléfono. */}
             <div className="grid grid-cols-2 gap-3">
               <Field
                 htmlFor="job-salary"
@@ -675,6 +916,7 @@ export function JobPublishForm({
                   type="number"
                   inputMode="decimal"
                   min={1}
+                  max={MAX_SALARY}
                   value={salary}
                   placeholder={C.steps.pay.amountPlaceholder}
                   onChange={(event) => setSalary(event.target.value)}
@@ -682,23 +924,42 @@ export function JobPublishForm({
                 />
               </Field>
               <Field
-                htmlFor="job-period"
-                label={C.steps.pay.periodLabel}
-                help={C.steps.pay.periodHelp}
+                htmlFor="job-salary-max"
+                label={C.steps.pay.amountMaxLabel}
+                help={C.steps.pay.amountMaxHelp}
+                optional
               >
-                <Select
-                  id="job-period"
-                  value={payPeriod}
-                  onChange={(event) => setPayPeriod(event.target.value as JobPayPeriod)}
-                >
-                  {JOB_PAY_PERIODS.map((period) => (
-                    <option key={period} value={period}>
-                      {C.payPeriodLabel[period]}
-                    </option>
-                  ))}
-                </Select>
+                <Input
+                  id="job-salary-max"
+                  type="number"
+                  inputMode="decimal"
+                  min={1}
+                  max={MAX_SALARY}
+                  value={salaryMax}
+                  placeholder={C.steps.pay.amountMaxPlaceholder}
+                  onChange={(event) => setSalaryMax(event.target.value)}
+                  className="numeric"
+                />
               </Field>
             </div>
+
+            <Field
+              htmlFor="job-period"
+              label={C.steps.pay.periodLabel}
+              help={C.steps.pay.periodHelp}
+            >
+              <Select
+                id="job-period"
+                value={payPeriod}
+                onChange={(event) => setPayPeriod(event.target.value as JobPayPeriod)}
+              >
+                {JOB_PAY_PERIODS.map((period) => (
+                  <option key={period} value={period}>
+                    {C.payPeriodLabel[period]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
             {/* Vista previa con el MISMO formateador que la card del listado. */}
             {salaryPreview && (
@@ -710,7 +971,7 @@ export function JobPublishForm({
                   {C.steps.pay.previewLabel}
                 </span>
                 <span className="numeric font-display text-lg font-bold text-foreground">
-                  {salaryPreview}
+                  {salaryMaxPreview ? `${salaryPreview} – ${salaryMaxPreview}` : salaryPreview}
                 </span>
               </div>
             )}
@@ -755,6 +1016,135 @@ export function JobPublishForm({
               </div>
               <p className="text-sm text-foreground-muted">{C.steps.pay.typeHelp}</p>
             </fieldset>
+
+            {/* MODALIDAD → columna listings.work_mode (0087), que ya existía con
+                su CHECK y su índice y hasta hoy sólo usaba Creadores. Se reusa en
+                vez de inventar un attrs.work_mode paralelo: el mismo hecho en dos
+                lugares se termina contradiciendo. Elegir "a distancia" hace que
+                el paso 4 deje de pedir zona (requiresArea). */}
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-1 text-sm font-semibold text-foreground">
+                {C.steps.pay.modeLegend}
+              </legend>
+              <div
+                role="radiogroup"
+                aria-label={C.steps.pay.modeLegend}
+                className="grid grid-cols-3 gap-2"
+              >
+                {WORK_MODES.map((mode) => {
+                  const selected = workMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setWorkMode(mode)}
+                      className={cn(
+                        TAP_CARD,
+                        "h-full flex-col items-center gap-0.5 px-2 py-3 text-center",
+                        selected
+                          ? "text-foreground"
+                          : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
+                      )}
+                      style={
+                        selected
+                          ? { borderColor: ACCENT_EDGE, backgroundColor: ACCENT_TINT }
+                          : undefined
+                      }
+                    >
+                      <span className="text-sm font-semibold">{WORK_MODE_LABEL[mode]}</span>
+                      <span className="text-[11px] font-medium leading-snug text-foreground-muted">
+                        {WORK_MODE_HELP[mode]}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-sm text-foreground-muted">{C.steps.pay.modeHelp}</p>
+            </fieldset>
+
+            {/* LA FICHA DEL PUESTO, PLEGADA. Son seis datos que hoy se preguntan
+                por chat: útiles, no obligatorios. Desplegados convertirían este
+                paso en una planilla; acá ocupan una fila y se abren si sirven. */}
+            <OptionalSection
+              title={C.steps.pay.moreTitle}
+              hint={C.steps.pay.moreHint}
+              icon={<Clock weight="fill" />}
+            >
+              <ToggleChips
+                legend={C.steps.pay.daysLabel}
+                help={C.steps.pay.daysHelp}
+                square
+                // La etiqueta visible es una letra; el nombre accesible es el día
+                // completo, porque "X" no se puede escuchar y entender.
+                options={WORK_DAYS.map((day) => ({
+                  value: day.value,
+                  label: day.short,
+                  ariaLabel: day.label,
+                }))}
+                selected={days}
+                onToggle={(value) => setDays((current) => toggleInList(current, value))}
+              />
+
+              <Field htmlFor="job-schedule" label={C.steps.pay.scheduleLabel} optional>
+                <Input
+                  id="job-schedule"
+                  value={schedule}
+                  maxLength={MAX_SCHEDULE_LENGTH}
+                  placeholder={C.steps.pay.schedulePlaceholder}
+                  onChange={(event) => setSchedule(event.target.value)}
+                />
+              </Field>
+
+              <Field htmlFor="job-experience" label={C.steps.pay.experienceLabel} optional>
+                <Select
+                  id="job-experience"
+                  value={experience}
+                  onChange={(event) => setExperience(event.target.value as JobExperience | "")}
+                >
+                  <option value="">{C.steps.pay.experiencePlaceholder}</option>
+                  {JOB_EXPERIENCE_LEVELS.map((level) => (
+                    <option key={level.value} value={level.value}>
+                      {level.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+
+              <ToggleChips
+                legend={C.steps.pay.languagesLabel}
+                help={C.steps.pay.languagesHelp}
+                options={JOB_LANGUAGES}
+                selected={languages}
+                onToggle={(value) => setLanguages((current) => toggleInList(current, value))}
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field htmlFor="job-starts-on" label={C.steps.pay.startsOnLabel} optional>
+                  <Input
+                    id="job-starts-on"
+                    type="date"
+                    value={startsOn}
+                    onChange={(event) => setStartsOn(event.target.value)}
+                    className="numeric"
+                  />
+                </Field>
+                <Field htmlFor="job-apply-by" label={C.steps.pay.applyByLabel} optional>
+                  <Input
+                    id="job-apply-by"
+                    type="date"
+                    value={applyBy}
+                    // Acota el calendario nativo a lo que tiene sentido. Es
+                    // ayuda, no defensa: la regla la aplican validateStep y el
+                    // superRefine del esquema.
+                    max={startsOn || undefined}
+                    onChange={(event) => setApplyBy(event.target.value)}
+                    className="numeric"
+                  />
+                </Field>
+              </div>
+            </OptionalSection>
           </>
         )}
 
@@ -1004,19 +1394,72 @@ export function JobPublishForm({
               icon={<MapPin weight="fill" />}
             />
 
-            <Field
-              htmlFor="job-area"
-              label={C.steps.where.areaLabel}
-              help={C.steps.where.areaHelp}
-            >
-              <Input
-                id="job-area"
-                value={areaLabel}
-                maxLength={80}
-                placeholder={C.steps.where.areaPlaceholder}
-                onChange={(event) => setAreaLabel(event.target.value)}
-              />
-            </Field>
+            {/* Con modalidad "a distancia" la zona no se pide ni se inventa. Se
+                explica por qué en vez de dejar un hueco: un campo que
+                desaparece sin decir nada se lee como un error de la app. */}
+            {needsArea ? (
+              <Field
+                htmlFor="job-area"
+                label={C.steps.where.areaLabel}
+                help={C.steps.where.areaHelp}
+              >
+                <Input
+                  id="job-area"
+                  value={areaLabel}
+                  maxLength={80}
+                  placeholder={C.steps.where.areaPlaceholder}
+                  onChange={(event) => setAreaLabel(event.target.value)}
+                />
+              </Field>
+            ) : (
+              <div
+                className="flex items-start gap-2.5 rounded-md px-4 py-3"
+                style={{ backgroundColor: ACCENT_TINT }}
+              >
+                <MapPin
+                  size={18}
+                  weight="fill"
+                  aria-hidden="true"
+                  className="mt-0.5 shrink-0"
+                  style={{ color: ACCENT }}
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">
+                    {C.steps.where.areaRemoteTitle}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-foreground-secondary">
+                    {C.steps.where.areaRemoteBody}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* NEGOCIO VINCULADO → columna listings.business_listing_id (0107).
+                El desplegable sólo aparece si la persona TIENE fichas propias
+                publicadas: sin negocios sería una pregunta con una sola
+                respuesta posible. La pertenencia la verifica el trigger de la
+                base, no esta lista. */}
+            {businesses.length > 0 && (
+              <Field
+                htmlFor="job-business"
+                label={C.steps.where.businessLabel}
+                help={C.steps.where.businessHelp}
+                optional
+              >
+                <Select
+                  id="job-business"
+                  value={businessListingId}
+                  onChange={(event) => setBusinessListingId(event.target.value)}
+                >
+                  <option value="">{C.steps.where.businessPersonal}</option>
+                  {businesses.map((business) => (
+                    <option key={business.id} value={business.id}>
+                      {business.title}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
 
             <div className="flex flex-col gap-3">
               <div>

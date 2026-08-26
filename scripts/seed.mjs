@@ -159,7 +159,10 @@ async function upsertTenant(def) {
       );
     }
   } else {
-    const { domain, ...row } = def;
+    // `_domain` y no `domain`: se desestructura para SACARLO de `row` (la
+    // columna no existe en `tenants`; los dominios van en `tenant_domains`).
+    // El prefijo dice que no usarlo es la intencion, no un olvido.
+    const { domain: _domain, ...row } = def;
     const { data, error } = await supabase.from('tenants').insert(row).select('id').single();
     if (error) die(`creando tenant ${def.slug}`, error);
     tenantId = data.id;
@@ -748,6 +751,96 @@ async function main() {
 
   for (const item of professionalListings) {
     await upsertListing(dominicanosId, item);
+  }
+
+  // 4c. Profesional CON CUENTA + publicaciones "como" su ficha (0023) ---------
+  // Las 6 fichas de arriba son opt-in comunitario (sin created_by) — correcto
+  // para ellas (fuente externa, seed legal §9.1), pero por eso mismo NINGUNA
+  // puede "publicar como sí misma": la policy posts_insert (0023) exige que
+  // quien firma el post sea DUEÑO de la ficha (l.created_by = auth.uid()). Sin
+  // una ficha con cuenta real, la pestaña "Publicaciones" de /profesionales
+  // sólo se podría probar vacía. Esta ficha SÍ tiene cuenta — para eso.
+  const rosaId = await upsertUser({
+    email: 'rosa@demo.comunidadlatina.com',
+    displayName: 'Rosa Almonte',
+    role: 'member',
+    tenantId: dominicanosId,
+    countryOrigin: 'DO',
+    areaLabel: 'Jackson Heights, Queens',
+    bio: 'Abogada de inmigración. Comparto guías y novedades acá mismo para que la comunidad llegue informada a su cita.',
+    trust: {
+      score: 78,
+      level: 'confiable',
+      signals: { months_in_community: 20, transactions_ok: 5, endorsements_count: 9, reports_upheld: 0 },
+    },
+  });
+
+  // Identidad verificada (Stripe Identity, §5.4): `upsertUser` no la setea —
+  // no es parte del onboarding demo — así que se confirma acá con un UPDATE
+  // sobre la MISMA fila que la llamada de arriba acaba de crear/confirmar.
+  // Sigue siendo "agregar" en el sentido que importa: no toca ninguna fila que
+  // otra sesión haya sembrado, y sin esto no hay forma de ver la insignia de
+  // identidad del directorio con datos reales.
+  {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ identity_verified: true })
+      .eq('id', rosaId);
+    if (error) die('marcando identidad verificada de Rosa (demo)', error);
+  }
+
+  const rosaListingId = await upsertListing(dominicanosId, {
+    seed_key: 'prof-abogada-rosa-almonte-jh',
+    kind: 'professional',
+    title: 'Rosa Almonte — Abogada de inmigración',
+    description:
+      'Asesoría en TPS, renovación de EAD, DACA y peticiones familiares. Publico guías y novedades acá mismo para que la comunidad llegue informada a su cita.',
+    area_label: 'Jackson Heights, Queens',
+    geo_zone: 'dr5rz',
+    attrs: { category: 'abogado', credentials: ['Abogada admitida en el Estado de NY', 'Derecho migratorio'] },
+    created_by: rosaId,
+    // 'user' y no el default 'seed': la ficha tiene dueño real, y el WITH
+    // CHECK de listings_update (0004) exige source='user' para que Rosa pueda
+    // editar su propio aviso más adelante (ver el comentario de upsertListing).
+    source: 'user',
+  });
+
+  const rosaPosts = [
+    'Consejo rápido: si tu permiso de trabajo (EAD) vence en menos de 180 días, ya podés empezar el trámite de renovación. Esperar a último momento es la causa más común de quedarse unas semanas sin permiso vigente. Si tenés dudas con tu caso, escribime.',
+    'Para quienes tienen TPS: la fecha oficial de re-registro siempre está en la página del USCIS. Ojo con quien cobra por "agilizar" un trámite que en realidad es gratuito — ante la duda, consultá con un profesional matriculado.',
+  ];
+
+  for (const body of rosaPosts) {
+    const { data: existing, error: selErr } = await supabase
+      .from('posts')
+      .select('id')
+      .eq('tenant_id', dominicanosId)
+      .eq('body', body)
+      .maybeSingle();
+    if (selErr) die('buscando publicación de Rosa (demo)', selErr);
+
+    if (existing) {
+      log('skip', 'publicación de Rosa (demo) ya existe');
+      continue;
+    }
+
+    // kind='post' sin media: la 0062 lo exige salvo para service_role — este
+    // script corre con SUPABASE_SERVICE_ROLE_KEY (ver cabecera), que es
+    // justamente la excepción prevista ("seed curado"). No hay un bucket de
+    // fotos de ejemplo cableado en ESTE script (a diferencia de
+    // seed-demo-content.mjs) y una ruta de storage inventada rendería una
+    // imagen rota — peor que un post de texto.
+    const { error } = await supabase.from('posts').insert({
+      tenant_id: dominicanosId,
+      author_id: rosaId,
+      entity_listing_id: rosaListingId,
+      body,
+      media: [],
+      kind: 'post',
+      status: 'published',
+    });
+    if (error) die('creando publicación de Rosa (demo)', error);
+    log('create', 'publicación de Rosa Almonte (como su ficha profesional)');
   }
 
   // 5. Guías con fuentes oficiales reales -------------------------------------

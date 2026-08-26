@@ -55,6 +55,14 @@ function createSupabaseStub(result: { data: unknown; error: unknown } = {
         calls.push({ table, method: "select", args });
         return builder;
       }),
+      /**
+       * `.returns<T>()` es un no-op en runtime (sólo re-tipa el resultado), pero
+       * la action lo encadena: `createJobDraft` escribe columnas que
+       * `database.types.ts` todavía no lista (work_mode 0087,
+       * business_listing_id 0107) y para eso usa un cliente sin tipar, igual que
+       * `createGigDraft`. Sin este eslabón el stub corta la cadena.
+       */
+      returns: vi.fn(() => builder),
       single: vi.fn(async () => result),
     };
     return builder;
@@ -248,5 +256,244 @@ describe("createJobDraft — guard y cuota antes de escribir", () => {
 
     expect(result.ok).toBe(false);
     expect(stub.calls).toHaveLength(0);
+  });
+});
+
+/* ===========================================================================
+ * Campos de la spec: rango salarial, modalidad, ficha del puesto y negocio
+ * =========================================================================== */
+
+/** La fila que efectivamente se mandó a `listings.insert`. */
+function insertedRow(stub: ReturnType<typeof createSupabaseStub>) {
+  const call = stub.calls.find((entry) => entry.method === "insert");
+  return call?.args[0] as Record<string, unknown> | undefined;
+}
+
+function attrsOf(stub: ReturnType<typeof createSupabaseStub>) {
+  return (insertedRow(stub)?.attrs ?? {}) as Record<string, unknown>;
+}
+
+describe("createJobDraft — rango salarial", () => {
+  /**
+   * EL REPARTO QUE HAY QUE PROTEGER: el PISO va a la columna `price_amount` —lo
+   * que ordena, filtra y formatea toda la app— y sólo el techo a `attrs`. Mover
+   * el salario entero a `attrs` para que "quepa" el rango sacaría a los empleos
+   * del orden por precio y del formateador de las tarjetas.
+   */
+  it("el piso va a price_amount y el techo a attrs", async () => {
+    const stub = useGuardOk();
+
+    const result = await createJobDraft(validInput({ salaryAmount: 18, salaryMax: 22 }));
+
+    expect(result.ok).toBe(true);
+    expect(insertedRow(stub)?.price_amount).toBe(18);
+    expect(attrsOf(stub).salary_max).toBe(22);
+  });
+
+  it("sin techo no se escribe la clave: un monto único sigue siendo monto único", async () => {
+    const stub = useGuardOk();
+    await createJobDraft(validInput());
+    expect(attrsOf(stub)).not.toHaveProperty("salary_max");
+  });
+
+  /** Un "rango" de $18 a $18 no es un rango. Se guarda como lo que es. */
+  it("un techo igual al piso se guarda como monto único", async () => {
+    const stub = useGuardOk();
+    await createJobDraft(validInput({ salaryAmount: 18, salaryMax: 18 }));
+    expect(attrsOf(stub)).not.toHaveProperty("salary_max");
+  });
+
+  /**
+   * Contradicción, no dato incompleto: elegir cuál de los dos gana sería
+   * inventar qué quiso decir la persona. Y el mensaje es accionable, no un
+   * "revisá los datos" que la deja buscando a ciegas.
+   */
+  it("rechaza un techo menor que el piso, con un mensaje que se entiende", async () => {
+    const stub = useGuardOk();
+
+    const result = await createJobDraft(validInput({ salaryAmount: 22, salaryMax: 18 }));
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toMatch(/menor que el mínimo/i);
+    expect(stub.calls).toHaveLength(0);
+  });
+});
+
+describe("createJobDraft — modalidad (columna work_mode, 0087)", () => {
+  /**
+   * Se REUSA la columna que ya existe con su CHECK y su índice parcial, en vez
+   * de inventar un `attrs.work_mode` paralelo: el mismo hecho escrito en dos
+   * lugares se termina contradiciendo.
+   */
+  it("la modalidad va a la COLUMNA, no a attrs", async () => {
+    const stub = useGuardOk();
+
+    await createJobDraft(validInput({ workMode: "hibrido" }));
+
+    expect(insertedRow(stub)?.work_mode).toBe("hibrido");
+    expect(attrsOf(stub)).not.toHaveProperty("work_mode");
+  });
+
+  /**
+   * Con "a distancia" no hay zona que declarar. Se guarda NULL y no el string
+   * "Remoto": ese texto libre en un campo de ubicación es exactamente lo que la
+   * 0087 vino a reemplazar.
+   */
+  it("a distancia no exige zona y la guarda como NULL", async () => {
+    const stub = useGuardOk();
+
+    const result = await createJobDraft(validInput({ workMode: "remoto", areaLabel: null }));
+
+    expect(result.ok).toBe(true);
+    expect(insertedRow(stub)?.area_label).toBeNull();
+  });
+
+  it("presencial sigue exigiendo la zona", async () => {
+    const stub = useGuardOk();
+
+    const result = await createJobDraft(
+      validInput({ workMode: "presencial", areaLabel: null }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toMatch(/zona/i);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  /** Sin modalidad declarada se pide la zona: falla del lado seguro. */
+  it("sin modalidad se comporta como presencial", async () => {
+    const stub = useGuardOk();
+    const result = await createJobDraft(validInput({ areaLabel: null }));
+    expect(result.ok).toBe(false);
+    expect(stub.calls).toHaveLength(0);
+  });
+});
+
+describe("createJobDraft — ficha del puesto en attrs", () => {
+  it("guarda sólo lo declarado, en las claves del contrato", async () => {
+    const stub = useGuardOk();
+
+    await createJobDraft(
+      validInput({
+        days: ["fri", "mon"],
+        schedule: "  de 9 a 17  ",
+        experience: "hasta_1",
+        languages: ["ingles", "espanol"],
+        startsOn: "2026-09-01",
+        applyBy: "2026-08-25",
+      }),
+    );
+
+    expect(attrsOf(stub)).toMatchObject({
+      // Orden del CATÁLOGO, no el de llegada.
+      work_days: ["mon", "fri"],
+      schedule: "de 9 a 17",
+      experience: "hasta_1",
+      languages: ["espanol", "ingles"],
+      starts_on: "2026-09-01",
+      apply_by: "2026-08-25",
+    });
+  });
+
+  it("un aviso sin ficha no escribe ninguna clave de más", async () => {
+    const stub = useGuardOk();
+    await createJobDraft(validInput());
+    const attrs = attrsOf(stub);
+    for (const key of [
+      "work_days",
+      "schedule",
+      "experience",
+      "languages",
+      "starts_on",
+      "apply_by",
+    ]) {
+      expect(attrs).not.toHaveProperty(key);
+    }
+  });
+
+  it("descarta días e idiomas fuera del catálogo", async () => {
+    const stub = useGuardOk();
+    await createJobDraft(
+      validInput({ days: ["mon", "lunes", "caturday"], languages: ["espanol", "aleman"] }),
+    );
+    expect(attrsOf(stub).work_days).toEqual(["mon"]);
+    expect(attrsOf(stub).languages).toEqual(["espanol"]);
+  });
+
+  /**
+   * Un aviso al que hay que postularse DESPUÉS de que el trabajo empezó no le
+   * sirve a nadie. Se rechaza en vez de guardar las dos fechas al revés.
+   */
+  it("rechaza una fecha límite posterior al inicio", async () => {
+    const stub = useGuardOk();
+
+    const result = await createJobDraft(
+      validInput({ startsOn: "2026-09-01", applyBy: "2026-09-10" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toMatch(/antes de que empiece/i);
+    expect(stub.calls).toHaveLength(0);
+  });
+});
+
+describe("createJobDraft — negocio vinculado (columna business_listing_id, 0107)", () => {
+  const BUSINESS_ID = "22222222-2222-4222-8222-222222222222";
+
+  /**
+   * Va a una COLUMNA y no a `attrs` porque es una REFERENCIA a otra fila, no una
+   * descripción: necesita FK (que el negocio exista), tipo (que sea un uuid) e
+   * índice (la ficha del negocio va a listar sus empleos, y un
+   * `attrs->>'business_listing_id' = $1` sobre `listings` es un scan).
+   */
+  it("va a la columna, no a attrs", async () => {
+    const stub = useGuardOk();
+
+    await createJobDraft(validInput({ businessListingId: BUSINESS_ID }));
+
+    expect(insertedRow(stub)?.business_listing_id).toBe(BUSINESS_ID);
+    expect(attrsOf(stub)).not.toHaveProperty("business_listing_id");
+  });
+
+  it("sin vínculo se manda NULL: publicar a nombre personal es el caso normal", async () => {
+    const stub = useGuardOk();
+    await createJobDraft(validInput());
+    expect(insertedRow(stub)?.business_listing_id).toBeNull();
+  });
+
+  it("un id que no es un uuid ni llega a la base", async () => {
+    const stub = useGuardOk();
+    const result = await createJobDraft(validInput({ businessListingId: "mi-negocio" }));
+    expect(result.ok).toBe(false);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  /**
+   * La PERTENENCIA la impone `app.check_business_listing_link()` en la base —el
+   * único lugar donde no se puede saltear— y vuelve como VINCULO_INVALIDO. Acá
+   * se verifica que ese error se traduzca a algo accionable: la persona puede
+   * elegir otro negocio o ninguno, y un "probá de nuevo en un ratito" la
+   * dejaría reintentando algo que nunca va a funcionar.
+   */
+  it("el rechazo del trigger se traduce a un mensaje accionable", async () => {
+    const stub = createSupabaseStub({
+      data: null,
+      error: {
+        code: "P0001",
+        message: "VINCULO_INVALIDO: sólo podés vincular un empleo a un negocio tuyo",
+      },
+    });
+    mocks.requireTenantMatch.mockResolvedValue({
+      ok: true,
+      tenant: { id: TENANT_ID, slug: "dominicanos", name: "Dominicanos", currency: "USD" },
+      supabase: stub.client,
+      user: { id: USER_ID },
+    });
+
+    const result = await createJobDraft(validInput({ businessListingId: BUSINESS_ID }));
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toMatch(/negocio/i);
+    expect(!result.ok && result.error).not.toMatch(/en un ratito/i);
   });
 });

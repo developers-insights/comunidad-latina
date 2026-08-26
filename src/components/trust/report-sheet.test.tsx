@@ -16,37 +16,9 @@ vi.mock("@/app/(app)/reportes/actions", () => ({
 }));
 
 // motion neutralizado: la hoja aparece en el DOM al instante.
-vi.mock("motion/react", () => {
-  const filter = (props: Record<string, unknown>) => {
-    const {
-      layout,
-      initial,
-      animate,
-      exit,
-      transition,
-      drag,
-      dragConstraints,
-      dragElastic,
-      onDragEnd,
-      whileTap,
-      whileHover,
-      ...rest
-    } = props;
-    return rest;
-  };
-  const div = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => (
-    <div {...filter(props)}>{children}</div>
-  );
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-    m: { div },
-    motion: { div },
-    useReducedMotion: () => true,
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock(),
+);
 
 const TARGET_ID = "11111111-1111-4111-8111-111111111111";
 

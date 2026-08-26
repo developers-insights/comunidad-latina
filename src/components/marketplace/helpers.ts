@@ -1,5 +1,11 @@
 import type { Json } from "@/lib/types/database.types";
 import { formatListingPrice } from "@/components/listings";
+// La taxonomía de RUBROS es de Negocios, no de Marketplace. Módulo puro (sólo
+// un `import type`), así que traerlo acá no arrastra nada de servidor.
+import {
+  businessCategoryLabel,
+  isBusinessCategory,
+} from "@/app/(app)/negocios/categories";
 
 /**
  * Helpers puros del módulo MARKETPLACE. Sin dependencias de servidor:
@@ -71,6 +77,67 @@ export function conditionLabel(value: string | null): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Envío / entrega / recogida — cómo llega el artículo a quien compra.
+//
+// Vive en `attrs.fulfillment` (jsonb, mismo lugar que category/condition) y NO
+// en una migración: no hay nada acá que necesite ser consultable por columna
+// (no se filtra por método de entrega, sólo se MUESTRA), así que agregar
+// columnas y un CHECK nuevo habría sido superficie de esquema por una lista de
+// hasta 3 strings. Un producto puede ofrecer más de uno a la vez (envío Y
+// recogida, por ejemplo) — por eso es array y no un enum simple como condition.
+// ---------------------------------------------------------------------------
+
+export const FULFILLMENT_METHODS = [
+  { value: "envio", label: "Envío", shortLabel: "Envío" },
+  { value: "entrega", label: "Entrega en mano", shortLabel: "Entrega" },
+  { value: "recogida", label: "Recogida en persona", shortLabel: "Recogida" },
+] as const;
+
+export type FulfillmentMethod = (typeof FULFILLMENT_METHODS)[number]["value"];
+
+export function isFulfillmentMethod(value: string): value is FulfillmentMethod {
+  return FULFILLMENT_METHODS.some((option) => option.value === value);
+}
+
+export function fulfillmentLabel(value: string): string | null {
+  return FULFILLMENT_METHODS.find((option) => option.value === value)?.label ?? null;
+}
+
+/** Sólo los valores del set curado, sin duplicados y en el orden del catálogo — nunca lo que mande el cliente tal cual. */
+function sanitizeFulfillment(values: unknown): FulfillmentMethod[] {
+  if (!Array.isArray(values)) return [];
+  const known = new Set(values.filter((v): v is string => typeof v === "string"));
+  return FULFILLMENT_METHODS.map((option) => option.value).filter((value) => known.has(value));
+}
+
+// ---------------------------------------------------------------------------
+// Categoría de TIENDA (listings kind='business', attrs.category)
+//
+// Una tienda del Marketplace ES un `listings` kind='business', o sea la MISMA
+// entidad que lista el módulo Negocios y con la misma clave `attrs.category`.
+// Acá se mostraba con una capitalización genérica propia, así que el mismo
+// negocio se leía "Envios" en el directorio de Tiendas y "Envíos" en Negocios
+// —sin acento de un lado y con acento del otro— porque este archivo no
+// consultaba el set curado.
+//
+// Ahora sí lo consulta: `BUSINESS_CATEGORIES` es la fuente única del rubro y
+// esta función es sólo la capa de PRESENTACIÓN de Marketplace sobre ella.
+//
+// El fallback propio se conserva a propósito y no se delega a
+// `businessCategoryLabel`: `attrs.category` es texto libre en la base, y un
+// valor importado tipo `comida_bebidas` se lee mejor como "Comida bebidas"
+// que como "Comida_bebidas". Ése es el único aporte de esta función.
+// ---------------------------------------------------------------------------
+
+export function businessCategoryDisplayLabel(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (isBusinessCategory(trimmed)) return businessCategoryLabel(trimmed);
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).replace(/_/g, " ");
+}
+
+// ---------------------------------------------------------------------------
 // attrs de producto — patrón parsePropertyAttrs (listings/helpers.ts)
 // ---------------------------------------------------------------------------
 
@@ -79,6 +146,8 @@ export interface ProductAttrs {
   storeListingId: string | null;
   category: string | null;
   condition: string | null;
+  /** Cómo llega el producto a quien compra — 0 a 3 valores del catálogo. */
+  fulfillment: FulfillmentMethod[];
 }
 
 function asNonEmptyString(value: unknown): string | null {
@@ -94,6 +163,7 @@ export function parseProductAttrs(attrs: Json): ProductAttrs {
     storeListingId: asNonEmptyString(record.store_listing_id),
     category: asNonEmptyString(record.category),
     condition: asNonEmptyString(record.condition),
+    fulfillment: sanitizeFulfillment(record.fulfillment),
   };
 }
 

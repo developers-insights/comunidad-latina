@@ -190,6 +190,14 @@ export const COPY = {
     needLoginMessage:
       "Publicar es gratis y toma dos minutos. Necesitamos que entres a tu cuenta para proteger tu aviso y tu contacto.",
     needLoginCta: "Entrar a mi cuenta",
+    // La comunidad todavía no abrió ningún vertical de avisos (los cinco
+    // módulos apagados o en "muy pronto"). Se dice qué SÍ se puede hacer hoy
+    // —contar algo en el feed, que nunca se apaga— en vez de dejar un wizard
+    // vacío que no lleva a ningún lado.
+    noVerticalsTitle: "Todavía no hay avisos en tu comunidad",
+    noVerticalsMessage:
+      "Las secciones para publicar avisos todavía no están abiertas por acá. Mientras tanto, podés contarle algo a tu comunidad en el feed.",
+    noVerticalsCta: "Ir al feed",
     steps: {
       kind: {
         title: "¿Qué querés publicar?",

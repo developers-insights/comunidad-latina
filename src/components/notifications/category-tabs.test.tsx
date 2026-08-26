@@ -7,7 +7,8 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { CATEGORY_META } from "@/lib/notifications/categories";
-import { CategoryTabs, INBOX_PANEL_ID } from "./category-tabs";
+import { INBOX_PANEL_ID } from "@/lib/notifications/href";
+import { CategoryTabs } from "./category-tabs";
 import { COPY } from "./copy";
 
 /**
@@ -41,20 +42,9 @@ const LABEL = {
  * en el layout. Se reemplaza por un <span> pelado; el resto de motion/react
  * (`useReducedMotion`, `AnimatePresence`, que usa BottomSheet) queda real.
  */
-vi.mock("motion/react", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("motion/react")>();
-  return {
-    ...actual,
-    m: {
-      ...actual.m,
-      span: ({
-        layoutId: _layoutId,
-        transition: _transition,
-        ...props
-      }: Record<string, unknown>) => <span {...props} />,
-    },
-  };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock(),
+);
 
 const COUNTS = { mensajes: 3, trabajos: 12, pagos: 1 } as const;
 

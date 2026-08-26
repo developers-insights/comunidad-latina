@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowSquareOut, Clock, SealCheck } from "@phosphor-icons/react/dist/ssr";
+import { ArrowLeft, ArrowSquareOut, Buildings, Clock } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, Chip } from "@/components/ui";
 import {
   estimateReadingMinutes,
@@ -84,7 +84,11 @@ export default async function ComunidadGuiaPage({ params }: Props) {
       {fuentes.length > 0 && (
         <BezelCard variant="featured" className="mt-6" coreClassName="p-5">
           <h2 className="flex items-center gap-2 font-display text-base font-semibold text-foreground">
-            <SealCheck size={18} weight="fill" aria-hidden="true" className="text-brand-ink" />
+            {/* `Buildings` y no `SealCheck`: el sello con tilde es la marca de
+                un plan contratado (check azul, Presencia Verificada). Este
+                bloque sólo dice de dónde sale la información — no certifica a
+                nadie ni la plataforma la avala. */}
+            <Buildings size={18} weight="fill" aria-hidden="true" className="text-brand-ink" />
             {C.sourcesTitle}
           </h2>
           <ul className="mt-3 space-y-2">

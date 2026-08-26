@@ -128,7 +128,7 @@ describe("requireTenantMatch", () => {
     expect(stub.from).not.toHaveBeenCalled();
   });
 
-  it("no exime al global_admin: el `?t=` del panel tampoco habilita escrituras", async () => {
+  it("no exime al global_admin: la pista de tenant del panel tampoco habilita escrituras", async () => {
     useSupabase(member(COMUNIDAD_LATINA_ROW.id, "global_admin"), COMUNIDAD_LATINA_ROW);
 
     const guard = await requireTenantMatch();

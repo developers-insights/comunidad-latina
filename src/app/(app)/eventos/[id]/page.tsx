@@ -2,14 +2,22 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  ArrowSquareOut,
   CalendarBlank,
+  CalendarX,
   ChartBar,
+  Confetti,
   MapPin,
   RocketLaunch,
   Storefront,
+  Ticket,
+  Users,
+  UsersThree,
+  VideoCamera,
 } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Badge, Banner, BezelCard, buttonVariants } from "@/components/ui";
 import {
+  DetailFacts,
   DetailTopBar,
   ListingActions,
   PublisherTrust,
@@ -18,6 +26,7 @@ import {
   isOptimizableSrc,
   listingPhotoUrl,
   toTrustLevel,
+  type DetailFact,
 } from "@/components/listings";
 import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 // Lectura de `saves` (migración 0038) con degradación a false. Vive en el
@@ -33,6 +42,13 @@ import {
   eventDateParts,
   parseEventAttrs,
 } from "@/components/directory";
+import { canUseActionButtons } from "@/lib/monetization";
+import { eventAudienceLabel, eventCategoryLabel } from "@/lib/eventos/categorias";
+import {
+  EVENT_DETAILS_COPY,
+  readEventDetails,
+  resolveEventTicketsUrl,
+} from "@/lib/eventos/detalles";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
@@ -216,6 +232,63 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   const venue = attrs.venueArea ?? listing.area_label;
   const isOwner = Boolean(user && listing.created_by === user.id);
 
+  /**
+   * Lo que el formulario captura y esta pantalla no mostraba: tipo de evento,
+   * hora de cierre, público recomendado, cupo y —el caro— el enlace de boletos.
+   *
+   * ── EL ENLACE DE BOLETOS ────────────────────────────────────────────────────
+   * Acá había un bug con forma de omisión. El botón se pintaba con
+   * `listing.cta_tickets_url` a secas, que es la columna PREMIUM: un aviso
+   * gratuito no puede ni siquiera guardarla (CHECK `listings_cta_premium_only`,
+   * 0048). O sea que el enlace que el formulario base pide gratis —y que la
+   * gente venía cargando— no se mostraba NUNCA. `resolveEventTicketsUrl`
+   * resuelve la precedencia una sola vez: gana el premium, `attrs.tickets_url`
+   * es el respaldo.
+   *
+   * Y por eso hay dos lugares donde puede salir el botón, sin duplicarse:
+   * `ListingActions` sólo renderiza con tier premium vigente, así que cuando esa
+   * fila NO va a existir —o existe pero el valor salió del respaldo gratuito—
+   * el botón se pinta acá abajo. La condición es exactamente esa y no "si es
+   * gratis": un premium VENCIDO también tiene que volver a mostrar su respaldo.
+   */
+  const details = readEventDetails(listing.attrs);
+  const tickets = resolveEventTicketsUrl(listing.cta_tickets_url, listing.attrs);
+  const ticketsInActionsRow =
+    tickets !== null && tickets.source === "premium" && canUseActionButtons(listing.tier);
+  const categoryLabel = eventCategoryLabel(details.category);
+  const endDate = attrs.endsAt
+    ? eventDateParts(attrs.endsAt, tenant.locale, viewerZone ?? undefined)
+    : null;
+
+  const eventFacts: DetailFact[] = [];
+  if (endDate) {
+    eventFacts.push({
+      id: "ends-at",
+      icon: CalendarX,
+      label: EVENT_DETAILS_COPY.endsAt,
+      value: endDate.time ? `${endDate.full} · ${endDate.time}` : endDate.full,
+    });
+  }
+  if (details.audience) {
+    const audience = eventAudienceLabel(details.audience);
+    if (audience) {
+      eventFacts.push({
+        id: "audience",
+        icon: UsersThree,
+        label: EVENT_DETAILS_COPY.audience,
+        value: audience,
+      });
+    }
+  }
+  if (details.capacity !== null) {
+    eventFacts.push({
+      id: "capacity",
+      icon: Users,
+      label: EVENT_DETAILS_COPY.capacity,
+      value: EVENT_DETAILS_COPY.capacityValue(details.capacity),
+    });
+  }
+
   // ¿Ya lo guardé? (`saves`, 0038 — false si la migración todavía no corrió.)
   const initialSaved = await fetchListingSaved(supabase, tenant.id, listing.id, user?.id);
 
@@ -264,7 +337,16 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
             <h1 className="font-display text-xl font-bold leading-snug text-foreground">
               {listing.title}
             </h1>
+            {/* El tipo de evento va ACÁ y no en la ficha de abajo: es lo que
+                decide si alguien sigue leyendo, igual que la fecha. Lleva su
+                ícono Y su texto — nunca sólo color. */}
             <div className="mt-2 flex flex-wrap items-center gap-2">
+              {categoryLabel && (
+                <Badge variant="neutral">
+                  <Confetti size={14} aria-hidden="true" />
+                  {categoryLabel}
+                </Badge>
+              )}
               {attrs.free && <Badge variant="success">{C.freeChip}</Badge>}
               {date?.isPast && <Badge variant="neutral">{C.pastLabel}</Badge>}
             </div>
@@ -314,6 +396,39 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
         </section>
       )}
 
+      {/* Evento EN LÍNEA: el enlace es el "dónde". Va con el mismo peso que la
+          card de zona de un evento presencial y no escondido entre los botones,
+          porque para quien va a entrar por acá es la única dirección que hay.
+          `readEventDetails` ya lo validó como http(s) externo. */}
+      {details.onlineUrl && (
+        <section className="mt-6">
+          <h2 className="mb-2 text-sm font-semibold text-foreground-secondary">
+            {EVENT_DETAILS_COPY.onlineTitle}
+          </h2>
+          <BezelCard coreClassName="p-4">
+            <a
+              href={details.onlineUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "md" }),
+                "w-full justify-center",
+              )}
+            >
+              <VideoCamera size={18} aria-hidden="true" />
+              {EVENT_DETAILS_COPY.onlineCta}
+              <ArrowSquareOut size={14} aria-hidden="true" />
+            </a>
+            <p className="mt-2 text-xs text-foreground-muted">
+              {EVENT_DETAILS_COPY.externalHint}
+            </p>
+          </BezelCard>
+        </section>
+      )}
+
+      {/* Termina · Para quién es · Cupo. Sin filas declaradas, no renderiza. */}
+      <DetailFacts title={EVENT_DETAILS_COPY.title} facts={eventFacts} />
+
       {listing.description && (
         <section className="mt-6">
           <h2 className="mb-2 text-sm font-semibold text-foreground-secondary">
@@ -340,6 +455,31 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           directions: listing.cta_address,
         }}
       />
+
+      {/* Boletos cuando la fila de arriba no los pinta: aviso gratuito, o
+          premium vencido que vuelve a caer en el enlace de `attrs`. Ver el
+          comentario de `ticketsInActionsRow`. Es un enlace y no un botón
+          fantasma: si no hay a dónde ir, no se dibuja nada. */}
+      {tickets && !ticketsInActionsRow && (
+        <div className="mt-4">
+          <a
+            href={tickets.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "md" }),
+              "w-full justify-center",
+            )}
+          >
+            <Ticket size={18} aria-hidden="true" />
+            {EVENT_DETAILS_COPY.ticketsCta}
+            <ArrowSquareOut size={14} aria-hidden="true" />
+          </a>
+          <p className="mt-1.5 text-xs text-foreground-muted">
+            {EVENT_DETAILS_COPY.externalHint}
+          </p>
+        </div>
+      )}
 
       {isOwner && listing.status === "published" && (
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">

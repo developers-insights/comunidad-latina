@@ -35,20 +35,9 @@ vi.mock("next/link", () => ({
 }));
 
 /** El anillo activo anima su salto; acá se testea la fila, no la animación. */
-vi.mock("motion/react", () => {
-  const passthrough = ({
-    children,
-    ...props
-  }: Record<string, unknown> & { children?: React.ReactNode }) => {
-    const domProps = Object.fromEntries(
-      Object.entries(props).filter(
-        ([key]) => !["layoutId", "initial", "animate", "exit", "transition"].includes(key),
-      ),
-    );
-    return <span {...domProps}>{children}</span>;
-  };
-  return { m: { span: passthrough }, useReducedMotion: () => true };
-});
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock(),
+);
 
 /**
  * jsdom no implementa scroll (no tiene layout). La fila trae a la vista el

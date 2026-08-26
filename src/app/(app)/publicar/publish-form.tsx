@@ -4,9 +4,11 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import {
   Briefcase,
+  CaretDown,
   Calendar,
   CheckCircle,
   Eye,
+  Globe,
   House,
   ImageSquare,
   Key,
@@ -16,6 +18,7 @@ import {
   RocketLaunch,
   Storefront,
   Tag,
+  Ticket,
   Wrench,
   X,
 } from "@phosphor-icons/react/dist/ssr";
@@ -42,14 +45,30 @@ import {
   type DeclarationValue,
 } from "@/components/integrity/originality-fields";
 import {
-  PROPERTY_OPERATION_OPTIONS,
+  DEFAULT_PUBLISHABLE_OPERATION,
   PROPERTY_TYPE_OPTIONS,
+  PUBLISHABLE_PROPERTY_OPERATION_OPTIONS,
   normalizePropertyOperation,
   normalizePropertyType,
   propertyOperationLabel,
   propertyTypeLabel,
   type PropertyOperation,
 } from "@/lib/propiedades/tipos";
+import {
+  FURNISHED_OPTIONS,
+  MAX_DEPOSIT,
+  MAX_EXTRA_FEES_LENGTH,
+  RENTAL_REQUIREMENTS,
+  RENTAL_UTILITIES,
+  type FurnishedState,
+} from "@/lib/propiedades/alquiler";
+import { EVENT_AUDIENCES, EVENT_CATEGORIES } from "@/lib/eventos/categorias";
+import {
+  EVENT_MODE_OPTIONS,
+  MAX_EVENT_CAPACITY,
+  requiresVenue,
+  type EventMode,
+} from "@/lib/eventos/detalles";
 import { createListingDraft, finalizeListing } from "./actions";
 
 const C = COPY.publish;
@@ -66,9 +85,70 @@ const DIR_COPY = {
     credentialsHelp:
       "Separalas con comas. Si sos abogado o notario, después podés verificar tu matrícula en el centro de seguridad.",
   },
+  /**
+   * Condiciones del alquiler. Todo lo de acá es OPCIONAL y vive plegado: son
+   * las preguntas que hoy llegan por chat, no requisitos para poder publicar.
+   * Obligarlas dejaría afuera al que sólo quiere publicar rápido, que es la
+   * mitad del vertical.
+   */
+  rental: {
+    onlyRentTitle: "Publicás un alquiler",
+    onlyRentBody:
+      "Por ahora en Comunidad Latina se publican solo alquileres: departamentos, cuartos y viviendas compartidas.",
+    depositLabel: "Depósito",
+    depositPlaceholder: "Ej.: 1500",
+    depositHelp: "Poné 0 si no pedís depósito.",
+    moreTitle: "Condiciones del alquiler",
+    moreHint: "Opcional — evita que te pregunten lo mismo diez veces",
+    furnishedLegend: "¿Viene amueblado?",
+    availableLabel: "Disponible desde",
+    extraFeesLabel: "Cargos aparte del alquiler",
+    extraFeesPlaceholder: "Ej.: agua $30 y basura $15 por mes",
+    extraFeesHelp: "Lo que se paga además del alquiler, si hay algo.",
+    utilitiesLegend: "Servicios incluidos",
+    utilitiesHelp: "Marcá lo que ya está dentro del alquiler.",
+    requirementsLegend: "Qué pedís para alquilar",
+    requirementsHelp: "Así quien busca sabe de entrada si califica.",
+  },
   event: {
     dateLabel: "Fecha y hora del evento",
     dateError: "Decinos cuándo es el evento.",
+    endsLabel: "Hasta (fin del evento)",
+    endsHelp: "Si no sabés a qué hora termina, dejalo vacío.",
+    endsError: "La hora de cierre tiene que ser posterior a la de inicio.",
+    categoryLabel: "Categoría",
+    categoryPlaceholder: "Elegí una categoría…",
+    categoryError: "Elegí una categoría para el evento.",
+    ticketLegend: "Entrada",
+    ticketFree: "Gratis",
+    ticketFreeHint: "Se entra sin pagar",
+    ticketPaid: "Con entrada paga",
+    ticketPaidHint: "Se cobra para entrar",
+    ticketError: "Decinos si el evento es gratis o se cobra entrada.",
+    ticketsUrlLabel: "Enlace de entradas o inscripción",
+    ticketsUrlPlaceholder: "https://…",
+    ticketsUrlHelp: "Dónde se sacan las entradas o se anota la gente.",
+    ticketsUrlError: "Ese enlace no se entiende. Copialo completo, con https:// adelante.",
+    modeLegend: "¿Dónde es?",
+    modeError: "Decinos si el evento es en un lugar o en línea.",
+    onlineUrlLabel: "Enlace del evento",
+    onlineUrlPlaceholder: "https://…",
+    onlineUrlHelp: "Por dónde se entra: Zoom, Meet, un vivo de Instagram…",
+    onlineUrlError: "Pegá el enlace por donde se entra (tiene que empezar con https://).",
+    moreTitle: "Más datos del evento",
+    moreHint: "Opcional",
+    /**
+     * Lo que se guarda en `area_label` cuando el evento es en línea. La columna
+     * es obligatoria (mínimo 3 caracteres) y no se puede dejar vacía, así que
+     * en vez de inventar una zona falsa se escribe la modalidad, que es cierta
+     * y es lo que la tarjeta va a mostrar donde iría el barrio.
+     */
+    virtualAreaLabel: "En línea",
+    capacityLabel: "Cuánta gente entra",
+    capacityPlaceholder: "Ej.: 80",
+    capacityHelp: "Dejalo vacío si no hay cupo.",
+    audienceLabel: "Para quién es",
+    audiencePlaceholder: "Sin preferencia",
   },
   // Preselect por query param (menú crear-post del feed, ?kind=): link discreto
   // para volver al selector sin perder el resto del wizard. Copy local — no
@@ -145,8 +225,228 @@ async function preparePhoto(file: File): Promise<{ blob: Blob; ext: string }> {
   return { blob: file, ext: ["webp", "jpg", "jpeg", "png"].includes(ext) ? ext : "jpg" };
 }
 
+// ---------------------------------------------------------------------------
+// Controles compartidos del wizard
+//
+// Viven ACÁ y no en components/ui a propósito: son la resolución de un problema
+// de ESTE formulario (no agrandarlo a quince campos) y no un patrón que el
+// resto de la app haya pedido. Cada ruta de publicación del repo es
+// autocontenida por la misma razón (ver `preparePhoto`, duplicado a propósito
+// en cada wizard). Cuando una tercera pantalla los necesite, ahí sí suben.
+// ---------------------------------------------------------------------------
+
+/**
+ * Bloque plegable de campos opcionales.
+ *
+ * Es un `<details>` NATIVO y no un acordeón a mano: el navegador ya le da el
+ * toggle con teclado, el estado expandido al lector de pantalla y —lo que más
+ * importa acá— el buscador del navegador puede abrirlo para encontrar texto
+ * adentro. Un `useState` con `hidden` no hace nada de eso y hay que escribirlo.
+ *
+ * POR QUÉ PLEGADO Y NO EN UN PASO NUEVO: un paso más es un paso más que
+ * atravesar aunque no interese; un bloque plegado ocupa una fila y se abre solo
+ * si a la persona le sirve. La regla que sigue el wizard es: obligatorio a la
+ * vista, opcional a un toque.
+ */
+function OptionalSection({
+  title,
+  hint,
+  icon,
+  children,
+}: {
+  title: string;
+  hint: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group rounded-lg border border-border-subtle bg-surface-subtle">
+      <summary
+        className={cn(
+          "flex min-h-11 cursor-pointer list-none items-center gap-2.5 px-4 py-3",
+          "rounded-lg transition-colors duration-(--duration-fast)",
+          "hover:bg-surface focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          "[&::-webkit-details-marker]:hidden",
+        )}
+      >
+        <span aria-hidden="true" className="shrink-0 text-brand [&>svg]:size-[18px]">
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-foreground">{title}</span>
+          <span className="mt-0.5 block text-xs leading-snug text-foreground-muted">{hint}</span>
+        </span>
+        <CaretDown
+          size={16}
+          aria-hidden="true"
+          className={cn(
+            "shrink-0 text-foreground-muted",
+            "transition-transform duration-(--duration-fast) ease-(--ease-spring)",
+            "group-open:rotate-180",
+          )}
+        />
+      </summary>
+      <div className="flex flex-col gap-4 border-t border-border-subtle px-4 pb-4 pt-4">
+        {children}
+      </div>
+    </details>
+  );
+}
+
+interface CardChoice<T extends string> {
+  value: T;
+  label: string;
+  hint?: string;
+}
+
+/**
+ * Grupo de opciones excluyentes con forma de tarjeta.
+ *
+ * Por debajo son radios NATIVOS dentro de un `<fieldset>` — el mismo criterio
+ * que ya usaba el selector de operación de vivienda: se ven como tarjetas, pero
+ * las flechas del teclado recorren las opciones, el lector anuncia "1 de 2" y
+ * el grupo tiene nombre real, sin reimplementar nada de eso con `aria-checked`.
+ */
+function ChoiceCards<T extends string>({
+  name,
+  legend,
+  help,
+  options,
+  value,
+  onChange,
+  iconFor,
+  columns = 2,
+}: {
+  name: string;
+  legend: string;
+  help?: string;
+  options: readonly CardChoice<T>[];
+  value: T | "";
+  onChange: (value: T) => void;
+  iconFor?: (value: T) => React.ReactNode;
+  columns?: 2 | 3;
+}) {
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-1.5 text-sm font-semibold text-foreground">{legend}</legend>
+      <div className={cn("grid gap-2", columns === 3 ? "grid-cols-3" : "grid-cols-2")}>
+        {options.map((option) => {
+          const selected = value === option.value;
+          const icon = iconFor?.(option.value);
+          return (
+            <div key={option.value} className="relative">
+              <input
+                type="radio"
+                id={`${name}-${option.value}`}
+                name={name}
+                value={option.value}
+                checked={selected}
+                onChange={() => onChange(option.value)}
+                className="peer sr-only"
+              />
+              <label
+                htmlFor={`${name}-${option.value}`}
+                className={cn(
+                  "flex h-full min-h-16 cursor-pointer flex-col justify-center gap-0.5 rounded-lg border p-3",
+                  "transition-[border-color,background-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
+                  "active:scale-[0.98] peer-focus-visible:ring-[3px] peer-focus-visible:ring-focus-ring",
+                  selected
+                    ? "border-brand bg-brand-tint text-brand-ink"
+                    : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
+                )}
+              >
+                <span className="flex items-center gap-1.5 text-sm font-semibold">
+                  {icon}
+                  {option.label}
+                </span>
+                {option.hint && (
+                  <span className="text-xs leading-snug text-foreground-muted">{option.hint}</span>
+                )}
+              </label>
+            </div>
+          );
+        })}
+      </div>
+      {help && <p className="text-sm text-foreground-muted">{help}</p>}
+    </fieldset>
+  );
+}
+
+/**
+ * Selección múltiple con chips.
+ *
+ * Chips y no una lista de casillas: siete servicios en casillas apiladas son
+ * siete filas de scroll; en chips entran en tres renglones y se marcan con el
+ * pulgar. Cada chip es un `aria-pressed` real, así que el lector de pantalla
+ * anuncia el estado sin que haga falta describirlo con texto.
+ *
+ * `min-h-11` en cada chip: 44px es el mínimo táctil y no se negocia por
+ * estética, ni siquiera en un control secundario.
+ */
+function ToggleChips<T extends string>({
+  legend,
+  help,
+  options,
+  selected,
+  onToggle,
+}: {
+  legend: string;
+  help?: string;
+  options: readonly { value: T; label: string }[];
+  selected: readonly T[];
+  onToggle: (value: T) => void;
+}) {
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-1.5 text-sm font-semibold text-foreground">{legend}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const active = selected.includes(option.value);
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onToggle(option.value)}
+              className={cn(
+                "min-h-11 rounded-full border px-3.5 text-sm font-semibold",
+                "transition-[border-color,background-color,color,transform] duration-(--duration-fast) ease-(--ease-spring)",
+                "active:scale-[0.96] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+                active
+                  ? "border-brand bg-brand-tint text-brand-ink"
+                  : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      {help && <p className="text-sm text-foreground-muted">{help}</p>}
+    </fieldset>
+  );
+}
+
+/** Alterna un valor dentro de una lista, sin mutar. */
+function toggleInList<T>(list: T[], value: T): T[] {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
 export interface PublishFormProps {
   tenantId: string;
+  /**
+   * Los verticales que ESTE tenant tiene prendidos, ya resueltos por el
+   * servidor (`page.tsx`, vía `moduleAvailability`). Sin la lista, el wizard
+   * ofrece los cinco.
+   *
+   * El menú "+" ya filtra sus tiles por módulo, pero esta pantalla —el destino
+   * de esos tiles, y una URL que se puede escribir a mano o llegar por un link
+   * viejo— los ofrecía TODOS. O sea que una comunidad con Eventos apagado no
+   * veía el tile de Evento y sin embargo podía publicar uno: el aviso nacía en
+   * un módulo que después no lo muestra en ningún lado. La promesa y la entrega
+   * tienen que salir de la misma fuente.
+   */
+  allowedKinds?: readonly Kind[];
   /**
    * Preselect por query param (?kind=, menú crear-post del feed — page.tsx ya
    * lo validó). Con un kind fijado, el wizard arranca en el paso 1 (el
@@ -156,7 +456,21 @@ export interface PublishFormProps {
   initialKind?: Kind | null;
 }
 
-export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) {
+export function PublishForm({
+  tenantId,
+  initialKind = null,
+  allowedKinds,
+}: PublishFormProps) {
+  // Orden del catálogo, no el que venga en la prop: el selector se lee siempre
+  // igual. Nunca queda vacío — con los cinco módulos apagados este componente
+  // ni se monta (page.tsx corta con un estado vacío antes), así que la lista
+  // completa es la degradación correcta para el resto de los casos raros.
+  const kindOptions = (() => {
+    if (!allowedKinds || allowedKinds.length === 0) return KIND_OPTIONS;
+    const filtered = KIND_OPTIONS.filter((option) => allowedKinds.includes(option.value));
+    return filtered.length > 0 ? filtered : KIND_OPTIONS;
+  })();
+
   const { toast } = useToast();
   const { celebrating, celebrate } = useCelebration();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -175,14 +489,30 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [period, setPeriod] = useState("month");
-  // Vivienda: sin valor inicial A PROPÓSITO. "Alquiler" es lo más frecuente,
-  // pero preseleccionarlo pondría en boca de quien publica algo que todavía no
-  // dijo — y el que vende tendría que darse cuenta de destildarlo.
-  const [operation, setOperation] = useState<PropertyOperation | "">("");
+  /**
+   * Vivienda. Ya NO arranca vacío: con una sola operación publicable, dejarlo
+   * sin valor obligaría a pedir que la persona "elija" entre una cosa, y eso no
+   * es una elección, es un trámite. Se asume y se DICE en una línea arriba del
+   * paso, que es más honesto que un grupo de radios de una sola opción.
+   *
+   * El día que vuelva a haber dos, `PUBLISHABLE_PROPERTY_OPERATION_OPTIONS`
+   * tendrá dos elementos, el grupo de opciones reaparece solo (ver el paso 2) y
+   * esta línea es lo único que habría que volver a poner en "".
+   */
+  const [operation, setOperation] = useState<PropertyOperation | "">(
+    DEFAULT_PUBLISHABLE_OPERATION,
+  );
   const [propertyType, setPropertyType] = useState("");
   const [bedrooms, setBedrooms] = useState("");
   const [bathrooms, setBathrooms] = useState("");
   const [sqft, setSqft] = useState("");
+  // Condiciones del alquiler — todas opcionales, todas plegadas.
+  const [deposit, setDeposit] = useState("");
+  const [extraFees, setExtraFees] = useState("");
+  const [utilities, setUtilities] = useState<string[]>([]);
+  const [requirements, setRequirements] = useState<string[]>([]);
+  const [furnished, setFurnished] = useState<FurnishedState | "">("");
+  const [availableFrom, setAvailableFrom] = useState("");
   const [areaLabel, setAreaLabel] = useState("");
   const [exactAddress, setExactAddress] = useState("");
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -192,24 +522,59 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
   const [category, setCategory] = useState("");
   const [credentials, setCredentials] = useState("");
   const [eventStartsAt, setEventStartsAt] = useState("");
+  const [eventEndsAt, setEventEndsAt] = useState("");
+  const [eventCategory, setEventCategory] = useState("");
+  const [eventMode, setEventMode] = useState<EventMode | "">("");
+  const [eventOnlineUrl, setEventOnlineUrl] = useState("");
+  const [eventTicketsUrl, setEventTicketsUrl] = useState("");
+  /**
+   * Gratis / pago como TERCER estado ("" = todavía no eligió). La spec pide que
+   * la elección sea explícita, y un booleano con default pondría en boca de
+   * quien organiza una respuesta que no dio: preseleccionar "gratis" publicaría
+   * eventos gratis por descuido, y preseleccionar "pago" es peor.
+   */
+  const [eventTicket, setEventTicket] = useState<"gratis" | "pago" | "">("");
+  const [eventCapacity, setEventCapacity] = useState("");
+  const [eventAudience, setEventAudience] = useState("");
 
   // El borrador se crea una sola vez — reintentos no duplican avisos.
   const [draftId, setDraftId] = useState<string | null>(null);
 
   const isProperty = kind === "property";
+  const isEvent = kind === "event";
   /**
-   * Una VENTA no tiene frecuencia: el precio es uno solo. Al elegir "Venta" el
-   * selector de frecuencia desaparece en vez de quedar ahí ofreciendo "por mes"
-   * para una casa que se vende — que es exactamente la contradicción que el
-   * servidor rechaza. Mientras la operación no se eligió se muestra la vista de
-   * alquiler, que es el caso mayoritario del vertical.
+   * Una VENTA no tiene frecuencia: el precio es uno solo. Hoy la venta no se
+   * puede publicar, así que `isSale` es siempre falso — la lógica se conserva
+   * igual porque el estado `operation` sigue existiendo y porque el día que la
+   * venta vuelva, la contradicción precio/operación vuelve con ella.
    */
   const isSale = isProperty && operation === "venta";
+  /**
+   * ¿Hay más de una operación publicable? Con una sola, el paso 2 no dibuja el
+   * grupo de opciones y muestra la línea explicativa. La condición se lee del
+   * catálogo y no de un booleano a mano para que la UI no pueda desincronizarse
+   * de la política que aplica el servidor.
+   */
+  const showOperationChoice = PUBLISHABLE_PROPERTY_OPERATION_OPTIONS.length > 1;
   // La frecuencia (por mes/semana/día) es lenguaje de alquileres y sueldos.
   // Para negocio/profesional/evento se oculta y el precio queda como único —
   // el cliente eligió "Negocio" y le apareció "Por mes" como si fuera una
   // propiedad (feedback 2026-07-21).
   const hasPriceFrequency = (isProperty && !isSale) || kind === "job";
+  /**
+   * Un evento GRATIS no muestra el campo de precio. No se trata de esconder un
+   * control: es que el precio de un evento gratis no existe, y dejarlo ahí
+   * invita a escribir un número que después contradice el chip "Gratis".
+   */
+  const isFreeEvent = isEvent && eventTicket === "gratis";
+  const isOnlineEvent = isEvent && eventMode === "virtual";
+  /**
+   * La zona (paso 3) deja de tener sentido en un evento EN LÍNEA: no hay lugar
+   * al que ir. En vez de pedirla igual —y que alguien escriba "Zoom" en un
+   * campo de ubicación— el paso muestra el enlace de acceso, que es el "dónde"
+   * de verdad de ese evento.
+   */
+  const zoneStepIsVirtual = isOnlineEvent;
 
   /**
    * La frecuencia que se va a guardar. Una sola fuente para el borrador y para
@@ -229,9 +594,24 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
    * se lee como el total, no como lo que se paga por semana.
    */
   const priceAmount = price ? Number(price) : Number.NaN;
-  const pricePreview = Number.isFinite(priceAmount)
-    ? formatListingPrice(priceAmount, DEFAULT_CURRENCY, savedPeriod)
-    : null;
+  const pricePreview =
+    !isFreeEvent && Number.isFinite(priceAmount)
+      ? formatListingPrice(priceAmount, DEFAULT_CURRENCY, savedPeriod)
+      : null;
+
+  /**
+   * ¿El enlace se entiende como una dirección de internet?
+   *
+   * Chequeo LAXO y deliberadamente distinto del del servidor: acá sólo evita
+   * que se avance con algo que claramente no es un enlace. La validación real
+   * —origen resuelto, protocolo, no-interno— la hace `normalizeEventUrl` en la
+   * server action, que es donde no se puede saltear. Duplicar ahí la regla
+   * completa arrastraría `safeExternalHref` al bundle del cliente sin agregar
+   * ninguna garantía.
+   */
+  function looksLikeUrl(value: string): boolean {
+    return /^https?:\/\/\S+\.\S+/i.test(value.trim());
+  }
 
   function validateStep(current: number): string | null {
     if (current === 0 && !kind) return C.errors.kindRequired;
@@ -250,10 +630,28 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
     if (current === 2 && kind === "professional" && !category) {
       return DIR_COPY.professional.categoryError;
     }
-    if (current === 2 && kind === "event" && !eventStartsAt) {
-      return DIR_COPY.event.dateError;
+    if (current === 2 && isEvent) {
+      // Mismo criterio que vivienda: el orden de los chequeos sigue al orden
+      // visual, así el primer error señalado es el del campo de más arriba.
+      if (!eventCategory) return DIR_COPY.event.categoryError;
+      if (!eventStartsAt) return DIR_COPY.event.dateError;
+      if (eventEndsAt && new Date(eventEndsAt).getTime() <= new Date(eventStartsAt).getTime()) {
+        return DIR_COPY.event.endsError;
+      }
+      if (!eventTicket) return DIR_COPY.event.ticketError;
+      if (eventTicketsUrl.trim() && !looksLikeUrl(eventTicketsUrl)) {
+        return DIR_COPY.event.ticketsUrlError;
+      }
+      if (!eventMode) return DIR_COPY.event.modeError;
     }
-    if (current === 3 && areaLabel.trim().length < 3) return C.errors.zoneShort;
+    if (current === 3) {
+      if (zoneStepIsVirtual) {
+        if (!looksLikeUrl(eventOnlineUrl)) return DIR_COPY.event.onlineUrlError;
+        // Un evento en línea NO necesita zona: el "dónde" es el enlace.
+        return null;
+      }
+      if (areaLabel.trim().length < 3) return C.errors.zoneShort;
+    }
     return null;
   }
 
@@ -319,17 +717,31 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
     setDescription("");
     setPrice("");
     setPeriod("month");
-    setOperation("");
+    setOperation(DEFAULT_PUBLISHABLE_OPERATION);
     setPropertyType("");
     setBedrooms("");
     setBathrooms("");
     setSqft("");
+    setDeposit("");
+    setExtraFees("");
+    setUtilities([]);
+    setRequirements([]);
+    setFurnished("");
+    setAvailableFrom("");
     setAreaLabel("");
     setExactAddress("");
     setPhotos([]);
     setCategory("");
     setCredentials("");
     setEventStartsAt("");
+    setEventEndsAt("");
+    setEventCategory("");
+    setEventMode("");
+    setEventOnlineUrl("");
+    setEventTicketsUrl("");
+    setEventTicket("");
+    setEventCapacity("");
+    setEventAudience("");
     setDraftId(null);
   }
 
@@ -363,12 +775,37 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
           bedrooms: isProperty && bedrooms ? Number(bedrooms) : null,
           bathrooms: isProperty && bathrooms ? Number(bathrooms) : null,
           sqft: isProperty && sqft ? Number(sqft) : null,
-          areaLabel: areaLabel.trim(),
-          exactAddress: exactAddress.trim() || null,
+          // El depósito se compara contra "" y no con un truthy: `"0"` es
+          // truthy pero `Number("0")` es 0, y 0 es el valor que MÁS importa
+          // conservar acá ("no pido depósito"). Un `deposit ? … : null` lo
+          // hubiera mandado como null y la afirmación se perdería.
+          deposit: isProperty && deposit !== "" ? Number(deposit) : null,
+          extraFees: isProperty ? extraFees.trim() || null : null,
+          utilities: isProperty ? utilities : null,
+          requirements: isProperty ? requirements : null,
+          furnished: isProperty && furnished ? furnished : null,
+          availableFrom: isProperty && availableFrom ? availableFrom : null,
+          // Evento en línea: no hay zona que declarar, así que se manda la
+          // etiqueta de modalidad. `areaLabel` es NOT NULL con mínimo 3 en el
+          // esquema y en la base, y un evento sin ella no podría publicarse.
+          areaLabel: zoneStepIsVirtual
+            ? DIR_COPY.event.virtualAreaLabel
+            : areaLabel.trim(),
+          exactAddress: zoneStepIsVirtual ? null : exactAddress.trim() || null,
           category:
             kind === "professional" && isProfessionalCategory(category) ? category : null,
           credentials: kind === "professional" ? credentials.trim() || null : null,
-          eventStartsAt: kind === "event" && eventStartsAt ? eventStartsAt : null,
+          eventStartsAt: isEvent && eventStartsAt ? eventStartsAt : null,
+          eventEndsAt: isEvent && eventEndsAt ? eventEndsAt : null,
+          eventCategory: isEvent ? eventCategory || null : null,
+          eventMode: isEvent && eventMode ? eventMode : null,
+          eventOnlineUrl: isOnlineEvent ? eventOnlineUrl.trim() || null : null,
+          eventTicketsUrl: isEvent ? eventTicketsUrl.trim() || null : null,
+          // `null` mientras no eligió (el paso 2 no deja avanzar sin elegir, así
+          // que sólo pasa si el kind no es evento).
+          eventFree: isEvent && eventTicket ? eventTicket === "gratis" : null,
+          eventCapacity: isEvent && eventCapacity ? Number(eventCapacity) : null,
+          eventAudience: isEvent ? eventAudience || null : null,
         });
         if (!result.ok) {
           setError(result.error);
@@ -513,7 +950,7 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
           </legend>
           <p className="-mt-1 text-sm text-foreground-secondary">{C.steps.kind.help}</p>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            {KIND_OPTIONS.map(({ value, label, Icon }) => {
+            {kindOptions.map(({ value, label, Icon }) => {
               const selected = kind === value;
               return (
                 <button
@@ -594,59 +1031,48 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
 
           {isProperty && (
             <>
-              {/* Operación: radios NATIVOS dentro de un fieldset. Se ven como
-                  dos tarjetas, pero por debajo es el control estándar — así las
-                  flechas del teclado recorren las opciones, el lector de
-                  pantalla anuncia "1 de 2" y el grupo tiene un nombre real, sin
-                  reimplementar nada de eso a mano con aria-checked. */}
-              <fieldset className="flex flex-col gap-2">
-                <legend className="mb-1.5 text-sm font-semibold text-foreground">
-                  {C.steps.price.operationLabel}
-                </legend>
-                <div className="grid grid-cols-2 gap-2">
-                  {PROPERTY_OPERATION_OPTIONS.map((option) => {
-                    const OptionIcon = option.value === "venta" ? Tag : Key;
-                    const selected = operation === option.value;
+              {/* OPERACIÓN. Con una sola publicable no se dibuja un grupo de
+                  opciones: elegir entre una cosa no es elegir, es un trámite con
+                  forma de pregunta. Se dice en una línea y se sigue. El grupo
+                  vuelve solo el día que el catálogo tenga dos otra vez —
+                  ver PUBLISHABLE_PROPERTY_OPERATION_OPTIONS. */}
+              {showOperationChoice ? (
+                <ChoiceCards
+                  name="pub-operation"
+                  legend={C.steps.price.operationLabel}
+                  help={C.steps.price.operationHelp}
+                  options={PUBLISHABLE_PROPERTY_OPERATION_OPTIONS}
+                  value={operation}
+                  onChange={setOperation}
+                  iconFor={(value) => {
+                    const OptionIcon = value === "venta" ? Tag : Key;
                     return (
-                      <div key={option.value} className="relative">
-                        <input
-                          type="radio"
-                          id={`pub-operation-${option.value}`}
-                          name="pub-operation"
-                          value={option.value}
-                          checked={selected}
-                          onChange={() => setOperation(option.value)}
-                          className="peer sr-only"
-                        />
-                        <label
-                          htmlFor={`pub-operation-${option.value}`}
-                          className={cn(
-                            "flex min-h-16 cursor-pointer flex-col justify-center gap-0.5 rounded-lg border p-3",
-                            "transition-[border-color,background-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
-                            "active:scale-[0.98] peer-focus-visible:ring-[3px] peer-focus-visible:ring-focus-ring",
-                            selected
-                              ? "border-brand bg-brand-tint text-brand-ink"
-                              : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
-                          )}
-                        >
-                          <span className="flex items-center gap-1.5 text-sm font-semibold">
-                            <OptionIcon
-                              size={18}
-                              weight={selected ? "fill" : "regular"}
-                              aria-hidden="true"
-                            />
-                            {option.label}
-                          </span>
-                          <span className="text-xs leading-snug text-foreground-muted">
-                            {option.hint}
-                          </span>
-                        </label>
-                      </div>
+                      <OptionIcon
+                        size={18}
+                        weight={operation === value ? "fill" : "regular"}
+                        aria-hidden="true"
+                      />
                     );
-                  })}
+                  }}
+                />
+              ) : (
+                <div className="flex items-start gap-2.5 rounded-lg bg-brand-tint px-4 py-3">
+                  <Key
+                    size={18}
+                    weight="fill"
+                    aria-hidden="true"
+                    className="mt-0.5 shrink-0 text-brand"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-brand-ink">
+                      {DIR_COPY.rental.onlyRentTitle}
+                    </p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-foreground-secondary">
+                      {DIR_COPY.rental.onlyRentBody}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-sm text-foreground-muted">{C.steps.price.operationHelp}</p>
-              </fieldset>
+              )}
 
               <Field
                 htmlFor="pub-property-type"
@@ -671,34 +1097,64 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
             </>
           )}
 
-          <div className={cn("grid gap-3", hasPriceFrequency ? "grid-cols-2" : "grid-cols-1")}>
-            <Field htmlFor="pub-price" label={C.steps.price.priceLabel} optional={!isProperty}>
+          {/* Un evento GRATIS no lleva precio. El campo no se "deshabilita": se
+              va. Un input vacío y apagado sigue invitando a preguntarse qué
+              habría que poner ahí. */}
+          {!isFreeEvent && (
+            <div className={cn("grid gap-3", hasPriceFrequency ? "grid-cols-2" : "grid-cols-1")}>
+              <Field htmlFor="pub-price" label={C.steps.price.priceLabel} optional={!isProperty}>
+                <Input
+                  id="pub-price"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  value={price}
+                  placeholder={C.steps.price.pricePlaceholder}
+                  onChange={(event) => setPrice(event.target.value)}
+                  className="numeric"
+                />
+              </Field>
+              {hasPriceFrequency && (
+                <Field htmlFor="pub-period" label={C.steps.price.periodLabel}>
+                  <Select
+                    id="pub-period"
+                    value={period}
+                    onChange={(event) => setPeriod(event.target.value)}
+                  >
+                    <option value="month">Por mes</option>
+                    <option value="week">Por semana</option>
+                    <option value="day">Por día</option>
+                    <option value="one_time">Precio único</option>
+                  </Select>
+                </Field>
+              )}
+            </div>
+          )}
+
+          {/* El DEPÓSITO va acá arriba y no plegado con el resto: después del
+              alquiler es la pregunta que más se hace, y en muchos casos es la
+              que decide si la persona sigue mirando. Esconderlo con los
+              opcionales lo dejaría sin contestar en casi todos los avisos. */}
+          {isProperty && (
+            <Field
+              htmlFor="pub-deposit"
+              label={DIR_COPY.rental.depositLabel}
+              help={DIR_COPY.rental.depositHelp}
+              optional
+            >
               <Input
-                id="pub-price"
+                id="pub-deposit"
                 type="number"
                 inputMode="decimal"
                 min={0}
-                value={price}
-                placeholder={C.steps.price.pricePlaceholder}
-                onChange={(event) => setPrice(event.target.value)}
+                max={MAX_DEPOSIT}
+                value={deposit}
+                placeholder={DIR_COPY.rental.depositPlaceholder}
+                onChange={(event) => setDeposit(event.target.value)}
                 className="numeric"
               />
             </Field>
-            {hasPriceFrequency && (
-              <Field htmlFor="pub-period" label={C.steps.price.periodLabel}>
-                <Select
-                  id="pub-period"
-                  value={period}
-                  onChange={(event) => setPeriod(event.target.value)}
-                >
-                  <option value="month">Por mes</option>
-                  <option value="week">Por semana</option>
-                  <option value="day">Por día</option>
-                  <option value="one_time">Precio único</option>
-                </Select>
-              </Field>
-            )}
-          </div>
+          )}
 
           {isProperty && (
             <div className="grid grid-cols-3 gap-3">
@@ -740,6 +1196,68 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
             </div>
           )}
 
+          {isProperty && (
+            <OptionalSection
+              title={DIR_COPY.rental.moreTitle}
+              hint={DIR_COPY.rental.moreHint}
+              icon={<Key weight="fill" />}
+            >
+              <ChoiceCards
+                name="pub-furnished"
+                legend={DIR_COPY.rental.furnishedLegend}
+                options={FURNISHED_OPTIONS}
+                value={furnished}
+                onChange={setFurnished}
+                columns={3}
+              />
+
+              <Field
+                htmlFor="pub-available-from"
+                label={DIR_COPY.rental.availableLabel}
+                optional
+              >
+                <Input
+                  id="pub-available-from"
+                  type="date"
+                  value={availableFrom}
+                  onChange={(event) => setAvailableFrom(event.target.value)}
+                  className="numeric"
+                />
+              </Field>
+
+              <Field
+                htmlFor="pub-extra-fees"
+                label={DIR_COPY.rental.extraFeesLabel}
+                help={DIR_COPY.rental.extraFeesHelp}
+                optional
+              >
+                <Input
+                  id="pub-extra-fees"
+                  value={extraFees}
+                  maxLength={MAX_EXTRA_FEES_LENGTH}
+                  placeholder={DIR_COPY.rental.extraFeesPlaceholder}
+                  onChange={(event) => setExtraFees(event.target.value)}
+                />
+              </Field>
+
+              <ToggleChips
+                legend={DIR_COPY.rental.utilitiesLegend}
+                help={DIR_COPY.rental.utilitiesHelp}
+                options={RENTAL_UTILITIES}
+                selected={utilities}
+                onToggle={(value) => setUtilities((current) => toggleInList(current, value))}
+              />
+
+              <ToggleChips
+                legend={DIR_COPY.rental.requirementsLegend}
+                help={DIR_COPY.rental.requirementsHelp}
+                options={RENTAL_REQUIREMENTS}
+                selected={requirements}
+                onToggle={(value) => setRequirements((current) => toggleInList(current, value))}
+              />
+            </OptionalSection>
+          )}
+
           {kind === "professional" && (
             <>
               <Field htmlFor="pub-category" label={DIR_COPY.professional.categoryLabel}>
@@ -775,16 +1293,166 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
             </>
           )}
 
-          {kind === "event" && (
-            <Field htmlFor="pub-event-date" label={DIR_COPY.event.dateLabel}>
-              <Input
-                id="pub-event-date"
-                type="datetime-local"
-                value={eventStartsAt}
-                onChange={(event) => setEventStartsAt(event.target.value)}
-                className="numeric"
+          {isEvent && (
+            <>
+              <Field htmlFor="pub-event-category" label={DIR_COPY.event.categoryLabel}>
+                <Select
+                  id="pub-event-category"
+                  value={eventCategory}
+                  onChange={(event) => setEventCategory(event.target.value)}
+                >
+                  <option value="" disabled>
+                    {DIR_COPY.event.categoryPlaceholder}
+                  </option>
+                  {EVENT_CATEGORIES.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+
+              <Field htmlFor="pub-event-date" label={DIR_COPY.event.dateLabel}>
+                <Input
+                  id="pub-event-date"
+                  type="datetime-local"
+                  value={eventStartsAt}
+                  onChange={(event) => setEventStartsAt(event.target.value)}
+                  className="numeric"
+                />
+              </Field>
+
+              <Field
+                htmlFor="pub-event-ends"
+                label={DIR_COPY.event.endsLabel}
+                help={DIR_COPY.event.endsHelp}
+                optional
+              >
+                <Input
+                  id="pub-event-ends"
+                  type="datetime-local"
+                  value={eventEndsAt}
+                  // `min` acota el calendario nativo a lo que tiene sentido: es
+                  // ayuda, no defensa. La regla real la aplican validateStep y
+                  // resolveEventDates en el servidor.
+                  min={eventStartsAt || undefined}
+                  onChange={(event) => setEventEndsAt(event.target.value)}
+                  className="numeric"
+                />
+              </Field>
+
+              {/* GRATIS O PAGO. Sin preselección: la spec pide la elección
+                  explícita, y un default publicaría eventos gratis por descuido.
+                  Elegir "Gratis" hace desaparecer el campo de precio de arriba. */}
+              <ChoiceCards
+                name="pub-event-ticket"
+                legend={DIR_COPY.event.ticketLegend}
+                options={[
+                  {
+                    value: "gratis" as const,
+                    label: DIR_COPY.event.ticketFree,
+                    hint: DIR_COPY.event.ticketFreeHint,
+                  },
+                  {
+                    value: "pago" as const,
+                    label: DIR_COPY.event.ticketPaid,
+                    hint: DIR_COPY.event.ticketPaidHint,
+                  },
+                ]}
+                value={eventTicket}
+                onChange={setEventTicket}
+                iconFor={(value) => (
+                  <Ticket
+                    size={18}
+                    weight={eventTicket === value ? "fill" : "regular"}
+                    aria-hidden="true"
+                  />
+                )}
               />
-            </Field>
+
+              {/* Enlace de entradas: BASE y gratis para todos, guardado en
+                  attrs.tickets_url. El botón premium vive en la columna
+                  cta_tickets_url, que la base le prohíbe a un aviso free. La
+                  precedencia entre los dos está en resolveEventTicketsUrl(). */}
+              <Field
+                htmlFor="pub-event-tickets-url"
+                label={DIR_COPY.event.ticketsUrlLabel}
+                help={DIR_COPY.event.ticketsUrlHelp}
+                optional
+              >
+                <Input
+                  id="pub-event-tickets-url"
+                  type="url"
+                  inputMode="url"
+                  autoComplete="url"
+                  value={eventTicketsUrl}
+                  maxLength={500}
+                  placeholder={DIR_COPY.event.ticketsUrlPlaceholder}
+                  onChange={(event) => setEventTicketsUrl(event.target.value)}
+                />
+              </Field>
+
+              {/* DÓNDE. Va acá y no en el paso 3 porque decide QUÉ muestra el
+                  paso 3: presencial pide zona y dirección, en línea pide el
+                  enlace de acceso. */}
+              <ChoiceCards
+                name="pub-event-mode"
+                legend={DIR_COPY.event.modeLegend}
+                options={EVENT_MODE_OPTIONS}
+                value={eventMode}
+                onChange={setEventMode}
+                iconFor={(value) => {
+                  const ModeIcon = requiresVenue(value) ? MapPin : Globe;
+                  return (
+                    <ModeIcon
+                      size={18}
+                      weight={eventMode === value ? "fill" : "regular"}
+                      aria-hidden="true"
+                    />
+                  );
+                }}
+              />
+
+              <OptionalSection
+                title={DIR_COPY.event.moreTitle}
+                hint={DIR_COPY.event.moreHint}
+                icon={<Calendar weight="fill" />}
+              >
+                <Field
+                  htmlFor="pub-event-capacity"
+                  label={DIR_COPY.event.capacityLabel}
+                  help={DIR_COPY.event.capacityHelp}
+                  optional
+                >
+                  <Input
+                    id="pub-event-capacity"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={MAX_EVENT_CAPACITY}
+                    value={eventCapacity}
+                    placeholder={DIR_COPY.event.capacityPlaceholder}
+                    onChange={(event) => setEventCapacity(event.target.value)}
+                    className="numeric"
+                  />
+                </Field>
+
+                <Field htmlFor="pub-event-audience" label={DIR_COPY.event.audienceLabel} optional>
+                  <Select
+                    id="pub-event-audience"
+                    value={eventAudience}
+                    onChange={(event) => setEventAudience(event.target.value)}
+                  >
+                    <option value="">{DIR_COPY.event.audiencePlaceholder}</option>
+                    {EVENT_AUDIENCES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </OptionalSection>
+            </>
           )}
         </div>
       )}
@@ -792,29 +1460,59 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
       {step === 3 && (
         <div className="flex flex-col gap-4">
           <h2 className="font-display text-xl font-bold text-foreground">{C.steps.zone.title}</h2>
-          <Field htmlFor="pub-zone" label={C.steps.zone.zoneLabel} help={C.steps.zone.zoneHelp}>
-            <Input
-              id="pub-zone"
-              value={areaLabel}
-              maxLength={80}
-              placeholder={C.steps.zone.zonePlaceholder}
-              onChange={(event) => setAreaLabel(event.target.value)}
-            />
-          </Field>
-          <Field
-            htmlFor="pub-address"
-            label={C.steps.zone.addressLabel}
-            help={C.steps.zone.addressHelp}
-            optional
-          >
-            <Input
-              id="pub-address"
-              value={exactAddress}
-              maxLength={200}
-              placeholder={C.steps.zone.addressPlaceholder}
-              onChange={(event) => setExactAddress(event.target.value)}
-            />
-          </Field>
+
+          {/* El "dónde" de un evento EN LÍNEA es su enlace, no un barrio. El
+              paso entero cambia en vez de mostrar una zona que nadie puede
+              contestar — pedirla igual sólo consigue que alguien escriba "Zoom"
+              en un campo de ubicación. */}
+          {zoneStepIsVirtual ? (
+            <Field
+              htmlFor="pub-event-online-url"
+              label={DIR_COPY.event.onlineUrlLabel}
+              help={DIR_COPY.event.onlineUrlHelp}
+            >
+              <Input
+                id="pub-event-online-url"
+                type="url"
+                inputMode="url"
+                autoComplete="url"
+                value={eventOnlineUrl}
+                maxLength={500}
+                placeholder={DIR_COPY.event.onlineUrlPlaceholder}
+                onChange={(event) => setEventOnlineUrl(event.target.value)}
+              />
+            </Field>
+          ) : (
+            <>
+              <Field
+                htmlFor="pub-zone"
+                label={C.steps.zone.zoneLabel}
+                help={C.steps.zone.zoneHelp}
+              >
+                <Input
+                  id="pub-zone"
+                  value={areaLabel}
+                  maxLength={80}
+                  placeholder={C.steps.zone.zonePlaceholder}
+                  onChange={(event) => setAreaLabel(event.target.value)}
+                />
+              </Field>
+              <Field
+                htmlFor="pub-address"
+                label={C.steps.zone.addressLabel}
+                help={C.steps.zone.addressHelp}
+                optional
+              >
+                <Input
+                  id="pub-address"
+                  value={exactAddress}
+                  maxLength={200}
+                  placeholder={C.steps.zone.addressPlaceholder}
+                  onChange={(event) => setExactAddress(event.target.value)}
+                />
+              </Field>
+            </>
+          )}
         </div>
       )}
 
@@ -951,14 +1649,31 @@ export function PublishForm({ tenantId, initialKind = null }: PublishFormProps) 
                   {propertyType && <span>{propertyTypeLabel(propertyType)}</span>}
                 </p>
               )}
-              {pricePreview && (
-                <p className="numeric text-2xl font-bold text-brand">{pricePreview}</p>
+              {/* Un evento gratis muestra "Gratis" donde iría el precio, no un
+                  hueco: la ausencia de precio y "no cuesta nada" se ven igual, y
+                  son cosas distintas. */}
+              {isFreeEvent ? (
+                <p className="text-2xl font-bold text-brand">{DIR_COPY.event.ticketFree}</p>
+              ) : (
+                pricePreview && (
+                  <p className="numeric text-2xl font-bold text-brand">{pricePreview}</p>
+                )
               )}
-              {areaLabel.trim() && (
+              {/* La vista previa dice lo MISMO que se va a guardar: en un evento
+                  en línea, `area_label` es la etiqueta de modalidad, así que eso
+                  es lo que tiene que leerse acá. */}
+              {zoneStepIsVirtual ? (
                 <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
-                  <MapPin size={14} aria-hidden="true" />
-                  {areaLabel.trim()}
+                  <Globe size={14} aria-hidden="true" />
+                  {DIR_COPY.event.virtualAreaLabel}
                 </p>
+              ) : (
+                areaLabel.trim() && (
+                  <p className="flex items-center gap-1.5 text-sm text-foreground-secondary">
+                    <MapPin size={14} aria-hidden="true" />
+                    {areaLabel.trim()}
+                  </p>
+                )
               )}
               {description.trim() && (
                 <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm leading-relaxed text-foreground-secondary">
