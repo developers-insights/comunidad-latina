@@ -21,6 +21,34 @@ export const COPY = {
     markAllError: "No pudimos marcarlas como leídas. Probá de nuevo.",
   },
 
+  /**
+   * LA GAVETA DE LA CAMPANA — el desplegable del header.
+   *
+   * Su razón de ser es no sacar a nadie del feed (pedido de Manuel,
+   * 2026-08-25): la campana llevaba a otra pantalla y volver costaba perder el
+   * lugar donde se estaba leyendo. Los textos son más cortos que los de la
+   * bandeja a propósito — es una mirada de reojo, no una sesión de lectura.
+   */
+  panel: {
+    /** Nombre accesible del desplegable (es un diálogo no modal). */
+    label: "Tus últimos avisos",
+    open: "Ver notificaciones",
+    close: "Cerrar",
+    /** Bajada del encabezado. */
+    unread: (count: number) =>
+      count === 1 ? "1 sin leer" : `${count} sin leer`,
+    allRead: "Estás al día",
+    loading: "Cargando tus avisos",
+    emptyTitle: "Por ahora, todo tranquilo",
+    emptyBody: "Cuando pase algo que te toque, el aviso te espera acá.",
+    errorTitle: "No pudimos cargar tus avisos",
+    errorBody: "Puede ser la conexión. Probá de nuevo.",
+    retry: "Reintentar",
+    seeAll: "Ver todas",
+    /** Se anuncia al abrir, para quien no ve el panel aparecer. */
+    openedAnnounce: "Panel de notificaciones abierto",
+  },
+
   tabs: {
     label: "Categorías de notificaciones",
     all: "Todas",

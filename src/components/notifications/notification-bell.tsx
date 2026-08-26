@@ -1,14 +1,5 @@
-import Link from "next/link";
-import { Bell } from "@phosphor-icons/react/dist/ssr";
 import { createClient, getAuthUserId } from "@/lib/supabase/server";
-
-const COPY = {
-  label: "Notificaciones",
-  labelUnread: (count: number) => `Notificaciones, ${count} sin leer`,
-} as const;
-
-/** Techo visual del badge: por encima de esto se lee "9+", no el número real. */
-const MAX_DISPLAY = 9;
+import { NotificationPanel } from "./notification-panel";
 
 /**
  * Cuántas notificaciones sin leer tiene la sesión actual, para el badge de la
@@ -48,34 +39,27 @@ async function getUnreadCount(): Promise<number> {
 }
 
 /**
- * Campana del header, entre el selector de zona y Mensajes. Server Component
- * async: el header ya lo es (llama `getShellContext()` para el avatar), así
- * que sumar esta consulta no cambia el modelo de render.
+ * Campana del header, entre el selector de zona y Mensajes.
  *
- * El badge es puramente decorativo (`aria-hidden`): el conteo se anuncia una
- * sola vez, en el `aria-label` del link ("Notificaciones, 3 sin leer"), nunca
- * dos veces.
+ * Este archivo resuelve UNA sola cosa: cuántos avisos sin leer hay, para que el
+ * globito esté bien desde el primer frame renderizado en el servidor. Todo lo
+ * demás —abrir la gaveta, traer las últimas seis, marcarlas leídas— vive en
+ * `NotificationPanel`, que es cliente.
+ *
+ * ── LO QUE CAMBIÓ EL 2026-08-25 ─────────────────────────────────────────────
+ * Hasta esta fecha la campana era un `<Link href="/notificaciones">`: tocarla
+ * te sacaba del feed y volver te devolvía arriba de todo, perdiendo la posición
+ * de lectura. Ahora despliega un panel anclado al header. La bandeja completa
+ * sigue existiendo igual que siempre —pestañas, filtros, ⋯ por fila, deshacer—
+ * y el pie del panel lleva ahí en un toque. Ver el docblock de
+ * `notification-panel.tsx`.
+ *
+ * La consulta del contador NO se movió al panel a propósito: si el número
+ * naciera del cliente, el header aparecería sin globito y lo agregaría medio
+ * segundo después. Un aviso de seguridad que parpadea en la pantalla es peor
+ * que uno que está desde el principio.
  */
 export async function NotificationBell() {
   const unread = await getUnreadCount();
-  const hasUnread = unread > 0;
-  const display = unread > MAX_DISPLAY ? `${MAX_DISPLAY}+` : String(unread);
-
-  return (
-    <Link
-      href="/notificaciones"
-      aria-label={hasUnread ? COPY.labelUnread(unread) : COPY.label}
-      className="relative flex size-11 shrink-0 items-center justify-center rounded-full text-foreground-secondary transition-colors duration-(--duration-fast) hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-    >
-      <Bell size={24} aria-hidden="true" />
-      {hasUnread && (
-        <span
-          aria-hidden="true"
-          className="absolute top-1.5 right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[11px] leading-none font-bold tabular-nums text-on-danger ring-2 ring-surface"
-        >
-          {display}
-        </span>
-      )}
-    </Link>
-  );
+  return <NotificationPanel initialUnread={unread} />;
 }

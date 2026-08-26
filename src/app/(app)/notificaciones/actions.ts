@@ -3,13 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { timeAgo } from "@/lib/utils";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import {
   NOTIFICATION_CATEGORIES,
   isAlwaysOnCategory,
+  isNotificationCategory,
   type NotificationCategory,
 } from "@/lib/notifications/categories";
 import { NOTIFICATION_FREQUENCIES } from "@/lib/notifications/prefs";
+import {
+  PANEL_LIMIT,
+  type NotificationPanelItem,
+  type NotificationPanelResult,
+} from "@/lib/notifications/panel";
 
 /**
  * Server actions del módulo NOTIFICACIONES.
@@ -221,6 +228,77 @@ export async function muteCategoryAction(
   revalidateInbox();
   revalidatePath("/ajustes/notificaciones");
   return { ok: true };
+}
+
+/* ========================================================================== */
+/* El desplegable de la campana — lectura                                     */
+/* ========================================================================== */
+
+/**
+ * Los últimos avisos + cuántos quedan sin leer, para la gaveta que abre la
+ * campana del header (`NotificationPanel`).
+ *
+ * Es la MISMA consulta que la bandeja, recortada: `dismissed_at is null` +
+ * `expires_at` en el futuro + orden por fecha. Sin `.eq()` de tenant ni de
+ * perfil — la RLS de `notifications` (0011) ya exige `tenant_id =
+ * current_tenant_id() AND profile_id = auth.uid()`, y repetirlo acá sería un
+ * filtro de más que tapa un error de política en vez de mostrarlo.
+ *
+ * Los dos números salen de dos consultas en paralelo y no de contar la página:
+ * `unread` es el total de la persona, no cuántos de estos seis están sin leer.
+ * Si dijera lo segundo, el globito bajaría de 12 a 6 con sólo abrir la gaveta.
+ *
+ * Devuelve `{ ok: false }` ante cualquier fallo de lectura: el panel muestra un
+ * aviso de error, nunca "estás al día".
+ */
+export async function getNotificationPanelAction(): Promise<NotificationPanelResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false };
+
+  const nowIso = new Date().toISOString();
+
+  const [{ data, error }, { count, error: countError }] = await Promise.all([
+    supabase
+      .from("notifications")
+      .select("id, title, body, href, read_at, created_at, category")
+      .is("dismissed_at", null)
+      .gt("expires_at", nowIso)
+      .order("created_at", { ascending: false })
+      .limit(PANEL_LIMIT),
+    supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .is("dismissed_at", null)
+      .gt("expires_at", nowIso)
+      .is("read_at", null),
+  ]);
+
+  if (error || countError) {
+    console.error(
+      "[notificaciones] panel de la campana:",
+      error?.message ?? countError?.message,
+    );
+    return { ok: false };
+  }
+
+  const now = new Date();
+  const items: NotificationPanelItem[] = (data ?? []).map((row) => ({
+    id: row.id,
+    // La columna llega como `text`. Si mañana se suma una categoría y este
+    // deploy es viejo, la fila cae en una conocida en vez de romper el ícono.
+    category: isNotificationCategory(row.category) ? row.category : "social",
+    title: row.title,
+    body: row.body,
+    href: row.href,
+    read: row.read_at !== null,
+    createdAt: row.created_at,
+    timeLabel: timeAgo(new Date(row.created_at), now),
+  }));
+
+  return { ok: true, data: { unread: count ?? 0, items } };
 }
 
 /* ========================================================================== */

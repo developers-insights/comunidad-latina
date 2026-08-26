@@ -19,4 +19,5 @@ export { PrefRow } from "./pref-row";
 export { MarkAllRead } from "./mark-all-read";
 export { NotificationMenu } from "./notification-menu";
 export { NotificationBell } from "./notification-bell";
+export { NotificationPanel } from "./notification-panel";
 export { COPY as notificationsCopy, PREFS_COPY } from "./copy";
