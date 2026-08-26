@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { listingPhotoUrl } from "@/components/listings/helpers";
 
 /**
  * =============================================================================
@@ -70,6 +71,15 @@ export interface IdentidadNegocio {
    * firmar una publicación como el negocio (`posts.entity_listing_id`).
    */
   listingId: string | null;
+  /**
+   * La FOTO del negocio, ya resuelta a URL pública. Sale de `photos[1]` de esa
+   * misma ficha (0116) — el negocio no tiene columna de avatar propia y no debe
+   * tenerla: sería una columna que ningún formulario escribe (el argumento de
+   * la 0103, que sigue en pie). La ficha sí tiene formulario y sí modera sus
+   * imágenes, así que su primera foto es la única cara del negocio que pasó por
+   * un control. `null` = todavía no subió ninguna → inicial en un círculo.
+   */
+  avatarUrl: string | null;
   rol: RolDeNegocio;
   esPropietario: boolean;
 }
@@ -91,6 +101,8 @@ interface FilaIdentidad {
   nombre: string;
   categoria: string | null;
   listing_id: string | null;
+  /** Path de storage crudo (o URL absoluta si vino de un seed). Ver 0116. */
+  foto: string | null;
   rol: string;
   es_propietario: boolean;
 }
@@ -117,6 +129,7 @@ function aIdentidad(fila: FilaIdentidad): IdentidadNegocio | null {
     nombre: fila.nombre,
     categoria: fila.categoria,
     listingId: fila.listing_id,
+    avatarUrl: fila.foto ? listingPhotoUrl(fila.foto) : null,
     rol: fila.rol,
     esPropietario: fila.es_propietario,
   };

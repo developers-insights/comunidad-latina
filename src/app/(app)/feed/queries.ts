@@ -828,10 +828,15 @@ export async function fetchEntityViews(
   if (ids.length === 0) return byId;
   const { data } = await supabase
     .from("listings")
-    .select("id, title, kind")
+    .select("id, title, kind, photos")
     .in("id", ids);
   for (const row of data ?? []) {
-    byId.set(row.id, { id: row.id, title: row.title, kind: row.kind });
+    byId.set(row.id, {
+      id: row.id,
+      title: row.title,
+      kind: row.kind,
+      photoUrl: firstPhotoUrl(row.photos),
+    });
   }
   return byId;
 }

@@ -88,11 +88,20 @@ async function emitSocial(admin: SupabaseClient<Database>, input: EmitInput): Pr
  * ese número tiene que seguir siendo verdad cuando alguien saca su me gusta, y
  * un contador copiado en la notificación se desincroniza el primer día.
  */
+/**
+ * `firmadoComo` es el nombre del NEGOCIO cuando la acción salió firmada por una
+ * ficha (0116/0117). Reemplaza al nombre de la persona, no lo acompaña: el aviso
+ * tiene que decir lo mismo que ve quien abre la publicación, y ahí el comentario
+ * y el me gusta figuran a nombre del local. Decir "A Manuel le gustó" cuando en
+ * la publicación dice "desarrollo" es filtrar quién está detrás del negocio, que
+ * es justo lo que el interruptor de perfil promete no hacer.
+ */
 async function readActorAndTotal(
   admin: SupabaseClient<Database>,
   actorId: string,
   postId: string,
   column: "like_count" | "comment_count",
+  firmadoComo?: string | null,
 ): Promise<{ name: string | null; total: number }> {
   const [{ data: actor }, { data: post }] = await Promise.all([
     admin.from("profiles").select("display_name").eq("id", actorId).maybeSingle(),
@@ -104,7 +113,7 @@ async function readActorAndTotal(
 
   const raw = post ? post[column] : null;
   return {
-    name: actor?.display_name?.trim() || null,
+    name: firmadoComo?.trim() || actor?.display_name?.trim() || null,
     total: typeof raw === "number" && raw > 0 ? raw : 1,
   };
 }
@@ -120,6 +129,8 @@ export async function notifyPostReaction(input: {
   postId: string;
   authorId: string;
   actorId: string;
+  /** Nombre de la ficha que firmó el me gusta, si salió a nombre de un negocio. */
+  firmadoComo?: string | null;
 }): Promise<void> {
   // Corte barato antes de la red. La base lo vuelve a garantizar.
   if (input.authorId === input.actorId) return;
@@ -131,6 +142,7 @@ export async function notifyPostReaction(input: {
       input.actorId,
       input.postId,
       "like_count",
+      input.firmadoComo,
     );
     if (!name) return;
 
@@ -168,6 +180,8 @@ export async function notifyPostComment(input: {
   authorId: string;
   actorId: string;
   body: string;
+  /** Nombre de la ficha que firmó el comentario, si salió a nombre de un negocio. */
+  firmadoComo?: string | null;
 }): Promise<void> {
   if (input.authorId === input.actorId) return;
 
@@ -178,6 +192,7 @@ export async function notifyPostComment(input: {
       input.actorId,
       input.postId,
       "comment_count",
+      input.firmadoComo,
     );
     if (!name) return;
 

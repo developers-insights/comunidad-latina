@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
+import { useFirmaActiva } from "@/lib/perfil-activo/firma-activa";
 import { createClient } from "@/lib/supabase/client";
 import { notifyPostReactionAction } from "@/app/(app)/feed/actions";
 
@@ -58,6 +59,14 @@ export function useOptimisticLike({
   initialCount,
 }: UseOptimisticLikeArgs): PostLikeState {
   const requireAuth = useRequireAuth();
+  /**
+   * Con qué ficha firma el me gusta (0117). Sale del contexto y no de un prop
+   * porque `viewerId` ya cruza ocho componentes para llegar hasta acá y un
+   * segundo prop serían ocho lugares donde olvidárselo — y olvidárselo no da
+   * error: da un me gusta a nombre de la persona cuando la app entera dice que
+   * estás actuando como tu negocio. Ver firma-activa.tsx.
+   */
+  const firma = useFirmaActiva();
   const [liked, setLiked] = useState(initialLiked);
   const [count, setCount] = useState(initialCount);
   const [, startTransition] = useTransition();
@@ -121,6 +130,11 @@ export function useOptimisticLike({
           subject_kind: "post",
           subject_id: postId,
           profile_id: viewerId,
+          // El me gusta lo sigue poniendo la PERSONA (`profile_id`, y la
+          // unicidad no cambió: uno por ser humano). Lo que dice esta columna es
+          // a nombre de quién sale — el aviso que le llega al autor va a decir
+          // el nombre del negocio. Ver el encabezado de la 0117.
+          entity_listing_id: firma.listingId,
           kind: "like",
         });
         // 23505 = la reacción ya existía (doble tap veloz): el estado ya es correcto.

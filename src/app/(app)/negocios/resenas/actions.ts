@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { DAY_MS, limit } from "@/lib/rate-limit";
 import { requireTenantMatch } from "@/lib/tenant/guard";
+import { getCaraActiva } from "@/lib/perfil-activo/cara";
+import { puedeFirmarComo } from "@/lib/feed/autoria";
 import {
   MAX_CARACTERES_RESENA,
   PUNTAJE_MAX,
@@ -181,10 +183,33 @@ export async function publicarResenaAction(
     return { status: "success", message: C.actualizada };
   }
 
+  /**
+   * La reseña también sale a nombre de la cara activa (0117). La unicidad NO
+   * cambió —una reseña por persona y por negocio, se firme como se firme—: poder
+   * calificar dos veces el mismo local, una como vos y otra como tu comercio,
+   * sería el fraude de estrellas que las reseñas existen para evitar.
+   *
+   * La firma se revalida contra la base aunque la identidad activa ya haya
+   * pasado su propio control: son dos hechos distintos —"podés actuar como este
+   * negocio" y "esta ficha es tuya y está publicada"— y el que exige la policy
+   * es el segundo.
+   */
+  const cara = await getCaraActiva();
+  const entityListingId =
+    cara.firmaListingId &&
+    (await puedeFirmarComo(supabase, {
+      tenantId: guard.tenant.id,
+      userId: guard.user.id,
+      listingId: cara.firmaListingId,
+    }))
+      ? cara.firmaListingId
+      : null;
+
   const { error } = await supabase.from("listing_reviews").insert({
     tenant_id: guard.tenant.id,
     listing_id: listingId,
     author_id: guard.user.id,
+    entity_listing_id: entityListingId,
     rating,
     body,
   });

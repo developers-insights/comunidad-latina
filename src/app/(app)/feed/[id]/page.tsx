@@ -7,7 +7,7 @@ import {
   CommentComposer,
   PostCard,
   PostMenu,
-  type PostEntityView,
+
   type PostPollView,
 } from "@/components/feed";
 // Import por path directo (el barrel del feed es de otro agente): el item del
@@ -131,7 +131,7 @@ export default async function PostDetailPage({
   // "Index Scan Backward using comments_post_thread_idx" y sin Sort.
   let commentsQuery = supabase
     .from("comments")
-    .select("id, body, created_at, author_id, status")
+    .select("id, body, created_at, author_id, entity_listing_id, status")
     .eq("tenant_id", tenant.id)
     .eq("post_id", post.id)
     .eq("status", "published")
@@ -201,9 +201,16 @@ export default async function PostDetailPage({
       post.kind === "question"
         ? fetchPostPolls(supabase, viewerId, [post.id])
         : Promise.resolve(new Map<string, PostPollView>()),
-      post.entity_listing_id
-        ? fetchEntityViews(supabase, [post.entity_listing_id])
-        : Promise.resolve(new Map<string, PostEntityView>()),
+      // Las fichas del post Y las de los comentarios firmados por un negocio
+      // (0116), en la MISMA consulta: un hilo donde tres comentarios son del
+      // mismo local no puede costar tres viajes, y separar las dos listas sólo
+      // serviría para pedir dos veces la misma fila.
+      fetchEntityViews(supabase, [
+        ...(post.entity_listing_id ? [post.entity_listing_id] : []),
+        ...comments
+          .map((comment) => comment.entity_listing_id)
+          .filter((id): id is string => Boolean(id)),
+      ]),
       // Campaña activa del post: público sabe que es "Publicidad"; solo el autor
       // ve hasta cuándo (badge más abajo). Sigue siendo la fuente de isPromoted.
       supabase
@@ -366,17 +373,30 @@ export default async function PostDetailPage({
             // rebotar.
             const isOwnComment = Boolean(viewerId && comment.author_id === viewerId);
             const canDelete = isOwnComment || isAuthor;
+            // Firmado por un negocio: se muestra el negocio. Si la ficha ya no
+            // resuelve (se despublicó), vuelve a verse a nombre de la persona
+            // que lo escribió — que es quien lo escribió.
+            const fichaDelComentario = comment.entity_listing_id
+              ? entityById.get(comment.entity_listing_id)
+              : undefined;
+            const comentarioEntity = fichaDelComentario
+              ? {
+                  nombre: fichaDelComentario.title,
+                  avatarUrl: fichaDelComentario.photoUrl ?? null,
+                }
+              : null;
             return (
               <CommentItem
                 key={comment.id}
                 author={author}
+                entity={comentarioEntity}
                 body={comment.body}
                 timeAgoLabel={timeAgo(comment.created_at, now)}
                 menu={
                   canDelete ? (
                     <CommentMenu
                       commentId={comment.id}
-                      authorName={author.displayName}
+                      authorName={comentarioEntity?.nombre ?? author.displayName}
                       isOwnComment={isOwnComment}
                     />
                   ) : undefined

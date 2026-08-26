@@ -206,6 +206,8 @@ describe("publicarResenaAction", () => {
       tenant_id: TENANT_ID,
       listing_id: LISTING_ID,
       author_id: USER_ID,
+      // Sin identidad de negocio activa, la reseña sale a nombre de la persona.
+      entity_listing_id: null,
       rating: 5,
       body: "Muy bien atendido",
     });

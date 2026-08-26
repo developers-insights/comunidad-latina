@@ -372,6 +372,13 @@ export const COPY = {
     createMenu: {
       rowLabel: "¿Qué querés publicar?",
       rowHint: "Foto, video, texto, pregunta y todo lo demás",
+      /**
+       * Reemplaza a `rowHint` mientras se actúa como negocio. La tarjeta es lo
+       * último que se ve antes de escribir, así que es el último lugar donde
+       * avisar con qué nombre va a salir — y decirlo acá es más barato que
+       * borrar una publicación firmada por quien no correspondía.
+       */
+      rowHintNegocio: (nombre: string) => `Vas a publicar como ${nombre}`,
       sheetTitle: "Elegí qué publicar",
       tiles: {
         photo: {

@@ -40,6 +40,7 @@ const PERSONAL = { displayName: "Giovanni Pérez", avatarUrl: null };
 const NEGOCIO: IdentidadNegocioUI = {
   businessId: "11111111-1111-4111-8111-111111111111",
   nombre: "Panadería Giovanni",
+  avatarUrl: null,
   rol: "propietario",
 };
 

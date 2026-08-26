@@ -159,6 +159,7 @@ describe("puedePublicar", () => {
           nombre: "Panadería",
           categoria: null,
           listingId: null,
+          avatarUrl: null,
           rol: rol as never,
           esPropietario: false,
         },

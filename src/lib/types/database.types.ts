@@ -1276,6 +1276,7 @@ export type Database = {
           author_id: string | null
           body: string
           created_at: string
+          entity_listing_id: string | null
           id: string
           post_id: string
           status: string
@@ -1285,6 +1286,7 @@ export type Database = {
           author_id?: string | null
           body: string
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           post_id: string
           status?: string
@@ -1294,6 +1296,7 @@ export type Database = {
           author_id?: string | null
           body?: string
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           post_id?: string
           status?: string
@@ -1305,6 +1308,13 @@ export type Database = {
             columns: ["author_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_entity_listing_id_fkey"
+            columns: ["entity_listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
             referencedColumns: ["id"]
           },
           {
@@ -3247,6 +3257,7 @@ export type Database = {
           author_id: string | null
           body: string
           created_at: string
+          entity_listing_id: string | null
           id: string
           listing_id: string
           status: string
@@ -3256,6 +3267,7 @@ export type Database = {
           author_id?: string | null
           body: string
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           listing_id: string
           status?: string
@@ -3265,12 +3277,20 @@ export type Database = {
           author_id?: string | null
           body?: string
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           listing_id?: string
           status?: string
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "listing_comments_entity_listing_id_fkey"
+            columns: ["entity_listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "listing_comments_author_id_fkey"
             columns: ["author_id"]
@@ -3588,6 +3608,7 @@ export type Database = {
           author_id: string
           body: string | null
           created_at: string
+          entity_listing_id: string | null
           id: string
           listing_id: string
           owner_reply: string | null
@@ -3602,6 +3623,7 @@ export type Database = {
           author_id: string
           body?: string | null
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           listing_id: string
           owner_reply?: string | null
@@ -3616,6 +3638,7 @@ export type Database = {
           author_id?: string
           body?: string | null
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           listing_id?: string
           owner_reply?: string | null
@@ -3627,6 +3650,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "listing_reviews_entity_listing_id_fkey"
+            columns: ["entity_listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "listing_reviews_author_id_fkey"
             columns: ["author_id"]
@@ -5265,6 +5295,7 @@ export type Database = {
       reactions: {
         Row: {
           created_at: string
+          entity_listing_id: string | null
           id: string
           kind: string
           profile_id: string
@@ -5274,6 +5305,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           kind?: string
           profile_id: string
@@ -5283,6 +5315,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           kind?: string
           profile_id?: string
@@ -5291,6 +5324,13 @@ export type Database = {
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "reactions_entity_listing_id_fkey"
+            columns: ["entity_listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reactions_profile_id_fkey"
             columns: ["profile_id"]
