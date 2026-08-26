@@ -5,6 +5,7 @@ import {
   Bubble,
   Chip,
   EmptyState,
+  NavTabs,
   SectionCta,
   SectionHeading,
   Skeleton,
@@ -46,11 +47,23 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getAreaLabelDelPerfil, resolverVistaZona } from "@/lib/zona/server";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
+import { fetchAnunciantesDePropiedades } from "@/lib/propiedades/anunciantes";
+import { AnuncianteCard } from "@/components/propiedades/anunciante-card";
 import { cn } from "@/lib/utils";
+import {
+  PROPERTY_TAB_IDS,
+  PROPERTY_TAB_LABELS,
+  parsePropertyTab,
+  propertyTabHref,
+  type PropertyTabId,
+} from "../property-tabs";
 
 export const metadata = { title: "Vivienda" };
 
 const PAGE_SIZE = 10;
+
+/** `?de=` sólo llega a la query si es un uuid; ver dónde se usa. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Acento + ícono 3D de la sección (los mismos del menú y de /buscar). */
 const SECCION = {
@@ -66,6 +79,13 @@ interface Filters {
   precio: number | null;
   hab: number | null;
   zona: string;
+  /**
+   * `listings.created_by` de un anunciante — el filtro que abre la tarjeta del
+   * directorio «Agentes y propietarios». No tiene control en la bandeja de
+   * filtros a propósito: no es una faceta que alguien elija de una lista, es la
+   * consecuencia de haber tocado un nombre. Se limpia navegando a /propiedades.
+   */
+  de: string;
   /** `null` = sin filtrar por tipo (se ven todos, incluidos los que no declaran). */
   tipo: PropertyType | null;
   /** `null` = sin filtrar por operación (se ven alquiler, venta y no declarados). */
@@ -85,6 +105,9 @@ function parseFilters(sp: Record<string, string | string[] | undefined>): Filter
     precio: Number.isFinite(precioRaw) && precioRaw > 0 ? precioRaw : null,
     hab: Number.isFinite(habRaw) && habRaw >= 1 && habRaw <= 10 ? habRaw : null,
     zona: firstValue(sp.zona).slice(0, 80),
+    // Un uuid o nada. Recortar a 36 no valida el formato, y por eso abajo se
+    // compara contra un uuid de verdad antes de llegar a la query.
+    de: firstValue(sp.de).slice(0, 36),
     // Los normalizadores devuelven null ante cualquier cosa que no esté en el
     // catálogo, así que un `?tipo=<script>` de la URL no llega a la query: se
     // lee como "sin filtro" y la lista sale completa, no vacía ni rota.
@@ -101,11 +124,155 @@ export default async function PropiedadesPage({
 }) {
   const sp = await searchParams;
   const filters = parseFilters(sp);
+  const tab = parsePropertyTab(firstValue(sp.t) || undefined);
 
   return (
-    <Suspense key={JSON.stringify(filters)} fallback={<PageSkeleton />}>
-      <PropiedadesContent filters={filters} />
-    </Suspense>
+    <>
+      {/* El encabezado, la burbuja de publicar y las pestañas son comunes a las
+          dos secciones, así que viven ACÁ y no adentro del Suspense keyeado: no
+          se duplican en cada fallback ni parpadean al cambiar de pestaña.
+          Mismo reparto que Negocios.
+
+          El subtítulo depende de "Tu zona", que sí toca la base: va en su
+          propio límite de Suspense con el texto genérico de fallback, igual que
+          `FeedHeaderWithArea`. Así el título no espera a la zona. */}
+      <Suspense fallback={<PropiedadesHeading zonaLabel={null} />}>
+        <PropiedadesHeadingConZona zona={filters.zona} />
+      </Suspense>
+
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishPropertyTitle")}
+        hint={t("sections", "publishPropertyHint")}
+        className="mt-3"
+      />
+
+      <PropertyTabs active={tab} className="mb-1 mt-5" />
+
+      <Suspense key={`${tab}|${JSON.stringify(filters)}`} fallback={<PageSkeleton />}>
+        {tab === "agentes" ? (
+          <AgentesContent zona={filters.zona} />
+        ) : (
+          <PropiedadesContent filters={filters} />
+        )}
+      </Suspense>
+    </>
+  );
+}
+
+/** Las dos pestañas como NAVEGACIÓN (ver `ui/nav-tabs.tsx`), nunca `role="tab"`. */
+function PropertyTabs({ active, className }: { active: PropertyTabId; className?: string }) {
+  return (
+    <NavTabs
+      className={className}
+      label={PROPERTY_TABS_ARIA}
+      active={active}
+      items={PROPERTY_TAB_IDS.map((id) => ({
+        id,
+        label: PROPERTY_TAB_LABELS[id],
+        href: propertyTabHref(id),
+      }))}
+    />
+  );
+}
+
+/** Encabezado de la sección. Igual para las dos pestañas → nunca se remonta. */
+function PropiedadesHeading({ zonaLabel }: { zonaLabel: string | null }) {
+  return (
+    <SectionHeading
+      accent={SECCION.accent}
+      image={SECCION.image}
+      title={COPY.list.title}
+      subtitle={
+        zonaLabel ? COPY.list.subtitleNearArea(zonaLabel) : COPY.list.subtitleDefault
+      }
+    />
+  );
+}
+
+/**
+ * El mismo encabezado, con la zona resuelta. `resolverVistaZona` está
+ * cache()-eada por request, así que preguntarla acá y otra vez adentro del
+ * listado es UNA sola lectura entre las dos.
+ */
+async function PropiedadesHeadingConZona({ zona }: { zona: string }) {
+  let label: string | null = null;
+  try {
+    const tenant = await getTenant();
+    const vista = await resolverVistaZona(tenant.id, zona);
+    label = vista.zona.label;
+  } catch {
+    label = null; // sin zona: el subtítulo cae al genérico, nunca un error.
+  }
+  return <PropiedadesHeading zonaLabel={label} />;
+}
+
+const PROPERTY_TABS_ARIA = "Secciones de Vivienda";
+
+const AGENTES_COPY = {
+  intro:
+    "Quiénes están alquilando en tu comunidad: propietarios, agentes, administradoras y representantes.",
+  vacioTitulo: "Todavía no hay anunciantes",
+  vacioMensaje:
+    "Acá van a aparecer las personas y las inmobiliarias que publiquen alquileres en tu comunidad, con su verificación y sus propiedades activas.",
+  vacioCta: "Publicar un alquiler",
+} as const;
+
+/**
+ * Pestaña «Agentes y propietarios».
+ *
+ * El directorio se DERIVA de los avisos publicados (ver el encabezado de
+ * `lib/propiedades/anunciantes.ts`): no hay un alta aparte que llenar, así que
+ * no puede desactualizarse respecto del listado ni nacer vacío mientras haya
+ * alquileres publicados.
+ */
+async function AgentesContent({ zona }: { zona: string }) {
+  const supabase = await createClient();
+  const tenant = await getTenant();
+  const vistaZona = await resolverVistaZona(tenant.id, zona);
+
+  const anunciantes = await fetchAnunciantesDePropiedades(supabase, {
+    tenantId: tenant.id,
+    areaLabels: vistaZona.areaLabels,
+  });
+
+  if (anunciantes.length === 0) {
+    // Con una zona puesta el vacío tiene OTRA causa y otra salida: no es que no
+    // haya nadie alquilando, es que no hay nadie alquilando ahí.
+    if (vistaZona.filtraPorPreferencia && vistaZona.zona.label) {
+      return <ZonaVacia zona={vistaZona.zona.label} />;
+    }
+    return (
+      <EmptyState
+        className="mt-4"
+        illustration="/images/empty-state-search.png"
+        title={AGENTES_COPY.vacioTitulo}
+        message={AGENTES_COPY.vacioMensaje}
+        action={
+          <Link
+            href={SECCION.publicarHref}
+            className={buttonVariants({ variant: "primary", size: "md" })}
+          >
+            <Plus size={18} aria-hidden="true" />
+            {AGENTES_COPY.vacioCta}
+          </Link>
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="mt-4">
+      <p className="mb-3 text-sm text-foreground-secondary">{AGENTES_COPY.intro}</p>
+      <ul className="flex flex-col gap-3">
+        {anunciantes.map((anunciante) => (
+          <li key={anunciante.key}>
+            <AnuncianteCard anunciante={anunciante} />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -181,6 +348,15 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
   if (filters.operacion !== null) {
     query = query.eq(`attrs->>${PROPERTY_OPERATION_ATTR}`, filters.operacion);
   }
+  /**
+   * Filtro por ANUNCIANTE — lo abre la tarjeta del directorio «Agentes y
+   * propietarios». Se compara contra un uuid de verdad antes de tocar la query:
+   * `?de=cualquier-cosa` iría a PostgREST como un uuid inválido y devolvería un
+   * 400 en vez de una lista vacía, que es un error que no le sirve a nadie.
+   */
+  if (filters.de && UUID.test(filters.de)) {
+    query = query.eq("created_by", filters.de);
+  }
   if (filters.zona) {
     query = query.eq("area_label", filters.zona);
   } else if (vistaZona.areaLabels.length > 0) {
@@ -229,6 +405,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
     filters.hab === null &&
     filters.tipo === null &&
     filters.operacion === null &&
+    !filters.de &&
     !filters.zona;
   /**
    * "Tu zona" también es un recorte, aunque no se vea en la URL: con una zona
@@ -405,6 +582,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
   if (filters.hab !== null) nextParams.set("hab", String(filters.hab));
   if (filters.tipo !== null) nextParams.set("tipo", filters.tipo);
   if (filters.operacion !== null) nextParams.set("operacion", filters.operacion);
+  if (filters.de) nextParams.set("de", filters.de);
   if (filters.zona) nextParams.set("zona", filters.zona);
   if (hasMore && lastRow) nextParams.set("cursor", encodeCursor(lastRow.created_at, lastRow.id));
 
@@ -412,25 +590,6 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
 
   return (
     <>
-      <SectionHeading
-        accent={SECCION.accent}
-        image={SECCION.image}
-        title={COPY.list.title}
-        subtitle={
-          vistaZona.zona.label
-            ? COPY.list.subtitleNearArea(vistaZona.zona.label)
-            : COPY.list.subtitleDefault
-        }
-      />
-
-      <SectionCta
-        accent={SECCION.accent}
-        href={SECCION.publicarHref}
-        title={t("sections", "publishPropertyTitle")}
-        hint={t("sections", "publishPropertyHint")}
-        className="mt-3"
-      />
-
       {/* Bandeja de filtros: el buscador y los tres selectores flotaban sueltos
           sobre la página (justo lo que el cliente marcó como "todo suelto").
           Adentro de una cápsula hundida se leen como UN control de búsqueda —

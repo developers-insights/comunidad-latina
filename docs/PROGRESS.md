@@ -1,5 +1,84 @@
 # PROGRESS — Comunidad Latina
 
+## Los seis huecos que quedaban de la spec de módulos (✅ 2026-08-26)
+
+Auditoría del documento de requisitos contra el código, hueco por hueco. Lo que
+ya estaba (las tres pestañas de Negocios y sus seis filtros, Tiendas|Artículos,
+el formulario completo de Eventos y de Empleos, alquiler-only, `entity_listing_id`
+cableado) se verificó y no se tocó. Lo que faltaba se construyó:
+
+**1 · Se pueden CREAR ofertas.** `post_offers` (0106) existía con su RLS, su
+índice de vigencia y su panel de lectura, y **nada escribía en ella**: la pestaña
+Ofertas nacía vacía por construcción, y el docblock del panel lo decía con todas
+las letras. Ahora el composer tiene el bloque "Es una oferta" —tipo, título,
+descuento (% o monto), cupón, vigencia y letra chica— que **sólo aparece firmando
+como negocio**, porque `post_offers_insert` exige `can_manage_listing` sobre
+`negocio_del_post()` y con cualquier otra firma la base rechazaría el formulario
+recién al final. Sigue siendo UNA publicación: la fila de `posts` es la misma y
+aparece en Publicaciones y en Ofertas por un join, que es textualmente lo que
+pidió el cliente. Si el satélite no entra, **se deshace el post**: publicar "una
+oferta" y que quede un anuncio sin descuento ni vencimiento es publicar a nombre
+de alguien algo que no escribió.
+
+**2 · Feed «Siguiendo» / «Para ti» (§8).** Es lo que quedó pendiente en la ronda
+anterior por el techo de 8 KB de URL; la 0113 lo cerró y esto se apoya en ella.
+Migración **0115**: `feed_following_page()`, `security invoker`, con **dos ramas
+que no se cruzan** — seguir una FICHA trae sus publicaciones de entidad, seguir
+una PERSONA trae sus publicaciones personales. No trae lo promocionado (la spec
+parte las dos pestañas justamente por eso) ni lo propio (nadie se sigue a sí
+mismo). Va en `?ver=`, separado de `?tab=`, así que convive con los cinco
+verticales: son dos preguntas distintas sobre el mismo feed.
+
+**3 · Propiedades › «Agentes y propietarios» (§4).** El directorio se **deriva de
+los avisos**, no se da de alta aparte: agente, propietario, administradora y
+representante son roles de la misma persona frente a un aviso, y una tabla propia
+habría nacido vacía mientras la comunidad ya tiene alquileres publicados. Cada
+ficha muestra verificación de identidad, ciudad, calificación ponderada por
+reseñas y propiedades activas; los anunciantes externos aparecen pero sin
+insignia, sin puntaje y sin enlace a un perfil que no existe.
+
+**4 · «Alquilado» y la reconfirmación a los 60 días (§4).** Migración **0116**.
+`rented` es un ESTADO y no `attrs.rented = true`: como estado desaparece solo de
+todas las superficies (todas filtran `status='published'`), mientras que como
+etiqueta habría que acordarse de filtrarlo en cada una y la primera que se olvide
+manda a alguien a llamar por un cuarto ya alquilado. Un CHECK impide que algo que
+no sea propiedad se marque alquilado, y `rented_at` lo escribe un trigger.
+Los 60 días **no son un segundo cron** —la 0098 ya baja el aviso a los 30— sino
+una **puerta a la renovación**: `renovar_publicacion()` rechaza una propiedad sin
+confirmar con motivo `confirma_disponibilidad`, y la pantalla ofrece "Sí, sigue
+disponible" al lado de "Ya lo alquilé", que son las dos respuestas posibles a la
+misma pregunta. Renovar NO confirma a propósito: si confirmara, la regla no
+existiría.
+
+**5 · Eventos y empleos como tarjeta vinculada en Negocios › Publicaciones (§2,
+§7).** El panel decía que esas tarjetas "llegaban gratis" porque `PostCard` pinta
+la ficha del post — pero esa es la ficha AUTORA, no un evento vinculado. Ahora la
+pestaña mezcla cronológicamente las publicaciones con los eventos y empleos
+colgados de alguna ficha de negocio, cada uno con su tarjeta real (con su fecha,
+su sueldo y su acción), no aplanado a un post con foto.
+
+**6 · «Página del organizador» para eventos (§6).** Migración **0117**: una línea
+del trigger `check_business_listing_link()` — el vínculo `business_listing_id`
+pasa de `kind = 'job'` a `kind in ('job','event')`. La columna, la FK y el índice
+ya existían desde la 0107 y no se tocan. El alta de eventos gana el desplegable
+"Quién lo organiza" y la ficha del negocio, su sección "Próximos eventos"
+(ordenada por cuándo pasa, no por cuándo se publicó, y sin los que ya ocurrieron).
+
+**Lo que NO se hizo, y por qué.** El **gate de identidad para publicar**
+(`0109_activar_gate_identidad.sql`) sigue en `supabase/migraciones-en-espera/`,
+fuera de la cola. Las funciones existen desde la 0106 y `requireIdentidadVerificada()`
+está escrita, pero activarlo hoy deja a **todos** sin poder publicar: hay 0
+identidades verificadas sobre 20 perfiles y verificarse depende de Stripe
+Identity, que está sin claves. Las tres condiciones de activación están en el
+encabezado de ese archivo. Es la única parte de la spec que queda sin cerrar, y
+queda por una dependencia externa, no por trabajo pendiente.
+
+**Estado:** typecheck 0 errores · lint 0 errores y 0 warnings · **4.530 tests
+verdes** (eran 4.493) sobre 270 archivos.
+
+**Migraciones aplicadas:** 0115 (feed Siguiendo), 0116 (alquilado + confirmación
+de disponibilidad), 0117 (evento de un negocio).
+
 ## "Tu zona" — el último pedido del Loom (✅ 2026-08-25)
 
 Era lo único del Loom que quedaba sin hacer: el control del header abría un

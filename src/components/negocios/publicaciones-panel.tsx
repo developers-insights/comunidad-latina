@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CaretDown, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { PostCard, type PostCardModel } from "@/components/feed";
+import { FeedListingCard, PostCard } from "@/components/feed";
+import type { BusinessFeedItem } from "@/lib/negocios/publicaciones";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -9,11 +10,19 @@ import { cn } from "@/lib/utils";
  * contenido comercial — fotos, videos, textos, menús, productos y servicios,
  * anuncios, y tarjetas de eventos y de empleos vinculadas a sus módulos»).
  *
- * Renderiza con el MISMO `<PostCard>` que el feed principal. Cero UI nueva
- * inventada para leer una publicación, y las tarjetas embebidas de evento o de
- * empleo que pide la spec llegan gratis: `PostCard` ya sabe pintar la ficha
- * vinculada de un post, y cualquier mejora futura de esa tarjeta aparece acá sin
- * que nadie la porte.
+ * Renderiza con los MISMOS componentes que el feed principal: `<PostCard>` para
+ * las publicaciones y `<FeedListingCard>` para los eventos y empleos vinculados.
+ * Cero UI nueva inventada para leer algo que ya se lee en otras cuatro
+ * pantallas, y cualquier mejora futura de esas tarjetas aparece acá sin que
+ * nadie la porte.
+ *
+ * ── POR QUÉ DOS COMPONENTES Y NO UNO ────────────────────────────────────────
+ * Porque son dos cosas distintas y la spec las nombra por separado: las
+ * publicaciones son contenido del negocio, y las tarjetas de evento y de empleo
+ * son avisos de OTRO módulo que ese negocio publicó. Aplanar el evento a un post
+ * con foto lo dejaría sin su fecha y sin su "Quiero ir", que es justamente lo
+ * que alguien vino a tocar. La mezcla cronológica la resuelve la consulta
+ * (`lib/negocios/publicaciones.ts`); acá sólo se elige qué tarjeta pintar.
  *
  * ── EL VACÍO SIGUE SIENDO POSIBLE, PERO YA NO ES ESTRUCTURAL ────────────────
  * Este bloque decía que el composer que escribe `posts.entity_listing_id` "se
@@ -40,7 +49,8 @@ const COPY = {
 } as const;
 
 export interface PublicacionesPanelProps {
-  posts: PostCardModel[];
+  /** Publicaciones y tarjetas vinculadas, YA mezcladas por fecha. */
+  items: BusinessFeedItem[];
   tenantId: string;
   viewerId: string | null;
   /** Href de la próxima página (keyset), o null si no hay más. */
@@ -49,13 +59,13 @@ export interface PublicacionesPanelProps {
 }
 
 export function PublicacionesPanel({
-  posts,
+  items,
   tenantId,
   viewerId,
   nextHref,
   className,
 }: PublicacionesPanelProps) {
-  if (posts.length === 0) {
+  if (items.length === 0) {
     return (
       <EmptyState
         className={className}
@@ -73,9 +83,18 @@ export function PublicacionesPanel({
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
-      {posts.map((post) => (
-        <PostCard key={post.id} post={post} tenantId={tenantId} viewerId={viewerId} />
-      ))}
+      {items.map((item) =>
+        item.type === "post" ? (
+          <PostCard
+            key={`post:${item.id}`}
+            post={item.post}
+            tenantId={tenantId}
+            viewerId={viewerId}
+          />
+        ) : (
+          <FeedListingCard key={`listing:${item.id}`} listing={item.listing} />
+        ),
+      )}
 
       {nextHref && (
         <Link

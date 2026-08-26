@@ -4,6 +4,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getIdentidadActiva } from "@/lib/perfil-activo/identidad";
 import { getShellContext } from "@/components/shell/shell-context";
+import { getViewerTimeZone } from "@/lib/time/viewer-zone";
+import { hoyEnZona } from "@/lib/negocios/oferta-alta";
+import { DEFAULT_TIME_ZONE } from "@/lib/utils";
 
 /**
  * =============================================================================
@@ -98,6 +101,18 @@ export interface AutoriasDelComposer {
    * identidad activa (0103) y sólo si esa identidad tiene una ficha usable.
    */
   porDefecto: string | null;
+  /**
+   * HOY, `YYYY-MM-DD`, con el reloj de quien publica (`profiles.timezone`, 0067).
+   *
+   * Viaja acá y no se calcula en el navegador por un motivo concreto: es el
+   * piso del selector de fecha de la OFERTA (`post_offers.expires_at`, 0106) y
+   * el servidor va a validar contra ESTE mismo día. Si el composer usara la
+   * zona del navegador y el servidor la del perfil, una persona de vacaciones
+   * del otro lado del mundo podría elegir una fecha que el `min` del input
+   * acepta y el servidor rechaza con "esa fecha ya pasó". Un solo origen para
+   * los dos lados es lo que cierra ese caso.
+   */
+  hoy: string;
 }
 
 /**
@@ -109,6 +124,9 @@ export const SIN_AUTORIAS: AutoriasDelComposer = {
   personal: { displayName: "Tu cuenta", avatarUrl: null },
   entidades: [],
   porDefecto: null,
+  // Sin sesión no hay zona que leer, y la del servidor no es la de nadie: cae
+  // en la zona por defecto de la comunidad, igual que el resto de las fechas.
+  hoy: hoyEnZona(new Date(), DEFAULT_TIME_ZONE),
 };
 
 /**
@@ -183,6 +201,11 @@ export const listarAutoriasDelComposer = cache(
         getIdentidadActiva(),
         getShellContext(),
       ]);
+      // La zona de quien publica, para el piso del selector de fecha de la
+      // oferta. Se pide DESPUÉS del lote y no adentro porque `getViewerTimeZone`
+      // ya está cacheada por request (`getViewerAccount`): en el caso normal no
+      // agrega ninguna consulta.
+      const zonaDeQuienPublica = await getViewerTimeZone();
 
       if (error || !Array.isArray(data)) return SIN_AUTORIAS;
 
@@ -205,6 +228,7 @@ export const listarAutoriasDelComposer = cache(
         personal: shell.user ?? SIN_AUTORIAS.personal,
         entidades,
         porDefecto,
+        hoy: hoyEnZona(new Date(), zonaDeQuienPublica ?? DEFAULT_TIME_ZONE),
       };
     } catch (error) {
       // Degradar a "sólo tu perfil" es correcto; hacerlo EN SILENCIO no. El

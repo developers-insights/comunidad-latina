@@ -49,6 +49,11 @@ const {
     personal: { displayName: "Ana Gómez", avatarUrl: null },
     entidades: [] as { listingId: string; nombre: string; kind: "business" | "professional" }[],
     porDefecto: null as string | null,
+    // "Hoy" con el reloj de quien publica (0116): es el piso del selector de
+    // fecha de la oferta. Va en el default del mock —y no sólo en los tests que
+    // lo usan— porque el tipo del `vi.fn` sale de acá, y sin el campo cualquier
+    // `mockResolvedValue` que lo mande deja de compilar.
+    hoy: "" as string,
   })),
   prepareMediaUploadAction: vi.fn(),
   // Los dos pasos que corren DESPUÉS de publicar (necesitan el postId).
@@ -144,6 +149,7 @@ import { ComposerTrigger } from "./composer-trigger";
 import { COPY } from "./copy";
 import { TAGGER_COPY } from "./people-tagger-copy";
 import { MUSIC_COPY } from "./music-copy";
+import { OFERTA_ERROR } from "@/lib/negocios/oferta-alta";
 
 /**
  * `modules` vacío = nadie decidió nada en el panel, que es el default de
@@ -180,6 +186,7 @@ afterEach(() => {
     personal: { displayName: "Ana Gómez", avatarUrl: null },
     entidades: [],
     porDefecto: null,
+    hoy: HOY,
   });
   prepareMediaUploadAction.mockReset();
   bakePhoto.mockReset();
@@ -880,6 +887,13 @@ const PROFESIONAL = {
   kind: "professional" as const,
 };
 
+/**
+ * "Hoy" con el reloj de quien publica, tal como lo manda el servidor (0116).
+ * Fijo en el test para que el piso del selector de fecha de la oferta no
+ * dependa del día en que se corran los tests.
+ */
+const HOY = "2026-08-26";
+
 /** El servidor contesta con estas fichas y con esta firma por defecto. */
 function conAutorias(
   entidades: Array<typeof NEGOCIO | typeof PROFESIONAL>,
@@ -889,6 +903,7 @@ function conAutorias(
     personal: { displayName: "Ana Gómez", avatarUrl: null },
     entidades,
     porDefecto,
+    hoy: HOY,
   });
 }
 
@@ -1004,5 +1019,113 @@ describe("PostComposer — con qué perfil se publica", () => {
     await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
     const sent = createPostAction.mock.calls[0]?.[0] as FormData;
     expect(sent.get("entityId")).toBeNull();
+  });
+});
+
+/**
+ * =============================================================================
+ * "ES UNA OFERTA" (post_offers, 0106) — spec §1: «Descuento o promoción
+ * comercial → Negocios → Ofertas»
+ * =============================================================================
+ *
+ * Lo que estos tests fijan no es la pintura del bloque sino DOS invariantes que
+ * la base también sostiene, y que si se separan producen un formulario que se
+ * llena entero y revienta al final:
+ *
+ *   1. El bloque sólo existe firmando como NEGOCIO. `post_offers_insert` exige
+ *      `can_manage_listing(negocio_del_post(...))`, que es null para un post
+ *      personal o de ficha profesional.
+ *   2. Si no se prendió el interruptor, NO viaja el campo. Una oferta vacía que
+ *      llega igual es una publicación que la base rechaza sin que nadie la haya
+ *      pedido.
+ */
+describe("PostComposer — publicar una oferta", () => {
+  const ETIQUETA_OFERTA = "Es una oferta";
+
+  it("firmando como persona NO se ofrece el bloque de oferta", async () => {
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    await abrirHojaDeTexto();
+
+    expect(screen.queryByText(ETIQUETA_OFERTA)).toBeNull();
+  });
+
+  it("firmando como ficha PROFESIONAL tampoco — la policy sólo acepta negocios", async () => {
+    conAutorias([PROFESIONAL], PROFESIONAL.listingId);
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    await abrirHojaDeTexto();
+    await screen.findByText(COPY.composer.autoria.label);
+
+    expect(screen.queryByText(ETIQUETA_OFERTA)).toBeNull();
+  });
+
+  it("firmando como negocio aparece, y apagado NO manda nada", async () => {
+    conAutorias([NEGOCIO], NEGOCIO.listingId);
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    const body = await abrirHojaDeTexto();
+    await screen.findByText(COPY.composer.autoria.label);
+
+    // El bloque está, pero el interruptor arranca apagado.
+    expect(screen.getAllByText(ETIQUETA_OFERTA).length).toBeGreaterThan(0);
+    const interruptor = screen.getByRole("switch", { name: ETIQUETA_OFERTA });
+    expect(interruptor.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.change(body, { target: { value: "Hoy hay pan recién salido." } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    expect(sent.get("oferta")).toBeNull();
+  });
+
+  it("prendido, la oferta viaja con sus condiciones y una fecha que no es hoy por casualidad", async () => {
+    conAutorias([NEGOCIO], NEGOCIO.listingId);
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    const body = await abrirHojaDeTexto();
+    await screen.findByText(COPY.composer.autoria.label);
+
+    fireEvent.click(screen.getByRole("switch", { name: ETIQUETA_OFERTA }));
+
+    // Al prenderlo nace con una semana de vigencia: la fecha no puede quedar
+    // vacía y bloquear Publicar sin decir por qué.
+    const fecha = screen.getByLabelText("Vale hasta el") as HTMLInputElement;
+    expect(fecha.value).toBe("2026-09-02");
+    expect(fecha.getAttribute("min")).toBe(HOY);
+
+    fireEvent.change(screen.getByLabelText("Título de la oferta"), {
+      target: { value: "2x1 en empanadas" },
+    });
+    fireEvent.change(body, { target: { value: "Hoy hay pan recién salido." } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    const sent = createPostAction.mock.calls[0]?.[0] as FormData;
+    const oferta = JSON.parse(String(sent.get("oferta"))) as Record<string, unknown>;
+    expect(oferta.titulo).toBe("2x1 en empanadas");
+    expect(oferta.tipo).toBe("descuento");
+    expect(oferta.vence).toBe("2026-09-02");
+    // Y sigue siendo UNA publicación: la firma va como siempre.
+    expect(sent.get("entityId")).toBe(NEGOCIO.listingId);
+  });
+
+  it("si el servidor rechaza las condiciones, el motivo se lee en el bloque", async () => {
+    conAutorias([NEGOCIO], NEGOCIO.listingId);
+    createPostAction.mockResolvedValue({ ok: false, code: "oferta", motivo: "titulo" });
+    mount();
+    const body = await abrirHojaDeTexto();
+    await screen.findByText(COPY.composer.autoria.label);
+
+    fireEvent.click(screen.getByRole("switch", { name: ETIQUETA_OFERTA }));
+    fireEvent.change(screen.getByLabelText("Título de la oferta"), {
+      target: { value: "2x1" },
+    });
+    fireEvent.change(body, { target: { value: "Hoy hay pan recién salido." } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    // El mensaje del motivo, no un "no se pudo publicar" genérico.
+    await screen.findAllByText(OFERTA_ERROR.titulo);
   });
 });

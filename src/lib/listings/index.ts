@@ -17,11 +17,14 @@ export {
 
 export {
   DEFAULT_EXPIRY_CONFIG,
+  DIAS_PARA_RECONFIRMAR,
   LISTING_KINDS,
   MOTIVOS_NO_RENOVABLE,
   calcularVencimiento,
   diasHasta,
+  diasHastaReconfirmar,
   estadoDeVencimiento,
+  necesitaConfirmarDisponibilidad,
   isMotivoNoRenovable,
   kindVence,
   parseExpiryConfig,

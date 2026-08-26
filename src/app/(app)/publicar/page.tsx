@@ -112,12 +112,37 @@ export default async function PublicarPage({
     );
   }
 
+  /**
+   * Fichas de negocio PROPIAS y PUBLICADAS — el desplegable «Organiza» del
+   * evento (0117). Las dos condiciones son las mismas que exige
+   * `app.check_business_listing_link()`: ofrecer en la lista algo que el trigger
+   * va a rechazar sería armar una trampa. Un borrador todavía no es una ficha
+   * que alguien pueda visitar.
+   *
+   * Sólo se pide si Eventos está abierto en esta comunidad: con el módulo
+   * apagado no hay evento que organizar y la consulta sería trabajo tirado.
+   */
+  const businessRows = allowedKinds.includes("event")
+    ? (
+        await supabase
+          .from("listings")
+          .select("id, title")
+          .eq("tenant_id", tenant.id)
+          .eq("created_by", user.id)
+          .eq("kind", "business")
+          .eq("status", "published")
+          .order("title")
+          .limit(20)
+      ).data
+    : null;
+
   return (
     <>
       <h1 className={cn("mb-6 font-display text-2xl font-bold tracking-tight text-foreground")}>
         {COPY.publish.title}
       </h1>
       <PublishForm
+        businesses={businessRows ?? []}
         tenantId={tenant.id}
         initialKind={initialKind}
         allowedKinds={allowedKinds}

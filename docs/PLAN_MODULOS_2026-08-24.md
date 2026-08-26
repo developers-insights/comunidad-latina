@@ -114,6 +114,19 @@ que quedó, con quién lo detectó:
 | 8 | `checkout.session.expired` sin handler → los checkouts abandonados dejan filas `pending_payment` que nadie limpia | webhook de Stripe |
 | 9 | Doble checkout = doble suscripción. El SDK cubre reintentos de red, no dos intenciones del usuario | superficies de suscripción |
 
+## CERRADO el 2026-08-26 — lo que decía esta sección ya no aplica
+
+Todo lo que la lista de abajo daba por pendiente se construyó (migraciones 0115,
+0116 y 0117). El detalle, con el porqué de cada decisión, está en
+[`docs/PROGRESS.md`](PROGRESS.md) bajo «Los seis huecos que quedaban de la spec
+de módulos». Queda UNA sola cosa afuera y no por trabajo pendiente: el gate de
+identidad (`supabase/migraciones-en-espera/0109_...`), que espera las claves de
+Stripe Identity — hoy hay 0 identidades verificadas sobre 20 perfiles y activarlo
+dejaría a todos sin poder publicar.
+
+La sección original se conserva tal cual, abajo, porque explica el estado en que
+quedó la ronda del 24 y por qué cada cosa se había postergado.
+
 ## Lo que NO se hizo en esta ronda, y por qué
 
 - **Negocios: las 3 pestañas y los 4 filtros faltantes.** La pestaña Ofertas

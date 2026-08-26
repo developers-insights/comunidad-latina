@@ -18,3 +18,8 @@ export {
   EmpleosDelNegocio,
   type EmpleosDelNegocioProps,
 } from "./empleos-del-negocio";
+export {
+  EVENTOS_DEL_NEGOCIO_TITULO,
+  EventosDelNegocio,
+  type EventosDelNegocioProps,
+} from "./eventos-del-negocio";

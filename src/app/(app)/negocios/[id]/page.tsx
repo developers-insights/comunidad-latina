@@ -17,7 +17,9 @@ import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
 import { ACCENT_CHIP_CLASS, DirectoryDetailHero, FollowRow } from "@/components/directory";
 import {
   EMPLEOS_DEL_NEGOCIO_TITULO,
+  EVENTOS_DEL_NEGOCIO_TITULO,
   EmpleosDelNegocio,
+  EventosDelNegocio,
   HorarioSeccion,
 } from "@/components/negocios";
 import { PostSheetTrigger } from "@/components/feed";
@@ -26,6 +28,8 @@ import { ResenaForm, ResenasLista, ResumenPuntajeCard } from "@/components/resen
 // `server-only` al bundle de sus consumidores cliente (ver su encabezado).
 import { fetchResenasDeAviso } from "@/components/resenas/queries";
 import { fetchPuestosDelNegocio } from "@/lib/negocios/empleos";
+import { fetchEventosDelNegocio } from "@/lib/negocios/eventos";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { puedeOfrecerseElFormulario } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -143,6 +147,7 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
     initialSaved,
     resenas,
     puestos,
+    eventos,
   ] = await Promise.all([
       listing.created_by
         ? supabase
@@ -180,7 +185,23 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
         tenantId: tenant.id,
         businessListingId: listing.id,
       }),
+      // Eventos que organiza (0117). Misma tolerancia que los puestos: sin la
+      // migración devuelve [] y la sección no se dibuja.
+      fetchEventosDelNegocio(supabase, {
+        tenantId: tenant.id,
+        businessListingId: listing.id,
+      }),
     ]);
+
+  /**
+   * El formateador de fecha de los eventos sale del reloj de QUIEN LEE (0067),
+   * no de una zona fija: "el sábado 6" leído desde la costa oeste no puede
+   * decir "el viernes 5". Es la misma decisión que ya toma el listado de
+   * Vivienda con la fecha de verificación.
+   */
+  const formatViewerDate = await getViewerFormatDate();
+  const formatearFechaDeEvento = (iso: string) =>
+    formatViewerDate(iso, { locale: tenant.locale, style: "long" });
 
   const posts = (postsResult.data ?? []).map((post) => {
     const firstMedia = post.media.find((path) => path && path.trim().length > 0);
@@ -476,6 +497,16 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
         <section className="mt-6">
           <SectionTitle>{EMPLEOS_DEL_NEGOCIO_TITULO}</SectionTitle>
           <EmpleosDelNegocio puestos={puestos} />
+        </section>
+      )}
+
+      {/* PRÓXIMOS EVENTOS (0117) — «página del organizador» de la spec §6. Va
+          pegado a los puestos porque las dos secciones contestan lo mismo: qué
+          más está pasando en este negocio. Sin eventos futuros no existe. */}
+      {eventos.length > 0 && (
+        <section className="mt-6">
+          <SectionTitle>{EVENTOS_DEL_NEGOCIO_TITULO}</SectionTitle>
+          <EventosDelNegocio eventos={eventos} formatearFecha={formatearFechaDeEvento} />
         </section>
       )}
 

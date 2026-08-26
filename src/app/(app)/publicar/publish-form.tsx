@@ -119,6 +119,12 @@ const DIR_COPY = {
     categoryLabel: "Categoría",
     categoryPlaceholder: "Elegí una categoría…",
     categoryError: "Elegí una categoría para el evento.",
+    // 0117 — el vínculo con la ficha del comercio. El copy no dice
+    // "business_listing_id" ni "vincular": pregunta quién organiza, que es lo
+    // que la persona sabe contestar.
+    businessLabel: "Quién lo organiza",
+    businessHelp: "Si lo organiza tu negocio, el evento también va a aparecer en su página.",
+    businessPersonal: "Yo, a título personal",
     ticketLegend: "Entrada",
     ticketFree: "Gratis",
     ticketFreeHint: "Se entra sin pagar",
@@ -454,10 +460,21 @@ export interface PublishFormProps {
    * Sin param (uso de siempre desde /publicar a mano), todo igual que antes.
    */
   initialKind?: Kind | null;
+  /**
+   * Fichas de negocio propias y publicadas de quien está publicando (0117).
+   * Alimentan el desplegable «Organiza» del EVENTO — el vínculo que lo hace
+   * aparecer en la ficha del comercio y en Negocios › Publicaciones.
+   *
+   * Vacío = esta persona no tiene negocios: el desplegable no se dibuja, porque
+   * sería una pregunta con una sola respuesta posible. La pertenencia la
+   * verifica el trigger de la base, no esta lista.
+   */
+  businesses?: readonly { id: string; title: string }[];
 }
 
 export function PublishForm({
   tenantId,
+  businesses = [],
   initialKind = null,
   allowedKinds,
 }: PublishFormProps) {
@@ -520,6 +537,8 @@ export function PublishForm({
   const [declaration, setDeclaration] = useState<DeclarationValue>(EMPTY_DECLARATION_VALUE);
   // Campos específicos de professional/event
   const [category, setCategory] = useState("");
+  /** `listings.business_listing_id` del evento (0117). "" = lo organizás vos. */
+  const [businessListingId, setBusinessListingId] = useState("");
   const [credentials, setCredentials] = useState("");
   const [eventStartsAt, setEventStartsAt] = useState("");
   const [eventEndsAt, setEventEndsAt] = useState("");
@@ -806,6 +825,7 @@ export function PublishForm({
           eventFree: isEvent && eventTicket ? eventTicket === "gratis" : null,
           eventCapacity: isEvent && eventCapacity ? Number(eventCapacity) : null,
           eventAudience: isEvent ? eventAudience || null : null,
+          businessListingId: isEvent && businessListingId ? businessListingId : null,
         });
         if (!result.ok) {
           setError(result.error);
@@ -1295,6 +1315,34 @@ export function PublishForm({
 
           {isEvent && (
             <>
+              {/* QUIÉN LO ORGANIZA → columna listings.business_listing_id (0117).
+                  Va PRIMERO del bloque de evento y no al final: de quién sale el
+                  evento cambia a quién le llega y en qué ficha aparece, y esa
+                  decisión se toma antes de escribir la fecha, no después.
+                  Sólo se dibuja si la persona TIENE fichas propias publicadas —
+                  sin negocios sería una pregunta con una sola respuesta. */}
+              {businesses.length > 0 && (
+                <Field
+                  htmlFor="pub-event-business"
+                  label={DIR_COPY.event.businessLabel}
+                  help={DIR_COPY.event.businessHelp}
+                  optional
+                >
+                  <Select
+                    id="pub-event-business"
+                    value={businessListingId}
+                    onChange={(event) => setBusinessListingId(event.target.value)}
+                  >
+                    <option value="">{DIR_COPY.event.businessPersonal}</option>
+                    {businesses.map((business) => (
+                      <option key={business.id} value={business.id}>
+                        {business.title}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
+
               <Field htmlFor="pub-event-category" label={DIR_COPY.event.categoryLabel}>
                 <Select
                   id="pub-event-category"

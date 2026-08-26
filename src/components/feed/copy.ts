@@ -13,6 +13,25 @@ export const COPY = {
   },
 
   /**
+   * LAS DOS MITADES DEL FEED (spec de módulos §8). Los nombres de las pestañas
+   * NO viven acá: salen de `feed-scope.ts`, que es el módulo puro que también
+   * parsea la URL — un solo lugar para "cómo se llama" y "cómo se escribe".
+   * Acá va sólo lo que es texto de ESTA pantalla: el nombre accesible de la
+   * barra y los dos vacíos.
+   */
+  scope: {
+    navLabel: "Qué feed estás viendo",
+    emptyTitle: "Todavía no seguís a nadie",
+    emptyMessage:
+      "Acá va a aparecer lo que publiquen las personas, los negocios y los profesionales que sigas. Encontralos en el buscador y tocá Seguir.",
+    emptyCta: "Buscar en tu comunidad",
+    anonTitle: "Entrá para ver lo que seguís",
+    anonMessage:
+      "Con tu cuenta podés seguir personas, negocios y profesionales, y tener un feed con lo que elegiste vos.",
+    anonCta: "Entrar",
+  },
+
+  /**
    * FILA DE MÓDULOS que encabeza el feed (pedido del cliente 2026-08-12: los
    * tabs de texto pasaron a ser círculos con el ícono del módulo y el nombre
    * debajo). Los nombres de cada círculo NO viven acá: salen del registro de
@@ -135,6 +154,17 @@ export const COPY = {
      */
     savingTags: "Guardando las etiquetas…",
     savingMusic: "Guardando la música…",
+    /**
+     * OFERTA (0106). El fallo NO deja nada a medias: el servidor deshace la
+     * publicación si las condiciones comerciales no entran, así que el copy
+     * dice "no se publicó" y no "se publicó sin la oferta" — que sería mentira
+     * y encima mandaría a alguien a buscar un post que no existe.
+     */
+    ofertaFalloTitle: "Revisá la oferta",
+    ofertaFalloBody:
+      "No pudimos guardar las condiciones de la oferta, así que no publicamos nada. Probá de nuevo en un momento.",
+    ofertaSinNegocio:
+      "Las ofertas salen a nombre de un negocio. Elegí tu negocio arriba, en «Vas a publicar como».",
     publish: "Publicar",
     publishing: "Publicando…",
     successTitle: "¡Publicado!",

@@ -37,6 +37,13 @@ import {
   prepareMediaUploadAction,
 } from "@/app/(app)/feed/actions";
 import { getAutoriasAction } from "@/app/(app)/feed/autoria-actions";
+import { OfertaComposer } from "@/components/negocios/oferta-composer";
+import {
+  OFERTA_ERROR,
+  hoyEnZona,
+  type OfertaBorrador,
+} from "@/lib/negocios/oferta-alta";
+import { DEFAULT_TIME_ZONE } from "@/lib/utils";
 /**
  * SÓLO EL TIPO, y no es un detalle de estilo: `@/lib/feed/autoria` abre con
  * `server-only`, y cualquier camino de imports que lo alcance desde un archivo
@@ -240,6 +247,19 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
   const [autoriasFallaron, setAutoriasFallaron] = useState(false);
   const [entityId, setEntityId] = useState<string | null>(null);
   /**
+   * ---- "ESTO ES UNA OFERTA" (`post_offers`, 0106) -------------------------
+   *
+   * `null` = publicación normal, que es el caso de casi todas. Vive acá junto
+   * al resto del borrador y no dentro del bloque, por lo mismo que el texto y
+   * las etiquetas: quien publica es este componente.
+   *
+   * Se limpia solo cuando la firma deja de ser un negocio (ver el efecto de
+   * abajo): una oferta firmada con el perfil personal la rechaza la policy.
+   */
+  const [oferta, setOferta] = useState<OfertaBorrador | null>(null);
+  /** Qué parte de la oferta rebotó el servidor, para mostrarlo en el bloque. */
+  const [ofertaError, setOfertaError] = useState<string | null>(null);
+  /**
    * ¿La persona eligió la firma A MANO en esta sesión del composer? Si sí, un
    * refresco que llega después NO puede pisarle la elección — sería cambiarle
    * a nombre de quién publica mientras escribe. Se resetea al abrir el menú.
@@ -312,6 +332,40 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
    */
   const autoriaBloquea =
     cargandoAutorias && (autorias === null || autorias.entidades.length > 0);
+
+  /**
+   * ---- ¿ESTA PUBLICACIÓN PUEDE SER UNA OFERTA? ----------------------------
+   *
+   * Sólo si sale firmada por una ficha de NEGOCIO. No es una preferencia: la
+   * policy `post_offers_insert` (0106) pide `app.can_manage_listing` sobre
+   * `app.negocio_del_post()`, que devuelve null para un post personal y para
+   * uno de ficha profesional. Ofrecer el bloque en esos dos casos sería ofrecer
+   * un formulario que la base va a rechazar.
+   */
+  const firmaEsNegocio =
+    entityId !== null &&
+    autorias?.entidades.some(
+      (entidad) => entidad.listingId === entityId && entidad.kind === "business",
+    ) === true;
+
+  /**
+   * Cambiar la firma a "vos" (o a la ficha profesional) con una oferta a medio
+   * cargar la BORRA. Dejarla escondida sería mandar al servidor condiciones
+   * comerciales que la policy va a rebotar, con un cartel de error sobre un
+   * bloque que ya no se ve.
+   *
+   * Ajuste de estado DURANTE EL RENDER y no en un `useEffect`: es el patrón que
+   * React recomienda para estado derivado de una prop/estado que cambió, y el
+   * mismo que ya usa `FeedList` con `seedItems`. Con efecto habría un frame con
+   * el bloque de oferta montado bajo una firma que no lo admite.
+   */
+  if (!firmaEsNegocio && (oferta !== null || ofertaError !== null)) {
+    setOferta(null);
+    setOfertaError(null);
+  }
+
+  /** Hoy con el reloj de quien publica — lo manda el servidor (ver `autoria.ts`). */
+  const hoyDelComposer = autorias?.hoy ?? hoyEnZona(new Date(), DEFAULT_TIME_ZONE);
 
   const photos = media.filter((item) => item.kind === "photo");
   const video = media.find((item) => item.kind === "video") ?? null;
@@ -485,6 +539,8 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
     // etiquetaría gente que nadie volvió a elegir.
     setTaggedPeople([]);
     setTrack(null);
+    setOferta(null);
+    setOfertaError(null);
     setFinishingLabel(null);
     setMedia((current) => {
       for (const item of current) URL.revokeObjectURL(item.preview);
@@ -811,6 +867,13 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         formData.set("licenseUrl", declaration.licenseUrl);
       }
 
+      /**
+       * LAS CONDICIONES COMERCIALES (0106) — un solo campo JSON, y sólo si hay
+       * oferta. Ver `leerOfertaCruda` en el server: o viajan todas o no viaja
+       * ninguna, para que no pueda llegar una oferta a medias.
+       */
+      if (oferta) formData.set("oferta", JSON.stringify(oferta));
+
       const result = await createPostAction(formData);
 
       if (result.ok) {
@@ -995,6 +1058,29 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         });
         return;
       }
+      if (result.code === "oferta") {
+        /**
+         * La publicación NO salió: el servidor deshace el post cuando la oferta
+         * no entra (ver `createPostAction`). Así que esto no es un aviso de
+         * "quedó a medias" sino un campo para corregir, y por eso el mensaje va
+         * DENTRO del bloque —al lado del control que hay que arreglar— y además
+         * en un toast, que es lo que se ve si el acordeón quedó plegado.
+         */
+        const mensaje =
+          result.motivo === "sin_negocio"
+            ? COPY.composer.ofertaSinNegocio
+            : result.motivo === "error"
+              ? COPY.composer.ofertaFalloBody
+              : OFERTA_ERROR[result.motivo];
+        setOfertaError(mensaje);
+        toast({
+          title: COPY.composer.ofertaFalloTitle,
+          description: mensaje,
+          variant: "warning",
+          duration: 8000,
+        });
+        return;
+      }
       if (result.code === "invalid") {
         toast({ title: COPY.composer.tooShort, variant: "warning" });
         return;
@@ -1143,6 +1229,25 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         musicSlot={
           media.length > 0 ? (
             <MusicPicker value={track} onChange={setTrack} disabled={isPending} />
+          ) : undefined
+        }
+        /**
+         * OFERTA (0106) — sólo publicando como negocio. Ver `firmaEsNegocio`:
+         * el bloque no se esconde por gusto, se esconde porque la base no
+         * aceptaría lo que se cargue ahí con ninguna otra firma.
+         */
+        ofertaSlot={
+          firmaEsNegocio ? (
+            <OfertaComposer
+              value={oferta}
+              onChange={(siguiente) => {
+                setOferta(siguiente);
+                setOfertaError(null);
+              }}
+              hoy={hoyDelComposer}
+              error={ofertaError ?? undefined}
+              disabled={isPending}
+            />
           ) : undefined
         }
       />

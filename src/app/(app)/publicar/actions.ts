@@ -170,6 +170,18 @@ const draftSchema = z
     // Vivienda: QUÉ es y QUÉ se ofrece. Van a `attrs` (JSONB libre) igual que
     // bedrooms/sqft — sin migración. El catálogo y las reglas de coherencia
     // viven en @/lib/propiedades/tipos, que también usan el form y el listado.
+    /**
+     * NEGOCIO ORGANIZADOR de un evento → columna `listings.business_listing_id`
+     * (0107, ampliada a eventos en 0117). Es lo que hace que el evento aparezca
+     * en la ficha del comercio —«página del organizador», spec §6— y en la
+     * pestaña Publicaciones de Negocios.
+     *
+     * Acá sólo se valida la FORMA. Que la ficha exista, sea de esta comunidad,
+     * sea del mismo dueño y esté publicada lo decide
+     * `app.check_business_listing_link()`, que es `security definer` y corre
+     * dentro de la base: reimplementarlo acá sería tener la regla en dos lados.
+     */
+    businessListingId: z.uuid().nullish(),
     propertyType: z.enum(PROPERTY_TYPES).nullish(),
     /**
      * Se sigue ACEPTANDO el vocabulario completo (`alquiler` y `venta`) aunque
@@ -471,6 +483,14 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
       area_label: input.areaLabel,
       status: "draft",
       created_by: user.id,
+      /**
+       * Sólo en eventos, y `null` en todo lo demás: el trigger de la 0117
+       * rechaza el vínculo desde cualquier otro vertical con VINCULO_INVALIDO,
+       * y mandarlo "por las dudas" convertiría un descuido del formulario en un
+       * alta que no se puede completar.
+       */
+      business_listing_id:
+        input.kind === "event" ? (input.businessListingId ?? null) : null,
     })
     .select("id")
     .single();

@@ -59,6 +59,13 @@ export {
   type PostMusicView,
   type PostPollView,
 } from "./helpers";
+export {
+  FEED_SCOPES,
+  FEED_SCOPE_LABELS,
+  feedScopeHref,
+  parseFeedScope,
+  type FeedScope,
+} from "./feed-scope";
 export { PostActions, type PostActionsProps } from "./post-actions";
 export { PostCard, type PostCardProps } from "./post-card";
 export { PostComposerHost, type PostComposerHostProps } from "./post-composer";

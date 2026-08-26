@@ -35,7 +35,12 @@ import {
   type PostRow,
 } from "./queries";
 import { fetchPostTags } from "@/lib/social/post-tags";
-import { fetchFeedListingsPageViaRpc, fetchFeedPostsPageViaRpc } from "./feed-rpc";
+import {
+  fetchFeedListingsPageViaRpc,
+  fetchFeedPostsPageViaRpc,
+  fetchFollowingPostsPageViaRpc,
+} from "./feed-rpc";
+import { parseFeedScope, type FeedScope } from "@/components/feed/feed-scope";
 
 /**
  * Módulo FLUIDEZ — paginación del feed como server action.
@@ -92,8 +97,15 @@ export interface FeedPageResult {
 export async function fetchFeedPageAction(input: {
   tab: FeedTabId;
   cursor: string | null;
+  /**
+   * Mitad del feed (spec §8). Ausente = «Para ti», que es el default de la URL
+   * y el comportamiento de siempre — así una llamada vieja sigue significando
+   * exactamente lo mismo.
+   */
+  scope?: FeedScope;
 }): Promise<FeedPageResult> {
   const tab = parseTab(input.tab);
+  const scope = parseFeedScope(input.scope);
   const cursor = decodeCursor(input.cursor ?? undefined);
 
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
@@ -101,6 +113,23 @@ export async function fetchFeedPageAction(input: {
   // (WebCrypto, sin round-trip al Auth server) alcanza y evita pagar esa
   // latencia en CADA scroll — mismo criterio que notificaciones/entrar.
   const viewerId = await getAuthUserId();
+
+  /**
+   * «Siguiendo» ignora el vertical a propósito y no es una simplificación: los
+   * cinco `?tab=` son carriles de DESCUBRIMIENTO (mezclan avisos recomendados
+   * de toda la comunidad) y «Siguiendo» es lo contrario — sólo lo que la
+   * persona eligió. Cruzarlos daría "las propiedades que sigo", que es una
+   * lista que ya existe y se llama Guardados.
+   */
+  if (scope === "siguiendo") {
+    return loadSiguiendoPage({
+      supabase,
+      tenantId: tenant.id,
+      locale: tenant.locale,
+      viewerId,
+      cursor,
+    });
+  }
 
   if (tab === "para-ti") {
     return loadParaTiPage({
@@ -118,6 +147,73 @@ export async function fetchFeedPageAction(input: {
     locale: tenant.locale,
     viewerId,
     cursor,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// "Siguiendo": SÓLO publicaciones, y sólo de lo que la persona sigue (0115)
+// ---------------------------------------------------------------------------
+
+/**
+ * Una página de la pestaña «Siguiendo».
+ *
+ * ── SIN FALLBACK, Y ESO ES UNA DECISIÓN ─────────────────────────────────────
+ * «Para ti» conserva su camino viejo con los ids inlineados en la URL porque
+ * ese camino EXISTÍA y hay que poder desplegar el código antes que la
+ * migración. Acá no hay nada viejo que conservar: la pestaña nace con el RPC
+ * de la 0115. Y el "camino equivalente" —traer todo lo que alguien sigue y
+ * meterlo en un `.in(…)`— es exactamente el 414 que la 0113 fue a cerrar, con
+ * el agravante de que le pegaría primero a quien más sigue.
+ *
+ * Así que sin RPC esto devuelve la página vacía y la pantalla muestra su
+ * estado vacío. Es honesto: mejor una pestaña que dice "todavía no hay nada"
+ * que una que funciona para el que sigue a tres personas y revienta con un 414
+ * para el que sigue a doscientas.
+ *
+ * ── SIN AVISOS Y SIN GUÍA ───────────────────────────────────────────────────
+ * `assembleParaTiPage` es el mismo ensamblador —los batches de autores, likes,
+ * guardados, encuestas, etiquetas, música y campañas son idénticos— pero entra
+ * con los dos carriles extra vacíos. Los avisos recomendados y la guía
+ * destacada son curaduría de la app, y «Siguiendo» no cura: muestra lo que la
+ * persona eligió, en orden cronológico.
+ *
+ * El chip "Publicidad" sí se sigue resolviendo, y tiene que ser así: la
+ * pestaña no DISTRIBUYE campañas (el RPC no las trae), pero si un negocio que
+ * seguís promociona una publicación suya, esa publicación llega acá por el
+ * follow y merece estar rotulada igual que en cualquier otra superficie.
+ */
+async function loadSiguiendoPage({
+  supabase,
+  tenantId,
+  locale,
+  viewerId,
+  cursor,
+}: {
+  supabase: Supabase;
+  tenantId: string;
+  locale: string;
+  viewerId: string | null;
+  cursor: Cursor;
+}): Promise<FeedPageResult> {
+  // Sin sesión no hay a quién seguir. Se corta acá y no en el RPC para no
+  // gastar el viaje: la pantalla ya ofrece "Entrá para ver a quién seguís".
+  if (!viewerId) return { items: [], nextCursor: null };
+
+  const postRows = await fetchFollowingPostsPageViaRpc(supabase, {
+    tenantId,
+    cursor,
+    limit: PAGE_SIZE + 1,
+  });
+  if (!postRows) return { items: [], nextCursor: null };
+
+  return assembleParaTiPage({
+    supabase,
+    tenantId,
+    locale,
+    viewerId,
+    postRows,
+    listingRows: [],
+    guideResult: { data: null },
   });
 }
 

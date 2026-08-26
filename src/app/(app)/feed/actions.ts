@@ -35,6 +35,16 @@ import {
 } from "@/lib/integrity";
 import { currentSourceHost } from "@/lib/integrity/source-host";
 import { puedeFirmarComo } from "@/lib/feed/autoria";
+import {
+  finDelDiaEnZona,
+  hoyEnZona,
+  validarOferta,
+  type MotivoOfertaInvalida,
+  type OfertaBorrador,
+} from "@/lib/negocios/oferta-alta";
+import { getViewerTimeZone } from "@/lib/time/viewer-zone";
+import type { Database } from "@/lib/types/database.types";
+import { DEFAULT_TIME_ZONE } from "@/lib/utils";
 import { notifyPostComment, notifyPostReaction } from "./social-notifications";
 
 /**
@@ -226,8 +236,85 @@ export type CreatePostResult =
    * distintas para la persona.
    */
   | { ok: false; code: "video"; reason: DurationRejection }
+  /**
+   * LAS CONDICIONES COMERCIALES DE LA OFERTA no pasaron (`post_offers`, 0106).
+   *
+   * Código propio, con motivo, por lo mismo que `entity` y `video` lo tienen: el
+   * arreglo de "falta el título de la oferta" y el de "esa fecha ya pasó" son
+   * distintos, y un `invalid` genérico obligaría al composer a mostrar un cartel
+   * que no dice qué corregir. `sin_negocio` es el caso en que se pidió una
+   * oferta firmando con el perfil personal o con una ficha profesional: la
+   * policy `post_offers_insert` sólo la acepta bajo una ficha de negocio.
+   */
+  | {
+      ok: false;
+      code: "oferta";
+      motivo: MotivoOfertaInvalida | "sin_negocio" | "error";
+    }
   /** El JWT y el header apuntan a comunidades distintas — copy ya resuelto. */
   | { ok: false; code: "tenant-mismatch"; message: string };
+
+/**
+ * ---------------------------------------------------------------------------
+ * "ESTO ES UNA OFERTA" — el borrador que manda el composer
+ * ---------------------------------------------------------------------------
+ *
+ * Viaja como UN campo JSON y no como siete campos sueltos del FormData a
+ * propósito: o hay oferta y están todos, o no hay oferta y no está ninguno.
+ * Siete `formData.get()` que pueden estar a medias son siete formas de que
+ * llegue una oferta sin fecha.
+ *
+ * Acá sólo se comprueba la FORMA (que sea un objeto con las claves esperadas).
+ * Los límites de verdad —largos, rangos, ventana— los aplica `validarOferta`,
+ * que es exactamente el mismo módulo que corrió el navegador.
+ */
+type PostOfferInsert = Database["public"]["Tables"]["post_offers"]["Insert"];
+
+/**
+ * Lo único de una oferta que escribe la APP. Lo que falta para completar la
+ * fila —`tenant_id` y `moneda`— lo deriva el trigger `app.post_offers_guard`
+ * (0106) desde el post y desde `tenants.currency`, y por eso el insert de abajo
+ * lleva un cast: el tipo generado los pide porque son `not null`, pero mandarlos
+ * desde acá sería dejar que el cliente declare en qué comunidad y en qué moneda
+ * está su descuento.
+ */
+type ColumnasDeOferta = Pick<
+  PostOfferInsert,
+  "tipo" | "titulo" | "valor_tipo" | "valor" | "codigo_cupon" | "expires_at" | "terminos"
+>;
+
+function leerOfertaCruda(raw: FormDataEntryValue | null): OfertaBorrador | null | "ilegible" {
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(raw);
+  } catch {
+    return "ilegible";
+  }
+  if (typeof decoded !== "object" || decoded === null) return "ilegible";
+  const objeto = decoded as Record<string, unknown>;
+  const texto = (clave: string): string | null => {
+    const valor = objeto[clave];
+    return typeof valor === "string" ? valor : null;
+  };
+  const numero = (clave: string): number | null => {
+    const valor = objeto[clave];
+    if (valor === null || valor === undefined || valor === "") return null;
+    const parsed = typeof valor === "number" ? valor : Number(valor);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  };
+  return {
+    // Los `as` no conceden nada: `validarOferta` rechaza cualquier valor que no
+    // esté en su catálogo, y detrás está el CHECK de la 0106.
+    tipo: (texto("tipo") ?? "") as OfertaBorrador["tipo"],
+    titulo: texto("titulo") ?? "",
+    valorTipo: (texto("valorTipo") ?? null) as OfertaBorrador["valorTipo"],
+    valor: numero("valor"),
+    codigoCupon: texto("codigoCupon"),
+    vence: texto("vence") ?? "",
+    terminos: texto("terminos"),
+  };
+}
 
 function devAutoApprove(): boolean {
   const isProduction =
@@ -506,6 +593,53 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     }
   }
 
+  /**
+   * ---- LAS CONDICIONES COMERCIALES (`post_offers`, 0106) --------------------
+   *
+   * Se validan ACÁ: después de saber que la firma es legítima (la oferta cuelga
+   * de la ficha del post, así que sin firma válida no hay oferta posible) y
+   * ANTES de moderar y de subir un solo byte. Una fecha mal puesta no puede
+   * costar una llamada a OpenAI ni dejar fotos en el bucket.
+   *
+   * La zona horaria es la de QUIEN PUBLICA (`profiles.timezone`, 0067) y es la
+   * misma que `listarAutoriasDelComposer` le mandó al navegador para el `min`
+   * del selector de fecha: un solo origen para los dos lados. "Vale hasta el
+   * 12" significa hasta el final del 12 en el reloj del negocio, no a las 00:00
+   * ni en UTC.
+   */
+  const ofertaCruda = leerOfertaCruda(formData.get("oferta"));
+  if (ofertaCruda === "ilegible") return { ok: false, code: GENERIC_INVALID };
+  let ofertaParaGuardar: ColumnasDeOferta | null = null;
+  if (ofertaCruda) {
+    // Sin ficha de negocio no hay oferta: `app.negocio_del_post()` devuelve null
+    // para un post personal o profesional y la policy la rechaza. Cortar acá es
+    // poder decir POR QUÉ en vez de devolver un 42501 crudo.
+    if (!entityId) return { ok: false, code: "oferta", motivo: "sin_negocio" };
+
+    const zona = (await getViewerTimeZone()) ?? DEFAULT_TIME_ZONE;
+    const validada = validarOferta(ofertaCruda, hoyEnZona(new Date(), zona));
+    if (!validada.ok) return { ok: false, code: "oferta", motivo: validada.motivo };
+
+    const expiresAt = finDelDiaEnZona(validada.oferta.vence, zona);
+    // `expires_at > now()` es literal en la policy. Que la fecha sea de hoy o
+    // posterior ya lo comprobó `validarOferta`; esto cubre el caso de borde de
+    // una zona desconocida y el de un request que llegó del otro lado de la
+    // medianoche.
+    if (!expiresAt || expiresAt.getTime() <= Date.now()) {
+      return { ok: false, code: "oferta", motivo: "vence_pasada" };
+    }
+
+    ofertaParaGuardar = {
+      tipo: validada.oferta.tipo,
+      titulo: validada.oferta.titulo,
+      valor_tipo: validada.oferta.valorTipo,
+      valor: validada.oferta.valor,
+      codigo_cupon: validada.oferta.codigoCupon,
+      expires_at: expiresAt.toISOString(),
+      terminos: validada.oferta.terminos,
+    };
+  }
+
   // Techo de publicación, ANTES de la moderación y de tocar Storage. Es el
   // único camino del feed que gasta plata ajena por request: `moderateText`
   // llama a OpenAI y cada foto sube bytes al bucket. 30 por hora no lo nota
@@ -648,6 +782,39 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   if (insertError || !created) {
     console.warn("[feed] insert de post falló", { code: insertError?.code });
     return { ok: false, code: "error" };
+  }
+
+  /**
+   * ---- LA OFERTA, COLGADA DEL POST QUE ACABA DE NACER (0106) ---------------
+   *
+   * Va inmediatamente después del insert y antes de cualquier otra cosa: la PK
+   * de `post_offers` ES `post_id`, así que no puede existir antes, y todo lo que
+   * viene después (integridad, moderación, etiquetas) es opcional para la
+   * persona mientras que esto es la mitad de lo que pidió.
+   *
+   * ── SI FALLA, SE DESHACE LA PUBLICACIÓN ────────────────────────────────────
+   * Y no es una precaución teórica: quien tocó Publicar quiso publicar UNA
+   * oferta. Dejar el post vivo sin sus condiciones comerciales sería publicar a
+   * su nombre algo que no escribió —un anuncio sin descuento, sin cupón y sin
+   * vencimiento— y encima invisible en la pestaña donde la fue a buscar. El
+   * borrado corre con el JWT del usuario sobre su propio post (`posts_delete`),
+   * y si tampoco pudiera, el post queda publicado: en ese caso el error de la
+   * oferta ya se le informó y una publicación de más se puede borrar a mano,
+   * mientras que un error mudo no se puede arreglar de ninguna forma.
+   *
+   * `supabaseSinTipar` no hace falta acá: `post_offers` SÍ está en
+   * `database.types.ts` (la 0106 entró en la última regeneración), a diferencia
+   * de lo que todavía anota `lib/negocios/ofertas.ts` para su lectura.
+   */
+  if (ofertaParaGuardar) {
+    const { error: ofertaError } = await supabase
+      .from("post_offers")
+      .insert({ post_id: created.id, ...ofertaParaGuardar } as PostOfferInsert);
+    if (ofertaError) {
+      console.warn("[feed] insert de oferta falló", { code: ofertaError.code });
+      await supabase.from("posts").delete().eq("id", created.id);
+      return { ok: false, code: "oferta", motivo: "error" };
+    }
   }
 
   // ---- Content Integrity: huella de cada archivo (§ pliego) ----------------

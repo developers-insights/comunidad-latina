@@ -76,9 +76,64 @@ export const VENCIMIENTO_COPY = {
       tope_alcanzado:
         "Esta publicación llegó al máximo de renovaciones de la comunidad. Podés volver a publicarla como nueva.",
       todavia_no: "Todavía falta. Vas a poder renovarla cuando se acerque la fecha.",
+      confirma_disponibilidad:
+        "Pasaron más de 60 días. Confirmá que la propiedad sigue disponible y después podés renovarla.",
     },
     errorGenerico: "No pudimos renovarla ahora. Probá de nuevo en un momento.",
     necesitaCuenta: "Entrá con tu cuenta para renovar tu publicación.",
+  },
+
+  /**
+   * CONFIRMAR DISPONIBILIDAD (0116) — spec §4: «deben confirmar nuevamente su
+   * disponibilidad después de 60 días».
+   *
+   * El copy no habla de "reconfirmación" ni de plazos: le pregunta a la persona
+   * lo único que sabe y que a la comunidad le importa —si el cuarto sigue
+   * libre— y le da dos salidas, porque las dos respuestas posibles son "sí" y
+   * "ya lo alquilé".
+   */
+  disponibilidad: {
+    titulo: "¿Sigue disponible?",
+    cuerpo:
+      "Pasaron más de 60 días desde la última vez que lo confirmaste. Decinos si sigue en pie para que la gente no llame de al pepe.",
+    cuerpoProximo: (dias: number) =>
+      dias === 1
+        ? "Mañana te vamos a pedir que confirmes que sigue disponible."
+        : `En ${dias} días te vamos a pedir que confirmes que sigue disponible.`,
+    cta: "Sí, sigue disponible",
+    enviando: "Confirmando…",
+    okTitulo: "Gracias, quedó confirmado",
+    okCuerpo: "Vamos a volver a preguntarte en 60 días.",
+    motivos: {
+      no_encontrada: "No encontramos esa publicación en tu cuenta.",
+      no_aplica: "Esto sólo aplica a las propiedades en alquiler.",
+      estado_invalido: "Esta publicación no está activa, así que no hay disponibilidad que confirmar.",
+    },
+    errorGenerico: "No pudimos confirmarla ahora. Probá de nuevo en un momento.",
+    necesitaCuenta: "Entrá con tu cuenta para confirmar tu publicación.",
+  },
+
+  /**
+   * ALQUILADO (0116) — spec §4: «deben marcarse como Alquilado cuando dejen de
+   * estar disponibles».
+   *
+   * Es una acción con vuelta atrás y el copy lo dice: sin esa frase, marcar
+   * alquilado se siente como borrar, y quien duda no lo toca — y un aviso
+   * alquilado que sigue publicado es exactamente lo que esto viene a evitar.
+   */
+  alquilado: {
+    cta: "Ya lo alquilé",
+    enviando: "Guardando…",
+    confirmarTitulo: "¿Ya lo alquilaste?",
+    confirmarCuerpo:
+      "Lo sacamos del listado para que no te sigan escribiendo. Podés volver a publicarlo cuando quieras.",
+    confirmarCta: "Sí, ya lo alquilé",
+    cancelar: "Todavía no",
+    okTitulo: "Listo, lo marcamos como alquilado",
+    okCuerpo: "Dejó de aparecer en Vivienda. Sigue en tus publicaciones.",
+    estado: "Alquilado",
+    errorGenerico: "No pudimos marcarlo ahora. Probá de nuevo en un momento.",
+    necesitaCuenta: "Entrá con tu cuenta para marcar tu publicación.",
   },
 
   /**

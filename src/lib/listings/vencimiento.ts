@@ -158,6 +158,16 @@ export type PublicacionVencible = {
   warnAt: string | null;
   /** `listings.renewal_count`. */
   renewalCount: number;
+  /**
+   * `listings.availability_confirmed_at` en ISO (0116). Sólo lo usan las
+   * PROPIEDADES; opcional porque las demás pantallas que arman este objeto
+   * (empleos, marketplace) no tienen por qué leer una columna que no las toca.
+   */
+  availabilityConfirmedAt?: string | null;
+  /** `listings.published_at` — respaldo de la fecha de confirmación. */
+  publishedAt?: string | null;
+  /** `listings.created_at` — último respaldo, igual que el coalesce del SQL. */
+  createdAt?: string | null;
 };
 
 export type EstadoVencimiento =
@@ -220,6 +230,13 @@ export const MOTIVOS_NO_RENOVABLE = [
   "no_vence",
   "tope_alcanzado",
   "todavia_no",
+  /**
+   * 0116 · spec §4: «deben confirmar nuevamente su disponibilidad después de 60
+   * días». Es el ÚNICO motivo de esta lista que se arregla en un toque y sin
+   * publicar nada de nuevo, así que la pantalla no le ofrece "Renovar" sino
+   * "Sigue disponible" — y renovar queda habilitado inmediatamente después.
+   */
+  "confirma_disponibilidad",
 ] as const;
 
 export type MotivoNoRenovable = (typeof MOTIVOS_NO_RENOVABLE)[number];
@@ -264,6 +281,12 @@ export function puedeRenovar(
   ) {
     return { ok: false, motivo: "tope_alcanzado" };
   }
+  // 0116 — MISMO ORDEN QUE LA FUNCIÓN DE LA BASE: después del tope (quien llegó
+  // al tope no tiene nada que confirmar) y antes de "todavía no" (a quien
+  // todavía no le toca renovar tampoco se le pide confirmar hoy).
+  if (necesitaConfirmarDisponibilidad(publicacion, ahora)) {
+    return { ok: false, motivo: "confirma_disponibilidad" };
+  }
   // Vencida: siempre se puede recuperar. Es la promesa central del modelo —
   // vencer no borra nada y siempre hay vuelta atrás.
   if (publicacion.status === "expired") return { ok: true };
@@ -273,4 +296,68 @@ export function puedeRenovar(
     return { ok: false, motivo: "todavia_no" };
   }
   return { ok: true };
+}
+
+
+// ---------------------------------------------------------------------------
+// Confirmación de disponibilidad (0116) — spec §4
+// ---------------------------------------------------------------------------
+
+/**
+ * Cada cuánto hay que volver a decir «sigue disponible». Espeja el
+ * `interval '60 days'` de `public.renovar_publicacion()`. Está escrito dos veces
+ * —acá y en el SQL— por el mismo motivo que el resto de los espejos de este
+ * módulo: la pantalla tiene que poder anticipar el rechazo de la base sin
+ * preguntarle. Manda el SQL.
+ */
+export const DIAS_PARA_RECONFIRMAR = 60;
+
+/**
+ * ¿Esta propiedad debe una confirmación?
+ *
+ * Sólo aplica a `property`: un empleo o un producto no tienen «disponibilidad»
+ * que confirmar, y pedírsela sería inventarle un trámite a quien publicó otra
+ * cosa.
+ *
+ * `null` en `availabilityConfirmedAt` NO significa «hace infinito»: significa
+ * un aviso anterior a la 0116 (la migración los sembró con su `published_at`,
+ * pero una fila leída de un caché viejo puede llegar sin el dato). Se cae a
+ * `publishedAt` y, sin eso, a `createdAt` — exactamente el mismo `coalesce` que
+ * hace la función de la base.
+ */
+export function necesitaConfirmarDisponibilidad(
+  publicacion: PublicacionVencible,
+  ahora: Date = new Date(),
+): boolean {
+  if (publicacion.kind !== "property") return false;
+  const referencia =
+    publicacion.availabilityConfirmedAt ??
+    publicacion.publishedAt ??
+    publicacion.createdAt ??
+    null;
+  if (!referencia) return false;
+  const desde = Date.parse(referencia);
+  if (!Number.isFinite(desde)) return false;
+  return ahora.getTime() - desde > DIAS_PARA_RECONFIRMAR * 86_400_000;
+}
+
+/**
+ * Cuántos días faltan para deber la confirmación. Negativo = ya la debe.
+ * `null` = no aplica (no es una propiedad, o no hay fecha de referencia).
+ */
+export function diasHastaReconfirmar(
+  publicacion: PublicacionVencible,
+  ahora: Date = new Date(),
+): number | null {
+  if (publicacion.kind !== "property") return null;
+  const referencia =
+    publicacion.availabilityConfirmedAt ??
+    publicacion.publishedAt ??
+    publicacion.createdAt ??
+    null;
+  if (!referencia) return null;
+  const desde = Date.parse(referencia);
+  if (!Number.isFinite(desde)) return null;
+  const vence = desde + DIAS_PARA_RECONFIRMAR * 86_400_000;
+  return Math.ceil((vence - ahora.getTime()) / 86_400_000);
 }

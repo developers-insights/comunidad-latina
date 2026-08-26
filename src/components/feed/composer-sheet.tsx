@@ -138,6 +138,19 @@ export interface ComposerSheetProps {
   tagSlot?: React.ReactNode;
   musicSlot?: React.ReactNode;
   /**
+   * "ESTO ES UNA OFERTA" (`post_offers`, 0106) — la cuarta ranura, con la misma
+   * regla que las anteriores: `undefined` no pinta ni el espacio.
+   *
+   * Va DESPUÉS del pie y antes de la declaración, y ese lugar no es estético:
+   * el título de la oferta ("2x1 en empanadas") sólo se puede escribir bien
+   * después de haber escrito de qué habla la publicación, y las condiciones
+   * comerciales son lo último que alguien revisa antes de tocar Publicar. Quién
+   * la monta —y cuándo— lo decide `PostComposerHost`: la policy
+   * `post_offers_insert` exige administrar la ficha, así que sólo tiene sentido
+   * publicando como negocio.
+   */
+  ofertaSlot?: React.ReactNode;
+  /**
    * A NOMBRE DE QUIÉN SALE ESTA PUBLICACIÓN (`posts.entity_listing_id`, 0023).
    *
    * Va PRIMERO, arriba de todo, y no es una preferencia de maquetación: quien
@@ -440,6 +453,7 @@ export function ComposerSheet({
   tagSlot,
   musicSlot,
   autoriaSlot,
+  ofertaSlot,
 }: ComposerSheetProps) {
   const isQuestion = mode === "question";
   const isText = mode === "text";
@@ -842,6 +856,9 @@ export function ComposerSheet({
                 "disabled:opacity-60",
               )}
             />
+
+            {/* Condiciones comerciales de la publicación (0106). Ver `ofertaSlot`. */}
+            {ofertaSlot}
 
             {isQuestion && (
               <div className="mt-3 shrink-0">

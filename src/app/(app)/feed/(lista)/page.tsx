@@ -1,13 +1,18 @@
 import { Suspense } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { BezelCard, EmptyState, buttonVariants } from "@/components/ui";
+import { BezelCard, EmptyState, NavTabs, buttonVariants } from "@/components/ui";
 import { decodeCursor } from "@/components/listings";
 import {
   COPY,
+  FEED_SCOPES,
+  FEED_SCOPE_LABELS,
   FeedSkeleton,
   ComposerTrigger,
+  feedScopeHref,
+  parseFeedScope,
   parseTab,
+  type FeedScope,
   type FeedTabId,
 } from "@/components/feed";
 // Por ruta y NO por el barril: `FeedModules` lee `next/headers`, y
@@ -33,6 +38,9 @@ function firstValue(value: string | string[] | undefined): string {
 export default async function FeedPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const tab = parseTab(firstValue(sp.tab) || undefined);
+  // Las dos mitades del feed (spec §8). Se lee de `?ver=` y convive con `?tab=`
+  // — ver el encabezado de `feed-scope.ts` para por qué son dos parámetros.
+  const scope = parseFeedScope(firstValue(sp.ver) || undefined);
   // Retrocompat: un link viejo (o compartido) con `?cursor=` sigue funcionando
   // SSR — arranca la primera pantalla desde ESE punto del keyset (el composer
   // y "Para vos" se ocultan, igual que antes). La UI nueva ya no genera esta
@@ -62,12 +70,48 @@ export default async function FeedPage({ searchParams }: { searchParams: SearchP
         <FeedAlert />
       </Suspense>
 
-      <FeedModules active={tab} />
+      {/* SIGUIENDO | PARA TI — arriba de la fila de módulos porque responden
+          preguntas de distinto nivel: primero DE QUIÉN es lo que estoy viendo,
+          después de qué vertical. Invertirlas haría que el vertical elegido
+          pareciera cambiar de significado al cruzar de mitad. */}
+      <FeedScopeTabs scope={scope} tab={tab} />
 
-      <Suspense key={`${tab}|${cursorRaw}`} fallback={<ContentSkeleton tab={tab} />}>
-        <FeedContent tab={tab} cursorRaw={cursorRaw} />
+      {/* La fila de módulos SÓLO en «Para ti»: en «Siguiendo» el vertical no se
+          aplica (ver `fetchFeedPageAction`), así que ofrecerla sería ofrecer
+          cinco filtros que no filtran. */}
+      {scope === "para-ti" && <FeedModules active={tab} />}
+
+      <Suspense
+        key={`${scope}|${tab}|${cursorRaw}`}
+        fallback={<ContentSkeleton tab={tab} scope={scope} />}
+      >
+        <FeedContent tab={tab} scope={scope} cursorRaw={cursorRaw} />
       </Suspense>
     </>
+  );
+}
+
+/**
+ * Las dos mitades del feed, como NAVEGACIÓN y no como widget: cada una es una
+ * URL propia que resuelve un Server Component distinto, así que son enlaces con
+ * `aria-current`, nunca `role="tab"` (el porqué largo está en `ui/nav-tabs.tsx`).
+ *
+ * Vive FUERA del Suspense keyeado, igual que el encabezado: ese límite se
+ * remonta al cambiar de mitad, y con las pestañas adentro el subrayado activo
+ * se destruiría y volvería a nacer en vez de quedarse quieto.
+ */
+function FeedScopeTabs({ scope, tab }: { scope: FeedScope; tab: FeedTabId }) {
+  return (
+    <NavTabs
+      className="mb-1"
+      label={COPY.scope.navLabel}
+      active={scope}
+      items={FEED_SCOPES.map((id) => ({
+        id,
+        label: FEED_SCOPE_LABELS[id],
+        href: feedScopeHref(id, tab),
+      }))}
+    />
   );
 }
 
@@ -117,7 +161,15 @@ async function FeedHeaderWithArea() {
 // Contenido (streamed): datos reales con la RLS del usuario
 // ---------------------------------------------------------------------------
 
-async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: string }) {
+async function FeedContent({
+  tab,
+  scope,
+  cursorRaw,
+}: {
+  tab: FeedTabId;
+  scope: FeedScope;
+  cursorRaw: string;
+}) {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
   const {
     data: { user },
@@ -144,7 +196,7 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
     // Component con datos frescos. mt-4/flex/gap-4 reemplazan al div que antes
     // envolvía composer+"Para vos"+feed (mismo espaciado visual de siempre).
     <PullToRefresh className="mt-4 flex flex-col gap-4">
-      {tab === "para-ti" ? (
+      {scope === "para-ti" && tab === "para-ti" ? (
         <>
           {user ? (
             <ComposerTrigger viewerName={viewerName} viewerAvatarUrl={viewerAvatarUrl} />
@@ -158,6 +210,7 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
               dos avisos recomendados, y lo que tiene que verse es el feed. */}
           <FeedRoot
             tab={tab}
+            scope={scope}
             tenantId={tenant.id}
             viewerId={user?.id ?? null}
             cursorRaw={cursorRaw}
@@ -173,6 +226,7 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
       ) : (
         <FeedRoot
           tab={tab}
+          scope={scope}
           tenantId={tenant.id}
           viewerId={user?.id ?? null}
           cursorRaw={cursorRaw}
@@ -189,12 +243,14 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
 
 async function FeedRoot({
   tab,
+  scope,
   tenantId,
   viewerId,
   cursorRaw,
   intercalado,
 }: {
   tab: FeedTabId;
+  scope: FeedScope;
   tenantId: string;
   viewerId: string | null;
   cursorRaw: string;
@@ -203,10 +259,35 @@ async function FeedRoot({
 }) {
   const { items, nextCursor } = await fetchFeedPageAction({
     tab,
+    scope,
     cursor: cursorRaw || null,
   });
 
   if (items.length === 0) {
+    /**
+     * EL VACÍO DE «SIGUIENDO» NO ES EL VACÍO DEL FEED. Que no haya nada acá casi
+     * nunca significa que la comunidad esté vacía: significa que esta persona
+     * todavía no sigue a nadie, o que quienes sigue no publicaron. Ofrecerle
+     * "Publicá algo" sería contestar una pregunta que no hizo; lo que necesita
+     * es a dónde ir a encontrar gente y negocios.
+     */
+    if (scope === "siguiendo") {
+      return (
+        <EmptyState
+          illustration="/images/empty-state-search.png"
+          title={viewerId ? COPY.scope.emptyTitle : COPY.scope.anonTitle}
+          message={viewerId ? COPY.scope.emptyMessage : COPY.scope.anonMessage}
+          action={
+            <Link
+              href={viewerId ? "/buscar" : "/entrar?next=/feed%3Fver%3Dsiguiendo"}
+              className={buttonVariants({ variant: "primary", size: "md" })}
+            >
+              {viewerId ? COPY.scope.emptyCta : COPY.scope.anonCta}
+            </Link>
+          }
+        />
+      );
+    }
     return tab === "para-ti" ? (
       <EmptyState
         illustration="/images/empty-state-search.png"
@@ -241,6 +322,7 @@ async function FeedRoot({
   return (
     <FeedList
       tab={tab}
+      scope={scope}
       tenantId={tenantId}
       viewerId={viewerId}
       initialItems={items}
@@ -280,10 +362,12 @@ function ComposerInvite() {
 // ---------------------------------------------------------------------------
 
 /** Solo el contenido: el encabezado y los tabs ya están montados y persisten. */
-function ContentSkeleton({ tab }: { tab: FeedTabId }) {
+function ContentSkeleton({ tab, scope }: { tab: FeedTabId; scope: FeedScope }) {
   return (
     <div aria-busy="true" className="mt-4">
-      <FeedSkeleton withComposer={tab === "para-ti"} />
+      {/* El composer sólo se dibuja donde de verdad va a aparecer: reservarle
+          el espacio en «Siguiendo» haría que la pantalla salte al cargar. */}
+      <FeedSkeleton withComposer={scope === "para-ti" && tab === "para-ti"} />
     </div>
   );
 }

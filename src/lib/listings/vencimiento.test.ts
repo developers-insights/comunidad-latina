@@ -3,8 +3,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   DEFAULT_EXPIRY_CONFIG,
+  DIAS_PARA_RECONFIRMAR,
   calcularVencimiento,
   diasHasta,
+  diasHastaReconfirmar,
+  necesitaConfirmarDisponibilidad,
   estadoDeVencimiento,
   isMotivoNoRenovable,
   kindVence,
@@ -284,5 +287,139 @@ describe("puedeRenovar espeja public.renovar_publicacion()", () => {
       expect(MIGRACION).toContain(`'motivo', '${motivo}'`);
     }
     expect(isMotivoNoRenovable("porque_si")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Confirmación de disponibilidad a los 60 días (0116, spec §4)
+// ---------------------------------------------------------------------------
+
+const MIGRACION_0116 = readFileSync(
+  fileURLToPath(
+    new URL(
+      "../../../supabase/migrations/0116_alquilado_y_disponibilidad.sql",
+      import.meta.url,
+    ),
+  ),
+  "utf8",
+);
+
+/** Una propiedad publicada que confirmó su disponibilidad hace `dias` días. */
+function propiedad(dias: number, extra: Partial<PublicacionVencible> = {}): PublicacionVencible {
+  return {
+    status: "published",
+    kind: "property",
+    expiresAt: enDias(3),
+    warnAt: enDias(-4),
+    renewalCount: 0,
+    availabilityConfirmedAt: enDias(-dias),
+    ...extra,
+  };
+}
+
+describe("necesitaConfirmarDisponibilidad", () => {
+  it("el número vive en un solo lugar y coincide con la migración", () => {
+    expect(DIAS_PARA_RECONFIRMAR).toBe(60);
+    // Si alguien afloja el intervalo en el SQL sin tocar la constante, la
+    // pantalla ofrecería renovar y la base lo rechazaría igual.
+    expect(MIGRACION_0116).toContain("interval '60 days'");
+  });
+
+  it("a los 30 días no debe nada; pasados los 60, sí", () => {
+    expect(necesitaConfirmarDisponibilidad(propiedad(30), AHORA)).toBe(false);
+    expect(necesitaConfirmarDisponibilidad(propiedad(61), AHORA)).toBe(true);
+  });
+
+  it("el día 60 exacto todavía no debe nada — la puerta es ESTRICTA, como el SQL", () => {
+    expect(necesitaConfirmarDisponibilidad(propiedad(60), AHORA)).toBe(false);
+  });
+
+  it("sólo aplica a propiedades: un empleo viejo no confirma disponibilidad", () => {
+    expect(
+      necesitaConfirmarDisponibilidad(propiedad(200, { kind: "job" }), AHORA),
+    ).toBe(false);
+  });
+
+  it("sin fecha de confirmación cae a published_at y después a created_at", () => {
+    expect(
+      necesitaConfirmarDisponibilidad(
+        propiedad(0, { availabilityConfirmedAt: null, publishedAt: enDias(-90) }),
+        AHORA,
+      ),
+    ).toBe(true);
+    expect(
+      necesitaConfirmarDisponibilidad(
+        propiedad(0, {
+          availabilityConfirmedAt: null,
+          publishedAt: null,
+          createdAt: enDias(-90),
+        }),
+        AHORA,
+      ),
+    ).toBe(true);
+  });
+
+  it("sin ninguna fecha NO inventa una deuda", () => {
+    expect(
+      necesitaConfirmarDisponibilidad(
+        propiedad(0, { availabilityConfirmedAt: null, publishedAt: null, createdAt: null }),
+        AHORA,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("diasHastaReconfirmar", () => {
+  it("cuenta hacia adelante y en negativo cuando ya se pasó", () => {
+    expect(diasHastaReconfirmar(propiedad(10), AHORA)).toBe(50);
+    expect(diasHastaReconfirmar(propiedad(70), AHORA)).toBe(-10);
+  });
+
+  it("null cuando no aplica", () => {
+    expect(diasHastaReconfirmar(propiedad(10, { kind: "event" }), AHORA)).toBeNull();
+  });
+});
+
+describe("puedeRenovar con la puerta de los 60 días", () => {
+  const config: ExpiryConfig = DEFAULT_EXPIRY_CONFIG;
+
+  it("una propiedad por vencer y CONFIRMADA se renueva", () => {
+    expect(puedeRenovar(propiedad(10), config, AHORA)).toEqual({ ok: true });
+  });
+
+  it("una propiedad por vencer y SIN confirmar pide confirmar primero", () => {
+    expect(puedeRenovar(propiedad(70), config, AHORA)).toEqual({
+      ok: false,
+      motivo: "confirma_disponibilidad",
+    });
+  });
+
+  it("el tope de renovaciones gana sobre la confirmación — mismo orden que el SQL", () => {
+    // Quien llegó al tope no tiene nada que confirmar: pedírselo sería mandarlo
+    // a resolver algo que igual no lo va a dejar renovar.
+    const conTope: ExpiryConfig = { ...config, renovacionesMaximas: 1 };
+    expect(puedeRenovar(propiedad(70, { renewalCount: 1 }), conTope, AHORA)).toEqual({
+      ok: false,
+      motivo: "tope_alcanzado",
+    });
+  });
+
+  it("la confirmación gana sobre «todavía no»", () => {
+    // Con la ventana de aviso lejos, el motivo sería `todavia_no`; pero si
+    // además debe una confirmación, ESO es lo que hay que decirle — es lo único
+    // que puede resolver hoy.
+    const lejos = propiedad(70, { expiresAt: enDias(25), warnAt: enDias(18) });
+    expect(puedeRenovar(lejos, config, AHORA)).toEqual({
+      ok: false,
+      motivo: "confirma_disponibilidad",
+    });
+  });
+
+  it("un empleo viejo se renueva sin confirmar nada", () => {
+    expect(puedeRenovar(propiedad(200, { kind: "job" }), config, AHORA)).toEqual({ ok: true });
+  });
+
+  it("el motivo nuevo es un MotivoNoRenovable válido (lo devuelve la base tal cual)", () => {
+    expect(isMotivoNoRenovable("confirma_disponibilidad")).toBe(true);
   });
 });

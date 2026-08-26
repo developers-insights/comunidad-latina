@@ -765,12 +765,15 @@ async function PublicacionesContent({
     tenantId: tenant.id,
     viewerId: user?.id ?? null,
     cursor,
+    // El locale de la comunidad formatea el precio de las tarjetas de evento y
+    // de empleo vinculadas (0107/0117), que ahora viajan en la misma página.
+    locale: tenant.locale,
   });
 
   return (
     <PublicacionesPanel
       className="mt-6"
-      posts={page.items}
+      items={page.items}
       tenantId={tenant.id}
       viewerId={user?.id ?? null}
       nextHref={page.nextCursor ? `/negocios?t=publicaciones&pcursor=${page.nextCursor}` : null}

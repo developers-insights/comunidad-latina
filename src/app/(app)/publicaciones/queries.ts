@@ -7,7 +7,9 @@ import { firstPhotoUrl } from "@/components/listings";
 import {
   DEFAULT_EXPIRY_CONFIG,
   PUBLICACION_COLUMNS,
+  diasHastaReconfirmar,
   estadoDeVencimiento,
+  necesitaConfirmarDisponibilidad,
   parseExpiryConfig,
   puedeRenovar,
   supabaseSinTiparListings,
@@ -47,6 +49,19 @@ export type PublicacionPropia = {
   renovable: boolean;
   /** Por qué no, cuando no. */
   motivo: MotivoNoRenovable | null;
+  /**
+   * 0116 · spec §4. `true` = pasaron los 60 días y hay que confirmar antes de
+   * poder renovar. `false` en todo lo que no es una propiedad publicada.
+   */
+  debeConfirmar: boolean;
+  /**
+   * Días que faltan para deber la confirmación (negativo = ya la debe, `null` =
+   * no aplica). Sirve para avisar ANTES, que es cuando la persona todavía puede
+   * resolverlo sin que el aviso se le caiga.
+   */
+  diasParaConfirmar: number | null;
+  /** `true` si el aviso está marcado como alquilado. */
+  alquilado: boolean;
 };
 
 export type MisPublicaciones = {
@@ -134,6 +149,9 @@ export async function fetchMisPublicaciones(): Promise<MisPublicaciones> {
         expiresAt: row.expires_at,
         warnAt: row.expiry_warn_at,
         renewalCount: row.renewal_count ?? 0,
+        availabilityConfirmedAt: row.availability_confirmed_at,
+        publishedAt: row.published_at,
+        createdAt: row.created_at,
       };
       const renovacion = puedeRenovar(vencible, config, ahora);
 
@@ -148,6 +166,14 @@ export async function fetchMisPublicaciones(): Promise<MisPublicaciones> {
         estado: estadoDeVencimiento(vencible, config, ahora),
         renovable: renovacion.ok,
         motivo: renovacion.ok ? null : renovacion.motivo,
+        // Se pregunta sólo sobre lo PUBLICADO: en una vencida el pedido que
+        // corresponde es "volvé a publicarla", y encimarle un segundo pedido
+        // sería dos botones para el mismo problema.
+        debeConfirmar:
+          row.status === "published" && necesitaConfirmarDisponibilidad(vencible, ahora),
+        diasParaConfirmar:
+          row.status === "published" ? diasHastaReconfirmar(vencible, ahora) : null,
+        alquilado: row.status === "rented",
       };
     })
     .sort((a, b) => PESO[a.estado.estado] - PESO[b.estado.estado]);

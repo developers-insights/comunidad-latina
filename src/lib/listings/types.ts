@@ -35,8 +35,12 @@ export type PublicacionRow = {
   expiry_warn_at: string | null;
   expired_at: string | null;
   renewal_count: number | null;
+  /** 0116 — sólo tiene valor en las propiedades. */
+  availability_confirmed_at: string | null;
+  /** 0116 — cuándo se marcó como alquilado, o null. */
+  rented_at: string | null;
 };
 
 /** Columnas que pide la pantalla. Una sola definición para query y tipo. */
 export const PUBLICACION_COLUMNS =
-  "id, kind, title, status, photos, published_at, created_at, expires_at, expiry_warn_at, expired_at, renewal_count";
+  "id, kind, title, status, photos, published_at, created_at, expires_at, expiry_warn_at, expired_at, renewal_count, availability_confirmed_at, rented_at";

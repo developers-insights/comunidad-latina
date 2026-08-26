@@ -9,6 +9,7 @@ import { Reveal } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { fetchFeedPageAction } from "@/app/(app)/feed/load-more";
 import { COPY } from "./copy";
+import type { FeedScope } from "./feed-scope";
 import { FeedListingCard } from "./feed-listing-card";
 import { GuideCard } from "./guide-card";
 import { PostCard } from "./post-card";
@@ -135,6 +136,13 @@ export function renderFeedItem(
 
 export interface FeedListProps {
   tab: FeedTabId;
+  /**
+   * Mitad del feed (spec §8). Viaja hasta acá porque el scroll infinito pide
+   * las páginas siguientes por su cuenta: sin esto, la segunda página de
+   * «Siguiendo» volvería con contenido de «Para ti» y nadie lo notaría hasta
+   * ver publicaciones de gente que no se sigue apareciendo al scrollear.
+   */
+  scope?: FeedScope;
   tenantId: string;
   viewerId: string | null;
   /** Primera página, ya resuelta server-side (SSR) — se pinta sin animar. */
@@ -174,6 +182,7 @@ export const INTERCALADO_DESPUES_DE = 5;
  */
 export function FeedList({
   tab,
+  scope = "para-ti",
   tenantId,
   viewerId,
   initialItems,
@@ -214,7 +223,7 @@ export function FeedList({
     if (isPending || cursor === null) return;
     startTransition(async () => {
       try {
-        const result = await fetchFeedPageAction({ tab, cursor });
+        const result = await fetchFeedPageAction({ tab, scope, cursor });
         const fresh = result.items.filter((item) => !seenKeys.has(feedItemKey(item)));
         if (fresh.length > 0) {
           setBatches((prev) => [...prev, fresh]);
@@ -227,7 +236,7 @@ export function FeedList({
         setHadError(true);
       }
     });
-  }, [isPending, cursor, tab, seenKeys]);
+  }, [isPending, cursor, tab, scope, seenKeys]);
 
   // Sentinel con rootMargin generoso: dispara la carga ANTES de que el
   // usuario vea el fondo real (se siente "infinito", nunca un salto brusco).

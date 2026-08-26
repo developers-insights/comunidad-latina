@@ -9,18 +9,18 @@ import { OfertaCard } from "./oferta-card";
  * Pestaña "Ofertas" (spec cliente: descuentos, cupones, promociones por tiempo
  * limitado, menús y paquetes).
  *
- * ── EL VACÍO CUENTA QUÉ VA A APARECER, Y NO PROMETE UN BOTÓN QUE NO EXISTE ──
- * Queda UN motivo, no dos. La migración 0106 SÍ está en el repo
- * (`0106_ofertas_y_verificacion.sql`) y `post_offers` existe con su RLS y su
- * índice de vigencia — lo único que sigue sin regenerarse es
- * `database.types.ts`, y por eso la lectura pasa por `supabaseSinTipar()` (ver
- * `lib/negocios/ofertas.ts`). Lo que todavía no existe es el composer que
- * ESCRIBE una oferta: nada inserta en `post_offers` hoy, así que con datos
- * reales la pestaña nace vacía igual.
+ * ── EL VACÍO CUENTA QUÉ VA A APARECER, Y CÓMO SE LLENA ──────────────────────
+ * Ya no hay ningún motivo estructural para que esté vacía: `post_offers` existe
+ * con su RLS desde la 0106 y el composer que la ESCRIBE existe desde el bloque
+ * "Es una oferta" (`components/negocios/oferta-composer.tsx`), que aparece al
+ * publicar firmando con una ficha de negocio. Así que el vacío pasó a decir
+ * exactamente eso: de qué se va a llenar, y por dónde entra quien tiene un
+ * negocio.
  *
- * El estado vacío explica de qué se va a llenar y ofrece el único camino que SÍ
- * existe hoy para un dueño de negocio —su ficha— en vez de un "Publicar oferta"
- * que no llevaría a ningún lado.
+ * El botón sigue apuntando al directorio y no a "Publicar oferta": este panel
+ * lo mira CUALQUIERA —la enorme mayoría no tiene negocio— y un CTA de alta para
+ * todos sería ofrecerle una pantalla de dueño a quien vino a buscar un
+ * descuento. Quien sí tiene negocio publica desde el "+" de siempre.
  *
  * Y nunca dice "no hay ofertas" cuando lo que pasa es que todas vencieron: la
  * consulta ya filtra por vigencia, así que este vacío es honesto en los dos
@@ -30,7 +30,7 @@ import { OfertaCard } from "./oferta-card";
 const COPY = {
   vacioTitulo: "Todavía no hay ofertas vigentes",
   vacioMensaje:
-    "Acá van a aparecer los descuentos, cupones, promos, menús y paquetes que publiquen los negocios de tu comunidad, con la fecha hasta la que valen.",
+    "Acá van a aparecer los descuentos, cupones, promos, menús y paquetes que publiquen los negocios de tu comunidad, con la fecha hasta la que valen. ¿Tenés un negocio? Publicá con su nombre desde el «+» y marcá «Es una oferta».",
   vacioCta: "Ver los negocios",
   verMas: "Ver más ofertas",
 } as const;

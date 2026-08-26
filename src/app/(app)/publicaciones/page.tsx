@@ -14,10 +14,16 @@ import { VENCIMIENTO_COPY, type EstadoVencimiento } from "@/lib/listings";
 import { cn } from "@/lib/utils";
 import { fetchMisPublicaciones, type PublicacionPropia } from "./queries";
 import { RenovarBoton } from "./renovar-boton";
+import {
+  ConfirmarDisponibilidadBoton,
+  MarcarAlquiladoBoton,
+} from "./disponibilidad-acciones";
 
 export const metadata = { title: "Mis publicaciones" };
 
 const C = VENCIMIENTO_COPY;
+/** Los 60 días de la spec §4 (0116) tienen su propio bloque de copy. */
+const D = VENCIMIENTO_COPY.disponibilidad;
 
 /**
  * MIS PUBLICACIONES — el lugar donde se renueva (0098).
@@ -139,6 +145,10 @@ function ChipDeEstado({ estado, status }: { estado: EstadoVencimiento; status: s
       if (status === "pending_review") return <Badge variant="info">{C.estado.enRevision}</Badge>;
       if (status === "paused") return <Badge>{C.estado.pausada}</Badge>;
       if (status === "removed") return <Badge>{C.estado.bajada}</Badge>;
+      // 0116 — «Alquilado» es un estado propio y no un pausado: la persona
+      // tiene que poder distinguir "lo bajé yo" de "se alquiló".
+      if (status === "rented")
+        return <Badge variant="success">{C.alquilado.estado}</Badge>;
       return <Badge>{C.estado.noVence}</Badge>;
   }
 }
@@ -146,6 +156,15 @@ function ChipDeEstado({ estado, status }: { estado: EstadoVencimiento; status: s
 function Tarjeta({ publicacion }: { publicacion: PublicacionPropia }) {
   const vencida = publicacion.estado.estado === "vencida";
   const porVencer = publicacion.estado.estado === "por_vencer";
+  /**
+   * «Ya lo alquilé» sólo donde significa algo: una propiedad que todavía puede
+   * recibir mensajes. En una ya alquilada el botón sería un no-op, y en un
+   * borrador nadie la vio nunca. El espejo de la misma condición vive en la
+   * server action y en el CHECK de la 0116 — acá sólo se decide si dibujarlo.
+   */
+  const puedeMarcarAlquilado =
+    publicacion.kind === "property" &&
+    ["published", "paused", "expired"].includes(publicacion.status);
 
   return (
     <article className="flex gap-3 rounded-2xl border border-border bg-surface p-3">
@@ -191,19 +210,43 @@ function Tarjeta({ publicacion }: { publicacion: PublicacionPropia }) {
           </p>
         )}
 
+        {/* LOS 60 DÍAS (0116, spec §4). El pedido explícito va arriba del de
+            vencimiento porque bloquea la renovación: sin confirmar, el botón
+            Renovar no aparece y quedaría un aviso pidiendo algo imposible. */}
+        {publicacion.debeConfirmar && (
+          <p className="text-sm leading-relaxed text-foreground-secondary">
+            <span className="font-semibold text-foreground">{D.titulo}</span> {D.cuerpo}
+          </p>
+        )}
+
         {publicacion.renewalCount > 0 && (
           <p className="text-xs text-foreground-muted">
             {C.detalle.renovadaVeces(publicacion.renewalCount)}
           </p>
         )}
 
-        {publicacion.renovable && (
-          <div className="pt-1">
-            <RenovarBoton
-              listingId={publicacion.id}
-              kind={publicacion.kind}
-              vencida={vencida}
-            />
+        {(publicacion.renovable || publicacion.debeConfirmar || puedeMarcarAlquilado) && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {/* Confirmar VA PRIMERO cuando toca: es lo que destraba renovar. */}
+            {publicacion.debeConfirmar && (
+              <ConfirmarDisponibilidadBoton
+                listingId={publicacion.id}
+                kind={publicacion.kind}
+              />
+            )}
+            {publicacion.renovable && (
+              <RenovarBoton
+                listingId={publicacion.id}
+                kind={publicacion.kind}
+                vencida={vencida}
+              />
+            )}
+            {puedeMarcarAlquilado && (
+              <MarcarAlquiladoBoton
+                listingId={publicacion.id}
+                kind={publicacion.kind}
+              />
+            )}
           </div>
         )}
       </div>

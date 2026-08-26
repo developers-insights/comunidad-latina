@@ -142,3 +142,31 @@ export async function fetchFeedListingsPageViaRpc(
   if (!Array.isArray(data)) return null;
   return data as ListingRow[];
 }
+
+/**
+ * Una página de la pestaña "SIGUIENDO" (0115), ya filtrada por los dos tipos de
+ * follow, por bloqueos, por `hidden_at` y por keyset.
+ *
+ * ── ACÁ EL `null` SIGNIFICA OTRA COSA ───────────────────────────────────────
+ * En las dos funciones de arriba, `null` = "usá el camino con topes de URL", y
+ * ese camino existe. Para "Siguiendo" no hay camino viejo al que caer: la
+ * pestaña NACIÓ con el RPC, y su alternativa —inlinear todo lo que una persona
+ * sigue en un `.in(…)`— es exactamente el 414 que la 0113 fue a cerrar. Así que
+ * quien llama trata el `null` como "esta pestaña todavía no está disponible en
+ * este entorno" y muestra su vacío, en vez de servir media pestaña.
+ */
+export async function fetchFollowingPostsPageViaRpc(
+  supabase: Supabase,
+  args: FeedRpcArgs,
+): Promise<PostRow[] | null> {
+  const { data, error } = await open(supabase).rpc("feed_following_page", {
+    p_tenant_id: args.tenantId,
+    p_cursor_created_at: args.cursor?.createdAt ?? null,
+    p_cursor_id: args.cursor?.id ?? null,
+    p_limit: args.limit,
+  });
+
+  if (error) return rpcFailed("siguiendo", error);
+  if (!Array.isArray(data)) return null;
+  return data as PostRow[];
+}
