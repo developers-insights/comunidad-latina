@@ -1,5 +1,81 @@
 # PROGRESS — Comunidad Latina
 
+## Video por Mux — cualquier formato, cualquier tamaño (✅ 2026-08-25)
+
+El Loom decía "si el video es muy pesado no se puede subir". El arreglo del
+24-ago sacó el `.mov` del iPhone del camino, pero el tope de 60 MB y la lista de
+tres formatos seguían ahí. El pedido nuevo fue explícito: **cualquier formato y
+cualquier tamaño**.
+
+**Se copió el patrón de `poncho_next`, que es del mismo dueño y ya funciona** —
+Direct Upload + UpChunk, webhook con firma HMAC, idempotencia por `event_id`.
+Con dos cambios a propósito: `playback_policy: "public"` en vez de `"signed"`
+(acá el contenido de la comunidad no tiene paywall, así que no hace falta firmar
+un JWT por reproducción), y **sin** la rendición MP4 `audio-only` (en Poncho
+existe sólo para darle el audio a Whisper; acá cuesta almacenamiento para nada).
+
+**Lo que NO se copió, y es la decisión importante:** el `chunked.ts` de Poncho,
+que parte un archivo en `.partK` y lo re-concatena al descargar. Para un ebook
+está bien; para video de feed sería un error. Re-unir partes en un route en cada
+reproducción rompe el salto en la barra de tiempo (necesita range requests),
+saca el CDN del medio y hace pagar la función serverless por cada byte que mira
+cada persona. Mux entrega HLS adaptativo, que además es lo que hace que se vea
+bien en 4G.
+
+**Dos hallazgos de seguridad que nadie había pedido buscar:**
+
+1. **El camino de Mux habría sido el ÚNICO por el que una cuenta suspendida
+   publica en el feed.** Los tres guards de publicación (suspensión 0021,
+   restricción social 0033, exige media 0023) son `BEFORE INSERT` y dejan pasar
+   a `service_role`. El borrador de Mux lo crea `service_role` y publicarlo es
+   un `UPDATE`: se los salteaba a los tres. No se ve probando a mano — quien
+   prueba no está suspendido. Lo cierra `app.enforce_draft_publish()`.
+2. **`protect_post_counters()` no cubría las columnas nuevas**, así que se podía
+   PATCHear el `mux_playback_id` de un video ajeno y quedarse con su autoría.
+
+**Dos costuras que quedaron abiertas entre los dos frentes y cerré yo:**
+
+- **La bloqueante**: la ruta creaba el borrador y el webhook lo marcaba listo,
+  pero **nadie lo publicaba** — `createPostAction` seguía haciendo INSERT y no
+  leía el id del borrador. Ahora hay dos formas de persistir y **un solo camino
+  antes**: misma moderación, mismo rate limit, misma validación de la ficha que
+  firma. La rama va abajo del todo a propósito; dos actions de escritura
+  terminan siempre con una de las dos sin un chequeo. La validación exige
+  CUATRO condiciones —comunidad, autor, sigue en `draft`, y que el
+  `mux_upload_id` sea el que dice el cliente—: sin la última, un borrador viejo
+  del mismo autor podía publicarse con el texto de una publicación nueva.
+- **La silenciosa**: el composer mandaba `muxVideoFilter` y **nadie lo leía**.
+  Los filtros (0104) se indexan por la RUTA del archivo y un video de Mux no
+  tiene ruta, así que se guardaba y no lo encontraba nadie. Ahora va bajo
+  `MUX_FILTER_KEY`, una clave centinela acordada entre quien escribe y quien
+  pinta.
+
+**El sondeo del estado "procesando" no es el de Poncho.** Allá es un
+`setInterval(4s)` por componente; en un feed eso son N consultas cada 4 s en 4G.
+Acá hay un temporizador único para toda la app, las tarjetas se suscriben, y la
+tanda pregunta por todos los ids juntos: espera creciente 4 s → ×1,5 → tope 30 s,
+cero consultas con la pestaña oculta, y se rinde a los 15 min. Ocho tarjetas
+procesando son **una** consulta.
+
+**Las tres reglas que se sostuvieron:** sin claves de Mux la app sube al bucket
+exactamente como antes (un 503 cae al camino viejo en silencio); los 36 videos
+que ya estaban siguen reproduciéndose con el `<video>` de siempre y nunca
+disparan el sondeo; y la publicación sale enseguida mostrando "Preparando" en
+vez de esperar a que Mux termine.
+
+Se regeneraron los tipos desde la base y se borró el puente a mano de la 0114
+—su nota decía "todavía NO está aplicada" y ya lo estaba—, más el puente de
+`work_mode` que quedaba de la 0087.
+
+**Estado:** typecheck 0 · lint 0 errores y 0 warnings · **4.649 tests verdes** ·
+build verde · `check:rls` **GATE VERDE con 98 superficies** · migración 0114
+aplicada y sus cuatro objetos de seguridad verificados contra la base.
+
+**Falta para encenderlo:** cuenta de Mux, `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET` y
+`MUX_WEBHOOK_SECRET`, más el endpoint de webhook. Hasta entonces todo sigue
+andando por el camino viejo.
+
+
 ## "Tu zona" — el último pedido del Loom (✅ 2026-08-25)
 
 Era lo único del Loom que quedaba sin hacer: el control del header abría un

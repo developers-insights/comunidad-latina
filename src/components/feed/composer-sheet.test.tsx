@@ -60,7 +60,7 @@ function mount(overrides: Partial<ComposerSheetProps> = {}) {
     declaration: EMPTY_DECLARATION_VALUE,
     onDeclarationChange: vi.fn(),
     previewId: "preview-1",
-    uploadPct: null,
+    videoUpload: null,
     measuringVideo: false,
     bakingProgress: null,
     isPending: false,

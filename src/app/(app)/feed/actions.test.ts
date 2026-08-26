@@ -102,18 +102,48 @@ interface RecordedCall {
  * Query builder falso, encadenable, con `storage` para la subida de fotos.
  * `insert(...).select("id").single()` es la única cadena que usa la action.
  */
-function createSupabaseStub(insertError: unknown = null, uploadError: unknown = null) {
+function createSupabaseStub(
+  insertError: unknown = null,
+  uploadError: unknown = null,
+  /**
+   * El borrador que devuelve el SELECT de verificación del camino de Mux.
+   * `null` = "no existe, o no es tuyo", que es como se prueba el rechazo.
+   */
+  borradorDeMux: { id: string } | null = null,
+) {
   const calls: RecordedCall[] = [];
   const uploads: Array<{ path: string; contentType?: string }> = [];
 
   const from = vi.fn((table: string) => {
+    /**
+     * La operación RAÍZ de la cadena. Con el camino de Mux hay tres formas
+     * distintas sobre la MISMA tabla —`insert().select().single()`,
+     * `select().eq()…maybeSingle()` y `update().eq()…select().maybeSingle()`—
+     * y el `.select()` de las dos últimas es el RETURNING del write, no una
+     * consulta nueva: sin recordar quién empezó, el stub contestaría lo mismo
+     * a las tres y los tests no distinguirían un UPDATE de un INSERT.
+     */
+    let raiz: "insert" | "update" | "select" | null = null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const builder: any = {
       insert: vi.fn((...args: unknown[]) => {
         calls.push({ table, method: "insert", args });
+        raiz ??= "insert";
         return builder;
       }),
-      select: vi.fn(() => builder),
+      update: vi.fn((...args: unknown[]) => {
+        calls.push({ table, method: "update", args });
+        raiz ??= "update";
+        return builder;
+      }),
+      eq: vi.fn((...args: unknown[]) => {
+        calls.push({ table, method: "eq", args });
+        return builder;
+      }),
+      select: vi.fn(() => {
+        raiz ??= "select";
+        return builder;
+      }),
       single: vi.fn(() =>
         Promise.resolve(
           insertError
@@ -121,6 +151,18 @@ function createSupabaseStub(insertError: unknown = null, uploadError: unknown = 
             : { data: { id: NEW_POST_ID }, error: null },
         ),
       ),
+      maybeSingle: vi.fn(() => {
+        // El SELECT de verificación contesta con el borrador (o con nada).
+        if (raiz === "select") {
+          return Promise.resolve({ data: borradorDeMux, error: null });
+        }
+        // El UPDATE que publica devuelve la fila tocada, o el error simulado.
+        return Promise.resolve(
+          insertError
+            ? { data: null, error: insertError }
+            : { data: { id: borradorDeMux?.id ?? NEW_POST_ID }, error: null },
+        );
+      }),
     };
     return builder;
   });
@@ -137,8 +179,11 @@ function createSupabaseStub(insertError: unknown = null, uploadError: unknown = 
   return { client: { from, storage }, from, calls, uploads };
 }
 
-function useGuardOk(insertError: unknown = null) {
-  const stub = createSupabaseStub(insertError);
+function useGuardOk(
+  insertError: unknown = null,
+  borradorDeMux: { id: string } | null = null,
+) {
+  const stub = createSupabaseStub(insertError, null, borradorDeMux);
   mocks.requireTenantMatch.mockResolvedValue({
     ok: true,
     tenant: { id: TENANT_ID, slug: "dominicanos", name: "Dominicanos" },
@@ -744,5 +789,102 @@ describe("createPostAction — publicar COMO una entidad", () => {
     expect(result).toMatchObject({ ok: true, entity: false });
     expect(insertedPost(stub)?.entity_listing_id).toBeNull();
     expect(mocks.puedeFirmarComo).not.toHaveBeenCalled();
+  });
+});
+
+/* --------- Publicar un video subido por Mux (borrador → publicado, 0114) --- */
+
+/**
+ * ESTA TAMBIÉN ES LA FRONTERA.
+ *
+ * Con Mux la fila de `posts` YA existe cuando se aprieta Publicar: la creó
+ * `/api/mux/subida` en `draft` para poder colgarle la subida. O sea que
+ * publicar deja de ser un INSERT y pasa a ser un UPDATE de una fila que ya
+ * tiene dueño — y `muxPostDraftId` viaja por el body.
+ *
+ * Sin comprobar de quién es ese borrador, cualquiera con un token de la
+ * comunidad podría quedarse con la publicación de otro, y con el video que esa
+ * persona subió. Lo que se fija acá es que las CUATRO condiciones se piden
+ * juntas y que, sin ellas, no se escribe nada.
+ */
+const BORRADOR_MUX = "77777777-7777-4777-8777-777777777777";
+const SUBIDA_MUX = "upload-mux-abc123";
+
+function postFormConMux(overrides: { draftId?: string; uploadId?: string } = {}): FormData {
+  const data = postForm({ body: "Miren cómo quedó el local.", kind: "text" });
+  data.set("muxPostDraftId", overrides.draftId ?? BORRADOR_MUX);
+  data.set("muxUploadId", overrides.uploadId ?? SUBIDA_MUX);
+  return data;
+}
+
+function updatedPost(stub: ReturnType<typeof createSupabaseStub>) {
+  return stub.calls.find((call) => call.table === "posts" && call.method === "update")
+    ?.args[0] as Record<string, unknown> | undefined;
+}
+
+describe("createPostAction — publicar un video de Mux", () => {
+  it("con un borrador propio, ACTUALIZA la fila en vez de insertar otra", async () => {
+    const stub = useGuardOk(null, { id: BORRADOR_MUX });
+
+    const result = await createPostAction(postFormConMux());
+
+    expect(result).toMatchObject({ ok: true });
+    // La clave del cambio: NO nace una publicación nueva. Si esto se rompe,
+    // cada video de Mux deja dos filas — el borrador huérfano y la publicación.
+    expect(insertedPost(stub)).toBeUndefined();
+    expect(updatedPost(stub)).toMatchObject({ status: "published" });
+  });
+
+  it("el UPDATE se acota por id, comunidad, autor y estado", async () => {
+    const stub = useGuardOk(null, { id: BORRADOR_MUX });
+
+    await createPostAction(postFormConMux());
+
+    // Entre el chequeo de más arriba y este UPDATE corre la moderación, que
+    // tarda: el predicado tiene que ir en el WHERE para que "cero filas" sea la
+    // respuesta correcta y no una publicación ajena pisada.
+    const eqsDelUpdate = stub.calls
+      .filter((call) => call.table === "posts" && call.method === "eq")
+      .map((call) => call.args[0]);
+    for (const columna of ["id", "tenant_id", "author_id", "status"]) {
+      expect(eqsDelUpdate).toContain(columna);
+    }
+  });
+
+  it("un borrador que no es tuyo se rechaza y no escribe nada", async () => {
+    // El SELECT de verificación no encuentra fila: no es de este autor, no es
+    // de esta comunidad, ya se publicó, o el upload id no corresponde.
+    const stub = useGuardOk(null, null);
+
+    const result = await createPostAction(postFormConMux());
+
+    expect(result).toEqual({ ok: false, code: "error" });
+    expect(insertedPost(stub)).toBeUndefined();
+    expect(updatedPost(stub)).toBeUndefined();
+    // Se corta ANTES de gastar la llamada de moderación.
+    expect(mocks.moderateText).not.toHaveBeenCalled();
+  });
+
+  it("mandar sólo uno de los dos identificadores es inválido", async () => {
+    const stub = useGuardOk(null, { id: BORRADOR_MUX });
+    const data = postForm({ body: "Sin el par completo.", kind: "text" });
+    data.set("muxPostDraftId", BORRADOR_MUX);
+
+    const result = await createPostAction(data);
+
+    // Un cliente que manda medio contrato está roto o probando: no se adivina.
+    expect(result).toMatchObject({ ok: false });
+    expect(insertedPost(stub)).toBeUndefined();
+    expect(updatedPost(stub)).toBeUndefined();
+  });
+
+  it("sin Mux el camino de siempre sigue insertando", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(postForm({ body: "Hola.", kind: "text" }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)).toBeDefined();
+    expect(updatedPost(stub)).toBeUndefined();
   });
 });

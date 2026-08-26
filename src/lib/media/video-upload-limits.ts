@@ -184,6 +184,115 @@ export type VideoFileCheck =
   | { ok: true; extension: string; mimeType: string }
   | { ok: false; reason: VideoFileRejection };
 
+// ---------------------------------------------------------------------------
+// LAS DOS RUTAS DE SUBIDA
+// ---------------------------------------------------------------------------
+
+/**
+ * POR DÓNDE VIAJA EL ARCHIVO — y, con eso, qué formatos y qué peso se aceptan.
+ * Los dos techos de arriba (el bucket y el navegador) son reales, pero SÓLO
+ * aplican a una de las dos rutas:
+ *
+ *  · "bucket" → navegador → Supabase Storage, como siempre. Los dos techos
+ *    valen enteros: mp4/mov/webm y 60 MB. Es lo que corre cuando Mux no está
+ *    configurado (503 de `/api/mux/subida`, ver `mux-video.ts`) y lo que va a
+ *    seguir corriendo en desarrollo local para siempre.
+ *
+ *  · "mux" → navegador → Mux, por subida directa resumible (UpChunk). Los dos
+ *    techos DESAPARECEN, y no por generosidad: dejan de ser ciertos.
+ *      (1) El bucket ya no toca el archivo — no hay `allowed_mime_types` que
+ *          pueda rechazarlo ya subido.
+ *      (2) El navegador ya no tiene que reproducir el ORIGINAL: Mux
+ *          transcodifica lo que sea y entrega HLS, así que un .mkv o un .avi
+ *          —que ningún `<video>` abre— se ven perfecto igual. La razón nº2 del
+ *          docblock de arriba deja de aplicar en esta ruta, que es exactamente
+ *          lo que pedía el cliente.
+ *
+ * Es un parámetro y no una bandera global a propósito: el composer descubre la
+ * ruta EN EL MOMENTO (preguntándole al backend), y las mismas funciones puras
+ * tienen que poder contestar por las dos sin reiniciar nada.
+ */
+export type VideoUploadRoute = "bucket" | "mux";
+
+/**
+ * Extensiones de contenedor de video que se aceptan POR LA RUTA DE MUX. Esta
+ * lista es larga a propósito y no tiene nada que ver con `VIDEO_FORMATS`: no
+ * promete que el navegador los reproduzca (no los reproduce), promete que Mux
+ * los sabe transcodificar. Existe para los casos en que el navegador NO reporta
+ * un MIME útil — un .mkv suele llegar como `application/x-matroska` o vacío, y
+ * mirar sólo el MIME lo dejaría afuera repitiendo el bug del .mov de iPhone.
+ */
+const MUX_VIDEO_EXTENSIONS: ReadonlySet<string> = new Set([
+  "mp4", "m4v", "mov", "qt", "webm", "mkv", "avi", "wmv", "asf", "flv", "f4v",
+  "mpeg", "mpg", "mpv", "m2v", "vob", "3gp", "3g2", "ogv", "ogm", "mts", "m2ts",
+  "ts", "mxf", "dv", "divx", "rm", "rmvb", "swf",
+]);
+
+/**
+ * MIMEs que significan "el navegador no sabe qué es esto". No son un rechazo:
+ * son la ausencia de información, y en la ruta de Mux la ausencia de información
+ * no puede costarle la subida a nadie — quien sabe de verdad es Mux.
+ */
+const GENERIC_MIME_TYPES: ReadonlySet<string> = new Set([
+  "",
+  "application/octet-stream",
+  "binary/octet-stream",
+  "application/binary",
+]);
+
+/**
+ * Techo de peso de la ruta de Mux: 5 GB. El pedido dice "de cualquier tamaño",
+ * y en la práctica esto ES cualquier tamaño — el tope que realmente muerde es
+ * el de DURACIÓN (90 s los cortos, 600 s la publicidad; `video-policy.ts`), y un
+ * video de 10 minutos grabado en 4K no llega ni a 4 GB. El número existe igual
+ * porque un formulario sin ningún techo es una forma de que alguien tire una
+ * imagen de disco de 40 GB por accidente y se quede mirando una barra tres horas.
+ */
+export const MAX_MUX_VIDEO_BYTES = 5 * 1024 * 1024 * 1024;
+
+/**
+ * `accept` del input en la ruta de Mux: `video/*` a secas. Nada de listas.
+ *
+ * Es literalmente lo contrario de `VIDEO_ACCEPT_ATTR` y es correcto que lo sea:
+ * ahí la lista existía para no dejar elegir lo que después iba a fallar; acá no
+ * hay nada que vaya a fallar, así que cualquier lista sólo podría dejar afuera
+ * algo válido. Con `video/*` el selector de macOS deja de pintar en gris los
+ * .mov, que fue el reporte original del cliente.
+ */
+export const MUX_VIDEO_ACCEPT_ATTR = "video/*";
+
+/** El `accept` que le corresponde al input según por dónde va a viajar el archivo. */
+export function videoAcceptFor(route: VideoUploadRoute): string {
+  return route === "mux" ? MUX_VIDEO_ACCEPT_ATTR : VIDEO_ACCEPT_ATTR;
+}
+
+/** El techo de peso de esa ruta. */
+export function maxVideoBytesFor(route: VideoUploadRoute): number {
+  return route === "mux" ? MAX_MUX_VIDEO_BYTES : MAX_VIDEO_BYTES;
+}
+
+/**
+ * ¿Esto parece un video, para la ruta de Mux? La pregunta NO es "¿lo reproduce
+ * el navegador?" sino "¿tiene sentido mandárselo a Mux?", y se contesta con la
+ * regla más permisiva que sigue siendo honesta:
+ *
+ *  · MIME `video/…` → sí, sin más.
+ *  · MIME vacío o genérico → sí. El navegador no supo; Mux sí va a saber.
+ *  · Extensión de contenedor conocida → sí, aunque el MIME diga otra cosa
+ *    (`application/x-matroska`, por ejemplo).
+ *  · Todo lo demás → no. Un PDF, un .zip o una foto no son "un formato de video
+ *    que todavía no soportamos": son otra cosa, y subir 2 GB para que Mux los
+ *    rechace media hora después sería una crueldad.
+ */
+function looksLikeVideoForMux(mimeType: string, fileName: string): boolean {
+  const normalizedMime = mimeType.trim().toLowerCase();
+  if (normalizedMime.startsWith("video/")) return true;
+  const dotIndex = fileName.lastIndexOf(".");
+  const extension = dotIndex === -1 ? "" : fileName.slice(dotIndex + 1).toLowerCase();
+  if (MUX_VIDEO_EXTENSIONS.has(extension)) return true;
+  return GENERIC_MIME_TYPES.has(normalizedMime);
+}
+
 /**
  * ¿Se puede subir este archivo? Recibe `{ type, name, size }` —no un `File`—
  * para que sirva igual en el navegador y en cualquier test, sin DOM.
@@ -191,12 +300,35 @@ export type VideoFileCheck =
  * El orden importa, igual que en `checkPhotoPayload`: primero el formato,
  * después el peso. Así el motivo que se devuelve es siempre el más
  * específico y accionable.
+ *
+ * `route` arranca en `"bucket"` a propósito: es el comportamiento de SIEMPRE, y
+ * el default hace que todo llamador que no sepa de Mux —la server action, los
+ * tests que ya existían— siga obteniendo exactamente la misma respuesta que
+ * antes. Pedir la ruta de Mux es una decisión explícita de quien ya confirmó que
+ * el backend la tiene prendida.
  */
-export function checkVideoFile(file: {
-  type: string;
-  name: string;
-  size: number;
-}): VideoFileCheck {
+export function checkVideoFile(
+  file: {
+    type: string;
+    name: string;
+    size: number;
+  },
+  route: VideoUploadRoute = "bucket",
+): VideoFileCheck {
+  if (route === "mux") {
+    if (!looksLikeVideoForMux(file.type, file.name)) return { ok: false, reason: "type" };
+    if (file.size > MAX_MUX_VIDEO_BYTES) return { ok: false, reason: "size" };
+    // Extensión y MIME tal cual vinieron: en esta ruta no nombran ningún archivo
+    // en ningún bucket (Mux se encarga), así que no hay nada que canonizar. Se
+    // devuelven igual para que el tipo de retorno sea UNO solo y quien llama no
+    // tenga que ramificar sobre la forma de la respuesta.
+    const dotIndex = file.name.lastIndexOf(".");
+    return {
+      ok: true,
+      extension: dotIndex === -1 ? "" : file.name.slice(dotIndex + 1).toLowerCase(),
+      mimeType: file.type.trim().toLowerCase(),
+    };
+  }
   const format = resolveVideoFormat(file.type, file.name);
   if (!format) return { ok: false, reason: "type" };
   if (file.size > MAX_VIDEO_BYTES) return { ok: false, reason: "size" };
@@ -216,7 +348,18 @@ export function checkVideoFile(file: {
  * `video-policy.ts`): un archivo de 60 MB + 1 byte tiene que leerse "61 MB",
  * nunca "60 MB" al lado de un máximo que también dice "60 MB".
  */
-export function formatVideoTooBigMessage(bytes: number): string {
+export function formatVideoTooBigMessage(
+  bytes: number,
+  route: VideoUploadRoute = "bucket",
+): string {
+  // En la ruta de Mux el techo son 5 GB: decirlo en megabytes ("5120 MB") es un
+  // número que nadie lee. Se cambia la UNIDAD, no la frase — el molde del
+  // mensaje sigue siendo el mismo en las dos rutas.
+  if (route === "mux") {
+    const actualGb = Math.ceil((bytes / (1024 * 1024 * 1024)) * 10) / 10;
+    const maxGb = Math.round(MAX_MUX_VIDEO_BYTES / (1024 * 1024 * 1024));
+    return `Este video pesa ${actualGb} GB y el máximo son ${maxGb} GB. Probá con uno más corto.`;
+  }
   const actualMb = Math.ceil(bytes / (1024 * 1024));
   const maxMb = Math.round(MAX_VIDEO_BYTES / (1024 * 1024));
   return `Este video pesa ${actualMb} MB y el máximo son ${maxMb} MB. Probá con uno más corto.`;
@@ -230,3 +373,17 @@ export function formatVideoTooBigMessage(bytes: number): string {
  */
 export const VIDEO_WRONG_TYPE_MESSAGE =
   "Ese formato de video no se reproduce en la app — convertilo a MP4 y volvé a intentar.";
+
+/**
+ * El mismo rechazo, pero en la ruta de Mux — y dice algo COMPLETAMENTE distinto
+ * porque el motivo es otro. Acá no hay ningún formato de video que sobre: si
+ * este mensaje aparece es porque el archivo no es un video, punto. Nombrar MP4
+ * como salida sería un consejo absurdo ("convertí tu PDF a MP4").
+ */
+export const MUX_WRONG_TYPE_MESSAGE =
+  "Ese archivo no parece un video. Elegí el video que querés publicar.";
+
+/** El rechazo por formato que corresponde a la ruta por la que se está subiendo. */
+export function videoWrongTypeMessageFor(route: VideoUploadRoute): string {
+  return route === "mux" ? MUX_WRONG_TYPE_MESSAGE : VIDEO_WRONG_TYPE_MESSAGE;
+}

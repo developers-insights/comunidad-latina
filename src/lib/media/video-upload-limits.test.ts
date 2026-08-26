@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   BUCKET_ALLOWED_VIDEO_MIME_TYPES,
   BUCKET_FILE_SIZE_LIMIT_BYTES,
+  MAX_MUX_VIDEO_BYTES,
   MAX_VIDEO_BYTES,
+  MUX_VIDEO_ACCEPT_ATTR,
+  MUX_WRONG_TYPE_MESSAGE,
   VIDEO_ACCEPT_ATTR,
   VIDEO_FILE_EXTENSIONS,
   VIDEO_FILENAME_PATTERN,
@@ -11,6 +14,9 @@ import {
   checkVideoFile,
   formatVideoTooBigMessage,
   isAcceptedVideoType,
+  maxVideoBytesFor,
+  videoAcceptFor,
+  videoWrongTypeMessageFor,
 } from "./video-upload-limits";
 
 /**
@@ -250,5 +256,162 @@ describe("el catálogo del código es subconjunto de lo que el bucket post-media
   it("MAX_VIDEO_BYTES entra debajo del techo real del bucket, con margen", () => {
     expect(BUCKET_FILE_SIZE_LIMIT_BYTES).toBe(80 * 1024 * 1024);
     expect(MAX_VIDEO_BYTES).toBeLessThan(BUCKET_FILE_SIZE_LIMIT_BYTES);
+  });
+});
+
+// ===========================================================================
+// LA RUTA DE MUX
+// ===========================================================================
+
+/**
+ * TODO LO DE ARRIBA SIGUE SIENDO VERDAD, Y SE PRUEBA IGUAL — pero sólo de la
+ * ruta "bucket", que es la que corre cuando Mux no está configurado. Los dos
+ * techos que recortan el catálogo a mp4/mov/webm (el `allowed_mime_types` del
+ * bucket y lo que un `<video>` sabe reproducir) NO son ciertos cuando el archivo
+ * viaja a Mux: ahí el bucket no lo toca y el navegador no reproduce el original,
+ * sino el HLS que Mux devuelve. Por eso la ruta es un parámetro y no una
+ * bandera: las dos verdades conviven, cada una en su camino.
+ *
+ * Lo que este bloque ancla es que ampliar una ruta NO amplió la otra.
+ */
+
+describe("la ruta de Mux acepta lo que el pedido pidió: cualquier formato de video", () => {
+  // Estos son EXACTAMENTE los cinco que el bloque de más arriba rechaza en la
+  // ruta del bucket. Que los mismos archivos den respuestas distintas según la
+  // ruta no es una inconsistencia: es la feature.
+  const CONTENEDORES_REALES: Array<{ type: string; name: string }> = [
+    { type: "video/x-matroska", name: "clip.mkv" },
+    { type: "video/x-msvideo", name: "clip.avi" },
+    { type: "video/mpeg", name: "clip.mpeg" },
+    { type: "video/3gpp", name: "clip.3gp" },
+    { type: "video/3gpp2", name: "clip.3g2" },
+  ];
+
+  for (const sample of CONTENEDORES_REALES) {
+    it(`acepta ${sample.type} (${sample.name}), que el bucket rechaza`, () => {
+      expect(checkVideoFile({ ...sample, size: 1024 }, "mux")).toMatchObject({ ok: true });
+      // La contracara, en el mismo test: la ruta vieja no se movió.
+      expect(checkVideoFile({ ...sample, size: 1024 })).toEqual({ ok: false, reason: "type" });
+    });
+  }
+
+  it("un .mkv que el navegador reporta como application/x-matroska entra por la EXTENSIÓN", () => {
+    // Es el mismo tipo de bug que el .mov de iPhone: mirar sólo el MIME deja
+    // afuera un video perfectamente válido porque el navegador no lo nombró bien.
+    expect(
+      checkVideoFile({ type: "application/x-matroska", name: "pelicula.mkv", size: 1024 }, "mux"),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("sin MIME ninguno también entra: el que sabe es Mux, no el navegador", () => {
+    expect(checkVideoFile({ type: "", name: "GRABACION", size: 1024 }, "mux")).toMatchObject({
+      ok: true,
+    });
+    expect(
+      checkVideoFile({ type: "application/octet-stream", name: "video-raro", size: 1024 }, "mux"),
+    ).toMatchObject({ ok: true });
+  });
+});
+
+describe("la ruta de Mux sigue rechazando lo que NO es un video", () => {
+  // "Cualquier formato de video" no es "cualquier archivo": mandar 2 GB de PDF
+  // a transcodificar para que Mux lo rechace media hora después sería peor que
+  // decirlo en el momento.
+  const NO_SON_VIDEO: Array<{ type: string; name: string }> = [
+    { type: "application/pdf", name: "contrato.pdf" },
+    { type: "image/jpeg", name: "foto.jpg" },
+    { type: "audio/mpeg", name: "cancion.mp3" },
+    { type: "text/plain", name: "notas.txt" },
+    { type: "application/zip", name: "backup.zip" },
+  ];
+
+  for (const sample of NO_SON_VIDEO) {
+    it(`rechaza ${sample.type}`, () => {
+      expect(checkVideoFile({ ...sample, size: 1024 }, "mux")).toEqual({
+        ok: false,
+        reason: "type",
+      });
+    });
+  }
+});
+
+describe("el peso en la ruta de Mux", () => {
+  it("un video de 600 MB —imposible por el bucket— pasa sin chistar", () => {
+    const seiscientosMb = 600 * 1024 * 1024;
+    expect(checkVideoFile({ type: "video/mp4", name: "c.mp4", size: seiscientosMb }, "mux")).toMatchObject({
+      ok: true,
+    });
+    expect(checkVideoFile({ type: "video/mp4", name: "c.mp4", size: seiscientosMb })).toEqual({
+      ok: false,
+      reason: "size",
+    });
+  });
+
+  it("acepta justo en el techo de 5 GB y rechaza un byte más", () => {
+    expect(
+      checkVideoFile({ type: "video/mp4", name: "c.mp4", size: MAX_MUX_VIDEO_BYTES }, "mux"),
+    ).toMatchObject({ ok: true });
+    expect(
+      checkVideoFile({ type: "video/mp4", name: "c.mp4", size: MAX_MUX_VIDEO_BYTES + 1 }, "mux"),
+    ).toEqual({ ok: false, reason: "size" });
+  });
+
+  it("el techo de Mux es órdenes de magnitud mayor que el del bucket", () => {
+    expect(MAX_MUX_VIDEO_BYTES).toBe(5 * 1024 * 1024 * 1024);
+    expect(MAX_MUX_VIDEO_BYTES).toBeGreaterThan(MAX_VIDEO_BYTES * 50);
+  });
+});
+
+describe("checkVideoFile sin ruta explícita es el comportamiento de SIEMPRE", () => {
+  it("el default es 'bucket': todo llamador que no sepa de Mux no cambió de respuesta", () => {
+    // Es la garantía de compatibilidad del módulo: la server action y cualquier
+    // código anterior siguen preguntando lo mismo y recibiendo lo mismo.
+    const mkv = { type: "video/x-matroska", name: "clip.mkv", size: 1024 };
+    expect(checkVideoFile(mkv)).toEqual(checkVideoFile(mkv, "bucket"));
+    expect(checkVideoFile(mkv)).toEqual({ ok: false, reason: "type" });
+  });
+});
+
+describe("el accept y el techo salen de la ruta, no de una copia a mano", () => {
+  it("con Mux el input ofrece video/* — el selector deja de pintar en gris nada", () => {
+    expect(videoAcceptFor("mux")).toBe("video/*");
+    expect(MUX_VIDEO_ACCEPT_ATTR).toBe("video/*");
+  });
+
+  it("sin Mux el input sigue ofreciendo exactamente la lista de siempre", () => {
+    expect(videoAcceptFor("bucket")).toBe(VIDEO_ACCEPT_ATTR);
+  });
+
+  it("maxVideoBytesFor devuelve el techo de cada ruta", () => {
+    expect(maxVideoBytesFor("mux")).toBe(MAX_MUX_VIDEO_BYTES);
+    expect(maxVideoBytesFor("bucket")).toBe(MAX_VIDEO_BYTES);
+  });
+});
+
+describe("el mensaje de rechazo dice la verdad de SU ruta", () => {
+  it("sin Mux: el formato no se reproduce, convertí a MP4", () => {
+    expect(videoWrongTypeMessageFor("bucket")).toBe(VIDEO_WRONG_TYPE_MESSAGE);
+  });
+
+  it("con Mux: no hay formato que sobre, así que el problema es otro", () => {
+    // Decirle "convertilo a MP4" a alguien que eligió un PDF sería un consejo
+    // absurdo, y en la ruta de Mux es el ÚNICO caso en que este mensaje sale.
+    expect(videoWrongTypeMessageFor("mux")).toBe(MUX_WRONG_TYPE_MESSAGE);
+    expect(MUX_WRONG_TYPE_MESSAGE).toBe(
+      "Ese archivo no parece un video. Elegí el video que querés publicar.",
+    );
+    expect(MUX_WRONG_TYPE_MESSAGE).not.toContain("MP4");
+  });
+
+  it("el aviso de peso cambia de unidad, no de frase", () => {
+    // 5120 MB es un número que nadie lee; 5 GB sí.
+    expect(formatVideoTooBigMessage(6 * 1024 * 1024 * 1024, "mux")).toBe(
+      "Este video pesa 6 GB y el máximo son 5 GB. Probá con uno más corto.",
+    );
+    // Y redondea HACIA ARRIBA igual que la versión en MB: 5 GB + 1 byte no
+    // puede leerse "5 GB" al lado de un máximo que también dice "5 GB".
+    expect(formatVideoTooBigMessage(MAX_MUX_VIDEO_BYTES + 1, "mux")).toBe(
+      "Este video pesa 5.1 GB y el máximo son 5 GB. Probá con uno más corto.",
+    );
   });
 });

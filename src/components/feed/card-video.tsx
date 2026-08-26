@@ -9,6 +9,11 @@ import { isPreviewTruncated, playbackCapSeconds } from "@/lib/media/video-policy
 import { clampStartSeconds, clipEndSeconds } from "@/lib/media/audio-track";
 import { clipGain, musicTimeFor, resolveAudioMix } from "@/lib/media/audio-mix";
 import { VIDEOS_COPY } from "@/app/(app)/videos/copy";
+import { muxPlaybackMode } from "@/lib/media/mux-video";
+import { MuxVideoSurface } from "@/components/video/mux-player";
+import { VideoStatusCard } from "@/components/video/video-status-card";
+import { useMuxLiveStatus } from "@/components/video/mux-status-poll";
+import { safePlayMedia, type PlayableMedia } from "@/components/video/playable-media";
 import { useCardLike } from "./card-like-context";
 import { useCardMedia } from "./card-media-context";
 import { useMediaViewer, type ViewerMediaItem } from "./media-viewer";
@@ -44,21 +49,18 @@ export const NO_REEL_SCOPE = "sin-reel";
 
 /**
  * `play()` puede devolver una promesa rechazada (política de autoplay) o
- * directamente `undefined` (navegadores viejos, jsdom): encadenar `.catch()`
- * a ciegas tiraba un TypeError. Mismo helper que usa el visor.
+ * directamente `undefined` (navegadores viejos, jsdom): encadenar `.catch()` a
+ * ciegas tiraba un TypeError.
  *
- * `HTMLMediaElement` y no `HTMLVideoElement`: desde 0061 este helper también
- * arranca el `<audio>` de la música — mismo método, misma promesa opcional,
- * en las dos clases que lo implementan.
+ * Vivía acá como función local sobre `HTMLMediaElement`. Se mudó a
+ * `@/components/video/playable-media` cuando el elemento de medio dejó de ser
+ * siempre un `<video>`: con Mux es un custom element que NO es un
+ * `HTMLMediaElement`, pero implementa los mismos cuatro métodos. El helper
+ * compartido habla de esa capacidad y no de una clase del DOM — así el
+ * `<video>` del bucket, el `<audio>` de la música (0061) y el reproductor de
+ * Mux pasan los tres por la misma función.
  */
-function safePlay(media: HTMLMediaElement) {
-  try {
-    const result = media.play() as Promise<void> | undefined;
-    result?.catch(() => undefined);
-  } catch {
-    // El navegador rechazó la reproducción: no hay nada que hacer ni que avisar.
-  }
-}
+const safePlay = safePlayMedia;
 
 export interface CardVideoProps {
   src: string;
@@ -123,6 +125,23 @@ export interface CardVideoProps {
    * suena y cuándo.
    */
   music?: PostMusicView | null;
+  /**
+   * ---- EL VIDEO POR MUX (opcional, y ausente es el caso normal) -----------
+   *
+   * `posts.mux_playback_id` y `posts.mux_status`. Los dos ausentes —que es lo
+   * que traen los 36 videos que ya estaban en el bucket, y todo lo que se suba
+   * mientras Mux esté apagado— significan "reproducí el archivo de `src` con el
+   * `<video>` de siempre". Ese es el camino por defecto y no cambió en nada.
+   *
+   * Con ellos presentes, `muxPlaybackMode` decide cuál de los cuatro estados se
+   * pinta (ver `@/lib/media/mux-video`). Lo que NO cambia en ninguno de los
+   * casos es todo lo demás de esta tarjeta: el autoplay al 60 %, el tope de 59 s
+   * de la vista previa, el toque, el doble toque, el altavoz y la música siguen
+   * siendo exactamente los mismos, porque operan sobre el contrato mínimo de
+   * `PlayableMedia` y no sobre un `<video>` en particular.
+   */
+  muxPlaybackId?: string | null;
+  muxStatus?: unknown;
 }
 
 /** Segundos que la TARJETA reproduce. El completo se abre desde la publicación. */
@@ -172,13 +191,29 @@ export function CardVideo({
   className,
   music = null,
   filterCss,
+  muxPlaybackId = null,
+  muxStatus,
 }: CardVideoProps) {
   const router = useRouter();
   const reduce = usePrefersReducedMotion();
   const like = useCardLike();
   const viewer = useMediaViewer();
   const media = useCardMedia();
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  /**
+   * DOS REFS DONDE ANTES HABÍA UNA, y no es un capricho:
+   *
+   *  · `videoRef` es el elemento con el que se REPRODUCE. Dejó de ser un
+   *    `HTMLVideoElement` porque con Mux es un custom element; lo que se le pide
+   *    (play, pause, currentTime, muted, duration) es lo mismo en los dos casos,
+   *    y eso es lo que declara `PlayableMedia`.
+   *  · `boxRef` es la caja que se OBSERVA para el autoplay. Antes se observaba
+   *    el `<video>` directamente, pero un `IntersectionObserver` necesita un
+   *    Element del DOM y `PlayableMedia` no promete serlo. La caja envuelve al
+   *    medio y a sus capas, así que ocupa exactamente el mismo rectángulo: el
+   *    umbral del 60 % sigue significando lo mismo que antes.
+   */
+  const videoRef = useRef<PlayableMedia | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const delayRef = useRef<number | null>(null);
   const tapTimer = useRef<number | null>(null);
@@ -201,6 +236,37 @@ export function CardVideo({
    */
   const mix = resolveAudioMix({ hasMusic, videoHasSound: true, soundOn });
   const muted = mix.source === "silent";
+
+  /**
+   * ---- ¿QUÉ SE PINTA EN LA CAJA DEL VIDEO? -------------------------------
+   *
+   * `useMuxLiveStatus` arranca con lo que trajo el servidor y, sólo si ese
+   * estado todavía puede cambiar solo (subiendo / procesando), se engancha al
+   * sondeo compartido hasta que cambie. Para un video que ya llegó listo —y
+   * para los 36 del bucket, que no tienen estado de Mux— esto no hace ni una
+   * consulta ni monta un temporizador.
+   *
+   * `reproductorFallado` es la otra fuente de "no se puede ver": el propio
+   * reproductor avisando que no pudo con el HLS. Se trata igual que un
+   * `errored` de la base porque para quien mira es lo mismo, y es mejor decirlo
+   * que dejar un rectángulo negro con un error adentro.
+   */
+  const [reproductorFallado, setReproductorFallado] = useState(false);
+  /**
+   * El reproductor de Mux ya está montado y `videoRef` apunta a él. Entra en las
+   * dependencias del observador de visibilidad de más abajo, y ESO es lo que
+   * evita un video que nunca arranca: cuando el reproductor termina de cargar
+   * (unos cientos de milisegundos después del primer render, porque el chunk
+   * baja aparte), el observador se vuelve a armar y evalúa la visibilidad ACTUAL
+   * — que es la que importa. Sin esto, una tarjeta que ya estaba a la vista se
+   * quedaría en su miniatura para siempre: el observador no se dispara de nuevo
+   * porque nada cambió de visibilidad, sólo cambió quién estaba escuchando.
+   */
+  const [muxMontado, setMuxMontado] = useState(false);
+  const muxVivo = useMuxLiveStatus({ postId, status: muxStatus, playbackId: muxPlaybackId });
+  const modo = reproductorFallado
+    ? "errored"
+    : muxPlaybackMode({ playbackId: muxVivo.playbackId, status: muxVivo.status });
 
   // Dejar de ser el medio activo (el usuario pasó a la foto siguiente del
   // carrusel) pausa YA, sin esperar a que el observer note que salió de vista.
@@ -238,8 +304,12 @@ export function CardVideo({
     // Fuera de la diapositiva visible no se arranca nada: dos videos del mismo
     // post no pueden sonar juntos.
     if (!active) return;
-    const node = videoRef.current;
-    if (!node || typeof IntersectionObserver === "undefined") return;
+    // Se observa la CAJA, no el medio: ver el comentario de `boxRef` arriba.
+    // Quien arranca y pausa sigue siendo el medio, que se lee de la ref en el
+    // momento de usarlo — con Mux el reproductor se monta un instante después
+    // que la caja, y leerlo acá arriba lo dejaría en null para siempre.
+    const box = boxRef.current;
+    if (!box || typeof IntersectionObserver === "undefined") return;
 
     const clearDelay = () => {
       if (delayRef.current !== null) {
@@ -258,7 +328,7 @@ export function CardVideo({
               delayRef.current = window.setTimeout(() => {
                 delayRef.current = null;
                 // Autoplay muted: si el navegador igual lo bloquea, no pasa nada.
-                safePlay(node);
+                safePlay(videoRef.current);
                 // La música acompaña el mismo ciclo de vida que el video: sale
                 // de pantalla, se calla; vuelve a entrar, retoma (en silencio,
                 // como el video, hasta que la persona toque el altavoz).
@@ -268,19 +338,19 @@ export function CardVideo({
             }
           } else {
             clearDelay();
-            node.pause();
+            videoRef.current?.pause();
             audioRef.current?.pause();
           }
         }
       },
       { threshold: [VISIBLE_RATIO] },
     );
-    io.observe(node);
+    io.observe(box);
     return () => {
       clearDelay();
       io.disconnect();
     };
-  }, [reduce, active]);
+  }, [reduce, active, muxMontado]);
 
   // Si la card se desmonta con un toque en vuelo (scroll rápido), no dejar que
   // el timer abra el visor desde una card que ya no está en pantalla.
@@ -331,7 +401,24 @@ export function CardVideo({
   function viewerSlides(): { items: ViewerMediaItem[]; startIndex: number } {
     const all = media?.items ?? [];
     const found = all.findIndex((item) => item.kind === "video" && item.url === src);
-    if (found < 0) return { items: [{ kind: "video", url: src }], startIndex: 0 };
+    // Sin contexto de carrusel (un video suelto) el visor abre este medio y
+    // nada más — y tiene que llevarse el playbackId, o el visor caería a un
+    // `<video src>` apuntando a la miniatura del video de Mux.
+    //
+    // La clave sólo viaja cuando HAY playbackId: para un video del bucket la
+    // diapositiva tiene que ser exactamente la de siempre, sin un campo de más
+    // que diga `null`. No es cosmético — es lo que mantiene idéntico el objeto
+    // que recibe el visor por el camino que no cambió.
+    if (found < 0) {
+      return {
+        items: [
+          muxVivo.playbackId
+            ? { kind: "video" as const, url: src, muxPlaybackId: muxVivo.playbackId }
+            : { kind: "video" as const, url: src },
+        ],
+        startIndex: 0,
+      };
+    }
     return { items: all, startIndex: found };
   }
 
@@ -416,10 +503,57 @@ export function CardVideo({
     }, DOUBLE_TAP_MS);
   }
 
+  /**
+   * TODAVÍA NO HAY VIDEO QUE MOSTRAR (o no lo va a haber). La tarjeta ES el
+   * estado: nada de capas de toque, altavoz ni píldora de vistas encima de algo
+   * que no se puede reproducir — un botón "Ver el video" sobre un video que no
+   * existe es peor que no tener botón.
+   *
+   * El guard va DESPUÉS de todos los hooks (mismo criterio que CardPostMedia):
+   * un return temprano más arriba rompería su orden entre renders, y este
+   * componente pasa de "procesando" a "listo" sin desmontarse.
+   */
+  if (modo === "processing" || modo === "errored") {
+    return (
+      <div className={cn("relative", className)}>
+        <VideoStatusCard
+          kind={modo === "errored" ? "fallo" : muxVivo.demorado ? "demorado" : "procesando"}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className={cn("relative", className)}>
+    <div ref={boxRef} className={cn("relative", className)}>
+      {modo === "mux" && muxVivo.playbackId ? (
+        /**
+         * EL MISMO RECTÁNGULO, OTRO ELEMENTO ADENTRO. Todo lo que se pinta
+         * debajo —la capa de toque, la píldora, el corazón, el altavoz— no sabe
+         * ni le importa cuál de los dos está montado: hablan con `videoRef`, que
+         * es el contrato mínimo que cumplen los dos.
+         */
+        <MuxVideoSurface
+          playbackId={muxVivo.playbackId}
+          mediaRef={videoRef}
+          filterCss={filterCss}
+          muted={mix.videoMuted}
+          loop
+          // El autoplay lo decide el observador de visibilidad de esta tarjeta
+          // (60 % + 2 s), igual que con el `<video>`. Dejárselo al reproductor
+          // sería un segundo criterio de cuándo arranca un video en el feed.
+          autoPlay={false}
+          ariaLabel={COPY.post.playVideo}
+          onReady={() => setMuxMontado(true)}
+          onLoadedMetadata={(seconds) => setMeasuredSeconds(seconds)}
+          onTimeUpdate={(current) => {
+            const node = videoRef.current;
+            if (node && current >= PREVIEW_CAP_SECONDS) node.currentTime = 0;
+          }}
+          onError={() => setReproductorFallado(true)}
+        />
+      ) : (
       <video
-        ref={videoRef}
+        ref={videoRef as React.RefObject<HTMLVideoElement | null>}
         src={src}
         className="aspect-[4/5] w-full bg-surface-subtle object-cover"
         // Cadena vacía → `undefined`: sin filtro no se escribe el atributo, así
@@ -441,6 +575,7 @@ export function CardVideo({
           if (node.currentTime >= PREVIEW_CAP_SECONDS) node.currentTime = 0;
         }}
       />
+      )}
 
       {/* Hermano del video, no mezclado en el archivo (ver audio-mix.ts):
           suena SINCRONIZADO por encima, nunca los dos a la vez con el video

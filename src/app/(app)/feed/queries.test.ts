@@ -285,6 +285,107 @@ describe("toPostCardModel — el filtro del video se resuelve contra el catálog
   });
 });
 
+/**
+ * =============================================================================
+ * EL VIDEO QUE NO ESTÁ EN EL BUCKET
+ * =============================================================================
+ *
+ * Un video subido por Mux no deja ruta en `posts.media`: el archivo nunca pasó
+ * por Storage. Si este mapeo se quedara sólo con las rutas, esa publicación
+ * llegaría a la tarjeta SIN NINGÚN MEDIO — pie, y un hueco donde va el video.
+ *
+ * Este bloque ancla las dos mitades del trato: que la diapositiva se arme, y que
+ * armarla no le haya cambiado nada a las publicaciones de siempre.
+ */
+describe("toPostCardModel — la diapositiva del video de Mux", () => {
+  it("arma la diapositiva desde las columnas, sin ninguna ruta en media", () => {
+    const model = toPostCardModel(
+      makeRow({ media: [], mux_status: "ready", mux_playback_id: "PLAY123" }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    expect(model.media).toHaveLength(1);
+    expect(model.media[0]?.kind).toBe("video");
+    expect(model.media[0]?.muxPlaybackId).toBe("PLAY123");
+    expect(model.media[0]?.muxStatus).toBe("ready");
+  });
+
+  it("su url es la MINIATURA, no un archivo de video que no existe", () => {
+    // Cualquier superficie que todavía no sepa de Mux pinta el primer cuadro
+    // —feo pero honesto— en vez de un `<video>` con el `src` roto.
+    const model = toPostCardModel(
+      makeRow({ media: [], mux_status: "ready", mux_playback_id: "PLAY123" }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    // La URL la arma `muxThumbnailUrl` de `@/lib/mux/urls` — el MISMO módulo que
+    // usa el resto de la app. Se afirma acá para que un cambio de formato o de
+    // fotograma no se cuele sin que nadie lo mire.
+    expect(model.media[0]?.url).toBe(
+      "https://image.mux.com/PLAY123/thumbnail.jpg?time=1&width=640&fit_mode=preserve",
+    );
+  });
+
+  it("un video que todavía se está preparando también tiene diapositiva", () => {
+    // Es lo que hace que la publicación exista en el feed apenas se publica, con
+    // su estado de "preparando", en vez de aparecer recién cuando Mux termina.
+    const model = toPostCardModel(
+      makeRow({ media: [], mux_status: "processing", mux_playback_id: null }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    expect(model.media).toHaveLength(1);
+    expect(model.media[0]?.muxStatus).toBe("processing");
+    expect(model.media[0]?.url).toBe("");
+  });
+
+  it("una fila con basura en mux_status NO genera diapositiva", () => {
+    // Mejor una publicación sin video —que es lo que hoy se ve— que una tarjeta
+    // con un reproductor que no puede reproducir nada.
+    const model = toPostCardModel(
+      makeRow({ media: [], mux_status: "vaya-a-saber" }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    expect(model.media).toHaveLength(0);
+  });
+
+  it("con un archivo de video de verdad en media, manda el archivo", () => {
+    const model = toPostCardModel(
+      makeRow({ media: ["t/u/clip.mp4"], mux_status: "ready", mux_playback_id: "PLAY123" }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    expect(model.media).toHaveLength(1);
+    expect(model.media[0]?.muxPlaybackId).toBeUndefined();
+    expect(model.media[0]?.url).toContain("clip.mp4");
+  });
+
+  it("las publicaciones de siempre no cambiaron en nada", () => {
+    // LA MITAD QUE MÁS IMPORTA: los 36 videos del bucket y todas las fotos.
+    const model = toPostCardModel(
+      makeRow({ media: ["t/u/foto.jpg", "t/u/clip.mp4"] }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    expect(model.media).toHaveLength(2);
+    expect(model.media.every((item) => item.muxPlaybackId === undefined)).toBe(true);
+    expect(model.media.every((item) => item.muxStatus === undefined)).toBe(true);
+  });
+});
+
 /* ------------------------------------------------------------------------- *
  * Lo que viaja por la URL: topes y fail-closed
  *

@@ -18,6 +18,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
+    "@mux/mux-node": "^15.0.0",
+    "@mux/mux-player-react": "^3.13.2",
+    "@mux/upchunk": "^3.5.0",
     "@phosphor-icons/react": "^2.1.10",
     "@sentry/nextjs": "^10.63.0",
     "@supabase/ssr": "^0.12.0",

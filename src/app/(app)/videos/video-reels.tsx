@@ -284,11 +284,28 @@ function ReelSlide({
   const reduce = usePrefersReducedMotion();
   const like = useReelLike({ post, tenantId, viewerId });
   const [bursts, setBursts] = useState(0);
-  const videoUrl = post.media.find((item) => item.kind === "video")?.url;
+  const videoItem = post.media.find((item) => item.kind === "video");
+  const videoUrl = videoItem?.url;
+  /**
+   * Video alojado en Mux: se reproduce con su reproductor y `url` es sólo la
+   * miniatura. Ausente = archivo del bucket, el camino de siempre.
+   */
+  const muxPlaybackId = videoItem?.muxPlaybackId ?? null;
   const entity = post.entity;
   const displayTitle = entity ? entity.title : post.author.displayName;
 
-  if (!videoUrl) return null; // la query garantiza video; defensa barata
+  /**
+   * Defensa barata (la query ya garantiza video), ahora con la variante de Mux:
+   * hay algo que reproducir si hay archivo O si el video de Mux ya está listo.
+   *
+   * UN VIDEO TODAVÍA EN PREPARACIÓN NO ENTRA AL REEL, y es deliberado: Videos
+   * Cortos es un scroll de pantalla completa donde cada deslizada tiene que
+   * traer un video. Una diapositiva que dice "esperá un rato" es un pozo en el
+   * medio del scroll. En el FEED sí se muestra —ahí la tarjeta convive con
+   * texto y contexto, y quien publicó necesita ver que su video salió—, y
+   * cuando termina de procesarse aparece acá con la siguiente tanda.
+   */
+  if (!videoUrl && !muxPlaybackId) return null;
 
   /**
    * Doble toque sobre el video = me gusta, igual que en la card del feed.
@@ -313,7 +330,8 @@ function ReelSlide({
     >
       <div className="mx-auto h-full w-full max-w-lg">
         <ViewerVideo
-          url={videoUrl}
+          url={videoUrl ?? ""}
+          muxPlaybackId={muxPlaybackId}
           active={active}
           muted={muted}
           onMutedChange={onMutedChange}

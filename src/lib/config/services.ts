@@ -46,6 +46,40 @@ export const isPagosDemoPermitido =
   process.env.NODE_ENV !== "production" &&
   !process.env.VERCEL_ENV;
 
+/**
+ * Video por Mux: subida de CUALQUIER formato y CUALQUIER tamaño (0114).
+ *
+ * Pide las dos credenciales de la API porque el SDK necesita las dos para
+ * firmar un solo request: con `MUX_TOKEN_ID` solo, `getMux()` construiría un
+ * cliente que falla en la primera llamada y la ruta devolvería 502 en vez del
+ * 503 honesto de "esto todavía no está configurado".
+ *
+ * `MUX_WEBHOOK_SECRET` NO entra acá y no es un olvido: es la credencial de la
+ * OTRA mitad del camino, y las dos mitades se configuran en momentos distintos
+ * (las claves de API salen del dashboard; el secreto del webhook recién existe
+ * cuando se crea el endpoint, que necesita la URL del deploy). La ruta del
+ * webhook lo chequea por su cuenta, igual que hace la de Stripe con
+ * `STRIPE_WEBHOOK_SECRET`. Colapsarlos en un flag apagaría la subida entera por
+ * no haber terminado de configurar la recepción.
+ *
+ * ── QUÉ PASA SIN ESTO, QUE ES LA PARTE QUE IMPORTA ──────────────────────────
+ * NADA distinto. Sin claves, `/api/mux/subida` devuelve 503 y el composer sigue
+ * subiendo al bucket `post-media` con sus límites de siempre (60 MB,
+ * mp4/webm/quicktime). Es un camino que se ENCIENDE, no un reemplazo.
+ *
+ * Y por eso este flag NO tiene un hermano tipo `isVideoDemoPermitido`. Mirá
+ * `isPagosDemoPermitido` acá abajo: ahí "sin configurar" llegó a significar
+ * "hacé algo distinto" —regalar la campaña— y el día que producción se quedara
+ * sin la clave, el error de deploy se cobraba en plata. La regla que salió de
+ * eso: la falta de una credencial puede apagar una función, nunca aflojar un
+ * límite. Acá se cumple sola, porque el fallback ES el camino viejo y sus
+ * límites viejos: un `.mkv` de 2 GB sigue siendo rechazado por el composer, no
+ * aceptado "porque Mux no está".
+ */
+export const isMuxConfigured = Boolean(
+  process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET,
+);
+
 export const isResendConfigured = Boolean(process.env.RESEND_API_KEY);
 
 export const isVisionConfigured = Boolean(

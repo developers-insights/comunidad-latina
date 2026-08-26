@@ -10,6 +10,10 @@ import {
   VIDEO_CATEGORY_ORDER,
 } from "@/app/(app)/videos/copy";
 import { OriginalityFields, type DeclarationValue } from "@/components/integrity/originality-fields";
+import {
+  VideoUploadProgressPanel,
+  type VideoUploadProgress,
+} from "@/components/video/upload-progress";
 import { licenseLabel } from "@/lib/integrity/declarations";
 import { COPY, VIDEO_EDITOR_COPY } from "./copy";
 import { QuestionBanner } from "./question-banner";
@@ -96,8 +100,19 @@ export interface ComposerSheetProps {
   onDeclarationChange: (next: DeclarationValue) => void;
   /** Id estable de la sesión: fija la variante de color de la vista previa. */
   previewId: string;
-  /** Progreso real de la subida del video, o null si no hay ninguna en curso. */
-  uploadPct: number | null;
+  /**
+   * Progreso real de la subida del video, o null si no hay ninguna en curso.
+   * Es el mismo objeto por las dos rutas —el XHR al bucket y UpChunk contra
+   * Mux— para que lo que la persona ve no dependa de una decisión de
+   * infraestructura que no le importa. Ver `VideoUploadProgressPanel`.
+   */
+  videoUpload: VideoUploadProgress | null;
+  /**
+   * Cortar la subida. Ausente = esta subida no se puede cancelar (la del
+   * bucket es un único request dentro de publicar): ahí no se ofrece el botón,
+   * en vez de ofrecer uno que no hace nada.
+   */
+  onCancelVideoUpload?: () => void;
   /** Leyendo la duración del archivo recién elegido (antes de subir nada). */
   measuringVideo?: boolean;
   /**
@@ -430,7 +445,8 @@ export function ComposerSheet({
   declaration,
   onDeclarationChange,
   previewId,
-  uploadPct,
+  videoUpload,
+  onCancelVideoUpload,
   measuringVideo = false,
   bakingProgress = null,
   finishingLabel = null,
@@ -878,19 +894,23 @@ export function ComposerSheet({
               </p>
             )}
 
-            {/* Progreso REAL de la subida del video (XHR), no una barra decorativa. */}
-            {uploadPct !== null && (
-              <div className="mt-3 shrink-0" role="status">
-                <p className="text-xs font-medium text-foreground-secondary">
-                  {COPY.composer.videoUploading(uploadPct)}
-                </p>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-subtle">
-                  <div
-                    className="h-full rounded-full bg-brand transition-[width] duration-(--duration-fast)"
-                    style={{ width: `${uploadPct}%` }}
-                  />
-                </div>
-              </div>
+            {/*
+              PROGRESO REAL DE LA SUBIDA, no una barra decorativa.
+
+              Antes esto eran cuatro líneas: un porcentaje y una barra. Alcanzaba
+              cuando el techo eran 60 MB y la espera duraba dos segundos. Con Mux
+              se pueden subir cientos de megas desde un teléfono en 4G, así que
+              la misma caja pasó a tener que sostener una espera de minutos: los
+              megabytes además del porcentaje, un botón de cancelar de 44 px, y
+              qué pasa si se corta el internet. Todo eso vive en
+              `VideoUploadProgressPanel`, junto al resto de la UI de video.
+            */}
+            {videoUpload && (
+              <VideoUploadProgressPanel
+                progress={videoUpload}
+                onCancel={onCancelVideoUpload}
+                className="mt-3 shrink-0"
+              />
             )}
           </div>
 

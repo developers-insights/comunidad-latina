@@ -258,6 +258,10 @@ export function MediaCarousel({
                   // porque es una decisión POR ARCHIVO: un post puede traer un
                   // video con Vintage y otro sin nada.
                   filterCss={item.filterCss}
+                  // Sólo los traen los videos de Mux; ausentes, `CardVideo`
+                  // reproduce el archivo de `src` como toda la vida.
+                  muxPlaybackId={item.muxPlaybackId}
+                  muxStatus={item.muxStatus}
                 />
               ) : (
                 <>

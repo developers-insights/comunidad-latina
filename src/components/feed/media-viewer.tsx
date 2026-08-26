@@ -22,6 +22,8 @@ import {
   useMounted,
 } from "@/lib/design/use-overlay";
 import { recordPostViewAction } from "@/app/(app)/feed/engagement-actions";
+import { MuxVideoSurface } from "@/components/video/mux-player";
+import type { PlayableMedia } from "@/components/video/playable-media";
 import type { PostMediaKind } from "./helpers";
 import { VIEWER_COPY } from "./viewer-copy";
 
@@ -72,6 +74,13 @@ const DISMISS_VELOCITY = 600;
 export interface ViewerMediaItem {
   kind: PostMediaKind;
   url: string;
+  /**
+   * Video alojado en Mux. Presente = se reproduce con el reproductor de Mux
+   * (HLS adaptativo) y `url` es sólo la miniatura; ausente —el caso de siempre,
+   * y el de los 36 videos que ya estaban en el bucket— = `url` es el archivo y
+   * se reproduce con el `<video>` de toda la vida.
+   */
+  muxPlaybackId?: string | null;
 }
 
 export interface OpenMediaViewerArgs {
@@ -345,6 +354,7 @@ function ViewerPanel({
             {item.kind === "video" ? (
               <ViewerVideo
                 url={item.url}
+                muxPlaybackId={item.muxPlaybackId}
                 active={itemIndex === index}
                 muted={muted}
                 onMutedChange={setMuted}
@@ -414,7 +424,7 @@ function ViewerPanel({
  * `play()` puede devolver una promesa rechazada (política de autoplay) o
  * `undefined` (jsdom / navegadores viejos): el fallback silencioso cubre ambos.
  */
-function safePlay(video: HTMLVideoElement, onRejected?: () => void) {
+function safePlay(video: PlayableMedia, onRejected?: () => void) {
   try {
     const result = video.play() as Promise<void> | undefined;
     result?.catch(() => onRejected?.());
@@ -425,6 +435,8 @@ function safePlay(video: HTMLVideoElement, onRejected?: () => void) {
 
 export interface ViewerVideoProps {
   url: string;
+  /** Ver `ViewerMediaItem.muxPlaybackId`. Ausente = archivo del bucket. */
+  muxPlaybackId?: string | null;
   /** Solo el slide activo reproduce; los demás quedan en pausa. */
   active: boolean;
   muted: boolean;
@@ -467,6 +479,7 @@ export interface ViewerVideoProps {
 
 export function ViewerVideo({
   url,
+  muxPlaybackId = null,
   active,
   muted,
   onMutedChange,
@@ -479,7 +492,21 @@ export function ViewerVideo({
   startSeconds,
   className,
 }: ViewerVideoProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  /**
+   * Dejó de ser `HTMLVideoElement`: con Mux el elemento es un custom element que
+   * no hereda de él, pero cumple el mismo contrato mínimo (`PlayableMedia`) y
+   * eso es todo lo que este visor le pide — arrancar, pausar, mover el reloj,
+   * mutear, y decir si está en pausa y qué tamaño tiene el cuadro.
+   */
+  const videoRef = useRef<PlayableMedia | null>(null);
+  const usaMux = Boolean(muxPlaybackId);
+  /**
+   * El reproductor de Mux existe (se carga en diferido, ver `mux-player.tsx`).
+   * Entra en las dependencias del efecto que reproduce: sin esto, el efecto
+   * corre con `videoRef.current` en null y el video de un reel se quedaría
+   * quieto en su miniatura, sin que nada vuelva a intentarlo.
+   */
+  const [muxMontado, setMuxMontado] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
   const tapTimer = useRef<number | null>(null);
   /** El salto de continuidad se hace UNA vez; después manda el reloj del visor. */
@@ -517,7 +544,7 @@ export function ViewerVideo({
       video.muted = true;
       safePlay(video);
     });
-  }, [active, muted, onMutedChange, startSeconds]);
+  }, [active, muted, onMutedChange, startSeconds, muxMontado]);
 
   // Con la pestaña oculta el video se pausa; al volver, si sigue activo,
   // retoma solo (cortesía estándar de reproductores móviles).
@@ -597,29 +624,63 @@ export function ViewerVideo({
     }, DOUBLE_TAP_MS);
   }
 
+  /**
+   * CÓMO ENTRA EL CUADRO EN LA PANTALLA. Una sola cuenta para los dos
+   * elementos, porque la regla es la misma: `cover` sólo si la superficie lo
+   * pidió Y el video es vertical. Uno horizontal recortado a `cover` en un reel
+   * quedaría partido al medio, así que ése siempre va entero, con bandas.
+   */
+  const ajuste: "cover" | "contain" =
+    fit === "cover" && !isLandscape ? "cover" : "contain";
+
   return (
     <div className={cn("relative h-full w-full", className)}>
-      <video
-        ref={videoRef}
-        src={url}
-        playsInline
-        loop
-        preload="metadata"
-        aria-label={
-          authorLabel ? VIEWER_COPY.videoLabel(authorLabel) : undefined
-        }
-        onPlay={() => setPaused(false)}
-        onPause={() => setPaused(true)}
-        onTimeUpdate={onTimeUpdate}
-        onLoadedMetadata={(event) => {
-          const el = event.currentTarget;
-          setIsLandscape(el.videoWidth > el.videoHeight);
-        }}
-        className={cn(
-          "h-full w-full",
-          fit === "cover" && !isLandscape ? "object-cover" : "object-contain",
-        )}
-      />
+      {usaMux && muxPlaybackId ? (
+        <MuxVideoSurface
+          playbackId={muxPlaybackId}
+          mediaRef={videoRef}
+          // `fill`: acá la caja la define la pantalla (el visor, el reel), no un
+          // 4:5 como en la tarjeta del feed.
+          layout="fill"
+          objectFit={ajuste}
+          muted={muted}
+          loop
+          // Igual que con el `<video>`: quien decide cuándo arranca es el efecto
+          // de arriba, que además sabe caer a mudo si el navegador bloquea el
+          // autoplay con sonido. Dos criterios de arranque serían dos bugs.
+          autoPlay={false}
+          ariaLabel={authorLabel ? VIEWER_COPY.videoLabel(authorLabel) : undefined}
+          onReady={() => setMuxMontado(true)}
+          onPlay={() => setPaused(false)}
+          onPause={() => setPaused(true)}
+          onTimeUpdate={onTimeUpdate}
+          onLoadedMetadata={() => {
+            const el = videoRef.current;
+            if (el?.videoWidth && el?.videoHeight) {
+              setIsLandscape(el.videoWidth > el.videoHeight);
+            }
+          }}
+        />
+      ) : (
+        <video
+          ref={videoRef as React.RefObject<HTMLVideoElement | null>}
+          src={url}
+          playsInline
+          loop
+          preload="metadata"
+          aria-label={
+            authorLabel ? VIEWER_COPY.videoLabel(authorLabel) : undefined
+          }
+          onPlay={() => setPaused(false)}
+          onPause={() => setPaused(true)}
+          onTimeUpdate={onTimeUpdate}
+          onLoadedMetadata={(event) => {
+            const el = event.currentTarget;
+            setIsLandscape(el.videoWidth > el.videoHeight);
+          }}
+          className={cn("h-full w-full", ajuste === "cover" ? "object-cover" : "object-contain")}
+        />
+      )}
 
       {/* Tap en el video = play/pausa (targets grandes, sin controles nativos) */}
       <button

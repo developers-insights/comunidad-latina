@@ -27,6 +27,7 @@ import {
   type PostPollView,
 } from "@/components/feed";
 import { mediaFilterCssByPath } from "@/lib/media/photo-filters";
+import { MUX_FILTER_KEY, muxThumbnailUrl, parseMuxStatus } from "@/lib/media/mux-video";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { timeAgo } from "@/lib/utils";
 import type { TaggedProfile } from "@/lib/social/post-tags";
@@ -155,6 +156,24 @@ export interface PostRow {
    * anterior a la 0104) significa "sin filtros", que es la verdad.
    */
   media_filters?: unknown;
+  /**
+   * ---- EL VIDEO EN MUX (columnas nuevas) ---------------------------------
+   *
+   * Un video subido por Mux NO deja archivo en el bucket: `posts.media` viene
+   * sin ninguna ruta de video y todo lo que se sabe de él está en estas dos
+   * columnas. Por eso viajan con TODA fila de post, igual que las de video de
+   * la 0046 y por el mismo motivo: la decisión que habilitan —¿esta tarjeta
+   * pinta un reproductor, un estado de "preparando", o el `<video>` de
+   * siempre?— la toma un componente que se monta en el feed, en el detalle, en
+   * el reel y en el perfil. Una consulta que las pidiera sólo en una superficie
+   * dejaría a las otras mostrando una publicación sin medio.
+   *
+   * Opcionales porque una base donde la migración de Mux todavía no corrió las
+   * devuelve ausentes, y ausente significa "este post no pasó por Mux" — que es
+   * la verdad para los 36 videos anteriores.
+   */
+  mux_playback_id?: string | null;
+  mux_status?: string | null;
 }
 
 /**
@@ -200,7 +219,7 @@ type ParsablePostColumns =
  * escalares: el costo es nulo al lado de la clase de bug que evitan.
  */
 export const POST_COLUMNS =
-  "id, body, kind, media, status, like_count, comment_count, view_count, created_at, author_id, entity_listing_id, video_type, duration_seconds, is_paid_ad, eligible_for_short_feed, video_category, pinned_at, hidden_at, comments_locked_at, media_filters" as ParsablePostColumns;
+  "id, body, kind, media, status, like_count, comment_count, view_count, created_at, author_id, entity_listing_id, video_type, duration_seconds, is_paid_ad, eligible_for_short_feed, video_category, pinned_at, hidden_at, comments_locked_at, media_filters, mux_playback_id, mux_status" as ParsablePostColumns;
 
 const FALLBACK_AUTHOR: AuthorView = {
   profileId: null,
@@ -941,6 +960,49 @@ export function toPostCardModel(
       // publicación ya publicada (0097) no puede correrle el filtro al video.
       filterCss: filterCssByPath.get(path),
     }));
+
+  /**
+   * ---- LA DIAPOSITIVA DEL VIDEO DE MUX -----------------------------------
+   *
+   * Un video subido por Mux no deja ruta en `posts.media`: el archivo nunca pasó
+   * por el bucket. Si esta función se quedara sólo con las rutas, una
+   * publicación con video de Mux llegaría a la tarjeta SIN NINGÚN MEDIO — un
+   * post con pie y un hueco donde debería estar el video.
+   *
+   * Así que la diapositiva se arma acá, desde las dos columnas del post. Es el
+   * único lugar del repo donde eso pasa, y tiene que serlo: el carrusel, la
+   * fila de acciones, el visor y el reel leen todos de este mismo array.
+   *
+   * `url` es la MINIATURA y no una cadena vacía (ver `PostMediaView`): quien
+   * todavía no sepa de Mux pinta el primer cuadro, no un medio roto.
+   *
+   * SÓLO si `mux_status` es un valor conocido. Una fila con basura en esa
+   * columna no genera diapositiva: preferimos una publicación sin video —que es
+   * lo que hoy se ve— antes que una tarjeta con un reproductor que no puede
+   * reproducir nada.
+   *
+   * Y sólo si NO hay ya un video en `media`: si alguna vez conviven los dos
+   * caminos en una misma fila, manda el archivo que existe de verdad.
+   */
+  const muxStatus = parseMuxStatus(row.mux_status);
+  const muxPlaybackId = row.mux_playback_id ?? null;
+  if (muxStatus !== null && !media.some((item) => item.kind === "video")) {
+    media.push({
+      kind: "video",
+      url: muxPlaybackId ? muxThumbnailUrl(muxPlaybackId) : "",
+      muxPlaybackId,
+      muxStatus,
+      /**
+       * El filtro (0104) de un video de Mux se guarda bajo `MUX_FILTER_KEY` y
+       * no bajo una ruta, porque no hay ruta que usar de clave — el archivo
+       * nunca pasó por el bucket. Es el otro extremo de lo que escribe
+       * `createPostAction`; sin esta línea el filtro se guardaba y no lo
+       * encontraba nadie.
+       */
+      filterCss: filterCssByPath.get(MUX_FILTER_KEY),
+    });
+  }
+
   const firstPhoto = media.find((item) => item.kind === "image");
   return {
     id: row.id,

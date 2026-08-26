@@ -53,6 +53,27 @@ export interface PostMediaView {
    * camino por el que un texto arbitrario termine siendo una regla de estilo.
    */
   filterCss?: string;
+  /**
+   * ---- EL VIDEO QUE VIVE EN MUX, NO EN EL BUCKET -------------------------
+   *
+   * `posts.mux_playback_id` y `posts.mux_status`, copiados en la diapositiva de
+   * video de ese post. Van en el MEDIO y no en el modelo de la tarjeta porque
+   * es quien reproduce el que los necesita, y un post puede traer fotos del
+   * bucket junto a su video de Mux en el mismo carrusel.
+   *
+   * AUSENTES ES EL CASO NORMAL, y significa exactamente lo de siempre: este
+   * medio es un archivo del bucket y se reproduce con un `<video src>`. Los 36
+   * videos que ya estaban publicados caen todos acá, y todo lo que se suba
+   * mientras Mux esté apagado también.
+   *
+   * OJO CON `url` CUANDO SÍ ESTÁN: un video de Mux NO tiene archivo en el
+   * bucket, así que su `url` es la MINIATURA (`muxThumbnailUrl`), no un video.
+   * Es a propósito: cualquier superficie que todavía no sepa de Mux y pinte el
+   * medio como imagen muestra el primer cuadro —feo pero honesto— en vez de un
+   * `<video>` con un `src` roto. Quien sí sabe, mira `muxPlaybackId` primero.
+   */
+  muxPlaybackId?: string | null;
+  muxStatus?: string | null;
 }
 
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|m4v)(\?.*)?$/i;

@@ -23,11 +23,18 @@ import {
   type VideoCategory,
 } from "@/lib/media/video-policy";
 import {
-  VIDEO_ACCEPT_ATTR,
-  VIDEO_WRONG_TYPE_MESSAGE,
   checkVideoFile,
   formatVideoTooBigMessage,
+  videoAcceptFor,
+  videoWrongTypeMessageFor,
+  type VideoUploadRoute,
 } from "@/lib/media/video-upload-limits";
+import { requestMuxUpload, type MuxUploadTicket } from "@/lib/media/mux-video";
+import { startMuxUpload, type MuxUploadHandle } from "@/components/video/mux-upload";
+// Sólo el TIPO: quien pinta el panel es `ComposerSheet` (recibe el objeto por
+// prop). Este archivo es el dueño del estado, no de su presentación.
+import type { VideoUploadProgress } from "@/components/video/upload-progress";
+import { VIDEO_COPY } from "@/components/video/copy";
 import {
   EMPTY_DECLARATION_VALUE,
   type DeclarationValue,
@@ -143,6 +150,26 @@ export interface PostComposerHostProps {
   /** `tenants.modules` / `modules_soon`: filtran los tiles del menú de crear. */
   modules: Record<string, boolean>;
   modulesSoon: Record<string, boolean>;
+  /**
+   * ¿ESTE ENTORNO TIENE MUX? Lo decide el SERVIDOR y llega como prop desde
+   * `(app)/layout.tsx`: `muxEnabled={isMuxConfigured}`, el mismo patrón con el
+   * que ya degrada Stripe en este repo.
+   *
+   * POR QUÉ NO SE AVERIGUA ACÁ: `isMuxConfigured` es `Boolean(process.env
+   * .MUX_TOKEN_ID)`, una variable de servidor que el navegador no ve. Y por qué
+   * hace falta ANTES de abrir el selector de archivos: el atributo `accept` del
+   * input se decide en ese instante, y es justamente lo que el cliente reportó
+   * roto ("no te deja subir cualquier tipo de video" — los .mov en gris). Con
+   * Mux, `accept` es `video/*` y no hay nada gris; sin Mux, sigue siendo la
+   * lista de tres formatos que el bucket y el navegador aguantan.
+   *
+   * DEFAULT `false` A PROPÓSITO. Mientras nadie pase la prop, el composer se
+   * comporta EXACTAMENTE como el día anterior a esta feature: mismo `accept`,
+   * mismo tope de 60 MB, misma subida al bucket. La bandera no es la única
+   * defensa igual — aunque llegue en `true`, si `/api/mux/subida` contesta 503
+   * la subida cae al bucket en silencio (ver `selectVideo`).
+   */
+  muxEnabled?: boolean;
   children: ReactNode;
 }
 
@@ -182,14 +209,43 @@ export interface PostComposerHostProps {
  * `selectVideo` copian `input.files` SINCRÓNICAMENTE en el handler, antes de
  * cualquier setState.
  */
-export function PostComposerHost({ modules, modulesSoon, children }: PostComposerHostProps) {
+export function PostComposerHost({
+  modules,
+  modulesSoon,
+  muxEnabled = false,
+  children,
+}: PostComposerHostProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
   const [body, setBody] = useState("");
   const [media, setMedia] = useState<PickedMedia[]>([]);
-  /** Progreso de subida del video (null = sin subida en curso). */
-  const [uploadPct, setUploadPct] = useState<number | null>(null);
+  /**
+   * Progreso de subida del video (null = sin subida en curso). Es el MISMO
+   * estado para los dos caminos —el XHR al bucket y UpChunk contra Mux— porque
+   * lo que la persona ve tiene que ser lo mismo: una barra que avanza de verdad.
+   * Lo que cambia entre los dos es qué se puede hacer con esa espera: la de Mux
+   * se puede cancelar y sobrevive a un corte de red; la del bucket, no.
+   */
+  const [videoUpload, setVideoUpload] = useState<VideoUploadProgress | null>(null);
+  /**
+   * ---- LA SESIÓN DE MUX --------------------------------------------------
+   *
+   * `muxTicket` es lo que devolvió `POST /api/mux/subida`: el permiso de subida
+   * y el borrador de publicación que el backend ya creó. Su presencia ES la
+   * señal de que este video va por Mux; `null` significa "camino de siempre".
+   *
+   * `muxSubido` se enciende cuando UpChunk terminó de mandar el archivo entero.
+   * Publicar espera a que esté en `true` — no porque falte transcodificar (eso
+   * pasa DESPUÉS y no bloquea nada), sino porque el archivo tiene que haber
+   * llegado. Es la única espera inevitable de todo el flujo.
+   *
+   * `muxHandleRef` guarda el control de la subida en curso para poder cortarla:
+   * lo usan el botón de cancelar, quitar el video, y cerrar el composer.
+   */
+  const [muxTicket, setMuxTicket] = useState<MuxUploadTicket | null>(null);
+  const [muxSubido, setMuxSubido] = useState(false);
+  const muxHandleRef = useRef<MuxUploadHandle | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   /** Hoja de texto abierta y en qué modo (null = cerrada). */
   const [composeMode, setComposeMode] = useState<ComposerMode | null>(null);
@@ -313,6 +369,25 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
   const autoriaBloquea =
     cargandoAutorias && (autorias === null || autorias.entidades.length > 0);
 
+  /**
+   * ESPERANDO QUE EL ARCHIVO TERMINE DE LLEGAR A MUX. Es la única espera que
+   * queda en todo el flujo, y es inevitable: no se puede publicar un video que
+   * todavía no subió.
+   *
+   * Ojo con lo que NO es: NO es esperar a que Mux termine de transcodificar.
+   * Eso pasa después, tarda mucho más, y la publicación no lo espera — sale
+   * igual y la tarjeta muestra "preparando" hasta que esté (ver
+   * `video-status-card.tsx`). Confundir las dos esperas sería volver a dejar a
+   * la persona mirando una pantalla durante minutos.
+   *
+   * El botón no queda mudo: el panel de progreso está a la vista, con el
+   * porcentaje, los megabytes y su botón de cancelar.
+   */
+  const esperandoSubidaMux = muxTicket !== null && !muxSubido;
+
+  /** Las dos razones por las que Publicar puede estar apagado sin faltar texto. */
+  const publicarBloqueado = autoriaBloquea || esperandoSubidaMux;
+
   const photos = media.filter((item) => item.kind === "photo");
   const video = media.find((item) => item.kind === "video") ?? null;
 
@@ -385,50 +460,129 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
     input.value = "";
     if (!file) return;
 
-    // MISMA función que corre el servidor (`isOwnVideoPath` en
-    // `feed/actions.ts` valida contra el mismo catálogo de extensiones): un
-    // formato o un peso que el picker deja elegir pero la validación rechaza
-    // le gastaría los datos a la persona para terminar diciéndole que no.
-    const fileCheck = checkVideoFile(file);
-    if (!fileCheck.ok) {
-      if (fileCheck.reason === "type") {
-        toast({ title: VIDEO_WRONG_TYPE_MESSAGE, variant: "warning", duration: 8000 });
-      } else {
-        toast({
-          title: formatVideoTooBigMessage(file.size),
-          variant: "warning",
-          duration: 8000,
-        });
-      }
-      return;
-    }
     if (video) {
       toast({ title: COPY.composer.videoLimit, variant: "warning" });
       return;
     }
 
+    /**
+     * ---- EL ORDEN DE ESTA FUNCIÓN NO ES CASUAL ---------------------------
+     *
+     * Cada paso está donde está para que nada se gaste al pedo: ni los datos de
+     * la persona, ni un viaje al servidor, ni una fila de borrador en la base.
+     *
+     *   1. ¿Es un video, y entra por peso?   → local, instantáneo.
+     *   2. ¿Cuánto dura?                     → local, un segundo.
+     *   3. ¿Se pasa de los 90 s?             → se rechaza ACÁ.
+     *   4. Recién ahora, el permiso de Mux   → que CREA un borrador en la base.
+     *
+     * Si el permiso se pidiera primero (que es lo natural de escribir), cada
+     * video largo que alguien elige por error dejaría un borrador huérfano
+     * detrás. Con este orden, el borrador se crea sólo para videos que de
+     * verdad se van a subir.
+     */
+
+    /**
+     * PASO 1 — ¿es un video, y entra por peso?
+     *
+     * Con Mux prendido la pregunta es la permisiva ("¿esto es un video?", techo
+     * de 5 GB); sin Mux es la de siempre (mp4/mov/webm, 60 MB) y este chequeo ya
+     * es el definitivo. Es la MISMA función en los dos casos — la que también
+     * corre el servidor cuando el archivo va al bucket (`isOwnVideoPath` en
+     * `feed/actions.ts` valida contra el mismo catálogo de extensiones).
+     */
+    const rutaProbable: VideoUploadRoute = muxEnabled ? "mux" : "bucket";
+    const chequeoInicial = checkVideoFile(file, rutaProbable);
+    if (!chequeoInicial.ok) {
+      toast({
+        title:
+          chequeoInicial.reason === "type"
+            ? videoWrongTypeMessageFor(rutaProbable)
+            : formatVideoTooBigMessage(file.size, rutaProbable),
+        variant: "warning",
+        duration: 8000,
+      });
+      return;
+    }
+
+    // PASO 2 — cuánto dura. Local: el navegador abre la cabecera del archivo.
     setMeasuringVideo(true);
     const measured = await readVideoDurationSeconds(file);
     setMeasuringVideo(false);
-
-    // MISMA función que corre el servidor. No hay dos reglas.
     const duration = checkVideoDuration("short_video", measured);
-    if (!duration.ok) {
-      toast(
-        duration.reason === "too-long"
-          ? {
-              title: COPY.composer.videoTooLongTitle,
-              description: COPY.composer.videoTooLongBody,
-              variant: "warning",
-              duration: 9000,
-            }
-          : {
-              title: COPY.composer.videoUnknownDurationTitle,
-              description: COPY.composer.videoUnknownDurationBody,
-              variant: "warning",
-              duration: 8000,
-            },
-      );
+
+    /**
+     * PASO 3 — LOS 90 s SIGUEN VALIENDO IGUAL, y se aplican antes de tocar el
+     * servidor. Es una regla de PRODUCTO, no una limitación técnica: nadie
+     * quiere un video de 40 minutos en el feed. Mux no la afloja.
+     */
+    if (!duration.ok && duration.reason === "too-long") {
+      toast({
+        title: COPY.composer.videoTooLongTitle,
+        description: COPY.composer.videoTooLongBody,
+        variant: "warning",
+        duration: 9000,
+      });
+      return;
+    }
+
+    /**
+     * PASO 4 — ¿POR DÓNDE VIAJA? Con `muxEnabled` en false ni se pregunta: es el
+     * camino de siempre. Con Mux prendido se pide el permiso de subida, y un
+     * 503 —Mux a medias, una clave rotada— devuelve la ruta vieja sin que la
+     * persona se entere de nada.
+     */
+    let ticket: MuxUploadTicket | null = null;
+    if (muxEnabled) {
+      setMeasuringVideo(true);
+      const pedido = await requestMuxUpload();
+      setMeasuringVideo(false);
+      if (pedido.ok) ticket = pedido.ticket;
+    }
+    const route: VideoUploadRoute = ticket ? "mux" : "bucket";
+
+    /**
+     * El chequeo DEFINITIVO, ahora que se sabe la ruta. Sólo puede cambiar algo
+     * cuando `muxEnabled` prometía Mux y el servidor contestó 503: ahí el
+     * archivo vuelve a medirse contra la vara del bucket, que es la que de
+     * verdad lo va a recibir. Un .mkv que iba a andar perfecto por Mux se
+     * rechaza acá, con el mensaje del bucket — que es la verdad de ese momento.
+     */
+    const fileCheck = route === rutaProbable ? chequeoInicial : checkVideoFile(file, route);
+    if (!fileCheck.ok) {
+      toast({
+        title:
+          fileCheck.reason === "type"
+            ? videoWrongTypeMessageFor(route)
+            : formatVideoTooBigMessage(file.size, route),
+        variant: "warning",
+        duration: 8000,
+      });
+      return;
+    }
+
+    /**
+     * LA DURACIÓN DESCONOCIDA, que es lo único que la ruta cambia.
+     *
+     * El navegador lee la duración abriendo el archivo con un `<video>`, y por
+     * la ruta de Mux ahora entran formatos que ningún navegador sabe abrir (un
+     * .mkv, un .avi). Rechazarlos por "no pudimos leer la duración" sería
+     * prometer cualquier formato y después rebotarlos a todos por la puerta de
+     * atrás.
+     *
+     * Así que por Mux una duración desconocida NO frena: se sube, y quien mide
+     * de verdad es Mux (`mux_duration_seconds` vuelve por el webhook, y es un
+     * dato mejor que el nuestro porque sale del archivo ya decodificado). Por el
+     * bucket sigue frenando, porque ahí el `<video>` del feed va a tener que
+     * abrir el mismo archivo que el composer no pudo.
+     */
+    if (!duration.ok && route === "bucket") {
+      toast({
+        title: COPY.composer.videoUnknownDurationTitle,
+        description: COPY.composer.videoUnknownDurationBody,
+        variant: "warning",
+        duration: 8000,
+      });
       return;
     }
 
@@ -439,7 +593,7 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         kind: "video",
         file,
         preview: URL.createObjectURL(file),
-        durationSeconds: duration.seconds,
+        durationSeconds: duration.ok ? duration.seconds : undefined,
         videoExtension: fileCheck.extension,
         videoContentType: fileCheck.mimeType,
         // Igual que la foto: el borrador arranca en "sin filtro" apenas se
@@ -449,12 +603,79 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
       },
     ]);
     openCompose("media");
+
+    /**
+     * ---- LA SUBIDA ARRANCA ACÁ, NO AL PUBLICAR ---------------------------
+     *
+     * Por la ruta del bucket el video se sube dentro de `submit()`, y con 60 MB
+     * eso son un par de segundos. Con Mux pueden ser cientos de megas en 4G:
+     * dejarlo para el final significaría que la persona escribe el pie, toca
+     * Publicar, y RECIÉN AHÍ empieza a esperar tres minutos mirando una barra.
+     *
+     * Arrancando acá, la subida corre mientras escribe. Cuando termina de armar
+     * la publicación, lo más probable es que el archivo ya esté arriba y
+     * publicar sea instantáneo. Es el mismo trabajo, movido al único rato en que
+     * la persona no lo está esperando.
+     */
+    if (ticket) {
+      setMuxTicket(ticket);
+      setMuxSubido(false);
+      setVideoUpload({ pct: 0, uploadedBytes: 0, totalBytes: file.size, offline: false });
+      muxHandleRef.current = startMuxUpload(
+        { uploadUrl: ticket.uploadUrl, file },
+        {
+          onProgress: (pct, uploadedBytes) =>
+            setVideoUpload((actual) =>
+              actual ? { ...actual, pct, uploadedBytes, offline: false } : actual,
+            ),
+          onOffline: () =>
+            setVideoUpload((actual) => (actual ? { ...actual, offline: true } : actual)),
+          onOnline: () =>
+            setVideoUpload((actual) => (actual ? { ...actual, offline: false } : actual)),
+          onSuccess: () => {
+            muxHandleRef.current = null;
+            setMuxSubido(true);
+            setVideoUpload(null);
+          },
+          onError: () => {
+            muxHandleRef.current = null;
+            setVideoUpload(null);
+            // No se quita el video del borrador: lo que escribió sigue ahí y
+            // puede volver a intentar quitándolo y eligiéndolo de nuevo. Se le
+            // dice eso, no un código.
+            toast({
+              title: VIDEO_COPY.subida.falloTitulo,
+              description: VIDEO_COPY.subida.falloCuerpo,
+              variant: "danger",
+              duration: 9000,
+            });
+          },
+        },
+      );
+    }
+  }
+
+  /**
+   * Corta la subida a Mux que esté en vuelo y limpia su rastro. Lo llaman el
+   * botón de cancelar, quitar el video del borrador y cerrar el composer: los
+   * tres significan lo mismo para el archivo que está viajando.
+   */
+  function cancelMuxUpload() {
+    muxHandleRef.current?.cancel();
+    muxHandleRef.current = null;
+    setVideoUpload(null);
+    setMuxTicket(null);
+    setMuxSubido(false);
   }
 
   function removeMedia(id: string) {
     setMedia((current) => {
       const found = current.find((item) => item.id === id);
       if (found) URL.revokeObjectURL(found.preview);
+      // Quitar el video del borrador CORTA su subida. Sin esto, el archivo
+      // seguiría viajando a Mux en segundo plano —gastando los datos de la
+      // persona— por un video que acaba de decidir que no va a publicar.
+      if (found?.kind === "video") cancelMuxUpload();
       return current.filter((item) => item.id !== id);
     });
   }
@@ -477,6 +698,10 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
     setComposeMode(null);
     setPollEnabled(false);
     setVideoCategory(DEFAULT_VIDEO_CATEGORY);
+    // Si quedaba una subida a Mux en vuelo (se cerró el composer, se descartó el
+    // borrador), se corta acá: nada de archivos viajando para una publicación
+    // que ya no existe.
+    cancelMuxUpload();
     // La declaración es de ESTA publicación: arrastrarla a la siguiente pondría
     // una afirmación en boca de alguien que no la hizo sobre otras fotos.
     setDeclaration(EMPTY_DECLARATION_VALUE);
@@ -524,7 +749,7 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
      * atajo de teclado, un test, un futuro disparador— mande una publicación
      * sin decidir a nombre de quién sale.
      */
-    if (autoriaBloquea) return;
+    if (publicarBloqueado) return;
 
     // Regla "todo post lleva imagen" (trigger MEDIA_REQUIRED 0023, exenta para
     // pregunta y texto): acá no hace falta reaccionar — ComposerSheet ya
@@ -550,7 +775,20 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
       let videoFrames: number[][] = [];
       /** PCM mono en base64 de la pista de audio del video. null = no se pudo. */
       let videoAudioPcm: string | null = null;
-      if (video) {
+      /**
+       * CON MUX NO HAY NADA QUE SUBIR ACÁ. El archivo ya viajó (o está viajando)
+       * desde que se eligió, así que este tramo se saltea entero: no se pide
+       * prefijo al bucket, no se arma path, no se sube. Lo único que sí se hace
+       * igual es el muestreo para Content Integrity, unas líneas más abajo —
+       * ese trabajo es sobre el archivo que está en memoria y no depende de por
+       * dónde viajó.
+       *
+       * Si la subida todavía no terminó, no se publica: el botón ya está apagado
+       * (`publishBlocked`), y esto es la misma regla del lado de quien envía.
+       */
+      if (video && muxTicket && !muxSubido) return;
+
+      if (video && !muxTicket) {
         const prepared = await prepareMediaUploadAction();
         if (!prepared.ok) {
           if (prepared.code === "unauthenticated") {
@@ -581,7 +819,8 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         // así que el campo siempre está.
         const extension = video.videoExtension ?? "mp4";
         videoPath = `${prepared.tenantId}/${prepared.userId}/video-${crypto.randomUUID()}.${extension}`;
-        setUploadPct(0);
+        const totalBytes = video.file.size;
+        setVideoUpload({ pct: 0, uploadedBytes: 0, totalBytes, offline: false });
         // El muestreo va en paralelo con la subida: son dos trabajos
         // independientes sobre el mismo archivo y encadenarlos le sumaría un
         // par de segundos a la espera por nada.
@@ -589,7 +828,16 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
           uploadVideoWithProgress(
             video.file,
             videoPath,
-            setUploadPct,
+            (pct) =>
+              setVideoUpload({
+                pct,
+                uploadedBytes: Math.round((totalBytes * pct) / 100),
+                totalBytes,
+                // El XHR al bucket es un único request: o va o no va. No hay un
+                // estado "sin conexión" que mostrar porque no hay nada que
+                // retomar — eso es exclusivo de la ruta de Mux.
+                offline: false,
+              }),
             video.videoContentType ?? video.file.type,
           ),
           sampleVideoLumaFrames(video.file),
@@ -601,7 +849,7 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         ]);
         videoFrames = frames;
         videoAudioPcm = audioPcm ? encodeAudioPcm16(audioPcm) : null;
-        setUploadPct(null);
+        setVideoUpload(null);
         if (!uploaded) {
           toast({
             title: COPY.composer.videoUploadErrorTitle,
@@ -610,6 +858,27 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
           });
           return;
         }
+      } else if (video && muxTicket) {
+        /**
+         * CONTENT INTEGRITY TAMBIÉN CON MUX. La huella perceptual se saca del
+         * archivo que está en memoria, no del que quedó en el bucket, así que
+         * este trabajo es idéntico por las dos rutas — y tiene que hacerse, o
+         * los videos que pasen por Mux entrarían al feed sin pasar por el
+         * pipeline que sí revisa a los demás.
+         *
+         * LO QUE CAMBIA: por Mux ahora entran formatos que el navegador no sabe
+         * decodificar (.mkv, .avi). Para esos, el muestreo vuelve vacío y el
+         * pipeline lo lee como "no se pudo analizar" → revisión humana. Es
+         * exactamente el comportamiento que ya tenía para un códec raro; lo
+         * único nuevo es que ahora va a pasar más seguido. Nunca frena la
+         * publicación, que es la regla de siempre.
+         */
+        const [frames, audioPcm] = await Promise.all([
+          sampleVideoLumaFrames(video.file),
+          sampleAudioPcm(video.file),
+        ]);
+        videoFrames = frames;
+        videoAudioPcm = audioPcm ? encodeAudioPcm16(audioPcm) : null;
       }
 
       // ---- 2) Hornear cada foto: filtro + texto quemados, SIEMPRE recomprimida
@@ -741,7 +1010,59 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
           formData.append("photos", bakedByPhotoId.get(item.id) ?? item.file);
         }
       }
-      if (videoPath) {
+      /**
+       * ---- EL VIDEO, POR CUALQUIERA DE LAS DOS RUTAS -----------------------
+       *
+       * Todo lo que sigue (declaración de duración, categoría, huellas de
+       * Content Integrity) es IGUAL por las dos rutas: describe el video, no
+       * dónde quedó guardado. Lo único que cambia es cómo se lo nombra —una
+       * ruta del bucket, o el par de identificadores de Mux— y eso son las dos
+       * ramas de abajo.
+       *
+       * ⚠️ CONTRATO CON EL BACKEND. Por la ruta de Mux viajan `muxUploadId` y
+       * `muxPostDraftId`, que son exactamente los dos identificadores que
+       * devolvió `POST /api/mux/subida`. `createPostAction` es quien tiene que
+       * atarlos a la publicación (y quien tiene que aceptar que una publicación
+       * con video de Mux SÍ tiene medio, aunque `posts.media` venga vacío: el
+       * archivo no está en el bucket). El cliente no inventa ningún otro campo.
+       */
+      if (muxTicket) {
+        formData.set("muxUploadId", muxTicket.uploadId);
+        formData.set("muxPostDraftId", muxTicket.postDraftId);
+        /**
+         * FILTRO DEL VIDEO (0104) por la ruta de Mux: un objeto suelto y no un
+         * arreglo paralelo, porque acá no hay `videoPaths` con los que emparejar
+         * — hay un solo video y su borrador ya tiene id. Mismo criterio de
+         * seguridad que la otra rama: sólo `id` e `intensity`, NUNCA el CSS. El
+         * string de `filter` lo arma el servidor desde el catálogo; mandarlo
+         * desde acá sería dejar que el navegador escriba en el `style` de todo
+         * el que abra la publicación.
+         */
+        const videoEditMux = video?.edit;
+        if (videoEditMux && videoEditMux.filterId !== DEFAULT_PHOTO_FILTER_ID) {
+          formData.set(
+            "muxVideoFilter",
+            JSON.stringify({
+              id: videoEditMux.filterId,
+              intensity: videoEditMux.filterIntensity ?? DEFAULT_PHOTO_FILTER_INTENSITY,
+            }),
+          );
+        }
+        formData.set("videoType", "short_video");
+        // La duración medida por el navegador, SI se pudo medir. Con un .mkv no
+        // se puede, y no pasa nada: `mux_duration_seconds` va a llegar por el
+        // webhook con el número real, que además es mejor que este.
+        if (video?.durationSeconds) {
+          formData.set("durationSeconds", String(video.durationSeconds));
+        }
+        formData.set("videoCategory", videoCategory);
+        if (videoFrames.length > 0) {
+          formData.set("videoFrames", JSON.stringify(videoFrames));
+        }
+        if (videoAudioPcm) {
+          formData.set("videoAudioPcm", videoAudioPcm);
+        }
+      } else if (videoPath) {
         formData.set("videoPaths", JSON.stringify([videoPath]));
         /**
          * FILTRO DEL VIDEO (0104) — arreglo PARALELO a `videoPaths`, no un
@@ -1045,7 +1366,13 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
       <input
         ref={videoInputRef}
         type="file"
-        accept={VIDEO_ACCEPT_ATTR}
+        /**
+         * `video/*` con Mux, la lista de tres formatos sin Mux. Es el atributo
+         * que el cliente reportó roto —los .mov de iPhone aparecían EN GRIS en
+         * el selector de macOS— y con Mux prendido deja de haber nada gris:
+         * cualquier video que el teléfono tenga se puede elegir.
+         */
+        accept={videoAcceptFor(muxEnabled ? "mux" : "bucket")}
         className="sr-only"
         tabIndex={-1}
         aria-hidden="true"
@@ -1086,12 +1413,20 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         declaration={declaration}
         onDeclarationChange={setDeclaration}
         previewId={previewId}
-        uploadPct={uploadPct}
+        videoUpload={videoUpload}
+        /**
+         * Cancelar sólo existe cuando hay algo que cancelar de verdad: la subida
+         * a Mux corre en segundo plano mientras la persona escribe y se puede
+         * cortar en cualquier momento. La del bucket pasa DENTRO de publicar, en
+         * un único request que no se interrumpe — ahí no se pinta el botón, en
+         * vez de pintar uno que no haría nada.
+         */
+        onCancelVideoUpload={muxTicket ? cancelMuxUpload : undefined}
         measuringVideo={measuringVideo}
         bakingProgress={bakingProgress}
         finishingLabel={finishingLabel}
         isPending={isPending}
-        publishBlocked={autoriaBloquea}
+        publishBlocked={publicarBloqueado}
         onPublish={submit}
         /**
          * CON QUÉ NOMBRE VA A SALIR (0023). Lo primero de la hoja. Las cuatro

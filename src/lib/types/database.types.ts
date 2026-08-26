@@ -1,31 +1,3 @@
-// GENERADO desde Supabase (proyecto ktmbtpuhqqofdkisqseq) — NO editar a mano.
-// Regenerar: MCP generate_typescript_types o `npx supabase gen types typescript`.
-//
-// REGENERADO ÍNTEGRAMENTE 2026-08-24, contra la base con la migración 0108
-// aplicada. La regeneración anterior (2026-08-08) se había quedado en la 0076, y
-// esos 32 números de diferencia eran la causa raíz de una familia entera de
-// parches: cada tabla o columna nueva llegaba a la app como `never`, y el
-// arreglo de turno era un `as unknown as` con un comentario prometiendo borrarlo
-// "cuando se regeneren los tipos". Esta regeneración es ese momento.
-//
-// Lo que entra ahora y antes no existía para TypeScript:
-//   · 0086–0088  integridad de contenido, disputas, `work_mode` en empleos y la
-//                comisión por comunidad (`creator_commission_config`).
-//   · 0089–0090  `post_tags`, `post_music` y `music_tracks`.
-//   · 0093–0095  reseñas y horarios de negocio (`listing_reviews`,
-//                `listing_review_stats`, `listing_hours`, `listing_hours_slots`).
-//   · 0096–0099  módulo comunidad (`community_resources`), menú de publicación y
-//                vencimiento de avisos (`listing_expiry_config`).
-//   · 0101–0103  verificación paga (`verification_subscriptions`,
-//                `verification_boost_grants`) y paquetes de servicio.
-//   · 0105–0107  centro de acopio, `post_offers` y los campos de publicación
-//                (`business_listing_id` en `posts`).
-//
-// POR QUÉ APARECEN TABLAS `*_caughtcode`. El proyecto de Supabase está
-// COMPARTIDO con otro producto: su esquema vive en la misma base, en el mismo
-// `public`, así que el generador lo trae. NO se borran a mano — un archivo
-// generado que alguien editó deja de ser generado, y la próxima regeneración las
-// devuelve igual. La app nunca las consulta.
 export type Json =
   | string
   | number
@@ -4108,6 +4080,53 @@ export type Database = {
           },
         ]
       }
+      mux_webhook_events: {
+        Row: {
+          claimed_at: string | null
+          error: string | null
+          event_id: string
+          event_type: string
+          id: string
+          payload: Json
+          processed: boolean
+          provider: string
+          received_at: string
+          tenant_id: string | null
+        }
+        Insert: {
+          claimed_at?: string | null
+          error?: string | null
+          event_id: string
+          event_type: string
+          id?: string
+          payload: Json
+          processed?: boolean
+          provider?: string
+          received_at?: string
+          tenant_id?: string | null
+        }
+        Update: {
+          claimed_at?: string | null
+          error?: string | null
+          event_id?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed?: boolean
+          provider?: string
+          received_at?: string
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mux_webhook_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_prefs: {
         Row: {
           category: string
@@ -4768,6 +4787,7 @@ export type Database = {
       }
       posts: {
         Row: {
+          area_label: string | null
           author_id: string | null
           body: string
           comment_count: number
@@ -4784,6 +4804,11 @@ export type Database = {
           like_count: number
           media: string[]
           media_filters: Json
+          mux_asset_id: string | null
+          mux_duration_seconds: number | null
+          mux_playback_id: string | null
+          mux_status: string | null
+          mux_upload_id: string | null
           pinned_at: string | null
           poll_kind: string | null
           poll_no_count: number
@@ -4797,6 +4822,7 @@ export type Database = {
           view_count: number
         }
         Insert: {
+          area_label?: string | null
           author_id?: string | null
           body: string
           comment_count?: number
@@ -4813,6 +4839,11 @@ export type Database = {
           like_count?: number
           media?: string[]
           media_filters?: Json
+          mux_asset_id?: string | null
+          mux_duration_seconds?: number | null
+          mux_playback_id?: string | null
+          mux_status?: string | null
+          mux_upload_id?: string | null
           pinned_at?: string | null
           poll_kind?: string | null
           poll_no_count?: number
@@ -4826,6 +4857,7 @@ export type Database = {
           view_count?: number
         }
         Update: {
+          area_label?: string | null
           author_id?: string | null
           body?: string
           comment_count?: number
@@ -4842,6 +4874,11 @@ export type Database = {
           like_count?: number
           media?: string[]
           media_filters?: Json
+          mux_asset_id?: string | null
+          mux_duration_seconds?: number | null
+          mux_playback_id?: string | null
+          mux_status?: string | null
+          mux_upload_id?: string | null
           pinned_at?: string | null
           poll_kind?: string | null
           poll_no_count?: number
@@ -6599,6 +6636,61 @@ export type Database = {
         Returns: string
       }
       ensure_org_caughtcode: { Args: { p_user_id?: string }; Returns: string }
+      feed_listings_page: {
+        Args: {
+          p_area_labels?: string[]
+          p_cursor_created_at?: string
+          p_cursor_id?: string
+          p_limit?: number
+          p_tenant_id: string
+        }
+        Returns: {
+          area_label: string
+          created_at: string
+          created_by: string
+          description: string
+          id: string
+          kind: string
+          photos: string[]
+          price_amount: number
+          price_currency: string
+          price_period: string
+          publisher_name: string
+          title: string
+        }[]
+      }
+      feed_posts_page: {
+        Args: {
+          p_area_labels?: string[]
+          p_cursor_created_at?: string
+          p_cursor_id?: string
+          p_entity_kind?: string
+          p_limit?: number
+          p_tenant_id: string
+        }
+        Returns: {
+          author_id: string
+          body: string
+          comment_count: number
+          comments_locked_at: string
+          created_at: string
+          duration_seconds: number
+          eligible_for_short_feed: boolean
+          entity_listing_id: string
+          hidden_at: string
+          id: string
+          is_paid_ad: boolean
+          kind: string
+          like_count: number
+          media: string[]
+          media_filters: Json
+          pinned_at: string
+          status: string
+          video_category: string
+          video_type: string
+          view_count: number
+        }[]
+      }
       fijar_publicacion: {
         Args: { p_fijar?: boolean; p_post: string }
         Returns: string

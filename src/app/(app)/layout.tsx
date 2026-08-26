@@ -16,6 +16,7 @@ import { getViewerAccount } from "@/lib/time/viewer-zone";
 import { OfflineBanner } from "@/components/shell/offline-banner";
 import { AccountGate } from "@/components/shell/account-gate";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { isMuxConfigured } from "@/lib/config/services";
 
 /**
  * Shell de la app autenticada: Header + contenido mobile-first centrado + BottomNav.
@@ -94,7 +95,25 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         disparadores del MISMO menú — antes el "+" navegaba a /feed?crear=… y
         perdía el gesto de usuario que abre el selector de archivos en Safari.
         Ver el docblock de post-composer.tsx. */}
-    <PostComposerHost modules={tenant.modules} modulesSoon={tenant.modulesSoon}>
+    <PostComposerHost
+      modules={tenant.modules}
+      modulesSoon={tenant.modulesSoon}
+      /**
+       * ¿ESTE ENTORNO TIENE MUX? Baja por prop desde acá y no se averigua en el
+       * cliente por el motivo que explica `lib/config/services.ts`: en el bundle
+       * del navegador las env de servidor son `undefined`, así que el flag no
+       * fallaría — MENTIRÍA, diciendo "no configurado" con Mux andando perfecto.
+       *
+       * El composer lo necesita ANTES de abrir el selector de archivos, porque
+       * de esto depende el `accept` del input: con Mux es `video/*` (cualquier
+       * formato, que es lo que pidió el cliente) y sin Mux sigue siendo la lista
+       * de tres que el bucket y el `<video>` del feed aguantan.
+       *
+       * NO es la única defensa: aunque esto llegue en `true`, si
+       * `/api/mux/subida` contesta 503 la subida cae al bucket en silencio.
+       */
+      muxEnabled={isMuxConfigured}
+    >
     <div className="flex min-h-dvh flex-col">
       <a
         href="#contenido"

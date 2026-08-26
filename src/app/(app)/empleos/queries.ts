@@ -112,18 +112,8 @@ type JobListingRow = Pick<
   | "created_at"
   | "created_by"
   | "publisher_name"
-> & {
-  /**
-   * `listings.work_mode` (migración 0087: presencial / híbrido / a distancia).
-   *
-   * Se declara a mano en vez de salir del `Pick<Tables<"listings">>` porque
-   * `src/lib/types/database.types.ts` está generado a la altura de la 0076 y
-   * todavía no conoce esta columna — el mismo motivo por el que `identidad.ts`
-   * y las lecturas de `post_offers` usan sus propios escapes. Cuando se
-   * regeneren los tipos, esta línea se borra y la columna vuelve al `Pick`.
-   */
-  work_mode: string | null;
-};
+  | "work_mode"
+>;
 
 /** Solo las columnas que alimentan el badge (over-fetch §perf, mismo criterio que /negocios). */
 type PublisherProfileRow = Pick<
@@ -247,7 +237,7 @@ export async function fetchJobsPage(input: {
     return { items: [], nextCursor: null };
   }
 
-  const pageRows = (rows ?? []) as unknown as JobListingRow[];
+  const pageRows = (rows ?? []) as JobListingRow[];
   const trimmedRows = pageRows.slice(0, PAGE_SIZE);
   const hasMore = pageRows.length > PAGE_SIZE;
 
@@ -290,7 +280,7 @@ export async function fetchJobsPage(input: {
         .eq("kind", "job")
         .eq("status", "published")
         .in("id", missingIds);
-      boostedExtra = (extra ?? []) as unknown as JobListingRow[];
+      boostedExtra = (extra ?? []) as JobListingRow[];
     }
   }
 

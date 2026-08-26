@@ -34,6 +34,7 @@ import {
   type MediaItem,
 } from "@/lib/integrity";
 import { currentSourceHost } from "@/lib/integrity/source-host";
+import { MUX_FILTER_KEY } from "@/lib/media/mux-video";
 import { puedeFirmarComo } from "@/lib/feed/autoria";
 import { notifyPostComment, notifyPostReaction } from "./social-notifications";
 
@@ -105,6 +106,22 @@ const postSchema = z.object({
   /** Duración DECLARADA por el navegador (metadata del archivo), en segundos. */
   durationSeconds: z.coerce.number().finite().positive().max(36_000).optional(),
   videoCategory: z.enum(VIDEO_CATEGORIES).optional(),
+  /**
+   * ---- VIDEO POR MUX (0114) -------------------------------------------------
+   *
+   * Los dos identificadores que devolvió `POST /api/mux/subida`. Vienen juntos
+   * o no viene ninguno: `muxPostDraftId` es la fila `posts` en `draft` que esa
+   * ruta ya creó, y `muxUploadId` es la subida de Mux con la que se la
+   * correlaciona.
+   *
+   * Que exista el borrador cambia CÓMO se persiste —un UPDATE en vez de un
+   * INSERT— pero nada de lo que pasa antes: el mismo texto pasa por la misma
+   * moderación y las mismas huellas de integridad. Duplicar ese camino en una
+   * segunda action sería la forma más rápida de que un día uno de los dos se
+   * quede sin un chequeo.
+   */
+  muxPostDraftId: z.string().uuid().optional(),
+  muxUploadId: z.string().min(1).max(200).optional(),
 });
 
 const PHOTO_TYPES: Record<string, string> = {
@@ -272,6 +289,8 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     videoType: formData.get("videoType") || undefined,
     durationSeconds: formData.get("durationSeconds") || undefined,
     videoCategory: formData.get("videoCategory") || undefined,
+    muxPostDraftId: formData.get("muxPostDraftId") || undefined,
+    muxUploadId: formData.get("muxUploadId") || undefined,
   });
   if (!parsed.success) return { ok: false, code: GENERIC_INVALID };
   const { body, kind, entityId } = parsed.data;
@@ -506,6 +525,51 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     }
   }
 
+  /**
+   * ---- EL BORRADOR DE MUX (0114) -------------------------------------------
+   *
+   * MISMA CATEGORÍA QUE LAS DOS DE ARRIBA, y por eso está acá y no más abajo:
+   * `muxPostDraftId` llega por el body. Tomarlo sin comprobar sería dejar que
+   * cualquiera con un token de la comunidad convierta en publicación suya el
+   * borrador de otro — y con él, el video que esa persona subió.
+   *
+   * Se exigen las CUATRO condiciones juntas, no tres: que la fila sea de esta
+   * comunidad, de este autor, que siga en `draft`, y que su `mux_upload_id` sea
+   * exactamente el que el cliente dice. La última es la que ata el borrador a
+   * ESTA subida: sin ella, un borrador viejo y abandonado del mismo autor
+   * podría publicarse con el texto de una publicación nueva.
+   *
+   * `app.enforce_draft_publish()` (0114) vuelve a chequear la transición del
+   * lado de la base, y ahí también se aplican los guards de suspensión y
+   * restricción social. Esto corta antes por el mismo motivo que `entityId`: no
+   * gastar moderación en algo que no se va a poder guardar, y poder devolver un
+   * motivo en vez de un código de PostgREST.
+   */
+  const { muxPostDraftId, muxUploadId } = parsed.data;
+  // Los dos o ninguno: uno solo es un cliente roto o alguien probando.
+  if (Boolean(muxPostDraftId) !== Boolean(muxUploadId)) {
+    return { ok: false, code: GENERIC_INVALID };
+  }
+  if (muxPostDraftId && muxUploadId) {
+    const { data: borrador, error: borradorError } = await supabase
+      .from("posts")
+      .select("id")
+      .eq("id", muxPostDraftId)
+      .eq("tenant_id", tenant.id)
+      .eq("author_id", user.id)
+      .eq("status", "draft")
+      .eq("mux_upload_id", muxUploadId)
+      .maybeSingle();
+    if (borradorError || !borrador) {
+      // Sin PII: no se registra qué borrador se intentó publicar.
+      console.warn("[feed] borrador de video no disponible para publicar", {
+        tenant: tenant.slug,
+        code: borradorError?.code,
+      });
+      return { ok: false, code: "error" };
+    }
+  }
+
   // Techo de publicación, ANTES de la moderación y de tocar Storage. Es el
   // único camino del feed que gasta plata ajena por request: `moderateText`
   // llama a OpenAI y cada foto sube bytes al bucket. 30 por hora no lo nota
@@ -605,6 +669,35 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     if (filter) mediaFilters[path] = filter;
   });
 
+  /**
+   * EL FILTRO DE UN VIDEO DE MUX VA BAJO UNA CLAVE CENTINELA, no bajo una ruta.
+   *
+   * El resto de este objeto se indexa por la ruta del archivo en el bucket, y
+   * un video de Mux no tiene ninguna: `posts.media` viene sin él. Sin una clave
+   * acordada, el composer mandaba `muxVideoFilter` y NADIE podía leerlo — el
+   * filtro se perdía en silencio, que es peor que no ofrecerlo.
+   *
+   * `MUX_FILTER_KEY` no puede chocar con una ruta real: las rutas del bucket
+   * son `{tenant}/{user}/archivo` y siempre llevan barras. Hay una sola por
+   * publicación porque Mux acepta un video por borrador.
+   */
+  const rawMuxFilter = formData.get("muxVideoFilter");
+  if (muxPostDraftId && typeof rawMuxFilter === "string" && rawMuxFilter.length > 0) {
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(rawMuxFilter);
+    } catch {
+      return { ok: false, code: GENERIC_INVALID };
+    }
+    // Mismo validador que la otra rama: del cliente sólo se acepta `id` e
+    // `intensity`, y el `id` tiene que existir en el catálogo. El CSS lo arma
+    // el servidor — dejarlo entrar sería escribir en el `style` de todo el que
+    // abra la publicación.
+    const parsedFilter = parseMediaFilterRef(decoded);
+    if (!parsedFilter.ok) return { ok: false, code: GENERIC_INVALID };
+    if (parsedFilter.value) mediaFilters[MUX_FILTER_KEY] = parsedFilter.value;
+  }
+
   // ---- Insert con el JWT del usuario: la RLS valida tenant/autor/status y,
   // si viene entity_listing_id, que el listing sea propio y published (0023).
   const basePayload = {
@@ -639,14 +732,44 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     ...(pollKind ? { poll_kind: pollKind } : {}),
   } as PostInsert;
 
-  const { data: created, error: insertError } = await supabase
-    .from("posts")
-    .insert(insertPayload)
-    .select("id")
-    .single();
+  /**
+   * DOS FORMAS DE PERSISTIR, UN SOLO CAMINO ANTES.
+   *
+   * Sin video de Mux se inserta la fila, como siempre. CON video de Mux la fila
+   * YA existe: la creó `/api/mux/subida` en `draft` para poder colgarle la
+   * subida, así que publicar es un UPDATE de ese borrador.
+   *
+   * Lo que NO cambia es todo lo de arriba —moderación del texto, rate limit,
+   * validación de la ficha que firma— ni todo lo de abajo, que trabaja con
+   * `created.id`. Ésa es la razón de que la rama esté acá abajo y no en una
+   * action aparte: dos caminos de escritura terminan, siempre, con uno de los
+   * dos sin un chequeo.
+   *
+   * El UPDATE repite las tres condiciones de pertenencia del chequeo de más
+   * arriba. No es redundancia inútil: entre aquel SELECT y este UPDATE corrió
+   * la moderación, que tarda, y en el medio el borrador pudo cambiar de estado.
+   * Con el predicado en el WHERE, "cero filas" es la respuesta correcta y no
+   * una publicación pisada.
+   */
+  const persistencia = muxPostDraftId
+    ? await supabase
+        .from("posts")
+        .update(insertPayload)
+        .eq("id", muxPostDraftId)
+        .eq("tenant_id", tenant.id)
+        .eq("author_id", user.id)
+        .eq("status", "draft")
+        .select("id")
+        .maybeSingle()
+    : await supabase.from("posts").insert(insertPayload).select("id").single();
+
+  const { data: created, error: insertError } = persistencia;
 
   if (insertError || !created) {
-    console.warn("[feed] insert de post falló", { code: insertError?.code });
+    console.warn("[feed] no se pudo guardar la publicación", {
+      code: insertError?.code,
+      viaMux: Boolean(muxPostDraftId),
+    });
     return { ok: false, code: "error" };
   }
 

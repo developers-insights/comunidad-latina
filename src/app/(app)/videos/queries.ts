@@ -17,6 +17,7 @@ import {
 import { feedPostVisibilityFilter, type PostCardModel } from "@/components/feed";
 import { encodeCursor } from "@/components/listings";
 import { isEligibleForShortFeed, type VideoCategory } from "@/lib/media/video-policy";
+import { parseMuxStatus } from "@/lib/media/mux-video";
 import { hasVideoMedia, scopeListingKind, type VideosScope } from "./helpers";
 
 /**
@@ -238,7 +239,19 @@ export async function fetchVideoReelsPage({
       videoType: row.video_type,
       eligibleForShortFeed: row.eligible_for_short_feed,
       status: row.status,
-      hasVideoMedia: hasVideoMedia(row.media),
+      /**
+       * "TIENE VIDEO" AHORA SON DOS COSAS. Un video subido por Mux no deja ruta
+       * en `posts.media` —el archivo nunca pasó por el bucket—, así que mirar
+       * sólo las rutas dejaría al reel sin ninguno de los videos nuevos.
+       *
+       * Y SÓLO CUANDO ESTÁ LISTO, a diferencia del feed. Videos Cortos es un
+       * scroll de pantalla completa donde cada deslizada tiene que traer un
+       * video: una diapositiva que dice "esperá un rato" es un pozo en el medio
+       * del scroll. En la tarjeta del feed sí se muestra el estado —ahí convive
+       * con texto y contexto, y quien publicó necesita ver que su video salió—;
+       * acá el video aparece con la siguiente tanda, ya reproducible.
+       */
+      hasVideoMedia: hasVideoMedia(row.media) || parseMuxStatus(row.mux_status) === "ready",
       durationSeconds: row.duration_seconds,
       isPaidAd: row.is_paid_ad,
     });
