@@ -143,8 +143,12 @@ const csp = [
   "script-src 'self' 'unsafe-inline' https://js.stripe.com",
   "style-src 'self' 'unsafe-inline'",
   // https://images.pexels.com → SOLO por las fotos del seed demo (ver deuda arriba).
-  "img-src 'self' data: blob: https://*.supabase.co https://images.pexels.com",
-  "media-src 'self' blob: https://*.supabase.co",
+  // `https://image.mux.com`: la MINIATURA de un video por Mux (0116). El poster
+  // sale de ahí, no del bucket — sin este host el reel arranca en negro.
+  "img-src 'self' data: blob: https://*.supabase.co https://images.pexels.com https://image.mux.com",
+  // `https://stream.mux.com`: el HLS de un video por Mux (0116). Los videos que
+  // siguen en el bucket usan el host de Supabase de siempre; conviven.
+  "media-src 'self' blob: https://*.supabase.co https://stream.mux.com",
   "font-src 'self' data:",
   // https://images.pexels.com también en connect-src: el service worker (Serwist)
   // revalida las <img> con fetch() y ese fetch cae bajo connect-src, no img-src —
@@ -155,7 +159,17 @@ const csp = [
   // vectorial, que se borró en la auditoría 2026-08-13 por no tener
   // consumidores. Permitir un host que el navegador nunca visita es superficie
   // de exfiltración regalada.
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://images.pexels.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com",
+  // Mux entra por TRES lados y los tres son connect-src, no media-src:
+  //   · `stream.mux.com`  — mux-player pide el .m3u8 y sus segmentos con fetch(),
+  //     y un fetch cae bajo connect-src aunque lo que traiga sea video (mismo
+  //     caso que ya documenta Pexels acá arriba con el service worker).
+  //   · `storage.mux.com` — el destino de la subida directa por UpChunk, que es
+  //     la URL que devuelve /api/mux/subida.
+  //   · `image.mux.com`   — la miniatura, cuando el service worker la revalida.
+  // Sin estos tres, el video por Mux no reproduce NI sube: falla en el
+  // navegador, con la API andando perfecto y sin un solo error del lado del
+  // servidor. Es el modo de falla más caro de diagnosticar que tiene el CSP.
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://images.pexels.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com https://stream.mux.com https://storage.mux.com https://image.mux.com",
   "frame-src https://js.stripe.com https://hooks.stripe.com",
   "worker-src 'self' blob:",
   "base-uri 'self'",
