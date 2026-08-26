@@ -98,9 +98,10 @@ export interface MediaCarouselProps {
   /** Clases extra de la fila de puntitos (p. ej. subirla sobre el CTA de campaña). */
   dotsClassName?: string;
   /**
-   * Pista asociada al POST (0090), no a un medio en particular: si alguna
-   * diapositiva es un video, baja hasta CardVideo para que la reproduzca
-   * sincronizada. Ausente en un carrusel sin música.
+   * Pista asociada al POST (0090), no a un medio en particular. Baja hasta
+   * CardVideo para que el video sepa que la música le gana y se quede mudo
+   * (`resolveAudioMix`, regla 2) — reproducirla es tarea de `CardMusic`, que
+   * cuelga de la publicación entera. Ausente en un carrusel sin música.
    */
   music?: PostMusicView | null;
 }

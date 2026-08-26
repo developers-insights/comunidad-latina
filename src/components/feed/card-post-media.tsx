@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Heart } from "@phosphor-icons/react/dist/ssr";
 import { usePrefersReducedMotion } from "@/components/motion";
 import { cn } from "@/lib/utils";
-import { attributionLine } from "@/lib/media/audio-track";
+import { resumeAudio, suspendAudio } from "@/lib/media/audio-channel";
 import { AdChip } from "./card-ad-chip";
 import { BoostCta } from "./boost-cta";
 import { useCardLike } from "./card-like-context";
 import { useCardMedia } from "./card-media-context";
 import { MediaCarousel } from "./media-carousel";
 import { useMediaViewer } from "./media-viewer";
-import { MusicBadge } from "./music-badge";
+import { CardMusic } from "./card-music";
 import {
   isPaidAdvertising,
   videoOpensReel,
@@ -93,6 +93,11 @@ export function CardPostMedia({
   const like = useCardLike();
   const media = useCardMedia();
   const [bursts, setBursts] = useState(0);
+  /**
+   * Los medios, para el observador de la música: lo que decide si la pista
+   * suena es que se vea la FOTO (o el video), no la insignia de la esquina.
+   */
+  const mediaRef = useRef<HTMLDivElement | null>(null);
 
   // Sin provider no hay card que pintar (y sin medios, tampoco). El guard va
   // DESPUÉS de todos los hooks: un return temprano antes rompería su orden.
@@ -122,14 +127,20 @@ export function CardPostMedia({
    * dentro de un anuncio, 300 s en el detalle (ver `viewerPlaybackCapFor`, que
    * lee los números de video-policy).
    */
-  const openViewerAt = (startIndex: number) =>
+  const openViewerAt = (startIndex: number) => {
+    // El visor arranca CON sonido: la música de la card se calla mientras dure,
+    // y vuelve sola al cerrarse. `suspend` y no `stop` porque no es un gesto de
+    // silencio de la persona — es que arriba hay algo que manda más.
+    suspendAudio();
     viewer.open({
       items,
       startIndex,
       postId,
       authorName,
       maxPlaybackSeconds: viewerPlaybackCapFor(paidAd),
+      onClose: resumeAudio,
     });
+  };
   /**
    * Sin reel por DOS motivos distintos, y los dos terminan igual: el video se
    * abre a pantalla completa sobre esta misma publicación y al cerrar volvés acá.
@@ -148,7 +159,7 @@ export function CardPostMedia({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={mediaRef}>
       <MediaCarousel
         items={items}
         index={index}
@@ -165,9 +176,11 @@ export function CardPostMedia({
         // Con campaña paga, la barra del CTA ocupa el borde inferior: los
         // puntitos suben para no quedar debajo.
         dotsClassName={showBoostCta ? "bottom-[3.75rem]" : undefined}
-        // La pista, para que el video de ESTE post (si lo hay) la reproduzca
-        // sincronizada. Es la misma para todas las diapositivas: la música es
-        // del POST, no de un medio en particular (post_music, PK post_id).
+        // La pista NO viaja para que el carrusel la reproduzca —de eso se
+        // encarga `CardMusic`, abajo— sino para que el video sepa que tiene que
+        // callarse (`resolveAudioMix`, regla 2) y no ofrecer un segundo control
+        // de audio. Es la misma para todas las diapositivas: la música es del
+        // POST, no de un medio en particular (post_music, PK post_id).
         music={music}
       />
 
@@ -180,25 +193,24 @@ export function CardPostMedia({
         </div>
       )}
 
-      {/* Insignia de música (0090): sobre CUALQUIER medio (foto o video), no
-          por diapositiva — la pista es del post entero. Abajo a la izquierda,
-          simétrica al AdChip (arriba a la derecha). Con CTA de campaña activo
-          la barra de BoostCta ocupa todo el borde inferior: la insignia sube
-          exactamente lo mismo que ya suben los puntitos del carrusel
-          (`dotsClassName` arriba) — mismo valor, misma regla, no una nueva. */}
+      {/* MÚSICA (0090): la insignia —que además de decorar CUMPLE la atribución
+          de la licencia— es también el play/pausa de la pista, y el `<audio>`
+          que suena cuelga de acá. Es del POST y no de una diapositiva: la
+          pista es una sola (`post_music`, PK post_id) tenga fotos, video o
+          las dos cosas. Abajo a la izquierda, simétrica al AdChip. Con CTA de
+          campaña activo la barra de BoostCta ocupa todo el borde inferior: la
+          insignia sube exactamente lo mismo que ya suben los puntitos del
+          carrusel (`dotsClassName` arriba) — mismo valor, misma regla. */}
       {music && (
-        <div
+        <CardMusic
+          postId={postId}
+          music={music}
+          targetRef={mediaRef}
           className={cn(
-            "pointer-events-none absolute left-2.5 z-[3]",
+            "absolute left-2.5 z-[3]",
             showBoostCta ? "bottom-[3.75rem]" : "bottom-3",
           )}
-        >
-          <MusicBadge
-            title={music.track.title}
-            artist={music.track.artist}
-            attribution={attributionLine(music.track)}
-          />
-        </div>
+        />
       )}
 
       {/* Corazón grande del doble-tap (decorativo; el estado lo comunica el botón).

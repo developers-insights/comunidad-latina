@@ -1,4 +1,4 @@
-import { MusicNotes } from "@phosphor-icons/react/dist/ssr";
+import { MusicNotes, Pause, Play } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { MUSIC_COPY } from "./music-copy";
 
@@ -35,10 +35,29 @@ export interface MusicBadgeProps {
    * crédito lo decide la licencia, no un componente de presentación.
    */
   attribution?: string | null;
+  /**
+   * ¿Está sonando? `undefined` = insignia QUIETA: nadie la puede tocar y el
+   * ícono es la nota musical de siempre (así se monta donde no hay reproductor:
+   * el visor a pantalla completa, una vista impresa).
+   *
+   * Con un booleano, la insignia se vuelve la cara de un control: ▶ cuando está
+   * en silencio, ⏸ cuando suena. El botón lo pone quien la monta (`CardMusic`),
+   * no ella: una insignia que se declarara botón sola no podría vivir dentro de
+   * la capa de toque de la foto sin robarle el gesto.
+   */
+  playing?: boolean;
   className?: string;
 }
 
-export function MusicBadge({ title, artist, attribution = null, className }: MusicBadgeProps) {
+export function MusicBadge({
+  title,
+  artist,
+  attribution = null,
+  playing,
+  className,
+}: MusicBadgeProps) {
+  /** Quieta = decorativa; con control = el ícono dice qué pasa si tocás. */
+  const Icon = playing === undefined ? MusicNotes : playing ? Pause : Play;
   const visible = `${title}${MUSIC_COPY.badgeSeparator}${artist}`;
   /**
    * La segunda línea aparece sólo si dice algo que la primera no. Repetir
@@ -49,7 +68,14 @@ export function MusicBadge({ title, artist, attribution = null, className }: Mus
     attribution && attribution.replace(/\s+/g, " ").trim() !== visible ? attribution : null;
 
   return (
-    <div className={cn("pointer-events-none flex max-w-[85%] flex-col items-start gap-1", className)}>
+    <div
+      className={cn(
+        "flex max-w-[85%] flex-col items-start gap-1",
+        // Sin control, la insignia no intercepta el toque de la foto.
+        playing === undefined && "pointer-events-none",
+        className,
+      )}
+    >
       <span
         className={cn(
           "cl-print-fill flex min-w-0 max-w-full items-center gap-1.5 rounded-full",
@@ -58,7 +84,7 @@ export function MusicBadge({ title, artist, attribution = null, className }: Mus
         // Lo que significa lo dice el texto de al lado; el ícono es adorno.
         aria-label={MUSIC_COPY.badgeLabel(title, artist)}
       >
-        <MusicNotes size={13} weight="fill" aria-hidden="true" className="shrink-0" />
+        <Icon size={13} weight="fill" aria-hidden="true" className="shrink-0" />
         {/* `truncate`: un título largo no puede empujar la píldora fuera de la
             foto. Se corta el texto, nunca se corta la píldora. */}
         <span className="truncate">{visible}</span>
