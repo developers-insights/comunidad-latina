@@ -7,6 +7,10 @@ import {
   editPostAction,
   removePostPhotoAction,
 } from "@/app/(app)/feed/post-edit-actions";
+import {
+  attachPostMusicAction,
+  detachPostMusicAction,
+} from "@/app/(app)/feed/music-actions";
 import { BottomSheet, Button, Dialog, Textarea, useToast } from "@/components/ui";
 import {
   POST_BODY_MAX,
@@ -14,8 +18,11 @@ import {
   bodyIsPublishable,
 } from "@/lib/social/post-editing";
 import { cn } from "@/lib/utils";
+import type { PickedTrack } from "@/lib/media/audio-track";
 import { COPY } from "./copy";
-import { mediaKindOf, postMediaUrl } from "./helpers";
+import { mediaKindOf, postMediaUrl, type PostMusicView } from "./helpers";
+import { MusicPicker } from "./music-picker";
+import { MUSIC_COPY } from "./music-copy";
 
 export interface PostEditSheetProps {
   open: boolean;
@@ -33,6 +40,14 @@ export interface PostEditSheetProps {
    * con query string. Ausente → la hoja no ofrece quitar nada.
    */
   media?: readonly string[];
+  /**
+   * La pista que la publicación tiene HOY (`post_music`, 0090), o null si no
+   * tiene. `undefined` no es lo mismo que `null`: significa que la superficie
+   * que montó la hoja no sabe de música, y entonces la sección no se ofrece —
+   * mostrar "Agregar música" sin saber si ya hay una llevaría a pisar en
+   * silencio la canción que la persona eligió al publicar.
+   */
+  music?: PostMusicView | null;
 }
 
 /**
@@ -46,6 +61,13 @@ export interface PostEditSheetProps {
  * exactamente lo que hace publicar de nuevo. Quitar no trae nada nuevo, así que
  * no hay pipeline que rehacer y la fila de procedencia del archivo que sale
  * sigue siendo verdadera — sólo se le anota cuándo dejó de mostrarse.
+ *
+ * LO QUE SÍ SUMÓ: la MÚSICA. Es la segunda puerta de la 0090 y la que vuelve
+ * cierta la promesa que el composer ya hacía por escrito cuando la canción no
+ * llegaba a pegarse ("podés agregarla desde la publicación"). Cambiarla no
+ * necesita el pipeline de integridad porque no entra ningún archivo nuevo: la
+ * pista sale del catálogo ya licenciado y lo único que se guarda es a cuál
+ * apunta la publicación.
  *
  * Tampoco se puede quitar el VIDEO ni la ÚNICA foto: en el primer caso quedarían
  * colgadas las columnas que lo describen (y la publicación seguiría existiendo
@@ -63,6 +85,7 @@ export function PostEditSheet({
   initialBody,
   hasMedia,
   media,
+  music,
 }: PostEditSheetProps) {
   return (
     <BottomSheet
@@ -81,6 +104,7 @@ export function PostEditSheet({
         initialBody={initialBody}
         hasMedia={hasMedia}
         media={media}
+        music={music}
       />
     </BottomSheet>
   );
@@ -92,6 +116,7 @@ function PostEditSheetBody({
   initialBody,
   hasMedia,
   media,
+  music,
 }: Omit<PostEditSheetProps, "open">) {
   const router = useRouter();
   const { toast } = useToast();
@@ -173,6 +198,14 @@ function PostEditSheetBody({
 
       {hasMedia && (
         <MediaStrip postId={postId} media={media ?? []} disabled={isPending} />
+      )}
+
+      {/* MÚSICA (0090) — sólo con foto o video, la misma regla que el composer:
+          la insignia y el sonido viven SOBRE el medio, así que en una
+          publicación de sólo texto no habría ni dónde anunciarla ni sobre qué
+          sonar. `music === undefined` = la superficie no sabe de música. */}
+      {hasMedia && music !== undefined && (
+        <MusicRow postId={postId} initial={music} disabled={isPending} />
       )}
 
       <p className="text-xs text-foreground-muted">
@@ -397,6 +430,119 @@ function MediaStrip({
           </p>
         )}
       </Dialog>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Música de la publicación (0090) — la segunda puerta, después de publicar
+// ---------------------------------------------------------------------------
+
+/**
+ * Poner, cambiar o sacar la canción de una publicación que YA existe.
+ *
+ * SE GUARDA AL INSTANTE, sin esperar el botón Guardar. No es una inconsistencia
+ * con el campo de texto: es la misma regla que ya sigue la tira de fotos de
+ * arriba. Lo que Guardar guarda es el TEXTO —y por eso marca la publicación como
+ * editada—; la música no es texto y no debería dejar esa marca. Atarla al botón
+ * también obligaría a explicar por qué el picker muestra una canción que todavía
+ * no está puesta.
+ *
+ * OPTIMISTA CON VUELTA ATRÁS: la fila muestra la pista elegida enseguida y, si
+ * el servidor rebota, vuelve a la anterior y lo dice. Dejarla puesta en pantalla
+ * después de un error sería mentir sobre lo que quedó publicado.
+ *
+ * `attachPostMusicAction` es un UPSERT sobre la PK `post_id`, así que cambiar de
+ * canción no acumula filas ni deja dos sonando, y `detach` es idempotente.
+ */
+function MusicRow({
+  postId,
+  initial,
+  disabled,
+}: {
+  postId: string;
+  initial: PostMusicView | null;
+  disabled: boolean;
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [track, setTrack] = useState<PickedTrack | null>(
+    initial
+      ? {
+          id: initial.track.id,
+          title: initial.track.title,
+          artist: initial.track.artist,
+          previewUrl: initial.track.previewUrl,
+          startSeconds: initial.startSeconds,
+        }
+      : null,
+  );
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSaving, startSaving] = useTransition();
+
+  function apply(next: PickedTrack | null) {
+    if (isSaving) return;
+    const previous = track;
+    setTrack(next);
+    setErrorMessage(null);
+
+    startSaving(async () => {
+      const result = next
+        ? await attachPostMusicAction({
+            postId,
+            trackId: next.id,
+            startSeconds: next.startSeconds,
+          })
+        : await detachPostMusicAction({ postId });
+
+      if (!result.ok) {
+        setTrack(previous);
+        // Cada motivo dice qué hacer. "track-unavailable" y "post-unavailable"
+        // tienen su copy propio porque reintentar no los arregla.
+        setErrorMessage(
+          result.code === "track-unavailable"
+            ? MUSIC_COPY.trackUnavailable
+            : result.code === "post-unavailable"
+              ? MUSIC_COPY.postUnavailable
+              : result.code === "unauthenticated"
+                ? MUSIC_COPY.signedOut
+                : result.code === "tenant-mismatch"
+                  ? result.message
+                  : MUSIC_COPY.editFailed,
+        );
+        return;
+      }
+
+      toast(
+        next
+          ? {
+              title: MUSIC_COPY.editAppliedTitle,
+              description: MUSIC_COPY.editAppliedBody,
+              variant: "success",
+            }
+          : {
+              title: MUSIC_COPY.editRemovedTitle,
+              description: MUSIC_COPY.editRemovedBody,
+              variant: "success",
+            },
+      );
+      // La insignia y el audio de la tarjeta se pintan en el servidor: sin esto
+      // la publicación sigue mostrando la canción vieja hasta el próximo scroll.
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-medium text-foreground-secondary">
+        {MUSIC_COPY.editSectionLabel}
+      </p>
+      <MusicPicker value={track} onChange={apply} disabled={disabled || isSaving} />
+      {errorMessage && (
+        <p role="alert" className="text-sm font-medium text-danger">
+          {errorMessage}
+        </p>
+      )}
     </div>
   );
 }

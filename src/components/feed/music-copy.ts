@@ -85,6 +85,27 @@ export const MUSIC_COPY = {
   /** El post no es de esta persona, es de otra comunidad, o lo moderaron. */
   postUnavailable: "No se puede agregar música a esta publicación.",
 
+  /* ------------------- Editar la música ya publicada ---------------------- */
+
+  /**
+   * La segunda puerta a la música, y la que vuelve verdadera la promesa de
+   * `attachFailed`: desde el ⋯ de la propia publicación. Se dice "de esta
+   * publicación" —y no sólo "Música"— porque en esa hoja conviven el texto y
+   * las fotos, y el título tiene que decir sobre QUÉ manda cada sección.
+   */
+  editSectionLabel: "Música de esta publicación",
+  /**
+   * Se avisa que el cambio ya ocurrió. Esta fila NO espera al botón Guardar
+   * —igual que quitar una foto—, así que callarse dejaría a la persona
+   * apretando Guardar por algo que ya pasó.
+   */
+  editAppliedTitle: "Listo, ya suena",
+  editAppliedBody: "La música quedó puesta en tu publicación.",
+  editRemovedTitle: "Le sacamos la música",
+  editRemovedBody: "Tu publicación queda con su sonido de siempre.",
+  /** Falló el guardado de la pista: la publicación sigue intacta. */
+  editFailed: "No pudimos guardar la música. Probá de nuevo en un momento.",
+
   /* ------------------------------ La insignia ----------------------------- */
 
   /** Prefijo accesible de la insignia sobre la publicación. */

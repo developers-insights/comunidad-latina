@@ -29,6 +29,7 @@ import { ReportScamButton, ReportSheet } from "@/components/trust";
 import { POST_EDIT_COPY } from "@/lib/social/post-editing";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
+import type { PostMusicView } from "./helpers";
 import { PostDeleteDialog } from "./post-delete-dialog";
 import { PostEditSheet } from "./post-edit-sheet";
 
@@ -71,6 +72,13 @@ export interface PostMenuProps {
    * edición no ofrece quitar fotos: no puede nombrar lo que no conoce.
    */
   media?: readonly string[];
+  /**
+   * La pista que tiene la publicación (`post_music`, 0090), o null si no tiene.
+   * Sin esto la hoja de edición NO ofrece música: no se puede ofrecer cambiar
+   * algo cuyo valor actual se desconoce. `null` sí se ofrece — significa
+   * "sabemos que no tiene".
+   */
+  music?: PostMusicView | null;
   /** Se nombran en la confirmación de borrado: es lo que se pierde. */
   commentCount?: number;
   likeCount?: number;
@@ -124,6 +132,7 @@ export function PostMenu({
   postStatus = "published",
   hasMedia = false,
   media,
+  music,
   commentCount = 0,
   likeCount = 0,
   pinnedAt = null,
@@ -409,6 +418,7 @@ export function PostMenu({
           initialBody={postBody}
           hasMedia={hasMedia}
           media={media}
+          music={music}
         />
       )}
 
