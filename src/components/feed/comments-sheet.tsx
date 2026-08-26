@@ -18,7 +18,7 @@ import { buildTrustSignals, firstPhotoUrl, toTrustLevel } from "@/components/lis
 import { fetchListingCommentsAction } from "@/app/(app)/marketplace/comments-actions";
 import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { createClient } from "@/lib/supabase/client";
-import { leerFirmaActiva, type FirmaActiva } from "@/lib/perfil-activo/actions";
+import { useFirmaActiva } from "@/lib/perfil-activo/firma-activa";
 import { useCloseOnBack } from "@/lib/design/use-overlay";
 import type { Database } from "@/lib/types/database.types";
 import { cn, timeAgo } from "@/lib/utils";
@@ -418,7 +418,8 @@ function toLoadedComment(
     id: row.id,
     body: row.body,
     timeAgoLabel: timeAgo(row.createdAt, now),
-    entity: (row.entityListingId && entities.get(row.entityListingId)) || null,
+    entity:
+      row.entity ?? (row.entityListingId ? entities.get(row.entityListingId) ?? null : null),
     // Si el perfil no resuelve pero la action trajo nombre/foto, se usan sin
     // profileId: mostramos a la persona, pero NO afirmamos confianza que no
     // tenemos (sin profileId, CommentItem no pinta el badge de Trust).
@@ -445,8 +446,17 @@ interface ThreadRow {
   body: string;
   createdAt: string;
   authorId: string | null;
-  /** Ficha con la que se firmó (0116). Los comentarios de AVISOS no la tienen. */
+  /**
+   * Ficha con la que se firmó, en las DOS formas que llegan:
+   *  · `entityListingId` — el hilo de un POST viene crudo de Supabase y la hoja
+   *    resuelve las fichas en batch (0116).
+   *  · `entity` — el hilo de un AVISO viene de una server action que YA las
+   *    resolvió (0117). Devolver ahí un id suelto obligaría a la hoja a hacer un
+   *    viaje más para una superficie que ya venía completa.
+   * Nunca vienen las dos: `toLoadedComment` prefiere la resuelta.
+   */
   entityListingId?: string | null;
+  entity?: EntityView | null;
   /** Nombre/foto que trajo la action del aviso si el perfil no resuelve. */
   fallbackName?: string;
   fallbackAvatarUrl?: string | null;
@@ -621,6 +631,7 @@ async function loadListingThread(listingId: string): Promise<ThreadResult> {
         body: item.body,
         createdAt: item.createdAt,
         authorId: item.authorId,
+        entity: item.entity,
         fallbackName: item.authorName,
         fallbackAvatarUrl: item.avatarUrl,
       })),
@@ -763,15 +774,15 @@ function CommentsSheetBody({
     { id: string; author: AuthorView } | null | undefined
   >(undefined);
   /**
-   * Con qué firma va a salir lo que se escriba ACÁ Y AHORA (0116). La decide el
-   * servidor —`leerFirmaActiva()`— y no el navegador: si el cliente la eligiera,
-   * comentar como un negocio ajeno sería una llamada de fetch. Se pide una vez
-   * al abrir la hoja, junto con el resto, y sólo sirve para pintar el
-   * comentario optimista con el nombre correcto DESDE EL PRIMER FRAME. Que se
-   * vea el nombre propio y a los dos segundos cambie al del negocio es
-   * exactamente la duda que esta feature vino a sacar.
+   * Con qué firma va a salir lo que se escriba ACÁ Y AHORA. Sólo sirve para
+   * pintar el comentario optimista con el nombre correcto DESDE EL PRIMER
+   * FRAME: que se vea el nombre propio y a los dos segundos cambie al del
+   * negocio es exactamente la duda que esta feature vino a sacar.
+   *
+   * Quién firma DE VERDAD lo decide el servidor al guardar, y la policy lo
+   * vuelve a exigir; esto es pintura. Ver firma-activa.tsx.
    */
-  const [firma, setFirma] = useState<FirmaActiva | null>(null);
+  const firma = useFirmaActiva();
 
   // Sin setState SÍNCRONO acá adentro: el efecto de mount llama load() y la
   // regla react-hooks/set-state-in-effect analiza el camino completo. "loading"
@@ -781,7 +792,7 @@ function CommentsSheetBody({
     const supabase = createClient();
     const now = new Date();
 
-    const [userResult, blocksResult, thread, firmaActiva] = await Promise.all([
+    const [userResult, blocksResult, thread] = await Promise.all([
       supabase.auth.getUser(),
       // RLS de user_blocks ya limita a blocker_id = auth.uid(): traemos SOLO los
       // bloqueos del viewer sin pasar su id (anónimo → set vacío).
@@ -789,7 +800,6 @@ function CommentsSheetBody({
       subject.kind === "post"
         ? loadPostThread(supabase, subject.id)
         : loadListingThread(subject.id),
-      leerFirmaActiva(),
     ]);
 
     if (!thread.ok) {
@@ -820,7 +830,6 @@ function CommentsSheetBody({
     ]);
 
     setComments(rows.map((row) => toLoadedComment(row, authors, entities, now)));
-    setFirma(firmaActiva);
     setTenantId(thread.tenantId);
     setOlderCursor(thread.page.hasOlder ? thread.page.olderCursor : null);
     setSubjectState(thread.subject);
@@ -914,9 +923,10 @@ function CommentsSheetBody({
             tempId,
             body,
             author: viewer?.author ?? FALLBACK_AUTHOR,
-            entity: firma
-              ? { nombre: firma.nombre, avatarUrl: firma.avatarUrl }
-              : null,
+            entity:
+              firma.listingId && firma.nombre
+                ? { nombre: firma.nombre, avatarUrl: firma.avatarUrl }
+                : null,
             timeAgoLabel: COPY.comments.sending,
             pending: true,
           },
@@ -1084,7 +1094,11 @@ function CommentsSheetBody({
                     canDelete ? (
                       <CommentMenu
                         commentId={comment.id}
-                        authorName={comment.author.displayName}
+                        // El nombre que ve quien abre el menú tiene que ser el
+                        // MISMO que está arriba del comentario: si lo firmó el
+                        // local, "Borrar el comentario de Manuel" nombraría a
+                        // alguien que en esa pantalla no aparece.
+                        authorName={comment.entity?.nombre ?? comment.author.displayName}
                         isOwnComment={isOwnComment}
                         tone={onMedia ? "media" : "surface"}
                         // La hoja NO se cierra ni se recarga: el comentario sale

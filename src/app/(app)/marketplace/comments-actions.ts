@@ -5,6 +5,8 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
+import { getCaraActiva } from "@/lib/perfil-activo/cara";
+import { puedeFirmarComo } from "@/lib/feed/autoria";
 import {
   TIER_AUTO,
   TIER_HUMAN,
@@ -14,6 +16,7 @@ import {
   moderationTier,
 } from "@/lib/moderation";
 import { COPY } from "@/components/marketplace/copy";
+import { firstPhotoUrl } from "@/components/listings/helpers";
 
 /**
  * Server actions de COMENTARIOS DE AVISOS (migración 0038, tabla
@@ -46,6 +49,12 @@ export type ListingCommentItem = {
   authorId: string | null;
   authorName: string;
   avatarUrl: string | null;
+  /**
+   * Ficha que firmó el comentario (0117), ya resuelta. Cuando viene, la hoja
+   * pinta el NEGOCIO —su nombre, su foto y la insignia de local— en vez de la
+   * persona. `null` = lo dijo la persona.
+   */
+  entity: ComentarioFicha | null;
   body: string;
   createdAt: string;
 };
@@ -74,7 +83,7 @@ export async function fetchListingCommentsAction(input: {
   const [commentsResult, blocksResult] = await Promise.all([
     supabase
       .from("listing_comments")
-      .select("id, body, created_at, author_id")
+      .select("id, body, created_at, author_id, entity_listing_id")
       .eq("listing_id", listingId)
       .eq("status", "published")
       .order("created_at", { ascending: true })
@@ -97,26 +106,72 @@ export async function fetchListingCommentsAction(input: {
     (row) => !row.author_id || !blocked.has(row.author_id),
   );
 
-  const authors = await fetchAuthors(
-    supabase,
-    rows.map((row) => row.author_id),
-  );
+  const [authors, fichas] = await Promise.all([
+    fetchAuthors(
+      supabase,
+      rows.map((row) => row.author_id),
+    ),
+    // Las fichas que firman comentarios, en una consulta para el hilo entero
+    // (0117). Se resuelven ACÁ y no en el cliente porque este hilo ya viaja
+    // resuelto —nombre y foto ya vienen planos—: devolver un id suelto obligaría
+    // a la hoja a hacer un viaje más sólo para esta superficie.
+    fetchFichas(
+      supabase,
+      rows.map((row) => row.entity_listing_id),
+    ),
+  ]);
 
   return {
     ok: true,
-    items: rows.map((row) => ({
-      id: row.id,
-      authorId: row.author_id,
-      authorName: authors.get(row.author_id ?? "")?.name ?? COPY.detail.communityMember,
-      avatarUrl: authors.get(row.author_id ?? "")?.avatarUrl ?? null,
-      body: row.body,
-      createdAt: row.created_at,
-    })),
+    items: rows.map((row) => {
+      const ficha = row.entity_listing_id ? fichas.get(row.entity_listing_id) : undefined;
+      return {
+        id: row.id,
+        authorId: row.author_id,
+        authorName: authors.get(row.author_id ?? "")?.name ?? COPY.detail.communityMember,
+        avatarUrl: authors.get(row.author_id ?? "")?.avatarUrl ?? null,
+        // Firmado por un negocio: la hoja lo pinta con el nombre y la foto del
+        // local. Si la ficha ya no resuelve (se despublicó), vuelve a verse a
+        // nombre de la persona — que es quien lo escribió.
+        entity: ficha ?? null,
+        body: row.body,
+        createdAt: row.created_at,
+      };
+    }),
     nextCursor: null,
   };
 }
 
 type AuthorRow = { name: string; avatarUrl: string | null };
+
+/** La ficha que firma un comentario, ya resuelta a nombre + foto pública. */
+export interface ComentarioFicha {
+  nombre: string;
+  avatarUrl: string | null;
+}
+
+/**
+ * Las fichas que firman comentarios del hilo, en UNA consulta. La RLS de
+ * `listings` ya limita a lo publicado (o propio): una ficha despublicada
+ * simplemente no resuelve y su comentario vuelve a verse a nombre de la persona.
+ * Nunca lanza — un hilo no puede caerse porque no se pueda pintar un logo.
+ */
+async function fetchFichas(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  listingIds: (string | null)[],
+): Promise<Map<string, ComentarioFicha>> {
+  const ids = [...new Set(listingIds.filter((id): id is string => Boolean(id)))];
+  const byId = new Map<string, ComentarioFicha>();
+  if (ids.length === 0) return byId;
+  const { data } = await supabase
+    .from("listings")
+    .select("id, title, photos")
+    .in("id", ids);
+  for (const row of data ?? []) {
+    byId.set(row.id, { nombre: row.title, avatarUrl: firstPhotoUrl(row.photos) });
+  }
+  return byId;
+}
 
 /**
  * Perfiles de los autores en UNA consulta (espejo de fetchAuthorViewsClient de
@@ -220,7 +275,19 @@ export async function createListingCommentAction(input: {
     return { ok: false, code: "moderation" };
   }
 
-  // RLS: valida autor, tenant y que el aviso exista published en este tenant.
+  const cara = await getCaraActiva();
+  const entityListingId =
+    cara.firmaListingId &&
+    (await puedeFirmarComo(supabase, {
+      tenantId: tenant.id,
+      userId: user.id,
+      listingId: cara.firmaListingId,
+    }))
+      ? cara.firmaListingId
+      : null;
+
+  // RLS: valida autor, tenant, que el aviso exista published en este tenant y
+  // —desde la 0117— que la ficha con la que se firma sea propia y publicada.
   const { data: created, error: insertError } = await supabase
     .from("listing_comments")
     .insert({
@@ -229,6 +296,10 @@ export async function createListingCommentAction(input: {
       author_id: user.id,
       body,
       status: "published",
+      // Misma regla que el feed (0116/0117): la decide el servidor desde la
+      // identidad activa y la vuelve a validar contra la base. El cliente no
+      // manda a nombre de quién comenta.
+      entity_listing_id: entityListingId,
     })
     .select("id, created_at")
     .single();
@@ -267,6 +338,13 @@ export async function createListingCommentAction(input: {
       authorId: user.id,
       authorName: authors.get(user.id)?.name ?? COPY.detail.communityMember,
       avatarUrl: authors.get(user.id)?.avatarUrl ?? null,
+      // El comentario recién creado vuelve con la MISMA firma con la que quedó
+      // guardado, no con la que el cliente creía tener: la hoja lo pinta con eso
+      // y así el optimista y la fila de la base nunca dicen cosas distintas.
+      entity:
+        entityListingId && cara.negocio
+          ? { nombre: cara.negocio.nombre, avatarUrl: cara.negocio.avatarUrl }
+          : null,
       body,
       createdAt: created.created_at,
     },

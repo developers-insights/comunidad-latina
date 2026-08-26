@@ -1,4 +1,4 @@
-import { Star } from "@phosphor-icons/react/dist/ssr";
+import { Star, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, BezelCard } from "@/components/ui";
 import { RESENAS_COPY as C, type ResenaVista } from "@/lib/resenas";
 import { cn } from "@/lib/utils";
@@ -56,7 +56,25 @@ export function ResenasLista({
           <li key={resena.id}>
             <BezelCard coreClassName="flex flex-col gap-3 p-4">
               <div className="flex items-start gap-3">
-                <Avatar src={resena.autorAvatar} name={resena.autorNombre} size="md" />
+                {/* Firmada por un negocio (0117): mismo glifo y mismo anillo
+                    que el cambiador del header y que un comentario de negocio —
+                    una sola gramática visual para "esto lo dice un local" en
+                    toda la app. */}
+                <Avatar
+                  src={resena.autorAvatar}
+                  name={resena.autorNombre}
+                  size="md"
+                  badge={
+                    resena.esDeNegocio ? (
+                      <span
+                        aria-hidden="true"
+                        className="cl-print-hide flex size-4 items-center justify-center rounded-full bg-brand text-brand-foreground ring-2 ring-surface"
+                      >
+                        <Storefront size={11} weight="fill" />
+                      </span>
+                    ) : undefined
+                  }
+                />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold text-foreground">{resena.autorNombre}</p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">

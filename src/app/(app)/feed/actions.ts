@@ -860,6 +860,9 @@ export async function createCommentAction(input: {
       authorId: commentedPost.author_id,
       actorId: user.id,
       body,
+      // Sólo si la firma sobrevivió a `puedeFirmarComo`: si el comentario quedó
+      // guardado a nombre de la persona, el aviso tiene que decir su nombre.
+      firmadoComo: entityListingId ? cara.negocio?.nombre ?? null : null,
     });
   }
 
@@ -924,9 +927,13 @@ export async function notifyPostReactionAction(input: {
     // nadie con el pulgar, y le pone piso a un script.
     if (!limit(`react-notify:${user.id}`, 120, HOUR_MS).ok) return { ok: false };
 
+    // `entity_listing_id` sale de la FILA ya escrita, no de un parámetro: el
+    // aviso dice a nombre de quién quedó guardado el me gusta, que es lo que va
+    // a ver quien abra la publicación. Un nombre que llegue por el body sería un
+    // aviso falsificable.
     const { data: reaction } = await supabase
       .from("reactions")
-      .select("profile_id")
+      .select("profile_id, entity_listing_id")
       .eq("subject_kind", "post")
       .eq("subject_id", postId)
       .eq("profile_id", user.id)
@@ -943,11 +950,22 @@ export async function notifyPostReactionAction(input: {
     // Sin autor (cuenta borrada) o me gusta propio: no hay a quién avisarle.
     if (!post?.author_id || post.author_id === user.id) return { ok: false };
 
+    let firmadoComo: string | null = null;
+    if (reaction.entity_listing_id) {
+      const { data: ficha } = await supabase
+        .from("listings")
+        .select("title")
+        .eq("id", reaction.entity_listing_id)
+        .maybeSingle();
+      firmadoComo = ficha?.title ?? null;
+    }
+
     await notifyPostReaction({
       tenantId: tenant.id,
       postId,
       authorId: post.author_id,
       actorId: user.id,
+      firmadoComo,
     });
     return { ok: true };
   } catch {

@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireTenantMatch } from "@/lib/tenant/guard";
-import { getCaraActiva } from "./cara";
 import { PERFIL_ACTIVO_COPY } from "./copy";
 import { listarIdentidadesDeNegocio } from "./identidad";
 
@@ -109,45 +108,4 @@ export async function cambiarIdentidad(
 
   revalidatePath("/", "layout");
   return { ok: true, tipo: "negocio", nombre: negocio.nombre };
-}
-
-/**
- * =============================================================================
- * LA FIRMA ACTIVA — para el comentario optimista de la hoja del feed
- * =============================================================================
- *
- * La hoja de comentarios pinta el comentario ANTES de que el servidor conteste
- * (es la razón de existir de esa hoja: «después de comentar no debería salirme
- * del feed»). Para pintarlo tiene que saber con qué nombre y qué foto va a
- * salir, y eso lo decide el servidor.
- *
- * Podría resolverlo sola —`active_identities` la puede leer su dueño y la RPC
- * es ejecutable por `authenticated`—, pero serían dos consultas y, sobre todo,
- * una SEGUNDA implementación de "con qué identidad estoy actuando" viviendo en
- * el navegador. El día que las dos difieran, el comentario se vería con un
- * nombre y se guardaría con otro. Un viaje, una sola verdad.
- *
- * Devuelve `null` cuando se está actuando como uno mismo (el caso normal) o
- * cuando el negocio activo todavía no tiene ficha con la que firmar.
- */
-export interface FirmaActiva {
-  /** `listings.id` — lo que va a `entity_listing_id`. */
-  listingId: string;
-  nombre: string;
-  avatarUrl: string | null;
-}
-
-export async function leerFirmaActiva(): Promise<FirmaActiva | null> {
-  try {
-    const cara = await getCaraActiva();
-    if (!cara.negocio || !cara.firmaListingId) return null;
-    return {
-      listingId: cara.firmaListingId,
-      nombre: cara.negocio.nombre,
-      avatarUrl: cara.negocio.avatarUrl,
-    };
-  } catch {
-    // Sos vos: el default seguro de toda esta carpeta.
-    return null;
-  }
 }

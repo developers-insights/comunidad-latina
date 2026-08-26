@@ -153,6 +153,8 @@ describe("createListingCommentAction", () => {
         authorId: USER_ID,
         authorName: "Rosa",
         avatarUrl: "rosa.webp",
+        // Sin identidad de negocio activa: el comentario es de la persona.
+        entity: null,
         body: "Me encanta este producto",
         createdAt: CREATED_AT,
       },
@@ -166,6 +168,7 @@ describe("createListingCommentAction", () => {
       author_id: USER_ID,
       body: "Me encanta este producto",
       status: "published",
+      entity_listing_id: null,
     });
     expect(mocks.revalidatePath).toHaveBeenCalledWith(`/marketplace/${LISTING_ID}`);
     // Score 0 y sin skip: nada que encolar.

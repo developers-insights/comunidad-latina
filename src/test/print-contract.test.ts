@@ -414,6 +414,14 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",
   },
+  // Insignia de una reseña firmada por un negocio (0117): el mismo glifo
+  // `brand-foreground` sobre `bg-brand` del cambiador de identidad, acá sobre el
+  // avatar de quien opinó. Con su `cl-print-hide` — sin el relleno queda 1.00:1,
+  // y en papel la reseña ya se lee con el nombre del local arriba.
+  "src/components/resenas/resenas-lista.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
   // Música de una publicación, a la vista (0090): la píldora "♪ Título ·
   // Artista" (y, si la licencia lo exige, la línea de atribución debajo) flota
   // sobre la foto/video, así que escribe tinta on-media — mismo problema que

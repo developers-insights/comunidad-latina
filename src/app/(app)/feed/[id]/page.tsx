@@ -396,7 +396,7 @@ export default async function PostDetailPage({
                   canDelete ? (
                     <CommentMenu
                       commentId={comment.id}
-                      authorName={author.displayName}
+                      authorName={comentarioEntity?.nombre ?? author.displayName}
                       isOwnComment={isOwnComment}
                     />
                   ) : undefined

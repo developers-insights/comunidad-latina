@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { requireTenantMatch } from "@/lib/tenant/guard";
+import { getCaraActiva } from "@/lib/perfil-activo/cara";
 
 /**
  * Server actions del módulo DIRECTORIOS (lado eventos).
@@ -71,11 +72,17 @@ export async function toggleEventInterestAction(
     return { ok: true, interested: false };
   }
 
+  // El interés en un evento es la misma tabla que el me gusta del feed, así que
+  // lleva la misma firma (0117): si estás actuando como tu negocio, el evento
+  // registra que se anotó tu negocio. Sale de la identidad activa y no de un
+  // parámetro — el cliente no elige a nombre de quién se anota.
+  const cara = await getCaraActiva();
   const { error: insertError } = await supabase.from("reactions").insert({
     tenant_id: tenant.id,
     subject_kind: "listing",
     subject_id: eventId,
     profile_id: user.id,
+    entity_listing_id: cara.firmaListingId,
     kind: "like",
   });
 
