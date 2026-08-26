@@ -5,10 +5,12 @@ import {
   Bubble,
   Chip,
   EmptyState,
+  NavTabs,
   SectionCta,
   SectionHeading,
   Skeleton,
   buttonVariants,
+  type NavTabItem,
 } from "@/components/ui";
 import {
   COPY,
@@ -47,6 +49,14 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { getAreaLabelDelPerfil, resolverVistaZona } from "@/lib/zona/server";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { cn } from "@/lib/utils";
+import { AdvertiserDirectoryContent, AdvertiserDirectorySkeleton } from "../advertiser-directory";
+import {
+  PROPIEDADES_TAB_IDS,
+  PROPIEDADES_TAB_LABELS,
+  parsePropiedadesTab,
+  propiedadesTabHref,
+  type PropiedadesTabId,
+} from "../propiedades-tabs";
 
 export const metadata = { title: "Vivienda" };
 
@@ -100,12 +110,73 @@ export default async function PropiedadesPage({
   searchParams: SearchParams;
 }) {
   const sp = await searchParams;
+  const tab = parsePropiedadesTab(firstValue(sp.t));
+
+  /**
+   * PESTAÑA "AGENTES Y PROPIETARIOS" (requisito del cliente): un directorio de
+   * PERSONAS, no otra lista de avisos — vive entero en `advertiser-directory.tsx`
+   * (ver su docblock). Acá sólo se arma la cabecera: esta pestaña no tiene
+   * "Tu zona" ni ningún otro dato async para el subtítulo, así que se resuelve
+   * sin esperar nada (a diferencia de "Propiedades", más abajo).
+   */
+  if (tab === "agentes") {
+    return (
+      <>
+        <PropiedadesTopBar tab="agentes" subtitle={COPY.list.subtitleDefault} />
+        <Suspense fallback={<AdvertiserDirectorySkeleton />}>
+          <AdvertiserDirectoryContent />
+        </Suspense>
+      </>
+    );
+  }
+
   const filters = parseFilters(sp);
 
   return (
     <Suspense key={JSON.stringify(filters)} fallback={<PageSkeleton />}>
       <PropiedadesContent filters={filters} />
     </Suspense>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cabecera + CTA de publicar + pestañas: no dependen de la DB (el subtítulo
+// que SÍ depende de "Tu zona" lo resuelve cada caller y lo pasa ya armado),
+// así que se pintan igual tanto en el contenido real como en cada fallback —
+// mismo patrón que `MarketplaceTopBar` (marketplace/(lista)/page.tsx).
+// ---------------------------------------------------------------------------
+
+function propiedadesTabItems(): NavTabItem[] {
+  return PROPIEDADES_TAB_IDS.map((id) => ({
+    id,
+    label: PROPIEDADES_TAB_LABELS[id],
+    href: propiedadesTabHref(id),
+  }));
+}
+
+function PropiedadesTopBar({ tab, subtitle }: { tab: PropiedadesTabId; subtitle: string }) {
+  return (
+    <>
+      <SectionHeading
+        accent={SECCION.accent}
+        image={SECCION.image}
+        title={COPY.list.title}
+        subtitle={subtitle}
+      />
+      <SectionCta
+        accent={SECCION.accent}
+        href={SECCION.publicarHref}
+        title={t("sections", "publishPropertyTitle")}
+        hint={t("sections", "publishPropertyHint")}
+        className="mt-3"
+      />
+      <NavTabs
+        items={propiedadesTabItems()}
+        active={tab}
+        label="Secciones de Propiedades"
+        className="mt-5"
+      />
+    </>
   );
 }
 
@@ -412,23 +483,13 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
 
   return (
     <>
-      <SectionHeading
-        accent={SECCION.accent}
-        image={SECCION.image}
-        title={COPY.list.title}
+      <PropiedadesTopBar
+        tab="propiedades"
         subtitle={
           vistaZona.zona.label
             ? COPY.list.subtitleNearArea(vistaZona.zona.label)
             : COPY.list.subtitleDefault
         }
-      />
-
-      <SectionCta
-        accent={SECCION.accent}
-        href={SECCION.publicarHref}
-        title={t("sections", "publishPropertyTitle")}
-        hint={t("sections", "publishPropertyHint")}
-        className="mt-3"
       />
 
       {/* Bandeja de filtros: el buscador y los tres selectores flotaban sueltos
@@ -520,19 +581,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
 function PageSkeleton() {
   return (
     <div aria-busy="true">
-      <SectionHeading
-        accent={SECCION.accent}
-        image={SECCION.image}
-        title={COPY.list.title}
-        subtitle={COPY.list.subtitleDefault}
-      />
-      <SectionCta
-        accent={SECCION.accent}
-        href={SECCION.publicarHref}
-        title={t("sections", "publishPropertyTitle")}
-        hint={t("sections", "publishPropertyHint")}
-        className="mt-3"
-      />
+      <PropiedadesTopBar tab="propiedades" subtitle={COPY.list.subtitleDefault} />
       <Bubble tone="tray" shape="tile" size="none" className="mb-5 mt-4 flex flex-col gap-3 p-3">
         <Skeleton className="h-11 w-full rounded-md" />
         {/* Misma grilla que <ListingFilters/>: 5 selectores, el de zona a dos

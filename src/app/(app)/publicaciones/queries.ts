@@ -8,9 +8,11 @@ import {
   DEFAULT_EXPIRY_CONFIG,
   PUBLICACION_COLUMNS,
   estadoDeVencimiento,
+  isClosedReason,
   parseExpiryConfig,
   puedeRenovar,
   supabaseSinTiparListings,
+  type ClosedReason,
   type EstadoVencimiento,
   type ExpiryConfig,
   type MotivoNoRenovable,
@@ -47,6 +49,16 @@ export type PublicacionPropia = {
   renovable: boolean;
   /** Por qué no, cuando no. */
   motivo: MotivoNoRenovable | null;
+  /** `attrs.closed_reason`, sólo cuando `status === 'closed'` (0117). */
+  closedReason: ClosedReason | null;
+  /**
+   * `attrs.paused_reason`, sólo cuando `status === 'paused'` (0118). Hoy el
+   * único valor que emite la base es `'reports'` (pausa automática); se deja
+   * como `string` y no como literal para no inventarle un contrato a una
+   * clave de `attrs` que no lo tiene (jsonb libre, doctrina 0107) — el chip
+   * sólo compara contra `'reports'`.
+   */
+  pausedReason: string | null;
 };
 
 export type MisPublicaciones = {
@@ -137,6 +149,13 @@ export async function fetchMisPublicaciones(): Promise<MisPublicaciones> {
       };
       const renovacion = puedeRenovar(vencible, config, ahora);
 
+      // jsonb libre (doctrina 0107): se angosta acá, en el único lugar que lo
+      // lee, en vez de confiar en la forma de `attrs` en ningún otro sitio.
+      const attrs =
+        row.attrs && typeof row.attrs === "object" && !Array.isArray(row.attrs)
+          ? (row.attrs as Record<string, unknown>)
+          : {};
+
       return {
         id: row.id,
         kind: row.kind,
@@ -148,6 +167,14 @@ export async function fetchMisPublicaciones(): Promise<MisPublicaciones> {
         estado: estadoDeVencimiento(vencible, config, ahora),
         renovable: renovacion.ok,
         motivo: renovacion.ok ? null : renovacion.motivo,
+        closedReason:
+          row.status === "closed" && isClosedReason(attrs.closed_reason)
+            ? attrs.closed_reason
+            : null,
+        pausedReason:
+          row.status === "paused" && typeof attrs.paused_reason === "string"
+            ? attrs.paused_reason
+            : null,
       };
     })
     .sort((a, b) => PESO[a.estado.estado] - PESO[b.estado.estado]);

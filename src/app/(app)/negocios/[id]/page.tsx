@@ -26,10 +26,14 @@ import { ResenaForm, ResenasLista, ResumenPuntajeCard } from "@/components/resen
 // `server-only` al bundle de sus consumidores cliente (ver su encabezado).
 import { fetchResenasDeAviso } from "@/components/resenas/queries";
 import { fetchPuestosDelNegocio } from "@/lib/negocios/empleos";
+import { fetchEventosDelNegocio } from "@/lib/negocios/eventos";
+import { EventosDelNegocio, EVENTOS_DEL_NEGOCIO_TITULO } from "@/components/negocios/eventos-del-negocio";
 import { puedeOfrecerseElFormulario } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
-import { cn, timeAgo } from "@/lib/utils";
+import { getViewerTimeZone } from "@/lib/time/viewer-zone";
+import { VENCIMIENTO_COPY } from "@/lib/listings";
+import { cn, DEFAULT_TIME_ZONE, timeAgo } from "@/lib/utils";
 import { businessCategoryLabel, businessCategoryOf } from "../categories";
 import { BUSINESS_PROFILE_COPY as C } from "./copy";
 
@@ -60,6 +64,9 @@ import { BUSINESS_PROFILE_COPY as C } from "./copy";
  *   · puestos        → listings.business_listing_id (0107) — los empleos que
  *                      este comercio publicó. Hasta esa migración el negocio y
  *                      sus vacantes eran dos avisos sin nada que los uniera.
+ *   · eventos        → listings kind='event' con el MISMO created_by que esta
+ *                      ficha (sin FK: el vínculo de la 0107 es exclusivo de
+ *                      empleos). Ver el docblock de `lib/negocios/eventos.ts`.
  *
  * HORARIOS Y RESEÑAS YA EXISTEN (migración 0093). Hasta esa migración ninguna
  * tabla del esquema los guardaba y las dos secciones se mostraban con un vacío
@@ -115,7 +122,15 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  const [tenant, supabase, viewerZone] = await Promise.all([
+    getTenant(),
+    createClient(),
+    // Sólo para formatear la fecha de "Próximos eventos" en la zona de quien
+    // mira, igual que en /perfil/[id]. `getTenant`/`getViewerAccount` ya son
+    // cache() de React: si el layout de (app) la pidió antes, esto no repite
+    // la consulta a `profiles`.
+    getViewerTimeZone(),
+  ]);
 
   const { data: listing } = await supabase
     .from("listings")
@@ -143,6 +158,7 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
     initialSaved,
     resenas,
     puestos,
+    eventos,
   ] = await Promise.all([
       listing.created_by
         ? supabase
@@ -179,6 +195,16 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
       fetchPuestosDelNegocio(supabase, {
         tenantId: tenant.id,
         businessListingId: listing.id,
+      }),
+      // Próximos eventos. A diferencia de los puestos, SIN FK: se cruzan por
+      // `created_by` (mismo publicador que la ficha) — ver el docblock de
+      // `lib/negocios/eventos.ts` para el porqué. `listing.created_by` es el
+      // de esta ficha, no el de ningún evento.
+      fetchEventosDelNegocio(supabase, {
+        tenantId: tenant.id,
+        createdBy: listing.created_by,
+        locale: tenant.locale,
+        timeZone: viewerZone ?? DEFAULT_TIME_ZONE,
       }),
     ]);
 
@@ -259,14 +285,38 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
   const photos = (listing.photos ?? []).map(listingPhotoUrl);
   const address = listing.cta_address;
 
+  // Cierre (0117): mismo criterio que propiedades/[id] — `listings_select`
+  // deja pasar `closed` por su rama pública, así que esta página también
+  // puede recibir un aviso que ya no está disponible. Negocios cierra
+  // siempre con el motivo genérico (`closedReasonForKind` devuelve "done"
+  // para este `kind`), así que alcanza con el status — a diferencia de
+  // Empleos/Marketplace, acá no hace falta leer `attrs.closed_reason`.
+  const isClosed = listing.status === "closed";
+  const CIERRE = VENCIMIENTO_COPY.cerrado;
+
   return (
     <div className="pb-28">
       <DetailTopBar title={listing.title} listingId={listing.id} initialSaved={initialSaved} />
 
-      {listing.status !== "published" && isOwner && (
-        <Banner variant="info" className="mb-3 rounded-lg">
-          {C.pendingBanner}
+      {isClosed ? (
+        // Visible para CUALQUIERA (dueño o no): un aviso cerrado ya fue
+        // público (0117) y el link guardado tiene que decir "ya no está
+        // disponible" en vez de tropezar con el CTA de contacto de un
+        // negocio que ya cerró.
+        <Banner variant="warning" className="mb-3 rounded-lg">
+          {/* Negocios cierra siempre con motivo genérico ("done",
+              `closedReasonForKind`): no hay un hecho más concreto que
+              contar, así que acá va sólo el título — mismo criterio que
+              propiedades/[id] con cualquier motivo que no sea el suyo. */}
+          <p className="font-semibold">{CIERRE.bannerTitulo}</p>
         </Banner>
+      ) : (
+        listing.status !== "published" &&
+        isOwner && (
+          <Banner variant="info" className="mb-3 rounded-lg">
+            {C.pendingBanner}
+          </Banner>
+        )
       )}
 
       <DirectoryDetailHero
@@ -323,37 +373,43 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
       {/* CONTACTO. `ListingActions` decide sola: en `free` no renderiza nada
           (el chat es el único canal y se ofrece abajo), en `premium` pinta
           Llamar · WhatsApp · Sitio web · Cómo llegar con los valores cargados.
-          El tier se lee de la fila, nunca del cliente. */}
-      <section className="mt-6">
-        <SectionTitle>{C.contactTitle}</SectionTitle>
-        <ListingActions
-          listingId={listing.id}
-          kind="business"
-          tier={listing.tier}
-          values={{
-            phone: listing.cta_phone,
-            whatsapp: listing.cta_whatsapp,
-            website: listing.cta_website,
-            directions: listing.cta_address,
-          }}
-          subject={listing.title}
-          showChat={false}
-          isLoggedIn={Boolean(user)}
-        />
-        {listing.created_by && !isOwner ? (
-          <InlineMessageCta
+          El tier se lee de la fila, nunca del cliente.
+
+          Sección entera oculta si `closed` (0117): el negocio ya cerró, no
+          hay a quién contactar — ni el heading "Contacto" tiene sentido sin
+          ningún camino debajo. */}
+      {!isClosed && (
+        <section className="mt-6">
+          <SectionTitle>{C.contactTitle}</SectionTitle>
+          <ListingActions
             listingId={listing.id}
+            kind="business"
+            tier={listing.tier}
+            values={{
+              phone: listing.cta_phone,
+              whatsapp: listing.cta_whatsapp,
+              website: listing.cta_website,
+              directions: listing.cta_address,
+            }}
+            subject={listing.title}
+            showChat={false}
             isLoggedIn={Boolean(user)}
-            nextPath={`/negocios/${listing.id}`}
-            label={C.messageLabel}
-            placeholder={C.messagePlaceholder}
-            className="mt-3"
           />
-        ) : null}
-        {!isOwner && (
-          <p className="mt-2 text-xs leading-relaxed text-foreground-muted">{C.contactFree}</p>
-        )}
-      </section>
+          {listing.created_by && !isOwner ? (
+            <InlineMessageCta
+              listingId={listing.id}
+              isLoggedIn={Boolean(user)}
+              nextPath={`/negocios/${listing.id}`}
+              label={C.messageLabel}
+              placeholder={C.messagePlaceholder}
+              className="mt-3"
+            />
+          ) : null}
+          {!isOwner && (
+            <p className="mt-2 text-xs leading-relaxed text-foreground-muted">{C.contactFree}</p>
+          )}
+        </section>
+      )}
 
       <section className="mt-6">
         <SectionTitle>{C.aboutTitle}</SectionTitle>
@@ -476,6 +532,17 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
         <section className="mt-6">
           <SectionTitle>{EMPLEOS_DEL_NEGOCIO_TITULO}</SectionTitle>
           <EmpleosDelNegocio puestos={puestos} />
+        </section>
+      )}
+
+      {/* PRÓXIMOS EVENTOS (requisito del cliente: un evento publicado tiene
+          que verse en la página de su organizador). Mismo criterio que los
+          puestos: sin eventos vigentes, la sección entera no existe — "este
+          negocio no tiene eventos" no le sirve a nadie. */}
+      {eventos.length > 0 && (
+        <section className="mt-6">
+          <SectionTitle>{EVENTOS_DEL_NEGOCIO_TITULO}</SectionTitle>
+          <EventosDelNegocio eventos={eventos} />
         </section>
       )}
 

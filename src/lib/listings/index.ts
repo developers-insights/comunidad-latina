@@ -16,16 +16,20 @@ export {
 } from "./types";
 
 export {
+  CLOSED_REASONS,
   DEFAULT_EXPIRY_CONFIG,
   LISTING_KINDS,
   MOTIVOS_NO_RENOVABLE,
   calcularVencimiento,
+  closedReasonForKind,
   diasHasta,
   estadoDeVencimiento,
+  isClosedReason,
   isMotivoNoRenovable,
   kindVence,
   parseExpiryConfig,
   puedeRenovar,
+  type ClosedReason,
   type EstadoVencimiento,
   type ExpiryConfig,
   type ExpiryConfigRow,

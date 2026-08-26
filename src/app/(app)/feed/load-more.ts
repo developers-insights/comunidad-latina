@@ -10,6 +10,8 @@ import {
   feedPostVisibilityFilter,
   feedZoneFilter,
   parseTab,
+  siguiendoListingVisibilityFilter,
+  siguiendoPostVisibilityFilter,
   type FeedItem,
   type FeedTabId,
   type GuideCardModel,
@@ -25,6 +27,7 @@ import {
   fetchBlockedIds,
   fetchEntityViews,
   fetchFollowedListingIds,
+  fetchFollowedProfileIds,
   fetchListingExtras,
   fetchPostMusic,
   fetchPostPolls,
@@ -38,7 +41,12 @@ import {
   type PostRow,
 } from "./queries";
 import { fetchPostTags } from "@/lib/social/post-tags";
-import { fetchFeedListingsPageViaRpc, fetchFeedPostsPageViaRpc } from "./feed-rpc";
+import {
+  fetchFeedListingsPageViaRpc,
+  fetchFeedPostsPageViaRpc,
+  fetchFeedSiguiendoListingsPageViaRpc,
+  fetchFeedSiguiendoPostsPageViaRpc,
+} from "./feed-rpc";
 
 /**
  * Módulo FLUIDEZ — paginación del feed como server action.
@@ -129,6 +137,19 @@ export async function fetchFeedPageAction(input: {
       areaLabels,
     });
   }
+  if (tab === "siguiendo") {
+    // SIN `areaLabels`: "Siguiendo" no filtra por zona (0119 §67, "SIN
+    // ZONA") — pasarlo igual sería la clase de copiar-y-pegar que termina
+    // filtrando por barrio una pestaña que el propio contrato dice que no
+    // filtra por barrio.
+    return loadSiguiendoPage({
+      supabase,
+      tenantId: tenant.id,
+      locale: tenant.locale,
+      viewerId,
+      cursor,
+    });
+  }
   return loadListingsPage({
     supabase,
     tab,
@@ -190,7 +211,7 @@ async function loadParaTiPage({
   ]);
 
   if (rpcPosts && rpcListings) {
-    return assembleParaTiPage({
+    return assembleFeedPage({
       supabase,
       tenantId,
       locale,
@@ -312,7 +333,7 @@ async function loadParaTiPage({
     console.warn("[feed] query de listings falló", { code: listingsResult.error.code });
   }
 
-  return assembleParaTiPage({
+  return assembleFeedPage({
     supabase,
     tenantId,
     locale,
@@ -332,8 +353,19 @@ async function loadParaTiPage({
  * arriba —el RPC y el legado con topes de URL— comparten sin poder
  * desincronizarse. Si la mezcla viviera dentro de cada camino, el fallback
  * podría empezar a devolver un feed distinto sin que nadie lo note.
+ *
+ * COMPARTIDA por "Para ti" Y "Siguiendo" (0119): el merge-por-fecha, el corte
+ * de página y los ocho batches (autores, likes, guardados, encuestas, extras
+ * de listings, entidades, etiquetados, música, promociones) no dependen de
+ * QUÉ alcance decidió qué filas entraron — sólo de la forma de la fila
+ * (`PostRow`/`ListingRow`), que es idéntica en las dos pestañas porque las
+ * cuatro funciones SQL comparten `returns table`. Repetir esto en
+ * `loadSiguiendoPage` sería la clase de duplicación que se desincroniza sola.
+ * La ÚNICA diferencia entre pestañas es la guía editorial: "Siguiendo" nunca
+ * la intercala (no es contenido de alguien que se sigue), así que ese
+ * llamador manda siempre `guideResult: { data: null }`.
  */
-async function assembleParaTiPage({
+async function assembleFeedPage({
   supabase,
   tenantId,
   locale,
@@ -602,4 +634,152 @@ async function loadListingsPage({
 
   const nextCursor = hasMore && lastRow ? encodeCursor(lastRow.created_at, lastRow.id) : null;
   return { items, nextCursor };
+}
+
+// ---------------------------------------------------------------------------
+// "Siguiendo" (0119): SOLO lo de los perfiles y las fichas que seguís, más lo
+// propio. Sin promociones, sin zona (ver el docblock de la migración para el
+// porqué completo de las dos ausencias) — es la mezcla RPC/legado de "Para
+// ti" (mismo merge, mismos batches, vía `assembleFeedPage`) con un alcance
+// distinto.
+// ---------------------------------------------------------------------------
+
+async function loadSiguiendoPage({
+  supabase,
+  tenantId,
+  locale,
+  viewerId,
+  cursor,
+}: {
+  supabase: Supabase;
+  tenantId: string;
+  locale: string;
+  viewerId: string | null;
+  cursor: Cursor;
+}): Promise<FeedPageResult> {
+  /**
+   * SIN SESIÓN NO HAY "SIGUIENDO" (0119 §3): el filtro entero se define contra
+   * `auth.uid()`, así que sin viewer no hay una sola fila que pueda entrar —
+   * ni por RPC (que ni siquiera tiene grant para `anon`) ni por el camino
+   * legado. Se corta ACÁ, antes de cualquier lectura: esta action es un POST
+   * alcanzable por cualquiera (ver la cabecera del módulo), así que este
+   * guard no puede vivir solo del lado del estado vacío de `page.tsx`.
+   */
+  if (!viewerId) {
+    return { items: [], nextCursor: null };
+  }
+
+  // CAMINO 1 — RPC (`feed_siguiendo_posts_page` / `feed_siguiendo_listings_page`,
+  // 0119). Hermanas exactas de las de "Para ti": mismo `returns table`, mismos
+  // mappers vía `assembleFeedPage`. Nunca se intercala la guía editorial acá
+  // —no es contenido de alguien que se sigue— así que `guideResult` va fijo.
+  const rpcArgs = { tenantId, cursor, limit: PAGE_SIZE + 1 };
+  const [rpcPosts, rpcListings] = await Promise.all([
+    fetchFeedSiguiendoPostsPageViaRpc(supabase, rpcArgs),
+    fetchFeedSiguiendoListingsPageViaRpc(supabase, rpcArgs),
+  ]);
+
+  if (rpcPosts && rpcListings) {
+    return assembleFeedPage({
+      supabase,
+      tenantId,
+      locale,
+      viewerId,
+      postRows: rpcPosts,
+      listingRows: rpcListings,
+      guideResult: { data: null },
+    });
+  }
+
+  /**
+   * CAMINO 2 (legado) — los follows se leen UNA sola vez acá (ni por post ni
+   * por listing: nada de N+1) y se vuelcan a dos `.or()` con
+   * `siguiendoPostVisibilityFilter` / `siguiendoListingVisibilityFilter`
+   * (helpers.ts), que espejan las mismas tres/dos ramas que la 0119.
+   */
+  const [followedProfileIds, followedListingIds, blockedIds] = await Promise.all([
+    fetchFollowedProfileIds(supabase, viewerId),
+    fetchFollowedListingIds(supabase, viewerId),
+    fetchBlockedIds(supabase, viewerId),
+  ]);
+
+  // POSTS: SIEMPRE se consulta, nunca detrás de "¿hay follows?" — la rama de
+  // "lo propio" (`author_id.eq.viewerId`) no depende de tener follows, y
+  // saltear la query con las dos listas vacías dejaría afuera las
+  // publicaciones propias que la 0119 garantiza (ver el docblock de
+  // `siguiendoPostVisibilityFilter`).
+  let postsQuery = supabase
+    .from("posts")
+    .select(POST_COLUMNS)
+    .eq("tenant_id", tenantId)
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(PAGE_SIZE + 1)
+    .or(siguiendoPostVisibilityFilter(followedProfileIds, followedListingIds, viewerId))
+    // Fuera lo que su autor OCULTÓ (0097) — igual que en "Para ti".
+    .or(VISIBLE_POSTS_FILTER);
+
+  if (blockedIds.size > 0) {
+    postsQuery = postsQuery.or(
+      `author_id.is.null,author_id.not.in.(${[...blockedIds].join(",")})`,
+    );
+  }
+  if (cursor) {
+    const keysetFilter = `created_at.lt."${cursor.createdAt}",and(created_at.eq."${cursor.createdAt}",id.lt."${cursor.id}")`;
+    postsQuery = postsQuery.or(keysetFilter);
+  }
+
+  // LISTINGS: acá SÍ hay algo que preguntar únicamente si hay follows — la
+  // 0119 no le da a "Siguiendo" una rama de avisos propios (para eso está
+  // "Mis publicaciones"). Con las dos listas vacías, `siguiendoListingVisibilityFilter`
+  // devuelve `null` y esta rama corta ANTES de pegarle a la base por nada.
+  const listingsFilter = siguiendoListingVisibilityFilter(followedProfileIds, followedListingIds);
+
+  let listingsQuery = listingsFilter
+    ? supabase
+        .from("listings")
+        .select(LISTING_COLUMNS)
+        .eq("tenant_id", tenantId)
+        .eq("status", "published")
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(PAGE_SIZE + 1)
+        .or(listingsFilter)
+    : null;
+
+  if (listingsQuery && blockedIds.size > 0) {
+    listingsQuery = listingsQuery.or(
+      `created_by.is.null,created_by.not.in.(${[...blockedIds].join(",")})`,
+    );
+  }
+  if (listingsQuery && cursor) {
+    listingsQuery = listingsQuery.or(
+      `created_at.lt."${cursor.createdAt}",and(created_at.eq."${cursor.createdAt}",id.lt."${cursor.id}")`,
+    );
+  }
+
+  const [postsResult, listingsResult] = await Promise.all([
+    postsQuery,
+    listingsQuery ?? Promise.resolve({ data: [] as ListingRow[], error: null }),
+  ]);
+
+  if (postsResult.error) {
+    console.warn("[feed] query de posts (siguiendo) falló", { code: postsResult.error.code });
+  }
+  if (listingsResult.error) {
+    console.warn("[feed] query de listings (siguiendo) falló", { code: listingsResult.error.code });
+  }
+
+  return assembleFeedPage({
+    supabase,
+    tenantId,
+    locale,
+    viewerId,
+    // El RPC puede haber contestado UNA de las dos: se aprovecha la que vino
+    // (mismo criterio que loadParaTiPage).
+    postRows: rpcPosts ?? ((postsResult.data ?? []) as PostRow[]),
+    listingRows: rpcListings ?? ((listingsResult.data ?? []) as ListingRow[]),
+    guideResult: { data: null },
+  });
 }

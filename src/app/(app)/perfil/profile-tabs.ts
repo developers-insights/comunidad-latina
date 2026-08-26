@@ -2,17 +2,32 @@ import { DEFAULT_TIME_ZONE } from "@/lib/utils";
 import type { PostTile } from "./post-tiles";
 
 /**
- * LAS SIETE PESTAÑAS DEL PERFIL (contrato 2026-07-30 §B.6) — parte PURA.
+ * LAS OCHO PESTAÑAS DEL PERFIL (contrato 2026-07-30 §B.6 + "Avisos", pedido del
+ * cliente 2026-08-26: un evento o aviso publicado tiene que verse en la página
+ * de quien lo publicó) — parte PURA.
  *
  * Sin `server-only` y sin imports de Supabase a propósito: acá viven el orden,
  * los ids, el copy y el parseo del `?t=`, que es lo que se testea en node sin
- * jsdom ni base. Las consultas viven en `profile-data.ts`.
+ * jsdom ni base. Las consultas viven en `profile-data.ts` (y, para "avisos",
+ * en `profile-listings.ts` — separada porque reusa la capa de datos del feed y
+ * no tiene nada que ver con `posts`/`follows`/`gig_reviews`, que es lo que
+ * consulta el resto de ese archivo).
+ *
+ * "AVISOS" VA DESPUÉS DE "VIDEOS" Y ANTES DE "INFORMACIÓN": las tres primeras
+ * pestañas (publicaciones, fotos, videos) son galerías de `posts` — contenido
+ * social. "Avisos" es la otra mitad de lo que esta persona publicó —`listings`,
+ * no `posts`— y por eso cierra ese grupo en vez de mezclarse con él. Recién
+ * después viene "Información" (quién es), "Reseñas" (qué dicen de ella) y el
+ * grafo social (seguidores/siguiendo): de "qué publicó" a "quién es" a "qué
+ * dicen" a "con quién se conecta" es el único orden de los tres que no salta
+ * de un tema al otro y vuelve.
  */
 
 export const PROFILE_TAB_IDS = [
   "publicaciones",
   "fotos",
   "videos",
+  "avisos",
   "informacion",
   "resenas",
   "seguidores",
@@ -25,6 +40,7 @@ export const PROFILE_TAB_LABELS: Record<ProfileTabId, string> = {
   publicaciones: "Publicaciones",
   fotos: "Fotos",
   videos: "Videos",
+  avisos: "Avisos",
   informacion: "Información",
   resenas: "Reseñas",
   seguidores: "Seguidores",

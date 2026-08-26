@@ -43,6 +43,7 @@ import {
 } from "@/components/marketplace";
 import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
 import { visibleCtasFor } from "@/lib/monetization/tier";
+import { VENCIMIENTO_COPY, isClosedReason } from "@/lib/listings";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -106,6 +107,22 @@ export default async function ProductoDetallePage({ params }: { params: Params }
   const priceLabel = formatProductPrice(product.price_amount, product.price_currency, tenant.locale);
   const photos = (product.photos ?? []).map(listingPhotoUrl);
   const isOwner = Boolean(user && product.created_by === user.id);
+
+  // Cierre (0117): mismo criterio que propiedades/[id] — `listings_select`
+  // deja pasar `closed` por su rama pública, así que esta página también
+  // puede recibir un producto que ya no está disponible. `closed_reason` se
+  // lee del jsonb crudo (no hay columna propia, doctrina 0107) y nunca de
+  // algo que mandó el cliente. `closedReasonForKind` default para "product"
+  // es "sold", de ahí `bannerSold`.
+  const isClosed = product.status === "closed";
+  const closedAttrsRaw =
+    product.attrs && typeof product.attrs === "object" && !Array.isArray(product.attrs)
+      ? (product.attrs as Record<string, unknown>)
+      : {};
+  const closedReason = isClosed && isClosedReason(closedAttrsRaw.closed_reason)
+    ? closedAttrsRaw.closed_reason
+    : null;
+  const CIERRE = VENCIMIENTO_COPY.cerrado;
 
   // Engagement del aviso (0038): el conteo viaja en el select de arriba
   // (listings.comment_count, mantenido por trigger); "¿ya lo guardé?" es una
@@ -286,10 +303,21 @@ export default async function ProductoDetallePage({ params }: { params: Params }
 
       <ProductGallery photos={photos} title={product.title} />
 
-      {product.status !== "published" && isOwner && (
-        <Banner variant="info" className="mt-4 rounded-lg">
-          {COPY.detail.pendingBanner}
+      {isClosed ? (
+        // Visible para CUALQUIERA (dueño o no): un link guardado tiene que
+        // decir "ya no está disponible" en vez de ofrecer "Comprar" sobre un
+        // producto que ya se vendió (mismo criterio que propiedades/[id]).
+        <Banner variant="warning" className="mt-4 rounded-lg">
+          <p className="font-semibold">{CIERRE.bannerTitulo}</p>
+          {closedReason === "sold" && <p className="mt-0.5">{CIERRE.bannerSold}</p>}
         </Banner>
+      ) : (
+        product.status !== "published" &&
+        isOwner && (
+          <Banner variant="info" className="mt-4 rounded-lg">
+            {COPY.detail.pendingBanner}
+          </Banner>
+        )
       )}
 
       {/* Dueño de una tienda apagada: su producto sigue acá, pero nadie más lo
@@ -360,7 +388,9 @@ export default async function ProductoDetallePage({ params }: { params: Params }
           pegado, en el mismo bloque, quién cobra y quién responde por el envío.
           Ese aviso NO puede quedar debajo del pliegue: es lo que evita que
           alguien crea que Comunidad Latina está en el medio de la compra. */}
-      {showPurchase && (
+      {/* Oculto si `closed` (0117): el trato ya se hizo, no hay nada que
+          comprar. */}
+      {showPurchase && !isClosed && (
         <section className="mt-5">
           <ExternalPurchaseCta
             purchaseUrl={product.cta_purchase_url}
@@ -422,7 +452,10 @@ export default async function ProductoDetallePage({ params }: { params: Params }
           quien vende decide si la acepta. Sin dueño con cuenta (producto de
           fuente externa) no hay a quién escribirle: se dice de frente. */}
       {product.created_by ? (
-        !isOwner && (
+        // Oculto si `closed` (0117): el trato ya se hizo, no hay a quién
+        // escribirle por esto.
+        !isOwner &&
+        !isClosed && (
           <section className="mt-6">
             <InlineMessageCta
               listingId={product.id}

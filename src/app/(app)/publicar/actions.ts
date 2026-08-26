@@ -47,6 +47,7 @@ import {
   normalizeRequirements,
   normalizeUtilities,
 } from "@/lib/propiedades/alquiler";
+import { ADVERTISER_ROLES, ADVERTISER_ROLE_ATTR } from "@/lib/propiedades/anunciante";
 import { isEventAudience, isEventCategory } from "@/lib/eventos/categorias";
 import {
   EVENT_AUDIENCE_ATTR,
@@ -195,6 +196,11 @@ const draftSchema = z
     requirements: z.array(z.string()).max(20).nullish(),
     furnished: z.enum(FURNISHED_STATES).nullish(),
     availableFrom: z.string().trim().max(10).nullish(),
+    // ---- Quién publica (contrato: @/lib/propiedades/anunciante) ------------
+    // Opcional y sin relación con las condiciones del alquiler de arriba: es
+    // el dato que alimenta el directorio "Agentes y propietarios", no algo
+    // que alguien que alquila necesite saber para decidir.
+    advertiserRole: z.enum(ADVERTISER_ROLES).nullish(),
     areaLabel: z.string().trim().min(3).max(80),
     exactAddress: z.string().trim().max(200).nullish(),
     // Campos específicos de professional/event (módulo DIRECTORIOS)
@@ -391,6 +397,11 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
     if (input.furnished) attrs[FURNISHED_ATTR] = input.furnished;
     const availableFrom = normalizeAvailableFrom(input.availableFrom);
     if (availableFrom) attrs[AVAILABLE_FROM_ATTR] = availableFrom;
+
+    // Quién publica (spec cliente: directorio "Agentes y propietarios").
+    // Opcional — ausente significa "no lo declaró", nunca "Propietario/a" por
+    // default (mismo criterio que el resto de este bloque).
+    if (input.advertiserRole) attrs[ADVERTISER_ROLE_ATTR] = input.advertiserRole;
   }
   if (input.kind === "professional") {
     if (input.category) attrs.category = input.category;

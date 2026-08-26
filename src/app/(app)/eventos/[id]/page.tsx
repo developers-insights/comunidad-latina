@@ -52,6 +52,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
+import { VENCIMIENTO_COPY } from "@/lib/listings";
 import { cn, timeAgo } from "@/lib/utils";
 
 const C = COPY.events;
@@ -232,6 +233,13 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   const venue = attrs.venueArea ?? listing.area_label;
   const isOwner = Boolean(user && listing.created_by === user.id);
 
+  // Cierre (0117): mismo criterio que propiedades/[id] — `listings_select`
+  // deja pasar `closed` por su rama pública. Eventos cierra siempre con el
+  // motivo genérico (`closedReasonForKind` devuelve "done" para este
+  // `kind`), así que alcanza con el status.
+  const isClosed = listing.status === "closed";
+  const CIERRE = VENCIMIENTO_COPY.cerrado;
+
   /**
    * Lo que el formulario captura y esta pantalla no mostraba: tipo de evento,
    * hora de cierre, público recomendado, cupo y —el caro— el enlace de boletos.
@@ -296,10 +304,21 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
     <div className="pb-28">
       <DetailTopBar title={listing.title} listingId={listing.id} initialSaved={initialSaved} />
 
-      {listing.status !== "published" && isOwner && (
-        <Banner variant="info" className="mb-3 rounded-lg">
-          {C.detail.pendingBanner}
+      {isClosed ? (
+        // Visible para CUALQUIERA (dueño o no) — mismo criterio que
+        // propiedades/[id]: un link guardado tiene que decir "ya no está
+        // disponible" en vez de ofrecer "Quiero ir" a un evento que ya
+        // terminó o se canceló.
+        <Banner variant="warning" className="mb-3 rounded-lg">
+          <p className="font-semibold">{CIERRE.bannerTitulo}</p>
         </Banner>
+      ) : (
+        listing.status !== "published" &&
+        isOwner && (
+          <Banner variant="info" className="mb-3 rounded-lg">
+            {C.detail.pendingBanner}
+          </Banner>
+        )
       )}
 
       <DirectoryDetailHero
@@ -442,25 +461,29 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
 
       {/* Botones de acción (premium) — Comprar boletos · Cómo llegar, con el
           chat de Comunidad Latina al lado. Eventos no tiene barra sticky de
-          contacto, así que el chat va ACÁ (showChat por defecto en true). */}
-      <ListingActions
-        className="mt-5"
-        listingId={listing.id}
-        kind={listing.kind}
-        tier={listing.tier}
-        subject={listing.title}
-        isLoggedIn={Boolean(user)}
-        values={{
-          tickets: listing.cta_tickets_url,
-          directions: listing.cta_address,
-        }}
-      />
+          contacto, así que el chat va ACÁ (showChat por defecto en true).
+          Ocultos si `closed` (0117): ya no hay boletos que vender ni a dónde
+          llegar. */}
+      {!isClosed && (
+        <ListingActions
+          className="mt-5"
+          listingId={listing.id}
+          kind={listing.kind}
+          tier={listing.tier}
+          subject={listing.title}
+          isLoggedIn={Boolean(user)}
+          values={{
+            tickets: listing.cta_tickets_url,
+            directions: listing.cta_address,
+          }}
+        />
+      )}
 
       {/* Boletos cuando la fila de arriba no los pinta: aviso gratuito, o
           premium vencido que vuelve a caer en el enlace de `attrs`. Ver el
           comentario de `ticketsInActionsRow`. Es un enlace y no un botón
-          fantasma: si no hay a dónde ir, no se dibuja nada. */}
-      {tickets && !ticketsInActionsRow && (
+          fantasma: si no hay a dónde ir, no se dibuja nada. Ídem `closed`. */}
+      {!isClosed && tickets && !ticketsInActionsRow && (
         <div className="mt-4">
           <a
             href={tickets.href}
@@ -510,8 +533,8 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           {/* Escribirle a quien organiza sin salir del evento (call cliente
               2026-07-24). Sólo si el evento tiene dueño con cuenta: una fuente
               externa no tiene bandeja de entrada. El CTA "Quiero ir" sigue
-              siendo la acción principal, abajo. */}
-          {listing.created_by && !isOwner && (
+              siendo la acción principal, abajo. Oculto si `closed` (0117). */}
+          {listing.created_by && !isOwner && !isClosed && (
             <InlineMessageCta
               listingId={listing.id}
               isLoggedIn={Boolean(user)}
@@ -573,14 +596,19 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
         </section>
       )}
 
-      {/* "Quiero ir" + compartir — CTA sticky con contador de interesados */}
-      <EventActions
-        eventId={listing.id}
-        eventTitle={listing.title}
-        isLoggedIn={Boolean(user)}
-        initialInterested={Boolean(myReactionResult.data)}
-        initialCount={interestedCount ?? 0}
-      />
+      {/* "Quiero ir" + compartir — CTA sticky con contador de interesados.
+          Oculto si `closed` (0117): no se ofrece "anotarse" a un evento que
+          ya terminó o se canceló — el share va empaquetado en el mismo
+          componente y no se puede separar sin tocarlo. */}
+      {!isClosed && (
+        <EventActions
+          eventId={listing.id}
+          eventTitle={listing.title}
+          isLoggedIn={Boolean(user)}
+          initialInterested={Boolean(myReactionResult.data)}
+          initialCount={interestedCount ?? 0}
+        />
+      )}
     </div>
   );
 }

@@ -115,6 +115,10 @@ export const COPY = {
     dispute: "Ver la disputa",
     creator_proposal: "Ver la propuesta",
     listing_question: "Responder",
+    // Pausa/restauración por reportes (0118): las dos llevan al aviso, así
+    // que comparten etiqueta — lo que cambia es el cuerpo, no la acción.
+    listing_paused_reports: "Ver el aviso",
+    listing_restored_reports: "Ver el aviso",
   } as Record<string, string | undefined>,
 
   /**

@@ -33,6 +33,7 @@ export { PollYesNo, type PollTone, type PollYesNoProps } from "./poll-yes-no";
 export {
   FEED_TABS,
   ENTITY_KIND_META,
+  SIGUIENDO_EMPTY_COPY,
   canPromotePost,
   entityAccentVar,
   entityHref,
@@ -46,6 +47,8 @@ export {
   postKindOf,
   postMediaUrl,
   postgrestQuoted,
+  siguiendoListingVisibilityFilter,
+  siguiendoPostVisibilityFilter,
   videoOpensReel,
   viewerPlaybackCapFor,
   type AuthorView,

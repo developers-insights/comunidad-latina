@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database.types";
-import { fetchFeedListingsPageViaRpc, fetchFeedPostsPageViaRpc } from "./feed-rpc";
+import {
+  fetchFeedListingsPageViaRpc,
+  fetchFeedPostsPageViaRpc,
+  fetchFeedSiguiendoListingsPageViaRpc,
+  fetchFeedSiguiendoPostsPageViaRpc,
+} from "./feed-rpc";
 
 /**
  * El contrato de las dos llamadas: qué manda por el body y —sobre todo— QUÉ
@@ -105,6 +110,84 @@ describe("fetchFeedListingsPageViaRpc", () => {
     const { supabase } = clientWith({ error: { code: "PGRST202" } });
     expect(
       await fetchFeedListingsPageViaRpc(supabase, { tenantId: "t1", cursor: null, limit: 9 }),
+    ).toBeNull();
+  });
+});
+
+/**
+ * El tab "Siguiendo" (0119) — mismas garantías que "Para ti" (null cuando el
+ * RPC no está, filas tal cual cuando sí), pero SIN `p_entity_kind` ni
+ * `p_area_labels`: esas dos funciones no los reciben (ver el docblock de
+ * `FeedSiguiendoRpcArgs`).
+ */
+describe("fetchFeedSiguiendoPostsPageViaRpc", () => {
+  it("manda tenant, keyset y tope por el BODY — sin zona ni entity_kind", async () => {
+    const { supabase, rpc } = clientWith({ data: [] });
+    await fetchFeedSiguiendoPostsPageViaRpc(supabase, {
+      tenantId: "t1",
+      cursor: { createdAt: "2026-08-01T10:00:00Z", id: "p9" },
+      limit: 9,
+    });
+    expect(rpc).toHaveBeenCalledWith("feed_siguiendo_posts_page", {
+      p_tenant_id: "t1",
+      p_cursor_created_at: "2026-08-01T10:00:00Z",
+      p_cursor_id: "p9",
+      p_limit: 9,
+    });
+  });
+
+  it("primera página: el cursor viaja explícitamente en null", async () => {
+    const { supabase, rpc } = clientWith({ data: [] });
+    await fetchFeedSiguiendoPostsPageViaRpc(supabase, { tenantId: "t1", cursor: null, limit: 9 });
+    expect(rpc.mock.calls[0][1]).toMatchObject({
+      p_cursor_created_at: null,
+      p_cursor_id: null,
+    });
+  });
+
+  it("devuelve las filas tal cual cuando el RPC contesta", async () => {
+    const { supabase } = clientWith({ data: [{ id: "p1" }, { id: "p2" }] });
+    const rows = await fetchFeedSiguiendoPostsPageViaRpc(supabase, {
+      tenantId: "t1",
+      cursor: null,
+      limit: 9,
+    });
+    expect(rows?.map((row) => row.id)).toEqual(["p1", "p2"]);
+  });
+
+  it("entorno sin la 0119 (PGRST202): null, no una lista vacía", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { supabase } = clientWith({ error: { code: "PGRST202" } });
+    expect(
+      await fetchFeedSiguiendoPostsPageViaRpc(supabase, { tenantId: "t1", cursor: null, limit: 9 }),
+    ).toBeNull();
+  });
+
+  it("una página VACÍA de verdad (nadie posteó) es [] y no null", async () => {
+    const { supabase } = clientWith({ data: [] });
+    expect(
+      await fetchFeedSiguiendoPostsPageViaRpc(supabase, { tenantId: "t1", cursor: null, limit: 9 }),
+    ).toEqual([]);
+  });
+});
+
+describe("fetchFeedSiguiendoListingsPageViaRpc", () => {
+  it("llama a su propia función, sin p_area_labels", async () => {
+    const { supabase, rpc } = clientWith({ data: [] });
+    await fetchFeedSiguiendoListingsPageViaRpc(supabase, { tenantId: "t1", cursor: null, limit: 9 });
+    expect(rpc).toHaveBeenCalledWith("feed_siguiendo_listings_page", {
+      p_tenant_id: "t1",
+      p_cursor_created_at: null,
+      p_cursor_id: null,
+      p_limit: 9,
+    });
+  });
+
+  it("sin la migración devuelve null y deja pasar al camino con topes", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { supabase } = clientWith({ error: { code: "PGRST202" } });
+    expect(
+      await fetchFeedSiguiendoListingsPageViaRpc(supabase, { tenantId: "t1", cursor: null, limit: 9 }),
     ).toBeNull();
   });
 });

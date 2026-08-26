@@ -213,6 +213,11 @@ export function estadoDeVencimiento(
  * Motivos por los que no se puede renovar. Los mismos literales que devuelve
  * `public.renovar_publicacion()` en su jsonb — es lo que permite traducir el
  * rechazo del servidor con el mismo diccionario que el cálculo local.
+ *
+ * Los cinco primeros viven en la 0098. El sexto —`necesita_confirmar_disponibilidad`—
+ * lo agregó la 0117 (reconfirmación de disponibilidad pasados 60 días) y vive
+ * en ESA migración, no en 0098: `vencimiento.test.ts` busca cada motivo en su
+ * archivo correcto y no en "alguna de las dos".
  */
 export const MOTIVOS_NO_RENOVABLE = [
   "no_encontrada",
@@ -220,6 +225,7 @@ export const MOTIVOS_NO_RENOVABLE = [
   "no_vence",
   "tope_alcanzado",
   "todavia_no",
+  "necesita_confirmar_disponibilidad",
 ] as const;
 
 export type MotivoNoRenovable = (typeof MOTIVOS_NO_RENOVABLE)[number];
@@ -273,4 +279,44 @@ export function puedeRenovar(
     return { ok: false, motivo: "todavia_no" };
   }
   return { ok: true };
+}
+
+/**
+ * =============================================================================
+ * CIERRE — "ya no está disponible" (migración 0117)
+ * =============================================================================
+ *
+ * `puedeRenovar()` NO calcula `necesita_confirmar_disponibilidad` a propósito:
+ * esa guarda depende de `published_at` + si ya pasaron 60 días, y la pantalla
+ * de "Mis publicaciones" sigue mostrando el botón "Renovar" igual — es la base
+ * la que, al apretarlo, puede pedir la confirmación. Acortar el botón de
+ * entrada sería esconder la única guarda que la persona puede levantar sin
+ * salir de la pantalla (ver la cabecera de la 0117).
+ */
+
+/**
+ * Motivo de cierre. Un aviso `closed` declara siempre por qué en
+ * `attrs.closed_reason` — no hay CHECK en la base para esta clave (jsonb
+ * libre, doctrina 0107), así que este array es el contrato que la app respeta.
+ */
+export const CLOSED_REASONS = ["rented", "filled", "sold", "done"] as const;
+
+export type ClosedReason = (typeof CLOSED_REASONS)[number];
+
+export function isClosedReason(value: unknown): value is ClosedReason {
+  return typeof value === "string" && (CLOSED_REASONS as readonly string[]).includes(value);
+}
+
+/**
+ * Qué motivo corresponde por default a cada `kind` al cerrar desde la UI. La
+ * migración deja los cuatro motivos abiertos a propósito y es la app la que
+ * decide cuál usar; `done` es el genérico — mismo criterio que 0117: cuatro
+ * motivos que la gente entiende, en vez de una taxonomía por vertical que
+ * nadie mantiene.
+ */
+export function closedReasonForKind(kind: string): ClosedReason {
+  if (kind === "property") return "rented";
+  if (kind === "job") return "filled";
+  if (kind === "product") return "sold";
+  return "done";
 }

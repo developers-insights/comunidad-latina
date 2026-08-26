@@ -48,6 +48,7 @@ import { RESENAS_COPY, puedeOfrecerseElFormulario } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
+import { VENCIMIENTO_COPY } from "@/lib/listings";
 import { cn } from "@/lib/utils";
 
 const C = COPY.professionals;
@@ -238,21 +239,40 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
   const attrs = parseProfessionalAttrs(listing.attrs);
   const isOwner = Boolean(user && listing.created_by === user.id);
 
+  // Cierre (0117): mismo criterio que propiedades/[id] — `listings_select`
+  // deja pasar `closed` por su rama pública. Profesionales cierra siempre con
+  // el motivo genérico (`closedReasonForKind` devuelve "done" para este
+  // `kind`), así que alcanza con el status.
+  const isClosed = listing.status === "closed";
+  const CIERRE = VENCIMIENTO_COPY.cerrado;
+
   return (
     // pb-40 (no pb-24): el CTA "Contactar" es `fixed` sobre el bottom-nav y su
     // footprint real ronda las 7rem — con pb-24 la última card quedaba TAPADA
-    // por la barra (pedido cliente 2026-07-20). Mismo valor que propiedades.
-    <div className="pb-40">
+    // por la barra (pedido cliente 2026-07-20). Mismo valor que propiedades,
+    // y mismo recorte a pb-8 cuando `closed` oculta esa barra (0117).
+    <div className={cn("pb-40", isClosed && "pb-8")}>
       <DetailTopBar
         title={listing.title}
         listingId={listing.id}
         initialSaved={savedListingIds.has(listing.id)}
       />
 
-      {listing.status !== "published" && isOwner && (
-        <Banner variant="info" className="mb-3 rounded-lg">
-          {C.detail.pendingBanner}
+      {isClosed ? (
+        // Visible para CUALQUIERA (dueño o no) — mismo criterio que
+        // propiedades/[id]: un link guardado tiene que decir "ya no está
+        // disponible" en vez de ofrecer reservar cita con alguien que ya
+        // cerró su ficha.
+        <Banner variant="warning" className="mb-3 rounded-lg">
+          <p className="font-semibold">{CIERRE.bannerTitulo}</p>
         </Banner>
+      ) : (
+        listing.status !== "published" &&
+        isOwner && (
+          <Banner variant="info" className="mb-3 rounded-lg">
+            {C.detail.pendingBanner}
+          </Banner>
+        )
       )}
 
       <DirectoryDetailHero
@@ -362,21 +382,24 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
 
       {/* Botones de acción (premium) — Reservar cita · Llamar · WhatsApp, con
           el chat de Comunidad Latina al lado. En una publicación gratuita esto
-          no renderiza nada y el único contacto sigue siendo el CTA de abajo. */}
-      <ListingActions
-        className="mt-6"
-        listingId={listing.id}
-        kind={listing.kind}
-        tier={listing.tier}
-        subject={listing.title}
-        showChat={false}
-        isLoggedIn={Boolean(user)}
-        values={{
-          booking: listing.cta_booking_url,
-          phone: listing.cta_phone,
-          whatsapp: listing.cta_whatsapp,
-        }}
-      />
+          no renderiza nada y el único contacto sigue siendo el CTA de abajo.
+          Ocultos si `closed` (0117): ya no hay con quién coordinar. */}
+      {!isClosed && (
+        <ListingActions
+          className="mt-6"
+          listingId={listing.id}
+          kind={listing.kind}
+          tier={listing.tier}
+          subject={listing.title}
+          showChat={false}
+          isLoggedIn={Boolean(user)}
+          values={{
+            booking: listing.cta_booking_url,
+            phone: listing.cta_phone,
+            whatsapp: listing.cta_whatsapp,
+          }}
+        />
+      )}
 
       {isOwner && listing.status === "published" && (
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -425,14 +448,18 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
         </div>
       </section>
 
-      {/* Contacto protegido — mismo RPC request_contact que vivienda (§9.2) */}
-      <DirectoryContactCta
-        listingId={listing.id}
-        returnPath={`/profesionales/${listing.id}`}
-        isLoggedIn={Boolean(user)}
-        isExternal={!listing.created_by}
-        externalName={listing.publisher_name}
-      />
+      {/* Contacto protegido — mismo RPC request_contact que vivienda (§9.2).
+          Oculto si `closed` (0117): el trato ya se hizo, no hay a quién
+          contactar. */}
+      {!isClosed && (
+        <DirectoryContactCta
+          listingId={listing.id}
+          returnPath={`/profesionales/${listing.id}`}
+          isLoggedIn={Boolean(user)}
+          isExternal={!listing.created_by}
+          externalName={listing.publisher_name}
+        />
+      )}
     </div>
   );
 }

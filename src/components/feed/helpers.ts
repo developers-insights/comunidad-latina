@@ -127,10 +127,17 @@ export const COMMENT_THREAD_COPY = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Tabs (los 5 feeds del wireframe §4.b) — el estado vive en ?tab= (URL)
+// Tabs (los 5 feeds del wireframe §4.b + "Siguiendo", 0119) — el estado vive en ?tab= (URL)
 // ---------------------------------------------------------------------------
 
 export const FEED_TABS = [
+  // "Siguiendo" va PRIMERO (requisito del cliente, 0119): es la pregunta más
+  // simple que se le hace a una red — "lo de la gente que sigo, y nada más" —
+  // y hoy no tenía respuesta. "Para ti" (el algoritmo: seguidos + premium +
+  // impulsado + promocionado) se queda de segundo, como default: parseTab()
+  // sigue cayendo ahí, y ningún link viejo a `/feed` sin `?tab=` cambia de
+  // significado.
+  { id: "siguiendo", listingKind: null },
   { id: "para-ti", listingKind: null },
   { id: "propiedades", listingKind: "property" },
   { id: "negocios", listingKind: "business" },
@@ -591,6 +598,91 @@ export function feedPostVisibilityFilter(
   }
   return parts.join(",");
 }
+
+/**
+ * Filtro `.or()` de PostgREST para la VISIBILIDAD de posts del tab "Siguiendo"
+ * (0119) — el camino legado, cuando el RPC `feed_siguiendo_posts_page` todavía
+ * no existe en el entorno. Espeja CARÁCTER POR CARÁCTER las tres ramas del
+ * `where` de esa función SQL (ver supabase/migrations/0119_feed_siguiendo.sql):
+ * un post entra si su AUTOR es alguien que seguís, si lo firmó una FICHA que
+ * seguís, o si es tuyo.
+ *
+ * `author_id.eq.<viewerId>` va SIEMPRE, nunca detrás de un "si hay algo que
+ * seguir": la 0119 documenta por qué la rama de "lo propio" no puede depender
+ * de tener follows —el dueño de un negocio no sigue su propia ficha, y sin
+ * esta rama su primera publicación no aparecería en la ÚNICA pestaña donde
+ * está seguro de que tendría que estar (mismo motivo que la cuarta rama de
+ * `feedPostVisibilityFilter`, arriba). Por eso esta función no admite
+ * "sin viewer": a "Siguiendo" no se entra sin sesión (ver 0119 §3), así que
+ * `viewerId` es un string, no un opcional.
+ */
+export function siguiendoPostVisibilityFilter(
+  followedProfileIds: readonly string[],
+  followedListingIds: readonly string[],
+  viewerId: string,
+): string {
+  const parts: string[] = [];
+  if (followedProfileIds.length > 0) {
+    parts.push(`author_id.in.(${followedProfileIds.join(",")})`);
+  }
+  if (followedListingIds.length > 0) {
+    parts.push(`entity_listing_id.in.(${followedListingIds.join(",")})`);
+  }
+  parts.push(`author_id.eq.${viewerId}`);
+  return parts.join(",");
+}
+
+/**
+ * La misma idea del lado de los AVISOS: espeja `feed_siguiendo_listings_page`
+ * (0119) — publicado por un perfil que seguís, o la ficha misma si la seguís.
+ *
+ * A diferencia de la de arriba, ACÁ SÍ puede no haber nada que preguntar: la
+ * 0119 es explícita en que los avisos NO tienen rama de "lo propio" ("Mis
+ * publicaciones" ya cubre eso), así que con las dos listas vacías no existe
+ * ninguna condición que un aviso pueda cumplir. Devolver `null` en ese caso
+ * —en vez de un `.or()` que no matchea nunca— es lo que le permite al
+ * llamador (`load-more.ts`) saltear la consulta entera: un `in.()` vacío
+ * PostgREST lo rechaza con 400 (ver `recommendedFeedListingFilter`), así que
+ * "nada que preguntar" tiene que cortar ANTES de armar el filtro, no adentro.
+ */
+export function siguiendoListingVisibilityFilter(
+  followedProfileIds: readonly string[],
+  followedListingIds: readonly string[],
+): string | null {
+  const parts: string[] = [];
+  if (followedProfileIds.length > 0) {
+    parts.push(`created_by.in.(${followedProfileIds.join(",")})`);
+  }
+  if (followedListingIds.length > 0) {
+    parts.push(`id.in.(${followedListingIds.join(",")})`);
+  }
+  return parts.length > 0 ? parts.join(",") : null;
+}
+
+/**
+ * Copy de los DOS vacíos del tab "Siguiendo" (0119) — no son una variación del
+ * mismo texto, son dos problemas distintos: sin sesión el problema es "no
+ * entraste todavía" (se resuelve entrando); con sesión y sin nada que ver el
+ * problema es "no elegiste a nadie" (se resuelve siguiendo). Confundirlos
+ * manda a iniciar sesión a alguien que ya inició sesión.
+ *
+ * Vive ACÁ y no en `copy.ts` por el mismo motivo que `COMMENT_THREAD_COPY`
+ * (arriba de este archivo): coordinación con otro frente que puede estar
+ * tocando ese archivo en la misma tanda, no una decisión de diseño. MOVER a
+ * `COPY.feed` (mismo prefijo que `emptyParaTi*`/`emptyListings*`) cuando se
+ * pueda editar sin pisar a nadie.
+ */
+export const SIGUIENDO_EMPTY_COPY = {
+  anonTitle: "Seguí a tu gente",
+  anonMessage:
+    "Con tu cuenta vas a ver acá las publicaciones y los avisos de la gente, los negocios y los profesionales que sigas.",
+  anonCta: "Entrá a tu cuenta",
+  noFollowsTitle: "Todavía no hay nada de lo que seguís",
+  noFollowsMessage:
+    "Seguí a más vecinos, negocios o profesionales de tu comunidad — sus publicaciones y sus avisos van a aparecer acá.",
+  noFollowsCtaBusinesses: "Explorar negocios",
+  noFollowsCtaProfessionals: "Explorar profesionales",
+} as const;
 
 /**
  * Filtro `.or()` de PostgREST para la ZONA de los posts del feed (0115).

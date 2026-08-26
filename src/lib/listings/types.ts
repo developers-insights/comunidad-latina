@@ -35,8 +35,14 @@ export type PublicacionRow = {
   expiry_warn_at: string | null;
   expired_at: string | null;
   renewal_count: number | null;
+  /**
+   * jsonb libre (doctrina 0107): `unknown` a propósito, no `Record<string,
+   * unknown>`. Quien lo lea tiene que angostarlo en runtime — `closed_reason`
+   * (0117) y `paused_reason` (0118) viven acá, no en columnas propias.
+   */
+  attrs: unknown;
 };
 
 /** Columnas que pide la pantalla. Una sola definición para query y tipo. */
 export const PUBLICACION_COLUMNS =
-  "id, kind, title, status, photos, published_at, created_at, expires_at, expiry_warn_at, expired_at, renewal_count";
+  "id, kind, title, status, photos, published_at, created_at, expires_at, expiry_warn_at, expired_at, renewal_count, attrs";

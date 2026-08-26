@@ -46,6 +46,17 @@ export const COPY = {
      * "Vivienda" y "Eventos", que sí filtran— y no compite con ningún módulo.
      */
     paraTi: "Todo",
+    /**
+     * El conmutador del feed social ("Para ti" | "Siguiendo"), debajo de la
+     * fila de círculos. Acá "Para ti" no compite con ningún módulo (el
+     * conflicto que obligó a "Todo" era con "Comunidad", no con este nombre) y
+     * es el par que el cliente pidió textual: Siguiendo / Para ti. Que el
+     * círculo diga "Todo" y el conmutador "Para ti" no es una contradicción:
+     * el círculo te trae al feed social; el conmutador elige el modo adentro.
+     */
+    modeLabel: "Modo del feed",
+    modeParaTi: "Para ti",
+    modeSiguiendo: "Siguiendo",
   },
 
   composer: {

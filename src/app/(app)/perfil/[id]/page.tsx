@@ -10,6 +10,7 @@ import { TrustScoreCard } from "@/components/trust";
 import { decodeCursor } from "@/components/listings";
 import { MessageCta } from "@/components/auth/message-cta";
 import { ProfileActionsMenu } from "@/components/auth/profile-actions-menu";
+import { FollowButton } from "@/components/social/follow-button";
 import { countryName } from "@/components/auth/countries";
 import {
   normalizeTrustLevel,
@@ -115,10 +116,18 @@ export default async function PerfilPublicoPage({
   const cursor = decodeCursor(firstValue(sp.fotos) || undefined);
   const tab = parseProfileTab(firstValue(sp.t) || undefined);
 
-  // Conversación previa + contadores. Ver perfil NO implica tener sesión (la
-  // policy es pública): para quien mira sin cuenta, `conversations` no devuelve
-  // nada por su propia RLS y el CTA cae solo en el de "entrar para escribir".
-  const [{ data: existingConversation }, counts] = await Promise.all([
+  // Conversación previa + contadores + ¿ya lo sigo? Las tres son independientes
+  // entre sí, así que van juntas y no una atrás de la otra.
+  //
+  // CONVERSACIÓN: ver perfil NO implica tener sesión (la policy es pública):
+  // para quien mira sin cuenta, `conversations` no devuelve nada por su propia
+  // RLS y el CTA cae solo en el de "entrar para escribir".
+  //
+  // SEGUIMIENTO: mismo criterio EXACTO que /creadores/perfil/[id] — sin
+  // `user` no hay sesión con la que resolver "¿lo sigo?", así que ni se
+  // pregunta; `FollowButton` ya sabe abrir la puerta de entrar si alguien sin
+  // cuenta toca "Seguir".
+  const [{ data: existingConversation }, counts, { data: existingFollow }] = await Promise.all([
     supabase
       .from("conversations")
       .select("id, status, created_at")
@@ -128,6 +137,15 @@ export default async function PerfilPublicoPage({
       .limit(1)
       .maybeSingle(),
     fetchProfileCounts(supabase, { tenantId: tenant.id, profileId: id }),
+    user
+      ? supabase
+          .from("follows")
+          .select("target_id")
+          .eq("follower_id", user.id)
+          .eq("target_kind", "profile")
+          .eq("target_id", id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   const score = trust?.score ?? 0;
@@ -182,7 +200,13 @@ export default async function PerfilPublicoPage({
         headerRight={<ProfileActionsMenu profileId={card.id} />}
         // 1 CTA primario por pantalla: hilo real si ya hay conversación; si no,
         // estado honesto (el contacto perfil→perfil llega con el módulo social).
-        // "Compartir" va al lado como secundario, nunca compitiendo con él.
+        // "Seguir" y "Compartir" van al lado, como secundarios, nunca
+        // compitiendo con él — por eso comparten una fila en vez de apilarse
+        // cada uno a todo el ancho como el CTA principal.
+        //
+        // SIN chequeo de "es mi perfil": esta página YA redirige a /perfil más
+        // arriba en cuanto `user?.id === id`, así que todo lo que se renderiza
+        // de acá para abajo es, por construcción, el perfil de OTRA persona.
         actions={
           <>
             {existingConversation ? (
@@ -196,7 +220,15 @@ export default async function PerfilPublicoPage({
             ) : (
               <MessageCta firstName={firstName} />
             )}
-            <ShareProfileButton path={base} displayName={card.displayName} />
+            <div className="flex items-center justify-center gap-2">
+              <FollowButton
+                targetKind="profile"
+                targetId={id}
+                initialFollowing={Boolean(existingFollow)}
+                size="sm"
+              />
+              <ShareProfileButton path={base} displayName={card.displayName} />
+            </div>
           </>
         }
       />
