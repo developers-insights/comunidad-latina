@@ -7,6 +7,7 @@ const NEGOCIO: IdentidadNegocio = {
   nombre: "Panadería Giovanni",
   categoria: "comida",
   listingId: null,
+  avatarUrl: null,
   rol: "propietario",
   esPropietario: true,
 };

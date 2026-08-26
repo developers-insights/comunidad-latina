@@ -19,6 +19,7 @@ import { PullToRefresh } from "@/components/feed/pull-to-refresh";
 import { ParaVos, ParaVosSkeleton } from "@/components/matching";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { getCaraActiva } from "@/lib/perfil-activo/cara";
 import { FeedAlert } from "../alert-banner";
 import { fetchFeedPageAction } from "../load-more";
 
@@ -123,18 +124,14 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Identidad del usuario para el composer (publica siempre como sí mismo).
-  let viewerName = "";
-  let viewerAvatarUrl: string | null = null;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("display_name, avatar_url")
-      .eq("id", user.id)
-      .maybeSingle();
-    viewerName = profile?.display_name ?? "";
-    viewerAvatarUrl = profile?.avatar_url ?? null;
-  }
+  /**
+   * La cara con la que se va a publicar, no la de la persona. Acá había una
+   * consulta propia a `profiles` con el comentario «publica siempre como sí
+   * mismo»: dejó de ser cierto con la 0103 y por eso la tarjeta de publicar
+   * seguía mostrando el nombre y la foto personales mientras el header ya
+   * mostraba el negocio. Una sola fuente ahora — ver @/lib/perfil-activo/cara.
+   */
+  const cara = user ? await getCaraActiva() : null;
 
   const isFirstPage = !decodeCursor(cursorRaw || undefined);
 
@@ -147,7 +144,11 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
       {tab === "para-ti" ? (
         <>
           {user ? (
-            <ComposerTrigger viewerName={viewerName} viewerAvatarUrl={viewerAvatarUrl} />
+            <ComposerTrigger
+              viewerName={cara?.displayName ?? ""}
+              viewerAvatarUrl={cara?.avatarUrl ?? null}
+              negocio={cara?.negocio ? { nombre: cara.negocio.nombre } : null}
+            />
           ) : (
             <ComposerInvite />
           )}

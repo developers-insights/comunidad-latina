@@ -26,6 +26,8 @@ import {
   getIdentidadActiva,
   listarIdentidadesDeNegocio,
 } from "@/lib/perfil-activo/identidad";
+import { getShellContext } from "@/components/shell/shell-context";
+import { PerfilDeNegocio, fetchNegocioPerfilData } from "../perfil-de-negocio";
 import { ProfileHeader } from "../profile-header";
 import { ShareProfileButton } from "../share-profile-button";
 import { ProfileTabSection } from "../profile-tab-section";
@@ -82,6 +84,41 @@ export default async function PerfilPage({
   const tab = parseProfileTab(firstValue(sp.t) || undefined);
 
   /**
+   * ── LA BIFURCACIÓN, ANTES DE LEER NADA DE LA PERSONA ──────────────────────
+   * Si estás actuando como tu negocio, "Tu perfil" ES el del negocio: nombre,
+   * foto y contadores del local, no los tuyos. Va acá arriba y no dentro del
+   * render para no pagar las seis consultas del perfil personal (ficha, Trust
+   * Score, contadores, contratos) en una pantalla que no muestra ninguna.
+   *
+   * Las dos lecturas están `cache()`-eadas y el header ya las pidió en este
+   * mismo request: no agregan viaje a la base.
+   */
+  const [identidadActiva, negociosDisponibles] = await Promise.all([
+    getIdentidadActiva(),
+    listarIdentidadesDeNegocio(),
+  ]);
+
+  if (identidadActiva.tipo === "negocio") {
+    const [shell, datosDelNegocio] = await Promise.all([
+      getShellContext(),
+      fetchNegocioPerfilData(supabase, {
+        tenantId: tenant.id,
+        listingId: identidadActiva.negocio.listingId,
+      }),
+    ]);
+    return (
+      <PerfilDeNegocio
+        negocio={identidadActiva.negocio}
+        negocios={negociosDisponibles}
+        personal={shell.user ?? { displayName: "Tu cuenta", avatarUrl: null }}
+        postsCount={datosDelNegocio.postsCount}
+        followersCount={datosDelNegocio.followersCount}
+        tieneFoto={datosDelNegocio.tieneFoto}
+      />
+    );
+  }
+
+  /**
    * `profile_card()` Y NO `select("*")`.
    *
    * El `*` que había acá era el hueco que las migraciones 0062 y 0067 dejaron
@@ -102,7 +139,7 @@ export default async function PerfilPage({
    * (no se le concede a `anon` a propósito, 0067) y sólo la usa el propio
    * usuario para formatear sus fechas.
    */
-  const [card, { data: trust }, counts, { count: contractsCount }, negociosDisponibles, identidadActiva] =
+  const [card, { data: trust }, counts, { count: contractsCount }] =
     await Promise.all([
       fetchProfileCard(supabase, user.id),
       supabase
@@ -119,11 +156,6 @@ export default async function PerfilPage({
         .select("*", { count: "exact", head: true })
         .eq("tenant_id", tenant.id)
         .or(`client_id.eq.${user.id},creator_id.eq.${user.id}`),
-      // Para la puerta del cambiador de perfil, junto a Editar/Verificar/
-      // Compartir. `cache()`-eadas (perfil-activo/identidad.ts): el header ya
-      // las pide en este mismo request, así que esto no repite la consulta.
-      listarIdentidadesDeNegocio(),
-      getIdentidadActiva(),
     ]);
 
   // Cuenta sin perfil (edge raro) → que complete el onboarding.
@@ -214,13 +246,13 @@ export default async function PerfilPage({
                 negocios={negociosDisponibles.map((negocio) => ({
                   businessId: negocio.businessId,
                   nombre: negocio.nombre,
+                  avatarUrl: negocio.avatarUrl,
                   rol: negocio.rol,
                 }))}
-                activeBusinessId={
-                  identidadActiva.tipo === "negocio"
-                    ? identidadActiva.negocio.businessId
-                    : null
-                }
+                // Siempre null: si estuvieras actuando como un negocio, esta
+                // pantalla habría vuelto arriba con `PerfilDeNegocio`. Acá sos
+                // vos, y el cambiador ofrece cambiar.
+                activeBusinessId={null}
               />
             )}
           </div>

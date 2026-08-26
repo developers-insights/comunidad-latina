@@ -14,10 +14,11 @@ import {
 import { useReducedMotion } from "motion/react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BottomSheet, Button, Skeleton } from "@/components/ui";
-import { buildTrustSignals, toTrustLevel } from "@/components/listings";
+import { buildTrustSignals, firstPhotoUrl, toTrustLevel } from "@/components/listings";
 import { fetchListingCommentsAction } from "@/app/(app)/marketplace/comments-actions";
 import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { createClient } from "@/lib/supabase/client";
+import { leerFirmaActiva, type FirmaActiva } from "@/lib/perfil-activo/actions";
 import { useCloseOnBack } from "@/lib/design/use-overlay";
 import type { Database } from "@/lib/types/database.types";
 import { cn, timeAgo } from "@/lib/utils";
@@ -299,17 +300,26 @@ const FALLBACK_AUTHOR: AuthorView = {
   signals: [],
 };
 
+/** La ficha que firma un comentario, ya resuelta a nombre + foto. */
+interface EntityView {
+  nombre: string;
+  avatarUrl: string | null;
+}
+
 interface LoadedComment {
   id: string;
   body: string;
   timeAgoLabel: string;
   author: AuthorView;
+  /** Firmado por un negocio (0116), o null = lo dijo la persona. */
+  entity: EntityView | null;
 }
 
 interface OptimisticComment {
   tempId: string;
   body: string;
   author: AuthorView;
+  entity: EntityView | null;
   timeAgoLabel: string;
   /** En vuelo hacia el servidor (aún no confirmado). */
   pending: boolean;
@@ -359,6 +369,31 @@ async function fetchAuthorViewsClient(
   return byId;
 }
 
+/**
+ * Las fichas que firman comentarios, en UNA consulta para todo el hilo. La RLS
+ * de `listings` ya limita a lo publicado (o propio), así que una ficha que se
+ * despublicó simplemente no resuelve y su comentario vuelve a mostrarse a
+ * nombre de la persona que lo escribió — que es quien de verdad lo escribió.
+ * Nunca lanza: un hilo no puede caerse porque no se pueda pintar un logo.
+ */
+async function fetchEntityViewsClient(
+  supabase: Supabase,
+  listingIds: string[],
+): Promise<Map<string, EntityView>> {
+  const ids = [...new Set(listingIds.filter(Boolean))];
+  const byId = new Map<string, EntityView>();
+  if (ids.length === 0) return byId;
+
+  const { data } = await supabase.from("listings").select("id, title, photos").in("id", ids);
+  for (const row of data ?? []) {
+    byId.set(row.id, {
+      nombre: row.title,
+      avatarUrl: firstPhotoUrl(row.photos),
+    });
+  }
+  return byId;
+}
+
 function authorViewOf(
   authors: Map<string, AuthorView>,
   authorId: string | null,
@@ -376,12 +411,14 @@ function authorViewOf(
 function toLoadedComment(
   row: ThreadRow,
   authors: Map<string, AuthorView>,
+  entities: Map<string, EntityView>,
   now: Date,
 ): LoadedComment {
   return {
     id: row.id,
     body: row.body,
     timeAgoLabel: timeAgo(row.createdAt, now),
+    entity: (row.entityListingId && entities.get(row.entityListingId)) || null,
     // Si el perfil no resuelve pero la action trajo nombre/foto, se usan sin
     // profileId: mostramos a la persona, pero NO afirmamos confianza que no
     // tenemos (sin profileId, CommentItem no pinta el badge de Trust).
@@ -408,6 +445,8 @@ interface ThreadRow {
   body: string;
   createdAt: string;
   authorId: string | null;
+  /** Ficha con la que se firmó (0116). Los comentarios de AVISOS no la tienen. */
+  entityListingId?: string | null;
   /** Nombre/foto que trajo la action del aviso si el perfil no resuelve. */
   fallbackName?: string;
   fallbackAvatarUrl?: string | null;
@@ -723,6 +762,16 @@ function CommentsSheetBody({
   const [viewer, setViewer] = useState<
     { id: string; author: AuthorView } | null | undefined
   >(undefined);
+  /**
+   * Con qué firma va a salir lo que se escriba ACÁ Y AHORA (0116). La decide el
+   * servidor —`leerFirmaActiva()`— y no el navegador: si el cliente la eligiera,
+   * comentar como un negocio ajeno sería una llamada de fetch. Se pide una vez
+   * al abrir la hoja, junto con el resto, y sólo sirve para pintar el
+   * comentario optimista con el nombre correcto DESDE EL PRIMER FRAME. Que se
+   * vea el nombre propio y a los dos segundos cambie al del negocio es
+   * exactamente la duda que esta feature vino a sacar.
+   */
+  const [firma, setFirma] = useState<FirmaActiva | null>(null);
 
   // Sin setState SÍNCRONO acá adentro: el efecto de mount llama load() y la
   // regla react-hooks/set-state-in-effect analiza el camino completo. "loading"
@@ -732,7 +781,7 @@ function CommentsSheetBody({
     const supabase = createClient();
     const now = new Date();
 
-    const [userResult, blocksResult, thread] = await Promise.all([
+    const [userResult, blocksResult, thread, firmaActiva] = await Promise.all([
       supabase.auth.getUser(),
       // RLS de user_blocks ya limita a blocker_id = auth.uid(): traemos SOLO los
       // bloqueos del viewer sin pasar su id (anónimo → set vacío).
@@ -740,6 +789,7 @@ function CommentsSheetBody({
       subject.kind === "post"
         ? loadPostThread(supabase, subject.id)
         : loadListingThread(subject.id),
+      leerFirmaActiva(),
     ]);
 
     if (!thread.ok) {
@@ -761,9 +811,16 @@ function CommentsSheetBody({
     const authorIds = [...rows.map((row) => row.authorId), viewerId].filter(
       (id): id is string => Boolean(id),
     );
-    const authors = await fetchAuthorViewsClient(supabase, authorIds);
+    const [authors, entities] = await Promise.all([
+      fetchAuthorViewsClient(supabase, authorIds),
+      fetchEntityViewsClient(
+        supabase,
+        rows.map((row) => row.entityListingId ?? "").filter(Boolean),
+      ),
+    ]);
 
-    setComments(rows.map((row) => toLoadedComment(row, authors, now)));
+    setComments(rows.map((row) => toLoadedComment(row, authors, entities, now)));
+    setFirma(firmaActiva);
     setTenantId(thread.tenantId);
     setOlderCursor(thread.page.hasOlder ? thread.page.olderCursor : null);
     setSubjectState(thread.subject);
@@ -798,16 +855,22 @@ function CommentsSheetBody({
     const rows = result.page.rows.filter(
       (row) => !row.authorId || !blockedRef.current.has(row.authorId),
     );
-    const authors = await fetchAuthorViewsClient(
-      supabase,
-      rows.map((row) => row.authorId).filter((id): id is string => Boolean(id)),
-    );
+    const [authors, entities] = await Promise.all([
+      fetchAuthorViewsClient(
+        supabase,
+        rows.map((row) => row.authorId).filter((id): id is string => Boolean(id)),
+      ),
+      fetchEntityViewsClient(
+        supabase,
+        rows.map((row) => row.entityListingId ?? "").filter(Boolean),
+      ),
+    ]);
 
     const node = scrollRef.current;
     const anchor = node ? node.scrollHeight - node.scrollTop : null;
 
     setComments((prev) => [
-      ...rows.map((row) => toLoadedComment(row, authors, now)),
+      ...rows.map((row) => toLoadedComment(row, authors, entities, now)),
       ...prev,
     ]);
     setOlderCursor(result.page.hasOlder ? result.page.olderCursor : null);
@@ -851,6 +914,9 @@ function CommentsSheetBody({
             tempId,
             body,
             author: viewer?.author ?? FALLBACK_AUTHOR,
+            entity: firma
+              ? { nombre: firma.nombre, avatarUrl: firma.avatarUrl }
+              : null,
             timeAgoLabel: COPY.comments.sending,
             pending: true,
           },
@@ -870,7 +936,7 @@ function CommentsSheetBody({
         setOptimistic((prev) => prev.filter((item) => item.tempId !== tempId));
       },
     }),
-    [viewer, scrollToBottom],
+    [viewer, firma, scrollToBottom],
   );
 
   const visibleCount = comments.length + optimistic.length;
@@ -1010,6 +1076,7 @@ function CommentsSheetBody({
                 <CommentItem
                   key={comment.id}
                   author={comment.author}
+                  entity={comment.entity}
                   body={comment.body}
                   timeAgoLabel={comment.timeAgoLabel}
                   tone={onMedia ? "media" : "surface"}
@@ -1040,6 +1107,7 @@ function CommentsSheetBody({
               <CommentItem
                 key={item.tempId}
                 author={item.author}
+                entity={item.entity}
                 body={item.body}
                 timeAgoLabel={item.timeAgoLabel}
                 pending={item.pending}

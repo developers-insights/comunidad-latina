@@ -1304,6 +1304,7 @@ export type Database = {
           author_id: string | null
           body: string
           created_at: string
+          entity_listing_id: string | null
           id: string
           post_id: string
           status: string
@@ -1313,6 +1314,7 @@ export type Database = {
           author_id?: string | null
           body: string
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           post_id: string
           status?: string
@@ -1322,6 +1324,7 @@ export type Database = {
           author_id?: string | null
           body?: string
           created_at?: string
+          entity_listing_id?: string | null
           id?: string
           post_id?: string
           status?: string
@@ -1333,6 +1336,13 @@ export type Database = {
             columns: ["author_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_entity_listing_id_fkey"
+            columns: ["entity_listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
             referencedColumns: ["id"]
           },
           {

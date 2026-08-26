@@ -164,6 +164,13 @@ export interface PostEntityView {
   title: string;
   /** Vertical del listing: property | business | professional | event | job. */
   kind: string;
+  /**
+   * Primera foto de la ficha, ya resuelta a URL pública, o null. Es la CARA del
+   * negocio (0116): la usan el avatar de un comentario firmado por la entidad y
+   * cualquier lugar que necesite mostrarla en chico. Opcional porque la cabecera
+   * de un post de entidad nunca la necesitó y no se le va a pedir de más.
+   */
+  photoUrl?: string | null;
 }
 
 /**
