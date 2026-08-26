@@ -5,6 +5,7 @@ import { z } from "zod";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
+import { getCaraActiva } from "@/lib/perfil-activo/cara";
 import { isVisionConfigured } from "@/lib/config/services";
 import {
   DEFAULT_VIDEO_CATEGORY,
@@ -847,7 +848,15 @@ const commentSchema = z.object({
 });
 
 export type CreateCommentResult =
-  | { ok: true }
+  | {
+      ok: true;
+      /**
+       * Con qué firma quedó guardado. `null` = a nombre de la persona. La hoja
+       * lo usa para reconciliar el comentario optimista: si se pintó con un
+       * nombre y el servidor guardó otro, gana el servidor.
+       */
+      entityListingId?: string | null;
+    }
   | { ok: false; code: "invalid" | "unauthenticated" | "flagged" | "error" }
   /** El JWT y el header apuntan a comunidades distintas — copy ya resuelto. */
   | { ok: false; code: "tenant-mismatch"; message: string };
@@ -905,7 +914,39 @@ export async function createCommentAction(input: {
     return { ok: false, code: "flagged" };
   }
 
-  // RLS: valida autor, tenant y que el post exista published en este tenant.
+  /**
+   * ── CON QUÉ NOMBRE SALE EL COMENTARIO ────────────────────────────────────
+   * Lo decide el SERVIDOR a partir de la identidad activa (0103), nunca un
+   * campo del body: si el cliente pudiera mandar el `entityId`, comentar como
+   * un negocio ajeno sería una llamada de fetch. Así, lo peor que puede hacer
+   * quien puentee la app es comentar como él mismo.
+   *
+   * A diferencia de PUBLICAR, acá no hay selector de autoría. Comentar es un
+   * acto corto y frecuente dentro de una conversación ajena; meterle un
+   * desplegable de "¿a nombre de quién?" a cada respuesta sería fricción en el
+   * lugar equivocado. El interruptor global ya lo dijo, y la hoja lo muestra.
+   *
+   * `puedeFirmarComo` vuelve a preguntarle a la base —con el cliente del
+   * usuario— aunque `getIdentidadActiva()` ya revalidó la membresía: son dos
+   * hechos distintos. Uno es "podés actuar como este negocio"; el otro, "esta
+   * ficha es tuya y está publicada", que es lo que exige la policy. Un negocio
+   * cuya ficha se despublicó pasa el primero y falla el segundo, y entonces el
+   * comentario sale a nombre de la persona en vez de fallar con un 42501.
+   */
+  const cara = await getCaraActiva();
+  const firmaCandidata = cara.firmaListingId;
+  const entityListingId =
+    firmaCandidata &&
+    (await puedeFirmarComo(supabase, {
+      tenantId: tenant.id,
+      userId: user.id,
+      listingId: firmaCandidata,
+    }))
+      ? firmaCandidata
+      : null;
+
+  // RLS: valida autor, tenant, que el post exista published en este tenant y
+  // —desde la 0116— que la ficha con la que se firma sea propia y publicada.
   const { data: created, error: insertError } = await supabase
     .from("comments")
     .insert({
@@ -914,6 +955,7 @@ export async function createCommentAction(input: {
       author_id: user.id,
       body,
       status: "published",
+      entity_listing_id: entityListingId,
     })
     .select("id")
     .single();
@@ -941,6 +983,9 @@ export async function createCommentAction(input: {
       authorId: commentedPost.author_id,
       actorId: user.id,
       body,
+      // Sólo si la firma sobrevivió a `puedeFirmarComo`: si el comentario quedó
+      // guardado a nombre de la persona, el aviso tiene que decir su nombre.
+      firmadoComo: entityListingId ? cara.negocio?.nombre ?? null : null,
     });
   }
 
@@ -962,7 +1007,7 @@ export async function createCommentAction(input: {
   }
 
   revalidatePath(`/feed/${postId}`);
-  return { ok: true };
+  return { ok: true, entityListingId };
 }
 
 // ---------------------------------------------------------------------------
@@ -1005,9 +1050,13 @@ export async function notifyPostReactionAction(input: {
     // nadie con el pulgar, y le pone piso a un script.
     if (!limit(`react-notify:${user.id}`, 120, HOUR_MS).ok) return { ok: false };
 
+    // `entity_listing_id` sale de la FILA ya escrita, no de un parámetro: el
+    // aviso dice a nombre de quién quedó guardado el me gusta, que es lo que va
+    // a ver quien abra la publicación. Un nombre que llegue por el body sería un
+    // aviso falsificable.
     const { data: reaction } = await supabase
       .from("reactions")
-      .select("profile_id")
+      .select("profile_id, entity_listing_id")
       .eq("subject_kind", "post")
       .eq("subject_id", postId)
       .eq("profile_id", user.id)
@@ -1024,11 +1073,22 @@ export async function notifyPostReactionAction(input: {
     // Sin autor (cuenta borrada) o me gusta propio: no hay a quién avisarle.
     if (!post?.author_id || post.author_id === user.id) return { ok: false };
 
+    let firmadoComo: string | null = null;
+    if (reaction.entity_listing_id) {
+      const { data: ficha } = await supabase
+        .from("listings")
+        .select("title")
+        .eq("id", reaction.entity_listing_id)
+        .maybeSingle();
+      firmadoComo = ficha?.title ?? null;
+    }
+
     await notifyPostReaction({
       tenantId: tenant.id,
       postId,
       authorId: post.author_id,
       actorId: user.id,
+      firmadoComo,
     });
     return { ok: true };
   } catch {

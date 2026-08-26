@@ -338,13 +338,18 @@ const INVENTARIO: Record<string, Entrada> = {
       contiene: ["cl-print-hide"],
     },
   },
-  // Fila del hilo. Las tres tintas son la variante tone="media" (nombre, "hace 3
-  // min" y cuerpo sobre el vidrio). El detalle SSR /feed/[id] renderiza el MISMO
-  // componente sin `tone`, o sea en tokens de tema: ahí no hay `on-*` que salvar.
-  // Igual que el composer, esa variante sólo existe dentro de la hoja, que es
-  // donde vive el hook.
+  // Fila del hilo. Tres de las cuatro tintas son la variante tone="media"
+  // (nombre, "hace 3 min" y cuerpo sobre el vidrio). El detalle SSR /feed/[id]
+  // renderiza el MISMO componente sin `tone`, o sea en tokens de tema: ahí no
+  // hay `on-*` que salvar. Igual que el composer, esa variante sólo existe
+  // dentro de la hoja, que es donde vive el hook.
+  //
+  // La cuarta es la insignia del comentario firmado por un negocio (0116),
+  // hermana de la del cambiador de identidad: glifo `brand-foreground` sobre
+  // `bg-brand`, con su propio `cl-print-hide` — sin el relleno queda 1.00:1, y
+  // en papel el comentario ya se lee con el nombre del local al lado.
   "src/components/feed/comment-item.tsx": {
-    inks: Array<string>(3).fill("text-on-media"),
+    inks: ["text-brand-foreground", ...Array<string>(3).fill("text-on-media")],
     cobertura: "cl-print-hide",
     prueba: {
       archivo: "src/components/feed/comments-sheet.tsx",
@@ -397,6 +402,24 @@ const INVENTARIO: Record<string, Entrada> = {
   // comentarios y el visor.
   "src/components/feed/composer-sheet.tsx": {
     inks: Array<string>(4).fill("text-on-media"),
+    cobertura: "cl-print-hide",
+  },
+  // Insignia de negocio de la tarjeta "¿Qué querés publicar?" (0116): el mismo
+  // <span aria-hidden> con el glifo en `brand-foreground` sobre `bg-brand` que
+  // usa el cambiador del header, acá para decir que vas a publicar como tu
+  // local. Lleva su propio `cl-print-hide` por el mismo motivo que aquél: sin
+  // el relleno queda 1.00:1, y con qué perfil estabas navegando no significa
+  // nada en una hoja impresa.
+  "src/components/feed/composer-trigger.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
+  // Insignia de una reseña firmada por un negocio (0117): el mismo glifo
+  // `brand-foreground` sobre `bg-brand` del cambiador de identidad, acá sobre el
+  // avatar de quien opinó. Con su `cl-print-hide` — sin el relleno queda 1.00:1,
+  // y en papel la reseña ya se lee con el nombre del local arriba.
+  "src/components/resenas/resenas-lista.tsx": {
+    inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",
   },
   // Música de una publicación, a la vista (0090): la píldora "♪ Título ·

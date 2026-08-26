@@ -3,6 +3,8 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { Header } from "@/components/shell/header";
 import { BottomNav } from "@/components/shell/bottom-nav";
 import { getShellContext } from "@/components/shell/shell-context";
+import { getCaraActiva } from "@/lib/perfil-activo/cara";
+import { FirmaActivaProvider } from "@/lib/perfil-activo/firma-activa";
 import {
   CommentsSheetProvider,
   MediaViewerProvider,
@@ -30,9 +32,16 @@ import { isMuxConfigured } from "@/lib/config/services";
  * la trata como activa).
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const [tenant, shell, viewer] = await Promise.all([
+  const [tenant, shell, cara, viewer] = await Promise.all([
     getTenant(),
     getShellContext(),
+    /**
+     * Con qué cara está actuando quien mira. Baja al cliente por contexto para
+     * que el "me gusta" —que se escribe desde el navegador -- sepa con qué ficha
+     * firmar sin un viaje de red por toque. `cache()`-eada y ya pedida por el
+     * Header en este mismo request: no agrega consulta.
+     */
+    getCaraActiva(),
     /**
      * UNA sola lectura de quien mira, para dos cosas que antes eran dos.
      *
@@ -114,6 +123,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
        */
       muxEnabled={isMuxConfigured}
     >
+    {/* Envuelve TODO lo de adentro: cualquier botón de me gusta de cualquier
+        pantalla queda debajo, sin que nadie tenga que acordarse de pasarle un
+        prop. Ver el docblock de firma-activa.tsx. */}
+    <FirmaActivaProvider
+      value={{
+        listingId: cara.firmaListingId,
+        nombre: cara.negocio ? cara.negocio.nombre : null,
+        avatarUrl: cara.negocio ? cara.avatarUrl : null,
+      }}
+    >
     <div className="flex min-h-dvh flex-col">
       <a
         href="#contenido"
@@ -151,6 +170,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       />
       <InstallPrompt />
     </div>
+    </FirmaActivaProvider>
     </PostComposerHost>
     </PostSheetProvider>
     </CommentsSheetProvider>

@@ -31,6 +31,7 @@ import {
   toggleSaveAction,
 } from "@/app/(app)/feed/engagement-actions";
 import { useMounted } from "@/lib/design/use-overlay";
+import { useFirmaActiva } from "@/lib/perfil-activo/firma-activa";
 import { cn } from "@/lib/utils";
 import {
   isEligibleForShortFeed,
@@ -477,6 +478,9 @@ function useReelLike({
   viewerId: string | null;
 }): ReelLikeState {
   const requireAuth = useRequireAuth();
+  // Mismo criterio que el feed: el me gusta sale a nombre de la cara activa
+  // (0117). El reel y la card comparten la promesa, así que comparten la fuente.
+  const firma = useFirmaActiva();
   const [liked, setLiked] = useState(post.likedByViewer);
   const [count, setCount] = useState(post.likeCount);
 
@@ -542,6 +546,7 @@ function useReelLike({
           subject_kind: "post",
           subject_id: post.id,
           profile_id: viewerId,
+          entity_listing_id: firma.listingId,
           kind: "like",
         });
         // 23505 = la reacción ya existía (doble tap): el estado ya es correcto.

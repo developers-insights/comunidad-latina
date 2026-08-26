@@ -52,6 +52,13 @@ export interface CommentThreadRow {
   body: string;
   createdAt: string;
   authorId: string | null;
+  /**
+   * Ficha con la que se firmó (0116), o null = lo dijo la persona. Se lee
+   * SIEMPRE, también en las tandas de "ver anteriores": si sólo la primera
+   * tanda supiera de firmas, un comentario del negocio cambiaría de nombre al
+   * scrollear hacia atrás.
+   */
+  entityListingId: string | null;
 }
 
 /** Una tanda del hilo, ya en orden de LECTURA (la más vieja primero). */
@@ -127,7 +134,7 @@ export async function fetchCommentThreadPage(
 ): Promise<CommentThreadPageResult> {
   let query = supabase
     .from("comments")
-    .select("id, body, created_at, author_id, status")
+    .select("id, body, created_at, author_id, entity_listing_id, status")
     .eq("post_id", postId)
     .eq("status", "published")
     .order("created_at", { ascending: false })
@@ -164,6 +171,7 @@ export async function fetchCommentThreadPage(
           body: row.body,
           createdAt: row.created_at,
           authorId: row.author_id,
+          entityListingId: row.entity_listing_id ?? null,
         }))
         // De vuelta a ascendente: el más viejo arriba, como se lee un hilo.
         .reverse(),

@@ -168,6 +168,7 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
             negocios={negocios.map((negocio) => ({
               businessId: negocio.businessId,
               nombre: negocio.nombre,
+              avatarUrl: negocio.avatarUrl,
               rol: negocio.rol,
             }))}
             activeBusinessId={

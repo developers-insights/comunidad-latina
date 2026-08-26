@@ -1,3 +1,4 @@
+import { Storefront } from "@phosphor-icons/react/dist/ssr";
 import { Avatar } from "@/components/ui";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,19 @@ import type { AuthorView } from "./helpers";
 export interface CommentItemProps {
   /** Autor ya resuelto (perfil + Trust). Sin profileId → miembro anónimo (sin badge). */
   author: AuthorView;
+  /**
+   * La ficha con la que se firmó el comentario (0116). Cuando viene, el
+   * comentario se pinta a nombre del NEGOCIO: su foto, su nombre y la insignia
+   * de local.
+   *
+   * Y sin el Trust Score, que es lo que sorprende y es correcto: la confianza
+   * es de la PERSONA que está detrás, no del comercio. Colgarle el puntaje de
+   * su dueño a un nombre comercial sería afirmar algo que la app no midió — y
+   * al lado de un nombre que no es el de esa persona, nadie podría saber de
+   * quién habla. Quien quiera saber quién está atrás tiene la página del
+   * negocio, que sí muestra a su dueño con su puntaje.
+   */
+  entity?: { nombre: string; avatarUrl: string | null } | null;
   body: string;
   /**
    * Texto del slot de tiempo. El padre decide qué va: "hace 3 min" para uno ya
@@ -52,6 +66,7 @@ export interface CommentItemProps {
 
 export function CommentItem({
   author,
+  entity = null,
   body,
   timeAgoLabel,
   pending = false,
@@ -68,7 +83,21 @@ export function CommentItem({
         pending && "opacity-60",
       )}
     >
-      <Avatar size="sm" name={author.displayName} src={author.avatarUrl} />
+      <Avatar
+        size="sm"
+        name={entity ? entity.nombre : author.displayName}
+        src={entity ? entity.avatarUrl : author.avatarUrl}
+        badge={
+          entity ? (
+            <span
+              aria-hidden="true"
+              className="cl-print-hide flex size-3.5 items-center justify-center rounded-full bg-brand text-brand-foreground ring-2 ring-surface"
+            >
+              <Storefront size={9} weight="fill" />
+            </span>
+          ) : undefined
+        }
+      />
       <div
         className={cn(
           "min-w-0 flex-1 rounded-lg px-3.5 py-2.5",
@@ -84,9 +113,9 @@ export function CommentItem({
               onMedia ? "text-on-media" : "text-foreground",
             )}
           >
-            {author.displayName}
+            {entity ? entity.nombre : author.displayName}
           </span>
-          {author.profileId && (
+          {!entity && author.profileId && (
             <PublisherTrust
               displayName={author.displayName}
               firstName={firstNameOf(author.displayName)}

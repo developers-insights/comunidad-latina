@@ -71,6 +71,15 @@ export interface ResenaVista {
   respuestaFecha: string | null;
   /** true si la escribió quien está mirando: habilita editar y borrar. */
   esMia: boolean;
+  /**
+   * La firmó un NEGOCIO (0117): `autorNombre` y `autorAvatar` ya vienen con los
+   * del local, y la lista le pone la insignia de tienda al avatar. Quién está
+   * detrás sigue siendo `autorId` —lo necesitan "es mía", el bloqueo y la
+   * moderación—, pero no se muestra: si la reseña sale a nombre del comercio,
+   * mostrar además a su dueño sería revelar algo que el interruptor de perfil
+   * promete no revelar.
+   */
+  esDeNegocio: boolean;
 }
 
 /** El resumen de puntaje de un aviso. `promedio` null = todavía nadie opinó. */

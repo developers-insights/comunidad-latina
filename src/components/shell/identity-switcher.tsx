@@ -65,6 +65,13 @@ import { cn } from "@/lib/utils";
 export interface IdentidadNegocioUI {
   businessId: string;
   nombre: string;
+  /**
+   * La foto del negocio (primera de su ficha, 0116). `null` → inicial. Sin
+   * esto el avatar del header seguía siendo la foto de la PERSONA con una
+   * insignia encima, que es lo que hacía que cambiar de perfil se sintiera
+   * decorativo: la cara no cambiaba, sólo le aparecía un sello.
+   */
+  avatarUrl: string | null;
   rol: RolDeNegocio;
 }
 
@@ -198,7 +205,12 @@ function IdentitySwitcherSheet({
               aria-current={negocio.businessId === activeBusinessId}
               className={filaClase}
             >
-              <Avatar size="md" name={negocio.nombre} badge={<BusinessBadge />} />
+              <Avatar
+                size="md"
+                name={negocio.nombre}
+                src={negocio.avatarUrl}
+                badge={<BusinessBadge />}
+              />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-foreground">
                   {negocio.nombre}
@@ -264,7 +276,12 @@ export function IdentitySwitcher(props: IdentitySwitcherProps) {
         className="flex size-11 shrink-0 items-center justify-center rounded-full transition-colors duration-(--duration-fast) hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
       >
         {activo ? (
-          <Avatar size="sm" name={activo.nombre} badge={<BusinessBadge small />} />
+          <Avatar
+            size="sm"
+            name={activo.nombre}
+            src={activo.avatarUrl}
+            badge={<BusinessBadge small />}
+          />
         ) : (
           <Avatar size="sm" name={personal.displayName} src={personal.avatarUrl} />
         )}

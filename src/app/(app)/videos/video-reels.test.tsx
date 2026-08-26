@@ -225,6 +225,10 @@ describe("VideoReels — la puerta no saca del video", () => {
         subject_kind: "post",
         subject_id: "post-1",
         profile_id: "user-9",
+        // Sin `FirmaActivaProvider` alrededor, el contexto devuelve "sos vos":
+        // el default seguro de firma-activa.tsx, y lo que tiene que pasar en un
+        // reel montado suelto.
+        entity_listing_id: null,
         kind: "like",
       }),
     );

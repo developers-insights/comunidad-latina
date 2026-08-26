@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
+import { firstPhotoUrl } from "@/components/listings/helpers";
 import {
   distribucion,
   resumenDeStats,
@@ -51,6 +52,7 @@ const VACIO: ResenasDeAviso = {
 interface FilaResena {
   id: string;
   author_id: string;
+  entity_listing_id: string | null;
   rating: number;
   body: string | null;
   owner_reply: string | null;
@@ -73,7 +75,9 @@ export async function fetchResenasDeAviso(
       .maybeSingle(),
     supabase
       .from("listing_reviews")
-      .select("id, author_id, rating, body, owner_reply, owner_reply_at, created_at")
+      .select(
+        "id, author_id, entity_listing_id, rating, body, owner_reply, owner_reply_at, created_at",
+      )
       .eq("listing_id", listingId)
       .order("created_at", { ascending: false })
       .limit(RESENAS_POR_PAGINA),
@@ -129,13 +133,42 @@ export async function fetchResenasDeAviso(
     }
   }
 
+  /**
+   * Las fichas que firmaron reseñas, en UNA consulta (0117). La RLS de
+   * `listings` ya limita a lo publicado: una ficha despublicada no resuelve y su
+   * reseña vuelve a verse a nombre de la persona, que es quien la escribió.
+   */
+  const fichaIds = [
+    ...new Set(filas.map((fila) => fila.entity_listing_id).filter(Boolean)),
+  ] as string[];
+  const fichas = new Map<string, { nombre: string; avatar: string | null }>();
+  if (fichaIds.length > 0) {
+    const { data, error } = await supabase
+      .from("listings")
+      .select("id, title, photos")
+      .in("id", fichaIds);
+    if (error) {
+      console.warn("[resenas] no se pudieron leer las fichas que firman", {
+        code: error.code,
+      });
+    }
+    for (const ficha of data ?? []) {
+      fichas.set(ficha.id as string, {
+        nombre: (ficha.title as string | null) ?? "Un negocio de la comunidad",
+        avatar: firstPhotoUrl(ficha.photos as string[] | null),
+      });
+    }
+  }
+
   const resenas: ResenaVista[] = filas.map((fila) => {
     const autor = autores.get(fila.author_id);
+    const ficha = fila.entity_listing_id ? fichas.get(fila.entity_listing_id) : undefined;
     return {
       id: fila.id,
       autorId: fila.author_id,
-      autorNombre: autor?.nombre ?? "Miembro de la comunidad",
-      autorAvatar: autor?.avatar ?? null,
+      esDeNegocio: Boolean(ficha),
+      autorNombre: ficha?.nombre ?? autor?.nombre ?? "Miembro de la comunidad",
+      autorAvatar: ficha ? ficha.avatar : autor?.avatar ?? null,
       puntaje: fila.rating,
       texto: fila.body,
       fecha: formatDate(fila.created_at, { style: "long" }),
