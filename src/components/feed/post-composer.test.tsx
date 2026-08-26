@@ -133,6 +133,16 @@ vi.mock("@/app/(app)/feed/music-actions", () => ({
   detachPostMusicAction: vi.fn(),
 }));
 
+/**
+ * Medir un video pide un `<video>` que decodifique la cabecera — jsdom no lo
+ * hace. Se stubea con una duración FIJA y válida: lo que estos tests miran es
+ * cuántos videos entran en la publicación, no cómo se leen los segundos (eso
+ * lo cubre measure-video contra el módulo real).
+ */
+vi.mock("@/lib/media/measure-video", () => ({
+  readVideoDurationSeconds: vi.fn(async () => 30),
+}));
+
 // motion neutralizado: el DOM refleja el estado del BottomSheet al instante
 // (mismo patrón que toast.test.tsx / comments-sheet.test.tsx).
 vi.mock("motion/react", async () =>
@@ -268,6 +278,66 @@ describe("PostComposer — un solo elemento en reposo", () => {
     expect(clicked.id).toBe("post-composer-video");
 
     clickSpy.mockRestore();
+  });
+});
+
+/**
+ * VARIOS VIDEOS POR PUBLICACIÓN (pedido de Manuel, 2026-08-25: "si quiero subir
+ * más de un video ahí se tendría que poder"). Hasta ese día el composer aceptaba
+ * uno solo y el botón "Agregar video" desaparecía apenas había uno elegido — con
+ * lo cual la única forma de seguir sumando medios era foto, y no había manera de
+ * enterarse de por qué.
+ */
+describe("PostComposer — varios videos", () => {
+  /** Un archivo de video creíble para `checkVideoFile` (formato y peso reales). */
+  function videoFile(name: string): File {
+    return new File([new Uint8Array(1024)], name, { type: "video/mp4" });
+  }
+
+  /** Elige `names` en el input oculto de video, de una sola vez. */
+  async function pickVideos(...names: string[]) {
+    const input = document.getElementById("post-composer-video") as HTMLInputElement;
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: names.map(videoFile),
+    });
+    fireEvent.change(input);
+    // La medición es asíncrona: la hoja se abre recién cuando terminó.
+    await screen.findByText(COPY.composer.compose.mediaTitle);
+  }
+
+  it("entran los tres y el contador los cuenta", async () => {
+    mount();
+    await openMenu();
+    await pickVideos("uno.mp4", "dos.mp4", "tres.mp4");
+
+    await waitFor(() =>
+      expect(screen.getByText(COPY.composer.compose.mediaCount(0, 3, 10, 10))).toBeTruthy(),
+    );
+    // Y se puede seguir sumando: el cupo es 10, no 1.
+    expect(screen.getByText(COPY.composer.addVideo)).toBeTruthy();
+  });
+
+  it("se pueden sumar de a tandas: el segundo no reemplaza al primero", async () => {
+    mount();
+    await openMenu();
+    await pickVideos("uno.mp4");
+    await pickVideos("dos.mp4");
+
+    await waitFor(() =>
+      expect(screen.getByText(COPY.composer.compose.mediaCount(0, 2, 10, 10))).toBeTruthy(),
+    );
+  });
+
+  it("pasado el cupo avisa una sola vez y guarda los que entran", async () => {
+    mount();
+    await openMenu();
+    await pickVideos(...Array.from({ length: 12 }, (_, i) => `v${i}.mp4`));
+
+    await waitFor(() =>
+      expect(screen.getByText(COPY.composer.compose.mediaCount(0, 10, 10, 10))).toBeTruthy(),
+    );
+    expect(screen.getByText(COPY.composer.videoLimit)).toBeTruthy();
   });
 });
 

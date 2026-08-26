@@ -14,10 +14,11 @@
  *
  * ─── CÓMO CIERRAN LOS NÚMEROS ──────────────────────────────────────────────
  *
- * Las fotos son lo ÚNICO que viaja por el body de la server action. El video no
- * pasa por acá: sube directo del navegador al bucket por XHR
- * (`prepareMediaUploadAction` + policy 0025), justamente para no chocar con
- * este límite. Por eso el presupuesto de abajo habla sólo de fotos.
+ * Los ARCHIVOS de video no viajan por el body de la server action: suben
+ * directo del navegador al bucket por XHR (`prepareMediaUploadAction` + policy
+ * 0025), justamente para no chocar con este límite. Lo único suyo que sí pasa
+ * por acá es la pista de audio muestreada para la huella perceptual, y tiene su
+ * propio presupuesto más abajo.
  *
  *  · Al ELEGIR del disco se acepta hasta `MAX_PICKED_PHOTO_BYTES` (5 MB): es el
  *    archivo crudo de una cámara de teléfono y no tiene sentido rechazarlo,
@@ -31,9 +32,10 @@
  *  · `MAX_TOTAL_PHOTO_BYTES` (10 MB) es el techo del CONJUNTO. Sin él, 10 fotos
  *    de 2 MB serían 20 MB "válidos" que el propio `bodySizeLimit` corta antes
  *    de llegar: una validación que aprueba lo imposible no valida nada.
- *  · `next.config.ts` declara `serverActions.bodySizeLimit: "11mb"` — el total
- *    de arriba más 1 MB de aire para el overhead de multipart (bordes y headers
- *    de cada parte; los docs de Next hablan de 10-20 KB) y el cuerpo de texto.
+ *  · `next.config.ts` declara `serverActions.bodySizeLimit: "14mb"` — el total
+ *    de arriba MÁS el presupuesto de audio (`MAX_TOTAL_AUDIO_PCM_CHARS`, ~2,9
+ *    MB), más ~1 MB de aire para el overhead de multipart (bordes y headers de
+ *    cada parte; los docs de Next hablan de 10-20 KB) y el cuerpo de texto.
  *    O sea: TODO payload que este módulo bendice puede llegar físicamente, y
  *    nada que llegue puede ser mucho más grande de lo que se bendice.
  *    `post-media-limits.test.ts` verifica esa relación contra el config real.
@@ -42,8 +44,17 @@
 /** Fotos por publicación. El composer y la action leen ESTE número. */
 export const MAX_PHOTOS = 10;
 
-/** Videos por publicación. No viaja por el body: sube directo al bucket. */
-export const MAX_VIDEOS = 1;
+/**
+ * Videos por publicación. No viajan por el body: suben directo al bucket, uno
+ * detrás de otro y con progreso propio, así que el tope NO lo pone
+ * `bodySizeLimit` sino la paciencia de quien sube desde un teléfono: 10 videos
+ * de 60 MB son 600 MB, y ahí el problema deja de ser técnico.
+ *
+ * Es el MISMO número que `MAX_PHOTOS` a propósito: el carrusel de la card ya
+ * mezcla fotos y videos en cualquier orden (`media-carousel.tsx`), y dos cupos
+ * distintos para dos cosas que se ven igual sólo se explican con un párrafo.
+ */
+export const MAX_VIDEOS = 10;
 
 /** Peso máximo de una foto TAL COMO SE ELIGE del disco (sólo navegador). */
 export const MAX_PICKED_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -53,6 +64,29 @@ export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 
 /** Peso máximo de TODAS las fotos de una publicación, sumadas. */
 export const MAX_TOTAL_PHOTO_BYTES = 10 * 1024 * 1024;
+
+/**
+ * PISTA DE AUDIO DE LOS VIDEOS (huella perceptual, Content Integrity).
+ *
+ * El archivo de video NO pasa por el body, pero su PCM sí: el navegador lo
+ * muestrea (`audio-samples.ts`) y lo manda en base64 dentro del mismo FormData
+ * que las fotos. Son ~21 KB por segundo analizado — un corto de 90 s deja
+ * ~1,9 MB —, así que con varios videos por publicación esto compite por el
+ * MISMO presupuesto de `bodySizeLimit` que las fotos.
+ *
+ *  · `MAX_AUDIO_PCM_CHARS` es el techo de UNA pista. No es una defensa
+ *    criptográfica sino de memoria: 120 s a 8 kHz en base64 son ~2,6 MB, y
+ *    bastante más que eso no es la pista de un video corto sino alguien
+ *    probando qué aguanta.
+ *  · `MAX_TOTAL_AUDIO_PCM_CHARS` es el techo del CONJUNTO, y es el que hace
+ *    que varios videos entren: el composer manda pistas MIENTRAS ENTREN y deja
+ *    las demás en null. Lo que queda afuera no queda sin huella —los fotogramas
+ *    (4 KB por video) viajan siempre—, sólo pierde el match por sonido.
+ *    El número está a la altura del peor caso de UN video (~2,6 MB), que es lo
+ *    que este body ya venía tolerando antes de aceptar varios.
+ */
+export const MAX_AUDIO_PCM_CHARS = 4_000_000;
+export const MAX_TOTAL_AUDIO_PCM_CHARS = 3_000_000;
 
 /**
  * Por qué no se puede publicar este conjunto de fotos.

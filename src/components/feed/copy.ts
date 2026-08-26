@@ -1,5 +1,5 @@
 import { SHORT_VIDEO_LIMIT_MESSAGE } from "@/lib/media/video-policy";
-import { MAX_PHOTOS } from "@/lib/media/post-media-limits";
+import { MAX_PHOTOS, MAX_VIDEOS } from "@/lib/media/post-media-limits";
 
 /**
  * Copy del módulo FEED SOCIAL — español cálido, directo, sin jerga (§5 del
@@ -66,7 +66,8 @@ export const COPY = {
     photoLimit: `Podés subir hasta ${MAX_PHOTOS} fotos por publicación.`,
     /** Contador discreto bajo la grilla: "3 de 10 fotos". */
     photoCount: (count: number, max: number): string => `${count} de ${max} fotos`,
-    // Video (sprint reels): 1 por publicación, MP4/WebM, hasta 60 MB.
+    // Video (sprint reels): hasta MAX_VIDEOS por publicación, MP4/WebM/MOV,
+    // hasta 60 MB cada uno.
     addVideo: "Agregar video",
     removeVideo: "Quitar video",
     videoChip: "Video",
@@ -80,8 +81,16 @@ export const COPY = {
      * acepta también .mov. Un copy huérfano no molesta hasta el día que alguien
      * lo vuelve a usar y contradice al que manda.
      */
-    videoLimit: "Por ahora va un video por publicación.",
-    videoUploading: (percent: number) => `Subiendo tu video… ${percent}%`,
+    videoLimit: `Podés subir hasta ${MAX_VIDEOS} videos por publicación.`,
+    /**
+     * Progreso de la subida. Los videos suben DE A UNO (uno detrás de otro), así
+     * que cuando hay varios el porcentaje solo no alcanza: sin el "2 de 3" la
+     * barra parece volver a empezar y se lee como que algo falló.
+     */
+    videoUploading: (percent: number, current = 1, total = 1) =>
+      total > 1
+        ? `Subiendo video ${current} de ${total}… ${percent}%`
+        : `Subiendo tu video… ${percent}%`,
     videoUploadErrorTitle: "No pudimos subir el video",
     videoUploadErrorBody: "Revisá tu conexión y probá de nuevo en un ratito.",
     /**
@@ -277,10 +286,17 @@ export const COPY = {
        * `maxPhotos` viaja para que el "3 de 10" no quede huérfano del tope
        * real (composer premium 2026-08-11, `MAX_PHOTOS` subió a 10).
        */
-      mediaCount: (photos: number, hasVideo: boolean, maxPhotos: number): string => {
+      mediaCount: (
+        photos: number,
+        videos: number,
+        maxPhotos: number,
+        maxVideos: number,
+      ): string => {
         const parts: string[] = [];
         if (photos > 0) parts.push(`${photos} de ${maxPhotos} fotos`);
-        if (hasVideo) parts.push("1 video");
+        if (videos > 0) {
+          parts.push(videos === 1 ? "1 video" : `${videos} de ${maxVideos} videos`);
+        }
         return parts.join(" · ");
       },
 

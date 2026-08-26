@@ -14,7 +14,9 @@ import {
   type DurationRejection,
 } from "@/lib/media/video-policy";
 import {
+  MAX_AUDIO_PCM_CHARS,
   MAX_PHOTOS,
+  MAX_TOTAL_AUDIO_PCM_CHARS,
   MAX_VIDEOS,
   checkPhotoPayload,
 } from "@/lib/media/post-media-limits";
@@ -363,32 +365,59 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   }
 
   // ---- Insumos de Content Integrity ---------------------------------------
-  // Fotogramas del video muestreados por el navegador (32×32 en gris, ~4 KB).
-  // Ausentes = el video queda sin huella perceptual y va a revisión humana; eso
-  // lo decide el pipeline, no este parseo.
-  let videoFrames: unknown = null;
+  //
+  // Los dos son arreglos PARALELOS a `videoPaths` — una entrada por video, en
+  // el mismo orden. Un largo que no coincide no se intenta alinear a mano: se
+  // descarta ENTERO. Adivinar a qué archivo pertenece cada huella es peor que
+  // no tener huella, porque una huella mal atribuida acusa al video equivocado.
+  //
+  // Ausentes = ese video queda sin huella perceptual y va a revisión humana;
+  // eso lo decide el pipeline, no este parseo.
+
+  /** Fotogramas muestreados por el navegador (32×32 en gris, ~4 KB por video). */
+  let videoFrames: unknown[] = [];
   try {
     const raw = formData.get("videoFrames");
-    if (typeof raw === "string" && raw.length > 0) videoFrames = JSON.parse(raw);
+    if (typeof raw === "string" && raw.length > 0) {
+      const decoded: unknown = JSON.parse(raw);
+      if (Array.isArray(decoded) && decoded.length === videoPaths.length) {
+        videoFrames = decoded;
+      }
+    }
   } catch {
-    videoFrames = null;
+    videoFrames = [];
   }
 
   /**
-   * PCM mono de la pista de audio (base64 de Int16, 8 kHz). Mismo reparto que
-   * los fotogramas y con la misma advertencia: lo extrae el navegador, así que
-   * un cliente modificado puede falsearlo. No abre un agujero de autoría — el
-   * SHA-256 lo calcula siempre el servidor leyendo el archivo real del bucket.
+   * PCM mono de la pista de audio (base64 de Int16, 8 kHz), uno por video.
+   * Mismo reparto que los fotogramas y con la misma advertencia: lo extrae el
+   * navegador, así que un cliente modificado puede falsearlo. No abre un agujero
+   * de autoría — el SHA-256 lo calcula siempre el servidor leyendo el archivo
+   * real del bucket.
    *
-   * El tope de tamaño no es una defensa criptográfica sino de memoria: 120 s a
-   * 8 kHz en base64 son ~2,6 MB, y cualquier cosa mucho mayor que eso no es la
-   * pista de audio de un video corto sino alguien probando qué aguanta.
+   * Los dos topes (`MAX_AUDIO_PCM_CHARS` por pista, `MAX_TOTAL_AUDIO_PCM_CHARS`
+   * para el conjunto) no son defensas criptográficas sino de memoria, y viven en
+   * `post-media-limits.ts` junto al resto del presupuesto del body: el composer
+   * respeta el mismo número al decidir qué pistas manda. Lo que se pasa se
+   * descarta —queda en null, que es "no se analizó"—, nunca voltea la publicación.
    */
-  const MAX_AUDIO_PCM_CHARS = 4_000_000;
-  let videoAudioPcm: unknown = null;
-  const rawAudio = formData.get("videoAudioPcm");
-  if (typeof rawAudio === "string" && rawAudio.length > 0) {
-    videoAudioPcm = rawAudio.length <= MAX_AUDIO_PCM_CHARS ? rawAudio : null;
+  let videoAudioPcm: unknown[] = [];
+  try {
+    const raw = formData.get("videoAudioPcm");
+    if (typeof raw === "string" && raw.length > 0 && raw.length <= MAX_TOTAL_AUDIO_PCM_CHARS) {
+      const decoded: unknown = JSON.parse(raw);
+      if (Array.isArray(decoded) && decoded.length === videoPaths.length) {
+        let budget = MAX_TOTAL_AUDIO_PCM_CHARS;
+        videoAudioPcm = decoded.map((entry) => {
+          if (typeof entry !== "string" || entry.length === 0) return null;
+          if (entry.length > MAX_AUDIO_PCM_CHARS || entry.length > budget) return null;
+          budget -= entry.length;
+          return entry;
+        });
+      }
+    }
+  } catch {
+    videoAudioPcm = [];
   }
 
   // Declaración de originalidad y licencia. Si el composer todavía no la manda,
@@ -577,15 +606,18 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // leen de storage para el SHA-256, y los fotogramas los muestreó el navegador
   // (`sampleVideoLumaFrames`). El porqué de ese reparto —y su límite— está en
   // `src/lib/integrity/video.ts`.
-  for (const path of videoPaths) {
+  videoPaths.forEach((path, index) => {
     integrityItems.push({
       mediaKind: "video",
       storageBucket: "post-media",
       storagePath: path,
-      videoLumaFrames: videoFrames,
-      audioPcm: videoAudioPcm,
+      // `?? null` y no `?? undefined`: los arreglos vienen vacíos cuando el
+      // largo no cuadraba, y ahí lo correcto es decir "no se analizó" para
+      // TODOS los videos, no dejar el campo sin definir en unos y en otros no.
+      videoLumaFrames: videoFrames[index] ?? null,
+      audioPcm: videoAudioPcm[index] ?? null,
     });
-  }
+  });
 
   // posts.media en el ORDEN en que el usuario eligió los medios.
   const mediaPaths: string[] = buildMediaInOrder(mediaOrder, photoPaths, videoPaths);

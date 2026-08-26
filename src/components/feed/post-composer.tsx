@@ -68,6 +68,8 @@ import { MUSIC_COPY } from "./music-copy";
  */
 import {
   MAX_PHOTOS,
+  MAX_TOTAL_AUDIO_PCM_CHARS,
+  MAX_VIDEOS,
   MAX_PICKED_PHOTO_BYTES,
   checkPhotoPayload,
 } from "@/lib/media/post-media-limits";
@@ -188,8 +190,14 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
   const { toast } = useToast();
   const [body, setBody] = useState("");
   const [media, setMedia] = useState<PickedMedia[]>([]);
-  /** Progreso de subida del video (null = sin subida en curso). */
-  const [uploadPct, setUploadPct] = useState<number | null>(null);
+  /**
+   * Progreso de subida de video (null = sin subida en curso). Los videos suben
+   * DE A UNO, así que además del porcentaje viaja cuál de cuántos: con varios,
+   * una barra que vuelve a cero sin decirlo se lee como un error.
+   */
+  const [videoUpload, setVideoUpload] = useState<
+    { pct: number; current: number; total: number } | null
+  >(null);
   const [menuOpen, setMenuOpen] = useState(false);
   /** Hoja de texto abierta y en qué modo (null = cerrada). */
   const [composeMode, setComposeMode] = useState<ComposerMode | null>(null);
@@ -314,7 +322,7 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
     cargandoAutorias && (autorias === null || autorias.entidades.length > 0);
 
   const photos = media.filter((item) => item.kind === "photo");
-  const video = media.find((item) => item.kind === "video") ?? null;
+  const videos = media.filter((item) => item.kind === "video");
 
   /**
    * Lee el FileList VIVO del input de fotos de forma SÍNCRONA (gotcha de
@@ -370,71 +378,77 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
   }
 
   /**
-   * Mismo patrón síncrono para el video (1 por publicación) y, además, EL TOPE
-   * DE 90 s (spec nº4).
+   * Mismo patrón síncrono que las fotos —el FileList se lee ANTES del primer
+   * await (gotcha de arriba)— y, además, EL TOPE DE 90 s por video (spec nº4).
    *
-   * El archivo se MIDE acá, con la metadata del `<video>`, antes de subir un
+   * VARIOS VIDEOS POR PUBLICACIÓN (pedido de Manuel, 2026-08-25). El selector
+   * acepta multiselección y este handler se puede volver a llamar: los videos
+   * se acumulan hasta {@link MAX_VIDEOS}, igual que las fotos. El carrusel de
+   * la card ya sabía mostrarlos mezclados y en orden desde el 2026-07-27; lo
+   * único que faltaba era dejar elegirlos.
+   *
+   * Cada archivo se MIDE acá, con la metadata del `<video>`, antes de subir un
    * solo byte: el video va directo del navegador al bucket, así que enterarse
    * después sería gastarle los datos a la persona para terminar diciéndole que
    * no. Un video que no se puede medir tampoco entra — sin duración la base
    * rechaza el INSERT (`posts_video_declaration`), y un error de Postgres no es
    * un mensaje para nadie.
+   *
+   * La medición es de a uno y no en paralelo a propósito: son N decodificaciones
+   * de cabecera sobre el hilo principal, y diez juntas trababan la hoja.
    */
   async function selectVideo(input: HTMLInputElement) {
-    const file = input.files?.[0] ?? null;
+    const files = Array.from(input.files ?? []);
     input.value = "";
-    if (!file) return;
+    if (files.length === 0) return;
 
-    // MISMA función que corre el servidor (`isOwnVideoPath` en
-    // `feed/actions.ts` valida contra el mismo catálogo de extensiones): un
-    // formato o un peso que el picker deja elegir pero la validación rechaza
-    // le gastaría los datos a la persona para terminar diciéndole que no.
-    const fileCheck = checkVideoFile(file);
-    if (!fileCheck.ok) {
-      if (fileCheck.reason === "type") {
-        toast({ title: VIDEO_WRONG_TYPE_MESSAGE, variant: "warning", duration: 8000 });
-      } else {
-        toast({
-          title: formatVideoTooBigMessage(file.size),
-          variant: "warning",
-          duration: 8000,
-        });
-      }
-      return;
-    }
-    if (video) {
+    let slots = MAX_VIDEOS - videos.length;
+    if (slots <= 0) {
       toast({ title: COPY.composer.videoLimit, variant: "warning" });
       return;
     }
 
+    const accepted: PickedMedia[] = [];
+    let rejectedLimit = false;
+    let rejectedType = false;
+    /**
+     * Peso del archivo pesado que se rechazó (el más grande, si hubo varios).
+     * Se guarda el NÚMERO y no un booleano porque el mensaje nombra el peso
+     * real —"pesa 82 MB y el máximo son 60"—, y ese dato es justo el que le
+     * dice a la persona cuánto tiene que bajar.
+     */
+    let rejectedSizeBytes: number | null = null;
+    let rejectedTooLong = false;
+    let rejectedUnknown = false;
+
     setMeasuringVideo(true);
-    const measured = await readVideoDurationSeconds(file);
-    setMeasuringVideo(false);
+    for (const file of files) {
+      if (slots <= 0) {
+        rejectedLimit = true;
+        break;
+      }
 
-    // MISMA función que corre el servidor. No hay dos reglas.
-    const duration = checkVideoDuration("short_video", measured);
-    if (!duration.ok) {
-      toast(
-        duration.reason === "too-long"
-          ? {
-              title: COPY.composer.videoTooLongTitle,
-              description: COPY.composer.videoTooLongBody,
-              variant: "warning",
-              duration: 9000,
-            }
-          : {
-              title: COPY.composer.videoUnknownDurationTitle,
-              description: COPY.composer.videoUnknownDurationBody,
-              variant: "warning",
-              duration: 8000,
-            },
-      );
-      return;
-    }
+      // MISMA función que corre el servidor (`isOwnVideoPath` en
+      // `feed/actions.ts` valida contra el mismo catálogo de extensiones): un
+      // formato o un peso que el picker deja elegir pero la validación rechaza
+      // le gastaría los datos a la persona para terminar diciéndole que no.
+      const fileCheck = checkVideoFile(file);
+      if (!fileCheck.ok) {
+        if (fileCheck.reason === "type") rejectedType = true;
+        else rejectedSizeBytes = Math.max(rejectedSizeBytes ?? 0, file.size);
+        continue;
+      }
 
-    setMedia((current) => [
-      ...current,
-      {
+      const measured = await readVideoDurationSeconds(file);
+      // MISMA función que corre el servidor. No hay dos reglas.
+      const duration = checkVideoDuration("short_video", measured);
+      if (!duration.ok) {
+        if (duration.reason === "too-long") rejectedTooLong = true;
+        else rejectedUnknown = true;
+        continue;
+      }
+
+      accepted.push({
         id: crypto.randomUUID(),
         kind: "video",
         file,
@@ -446,9 +460,44 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         // elige el archivo, así el editor y el envío siempre tienen algo que
         // leer, se haya abierto el editor o no.
         edit: { ...DEFAULT_PHOTO_EDIT },
-      },
-    ]);
-    openCompose("media");
+      });
+      slots -= 1;
+    }
+    setMeasuringVideo(false);
+
+    if (accepted.length > 0) {
+      setMedia((current) => [...current, ...accepted]);
+      openCompose("media");
+    }
+
+    // Un solo aviso, el más accionable (no una ráfaga de toasts). El orden va
+    // de "qué sacar" a "qué archivo no sirve": el cupo primero porque es lo
+    // único que explica por qué se ignoraron archivos que sí eran válidos.
+    if (rejectedLimit) {
+      toast({ title: COPY.composer.videoLimit, variant: "warning" });
+    } else if (rejectedTooLong) {
+      toast({
+        title: COPY.composer.videoTooLongTitle,
+        description: COPY.composer.videoTooLongBody,
+        variant: "warning",
+        duration: 9000,
+      });
+    } else if (rejectedType) {
+      toast({ title: VIDEO_WRONG_TYPE_MESSAGE, variant: "warning", duration: 8000 });
+    } else if (rejectedSizeBytes !== null) {
+      toast({
+        title: formatVideoTooBigMessage(rejectedSizeBytes),
+        variant: "warning",
+        duration: 8000,
+      });
+    } else if (rejectedUnknown) {
+      toast({
+        title: COPY.composer.videoUnknownDurationTitle,
+        description: COPY.composer.videoUnknownDurationBody,
+        variant: "warning",
+        duration: 8000,
+      });
+    }
   }
 
   function removeMedia(id: string) {
@@ -532,25 +581,27 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
     // así que esta función nunca se llama en ese estado.
 
     startTransition(async () => {
-      // ---- 1) Video primero: subida directa al bucket con progreso ---------
-      let videoPath: string | null = null;
+      // ---- 1) Videos primero: subida directa al bucket con progreso -------
+      /** Rutas ya subidas, en el orden de `videos`. */
+      const videoPaths: string[] = [];
       /**
-       * Fotogramas para la huella perceptual del video (Content Integrity).
+       * Fotogramas para la huella perceptual de CADA video (Content Integrity),
+       * arreglo PARALELO a `videoPaths`.
        *
        * Se muestrean ACÁ y no en el servidor porque el video se sube DIRECTO al
        * bucket: el servidor nunca lo tiene abierto, y sacarle fotogramas allá
        * pediría ffmpeg (~70 MB de binario nativo) en una función serverless. El
        * navegador ya tiene el decodificador y le sale gratis.
        *
-       * Son 4 matrices de 32×32 en gris: ~4 KB en el FormData, nada al lado del
-       * video. Si el muestreo falla (códec raro, archivo corrupto) vuelve vacío
-       * y el pipeline lo lee como "no se pudo analizar" → revisión humana. Nunca
-       * frena la publicación.
+       * Son 4 matrices de 32×32 en gris por video: ~4 KB en el FormData, nada
+       * al lado del archivo. Si el muestreo falla (códec raro, archivo
+       * corrupto) vuelve vacío y el pipeline lo lee como "no se pudo analizar"
+       * → revisión humana. Nunca frena la publicación.
        */
-      let videoFrames: number[][] = [];
-      /** PCM mono en base64 de la pista de audio del video. null = no se pudo. */
-      let videoAudioPcm: string | null = null;
-      if (video) {
+      const videoFrames: number[][][] = [];
+      /** PCM mono en base64 por video (null = no se pudo, o no entró en el presupuesto). */
+      const videoAudioPcm: (string | null)[] = [];
+      if (videos.length > 0) {
         const prepared = await prepareMediaUploadAction();
         if (!prepared.ok) {
           if (prepared.code === "unauthenticated") {
@@ -574,42 +625,74 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
           return;
         }
 
-        // `videoExtension` ya salió de `checkVideoFile` en `selectVideo` — no
-        // se vuelve a leer `video.file.type` acá (puede venir vacío en
-        // algunos navegadores para formatos poco comunes; ver
-        // `video-upload-limits.ts`). Todo video en `media` pasó ese chequeo,
-        // así que el campo siempre está.
-        const extension = video.videoExtension ?? "mp4";
-        videoPath = `${prepared.tenantId}/${prepared.userId}/video-${crypto.randomUUID()}.${extension}`;
-        setUploadPct(0);
-        // El muestreo va en paralelo con la subida: son dos trabajos
-        // independientes sobre el mismo archivo y encadenarlos le sumaría un
-        // par de segundos a la espera por nada.
-        const [uploaded, frames, audioPcm] = await Promise.all([
-          uploadVideoWithProgress(
-            video.file,
-            videoPath,
-            setUploadPct,
-            video.videoContentType ?? video.file.type,
-          ),
-          sampleVideoLumaFrames(video.file),
-          // La pista de audio es una huella independiente de la imagen: quien
-          // recorta el video pero deja el sonido intacto matchea por acá. Va en
-          // el mismo Promise.all porque también es trabajo sobre el archivo que
-          // ya está en memoria, y degrada a null sin romper nada.
-          sampleAudioPcm(video.file),
-        ]);
-        videoFrames = frames;
-        videoAudioPcm = audioPcm ? encodeAudioPcm16(audioPcm) : null;
-        setUploadPct(null);
-        if (!uploaded) {
-          toast({
-            title: COPY.composer.videoUploadErrorTitle,
-            description: COPY.composer.videoUploadErrorBody,
-            variant: "danger",
-          });
-          return;
+        /**
+         * PRESUPUESTO DE AUDIO. La pista viaja por el body de la server action
+         * (~21 KB por segundo ya en base64, o sea ~1,9 MB por un corto de 90 s)
+         * y ese body tiene techo — `serverActions.bodySizeLimit`, compartido con
+         * las fotos. Diez pistas enteras no entran, y pasarse no devuelve un
+         * error nuestro: Next corta el request y la publicación se pierde.
+         *
+         * Así que el audio se manda MIENTRAS ENTRE, de a un video y en orden.
+         * Lo que queda afuera no queda sin huella: los fotogramas —4 KB, siempre
+         * viajan— ya alcanzan para que Content Integrity lo dé por analizado.
+         * Se pierde el match por sonido de ESE video, no la publicación.
+         */
+        let audioBudgetChars = MAX_TOTAL_AUDIO_PCM_CHARS;
+
+        for (const [index, item] of videos.entries()) {
+          // `videoExtension` ya salió de `checkVideoFile` en `selectVideo` — no
+          // se vuelve a leer `item.file.type` acá (puede venir vacío en
+          // algunos navegadores para formatos poco comunes; ver
+          // `video-upload-limits.ts`). Todo video en `media` pasó ese chequeo,
+          // así que el campo siempre está.
+          const extension = item.videoExtension ?? "mp4";
+          const path = `${prepared.tenantId}/${prepared.userId}/video-${crypto.randomUUID()}.${extension}`;
+          const progress = { current: index + 1, total: videos.length };
+          setVideoUpload({ pct: 0, ...progress });
+          // El muestreo va en paralelo con la subida: son trabajos
+          // independientes sobre el mismo archivo y encadenarlos le sumaría un
+          // par de segundos a la espera por nada.
+          const [uploaded, frames, audioSamples] = await Promise.all([
+            uploadVideoWithProgress(
+              item.file,
+              path,
+              (pct) => setVideoUpload({ pct, ...progress }),
+              item.videoContentType ?? item.file.type,
+            ),
+            sampleVideoLumaFrames(item.file),
+            // La pista de audio es una huella independiente de la imagen: quien
+            // recorta el video pero deja el sonido intacto matchea por acá. Va
+            // en el mismo Promise.all porque también es trabajo sobre el archivo
+            // que ya está en memoria, y degrada a null sin romper nada. Si el
+            // presupuesto ya se agotó ni se decodifica: sería tirar el trabajo.
+            audioBudgetChars > 0 ? sampleAudioPcm(item.file) : Promise.resolve(null),
+          ]);
+
+          if (!uploaded) {
+            setVideoUpload(null);
+            // Los que ya subieron quedarían huérfanos en el prefijo propio:
+            // se limpian best-effort (la policy delete lo permite).
+            await removeUploadedVideos(videoPaths);
+            toast({
+              title: COPY.composer.videoUploadErrorTitle,
+              description: COPY.composer.videoUploadErrorBody,
+              variant: "danger",
+            });
+            return;
+          }
+
+          const encodedAudio = audioSamples ? encodeAudioPcm16(audioSamples) : null;
+          const audioFits = encodedAudio !== null && encodedAudio.length <= audioBudgetChars;
+          if (audioFits) audioBudgetChars -= encodedAudio.length;
+          // Una pista que no entra CIERRA el presupuesto: las siguientes son de
+          // duración parecida, y seguir intentando sólo gastaría decodificaciones.
+          else if (encodedAudio !== null) audioBudgetChars = 0;
+
+          videoPaths.push(path);
+          videoFrames.push(frames);
+          videoAudioPcm.push(audioFits ? encodedAudio : null);
         }
+        setVideoUpload(null);
       }
 
       // ---- 2) Hornear cada foto: filtro + texto quemados, SIEMPRE recomprimida
@@ -700,15 +783,9 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
                   duration: 9000,
                 },
         );
-        // El video ya subido queda huérfano si lo había: se limpia igual que en
-        // cualquier otro corte (best-effort, la policy delete lo permite).
-        if (videoPath) {
-          try {
-            await createClient().storage.from("post-media").remove([videoPath]);
-          } catch {
-            // sin drama: el archivo queda en el prefijo propio, no es visible
-          }
-        }
+        // Los videos ya subidos quedan huérfanos si los había: se limpian igual
+        // que en cualquier otro corte (best-effort, la policy delete lo permite).
+        await removeUploadedVideos(videoPaths);
         return;
       }
 
@@ -741,10 +818,10 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
           formData.append("photos", bakedByPhotoId.get(item.id) ?? item.file);
         }
       }
-      if (videoPath) {
-        formData.set("videoPaths", JSON.stringify([videoPath]));
+      if (videoPaths.length > 0) {
+        formData.set("videoPaths", JSON.stringify(videoPaths));
         /**
-         * FILTRO DEL VIDEO (0104) — arreglo PARALELO a `videoPaths`, no un
+         * FILTRO DE CADA VIDEO (0104) — arreglo PARALELO a `videoPaths`, no un
          * objeto ya indexado por ruta: la clave la escribe el servidor con los
          * paths que él mismo validó como propios. Si la mandara el cliente,
          * podría poner de clave el video de otra persona.
@@ -757,36 +834,49 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
          * el servidor desde el catálogo — mandarlo desde acá sería dejar que el
          * navegador escriba en el `style` de todo el que abra la publicación.
          */
-        const videoEdit = video?.edit;
         formData.set(
           "videoFilters",
-          JSON.stringify([
-            videoEdit && videoEdit.filterId !== DEFAULT_PHOTO_FILTER_ID
-              ? {
-                  id: videoEdit.filterId,
-                  intensity: videoEdit.filterIntensity ?? DEFAULT_PHOTO_FILTER_INTENSITY,
-                }
-              : null,
-          ]),
+          JSON.stringify(
+            videos.map((item) => {
+              const edit = item.edit;
+              return edit && edit.filterId !== DEFAULT_PHOTO_FILTER_ID
+                ? {
+                    id: edit.filterId,
+                    intensity: edit.filterIntensity ?? DEFAULT_PHOTO_FILTER_INTENSITY,
+                  }
+                : null;
+            }),
+          ),
         );
         // DECLARACIÓN OBLIGATORIA (0046): sin estos dos campos el INSERT rebota
-        // contra `posts_video_declaration`. La duración es la MEDIDA al elegir
-        // el archivo, y el servidor la vuelve a pasar por la misma política.
+        // contra `posts_video_declaration`. Las duraciones son las MEDIDAS al
+        // elegir los archivos, y el servidor las vuelve a pasar por la misma
+        // política.
+        //
+        // POR QUÉ LA MÁS LARGA Y NO LA SUMA. `posts.duration_seconds` es UNA
+        // columna y la regla que cuelga de ella —90 s -- es por CLIP, no por
+        // publicación: es lo que dura lo que se mira de un tirón. Declarar la
+        // suma haría que tres cortos de 40 s se leyeran como un video de 2
+        // minutos y el CHECK rebotara una publicación perfectamente válida.
+        // La más larga es la única lectura que sigue siendo verdad sobre un
+        // archivo real: si esa entra en el tope, todas entran.
         formData.set("videoType", "short_video");
-        if (video?.durationSeconds) {
-          formData.set("durationSeconds", String(video.durationSeconds));
-        }
+        const longest = videos.reduce(
+          (max, item) => Math.max(max, item.durationSeconds ?? 0),
+          0,
+        );
+        if (longest > 0) formData.set("durationSeconds", String(longest));
         formData.set("videoCategory", videoCategory);
         // Sólo si hay algo que mandar: un array vacío y la ausencia del campo
         // significan lo mismo para el servidor ("no se pudo analizar"), y así
         // no viaja un `"[]"` que aparenta ser un análisis hecho.
-        if (videoFrames.length > 0) {
+        if (videoFrames.some((frames) => frames.length > 0)) {
           formData.set("videoFrames", JSON.stringify(videoFrames));
         }
-        // Mismo criterio que los fotogramas: si no se pudo extraer, el campo no
-        // viaja. Un string vacío parecería un análisis hecho que dio nada.
-        if (videoAudioPcm) {
-          formData.set("videoAudioPcm", videoAudioPcm);
+        // Mismo criterio que los fotogramas: si de ningún video se pudo extraer
+        // audio (o ninguno entró en el presupuesto), el campo no viaja.
+        if (videoAudioPcm.some((pcm) => pcm !== null)) {
+          formData.set("videoAudioPcm", JSON.stringify(videoAudioPcm));
         }
       }
       formData.set(
@@ -929,15 +1019,9 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         return;
       }
 
-      // El post no salió: el video ya subido quedaría huérfano en el prefijo
-      // del usuario — lo limpiamos best-effort (la policy delete lo permite).
-      if (videoPath) {
-        try {
-          await createClient().storage.from("post-media").remove([videoPath]);
-        } catch {
-          // sin drama: el archivo queda en el prefijo propio, no es visible
-        }
-      }
+      // El post no salió: los videos ya subidos quedarían huérfanos en el
+      // prefijo del usuario — se limpian best-effort (la policy delete lo permite).
+      await removeUploadedVideos(videoPaths);
 
       if (result.code === "unauthenticated") {
         router.push("/entrar?next=/feed");
@@ -1046,6 +1130,8 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         ref={videoInputRef}
         type="file"
         accept={VIDEO_ACCEPT_ATTR}
+        // Varios de una (2026-08-25): el cupo lo pone `MAX_VIDEOS`, no el picker.
+        multiple
         className="sr-only"
         tabIndex={-1}
         aria-hidden="true"
@@ -1073,11 +1159,12 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         onBodyChange={setBody}
         media={media}
         canAddPhoto={photos.length < MAX_PHOTOS}
-        canAddVideo={!video && !measuringVideo}
+        canAddVideo={videos.length < MAX_VIDEOS && !measuringVideo}
         onAddPhotos={() => photoInputRef.current?.click()}
         onAddVideo={() => videoInputRef.current?.click()}
         onRemoveMedia={removeMedia}
         maxPhotos={MAX_PHOTOS}
+        maxVideos={MAX_VIDEOS}
         onSavePhotoEdit={savePhotoEdit}
         pollEnabled={pollEnabled}
         onPollChange={setPollEnabled}
@@ -1086,7 +1173,7 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
         declaration={declaration}
         onDeclarationChange={setDeclaration}
         previewId={previewId}
-        uploadPct={uploadPct}
+        videoUpload={videoUpload}
         measuringVideo={measuringVideo}
         bakingProgress={bakingProgress}
         finishingLabel={finishingLabel}
@@ -1156,6 +1243,24 @@ export function PostComposerHost({ modules, modulesSoon, children }: PostCompose
 // con XHR y el token de la sesión — la policy post_media_insert (0025) valida
 // el prefijo {tenant}/{user} contra el JWT igual que siempre.
 // ---------------------------------------------------------------------------
+
+/**
+ * Borra del bucket los videos que YA se subieron cuando la publicación no
+ * llega a existir (falló otro video, la guarda de peso, el propio insert).
+ *
+ * Best-effort a propósito: la policy de delete lo permite y el archivo vive en
+ * el prefijo {tenant}/{user} de quien lo subió, así que si esto falla no queda
+ * nada visible para nadie — no vale la pena romperle el flujo a la persona por
+ * un archivo que ya nadie referencia.
+ */
+async function removeUploadedVideos(paths: readonly string[]): Promise<void> {
+  if (paths.length === 0) return;
+  try {
+    await createClient().storage.from("post-media").remove([...paths]);
+  } catch {
+    // sin drama: el archivo queda en el prefijo propio, no es visible
+  }
+}
 
 async function uploadVideoWithProgress(
   file: File,

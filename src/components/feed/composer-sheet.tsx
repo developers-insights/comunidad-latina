@@ -84,6 +84,8 @@ export interface ComposerSheetProps {
   onRemoveMedia: (id: string) => void;
   /** Cupo máximo de fotos (hoy 10) — sólo para el contador "3 de 10". */
   maxPhotos: number;
+  /** Tope de videos por publicación — el contador lo muestra tal cual. */
+  maxVideos: number;
   /** Se llama cuando se confirma la edición de una foto ("Listo" en el editor). */
   onSavePhotoEdit: (id: string, edit: PhotoEdit) => void;
   pollEnabled: boolean;
@@ -96,8 +98,12 @@ export interface ComposerSheetProps {
   onDeclarationChange: (next: DeclarationValue) => void;
   /** Id estable de la sesión: fija la variante de color de la vista previa. */
   previewId: string;
-  /** Progreso real de la subida del video, o null si no hay ninguna en curso. */
-  uploadPct: number | null;
+  /**
+   * Progreso real de la subida de video, o null si no hay ninguna en curso.
+   * `current`/`total` existen porque los videos suben DE A UNO: con varios, un
+   * porcentaje que vuelve a 0% sin decir "2 de 3" se lee como un error.
+   */
+  videoUpload: { pct: number; current: number; total: number } | null;
   /** Leyendo la duración del archivo recién elegido (antes de subir nada). */
   measuringVideo?: boolean;
   /**
@@ -422,6 +428,7 @@ export function ComposerSheet({
   onAddVideo,
   onRemoveMedia,
   maxPhotos,
+  maxVideos,
   onSavePhotoEdit,
   pollEnabled,
   onPollChange,
@@ -430,7 +437,7 @@ export function ComposerSheet({
   declaration,
   onDeclarationChange,
   previewId,
-  uploadPct,
+  videoUpload,
   measuringVideo = false,
   bakingProgress = null,
   finishingLabel = null,
@@ -446,7 +453,8 @@ export function ComposerSheet({
   // Ambos exentos del trigger MEDIA_REQUIRED (0023/0043): question y text.
   const exemptFromMedia = isQuestion || isText;
   const photos = media.filter((item) => item.kind === "photo");
-  const hasVideo = media.some((item) => item.kind === "video");
+  const videos = media.filter((item) => item.kind === "video");
+  const hasVideo = videos.length > 0;
   const hasMedia = media.length > 0;
   const trimmed = body.trim();
 
@@ -745,7 +753,12 @@ export function ComposerSheet({
                 {/* Cupo discreto — "3 de 10 fotos"; se suma "1 video" si hay. */}
                 {media.length > 0 && (
                   <p className="mt-2 text-xs text-foreground-muted">
-                    {COPY.composer.compose.mediaCount(photos.length, hasVideo, maxPhotos)}
+                    {COPY.composer.compose.mediaCount(
+                      photos.length,
+                      videos.length,
+                      maxPhotos,
+                      maxVideos,
+                    )}
                   </p>
                 )}
 
@@ -879,15 +892,19 @@ export function ComposerSheet({
             )}
 
             {/* Progreso REAL de la subida del video (XHR), no una barra decorativa. */}
-            {uploadPct !== null && (
+            {videoUpload !== null && (
               <div className="mt-3 shrink-0" role="status">
                 <p className="text-xs font-medium text-foreground-secondary">
-                  {COPY.composer.videoUploading(uploadPct)}
+                  {COPY.composer.videoUploading(
+                    videoUpload.pct,
+                    videoUpload.current,
+                    videoUpload.total,
+                  )}
                 </p>
                 <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-subtle">
                   <div
                     className="h-full rounded-full bg-brand transition-[width] duration-(--duration-fast)"
-                    style={{ width: `${uploadPct}%` }}
+                    style={{ width: `${videoUpload.pct}%` }}
                   />
                 </div>
               </div>

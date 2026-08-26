@@ -174,6 +174,9 @@ function postForm(input: {
    * mandan basura, que es justamente el caso que la action tiene que frenar.
    */
   videoFilters?: unknown;
+  /** Huellas del navegador: arreglos PARALELOS a `videoPaths` (una por video). */
+  videoFrames?: unknown;
+  videoAudioPcm?: unknown;
 }): FormData {
   const data = new FormData();
   data.set("body", input.body);
@@ -187,6 +190,12 @@ function postForm(input: {
   }
   if (input.videoFilters !== undefined) {
     data.set("videoFilters", JSON.stringify(input.videoFilters));
+  }
+  if (input.videoFrames !== undefined) {
+    data.set("videoFrames", JSON.stringify(input.videoFrames));
+  }
+  if (input.videoAudioPcm !== undefined) {
+    data.set("videoAudioPcm", JSON.stringify(input.videoAudioPcm));
   }
   return data;
 }
@@ -656,6 +665,104 @@ describe("createPostAction — el filtro del video se valida contra el catálogo
     await createPostAction(postForm({ body: "", photos: [photo()] }));
 
     expect(insertedPost(stub)?.media_filters).toEqual({});
+  });
+});
+
+/**
+ * VARIOS VIDEOS EN UNA PUBLICACIÓN (2026-08-25). El contrato del wire ya era
+ * plural —`videoPaths`, `videoFilters`— pero las huellas de Content Integrity
+ * viajaban en singular y se le pegaban IGUALES a todos los videos. Con uno solo
+ * eso no se notaba; con dos, el segundo heredaba la huella del primero, o sea
+ * una acusación de duplicado contra un archivo que nadie miró.
+ */
+describe("createPostAction — las huellas van una por video", () => {
+  const OTRO_VIDEO = `${TENANT_ID}/${USER_ID}/video-def.mp4`;
+
+  it("cada video recibe SUS fotogramas y SU audio, en orden", async () => {
+    useGuardOk();
+
+    const result = await createPostAction(
+      postForm({
+        body: "",
+        videoPaths: [VIDEO_PATH, OTRO_VIDEO],
+        videoFilters: [{ id: "vintage", intensity: 0.6 }, null],
+        videoFrames: [[[1, 2]], [[3, 4]]],
+        videoAudioPcm: ["AAAA", "BBBB"],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    const items = mocks.registerUploadedMedia.mock.calls[0]?.[0]?.items as Array<{
+      storagePath: string;
+      videoLumaFrames: unknown;
+      audioPcm: unknown;
+    }>;
+    expect(items).toEqual([
+      expect.objectContaining({
+        storagePath: VIDEO_PATH,
+        videoLumaFrames: [[1, 2]],
+        audioPcm: "AAAA",
+      }),
+      expect.objectContaining({
+        storagePath: OTRO_VIDEO,
+        videoLumaFrames: [[3, 4]],
+        audioPcm: "BBBB",
+      }),
+    ]);
+  });
+
+  it("el filtro de cada video se indexa por SU ruta", async () => {
+    const stub = useGuardOk();
+
+    await createPostAction(
+      postForm({
+        body: "",
+        videoPaths: [VIDEO_PATH, OTRO_VIDEO],
+        videoFilters: [null, { id: "carbon", intensity: 0.4 }],
+      }),
+    );
+
+    expect(insertedPost(stub)?.media_filters).toEqual({
+      [OTRO_VIDEO]: { id: "carbon", intensity: 0.4 },
+    });
+  });
+
+  it("un arreglo de huellas que no cuadra se DESCARTA entero, no se alinea a mano", async () => {
+    // Adivinar a qué archivo pertenece cada huella es peor que no tenerla: una
+    // huella mal atribuida acusa al video equivocado. Sin huella, el pipeline
+    // pide ojos humanos, que es exactamente lo que corresponde.
+    useGuardOk();
+
+    await createPostAction(
+      postForm({
+        body: "",
+        videoPaths: [VIDEO_PATH, OTRO_VIDEO],
+        videoFilters: [null, null],
+        videoFrames: [[[1, 2]]],
+        videoAudioPcm: ["AAAA"],
+      }),
+    );
+
+    const items = mocks.registerUploadedMedia.mock.calls[0]?.[0]?.items as Array<{
+      videoLumaFrames: unknown;
+      audioPcm: unknown;
+    }>;
+    expect(items.every((item) => item.videoLumaFrames === null)).toBe(true);
+    expect(items.every((item) => item.audioPcm === null)).toBe(true);
+  });
+
+  it("los dos videos quedan en posts.media, en el orden recibido", async () => {
+    const stub = useGuardOk();
+
+    await createPostAction(
+      postForm({
+        body: "",
+        videoPaths: [VIDEO_PATH, OTRO_VIDEO],
+        videoFilters: [null, null],
+      }),
+    );
+
+    expect(insertedPost(stub)?.media).toEqual([VIDEO_PATH, OTRO_VIDEO]);
   });
 });
 

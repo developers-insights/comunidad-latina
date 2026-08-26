@@ -262,13 +262,23 @@ const nextConfig: NextConfig = {
      * action y la persona veía un error opaco. Acepta bytes o string tipo
      * '3mb' (`05-config/01-next-config-js/serverActions.md`).
      *
-     * POR QUÉ 11 Y NO OTRO NÚMERO. Las fotos son lo único que viaja por acá —el
-     * video sube directo al bucket por XHR— y su presupuesto vive en
-     * `src/lib/media/post-media-limits.ts`: `MAX_TOTAL_PHOTO_BYTES` = 10 MB
-     * (10 fotos horneadas de hasta ~1 MB), con `MAX_PHOTO_BYTES` = 2 MB por
-     * archivo. Este límite es ese total más 1 MB de aire para el overhead de
-     * multipart (bordes y headers de cada parte: los docs sugieren 10-20 KB) y
-     * el cuerpo de hasta 2000 caracteres.
+     * POR QUÉ 14 Y NO OTRO NÚMERO. Dos cosas viajan por acá, las dos con su
+     * presupuesto en `src/lib/media/post-media-limits.ts`:
+     *  · las FOTOS —`MAX_TOTAL_PHOTO_BYTES` = 10 MB, 10 horneadas de ~1 MB, con
+     *    `MAX_PHOTO_BYTES` = 2 MB por archivo—; el video no, sube directo al
+     *    bucket por XHR;
+     *  · la PISTA DE AUDIO de los videos, que sí pasa por acá porque la huella
+     *    perceptual la muestrea el navegador — `MAX_TOTAL_AUDIO_PCM_CHARS` = 3 M
+     *    de caracteres base64, o sea ~2,9 MB para TODOS los videos juntos.
+     * Este límite es esa suma más ~1 MB de aire para el overhead de multipart
+     * (bordes y headers de cada parte: los docs sugieren 10-20 KB) y el cuerpo
+     * de hasta 2000 caracteres.
+     *
+     * Subió de 11 a 14 el 2026-08-25, al aceptar VARIOS videos por publicación.
+     * No es que antes sobrara: 10 fotos + la pista de un solo video ya se
+     * pasaban de 11 MB, y ahí Next cortaba el request sin devolver un error
+     * nuestro — la persona se quedaba mirando un botón que no hizo nada. El
+     * agujero existía; lo que cambió es que ahora hay un número que lo cierra.
      *
      * No se sube más "por las dudas": este número es superficie de abuso —el
      * chequeo corre ANTES de la autenticación y del rate limit, así que
@@ -276,12 +286,12 @@ const nextConfig: NextConfig = {
      * que el servidor rechace por peso (`checkPhotoPayload`), no que el
      * transporte sea infinito.
      *
-     * ⚠️ Si cambiás `MAX_TOTAL_PHOTO_BYTES`, cambiá este número: el test
-     * `src/lib/media/post-media-limits.test.ts` lee ESTE archivo y falla si se
-     * desincronizan.
+     * ⚠️ Si cambiás `MAX_TOTAL_PHOTO_BYTES` o `MAX_TOTAL_AUDIO_PCM_CHARS`,
+     * cambiá este número: el test `src/lib/media/post-media-limits.test.ts` lee
+     * ESTE archivo y falla si se desincronizan.
      */
     serverActions: {
-      bodySizeLimit: "11mb",
+      bodySizeLimit: "14mb",
     },
   },
 };

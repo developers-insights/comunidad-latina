@@ -7,6 +7,8 @@ import {
   MAX_PICKED_PHOTO_BYTES,
   MAX_TOTAL_PHOTO_BYTES,
   MAX_VIDEOS,
+  MAX_AUDIO_PCM_CHARS,
+  MAX_TOTAL_AUDIO_PCM_CHARS,
   checkPhotoPayload,
 } from "./post-media-limits";
 
@@ -84,8 +86,26 @@ describe("los números tienen que cerrar entre sí", () => {
     expect(MAX_TOTAL_PHOTO_BYTES).toBeGreaterThanOrEqual(MAX_PHOTOS * 1024 * 1024);
   });
 
-  it("el video no viaja por acá: sigue siendo 1 y sube directo al bucket", () => {
-    expect(MAX_VIDEOS).toBe(1);
+  it("los videos suben directo al bucket: el cupo iguala al de fotos", () => {
+    // Los bytes del video NO pasan por el body (subida directa), así que el
+    // número no sale de este presupuesto. Que sea el MISMO que el de fotos es
+    // la decisión de producto: el carrusel los muestra mezclados y dos cupos
+    // distintos para dos cosas que se ven igual sólo se explican con un párrafo.
+    expect(MAX_VIDEOS).toBe(MAX_PHOTOS);
+  });
+
+  /**
+   * Lo ÚNICO del video que sí viaja por el body es la pista de audio para la
+   * huella perceptual. Con varios videos por publicación, el techo del conjunto
+   * es lo que evita que diez pistas enteras (~1,9 MB cada una) revienten un
+   * body que además lleva las fotos.
+   */
+  it("el audio de los videos tiene techo por pista y techo del conjunto", () => {
+    expect(MAX_TOTAL_AUDIO_PCM_CHARS).toBeLessThanOrEqual(MAX_AUDIO_PCM_CHARS);
+    // Tiene que alcanzar para al menos UNA pista completa: un corto de 90 s a
+    // 8 kHz en base64 son ~1,9 MB. Menos que eso y ningún video tendría huella
+    // de audio nunca, que es peor que no tener el presupuesto.
+    expect(MAX_TOTAL_AUDIO_PCM_CHARS).toBeGreaterThanOrEqual(2_000_000);
   });
 
   /**
@@ -103,9 +123,17 @@ describe("los números tienen que cerrar entre sí", () => {
     expect(match, "next.config.ts tiene que declarar serverActions.bodySizeLimit").toBeTruthy();
 
     const limitBytes = Number(match![1]) * 1024 * 1024;
+    /**
+     * El payload más grande que el servidor puede bendecir NO son sólo las
+     * fotos: la pista de audio de los videos viaja por el mismo body (la huella
+     * perceptual la muestrea el navegador). Sumarla acá es lo que hace que este
+     * candado sea verdad — con sólo las fotos, 10 fotos + un video pasaban el
+     * test y no pasaban por el cable.
+     */
+    const peorPayload = MAX_TOTAL_PHOTO_BYTES + MAX_TOTAL_AUDIO_PCM_CHARS;
     // Con margen para el overhead de multipart (bordes, headers de cada parte)
     // y para el cuerpo de hasta 2000 caracteres: los docs de Next hablan de
     // 10-20 KB, acá sobra un mundo.
-    expect(limitBytes).toBeGreaterThan(MAX_TOTAL_PHOTO_BYTES + 512 * 1024);
+    expect(limitBytes).toBeGreaterThan(peorPayload + 512 * 1024);
   });
 });
