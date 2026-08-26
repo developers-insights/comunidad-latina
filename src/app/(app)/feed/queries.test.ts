@@ -4,6 +4,7 @@ import {
   fetchActivePromotions,
   fetchBlockedIds,
   fetchFollowedListingIds,
+  fetchFollowedProfileIds,
   fetchPostMusic,
   toPostCardModel,
   type PostRow,
@@ -475,6 +476,36 @@ describe("fetchFollowedListingIds — alcance, no seguridad", () => {
     const stub = createRecordingStub({ error: { code: "57014" } });
 
     expect(await fetchFollowedListingIds(stub.client, "viewer-1")).toEqual([]);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+});
+
+/**
+ * La mitad que le faltaba a `fetchFollowedListingIds` para servir el
+ * fallback sin RPC de "Siguiendo" (0119): hermana exacta, `target_kind =
+ * 'profile'` en vez de `'listing'`.
+ */
+describe("fetchFollowedProfileIds — la otra mitad de follows, para \"Siguiendo\" (0119)", () => {
+  it("sin sesión no consulta nada", async () => {
+    const stub = createRecordingStub({ data: [] });
+    expect(await fetchFollowedProfileIds(stub.client, null)).toEqual([]);
+    expect(stub.from).not.toHaveBeenCalled();
+  });
+
+  it("acota a 200 por los más recientes — mismo criterio que fetchFollowedListingIds", async () => {
+    const stub = createRecordingStub({ data: [{ target_id: "p1" }] });
+
+    expect(await fetchFollowedProfileIds(stub.client, "viewer-1")).toEqual(["p1"]);
+    expect(stub.argsOf("limit")).toEqual([[200]]);
+    expect(stub.argsOf("order")).toEqual([["created_at", { ascending: false }]]);
+  });
+
+  it("si falla, se degrada en silencio (alcance, no seguridad) y se loguea", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const stub = createRecordingStub({ error: { code: "57014" } });
+
+    expect(await fetchFollowedProfileIds(stub.client, "viewer-1")).toEqual([]);
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });

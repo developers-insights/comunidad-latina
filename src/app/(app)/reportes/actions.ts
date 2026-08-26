@@ -59,6 +59,12 @@ export async function reportTargetAction(
     ...(parsed.data.details ? { p_details: parsed.data.details } : {}),
   });
   if (error) {
+    // Tope diario del lado de la base (0118): mismo código que el limitador
+    // in-memory de arriba — la UI ya sabe mostrarlo. El de la base es el que
+    // vale con varias instancias; el de acá solo ahorra el viaje.
+    if (error.message.includes("RATE_LIMITED")) {
+      return { ok: false, code: "rate-limited" };
+    }
     console.error("[reportes] report_scam falló", { code: error.code });
     return { ok: false, code: "error" };
   }

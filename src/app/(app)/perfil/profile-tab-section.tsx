@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database.types";
+import { getTenant } from "@/lib/tenant/resolve";
 import { NavTabs, type NavTabItem } from "@/components/ui";
 import { ProfilePostsGrid } from "./posts-grid";
 import { fetchAuthorPostTiles } from "./posts";
@@ -8,6 +9,8 @@ import {
   fetchProfileReviews,
   type ProfileCounts,
 } from "./profile-data";
+import { fetchProfileListings } from "./profile-listings";
+import { ProfileListingsPanel } from "./profile-listings-panel";
 import {
   ProfileClosedPanel,
   ProfileInfoPanel,
@@ -27,14 +30,14 @@ import {
  * LA SECCIÓN DE PESTAÑAS DEL PERFIL — una sola implementación para las dos
  * pantallas (el perfil propio `/perfil` y el ajeno `/perfil/[id]`).
  *
- * Está factorizado así por una razón muy concreta: son siete pestañas por dos
+ * Está factorizado así por una razón muy concreta: son ocho pestañas por dos
  * pantallas. Copiado, el primer arreglo que se hiciera en una sola de las dos
  * dejaría al perfil ajeno con menos pestañas que el propio, y nadie lo notaría
  * hasta que un usuario abriera el perfil de otro. Acá el `switch` es único.
  *
- * Sólo se consulta la pestaña ABIERTA. Traer las siete en cada visita serían
- * seis queries tiradas a la basura por render — y "Publicaciones", que es la
- * que ve el 90% de la gente, pagaría el costo de las otras seis.
+ * Sólo se consulta la pestaña ABIERTA. Traer las ocho en cada visita serían
+ * siete queries tiradas a la basura por render — y "Publicaciones", que es la
+ * que ve el 90% de la gente, pagaría el costo de las otras siete.
  */
 
 const COPY = {
@@ -104,7 +107,8 @@ export async function ProfileTabSection({
    * (reseñas, seguidores, siguiendo). "Fotos 12 · Videos 3" convertiría la
    * barra en un tablero de estadísticas y, encima, obligaría a contar fotos y
    * videos por separado en cada visita — que es exactamente la query cara que
-   * este componente evita.
+   * este componente evita. "Avisos" queda afuera por el mismo motivo: contarlos
+   * pediría un `count` aparte sobre `listings` que hoy nadie necesita pagar.
    */
   const countFor: Partial<Record<ProfileTabId, number>> = {
     publicaciones: counts.posts,
@@ -183,6 +187,26 @@ export async function ProfileTabSection({
             emptyMessage=""
           />
         );
+      }
+
+      case "avisos": {
+        /**
+         * SIN gate de privacidad, a propósito: a diferencia de "Publicaciones"
+         * (que sí puede cerrarse, `canSeePosts` viene de `profile_card()`), un
+         * `listing` publicado es público por diseño del marketplace entero —
+         * su propia RLS ya lo dice (`status = 'published'` visible a
+         * `anon, authenticated`, igual que en /propiedades, /eventos,
+         * /empleos…). No existe una privacidad de "avisos" en ningún otro
+         * lugar de la app; inventarla acá escondería avisos que siguen siendo
+         * públicos si se los busca por su propia página.
+         */
+        const tenant = await getTenant(); // cache() de React: ya se pidió en la página, esto no repite la consulta.
+        const items = await fetchProfileListings(supabase, {
+          tenantId,
+          profileId,
+          locale: tenant.locale,
+        });
+        return <ProfileListingsPanel items={items} isOwn={isOwn} />;
       }
 
       default: {

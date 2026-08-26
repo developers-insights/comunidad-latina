@@ -24,6 +24,7 @@ function leer(ruta: string): string {
 }
 
 const MIGRACION = leer("../../../../supabase/migrations/0115_zona_del_feed.sql");
+const MIGRACION_SIGUIENDO = leer("../../../../supabase/migrations/0119_feed_siguiendo.sql");
 const FEED_RPC = leer("./feed-rpc.ts");
 const LOAD_MORE = leer("./load-more.ts");
 
@@ -178,5 +179,76 @@ describe("la app y el SQL hablan el mismo idioma", () => {
     expect(LOAD_MORE).toContain("campanaAlcanzaZona(");
     expect(LOAD_MORE).toContain("feedZoneFilter(areaLabels, promocionadosQueAlcanzan)");
     expect(LOAD_MORE).toContain('listingsQuery.in("area_label", [...areaLabels])');
+  });
+});
+
+/**
+ * =============================================================================
+ * "SIGUIENDO" (0119) NO TIENE ZONA — y esa AUSENCIA es la parte fácil de
+ * romper sin querer: alguien que vea el `.in("area_label", …)` de los otros
+ * cuatro tabs y lo copie "por consistencia" a `loadSiguiendoPage` estaría
+ * deshaciendo una decisión de producto explícita (ver el §"SIN ZONA" de la
+ * migración), no arreglando un olvido.
+ * =============================================================================
+ */
+describe('0119 — "Siguiendo" no filtra por zona', () => {
+  it("las dos funciones NO reciben p_area_labels (a diferencia de las de 0115)", () => {
+    const posts = MIGRACION_SIGUIENDO.slice(
+      MIGRACION_SIGUIENDO.indexOf("create or replace function public.feed_siguiendo_posts_page"),
+      MIGRACION_SIGUIENDO.indexOf("create or replace function public.feed_siguiendo_listings_page"),
+    );
+    const listings = MIGRACION_SIGUIENDO.slice(
+      MIGRACION_SIGUIENDO.indexOf("create or replace function public.feed_siguiendo_listings_page"),
+    );
+    expect(posts).not.toContain("p_area_labels");
+    expect(listings).not.toContain("p_area_labels");
+  });
+
+  it("sin grant a anon: sin sesión no hay \"Siguiendo\" (a diferencia de las de 0115)", () => {
+    // Desde el primer REVOKE real hasta el final: el bloque ejecutable, sin
+    // la prosa de arriba que SÍ menciona "to anon" al explicar por qué la
+    // 0115 (la otra migración) se lo da a sus propias funciones.
+    const grants = MIGRACION_SIGUIENDO.slice(
+      MIGRACION_SIGUIENDO.indexOf("revoke execute on function public.feed_siguiendo_posts_page"),
+    );
+    expect(grants).toContain(
+      "revoke execute on function public.feed_siguiendo_posts_page(uuid, timestamptz, uuid, int)\n  from public, anon;",
+    );
+    expect(grants).toContain(
+      "revoke execute on function public.feed_siguiendo_listings_page(uuid, timestamptz, uuid, int)\n  from public, anon;",
+    );
+    expect(grants).not.toContain("to anon");
+    expect(grants).toContain("to authenticated, service_role;");
+  });
+
+  it("feed-rpc: los wrappers de Siguiendo no mandan p_area_labels ni p_entity_kind", () => {
+    // Los dos `.rpc(…, { … })` de esta sección — no la prosa del docblock, que
+    // los NOMBRA (entre backticks) justamente para explicar por qué faltan.
+    // `:` es lo que distingue "se está mandando como parámetro" de "se está
+    // mencionando en un comentario".
+    const bloque = FEED_RPC.slice(FEED_RPC.indexOf('"Siguiendo" (0119)'));
+    expect(bloque).not.toContain("p_area_labels:");
+    expect(bloque).not.toContain("p_entity_kind:");
+    // Y que de verdad mande los cuatro escalares que sí lleva.
+    expect(bloque.match(/p_tenant_id: args\.tenantId,/g)?.length).toBe(2);
+    expect(bloque.match(/p_limit: args\.limit,/g)?.length).toBe(2);
+  });
+
+  it("load-more: loadSiguiendoPage no recorta por area_label ni recibe areaLabels", () => {
+    const bloque = LOAD_MORE.slice(LOAD_MORE.indexOf("async function loadSiguiendoPage"));
+    expect(bloque).not.toContain("area_label");
+    expect(bloque).not.toContain("areaLabels");
+  });
+
+  it('fetchFeedPageAction no le pasa areaLabels a loadSiguiendoPage (la llamada NO suma al conteo "los dos caminos")', () => {
+    const entrada = LOAD_MORE.slice(
+      LOAD_MORE.indexOf("export async function fetchFeedPageAction"),
+      LOAD_MORE.indexOf("async function loadParaTiPage"),
+    );
+    expect(entrada).toContain('if (tab === "siguiendo")');
+    expect(entrada).toContain("return loadSiguiendoPage({");
+    // El conteo de "los dos caminos" (test de arriba) sigue en 2: si esto
+    // cambiara a 3, alguien le empezó a pasar areaLabels a "Siguiendo".
+    expect(entrada.match(/areaLabels,/g)?.length).toBe(2);
   });
 });

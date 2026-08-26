@@ -80,10 +80,23 @@ describe("moduleCircles (cómo se arma la fila)", () => {
     }
   });
 
-  it("los cinco tabs del feed tienen su círculo — ninguno se queda sin puerta", () => {
+  /**
+   * ⚠️ "siguiendo" (0119) queda EXCLUIDO a propósito, y es una deuda anotada,
+   * no una decisión de diseño: esta fila sale del registro de MÓDULOS
+   * (secciones/verticales con su propio href), y "Siguiendo" no es una
+   * sección — es un segundo lente sobre el MISMO feed que "Todo", sin ruta
+   * propia en `MODULES`. Su puerta visual NO es un círculo: es el conmutador
+   * "Para ti | Siguiendo" (`feed-mode-toggle.tsx`), que aparece en los dos
+   * tabs sociales. Por eso este test excluye "siguiendo" del 1:1 con los
+   * círculos y el del conmutador cubre la entrada.
+   */
+  it("los tabs del feed QUE SON VERTICALES tienen su círculo — ninguno se queda sin puerta", () => {
     const { filters } = moduleCircles(SIN_DECISIONES, SIN_DECISIONES);
+    const tabsConCirculoPropio = FEED_TABS.map((tab) => tab.id).filter(
+      (id) => id !== "siguiendo",
+    );
     expect(filters.map((circle) => circle.tab).sort()).toEqual(
-      FEED_TABS.map((tab) => tab.id).sort(),
+      tabsConCirculoPropio.sort(),
     );
   });
 

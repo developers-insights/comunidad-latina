@@ -5,6 +5,7 @@ import {
   isEligibleForShortFeed,
 } from "@/lib/media/video-policy";
 import {
+  FEED_TABS,
   canPromotePost,
   entityAccentVar,
   entityHref,
@@ -12,8 +13,11 @@ import {
   feedPostVisibilityFilter,
   feedZoneFilter,
   isPaidAdvertising,
+  parseTab,
   postMediaUrl,
   postgrestQuoted,
+  siguiendoListingVisibilityFilter,
+  siguiendoPostVisibilityFilter,
   videoOpensReel,
   viewerPlaybackCapFor,
 } from "./helpers";
@@ -75,6 +79,100 @@ describe("feedPostVisibilityFilter", () => {
     );
     expect(feedPostVisibilityFilter(["e1"], [], undefined)).toBe(
       "entity_listing_id.is.null,entity_listing_id.in.(e1)",
+    );
+  });
+});
+
+describe("FEED_TABS / parseTab — el tab nuevo (0119)", () => {
+  it('"siguiendo" va primero, "para-ti" segundo, después los cuatro verticales', () => {
+    expect(FEED_TABS.map((tab) => tab.id)).toEqual([
+      "siguiendo",
+      "para-ti",
+      "propiedades",
+      "negocios",
+      "profesionales",
+      "eventos",
+    ]);
+  });
+
+  it('parsea "siguiendo" tal cual', () => {
+    expect(parseTab("siguiendo")).toBe("siguiendo");
+  });
+
+  it("el default SIGUE siendo \"para-ti\" — ningún link viejo cambia de destino", () => {
+    expect(parseTab(undefined)).toBe("para-ti");
+    expect(parseTab("")).toBe("para-ti");
+    expect(parseTab("cualquier-cosa-inventada")).toBe("para-ti");
+  });
+
+  it("los otros cinco tabs siguen parseando igual", () => {
+    expect(parseTab("para-ti")).toBe("para-ti");
+    expect(parseTab("propiedades")).toBe("propiedades");
+    expect(parseTab("negocios")).toBe("negocios");
+    expect(parseTab("profesionales")).toBe("profesionales");
+    expect(parseTab("eventos")).toBe("eventos");
+  });
+});
+
+/**
+ * Alcance del tab "Siguiendo" (0119) — el camino legado (sin RPC). Espeja las
+ * tres/dos ramas del `where` de `feed_siguiendo_posts_page` /
+ * `feed_siguiendo_listings_page` (supabase/migrations/0119_feed_siguiendo.sql).
+ */
+describe("siguiendoPostVisibilityFilter", () => {
+  it("sin follows: solo lo propio (nunca vacío — 0119 no admite sin sesión)", () => {
+    expect(siguiendoPostVisibilityFilter([], [], "yo")).toBe("author_id.eq.yo");
+  });
+
+  it("con perfiles seguidos: esos autores + lo propio", () => {
+    expect(siguiendoPostVisibilityFilter(["a", "b"], [], "yo")).toBe(
+      "author_id.in.(a,b),author_id.eq.yo",
+    );
+  });
+
+  it("con fichas seguidas: esas entidades + lo propio", () => {
+    expect(siguiendoPostVisibilityFilter([], ["e1"], "yo")).toBe(
+      "entity_listing_id.in.(e1),author_id.eq.yo",
+    );
+  });
+
+  it("combina las tres fuentes en un solo grupo OR", () => {
+    expect(siguiendoPostVisibilityFilter(["a"], ["e1"], "yo")).toBe(
+      "author_id.in.(a),entity_listing_id.in.(e1),author_id.eq.yo",
+    );
+  });
+
+  /**
+   * El dueño de un negocio no sigue su propia ficha: sin esta rama, su
+   * primera publicación no aparecería en la ÚNICA pestaña donde está seguro
+   * de que tendría que estar. Es la misma excepción que la cuarta rama de
+   * `feedPostVisibilityFilter`, y por eso acá NO es opcional (no hay rama
+   * "sin viewer" — a "Siguiendo" no se entra sin sesión).
+   */
+  it("lo propio va SIEMPRE, incluso sin ningún follow", () => {
+    const parts = siguiendoPostVisibilityFilter([], [], "yo").split(",");
+    expect(parts).toContain("author_id.eq.yo");
+  });
+});
+
+describe("siguiendoListingVisibilityFilter", () => {
+  it("sin follows: null — nada que preguntar (a diferencia de los posts, sin rama propia)", () => {
+    expect(siguiendoListingVisibilityFilter([], [])).toBeNull();
+  });
+
+  it("con perfiles seguidos: los avisos que publicaron", () => {
+    expect(siguiendoListingVisibilityFilter(["a", "b"], [])).toBe(
+      "created_by.in.(a,b)",
+    );
+  });
+
+  it("con fichas seguidas: esos avisos mismos", () => {
+    expect(siguiendoListingVisibilityFilter([], ["f1"])).toBe("id.in.(f1)");
+  });
+
+  it("combina las dos fuentes en un solo grupo OR", () => {
+    expect(siguiendoListingVisibilityFilter(["a"], ["f1"])).toBe(
+      "created_by.in.(a),id.in.(f1)",
     );
   });
 });

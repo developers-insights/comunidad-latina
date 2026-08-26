@@ -1,5 +1,69 @@
 # PROGRESS — Comunidad Latina
 
+## Los 7 puntos de la spec de módulos — cerrados (✅ 2026-08-26)
+
+Contra el doc del cliente ("Requisitos de módulos, distribución y verificación")
+quedaban 7 gaps reales. Se cerraron todos en una tanda orquestada (5 frentes en
+paralelo + fixes de review), sobre la base del video-por-Mux del 25-ago:
+
+1. **Feed "Siguiendo" | "Para ti"** — tab `siguiendo` nuevo (RPCs
+   `feed_siguiendo_posts_page`/`feed_siguiendo_listings_page` en 0119, espejo de
+   0115, solo `authenticated`, sin zona y sin promos pagas: 100% orgánico de
+   seguidos) + fallback PostgREST si la RPC no está. La puerta visual NO es un
+   círculo (la fila sale del registro de módulos): es el conmutador
+   `FeedModeToggle` ("Para ti | Siguiendo"), que aparece solo en los dos tabs
+   sociales. Trae posts de perfiles y fichas seguidas Y avisos (eventos,
+   empleos…) de seguidos — por eso no hizo falta duplicar listings en posts.
+2. **Propiedades → "Agentes y propietarios"** — pestañas calcadas de
+   marketplace (`?t=`), directorio derivado de quienes tienen propiedades
+   publicadas (sin entidad nueva): rol declarado opcional al publicar
+   (`attrs.advertiser_role`, "Publicás como…"), verificación, Trust Score, zona,
+   N activas. Tope 50/600 documentado en código.
+3. **"Página del organizador"** — pestaña "Avisos" en el perfil público (todos
+   los kinds published, cards del feed reusadas), `FollowButton` en el perfil
+   (target profile), y "Próximos eventos" en la ficha del negocio (espejo de
+   empleos; asociación por `created_by` — la FK 0107 es exclusiva de jobs, ver
+   docblock de `src/lib/negocios/eventos.ts`).
+4. **Reconfirmación a los 60 días** — `renovar_publicacion(p_listing,
+   p_confirma_disponibilidad default false)` (0117): pasados 60 días de
+   `published_at` rechaza con `motivo='necesita_confirmar_disponibilidad'` y el
+   botón de renovar pregunta "¿Sigue disponible?" y reintenta con true. Se
+   pide en CADA renovación pasado ese umbral, a propósito.
+5. **"Alquilado"** — status `closed` + `attrs.closed_reason`
+   (rented/filled/sold/done) con copy por vertical (Alquilado/Cubierto/
+   Vendido/Finalizado). El dueño lo setea desde /publicaciones; el aviso sale
+   de listados y las SEIS fichas de detalle muestran banner y esconden CTAs
+   (la policy pública ahora devuelve `closed` para que un link guardado
+   explique en vez de 404). Trigger `listings_guard_cierre`: solo se cierra
+   desde published/expired/paused-manual — nunca desde removed/draft/
+   pending_review/pausa-por-reportes.
+6. **Pausa automática por reportes** — trigger sobre `scam_reports` (0118):
+   peso acumulado ≥ 3.0 (pondera Trust Score, máx por persona) pausa el aviso
+   (`attrs.paused_reason='reports'`) + notificación categoría `seguridad`; al
+   desestimar reportes se republica solo. Endurecido tras auditoría: la marca
+   es columna protegida (un dueño no puede forjarla), un INSERT jamás
+   despausa, único parcial por (tenant,reporter,target) pendiente + tope
+   10/24h TAMBIÉN en SQL (`report_scam` recreada en 0118; idempotente — puede
+   devolver el uuid del reporte ya pendiente).
+7. **"+" que identifica el tipo** — `src/lib/composer/deteccion.ts`:
+   heurística léxica en español (señal fuerte o 2+ débiles, exclusiones con
+   patrón para "se busca empleo de cocinero"/"ando buscando un cuarto" = quien
+   se ofrece/pide, no publica) + chip discreto en el composer (vía `musicSlot`
+   de composer-sheet) que sugiere el flujo correcto sin mover nada solo.
+
+**Verificado**: tsc ✓ · eslint ✓ · 4808/4808 tests ✓ · `check:rls` GATE VERDE
+(98 superficies) ✓ · build prod ✓ · en vivo (dev server, tenant dominicanos):
+feed con toggle, tab siguiendo anon, directorio agentes a 375/1440px, perfil
+con Avisos y Seguir, fichas cerradas — ronda `code-reviewer` +
+`security-auditor` (Opus) con TODOS los bloqueantes cerrados (el CRÍTICO:
+`paused_reason` forjable → republicación sin moderación; ver 0118 cabecera).
+
+**Deuda anotada (no bloqueante)**: reel de /videos no reconoce
+`scope=siguiendo` (cae a para-ti); narrowing de `closed` copiado 6 veces
+(candidato a `readClosedState()`); "Compartir" desaparece junto con "Quiero
+ir" en evento cerrado (mismo componente); fallback de siguiendo puede 414 con
+cientos de follows si la 0119 no está aplicada (ventana de deploy).
+
 ## Video por Mux — cualquier formato, cualquier tamaño (✅ 2026-08-25)
 
 El Loom decía "si el video es muy pesado no se puede subir". El arreglo del

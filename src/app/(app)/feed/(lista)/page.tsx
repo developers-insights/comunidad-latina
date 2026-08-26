@@ -7,6 +7,7 @@ import {
   COPY,
   FeedSkeleton,
   ComposerTrigger,
+  SIGUIENDO_EMPTY_COPY,
   parseTab,
   type FeedTabId,
 } from "@/components/feed";
@@ -14,6 +15,7 @@ import {
 // `@/components/feed` lo importa un client component que reventaría al
 // bundlear código de servidor.
 import { FeedModules } from "@/components/feed/feed-modules";
+import { FeedModeToggle } from "@/components/feed/feed-mode-toggle";
 import { FeedList } from "@/components/feed/feed-list";
 import { PullToRefresh } from "@/components/feed/pull-to-refresh";
 import { ParaVos, ParaVosSkeleton } from "@/components/matching";
@@ -66,6 +68,13 @@ export default async function FeedPage({ searchParams }: { searchParams: SearchP
 
       <FeedModules active={tab} />
 
+      {/* Conmutador "Para ti | Siguiendo" (0119): solo en los dos tabs
+          sociales, y FUERA del Suspense keyeado por la misma razón que los
+          círculos — persiste entre navegaciones en vez de remontarse. En un
+          tab vertical devuelve null: ahí el círculo activo ya dice dónde
+          estás. */}
+      <FeedModeToggle active={tab} />
+
       <Suspense key={`${tab}|${cursorRaw}`} fallback={<ContentSkeleton tab={tab} />}>
         <FeedContent tab={tab} cursorRaw={cursorRaw} />
       </Suspense>
@@ -73,7 +82,7 @@ export default async function FeedPage({ searchParams }: { searchParams: SearchP
   );
 }
 
-/** Encabezado del feed. Igual para los 5 tabs → nunca se remonta al cambiarlos. */
+/** Encabezado del feed. Igual para los 6 tabs → nunca se remonta al cambiarlos. */
 function FeedHeader({ area }: { area: string | null }) {
   return (
     <header className="mb-3">
@@ -222,15 +231,66 @@ async function FeedRoot({
    * otro barrio y nada más. Eso se lee EXACTAMENTE como la app rota que este
    * bloque existe para evitar. Los avisos se pintan igual —se pagaron— y abajo
    * va la salida, en vez de dejar a alguien creyendo que su zona está muerta.
+   *
+   * `tab !== "siguiendo"`: esa pestaña NO filtra por zona (0119, "SIN ZONA" —
+   * un seguimiento es una decisión ya tomada, no una geografía). Sin este
+   * guard, alguien con una zona elegida y cero follows vería "salí de tu
+   * zona" — un consejo que no resuelve nada, porque el problema no es la
+   * zona: es que no sigue a nadie.
    */
   const organicos = items.filter(
     (item) => item.type !== "post" || !item.post.isPromoted,
   );
   const zonaSinNadaPropio =
-    organicos.length === 0 && vistaZona.filtraPorPreferencia && vistaZona.zona.label;
+    tab !== "siguiendo" &&
+    organicos.length === 0 &&
+    vistaZona.filtraPorPreferencia &&
+    vistaZona.zona.label;
 
   if (items.length === 0 && zonaSinNadaPropio) {
     return <ZonaVacia zona={vistaZona.zona.label as string} />;
+  }
+
+  if (items.length === 0 && tab === "siguiendo") {
+    return viewerId ? (
+      <EmptyState
+        illustration="/images/empty-state-search.png"
+        title={SIGUIENDO_EMPTY_COPY.noFollowsTitle}
+        message={SIGUIENDO_EMPTY_COPY.noFollowsMessage}
+        action={
+          <div className="flex flex-wrap items-center justify-center gap-2.5">
+            <Link
+              href="/negocios"
+              className={buttonVariants({ variant: "primary", size: "md" })}
+            >
+              {SIGUIENDO_EMPTY_COPY.noFollowsCtaBusinesses}
+            </Link>
+            <Link
+              href="/profesionales"
+              className={buttonVariants({ variant: "outline", size: "md" })}
+            >
+              {SIGUIENDO_EMPTY_COPY.noFollowsCtaProfessionals}
+            </Link>
+          </div>
+        }
+      />
+    ) : (
+      // Anónimo: "Siguiendo" no existe sin cuenta (0119 §3) — el CTA es
+      // entrar, no explorar directorios (eso ya lo ofrece "Para ti").
+      <EmptyState
+        illustration="/images/empty-state-search.png"
+        title={SIGUIENDO_EMPTY_COPY.anonTitle}
+        message={SIGUIENDO_EMPTY_COPY.anonMessage}
+        action={
+          <Link
+            href={`/entrar?next=${encodeURIComponent("/feed?tab=siguiendo")}`}
+            className={buttonVariants({ variant: "primary", size: "md" })}
+          >
+            {SIGUIENDO_EMPTY_COPY.anonCta}
+          </Link>
+        }
+      />
+    );
   }
 
   if (items.length === 0) {

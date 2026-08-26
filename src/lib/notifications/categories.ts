@@ -253,6 +253,14 @@ export const KIND_CATEGORY: Record<string, NotificationCategory> = {
   // pestañas según quién lo emitió.
   listing_expiring: "vencimientos",
   listing_expired: "vencimientos",
+
+  // Pausa automática por denuncias (0118). Los emite el trigger
+  // `app.reconciliar_pausa_por_denuncias()`, no la app — igual que los dos de
+  // arriba. 'seguridad' y no 'plataforma': es la categoría que NO se puede
+  // silenciar (0045), y silenciar esto significa que a alguien se le apaga el
+  // aviso y no se entera. Sin esta fila el fallback los mandaría a 'social'.
+  listing_paused_reports: "seguridad",
+  listing_restored_reports: "seguridad",
 };
 
 export function categoryForKind(kind: string): NotificationCategory {
@@ -283,6 +291,11 @@ export const KIND_PRIORITY: Record<string, NotificationPriority> = {
   security_alert: "critical",
   account_suspended: "critical",
   dispute: "critical",
+  // Pausa automática por denuncias (0118). El trigger SQL ya inserta con
+  // `priority` fija ('high' al pausar, 'normal' al restituir) — estas dos
+  // filas son el espejo para que `priorityForKind` no mienta si algo del lado
+  // TS alguna vez necesita la prioridad de estos kinds sin leerla de la fila.
+  listing_paused_reports: "high",
 };
 
 export function priorityForKind(kind: string): NotificationPriority {

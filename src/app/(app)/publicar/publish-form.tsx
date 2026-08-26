@@ -62,6 +62,7 @@ import {
   RENTAL_UTILITIES,
   type FurnishedState,
 } from "@/lib/propiedades/alquiler";
+import { ADVERTISER_ROLE_OPTIONS, type AdvertiserRole } from "@/lib/propiedades/anunciante";
 import { EVENT_AUDIENCES, EVENT_CATEGORIES } from "@/lib/eventos/categorias";
 import {
   EVENT_MODE_OPTIONS,
@@ -84,6 +85,19 @@ const DIR_COPY = {
     credentialsPlaceholder: "Ej.: Matrícula NY #12345, CPA",
     credentialsHelp:
       "Separalas con comas. Si sos abogado o notario, después podés verificar tu matrícula en el centro de seguridad.",
+  },
+  /**
+   * Quién publica (directorio "Agentes y propietarios"). Distinto de las
+   * condiciones del alquiler de más abajo: no es algo que quien busca vivienda
+   * necesite para decidir, es lo que alimenta ese directorio — por eso va
+   * visible y no plegado adentro de "Condiciones del alquiler", pero con el
+   * mismo criterio "opcional" que todo lo demás acá: publicar rápido sigue
+   * siendo posible sin elegir nada.
+   */
+  advertiser: {
+    label: "Publicás como",
+    help: "Así te encuentran en el directorio de Agentes y propietarios.",
+    placeholder: "Preferís no decirlo",
   },
   /**
    * Condiciones del alquiler. Todo lo de acá es OPCIONAL y vive plegado: son
@@ -513,6 +527,8 @@ export function PublishForm({
   const [requirements, setRequirements] = useState<string[]>([]);
   const [furnished, setFurnished] = useState<FurnishedState | "">("");
   const [availableFrom, setAvailableFrom] = useState("");
+  // Quién publica (directorio "Agentes y propietarios") — opcional, ver DIR_COPY.advertiser.
+  const [advertiserRole, setAdvertiserRole] = useState<AdvertiserRole | "">("");
   const [areaLabel, setAreaLabel] = useState("");
   const [exactAddress, setExactAddress] = useState("");
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -785,6 +801,7 @@ export function PublishForm({
           requirements: isProperty ? requirements : null,
           furnished: isProperty && furnished ? furnished : null,
           availableFrom: isProperty && availableFrom ? availableFrom : null,
+          advertiserRole: isProperty && advertiserRole ? advertiserRole : null,
           // Evento en línea: no hay zona que declarar, así que se manda la
           // etiqueta de modalidad. `areaLabel` es NOT NULL con mínimo 3 en el
           // esquema y en la base, y un evento sin ella no podría publicarse.
@@ -1088,6 +1105,30 @@ export function PublishForm({
                     {C.steps.price.typePlaceholder}
                   </option>
                   {PROPERTY_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+
+              {/* Quién publica (directorio "Agentes y propietarios", requisito
+                  del cliente) — opcional, ver DIR_COPY.advertiser. */}
+              <Field
+                htmlFor="pub-advertiser-role"
+                label={DIR_COPY.advertiser.label}
+                help={DIR_COPY.advertiser.help}
+                optional
+              >
+                <Select
+                  id="pub-advertiser-role"
+                  value={advertiserRole}
+                  onChange={(event) =>
+                    setAdvertiserRole(event.target.value as AdvertiserRole | "")
+                  }
+                >
+                  <option value="">{DIR_COPY.advertiser.placeholder}</option>
+                  {ADVERTISER_ROLE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>

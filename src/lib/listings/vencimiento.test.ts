@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  CLOSED_REASONS,
   DEFAULT_EXPIRY_CONFIG,
+  MOTIVOS_NO_RENOVABLE,
   calcularVencimiento,
+  closedReasonForKind,
   diasHasta,
   estadoDeVencimiento,
+  isClosedReason,
   isMotivoNoRenovable,
   kindVence,
   parseExpiryConfig,
@@ -24,6 +28,22 @@ const MIGRACION = readFileSync(
   fileURLToPath(
     new URL(
       "../../../supabase/migrations/0098_vencimiento_de_publicaciones.sql",
+      import.meta.url,
+    ),
+  ),
+  "utf8",
+);
+
+/**
+ * El sexto motivo —`necesita_confirmar_disponibilidad`— lo agregó la 0117 y
+ * vive SÓLO ahí: 0098 nunca lo va a tener (ver la cabecera de 0117, sección
+ * "ESPEJO EN TYPESCRIPT"). Se lee aparte para poder verificar cada motivo
+ * contra SU migración y no contra "alguna de las dos".
+ */
+const MIGRACION_0117 = readFileSync(
+  fileURLToPath(
+    new URL(
+      "../../../supabase/migrations/0117_cierre_y_reconfirmacion.sql",
       import.meta.url,
     ),
   ),
@@ -181,8 +201,8 @@ describe("estadoDeVencimiento", () => {
     ).toEqual({ estado: "vencida" });
   });
 
-  it("un borrador o una pausada no hablan de vencimiento", () => {
-    for (const status of ["draft", "pending_review", "paused", "removed"]) {
+  it("un borrador, una pausada o una cerrada no hablan de vencimiento", () => {
+    for (const status of ["draft", "pending_review", "paused", "removed", "closed"]) {
       expect(
         estadoDeVencimiento({ ...publicada(10), status }, DEFAULT_EXPIRY_CONFIG, AHORA).estado,
       ).toBe("no_vence");
@@ -272,17 +292,72 @@ describe("puedeRenovar espeja public.renovar_publicacion()", () => {
     });
   });
 
-  it("los motivos son exactamente los cinco de la función SQL", () => {
-    for (const motivo of [
+  it("los motivos son exactamente los seis de la función SQL, cada uno en SU migración", () => {
+    // Los cinco de siempre viven en 0098. El sexto lo sumó 0117 y NO existe en
+    // 0098 — buscarlo ahí haría que el test se cayera buscando en el archivo
+    // equivocado (exactamente la advertencia que deja escrita la cabecera de
+    // 0117).
+    const MOTIVOS_EN_0098 = [
       "no_encontrada",
       "estado_invalido",
       "no_vence",
       "tope_alcanzado",
       "todavia_no",
-    ]) {
-      expect(isMotivoNoRenovable(motivo)).toBe(true);
+    ] as const;
+    const MOTIVOS_EN_0117 = ["necesita_confirmar_disponibilidad"] as const;
+
+    for (const motivo of MOTIVOS_EN_0098) {
       expect(MIGRACION).toContain(`'motivo', '${motivo}'`);
     }
+    for (const motivo of MOTIVOS_EN_0117) {
+      expect(MIGRACION_0117).toContain(`'motivo', '${motivo}'`);
+    }
+    // Cubre la constante ENTERA: si alguien suma un motivo nuevo sin
+    // clasificarlo en una de las dos listas de arriba, esta comparación lo
+    // nota — es lo que mantiene al test capaz de fallar si un motivo no
+    // existe en NINGUNA migración, en vez de debilitarlo a "en alguna de
+    // las dos".
+    expect([...MOTIVOS_EN_0098, ...MOTIVOS_EN_0117].sort()).toEqual(
+      [...MOTIVOS_NO_RENOVABLE].sort(),
+    );
+    for (const motivo of MOTIVOS_NO_RENOVABLE) {
+      expect(isMotivoNoRenovable(motivo)).toBe(true);
+    }
     expect(isMotivoNoRenovable("porque_si")).toBe(false);
+  });
+
+  it("una cerrada no se renueva: el trato ya se hizo (0117)", () => {
+    expect(
+      puedeRenovar({ ...publicada(2), status: "closed" }, DEFAULT_EXPIRY_CONFIG, AHORA),
+    ).toEqual({ ok: false, motivo: "estado_invalido" });
+  });
+});
+
+describe("cierre (0117): closedReasonForKind espeja attrs.closed_reason", () => {
+  it("los cuatro motivos son los mismos que documenta la migración", () => {
+    expect([...CLOSED_REASONS].sort()).toEqual(["done", "filled", "rented", "sold"]);
+    for (const reason of CLOSED_REASONS) {
+      expect(MIGRACION_0117).toContain(`'${reason}'`);
+    }
+  });
+
+  it("vivienda, empleos y marketplace tienen motivo propio", () => {
+    expect(closedReasonForKind("property")).toBe("rented");
+    expect(closedReasonForKind("job")).toBe("filled");
+    expect(closedReasonForKind("product")).toBe("sold");
+  });
+
+  it("el resto usa el genérico 'done', a propósito (sin taxonomía por vertical)", () => {
+    for (const kind of ["business", "professional", "event", "creator_gig", "lost_found"]) {
+      expect(closedReasonForKind(kind)).toBe("done");
+    }
+  });
+
+  it("isClosedReason sólo acepta los cuatro literales del contrato", () => {
+    for (const reason of CLOSED_REASONS) {
+      expect(isClosedReason(reason)).toBe(true);
+    }
+    expect(isClosedReason("cancelado")).toBe(false);
+    expect(isClosedReason(null)).toBe(false);
   });
 });

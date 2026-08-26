@@ -2,7 +2,9 @@
 
 import {
   useCallback,
+  useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   useTransition,
@@ -85,6 +87,19 @@ import {
 } from "@/lib/media/photo-filters";
 import { DEFAULT_PHOTO_EDIT, photoEditFilterCss, type PhotoEdit } from "./photo-editor";
 import { COPY } from "./copy";
+/**
+ * DETECCIÓN AUTOMÁTICA DEL TIPO DE PUBLICACIÓN (frente E, pedido del cliente:
+ * "el sistema debe identificar automáticamente el tipo de publicación y
+ * enviarla al módulo correspondiente"). Módulo PURO — sin React, sin red — ver
+ * su docblock para el criterio completo. Acá sólo se consume.
+ */
+import {
+  detectarTipoDePublicacion,
+  type SugerenciaComposer,
+} from "@/lib/composer/deteccion";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
+import { ArrowRight, X } from "@phosphor-icons/react/dist/ssr";
+import { cn } from "@/lib/utils";
 
 const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 /**
@@ -171,6 +186,109 @@ export interface PostComposerHostProps {
    */
   muxEnabled?: boolean;
   children: ReactNode;
+}
+
+/**
+ * COPY DEL CHIP DE SUGERENCIA — sólo lo que es IGUAL sin importar el tipo
+ * detectado. La etiqueta de cada tipo ("¿Tenés una vacante?", etc.) no vive
+ * acá: es parte de la propia `SugerenciaComposer` que devuelve
+ * `detectarTipoDePublicacion` (`@/lib/composer/deteccion.ts`). Este objeto NO
+ * vive en `./copy.ts` — ese archivo es de otro frente en este reparto de
+ * trabajo y esta tarea tiene prohibido tocarlo; dos strings no ameritan pedir
+ * ese cambio para después.
+ */
+const COMPOSER_SUGGESTION_TEXT = {
+  cerrar: "Cerrar la sugerencia",
+  /**
+   * Sólo se muestra con más de 80 caracteres YA escritos (ver `avisoLargo` en
+   * `PostComposerHost`) — recién ahí hay algo real que perder. Es un aviso en
+   * texto, no una segunda confirmación: lo que se pierde es un borrador de
+   * texto en un composer, no una publicación ni un cobro, y esta misma
+   * sugerencia existe para mandar a la persona a ESE formulario — pedirle un
+   * toque extra para hacer lo que ya eligió sería fricción sin ninguna
+   * protección real detrás (decisión de criterio UX de este frente).
+   */
+  avisoTextoPerdido: "Vas a empezar el formulario vacío — este texto no se copia.",
+} as const;
+
+/**
+ * CHIP DE SUGERENCIA DEL COMPOSER GENÉRICO (frente E). Vive en ESTE archivo y
+ * no en `composer-sheet.tsx` a propósito: ese archivo pertenece a otro frente
+ * del mismo reparto de trabajo y esta tarea tiene prohibido tocarlo. La única
+ * forma de ubicar este chip pegado al textarea SIN editarlo es una ranura que
+ * ya existe para eso — `musicSlot`/`tagSlot` de `ComposerSheetProps`, pensadas
+ * explícitamente como "ranuras para otros frentes" — así que este chip viaja
+ * DENTRO de `musicSlot` en el JSX de más abajo, junto a (o en lugar de)
+ * `MusicPicker`: es la ranura que la hoja pinta última, inmediatamente arriba
+ * del campo de texto, en los TRES modos (media/pregunta/texto) — incluso sin
+ * medio elegido, que es el caso más común para este chip (alguien tipeando
+ * "se alquila…" como texto plano, sin foto). Es un préstamo de UBICACIÓN, no
+ * de dueño: si `composer-sheet.tsx` suma alguna vez una ranura propia para
+ * sugerencias, este chip se muda ahí sin cambiar su lógica.
+ *
+ * Nunca bloquea Publicar (no toca `canPublish`) y nunca navega ni cierra nada
+ * por su cuenta — cada botón es una decisión de la persona, no del sistema.
+ */
+function ComposerSuggestionChip({
+  sugerencia,
+  avisoLargo,
+  onNavigate,
+  onDismiss,
+}: {
+  sugerencia: SugerenciaComposer;
+  /** El pie YA escrito supera ~80 caracteres: hay algo real que se perdería. */
+  avisoLargo: boolean;
+  onNavigate: () => void;
+  onDismiss: () => void;
+}) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <m.div
+      // `key` en el tipo detectado (lo arma quien llama, ver `musicSlot` más
+      // abajo): si la sugerencia CAMBIA de tipo mientras la persona sigue
+      // escribiendo, motion la trata como salida+entrada en vez de un cambio
+      // de texto a mitad de animación — se lee como "otra sugerencia", no
+      // como un parpadeo de la misma.
+      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+      animate={reduceMotion ? { opacity: 1 } : { opacity: 1, height: "auto" }}
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+      transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+      className="overflow-hidden"
+    >
+      <div className="mt-0.5 flex items-start gap-1 rounded-xl border border-brand-subtle bg-brand-tint py-1 pl-3 pr-1">
+        <button
+          type="button"
+          onClick={onNavigate}
+          className={cn(
+            "flex min-h-10 flex-1 items-center gap-1.5 rounded-lg py-1 text-left",
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          )}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-brand-ink">{sugerencia.etiqueta}</span>
+            {avisoLargo && (
+              <span className="mt-0.5 block text-xs font-normal text-brand-ink/75">
+                {COMPOSER_SUGGESTION_TEXT.avisoTextoPerdido}
+              </span>
+            )}
+          </span>
+          <ArrowRight size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-brand-ink" />
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label={COMPOSER_SUGGESTION_TEXT.cerrar}
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-full text-brand-ink/70",
+            "transition-colors duration-(--duration-fast) hover:bg-brand/15 hover:text-brand-ink",
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          )}
+        >
+          <X size={14} weight="bold" aria-hidden="true" />
+        </button>
+      </div>
+    </m.div>
+  );
 }
 
 /**
@@ -315,6 +433,42 @@ export function PostComposerHost({
   const videoInputRef = useRef<HTMLInputElement>(null);
   /** Id estable de esta sesión: fija la variante de la vista previa del banner. */
   const previewId = useId();
+
+  /**
+   * ---- SUGERENCIA DE TIPO DE PUBLICACIÓN (frente E) ------------------------
+   *
+   * `bodyDebounced` sigue a `body` con ~500 ms de atraso: `body` cambia en
+   * cada tecla y correr la heurística en cada una es trabajo de sobra por
+   * nada que se vea distinto (nadie lee un chip que titila letra a letra).
+   *
+   * `sugerenciaCerrada` es el "una vez cerrado no vuelve a aparecer EN ESTA
+   * SESIÓN del composer" del pedido. Se resetea en el efecto de más abajo,
+   * que mira la transición `composeMode: null → algo` — o sea, se re-arma
+   * cuando la hoja pasa de CERRADA a ABIERTA, nunca en cada re-render con la
+   * hoja ya abierta. Esto último importa: `openCompose("media")` se vuelve a
+   * llamar cada vez que se agrega una foto o un video con la hoja YA abierta
+   * (ver `selectPhotos`/`selectVideo`), y `composeMode` pasando de "media" a
+   * "media" no dispara el efecto (React compara por valor) — así que agregar
+   * una segunda foto no resucita un chip que la persona ya cerró.
+   */
+  const [bodyDebounced, setBodyDebounced] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setBodyDebounced(body), 500);
+    return () => clearTimeout(id);
+  }, [body]);
+  const [sugerenciaCerrada, setSugerenciaCerrada] = useState(false);
+  useEffect(() => {
+    // `setState` síncrono dentro de un efecto encadena renders
+    // (react-hooks/set-state-in-effect) — se difiere a un frame, mismo
+    // patrón que `useKeyboardInset` en `@/components/ui/bottom-sheet.tsx`.
+    if (composeMode === null) return;
+    const raf = requestAnimationFrame(() => setSugerenciaCerrada(false));
+    return () => cancelAnimationFrame(raf);
+  }, [composeMode]);
+  const sugerenciaComposer = useMemo<SugerenciaComposer | null>(
+    () => (sugerenciaCerrada ? null : detectarTipoDePublicacion(bodyDebounced)),
+    [bodyDebounced, sugerenciaCerrada],
+  );
 
   /**
    * Pregunta al servidor con qué firmas se puede publicar. UNA vez por apertura
@@ -726,6 +880,31 @@ export function PostComposerHost({
     } else {
       openCompose(quick);
     }
+  }
+
+  /** Se cierra el chip a mano — no vuelve a aparecer en esta sesión del composer. */
+  function cerrarSugerenciaComposer() {
+    setSugerenciaCerrada(true);
+  }
+
+  /**
+   * Se tocó el chip: la persona ELIGIÓ ir al formulario correcto. Los
+   * formularios destino (`/publicar`, `/empleos/publicar`,
+   * `/marketplace/publicar`) no aceptan prefill hoy — no hay forma de
+   * pasarles este texto — así que lo honesto es tratar esto como abandonar EL
+   * borrador actual, no dejarlo a medio camino: `resetForm()` cierra la hoja,
+   * corta cualquier subida a Mux en vuelo (si había un video adjunto) y
+   * limpia texto/medios, y RECIÉN AHÍ se navega. Sin este orden, la hoja
+   * quedaría abierta y flotando ARRIBA de la pantalla nueva (este composer
+   * vive en el shell, por encima de toda la app) y un video seguiría
+   * subiendo en segundo plano para una publicación que la persona ya
+   * decidió no hacer.
+   */
+  function irASugerenciaComposer() {
+    if (!sugerenciaComposer) return;
+    const href = sugerenciaComposer.href;
+    resetForm();
+    router.push(href);
   }
 
   function submit() {
@@ -1474,11 +1653,33 @@ export function PostComposerHost({
          * sonido viven sobre el medio de la publicación (`card-post-media`):
          * en un texto o una pregunta la canción no tendría ni dónde anunciarse
          * ni sobre qué sonar, y ofrecerla sería prometer algo que no pasa.
+         *
+         * EL CHIP DE SUGERENCIA (frente E) viaja EN ESTA MISMA ranura, no en
+         * `tagSlot`: `musicSlot` es la que la hoja pinta ÚLTIMA, pegada al
+         * textarea (ver el docblock de `ComposerSuggestionChip` más arriba)
+         * — con o sin `MusicPicker` al lado, según haya medio o no.
+         * `AnimatePresence` envuelve la condición (no vive DENTRO del chip)
+         * a propósito: es la forma correcta de que motion anime también la
+         * SALIDA cuando la sugerencia desaparece, en vez de que React la
+         * desmonte de un tirón.
          */
         musicSlot={
-          media.length > 0 ? (
-            <MusicPicker value={track} onChange={setTrack} disabled={isPending} />
-          ) : undefined
+          <>
+            {media.length > 0 && (
+              <MusicPicker value={track} onChange={setTrack} disabled={isPending} />
+            )}
+            <AnimatePresence>
+              {sugerenciaComposer && (
+                <ComposerSuggestionChip
+                  key={sugerenciaComposer.tipo}
+                  sugerencia={sugerenciaComposer}
+                  avisoLargo={body.trim().length > 80}
+                  onNavigate={irASugerenciaComposer}
+                  onDismiss={cerrarSugerenciaComposer}
+                />
+              )}
+            </AnimatePresence>
+          </>
         }
       />
     </ComposerMenuProvider>

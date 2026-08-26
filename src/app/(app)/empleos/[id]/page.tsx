@@ -44,6 +44,7 @@ import {
 } from "@/lib/empleos/detalles";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { VENCIMIENTO_COPY, isClosedReason } from "@/lib/listings";
 import { cn, formatDate } from "@/lib/utils";
 import {
   fetchApplicantProfilePreview,
@@ -97,6 +98,22 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
 
   const attrs = parseJobAttrs(listing.attrs);
   const isOwner = Boolean(user && listing.created_by === user.id);
+
+  // Cierre (0117): mismo criterio que propiedades/[id] — `listings_select`
+  // deja pasar `closed` por su rama pública, así que esta página también
+  // puede recibir un puesto que ya no está disponible. `closed_reason` se lee
+  // del jsonb crudo (no hay columna propia, doctrina 0107) y nunca de algo
+  // que mandó el cliente. `closedReasonForKind` default para "job" es
+  // "filled", de ahí `bannerFilled`.
+  const isClosed = listing.status === "closed";
+  const closedAttrsRaw =
+    listing.attrs && typeof listing.attrs === "object" && !Array.isArray(listing.attrs)
+      ? (listing.attrs as Record<string, unknown>)
+      : {};
+  const closedReason = isClosed && isClosedReason(closedAttrsRaw.closed_reason)
+    ? closedAttrsRaw.closed_reason
+    : null;
+  const CIERRE = VENCIMIENTO_COPY.cerrado;
   const salaryLabel = formatListingPrice(
     listing.price_amount,
     listing.price_currency,
@@ -248,10 +265,22 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
     <div className="pb-28">
       <DetailTopBar title={listing.title} listingId={listing.id} initialSaved={initialSaved} />
 
-      {listing.status !== "published" && isOwner && (
-        <Banner variant="info" className="mb-3 rounded-lg">
-          {C.pendingBanner}
+      {isClosed ? (
+        // Visible para CUALQUIERA (dueño o no) — mismo criterio que
+        // propiedades/[id]: un link guardado tiene que decir "ya no está
+        // disponible" en vez de ofrecer postularse a un puesto que ya se
+        // cubrió.
+        <Banner variant="warning" className="mb-3 rounded-lg">
+          <p className="font-semibold">{CIERRE.bannerTitulo}</p>
+          {closedReason === "filled" && <p className="mt-0.5">{CIERRE.bannerFilled}</p>}
         </Banner>
+      ) : (
+        listing.status !== "published" &&
+        isOwner && (
+          <Banner variant="info" className="mb-3 rounded-lg">
+            {C.pendingBanner}
+          </Banner>
+        )
       )}
 
       <DirectoryDetailHero
@@ -352,21 +381,29 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
           serio te pide dinero por adelantado") — posición fija en todo vertical. */}
       <ScamShieldNotice variant="job" className="mt-6" />
 
-      <div className="mt-6">
-        {isOwner ? (
-          <OwnerApplications
-            jobId={listing.id}
-            tenantId={tenant.id}
-            isPending={listing.status !== "published"}
-          />
-        ) : (
-          <ApplicantAction
-            jobId={listing.id}
-            userId={user?.id ?? null}
-            questions={attrs.questions}
-          />
-        )}
-      </div>
+      {/* Postularse queda deshabilitado si `closed` (0117) — el banner de
+          arriba ya explica por qué. Al dueño SÍ se le sigue mostrando su
+          bandeja: cerrar el aviso no le borra las candidaturas que ya
+          recibió, sólo corta la entrada de gente nueva. */}
+      {(isOwner || !isClosed) && (
+        <div className="mt-6">
+          {isOwner ? (
+            <OwnerApplications
+              jobId={listing.id}
+              tenantId={tenant.id}
+              // Cerrado ≠ pendiente: un empleo que el dueño marcó "Cubierto"
+              // no está "en revisión" — el banner de cierre ya lo explica.
+              isPending={!isClosed && listing.status !== "published"}
+            />
+          ) : (
+            <ApplicantAction
+              jobId={listing.id}
+              userId={user?.id ?? null}
+              questions={attrs.questions}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

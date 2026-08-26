@@ -10,10 +10,12 @@ import {
   buttonVariants,
 } from "@/components/ui";
 import { FALLBACK_PHOTO } from "@/components/listings";
-import { VENCIMIENTO_COPY, type EstadoVencimiento } from "@/lib/listings";
+import { VENCIMIENTO_COPY, closedReasonForKind } from "@/lib/listings";
 import { cn } from "@/lib/utils";
 import { fetchMisPublicaciones, type PublicacionPropia } from "./queries";
 import { RenovarBoton } from "./renovar-boton";
+import { CerrarBoton } from "./cerrar-boton";
+import { puedeCerrarPublicacion } from "./puede-cerrar";
 
 export const metadata = { title: "Mis publicaciones" };
 
@@ -123,7 +125,8 @@ function Encabezado() {
  * El chip de estado. Es texto + color, nunca sólo color: quien no distingue
  * rojo de ámbar tiene que poder leer "Vence en 2 días" igual (§3.2).
  */
-function ChipDeEstado({ estado, status }: { estado: EstadoVencimiento; status: string }) {
+function ChipDeEstado({ publicacion }: { publicacion: PublicacionPropia }) {
+  const { estado, status, pausedReason, closedReason } = publicacion;
   switch (estado.estado) {
     case "vencida":
       return <Badge variant="danger">{C.estado.vencida}</Badge>;
@@ -132,13 +135,25 @@ function ChipDeEstado({ estado, status }: { estado: EstadoVencimiento; status: s
     case "vigente":
       return <Badge variant="success">{C.estado.vigente(estado.diasRestantes)}</Badge>;
     default:
-      // `no_vence` cubre dos cosas distintas y hay que decir cuál: una categoría
-      // que no caduca (un negocio) y una publicación que ni siquiera está
-      // publicada (borrador, en revisión, pausada, dada de baja).
+      // `no_vence` cubre varias cosas distintas y hay que decir cuál: una
+      // categoría que no caduca (un negocio), una publicación que ni siquiera
+      // está publicada (borrador, en revisión, dada de baja), una pausada —a
+      // mano o por reportes, que son dos carteles distintos (0118)— y una
+      // cerrada, con su propio motivo (0117).
       if (status === "draft") return <Badge>{C.estado.borrador}</Badge>;
       if (status === "pending_review") return <Badge variant="info">{C.estado.enRevision}</Badge>;
+      if (status === "paused" && pausedReason === "reports") {
+        return <Badge variant="warning">{C.estado.pausadaPorReportes}</Badge>;
+      }
       if (status === "paused") return <Badge>{C.estado.pausada}</Badge>;
       if (status === "removed") return <Badge>{C.estado.bajada}</Badge>;
+      if (status === "closed") {
+        return (
+          <Badge variant="success">
+            {closedReason ? C.cerrar.badge[closedReason] : C.estado.noVence}
+          </Badge>
+        );
+      }
       return <Badge>{C.estado.noVence}</Badge>;
   }
 }
@@ -146,6 +161,10 @@ function ChipDeEstado({ estado, status }: { estado: EstadoVencimiento; status: s
 function Tarjeta({ publicacion }: { publicacion: PublicacionPropia }) {
   const vencida = publicacion.estado.estado === "vencida";
   const porVencer = publicacion.estado.estado === "por_vencer";
+  const isClosed = publicacion.status === "closed";
+  const pausadaPorReportes =
+    publicacion.status === "paused" && publicacion.pausedReason === "reports";
+  const puedeCerrar = puedeCerrarPublicacion(publicacion.status, pausadaPorReportes);
 
   return (
     <article className="flex gap-3 rounded-2xl border border-border bg-surface p-3">
@@ -156,9 +175,9 @@ function Tarjeta({ publicacion }: { publicacion: PublicacionPropia }) {
       <div
         className={cn(
           "size-16 shrink-0 overflow-hidden rounded-xl",
-          // Una publicación que dejó de mostrarse se ve apagada: el estado se
-          // percibe antes de leer el chip.
-          vencida && "opacity-60",
+          // Una publicación que dejó de mostrarse (o que ya se cerró) se ve
+          // apagada: el estado se percibe antes de leer el chip.
+          (vencida || isClosed) && "opacity-60",
         )}
       >
         <CardMedia
@@ -175,7 +194,7 @@ function Tarjeta({ publicacion }: { publicacion: PublicacionPropia }) {
           <span className="text-xs font-medium text-foreground-muted">
             {C.modulos[publicacion.kind] ?? publicacion.kind}
           </span>
-          <ChipDeEstado estado={publicacion.estado} status={publicacion.status} />
+          <ChipDeEstado publicacion={publicacion} />
         </div>
 
         <Link
@@ -191,19 +210,43 @@ function Tarjeta({ publicacion }: { publicacion: PublicacionPropia }) {
           </p>
         )}
 
+        {pausadaPorReportes && (
+          <p className="text-sm leading-relaxed text-foreground-secondary">
+            {C.detalle.pausadaPorReportesCuerpo}
+          </p>
+        )}
+
         {publicacion.renewalCount > 0 && (
           <p className="text-xs text-foreground-muted">
             {C.detalle.renovadaVeces(publicacion.renewalCount)}
           </p>
         )}
 
-        {publicacion.renovable && (
-          <div className="pt-1">
-            <RenovarBoton
-              listingId={publicacion.id}
-              kind={publicacion.kind}
-              vencida={vencida}
-            />
+        {(publicacion.renovable || puedeCerrar) && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {publicacion.renovable && (
+              <RenovarBoton
+                listingId={publicacion.id}
+                kind={publicacion.kind}
+                vencida={vencida}
+              />
+            )}
+            {/* NI "reanudar" NI "Cerrar" se ofrecen en `pausadaPorReportes`
+                (0118): "reanudar" porque la policy lo rechazaría igual (sólo
+                el moderador la devuelve al aire desestimando el reporte), y
+                "Cerrar" porque el trigger `listings_guard_cierre` (0117)
+                rechaza con excepción cualquier cierre que salga de una pausa
+                por denuncias — un aviso bajo revisión no lo resuelve su
+                dueño cerrándolo, lo resuelve el moderador. `puedeCerrar` ya
+                descarta este caso arriba; el comentario queda para quien lea
+                sólo este JSX y se pregunte por qué no hay ningún botón acá. */}
+            {puedeCerrar && (
+              <CerrarBoton
+                listingId={publicacion.id}
+                kind={publicacion.kind}
+                closedReason={closedReasonForKind(publicacion.kind)}
+              />
+            )}
           </div>
         )}
       </div>

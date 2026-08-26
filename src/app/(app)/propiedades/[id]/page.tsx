@@ -43,6 +43,7 @@ import {
 import { fetchViewerSavedListingIds } from "@/app/(app)/feed/queries";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { VENCIMIENTO_COPY, isClosedReason } from "@/lib/listings";
 import {
   PROPERTY_OPERATION_LABEL,
   PROPERTY_TYPE_LABEL,
@@ -236,6 +237,22 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
   const photos = (listing.photos ?? []).map(listingPhotoUrl);
   const isOwner = Boolean(user && listing.created_by === user.id);
 
+  // Cierre (0117): `listings_select` extiende su rama pública a
+  // `status in ('published', 'closed')` para que el link guardado no dé 404
+  // cuando el aviso ya se resolvió — así que esta página YA NO puede asumir
+  // que todo lo que llega acá está `published`. `closed_reason` se lee del
+  // jsonb crudo (no hay columna propia, doctrina 0107) y nunca de algo que
+  // mandó el cliente.
+  const isClosed = listing.status === "closed";
+  const closedAttrsRaw =
+    listing.attrs && typeof listing.attrs === "object" && !Array.isArray(listing.attrs)
+      ? (listing.attrs as Record<string, unknown>)
+      : {};
+  const closedReason = isClosed && isClosedReason(closedAttrsRaw.closed_reason)
+    ? closedAttrsRaw.closed_reason
+    : null;
+  const CIERRE = VENCIMIENTO_COPY.cerrado;
+
   /**
    * Condiciones del alquiler (`readRentalTerms`) — depósito, cargos aparte,
    * servicios incluidos, requisitos, muebles y desde cuándo.
@@ -323,17 +340,29 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
     // Su footprint real (barra sólida + botón lg + hint) ronda las 7rem, así que
     // con el pb-28 del <main> queda holgura para que la última card no quede
     // tapada. Ver §4.d (CTA sticky).
-    <div className="pb-40">
+    <div className={cn("pb-40", isClosed && "pb-8")}>
       <DetailTopBar
         title={listing.title}
         listingId={listing.id}
         initialSaved={savedListingIds.has(listing.id)}
       />
 
-      {listing.status !== "published" && isOwner && (
-        <Banner variant="info" className="mb-3 rounded-lg">
-          {COPY.detail.pendingBanner}
+      {isClosed ? (
+        // Visible para CUALQUIERA (dueño o no): un aviso cerrado ya fue
+        // público (0117) y el link guardado tiene que decir "ya no está
+        // disponible" en vez de tropezar con un 404 o, peor, con el CTA de
+        // contacto de un trato que ya se cerró.
+        <Banner variant="warning" className="mb-3 rounded-lg">
+          <p className="font-semibold">{CIERRE.bannerTitulo}</p>
+          {closedReason === "rented" && <p className="mt-0.5">{CIERRE.bannerRented}</p>}
         </Banner>
+      ) : (
+        listing.status !== "published" &&
+        isOwner && (
+          <Banner variant="info" className="mb-3 rounded-lg">
+            {COPY.detail.pendingBanner}
+          </Banner>
+        )
       )}
 
       <ListingGallery photos={photos} title={listing.title} />
@@ -384,21 +413,24 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
       {/* Botones de acción (premium). En una publicación gratuita no renderiza
           NADA: el contacto es la barra de "Contactar" de abajo, que está visible
           al mismo tiempo — por eso acá el chat va con showChat={false} y no se
-          duplica el mismo botón dos veces en la misma pantalla. */}
-      <ListingActions
-        className="mt-5"
-        listingId={listing.id}
-        kind={listing.kind}
-        tier={listing.tier}
-        subject={listing.title}
-        showChat={false}
-        isLoggedIn={Boolean(user)}
-        values={{
-          phone: listing.cta_phone,
-          whatsapp: listing.cta_whatsapp,
-          directions: listing.cta_address,
-        }}
-      />
+          duplica el mismo botón dos veces en la misma pantalla.
+          Ocultos si `closed` (0117): el trato ya se hizo, no hay a quién contactar. */}
+      {!isClosed && (
+        <ListingActions
+          className="mt-5"
+          listingId={listing.id}
+          kind={listing.kind}
+          tier={listing.tier}
+          subject={listing.title}
+          showChat={false}
+          isLoggedIn={Boolean(user)}
+          values={{
+            phone: listing.cta_phone,
+            whatsapp: listing.cta_whatsapp,
+            directions: listing.cta_address,
+          }}
+        />
+      )}
 
       {/* Boost §7: solo el dueño de un aviso publicado puede promocionarlo.
           "Impulsar este aviso" se conserva con ese nombre porque ya existía y
@@ -473,12 +505,15 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
         </BezelCard>
       </section>
 
-      <ContactCta
-        listingId={listing.id}
-        isLoggedIn={Boolean(user)}
-        isExternal={!listing.created_by}
-        externalName={listing.publisher_name}
-      />
+      {/* Ídem: sin CTA de reserva/contacto sobre un aviso ya cerrado. */}
+      {!isClosed && (
+        <ContactCta
+          listingId={listing.id}
+          isLoggedIn={Boolean(user)}
+          isExternal={!listing.created_by}
+          externalName={listing.publisher_name}
+        />
+      )}
     </div>
   );
 }

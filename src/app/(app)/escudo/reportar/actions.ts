@@ -136,6 +136,10 @@ export async function reportarEstafaAction(
     if (error.message.includes("AUTH_REQUIRED")) {
       return { status: "error", message: COPY.unauthenticated };
     }
+    if (error.message.includes("RATE_LIMITED")) {
+      // Tope diario en la base (0118) — mismo mensaje que el limitador local.
+      return { status: "error", message: COPY.tooManyReports };
+    }
     console.error("[escudo] reporte: falló report_scam:", error.message);
     return { status: "error", message: COPY.genericError };
   }

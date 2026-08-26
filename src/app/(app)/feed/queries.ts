@@ -616,6 +616,45 @@ export async function fetchFollowedListingIds(
   return (data ?? []).map((row) => row.target_id);
 }
 
+/** Ids de PERFILES seguidos que se inyectan en el `.in(…)` del fallback de "Siguiendo" (~7,8 KB de URL, mismo tope que FOLLOWED_LISTINGS_CAP). */
+const FOLLOWED_PROFILES_CAP = 200;
+
+/**
+ * Ids de los PERFILES que el viewer sigue — hermana exacta de
+ * `fetchFollowedListingIds` (mismo tope, mismo orden, misma degradación en
+ * silencio), pero `target_kind = 'profile'`.
+ *
+ * Es la mitad que le faltaba a la lectura de arriba para servir el fallback
+ * SIN RPC del tab "Siguiendo" (0119): esa pestaña sí necesita las DOS mitades
+ * de `follows` —a quién seguís como PERSONA y qué FICHA seguís—, mientras que
+ * "Para ti" sólo necesitaba la segunda (ver el porqué completo en el docblock
+ * de `fetchFollowedListingIds`, que sigue vigente para esa pestaña).
+ *
+ * No es fail-closed (a diferencia de `fetchBlockedIds`): seguir es alcance, no
+ * seguridad. Sin la lista, "Siguiendo" queda con menos —nunca con algo que no
+ * debería ver— y el warning deja rastro de un feed misteriosamente pobre.
+ */
+export async function fetchFollowedProfileIds(
+  supabase: Supabase,
+  viewerId: string | null,
+): Promise<string[]> {
+  if (!viewerId) return [];
+  const { data, error } = await supabase
+    .from("follows")
+    .select("target_id")
+    .eq("follower_id", viewerId)
+    .eq("target_kind", "profile")
+    .order("created_at", { ascending: false })
+    .limit(FOLLOWED_PROFILES_CAP);
+  if (error) {
+    console.warn("[feed] no se pudieron leer los perfiles seguidos del viewer", {
+      code: error.code,
+    });
+    return [];
+  }
+  return (data ?? []).map((row) => row.target_id);
+}
+
 export interface ActivePromotions {
   /** Posts con campaña vigente: alimentan la visibilidad y el chip "Publicidad". */
   postIds: Set<string>;

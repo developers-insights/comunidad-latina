@@ -160,3 +160,70 @@ export async function fetchFeedListingsPageViaRpc(
   if (!Array.isArray(data)) return null;
   return data as ListingRow[];
 }
+
+// ---------------------------------------------------------------------------
+// "Siguiendo" (0119) — hermanas EXACTAS de las dos de arriba
+// ---------------------------------------------------------------------------
+
+/**
+ * Sin `entityKind` ni `areaLabels`: `feed_siguiendo_posts_page` no los recibe.
+ * `p_entity_kind` es de los paneles "Publicaciones" de Negocios/Profesionales,
+ * no del feed; `p_area_labels` no existe en esta función a propósito —
+ * "Siguiendo" no filtra por zona (0119 §67, "SIN ZONA": un seguimiento es una
+ * decisión ya tomada, la geografía no la reemplaza).
+ */
+export interface FeedSiguiendoRpcArgs {
+  tenantId: string;
+  /** Keyset: `null` en la primera página. */
+  cursor: { createdAt: string; id: string } | null;
+  /** Cuántas filas pedir (el llamador ya suma el +1 de "hay más"). */
+  limit: number;
+}
+
+/**
+ * Una página de POSTS del tab "Siguiendo": perfiles y fichas que el viewer
+ * sigue, más lo propio — filtrado también por bloqueos y por `hidden_at`
+ * igual que `feed_posts_page`. Mismo `returns table` que esa función (0119 lo
+ * fija con un comentario en la migración), así que se devuelve como el mismo
+ * `PostRow[]` y pasa por el mismo mapper.
+ *
+ * `null` = el RPC no está disponible (falta la 0119); el llamador cae al
+ * camino con los `.or()` armados en `queries.ts`.
+ */
+export async function fetchFeedSiguiendoPostsPageViaRpc(
+  supabase: Supabase,
+  args: FeedSiguiendoRpcArgs,
+): Promise<PostRow[] | null> {
+  const { data, error } = await open(supabase).rpc("feed_siguiendo_posts_page", {
+    p_tenant_id: args.tenantId,
+    p_cursor_created_at: args.cursor?.createdAt ?? null,
+    p_cursor_id: args.cursor?.id ?? null,
+    p_limit: args.limit,
+  });
+
+  if (error) return rpcFailed("siguiendo posts", error);
+  if (!Array.isArray(data)) return null;
+  return data as PostRow[];
+}
+
+/**
+ * La misma página del lado de los AVISOS: `feed_siguiendo_listings_page`.
+ * Publicado por un perfil que seguís, o la ficha misma si la seguís — sin la
+ * regla de distribución premium (eso es de "Para ti") y sin avisos propios
+ * (para eso está "Mis publicaciones"; ver el docblock de la migración).
+ */
+export async function fetchFeedSiguiendoListingsPageViaRpc(
+  supabase: Supabase,
+  args: FeedSiguiendoRpcArgs,
+): Promise<ListingRow[] | null> {
+  const { data, error } = await open(supabase).rpc("feed_siguiendo_listings_page", {
+    p_tenant_id: args.tenantId,
+    p_cursor_created_at: args.cursor?.createdAt ?? null,
+    p_cursor_id: args.cursor?.id ?? null,
+    p_limit: args.limit,
+  });
+
+  if (error) return rpcFailed("siguiendo listings", error);
+  if (!Array.isArray(data)) return null;
+  return data as ListingRow[];
+}
