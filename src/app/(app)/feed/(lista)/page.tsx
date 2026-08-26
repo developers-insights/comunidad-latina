@@ -19,6 +19,8 @@ import { PullToRefresh } from "@/components/feed/pull-to-refresh";
 import { ParaVos, ParaVosSkeleton } from "@/components/matching";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { ZonaVacia } from "@/components/zona";
+import { resolverVistaZona } from "@/lib/zona/server";
 import { FeedAlert } from "../alert-banner";
 import { fetchFeedPageAction } from "../load-more";
 
@@ -86,27 +88,26 @@ function FeedHeader({ area }: { area: string | null }) {
 }
 
 /**
- * Solo la zona del usuario para personalizar el subtítulo. Query mínima y
- * aparte del contenido: el encabezado no tiene por qué esperar al feed, y así
- * puede quedar fuera del límite que se remonta por tab.
+ * La zona ACTIVA para personalizar el subtítulo.
+ *
+ * Antes acá había un `select area_label` a mano al perfil, y por eso el
+ * encabezado y el header de la app podían decir cosas distintas: alguien elegía
+ * Bronx arriba y el feed seguía diciendo "cerca de Jackson Heights". Ese
+ * desacuerdo es lo que hacía ver rota la feature entera, incluso antes de que
+ * el feed filtrara nada. Ahora sale del MISMO lugar que el selector del header
+ * (`getZonaActiva`, adentro de `resolverVistaZona`) y no pueden discrepar.
+ *
+ * Sigue siendo una lectura mínima y aparte del contenido: el encabezado no
+ * espera al feed, y `resolverVistaZona` está `cache()`-eada por request — la
+ * comparte con la página del feed sin volver a la base.
  */
 async function FeedHeaderWithArea() {
   // El try/catch envuelve SOLO el fetch: construir JSX adentro haría que un
   // error de render se tragara acá en vez de subir al error boundary.
   let area: string | null = null;
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("area_label")
-        .eq("id", user.id)
-        .maybeSingle();
-      area = profile?.area_label ?? null;
-    }
+    const tenant = await getTenant();
+    area = (await resolverVistaZona(tenant.id, null)).zona.label;
   } catch {
     area = null; // sin zona: el subtítulo cae al genérico, nunca un error.
   }
@@ -201,10 +202,36 @@ async function FeedRoot({
   /** Bloque que se intercala después de las primeras publicaciones. */
   intercalado?: ReactNode;
 }) {
-  const { items, nextCursor } = await fetchFeedPageAction({
-    tab,
-    cursor: cursorRaw || null,
-  });
+  const [{ items, nextCursor }, vistaZona] = await Promise.all([
+    fetchFeedPageAction({ tab, cursor: cursorRaw || null }),
+    resolverVistaZona(tenantId, null),
+  ]);
+
+  /**
+   * EL VACÍO DE UNA ZONA NO ES EL VACÍO DEL FEED.
+   *
+   * Con Bronx elegido y nada publicado en Bronx, "todavía no hay nada por acá"
+   * es información falsa sobre la comunidad: hay cincuenta publicaciones, están
+   * en otro barrio. `ZonaVacia` dice DÓNDE se está mirando y ofrece salir en un
+   * toque — la misma pantalla y la misma action que ya usan Empleos, Negocios,
+   * Profesionales, Marketplace, Eventos y Vivienda.
+   *
+   * ── "VACÍA" INCLUYE LA ZONA QUE SÓLO TIENE PUBLICIDAD ───────────────────────
+   * Una campaña de alcance total llega a cualquier zona (lo compró), así que un
+   * barrio sin una sola publicación propia igual devuelve items: dos avisos de
+   * otro barrio y nada más. Eso se lee EXACTAMENTE como la app rota que este
+   * bloque existe para evitar. Los avisos se pintan igual —se pagaron— y abajo
+   * va la salida, en vez de dejar a alguien creyendo que su zona está muerta.
+   */
+  const organicos = items.filter(
+    (item) => item.type !== "post" || !item.post.isPromoted,
+  );
+  const zonaSinNadaPropio =
+    organicos.length === 0 && vistaZona.filtraPorPreferencia && vistaZona.zona.label;
+
+  if (items.length === 0 && zonaSinNadaPropio) {
+    return <ZonaVacia zona={vistaZona.zona.label as string} />;
+  }
 
   if (items.length === 0) {
     return tab === "para-ti" ? (
@@ -239,14 +266,19 @@ async function FeedRoot({
   }
 
   return (
-    <FeedList
-      tab={tab}
-      tenantId={tenantId}
-      viewerId={viewerId}
-      initialItems={items}
-      initialCursor={nextCursor}
-      intercalado={intercalado}
-    />
+    <>
+      <FeedList
+        tab={tab}
+        tenantId={tenantId}
+        viewerId={viewerId}
+        initialItems={items}
+        initialCursor={nextCursor}
+        intercalado={intercalado}
+      />
+      {zonaSinNadaPropio ? (
+        <ZonaVacia className="mt-2" zona={vistaZona.zona.label as string} />
+      ) : null}
+    </>
   );
 }
 

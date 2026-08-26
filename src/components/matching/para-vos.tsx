@@ -14,6 +14,7 @@ import { formatListingPrice, isOptimizableSrc, listingPhotoUrl } from "@/compone
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getMatches, type MatchItem } from "@/lib/matching";
+import { resolverVistaZona } from "@/lib/zona/server";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,7 +48,14 @@ const KIND_META: Record<string, { label: string; icon: React.ReactNode }> = {
 
 export async function ParaVos({ userId }: { userId: string }) {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const result = await getMatches(supabase, userId, tenant);
+  // "Tu zona" (0115): esta sección va intercalada en el feed, así que mira la
+  // misma zona que el feed. `cache()`-eada por request — ya la resolvió la
+  // página.
+  const vistaZona = await resolverVistaZona(tenant.id, null);
+  const result = await getMatches(supabase, userId, tenant, {
+    label: vistaZona.zona.label,
+    areaLabels: vistaZona.areaLabels,
+  });
 
   if (result.status === "unavailable" || result.status === "empty") return null;
 

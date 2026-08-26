@@ -792,7 +792,7 @@ describe("createPostAction — publicar COMO una entidad", () => {
   });
 });
 
-/* --------- Publicar un video subido por Mux (borrador → publicado, 0114) --- */
+/* --------- Publicar un video subido por Mux (borrador → publicado, 0116) --- */
 
 /**
  * ESTA TAMBIÉN ES LA FRONTERA.

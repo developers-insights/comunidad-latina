@@ -63,13 +63,26 @@ que ya estaban siguen reproduciéndose con el `<video>` de siempre y nunca
 disparan el sondeo; y la publicación sale enseguida mostrando "Preparando" en
 vez de esperar a que Mux termine.
 
-Se regeneraron los tipos desde la base y se borró el puente a mano de la 0114
+Se regeneraron los tipos desde la base y se borró el puente a mano de la 0116
 —su nota decía "todavía NO está aplicada" y ya lo estaba—, más el puente de
 `work_mode` que quedaba de la 0087.
 
 **Estado:** typecheck 0 · lint 0 errores y 0 warnings · **4.649 tests verdes** ·
-build verde · `check:rls` **GATE VERDE con 98 superficies** · migración 0114
+build verde · `check:rls` **GATE VERDE con 98 superficies** · migración 0116
 aplicada y sus cuatro objetos de seguridad verificados contra la base.
+
+**Colisión de numeración con otra sesión, y cómo se resolvió.** Mientras esto se
+escribía, otra sesión creó `0114_grants_de_musica.sql` y `0115_zona_del_feed.sql`
+y las pusheó. O sea que hubo **dos archivos 0114**, y las dos ya aplicadas a la
+base. Se renumeró LA DE ACÁ a `0116_video_por_mux.sql` —la otra ya estaba en la
+historia compartida— y se sincronizó la fila del registro
+(`supabase_migrations.schema_migrations`), porque si el archivo pasa a 0116 y el
+registro sigue diciendo 0114, el próximo `db:migrate` de cualquiera la aplica de
+nuevo. Se renumeraron también las 8 referencias cruzadas en comentarios y docs.
+
+⚠️ **Con varias sesiones trabajando a la vez, el número de migración se elige
+mirando el remoto, no la carpeta local.** `ls supabase/migrations` sólo dice qué
+número está libre en TU copia.
 
 **Falta para encenderlo:** cuenta de Mux, `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET` y
 `MUX_WEBHOOK_SECRET`, más el endpoint de webhook. Hasta entonces todo sigue

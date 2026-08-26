@@ -16,7 +16,7 @@ export const ZONA_COPY = {
   hoja: {
     titulo: "¿Qué zona querés ver?",
     ayuda:
-      "Se aplica a Vivienda, Empleos, Negocios, Profesionales, Marketplace y Eventos. Podés volver a toda la comunidad cuando quieras.",
+      "Filtra el feed y todas las secciones: Vivienda, Empleos, Negocios, Profesionales, Marketplace y Eventos. Podés volver a toda la comunidad cuando quieras.",
     buscarLabel: "Buscar zona",
     buscarPlaceholder: "Buscá tu barrio o ciudad",
     todas: "Toda la comunidad",

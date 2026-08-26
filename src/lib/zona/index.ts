@@ -31,4 +31,6 @@ export {
 
 export { zonasCoincidentes, ZONAS_MATCH_MAX } from "./coincidencias";
 
+export { campanaAlcanzaZona, zonasDeCampana, type ZonasDeCampana } from "./campanas";
+
 export { ZONA_COPY } from "./copy";

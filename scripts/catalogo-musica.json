@@ -1,0 +1,79 @@
+{
+  "_comentario": [
+    "CATÁLOGO REAL de música para publicaciones (tabla music_tracks, migración 0090).",
+    "Cada entrada es una ficha con licencia RESUELTA: se carga con",
+    "`node scripts/cargar-musica.mjs --desde <carpeta>`, donde <carpeta> tiene los",
+    "archivos de audio con el nombre de `archivo`.",
+    "Los audios NO viven en el repo (son megas de mp3 y no se versionan): la",
+    "fuente son los originales que entregó la comunidad."
+  ],
+  "bucket": "music-tracks",
+  "carpeta": "global",
+  "pistas": [
+    {
+      "archivo": "comunidad-latina.mp3",
+      "title": "Comunidad Latina",
+      "artist": "Comunidad Latina",
+      "duration_seconds": 193,
+      "license_kind": "licensed",
+      "source_url": null,
+      "license_url": null,
+      "attribution_required": false,
+      "attribution_text": null,
+      "category": "general",
+      "sort_order": 10
+    },
+    {
+      "archivo": "intro.mp3",
+      "title": "Intro",
+      "artist": "Comunidad Latina",
+      "duration_seconds": 268,
+      "license_kind": "licensed",
+      "source_url": null,
+      "license_url": null,
+      "attribution_required": false,
+      "attribution_text": null,
+      "category": "general",
+      "sort_order": 20
+    },
+    {
+      "archivo": "el-camino-de-mi-guerrero.mp3",
+      "title": "El Camino de mi Guerrero",
+      "artist": "Comunidad Latina",
+      "duration_seconds": 128,
+      "license_kind": "licensed",
+      "source_url": null,
+      "license_url": null,
+      "attribution_required": false,
+      "attribution_text": null,
+      "category": "general",
+      "sort_order": 30
+    },
+    {
+      "archivo": "no-me-voy-a-rendir.mp3",
+      "title": "No me voy a rendir",
+      "artist": "Comunidad Latina",
+      "duration_seconds": 196,
+      "license_kind": "licensed",
+      "source_url": null,
+      "license_url": null,
+      "attribution_required": false,
+      "attribution_text": null,
+      "category": "general",
+      "sort_order": 40
+    },
+    {
+      "archivo": "soy-vacana.mp3",
+      "title": "Soy vacana",
+      "artist": "Comunidad Latina",
+      "duration_seconds": 129,
+      "license_kind": "licensed",
+      "source_url": null,
+      "license_url": null,
+      "attribution_required": false,
+      "attribution_text": null,
+      "category": "general",
+      "sort_order": 50
+    }
+  ]
+}

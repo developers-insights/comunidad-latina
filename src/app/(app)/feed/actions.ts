@@ -107,7 +107,7 @@ const postSchema = z.object({
   durationSeconds: z.coerce.number().finite().positive().max(36_000).optional(),
   videoCategory: z.enum(VIDEO_CATEGORIES).optional(),
   /**
-   * ---- VIDEO POR MUX (0114) -------------------------------------------------
+   * ---- VIDEO POR MUX (0116) -------------------------------------------------
    *
    * Los dos identificadores que devolvió `POST /api/mux/subida`. Vienen juntos
    * o no viene ninguno: `muxPostDraftId` es la fila `posts` en `draft` que esa
@@ -526,7 +526,7 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   }
 
   /**
-   * ---- EL BORRADOR DE MUX (0114) -------------------------------------------
+   * ---- EL BORRADOR DE MUX (0116) -------------------------------------------
    *
    * MISMA CATEGORÍA QUE LAS DOS DE ARRIBA, y por eso está acá y no más abajo:
    * `muxPostDraftId` llega por el body. Tomarlo sin comprobar sería dejar que
@@ -539,7 +539,7 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
    * ESTA subida: sin ella, un borrador viejo y abandonado del mismo autor
    * podría publicarse con el texto de una publicación nueva.
    *
-   * `app.enforce_draft_publish()` (0114) vuelve a chequear la transición del
+   * `app.enforce_draft_publish()` (0116) vuelve a chequear la transición del
    * lado de la base, y ahí también se aplican los guards de suspensión y
    * restricción social. Esto corta antes por el mismo motivo que `entityId`: no
    * gastar moderación en algo que no se va a poder guardar, y poder devolver un

@@ -10,8 +10,10 @@ import {
   entityHref,
   entityKindLabel,
   feedPostVisibilityFilter,
+  feedZoneFilter,
   isPaidAdvertising,
   postMediaUrl,
+  postgrestQuoted,
   videoOpensReel,
   viewerPlaybackCapFor,
 } from "./helpers";
@@ -262,5 +264,42 @@ describe("el video publicitario se mira DENTRO de su anuncio", () => {
     expect(viewerPlaybackCapFor({ videoType: "short_video" })).toBe(
       PREMIUM_DETAIL_MAX_SECONDS,
     );
+  });
+});
+
+describe("feedZoneFilter (Tu zona en el feed, 0115)", () => {
+  it("sin zona elegida devuelve null — que es NO FILTRES, no 'no hay nada'", () => {
+    expect(feedZoneFilter([])).toBeNull();
+  });
+
+  it("con zona: recorta por area_label", () => {
+    expect(feedZoneFilter(["Bronx"])).toBe('area_label.in.("Bronx")');
+  });
+
+  it("entrecomilla las etiquetas con coma (PostgREST separa por coma)", () => {
+    expect(feedZoneFilter(["Corona, Queens", "Corona"])).toBe(
+      'area_label.in.("Corona, Queens","Corona")',
+    );
+  });
+
+  /**
+   * La campaña que compró llegar acá esquiva el recorte; la que compró OTRO
+   * barrio no entra en esta lista (la filtra `campanaAlcanzaZona` antes).
+   */
+  it("suma los posts promocionados que la campaña alcanza", () => {
+    expect(feedZoneFilter(["Bronx"], ["p1", "p2"])).toBe(
+      'area_label.in.("Bronx"),id.in.(p1,p2)',
+    );
+  });
+
+  it("sin zona, ni siquiera los promocionados arman un filtro", () => {
+    expect(feedZoneFilter([], ["p1"])).toBeNull();
+  });
+});
+
+describe("postgrestQuoted", () => {
+  it("escapa comillas y barras para que el valor no rompa el grupo", () => {
+    expect(postgrestQuoted('Barrio "el bajo"')).toBe('"Barrio \\"el bajo\\""');
+    expect(postgrestQuoted("a\\b")).toBe('"a\\\\b"');
   });
 });

@@ -23,7 +23,7 @@
 
 /**
  * Dónde está un video en el camino de Mux. Espeja el CHECK de
- * `posts.mux_status` (0114) — si esta unión y ese CHECK dejan de coincidir, la
+ * `posts.mux_status` (0116) — si esta unión y ese CHECK dejan de coincidir, la
  * app va a leer de la base un estado que no sabe nombrar.
  *
  *  · uploading  — la subida existe y el archivo está viajando desde el navegador.

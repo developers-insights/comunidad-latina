@@ -47,7 +47,7 @@ export const isPagosDemoPermitido =
   !process.env.VERCEL_ENV;
 
 /**
- * Video por Mux: subida de CUALQUIER formato y CUALQUIER tamaño (0114).
+ * Video por Mux: subida de CUALQUIER formato y CUALQUIER tamaño (0116).
  *
  * Pide las dos credenciales de la API porque el SDK necesita las dos para
  * firmar un solo request: con `MUX_TOKEN_ID` solo, `getMux()` construiría un

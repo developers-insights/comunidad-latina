@@ -584,3 +584,45 @@ export function feedPostVisibilityFilter(
   }
   return parts.join(",");
 }
+
+/**
+ * Filtro `.or()` de PostgREST para la ZONA de los posts del feed (0115).
+ *
+ * Un post entra si es de una de las etiquetas de la zona elegida, o si tiene
+ * una campaña que compró llegar hasta acá (`promotedPostIds` ya viene filtrado
+ * por `campanaAlcanzaZona`, no es "toda campaña activa"). Es el espejo exacto
+ * de la rama ZONA de `feed_posts_page`: si los dos caminos no dijeran lo mismo,
+ * el feed cambiaría de contenido según qué entorno tenga la migración.
+ *
+ * Devuelve `null` cuando NO hay que filtrar (sin zona elegida). Nunca devuelve
+ * un filtro que no matchee nada: `zonasCoincidentes` garantiza al menos una
+ * etiqueta cuando hay zona, y confundir "no filtres" con "no hay nada" deja el
+ * feed en blanco.
+ *
+ * Las etiquetas son texto libre de la gente ("Corona, Queens" trae una coma,
+ * que en PostgREST es el separador de la lista), así que van entrecomilladas y
+ * escapadas — ver `postgrestQuoted`.
+ */
+export function feedZoneFilter(
+  areaLabels: readonly string[],
+  promotedPostIds: readonly string[] = [],
+): string | null {
+  if (areaLabels.length === 0) return null;
+  const parts = [`area_label.in.(${areaLabels.map(postgrestQuoted).join(",")})`];
+  if (promotedPostIds.length > 0) {
+    parts.push(`id.in.(${promotedPostIds.join(",")})`);
+  }
+  return parts.join(",");
+}
+
+/**
+ * Un valor listo para entrar en una lista `in.(…)` de PostgREST.
+ *
+ * PostgREST separa por comas y corta el grupo con `)`, así que cualquier valor
+ * que traiga una coma, un paréntesis o comillas tiene que viajar entrecomillado
+ * con las comillas internas escapadas. Los `area_label` son exactamente ese
+ * caso: los escribe la gente y la mitad de esta comunidad los escribe con coma.
+ */
+export function postgrestQuoted(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}

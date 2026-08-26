@@ -46,7 +46,7 @@ import type { MuxStatus } from "@/lib/mux/urls";
  *
  * La correlación DE VERDAD es `mux_upload_id`: ese id lo mintea Mux al crear la
  * subida, lo guarda nuestro propio servidor en la fila que nuestro propio
- * servidor creó, y tiene UNIQUE parcial (0114). El `passthrough` queda como
+ * servidor creó, y tiene UNIQUE parcial (0116). El `passthrough` queda como
  * camino secundario para el caso en que un evento llegue sin `upload_id`, y ese
  * camino está acotado a filas que YA están en el circuito de Mux
  * (`mux_upload_id is not null`) y en un estado esperable. Consecuencia buscada:

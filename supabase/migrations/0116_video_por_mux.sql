@@ -1,5 +1,5 @@
 -- =============================================================================
--- 0114_video_por_mux.sql — Comunidad Latina
+-- 0116_video_por_mux.sql — Comunidad Latina
 --
 -- El camino de video por Mux: cinco columnas en `posts`, un estado `draft` para
 -- que la publicación pueda existir mientras el video todavía se está subiendo,
@@ -219,7 +219,7 @@ begin
 end $$;
 
 comment on column public.posts.status is
-  'draft = la publicación existe pero todavía no es de nadie más que de su autor: nace así SOLO por el camino de video de Mux (0114), donde la fila tiene que existir antes de que el archivo empiece a viajar. published = contenido público. pending_review = cola de moderación. removed = bajada. El cliente no puede crear un draft (posts_insert exige published|pending_review) ni volver a uno (el WITH CHECK de posts_update exige lo mismo): el borrador lo crea el servidor y sólo se sale de él hacia adelante.';
+  'draft = la publicación existe pero todavía no es de nadie más que de su autor: nace así SOLO por el camino de video de Mux (0116), donde la fila tiene que existir antes de que el archivo empiece a viajar. published = contenido público. pending_review = cola de moderación. removed = bajada. El cliente no puede crear un draft (posts_insert exige published|pending_review) ni volver a uno (el WITH CHECK de posts_update exige lo mismo): el borrador lo crea el servidor y sólo se sale de él hacia adelante.';
 
 -- ---------------------------------------------------------------------------
 -- 2 bis · EL AGUJERO QUE ABRE `draft`, CERRADO EN EL MISMO ARCHIVO
@@ -367,7 +367,7 @@ begin
      or new.eligible_for_short_feed is distinct from old.eligible_for_short_feed then
     raise exception 'PROTECTED_COLUMNS: video_type/duration_seconds/is_paid_ad/eligible_for_short_feed se fijan al publicar; pasar a publicitario es una transición de campaña (server-side)';
   end if;
-  -- 0114 · las cinco de Mux. El playback id es el que más duele: una policy
+  -- 0116 · las cinco de Mux. El playback id es el que más duele: una policy
   -- autoriza FILAS, y posts_update deja al autor editar la suya — sin esto,
   -- PATCHear el playback id de un video ajeno es quedarse con su autoría.
   if new.mux_upload_id is distinct from old.mux_upload_id
@@ -385,7 +385,7 @@ end;
 $$;
 
 comment on function app.protect_post_counters() is
-  'Bloquea manipulación directa de counters de posts (like_count, comment_count, view_count, poll_yes_count, poll_no_count), congela poll_kind una vez que la encuesta tiene votos, congela desde 0046 las columnas de video (video_type, duration_seconds, is_paid_ad, eligible_for_short_feed) y created_at, y desde 0114 las cinco columnas de Mux (mux_upload_id, mux_asset_id, mux_playback_id, mux_status, mux_duration_seconds) — las escribe el webhook con service_role o no las escribe nadie.';
+  'Bloquea manipulación directa de counters de posts (like_count, comment_count, view_count, poll_yes_count, poll_no_count), congela poll_kind una vez que la encuesta tiene votos, congela desde 0046 las columnas de video (video_type, duration_seconds, is_paid_ad, eligible_for_short_feed) y created_at, y desde 0116 las cinco columnas de Mux (mux_upload_id, mux_asset_id, mux_playback_id, mux_status, mux_duration_seconds) — las escribe el webhook con service_role o no las escribe nadie.';
 
 -- ---------------------------------------------------------------------------
 -- 5 · Bandeja de eventos del webhook de Mux
