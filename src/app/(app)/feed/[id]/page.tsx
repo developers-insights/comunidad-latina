@@ -313,6 +313,7 @@ export default async function PostDetailPage({
             postStatus={post.status}
             hasMedia={post.media.length > 0}
             media={post.media}
+            music={musicByPostId.get(post.id) ?? null}
             commentCount={post.comment_count}
             likeCount={post.like_count}
             pinnedAt={post.pinned_at}

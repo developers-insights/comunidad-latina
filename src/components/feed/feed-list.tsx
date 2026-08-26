@@ -112,6 +112,9 @@ export function renderFeedItem(
               // el retrocompat de `photoUrl` cuente como medio para la edición.
               hasMedia={item.post.postMenu.mediaPaths.length > 0}
               media={item.post.postMenu.mediaPaths}
+              // La pista ya viaja en el modelo (la pinta la tarjeta): pasarla
+              // acá es lo que deja CAMBIARLA sin volver a publicar.
+              music={item.post.music}
               commentCount={item.post.commentCount}
               likeCount={item.post.likeCount}
               pinnedAt={item.post.postMenu.pinnedAt}
