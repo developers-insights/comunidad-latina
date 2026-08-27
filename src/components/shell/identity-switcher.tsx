@@ -5,7 +5,9 @@ import Link from "next/link";
 import {
   CaretRight,
   Check,
+  GearSix,
   PlusCircle,
+  SealCheck,
   Storefront,
   UserCircle,
   UserSwitch,
@@ -14,6 +16,7 @@ import { Avatar, BottomSheet, Spinner, buttonVariants, useToast } from "@/compon
 import { cambiarIdentidad } from "@/lib/perfil-activo/actions";
 import { PERFIL_ACTIVO_COPY as C } from "@/lib/perfil-activo/copy";
 import type { RolDeNegocio } from "@/lib/perfil-activo/identidad";
+import { contarNegociosPropios, lugaresDeNegocio } from "@/lib/perfil-activo/tope";
 import { cn } from "@/lib/utils";
 
 /**
@@ -60,6 +63,33 @@ import { cn } from "@/lib/utils";
  * (`/negocios/cuenta`) en vez de abrir una hoja vacía. Es el caso exacto del
  * cliente (Giovanni no tenía cuenta de negocio, así que nunca vio el avatar
  * cambiar) — antes esa puerta no existía en ningún lado.
+ *
+ * ── HASTA DIEZ NEGOCIOS (2026-08-26) ────────────────────────────────────────
+ * «Falta agregar otro negocio, ya que la persona puede crear hasta 10 perfiles
+ * diferentes.» El cliente mandó una captura de ESTA hoja abierta: la última
+ * fila decía "Administrar tu cuenta de negocio" y no había ninguna que dijera
+ * agregar. Tres cosas cambian por eso:
+ *
+ *   1. Una fila propia para AGREGAR, con su verbo y su ícono. No alcanzaba con
+ *      renombrar la de administrar: son dos intenciones distintas y quien busca
+ *      la primera no lee la segunda. Van a rutas distintas a propósito
+ *      (`/negocios/cuenta#nuevo` cae en el formulario, ya scrolleado).
+ *   2. La hoja dice cuántos lugares quedan, y cuando no queda ninguno lo dice
+ *      con todas las letras en vez de ofrecer un botón que va a fallar.
+ *   3. LA LISTA SCROLLEA POR DENTRO. Con diez negocios más el perfil personal
+ *      son once filas: a 375 px eso empuja "Agregar" y "Administrar" fuera de
+ *      la pantalla, y la persona ve una lista que parece no tener final. La
+ *      hoja pasa a ser una columna con la lista scrolleable en el medio y las
+ *      acciones ancladas abajo — siempre visibles, no importa cuántos negocios
+ *      haya. (`BottomSheet` lo soporta con `bodyClassName`, documentado ahí.)
+ *
+ * ── LA INSIGNIA DE VERIFICADO, SÓLO EN POSITIVO ─────────────────────────────
+ * Cada perfil tiene su propia verificación (0121) y la fila la muestra cuando
+ * la tiene. Cuando NO la tiene no se muestra nada, y es deliberado: hoy no hay
+ * ninguna identidad verificada en la base, así que el aviso aparecería en las
+ * once filas a la vez y la hoja pasaría de ser un cambiador a ser una lista de
+ * pendientes. Lo que falta se dice en /perfil/verificar, que es la pantalla que
+ * existe para eso.
  */
 
 export interface IdentidadNegocioUI {
@@ -73,6 +103,21 @@ export interface IdentidadNegocioUI {
    */
   avatarUrl: string | null;
   rol: RolDeNegocio;
+  /**
+   * ¿Es TUYO o lo administrás para otra persona? Sólo los propios consumen
+   * lugares del tope de diez (0103: administrar negocios ajenos no tiene tope).
+   *
+   * OPCIONAL a propósito: los tres consumidores de este componente
+   * (`shell/header.tsx`, `perfil/(lista)/page.tsx`, `perfil/perfil-de-negocio.tsx`)
+   * mapean campo por campo, y agregarlo obligatorio los rompería a los tres.
+   * Sin el dato no se muestra el contador de lugares y la fila de agregar queda
+   * siempre habilitada: el tope lo aplica la base igual, con un mensaje humano.
+   * Ofrecer un lugar de más es recuperable; decirle a alguien que llegó al tope
+   * sin saberlo, no.
+   */
+  esPropietario?: boolean;
+  /** ¿Este perfil tiene su identidad verificada? (0121) Ver el docblock. */
+  verificada?: boolean;
 }
 
 export interface IdentitySwitcherProps {
@@ -167,11 +212,30 @@ function IdentitySwitcherSheet({
   pendiente,
   elegir,
 }: SheetProps) {
-  return (
-    <BottomSheet open={open} onClose={onClose} title={C.sheet.title}>
-      <p className="mb-3 text-xs text-foreground-secondary">{C.sheet.hint}</p>
+  // Sólo los negocios PROPIOS ocupan lugares (ver `IdentidadNegocioUI`). Si
+  // ningún consumidor manda `esPropietario`, el conteo da 0 y el contador no se
+  // muestra: la fila de agregar queda igual y decide la base.
+  const propios = contarNegociosPropios(negocios);
+  const lugares = lugaresDeNegocio(propios);
+  const sabemosCuantosPropios = propios > 0;
 
-      <ul className="flex flex-col gap-0.5">
+  return (
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      title={C.sheet.title}
+      // La lista scrollea por dentro y las acciones quedan ancladas abajo. Con
+      // el `overflow-y-auto` por default del BottomSheet, once filas empujaban
+      // "Agregar otro negocio" fuera de la pantalla a 375 px. Ver el docblock.
+      bodyClassName="flex min-h-0 flex-col overflow-hidden px-6 pb-2 pt-4"
+    >
+      <p className="mb-3 shrink-0 text-xs text-foreground-secondary">{C.sheet.hint}</p>
+
+      {/* `min-h-0` es lo que permite que este hijo del flex se achique por
+          debajo de su contenido; sin él el navegador le da min-height:auto y no
+          scrollea nunca. `overscroll-contain` evita que el scroll se encadene a
+          la página de atrás cuando la lista llega al final. */}
+      <ul className="-mx-1 flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain px-1">
         <li>
           <button
             type="button"
@@ -215,8 +279,9 @@ function IdentitySwitcherSheet({
                 <span className="block truncate text-sm font-semibold text-foreground">
                   {negocio.nombre}
                 </span>
-                <span className="block text-xs text-foreground-secondary">
-                  {C.roles[negocio.rol]}
+                <span className="flex items-center gap-1.5 text-xs text-foreground-secondary">
+                  <span className="truncate">{C.roles[negocio.rol]}</span>
+                  {negocio.verificada && <VerificadaChip />}
                 </span>
               </span>
               <EstadoDeFila
@@ -228,27 +293,67 @@ function IdentitySwitcherSheet({
         ))}
       </ul>
 
-      <div className="mt-2 flex flex-col gap-0.5 border-t border-border-subtle pt-2 pb-2">
+      {/* Acciones. `shrink-0` para que no se compriman cuando la lista es larga
+          —son justamente las que tienen que quedar visibles siempre—. */}
+      <div className="mt-2 flex shrink-0 flex-col gap-0.5 border-t border-border-subtle pt-2 pb-2">
         <Link href="/perfil" onClick={onClose} className={filaClase}>
-          <span
-            aria-hidden="true"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-foreground-secondary"
-          >
+          <IconoDeAccion>
             <UserCircle size={20} />
-          </span>
+          </IconoDeAccion>
           <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">
             {C.sheet.personalLabel}
           </span>
           <CaretRight size={16} aria-hidden="true" className="shrink-0 text-foreground-muted" />
         </Link>
 
-        <Link href="/negocios/cuenta" onClick={onClose} className={filaClase}>
-          <span
-            aria-hidden="true"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-foreground-secondary"
+        {lugares.puedeCrear || !sabemosCuantosPropios ? (
+          <Link
+            // `#nuevo` cae directo en el formulario de alta: la misma pantalla
+            // sirve para agregar y para administrar, y sin el ancla las dos
+            // filas de acá abajo llevarían al mismo lugar.
+            href="/negocios/cuenta#nuevo"
+            onClick={onClose}
+            className={filaClase}
           >
-            <PlusCircle size={20} />
-          </span>
+            <IconoDeAccion>
+              <PlusCircle size={20} weight="bold" />
+            </IconoDeAccion>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-foreground">
+                {C.sheet.addBusiness}
+              </span>
+              <span className="block truncate text-xs text-foreground-secondary">
+                {sabemosCuantosPropios
+                  ? C.sheet.slotsLeft(lugares.restantes, lugares.tope)
+                  : C.sheet.addBusinessHint}
+              </span>
+            </span>
+            <CaretRight size={16} aria-hidden="true" className="shrink-0 text-foreground-muted" />
+          </Link>
+        ) : (
+          // Sin lugares no hay botón: un control que sólo puede fallar es peor
+          // que decir la verdad. No manda a borrar nada — dar de baja una cuenta
+          // de negocio no tiene pantalla hoy, y pedir algo imposible es un
+          // callejón sin salida.
+          <p className="flex items-center gap-3 rounded-lg bg-surface-subtle p-2.5" role="status">
+            <IconoDeAccion>
+              <Storefront size={20} />
+            </IconoDeAccion>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-foreground">
+                {C.sheet.capReached(lugares.tope)}
+              </span>
+              <span className="block text-xs text-foreground-secondary">
+                {C.sheet.capReachedHint}
+              </span>
+            </span>
+          </p>
+        )}
+
+        <Link href="/negocios/cuenta" onClick={onClose} className={filaClase}>
+          <IconoDeAccion>
+            <GearSix size={20} />
+          </IconoDeAccion>
           <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">
             {C.sheet.manage}
           </span>
@@ -256,6 +361,34 @@ function IdentitySwitcherSheet({
         </Link>
       </div>
     </BottomSheet>
+  );
+}
+
+/** El círculo gris de las filas de acción. Estaba copiado tres veces. */
+function IconoDeAccion({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-foreground-secondary"
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * "Verificado" al lado del rol. Ícono + PALABRA, nunca sólo un color ni sólo un
+ * glifo: es la misma regla que ya siguen `BusinessBadge` y la puerta de
+ * /perfil. `cl-print-hide` no va acá — a diferencia de la insignia de negocio,
+ * que sólo dice con qué identidad estabas navegando, esto es un hecho sobre el
+ * perfil y sí significa algo impreso.
+ */
+function VerificadaChip() {
+  return (
+    <span className="flex shrink-0 items-center gap-0.5 font-semibold text-success">
+      <SealCheck size={12} weight="fill" aria-hidden="true" />
+      {C.sheet.verifiedBadge}
+    </span>
   );
 }
 

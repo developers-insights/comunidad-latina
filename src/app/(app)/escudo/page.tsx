@@ -4,10 +4,12 @@ import { notFound } from "next/navigation";
 import {
   BookOpenText,
   CaretRight,
+  ClipboardText,
   Flag,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { BezelCard, Emblem } from "@/components/ui";
+import { ESCUDO_ENABLED } from "./feature-flag";
 
 /**
  * Hub del Escudo Anti-Estafa (moat §3): verificación DETERMINÍSTICA contra
@@ -32,17 +34,23 @@ const COPY = {
       description:
         "Las 5 señales de alerta más comunes al alquilar en Nueva York, con ejemplos reales y qué hacer en cada caso.",
     },
+    /**
+     * La evidencia va TERCERA y no primera, y es una decisión editorial: quien
+     * entra al Centro de seguridad casi siempre viene con algo concreto —algo
+     * que denunciar o algo que no entiende—, y hacerlo pasar por nuestros
+     * números antes de darle la herramienta sería ponernos primeros a nosotros.
+     * Quien viene a evaluar la plataforma la encuentra igual: son tres tarjetas
+     * en una pantalla, no un menú largo.
+     */
+    transparencia: {
+      title: "Ver cómo viene funcionando",
+      description:
+        "Los números de lo que el sistema recibió y de lo que hizo con eso, y casos contados sin nombres.",
+    },
   },
 } as const;
 
 export const metadata: Metadata = { title: COPY.title };
-
-// Feature oculta por pedido del cliente (2026-07-20): el Escudo no debe
-// figurar en ningún lado de la app — sin entry points y con 404 directo en
-// esta ruta y sus 4 sub-rutas hasta reactivarla. Tipada como `boolean` (no
-// el literal `false`) para que TS no marque el resto de la función como
-// código muerto y rompa el narrowing de abajo.
-const ESCUDO_ENABLED: boolean = false;
 
 function SectionCard({
   href,
@@ -110,7 +118,6 @@ export default function EscudoPage() {
         <p className="mt-2 font-medium text-foreground">{COPY.whatNot}</p>
       </div>
 
-      {/* 4 secciones */}
       <nav aria-label="Herramientas de seguridad" className="flex flex-col gap-3">
         <SectionCard
           href="/escudo/reportar"
@@ -123,6 +130,12 @@ export default function EscudoPage() {
           icon={BookOpenText}
           title={COPY.sections.aprender.title}
           description={COPY.sections.aprender.description}
+        />
+        <SectionCard
+          href="/escudo/transparencia"
+          icon={ClipboardText}
+          title={COPY.sections.transparencia.title}
+          description={COPY.sections.transparencia.description}
         />
       </nav>
     </div>

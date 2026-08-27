@@ -248,6 +248,8 @@ export default async function PerfilPage({
                   nombre: negocio.nombre,
                   avatarUrl: negocio.avatarUrl,
                   rol: negocio.rol,
+                  esPropietario: negocio.esPropietario,
+                  verificada: negocio.verificada,
                 }))}
                 // Siempre null: si estuvieras actuando como un negocio, esta
                 // pantalla habría vuelto arriba con `PerfilDeNegocio`. Acá sos

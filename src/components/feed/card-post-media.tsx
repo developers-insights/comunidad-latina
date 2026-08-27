@@ -12,6 +12,7 @@ import { useCardMedia } from "./card-media-context";
 import { MediaCarousel } from "./media-carousel";
 import { useMediaViewer } from "./media-viewer";
 import { MusicBadge } from "./music-badge";
+import { PostMusicProvider, PostMusicSpeaker, usePostMusic } from "./post-music";
 import {
   isPaidAdvertising,
   videoOpensReel,
@@ -69,6 +70,14 @@ export interface CardPostMediaProps {
  * consume y se lo mueve; el visor abre en el medio que se estaba viendo —desde
  * la tercera foto, en la tercera— porque lee exactamente ese índice.
  *
+ * MÚSICA (0090): la pista es de la PUBLICACIÓN —`post_music`, PK `post_id`—,
+ * así que su reproductor vive acá y no dentro de un medio. `PostMusicProvider`
+ * ES la caja de medios: monta el único `<audio>`, observa esa caja para saber
+ * cuándo la publicación está a la vista y publica el veredicto de
+ * `resolveAudioMix` para que `CardVideo` sepa si le toca estar mudo. Hasta el
+ * 2026-08-26 el `<audio>` se montaba dentro de `CardVideo`: una publicación de
+ * FOTO con música mostraba la insignia y no sonaba nunca (ver post-music.tsx).
+ *
  * FILTRO DE VIDEO (0104): viaja DENTRO de cada diapositiva (`item.filterCss`),
  * ya resuelto a CSS por el servidor contra el catálogo de filtros. Pasa por acá
  * sin que este módulo tenga que opinar —es una decisión por archivo, no del
@@ -76,7 +85,34 @@ export interface CardPostMediaProps {
  * el suyo ya está quemado en los píxeles al publicar (`bake-photo.ts`), y
  * pintarlo otra vez acá lo mostraría dos veces.
  */
-export function CardPostMedia({
+/**
+ * El envoltorio: monta la pista de la publicación y ES la caja de medios.
+ *
+ * Está partido en dos componentes por una razón concreta y no por gusto: el
+ * altavoz y el `videoMuted` del carrusel se leen del contexto de
+ * `PostMusicProvider`, y un componente no puede consumir un contexto que él
+ * mismo monta. El de afuera declara la pista; el de adentro la usa.
+ */
+export function CardPostMedia(props: CardPostMediaProps) {
+  const media = useCardMedia();
+
+  // Sin provider de medios no hay card que pintar (y sin medios, tampoco).
+  if (!media || media.items.length === 0) return null;
+
+  return (
+    <PostMusicProvider
+      music={props.music ?? null}
+      // `videoHasSound` a escala de publicación: si alguna diapositiva es un
+      // video, hay algo que se puede escuchar aunque no haya música.
+      hasVideo={media.items.some((item) => item.kind === "video")}
+      className="relative"
+    >
+      <PostMediaLayers {...props} />
+    </PostMusicProvider>
+  );
+}
+
+function PostMediaLayers({
   postId,
   authorName,
   isPromoted,
@@ -92,10 +128,11 @@ export function CardPostMedia({
   const viewer = useMediaViewer();
   const like = useCardLike();
   const media = useCardMedia();
+  const postMusic = usePostMusic();
   const [bursts, setBursts] = useState(0);
 
-  // Sin provider no hay card que pintar (y sin medios, tampoco). El guard va
-  // DESPUÉS de todos los hooks: un return temprano antes rompería su orden.
+  // El guard de medios ya corrió en `CardPostMedia`; esta guarda es para el
+  // compilador (y para quien monte esta pieza suelta algún día).
   if (!media || media.items.length === 0) return null;
   const { items, index, setIndex } = media;
 
@@ -121,15 +158,24 @@ export function CardPostMedia({
    * El tope de reproducción lo decide la superficie, no el componente: 600 s
    * dentro de un anuncio, 300 s en el detalle (ver `viewerPlaybackCapFor`, que
    * lee los números de video-policy).
+   *
+   * LA MÚSICA SE CALLA ANTES DE ABRIR y vuelve al cerrar. El visor trae su
+   * propio sonido; la pista de la tarjeta sonando por debajo serían dos audios
+   * encimados sobre la misma publicación. Antes esto sólo pasaba al tocar un
+   * VIDEO (lo hacía CardVideo): tocar una foto dejaba la música corriendo
+   * detrás del visor.
    */
-  const openViewerAt = (startIndex: number) =>
+  const openViewerAt = (startIndex: number) => {
+    postMusic?.pause();
     viewer.open({
       items,
       startIndex,
       postId,
       authorName,
       maxPlaybackSeconds: viewerPlaybackCapFor(paidAd),
+      onClose: postMusic ? () => postMusic.resume() : undefined,
     });
+  };
   /**
    * Sin reel por DOS motivos distintos, y los dos terminan igual: el video se
    * abre a pantalla completa sobre esta misma publicación y al cerrar volvés acá.
@@ -148,7 +194,7 @@ export function CardPostMedia({
   }
 
   return (
-    <div className="relative">
+    <>
       <MediaCarousel
         items={items}
         index={index}
@@ -165,10 +211,6 @@ export function CardPostMedia({
         // Con campaña paga, la barra del CTA ocupa el borde inferior: los
         // puntitos suben para no quedar debajo.
         dotsClassName={showBoostCta ? "bottom-[3.75rem]" : undefined}
-        // La pista, para que el video de ESTE post (si lo hay) la reproduzca
-        // sincronizada. Es la misma para todas las diapositivas: la música es
-        // del POST, no de un medio en particular (post_music, PK post_id).
-        music={music}
       />
 
       {/* Divulgación honesta (FTC): el chip acompaña a TODO espacio pago, no
@@ -201,6 +243,15 @@ export function CardPostMedia({
         </div>
       )}
 
+      {/* El altavoz de la PUBLICACIÓN — uno solo, quieto, del lado opuesto a la
+          insignia. Vive acá y no dentro del video desde el 2026-08-26: sobre una
+          publicación de fotos con música no había ningún altavoz que tocar, así
+          que la canción no se podía pedir. Sube igual que la insignia cuando el
+          CTA de campaña ocupa el borde inferior. */}
+      <PostMusicSpeaker
+        className={showBoostCta ? "bottom-[3.75rem] right-2" : "bottom-2 right-2"}
+      />
+
       {/* Corazón grande del doble-tap (decorativo; el estado lo comunica el botón).
           `cl-print-hide`: es la ÚNICA tinta `on-media` que escribe este archivo y
           es un destello — vive lo que dura la animación. En papel, un corazón
@@ -232,6 +283,6 @@ export function CardPostMedia({
           className="z-[3]"
         />
       )}
-    </div>
+    </>
   );
 }

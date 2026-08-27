@@ -20,7 +20,7 @@ import { QuestionBanner } from "./question-banner";
 import { TextBanner } from "./text-banner";
 import {
   DEFAULT_PHOTO_EDIT,
-  PhotoCaptionOverlay,
+  PhotoEditPreview,
   PhotoEditor,
   photoEditFilterCss,
   type PhotoEdit,
@@ -639,25 +639,20 @@ export function ComposerSheet({
                               "disabled:pointer-events-none",
                             )}
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element -- preview local (blob:) */}
-                            <img
-                              src={item.preview}
-                              alt=""
-                              // MISMA función que la vista previa grande y que
-                              // el horneado: preset + intensidad resueltos en
-                              // un solo lugar (ver photo-editor.tsx).
-                              style={{ filter: photoEditFilterCss(item.edit) || undefined }}
-                              className="absolute inset-0 size-full object-cover"
-                            />
-                            {item.edit?.captionText.trim() && (
-                              <PhotoCaptionOverlay
-                                text={item.edit.captionText}
-                                position={item.edit.captionPosition}
-                                background={item.edit.captionBackground}
-                                className="py-1"
+                            {/* LA FOTO YA EDITADA, no la original: recorte,
+                                filtro, texto y emojis con las MISMAS cuentas
+                                que va a usar el horneado (ver photo-editor.tsx).
+                                Antes esto era un `<img object-cover>` con el
+                                filtro encima, y desde que el editor recorta esa
+                                miniatura mostraría un encuadre que no es el que
+                                se va a publicar. */}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <PhotoEditPreview
+                                preview={item.preview}
+                                edit={item.edit}
                                 textClassName={index === 0 ? "text-xs" : "text-[9px] leading-tight"}
                               />
-                            )}
+                            </div>
                           </button>
                         ) : (
                           <>

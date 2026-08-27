@@ -11,6 +11,7 @@ import {
   LockKey,
   PencilSimple,
   Prohibit,
+  Pulse,
   Scales,
   SealCheck,
   ShieldCheck,
@@ -270,6 +271,25 @@ export default async function AjustesPage() {
             a privacidad la gasta — la insignia de un hecho comprobado no puede
             ser también el ícono genérico de "acá hay algo seguro". */}
         <Row href="/ajustes/privacidad" icon={LockKey} {...COPY.rows.privacy_data} />
+        {/* La puerta a /escudo/transparencia (pedido del cliente del
+            2026-08-26: «casos de seguridad, dar a conocer y ver qué tan segura
+            es la plataforma»). Va acá y no en el menú de módulos por dos
+            razones: el Escudo sigue oculto —esta pantalla entra por la
+            excepción documentada en escudo/feature-flag.ts— y, aunque no lo
+            estuviera, no es una vertical de contenido que alguien navegue, es
+            una respuesta a una pregunta que se hace UNA vez, cuando se está
+            decidiendo si confiar. Ese momento vive en Ajustes, al lado de
+            "Privacidad y datos", que es la otra mitad de la misma pregunta.
+
+            `Pulse` y no un escudo: en esta pantalla `ShieldCheck` ya es la
+            marca de la identidad verificada y `ShieldStar` la del panel de
+            administración — un tercer escudo acá los gastaría a los tres. Y lo
+            que la fila ofrece no es un sello: es cómo viene latiendo la cosa.
+
+            Sin condicionar a sesión, igual que las filas legales de más abajo:
+            quien todavía no se dio de alta es exactamente quien más motivo
+            tiene para querer leer esto antes de dar su nombre. */}
+        <Row href="/escudo/transparencia" icon={Pulse} {...COPY.rows.transparency} />
         {shell.user && (
           <Row href="/perfil/bloqueados" icon={Prohibit} {...COPY.rows.blocked} />
         )}

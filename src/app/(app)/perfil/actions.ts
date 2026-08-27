@@ -631,25 +631,44 @@ export async function deleteAccountAction(): Promise<ActionResult> {
   // un mensaje que reintentar jamás arregla. Se distingue por plan_status:
   // sin suscripción real (inactive/canceled) se da de baja sola, con
   // suscripción real (active/past_due) se bloquea con una acción concreta.
-  const { data: business } = await admin
+  //
+  // ── DESDE LA 0121 SON HASTA DIEZ, NO UNA ──────────────────────────────────
+  // Esto era un `.maybeSingle()` cuando `business_accounts_one_per_owner`
+  // garantizaba como mucho una fila. Al levantarse ese índice, la misma
+  // consulta con dos cuentas devuelve PGRST116, `business` queda `null`, y el
+  // bloque entero —que existe para NO borrar una cuenta con billing vivo— se
+  // saltea sin ruido: `deleteUser` revienta abajo con el mismo
+  // foreign_key_violation opaco que este chequeo se escribió para evitar.
+  // Ahora se leen TODAS y basta una con suscripción viva para frenar el
+  // borrado; las inactivas se dan de baja juntas, en una sola sentencia.
+  const { data: negocios } = await admin
     .from("business_accounts")
     .select("id, plan_status")
-    .eq("owner_id", user.id)
-    .maybeSingle();
+    .eq("owner_id", user.id);
 
-  if (business) {
-    if (business.plan_status === "active" || business.plan_status === "past_due") {
-      return { ok: false, formError: COPY.businessAccountBlocked };
-    }
-    // Sin suscripción real detrás (nunca pagó o ya canceló): no hay billing
-    // que proteger — se da de baja la fila para que el borrado pueda seguir.
+  const cuentas = negocios ?? [];
+  const conBilling = cuentas.filter(
+    (cuenta) => cuenta.plan_status === "active" || cuenta.plan_status === "past_due",
+  );
+
+  if (conBilling.length > 0) {
+    return { ok: false, formError: COPY.businessAccountBlocked };
+  }
+
+  if (cuentas.length > 0) {
+    // Ninguna tiene suscripción real detrás (nunca pagaron o ya cancelaron):
+    // no hay billing que proteger — se dan de baja para que el borrado siga.
     const { error: cleanupError } = await admin
       .from("business_accounts")
       .delete()
-      .eq("id", business.id);
+      .in(
+        "id",
+        cuentas.map((cuenta) => cuenta.id),
+      );
     if (cleanupError) {
-      console.error("[perfil] deleteAccount: no se pudo dar de baja business_account inactivo", {
+      console.error("[perfil] deleteAccount: no se pudo dar de baja business_accounts inactivas", {
         code: cleanupError.code,
+        cuentas: cuentas.length,
       });
       return { ok: false, formError: COPY.genericError };
     }

@@ -4,9 +4,9 @@
  * Nada de "modo", nada de "entidad", nada de "perfil B2B".
  */
 export const COPY = {
-  title: "Cuenta de negocio",
+  title: "Tus negocios",
   subtitle:
-    "Un segundo perfil para tu local o tu emprendimiento, dentro de tu misma cuenta.",
+    "Perfiles para tus locales o emprendimientos, dentro de tu misma cuenta.",
 
   /** Antes de tenerla: qué es y qué gana. */
   intro: {
@@ -21,6 +21,8 @@ export const COPY = {
 
   form: {
     legend: "Datos de tu negocio",
+    /** Encabezado cuando ya hay al menos uno: no es "el" negocio, es otro más. */
+    legendOtro: "Agregar otro negocio",
     nameLabel: "Nombre del negocio",
     namePlaceholder: "Panadería La Esperanza",
     nameHint: "Es el nombre con el que va a aparecer en la comunidad.",
@@ -31,9 +33,23 @@ export const COPY = {
     submitting: "Creando…",
   },
 
-  /** Ya la tiene. */
+  /**
+   * Cuántos lugares quedan. En positivo, y sólo cuando ya tiene al menos uno:
+   * a quien todavía no creó ninguno, "podés crear 10" no le resuelve nada.
+   */
+  slots: {
+    left: (restantes: number, tope: number) =>
+      restantes === 1
+        ? `Te queda 1 negocio más (de ${tope}).`
+        : `Te quedan ${restantes} negocios más (de ${tope}).`,
+    fullTitle: (tope: number) => `Llegaste al máximo de ${tope} negocios`,
+    fullBody:
+      "Es el máximo por comunidad. Podés seguir usando y administrando los que ya tenés.",
+  },
+
+  /** Ya tiene al menos uno. */
   card: {
-    heading: "Tu negocio",
+    heading: "Tus negocios",
     roleLabel: "Tu rol",
     activeNow: "Estás usando la app con este perfil.",
     inactiveNow: "Ahora estás usando la app con tu perfil personal.",
@@ -42,26 +58,48 @@ export const COPY = {
     switching: "Cambiando…",
   },
 
-  /** Lo que se puede hacer después. Cada uno lleva a algo que existe hoy. */
+  /**
+   * Lo que se puede hacer después. Cada uno lleva a algo que existe hoy.
+   *
+   * "Publicá la ficha de tu negocio" (→ /publicar?kind=business) se sacó: desde
+   * la 0116 la ficha se crea sola con la cuenta, así que ese link llevaba a un
+   * formulario que la policy `listings_insert` iba a rechazar por duplicado.
+   * Un siguiente paso que sólo puede terminar en error no es un siguiente paso.
+   */
   next: {
     heading: "Siguientes pasos",
-    listingTitle: "Publicá la ficha de tu negocio",
-    listingBody: "Dirección, horarios y fotos, para que te encuentren en Negocios.",
     presenceTitle: "Presencia Verificada",
     presenceBody: "El plan que le da a tu negocio prioridad y la insignia de verificado.",
   },
 
   ok: {
     created: (nombre: string) =>
-      `Listo, ${nombre} ya es tu cuenta de negocio. Todavía estás publicando con tu perfil personal: cuando quieras, cambiá desde acá o desde tu foto.`,
+      `Listo, ${nombre} ya es una de tus cuentas de negocio. Todavía estás publicando con tu perfil personal: cuando quieras, cambiá desde acá o desde tu foto.`,
+  },
+
+  /**
+   * Verificación POR PERFIL (0121). Acá sólo se ANUNCIA y se enlaza: el flujo
+   * entero vive en /perfil/verificar, que es una sola pantalla para las dos
+   * identidades. Repetirlo sería tener dos lugares donde verificarse.
+   */
+  verificacion: {
+    heading: "Verificación",
+    verified: "Identidad verificada",
+    pending: "Sin verificar todavía",
+    hint: "Cada negocio se verifica por separado. Es lo que te habilita a vender.",
+    cta: "Verificar mis perfiles",
   },
 
   errors: {
     signedOut: "Entrá a tu cuenta para crear tu cuenta de negocio.",
     nombreCorto: "Escribí el nombre de tu negocio.",
     nombreLargo: "El nombre es muy largo: probá con uno de hasta 60 caracteres.",
-    yaExiste:
-      "Ya tenés una cuenta de negocio en esta comunidad. Podés usarla desde acá mismo.",
+    /**
+     * El tope, dicho igual que en el cambiador. Sin callejón sin salida: no
+     * manda a borrar nada porque dar de baja un negocio no tiene pantalla hoy.
+     */
+    tope: (tope: number) =>
+      `Llegaste al máximo de ${tope} negocios en esta comunidad. Podés seguir usando los que ya tenés.`,
     generico:
       "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo en un momento.",
   },

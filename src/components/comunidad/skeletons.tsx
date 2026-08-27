@@ -90,3 +90,40 @@ export function GuiaListSkeleton() {
     </div>
   );
 }
+
+/**
+ * Silueta de un aviso del tablón de ayuda mutua. Reserva el alto real de la
+ * `ManoCard`: chip de dirección, título, zona, dos líneas de texto y el pie con
+ * el botón de escribir. Sin foto —esa tarjeta no tiene—, así que no hay bloque
+ * 4:3 que reservar.
+ */
+export function ManoCardSkeleton() {
+  return (
+    <div className="rounded-lg border border-border-subtle bg-surface p-5">
+      <div className="flex items-center justify-between gap-2">
+        <Skeleton className="h-6 w-28 rounded-sm" />
+        <Skeleton className="h-3 w-16" />
+      </div>
+      <div className="mt-3 flex flex-col gap-2">
+        <Skeleton className="h-5 w-4/5" />
+        <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-2/3" />
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-2 border-t border-border-subtle pt-3">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-10 w-28 rounded-full" />
+      </div>
+    </div>
+  );
+}
+
+export function ManoListSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" aria-hidden="true">
+      {Array.from({ length: 4 }, (_, index) => (
+        <ManoCardSkeleton key={index} />
+      ))}
+    </div>
+  );
+}

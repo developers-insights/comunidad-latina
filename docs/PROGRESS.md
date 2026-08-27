@@ -1,5 +1,251 @@
 # PROGRESS — Comunidad Latina
 
+## El feedback de Nacho del 26-ago — los 14 puntos, cerrados (✅ 2026-08-26)
+
+Nueve capturas de WhatsApp con pedidos sueltos, algunos que eran bugs y otros
+features enteras. Se mapeó cada uno contra el código ANTES de castear el equipo,
+y ese mapeo cambió el trabajo: tres de los catorce **ya estaban hechos** y dos
+eran bugs con una causa distinta de la que el síntoma sugería.
+
+### Los dos bugs, y por qué el síntoma engañaba
+
+**1. «Cuando se publica con música, no se escucha la música.»** El `<audio>` de
+la pista se montaba dentro de `card-video.tsx`, o sea un nivel MÁS ABAJO de
+donde vive el dato: `post_music` tiene PK `post_id` —una pista por
+publicación—, no por medio. Consecuencia: una publicación de **foto** con
+música no montaba reproductor **y tampoco tenía el altavoz** con el que pedirlo
+(`resolveAudioMix` exige `soundOn`, y el único botón que lo prendía estaba
+adentro del video). Parchear del lado de la foto habría dado dos `<audio>` en un
+carrusel mixto. Se resolvió subiendo el reproductor a `PostMusicProvider`
+(`post-music.tsx`), que es la caja de medios de la publicación: `CardVideo`
+perdió la prop `music`, su `<audio>`, su `soundOn` y su altavoz. Test escrito
+primero: 4 casos rojos antes, 34/34 después.
+
+**2. «Cuando se publica con otro perfil, sacar la parte de por geovanny.»** No
+era cosmética: era una fuga de privacidad. Publicar como "Panadería La
+Esperanza" mostraba abajo el nombre y apellido de quien está detrás. Antes de
+borrar la línea había que contestar si `entity` significa siempre "publicado CON
+esta identidad" o puede ser un post que MENCIONA una ficha ajena. Se verificó en
+el modelo: `PostCardModel.entity` se resuelve en seis lugares y en los seis sale
+de `posts.entity_listing_id`, que la 0023 define como la FIRMA y cuya policy
+exige ficha propia y publicada. No existe columna de "post que referencia ficha
+ajena". Entonces `entity != null` ⇒ salió con esa cara ⇒ el nombre personal no
+se muestra. Se cerró también en el reel de `/videos` (por eso el inventario de
+`print-contract` bajó de 12 a 11 tintas).
+
+### Lo que ya estaba y no se tocó
+
+- **Recorte de música tipo Instagram**: `MUSIC_CLIP_SECONDS = 30` + deslizador
+  de arranque con vista previa, desde la 0090. Sólo le faltaba el caso de una
+  pista de menos de 30 s, que dejaba el control visible y deshabilitado sin
+  decir por qué; ahora no se pinta y explica que suena entera.
+- **Boost por zona**: el de posts ya deja elegir "Toda la comunidad" o zonas
+  específicas (`post_promotions.audience`), y `src/lib/zona/campanas.ts` lo
+  respeta al filtrar el feed. El de avisos usa la zona del aviso con alcance
+  local/nacional/global.
+- **`/videos` sólo videos**: ya filtraba. Lo que sí se cerró es el agujero hacia
+  adelante — la query pedía `video_type='short_video'` (se DECLARÓ un corto) y
+  descartaba en memoria los Mux en `uploading`/`processing`/`errored`, pagando
+  por traerlos. Ahora `.or("mux_status.is.null,mux_status.eq.ready")`. Medido
+  contra producción: 16 cortos elegibles, 0 sin video reproducible.
+
+### Las features nuevas
+
+3. **Ayuda mutua bidireccional** (0120) — el módulo Comunidad era sólo-lectura:
+   se podía LEER dónde hay un banco de comida, no ofrecerse. Tabla nueva
+   `community_help_notices` con `direction: offer | need` (las dos direcciones
+   son una columna, no dos tablas: comparten texto, zona, moderación, RLS y
+   sobre todo la misma búsqueda). NO se metió como tema de `community_resources`
+   porque esa tabla exige `source_name/url/checked_at` NOT NULL —un vecino que
+   se ofrece no tiene fuente que citar— ni como `listings` con `kind` nuevo,
+   que arrastra precio, boosts y vencimiento. Cero columnas de contacto y cero
+   de dinero: el contacto va por `conversations` vía RPC, y la plata no existe
+   como concepto en el schema («monetariamente no se ayuda» era regla, no copy).
+   Máquina de estados escrita tres veces a propósito (policy, trigger, TS) y el
+   autor **no tiene ninguna flecha hacia `approved`** — todo pasa por la cola de
+   Geovanny (`/admin/comunidad/ayuda-mutua`, `moderator+`).
+   **Temas nuevos**: `adicciones`, `medicinas`, `fe`, `trabajo`. Pero el tablón
+   sólo acepta 6 de los 14: se ofrece tiempo, manos y cosas, nunca criterio
+   profesional. Quedan afuera `migracion`, `legal`, `salud`, `medicinas`,
+   `adicciones` (ejercicio ilegal) y `vivienda` (alojamiento ofrecido por un
+   desconocido a alguien sin techo). Cada exclusión justificada y testeada.
+
+4. **Hasta 10 perfiles** (0121) — el candado era el índice único
+   `business_accounts_one_per_owner`. Se reemplaza por trigger BEFORE INSERT con
+   `pg_advisory_xact_lock` (un CHECK no admite subconsultas; un índice parcial +
+   columna `slot` obliga a la app a elegir el número libre y devuelve un `23505`
+   mudo). **Lo que no estaba en el pedido y sin lo cual el pedido no funciona**:
+   `app.asegurar_ficha_de_negocio()` adoptaba la primera ficha publicada del
+   DUEÑO, así que el negocio nº2 se robaba la cara del nº1 — dos identidades, un
+   solo rostro público. Ahora la ficha cuelga de la CUENTA.
+   **Verificación por perfil**: se resucita `business_verifications` (0031, letra
+   muerta desde entonces) en vez de crear tabla. El negocio se verifica por
+   RECLAMO y no por una segunda foto: Stripe Identity verifica a un humano, no
+   existe el documento de una panadería, y pedir la misma foto diez veces cuesta
+   ~USD 1,50 cada una. Queda en `'partial'`, no `'verified'`: ese valor vale +40
+   de Business Score y regalarlos por una foto sería mentir.
+
+5. **Editor de fotos completo** — ya tenía 16 filtros y texto con posición y
+   fondo. Se suma **recorte** (reusando el enfoque de `avatar-crop.ts`, sin
+   librería nueva), **emojis**, **color** y **tipografía** del texto, todo
+   horneado en `bake-photo.ts` — lo que se ve en la vista previa es lo que se
+   sube.
+
+6. **Imágenes de cualquier formato y tamaño** — el camino elegido NO fue subir
+   directo al bucket como el video: eso saltea el horneado, o sea pierde
+   recorte, filtro, texto y emojis. Tampoco se movieron `MAX_PHOTO_BYTES` ni
+   `MAX_TOTAL_PHOTO_BYTES` ni `bodySizeLimit`: miden el archivo YA horneado y su
+   cadena sigue intacta. Lo que se movió es la puerta del navegador —
+   `MAX_PICKED_PHOTO_BYTES` 5 → 25 MB y HEIC/HEIF en `PHOTO_TYPES`, con las
+   extensiones sueltas en el `accept` porque varios pickers de Android entregan
+   HEIC con `file.type` vacío. Un HEIC que el navegador no puede decodificar se
+   detecta AL ELEGIR y distingue "este navegador no puede" de "está dañada";
+   antes moría dentro de `bakePhoto` y el servidor lo rechazaba después de
+   escribir el pie y tocar Publicar.
+
+7. **Los círculos del feed = el buscador** — la fila mezclaba círculos que
+   FILTRABAN el feed (`?tab=`) con círculos que NAVEGABAN, separados por un
+   hairline. Lo que decidió el empate: `?tab=negocios` es una lista de
+   `listings` por fecha, sin buscador y sin un solo filtro — literalmente
+   `/negocios` peor. Ahora todos navegan, tomando el `href` del MISMO registro
+   de módulos que usa `/buscar` (hay test que lo compara). Los `?tab=`
+   verticales siguen sirviéndose para no romper links compartidos.
+
+8. **Transparencia y casos de seguridad** (0122) — ver el apartado del Escudo
+   más abajo.
+
+### El Escudo: un interruptor partido en dos
+
+El cliente mandó **esconder el Escudo entero** el 2026-07-20 («que no figurara
+en ningún lado»). El 2026-08-26 pidió «casos de seguridad, dar a conocer y ver
+qué tan segura es la plataforma» — el pedido nuevo apunta al revés, pero **sólo
+para esa cara**. Usar el pedido nuevo para reactivar el módulo entero habría
+sido revertir una orden que nadie revirtió.
+
+Por eso `escudo/feature-flag.ts` tiene ahora dos constantes: `ESCUDO_ENABLED`
+sigue en `false` (verificador de matrículas, denuncia, aprender, Trust Score) y
+`TRANSPARENCIA_ENABLED` en `true`. Verificado en vivo: `/escudo`,
+`/escudo/reportar` y `/escudo/aprender` responden **404**;
+`/escudo/transparencia` responde **200**.
+
+Consecuencias que hubo que atender: la pantalla colgaba de un padre en 404, así
+que su "volver al Centro de seguridad" apuntaba a un lugar que no existe para
+nadie (ahora va al feed) y sus tres links internos al Escudo oculto se
+redirigieron a `/comunidad/guias`, que sí está vivo; el CTA de denunciar se
+cayó y el cuerpo explica que se denuncia desde el menú «···» de cada
+publicación, que es el camino real. Su puerta de entrada es **Ajustes → "Cómo
+cuidamos la comunidad"**, sin pedir sesión: quien no se dio de alta todavía es
+justo quien más motivo tiene para leerla.
+
+Ningún número se escribe a mano: salen de `escudo_transparencia()` con ventana
+de 365 días (= la retención real de pg_cron; un total "desde siempre" encogería
+con cada purga). `parseMetricas` devuelve `null` ante cualquier campo faltante
+— **nunca rellena con ceros**, porque un cero inventado en una pantalla de
+seguridad tranquiliza, que es peor que un error visible. Con menos de 5
+revisiones cerradas no se publica mediana. Con la base de hoy la pantalla entra
+en el estado "todavía tenemos poca historia", que está diseñado como estado de
+primera clase.
+
+**El rastro que no existía**: la 0118 marcaba `attrs.paused_reason='reports'` y
+al restituir **borraba la marca**, así que sólo se podía contar lo pausado
+*ahora* — un aviso pausado en abril y devuelto en mayo no dejaba constancia. La
+0122 agrega un trigger que escribe las dos transiciones en `audit_log`, con
+`actor_id` NULL y sin registrar quién denunció (ese renglón sería el grafo que
+§5.4 pide no construir).
+
+**Los casos** (`security_cases`) no tienen ni `report_id`, ni `listing_id`, ni
+`profile_id`: una FK del relato público a la denuncia es un expediente
+reidentificable con un `join`. Las 4 semillas son `origin='patron'` (forma
+documentada, sin fecha), no `'caso'` — sembrar un "caso real" escrito por un
+agente sería inventar la evidencia en la pantalla que existe para no inventarla.
+
+### Lo que encontró la integración (bugs que ningún frente podía ver solo)
+
+- **Checkout de Presencia Verificada** (`negocios/presencia/actions.ts`): con el
+  índice único levantado, el `.maybeSingle()` sobre `business_accounts` devuelve
+  `PGRST116` con dos cuentas, `existing` quedaba `null` y el código caía en la
+  rama de "todavía no tiene ninguna" — **creaba una cuenta fantasma con el
+  nombre de la persona y le cobraba la suscripción a la equivocada**. Ahora
+  manda la identidad activa (doctrina de la 0116); con varios negocios y ninguno
+  activo **pregunta** en vez de adivinar: elegir por la persona acá es elegir a
+  quién se le cobra.
+- **Borrado de cuenta** (`perfil/actions.ts`): el mismo patrón se salteaba en
+  silencio la precondición que existe para NO borrar una cuenta con billing
+  vivo, y `deleteUser` reventaba abajo con el `foreign_key_violation` opaco que
+  ese bloque fue escrito para evitar.
+- **El tablón de ayuda mostraba un cartel rojo a quien miraba sin sesión.** La
+  0120 le niega SELECT a `anon` a propósito (un listado público de nombre +
+  barrio + "necesito ayuda con X" es un padrón), así que el `42501` es el diseño
+  funcionando — pero se pintaba como error del sistema, y encima con el copy
+  "No pudimos **enviarlo**" en una pantalla donde no se envía nada. Ahora
+  `needsSession` lo separa de `failed` y muestra una invitación a entrar que
+  explica por qué no es público. Es el mismo `42501` que documentó la 0114
+  cuando la música no sonaba sin cuenta: en esta base las tablas nuevas no nacen
+  con grants para `anon`.
+- **`listarZonasDelTenant` leía 200 filas de `listings` en CADA tanda del scroll
+  infinito.** `cache()` de React dedupe dentro de UN request; cada tanda es un
+  request nuevo. Memo de proceso con vencimiento de 5 min — el dato es público y
+  por comunidad, sin nada de quien mira. No se activó `cacheComponents`: cambia
+  la semántica de render de toda la app, es una migración propia y no el peaje
+  de optimizar una función.
+
+### Performance del feed (medido, no supuesto)
+
+Se descartaron cuatro sospechosos con medición antes de tocar nada: la query
+(`explain analyze` de `feed_posts_page`: 9 ms de ejecución, 0 lecturas de
+disco), el peso de la fila (455 bytes/post), el `contain-intrinsic-size` (error
+medio de 25 px contra alturas reales) y el `content-visibility` ahogando el
+lazy-load (la foto más lejana ya cargada a +4007 px del viewport).
+
+La causa real: el sentinel avisaba tarde. `rootMargin: 600px` con tarjetas de
+~570 px medidas = **1,05 tarjetas de anticipo**, y cada página cuesta 4 viajes
+encadenados a la base (mediana de ida y vuelta: 344 ms sobre 5 muestras). Se
+pedía la página cuando ya no quedaba tiempo de traerla. Ahora `200%` = 2,9
+tarjetas de anticipo y 12 ítems por tanda en vez de 8: recorrer los 107 ítems
+del tenant pasa de 14 tandas a 9 (−36 % de server actions), a un costo de ~1,8
+kB por tanda y **cero viajes nuevos** (el RPC clampea a 50).
+
+### Gates
+
+`tsc` 0 · `eslint` 0 · **5058 tests** (296 archivos, 0 fallos) · `build` verde
+(101 páginas) · migraciones **0120, 0121, 0122 y 0123 aplicadas** a
+`ktmbtpuhqqofdkisqseq` y verificadas estructuralmente (RLS enable+force, 4
+policies nombradas por tabla, triggers presentes) · advisors: security 56 → 55 y
+performance 137 → 135 tras la 0123, sin regresiones nuestras · verificado en
+vivo a 375 y 1280 px (feed, comunidad, ayuda mutua, transparencia, ajustes),
+consola sin errores de aplicación.
+
+**Prueba funcional del tope de 10**, contra el schema real y con rollback: se
+insertaron 10 cuentas y la 11 fue rechazada con
+`TOPE_DE_NEGOCIOS: ya hay 10 cuentas de negocio para este dueño en esta
+comunidad (tope 10)` (SQLSTATE P0001).
+
+### Deuda anotada (no bloqueante)
+
+- **`npm run check:rls` NO se corrió**: el enumerador pide `SUPABASE_DB_PASSWORD`
+  y en esta máquina no hay `.env.local` con credenciales de base. Las tres
+  tablas nuevas cumplen el contrato por inspección (`tenant_id`, RLS
+  enable+force, exactamente 4 policies nombradas), pero **el gate falta correrlo**.
+- **`src/lib/types/database.types.ts` sigue generado a la altura de 0076**: todo
+  lo nuevo pasa por casts acotados (`supabaseSinTiparComunidad`, `abierto()`).
+  Regenerarlo y barrer los casts es una tarea propia.
+- **La 0109 (gate de venta) sigue en espera.** Sus tres condiciones no se
+  cumplen: 0 identidades verificadas sobre 20 perfiles y Stripe sin claves.
+  Aplicarla hoy sigue siendo el candado sin llave que describe su `LEEME.md`,
+  que quedó actualizado con el estado real de cada condición.
+- **Ninguna pantalla autenticada se vio en un navegador** (tablón con avisos,
+  "Mis avisos", cola del panel, composer, editor de fotos): no hay sesión en
+  esta máquina. El gesto táctil del recorte tampoco tiene test — jsdom no hace
+  layout —, aunque su geometría está probada con 25 casos de números a mano.
+- **Lectura alternativa del pedido de "Videos Cortos"**: el cliente mandó la
+  captura del ÍCONO y escribió «que sea solo videos». Hoy ese ícono abre un
+  MENÚ de 10 categorías, y esa lectura encaja igual de bien. No se tocó porque
+  ese menú fue un pedido explícito suyo anterior (call del 29/7). **Confirmarlo
+  con Nacho antes de mover nada ahí.**
+- Emoji sin rotación ni pellizco (se escala con deslizador, a propósito: el
+  pellizco competiría con el del recorte); el texto sobre la foto sigue siendo
+  bloque de posición fija; un video con música sigue sin recorte ni texto (0104).
+
 ## Los 7 puntos de la spec de módulos — cerrados (✅ 2026-08-26)
 
 Contra el doc del cliente ("Requisitos de módulos, distribución y verificación")

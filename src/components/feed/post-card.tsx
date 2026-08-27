@@ -76,13 +76,53 @@ function EntityKindChip({ kind }: { kind: string }) {
   );
 }
 
-/** Cabecera cuando el post es de una entidad: la entidad es el autor visual. */
+/**
+ * Cabecera cuando el post SE EMITIÓ como una entidad: la entidad es el autor, y
+ * es el único autor.
+ *
+ * ── POR QUÉ ACÁ NO VA "por {persona}" (cliente, captura del 2026-08-26) ─────
+ * «Cuando se publica con otro perfil, sacar la parte de por geovanny.» Es una
+ * fuga de privacidad, no un detalle de diseño: publicar como "Panadería La
+ * Esperanza" y que abajo diga el nombre y apellido de quien está detrás del
+ * mostrador expone a una persona que eligió NO aparecer.
+ *
+ * Antes de sacarlo había que contestar una pregunta que no es obvia: ¿`entity`
+ * significa siempre "publicado CON esta identidad", o puede ser un post que
+ * apenas MENCIONA una ficha ajena? Si fuera lo segundo, la autoría personal
+ * seguiría teniendo sentido. Se verificó en el modelo, y la respuesta es la
+ * primera, sin excepciones:
+ *
+ *   · `PostCardModel.entity` se resuelve en SEIS lugares —feed/load-more.ts,
+ *     feed/post-sheet-actions.ts, feed/[id]/page.tsx, videos/queries.ts,
+ *     lib/profesionales/entity-posts.ts y lib/negocios/publicaciones.ts— y en
+ *     los seis sale de `posts.entity_listing_id` vía `fetchEntityViews`. No hay
+ *     ningún otro camino que lo llene.
+ *   · Y `posts.entity_listing_id` ES la firma: la 0023 lo define como «a nombre
+ *     de quién sale una publicación» y su policy `posts_insert` exige que la
+ *     ficha sea PROPIA y esté PUBLICADA; la 0116 lo repite para `comments` y la
+ *     0117 para me gusta, comentarios de avisos y reseñas, con el mismo
+ *     predicado copiado literal. No existe una columna de "post que referencia
+ *     una ficha ajena" — mencionar un negocio se hace con texto.
+ *
+ * Entonces `entity != null` ⇒ la publicación SALIÓ con esa cara ⇒ el nombre
+ * personal no se muestra. El día que exista una publicación que referencie una
+ * ficha que no es su firma, va a llegar por una columna NUEVA y con su propia
+ * decisión de qué mostrar: no se puede reusar esta.
+ *
+ * Lo que NO cambia: la publicación sigue teniendo `postMenu.authorId`, así que
+ * reportar y moderar siguen sabiendo de quién es. Ocultar la autoría en la
+ * PANTALLA no es borrarla del sistema.
+ *
+ * Con la línea de "por…" fuera, el "hace 2 h" vuelve a su lugar natural —bajo
+ * el nombre, igual que en la cabecera de una persona— en vez de la línea suelta
+ * que se le había hecho debajo para no competir con ella.
+ */
 function EntityHeader({
   entity,
-  authorName,
+  timeAgoLabel,
 }: {
   entity: PostEntityView;
-  authorName: string;
+  timeAgoLabel: string;
 }) {
   const href = entityHref(entity.kind, entity.id);
   const title = (
@@ -103,9 +143,7 @@ function EntityHeader({
         )}
         <EntityKindChip kind={entity.kind} />
       </div>
-      <p className="mt-0.5 truncate text-xs text-foreground-muted">
-        {COPY.post.byAuthor(authorName)}
-      </p>
+      <p className="mt-0.5 text-xs text-foreground-muted">{timeAgoLabel}</p>
     </div>
   );
 }
@@ -206,9 +244,17 @@ export function PostCard({
     : null;
 
   const entity = post.entity;
-  // La entidad es el autor visual → avatar con las iniciales de la entidad.
+  /**
+   * La entidad es el autor visual → nombre y FOTO de la entidad.
+   *
+   * La foto sale de `entity.photoUrl` (la primera de su ficha, 0116) y NUNCA de
+   * `post.author.avatarUrl`: mostrar la cara de la persona arriba del nombre del
+   * negocio sería la misma fuga que la línea "por…" que se sacó acá arriba, sólo
+   * que en imagen. Sin foto en la ficha cae a la inicial de la entidad, que es
+   * lo que se veía hasta hoy.
+   */
   const avatarName = entity ? entity.title : post.author.displayName;
-  const avatarSrc = entity ? null : post.author.avatarUrl;
+  const avatarSrc = entity ? (entity.photoUrl ?? null) : post.author.avatarUrl;
 
   return (
     <article
@@ -263,7 +309,7 @@ export function PostCard({
             <header className="flex items-start gap-2.5">
               <Avatar size="sm" name={avatarName} src={avatarSrc} />
               {entity ? (
-                <EntityHeader entity={entity} authorName={post.author.displayName} />
+                <EntityHeader entity={entity} timeAgoLabel={post.timeAgoLabel} />
               ) : (
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -297,11 +343,6 @@ export function PostCard({
               )}
               {menu}
             </header>
-
-            {/* timeAgo del post de entidad: bajo la cabecera para no competir con "por…" */}
-            {entity && (
-              <p className="text-xs text-foreground-muted">{post.timeAgoLabel}</p>
-            )}
 
             {/* "con Ana y 2 más" (0060). Va acá y no bajo el cuerpo porque
                 pertenece a la CABECERA: es parte de quién está en la

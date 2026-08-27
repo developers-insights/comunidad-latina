@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MODULES } from "@/components/shell/modules";
 import { t } from "@/lib/i18n";
 import { COPY } from "./copy";
-import { FEED_TABS, type FeedTabId } from "./helpers";
+import { FEED_TABS, parseTab, type FeedTabId } from "./helpers";
 import { ModuleCircles, feedTabHref, moduleCircles, ringSpring } from "./module-circles";
 
 /**
@@ -13,8 +13,13 @@ import { ModuleCircles, feedTabHref, moduleCircles, ringSpring } from "./module-
  * note mirando la pantalla:
  *
  *  · que un módulo apagado desde /admin/dominio NO llegue a la fila;
- *  · que cada círculo lleve adonde dice su nombre (filtro vs. sección);
- *  · que el activo se marque por FORMA y no sólo por color;
+ *  · que cada círculo lleve a la MISMA ruta que su burbuja en /buscar — el
+ *    pedido del cliente del 2026-08-26 («que tengan las mismas funciones que en
+ *    el buscador») dicho de forma verificable— y que ninguno vuelva a filtrar el
+ *    feed con `?tab=`;
+ *  · que los `?tab=` sigan siendo rutas VÁLIDAS aunque ya no tengan puerta:
+ *    sacarles el círculo no puede romper un link que alguien compartió;
+ *  · que el marcado se distinga por FORMA y no sólo por color;
  *  · que la lista salga del registro de módulos y de la config del tenant, y
  *    nunca de una lista de nombres escrita a mano en el componente.
  */
@@ -34,14 +39,14 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-/** El anillo activo anima su salto; acá se testea la fila, no la animación. */
+/** El anillo anima su entrada; acá se testea la fila, no la animación. */
 vi.mock("motion/react", async () =>
   (await import("@/test/motion-mock")).motionMock(),
 );
 
 /**
  * jsdom no implementa scroll (no tiene layout). La fila trae a la vista el
- * círculo activo moviendo el `scrollLeft` de SU carril — comportamiento de
+ * círculo marcado moviendo el `scrollLeft` de SU carril — comportamiento de
  * navegador real, no lógica de este componente: se apaga acá.
  *
  * `scrollIntoView` sigue stubeado aunque la fila ya no lo use: si alguien lo
@@ -52,7 +57,6 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
   Element.prototype.scrollBy = vi.fn();
 });
-
 
 /** Comunidad recién sembrada: nadie decidió nada todavía. */
 const SIN_DECISIONES: Record<string, boolean> = {};
@@ -71,59 +75,74 @@ function hrefs() {
   return screen.getAllByRole("link").map((link) => link.getAttribute("href"));
 }
 
+/** El anillo del círculo marcado — la señal que sobrevive a escala de grises. */
+function anillo(link: HTMLElement) {
+  return link.querySelector(".rounded-full.pointer-events-none");
+}
+
 describe("moduleCircles (cómo se arma la fila)", () => {
   it("sale del registro de módulos, no de una lista escrita a mano", () => {
-    const { filters, sections } = moduleCircles(SIN_DECISIONES, SIN_DECISIONES);
     const registro = new Set(MODULES.map((item) => item.href));
-    for (const circle of [...filters, ...sections]) {
+    for (const circle of moduleCircles(SIN_DECISIONES, SIN_DECISIONES)) {
       expect(registro.has(circle.key), `${circle.key} no existe en MODULES`).toBe(true);
     }
   });
 
   /**
-   * ⚠️ "siguiendo" (0119) queda EXCLUIDO a propósito, y es una deuda anotada,
-   * no una decisión de diseño: esta fila sale del registro de MÓDULOS
-   * (secciones/verticales con su propio href), y "Siguiendo" no es una
-   * sección — es un segundo lente sobre el MISMO feed que "Todo", sin ruta
-   * propia en `MODULES`. Su puerta visual NO es un círculo: es el conmutador
-   * "Para ti | Siguiendo" (`feed-mode-toggle.tsx`), que aparece en los dos
-   * tabs sociales. Por eso este test excluye "siguiendo" del 1:1 con los
-   * círculos y el del conmutador cubre la entrada.
+   * EL PEDIDO DEL CLIENTE, EN UNA ASERCIÓN (2026-08-26): «que tengan las mismas
+   * funciones que en el buscador».
+   *
+   * "Las mismas funciones" se traduce a algo verificable: el destino de cada
+   * círculo tiene que ser EL MISMO `href` que /buscar le da a su burbuja para
+   * ese módulo, no una ruta parecida escrita al lado. Si mañana un módulo cambia
+   * de ruta, las dos superficies cambian juntas o esto se pone rojo.
    */
-  it("los tabs del feed QUE SON VERTICALES tienen su círculo — ninguno se queda sin puerta", () => {
-    const { filters } = moduleCircles(SIN_DECISIONES, SIN_DECISIONES);
-    const tabsConCirculoPropio = FEED_TABS.map((tab) => tab.id).filter(
-      (id) => id !== "siguiendo",
-    );
-    expect(filters.map((circle) => circle.tab).sort()).toEqual(
-      tabsConCirculoPropio.sort(),
-    );
+  it("cada círculo lleva a la MISMA ruta que su burbuja en /buscar", () => {
+    const rutaEnElRegistro = new Map(MODULES.map((item) => [item.href, item.href]));
+    for (const circle of moduleCircles(SIN_DECISIONES, SIN_DECISIONES)) {
+      expect(circle.href).toBe(rutaEnElRegistro.get(circle.key));
+    }
   });
 
-  it("los módulos sin tab van al grupo de secciones, con su ruta propia", () => {
-    const { sections } = moduleCircles(SIN_DECISIONES, SIN_DECISIONES);
-    expect(sections.map((circle) => circle.href)).toEqual([
-      "/empleos",
-      "/marketplace",
-      "/creadores",
-      "/comunidad",
-    ]);
+  /**
+   * La otra mitad del mismo pedido, dicha en negativo — y es la que atrapa una
+   * vuelta atrás sin querer. Un `?tab=` acá significa que dos círculos con el
+   * mismo nombre y el mismo ícono (éste y el de /buscar) volvieron a entregar
+   * cosas distintas, que es exactamente lo que el cliente señaló.
+   */
+  it("ningún círculo filtra el feed: se acabaron los `?tab=`", () => {
+    for (const circle of moduleCircles(SIN_DECISIONES, SIN_DECISIONES)) {
+      expect(circle.href).not.toContain("?tab=");
+    }
+  });
+
+  /**
+   * El otro sentido del contrato: los tabs del feed siguen EXISTIENDO aunque
+   * ningún círculo los abra. Un link viejo —compartido por WhatsApp, guardado,
+   * indexado— tiene que seguir mostrando lo mismo. Lo que se sacó es la puerta
+   * visual, no la ruta.
+   */
+  it("los tabs del feed siguen siendo válidos aunque ya no tengan círculo", () => {
+    for (const tab of FEED_TABS) {
+      expect(parseTab(tab.id)).toBe(tab.id);
+    }
+  });
+
+  it("el feed es el único círculo que puede decir 'estás acá'", () => {
+    const circles = moduleCircles(SIN_DECISIONES, SIN_DECISIONES);
+    expect(
+      circles.filter((circle) => circle.esElFeed).map((circle) => circle.href),
+    ).toEqual(["/feed"]);
   });
 
   it("Videos no ocupa lugar: ya es una pestaña del bottom nav", () => {
-    const { filters, sections } = moduleCircles(SIN_DECISIONES, SIN_DECISIONES);
-    expect([...filters, ...sections].map((circle) => circle.key)).not.toContain("/videos");
+    const circles = moduleCircles(SIN_DECISIONES, SIN_DECISIONES);
+    expect(circles.map((circle) => circle.key)).not.toContain("/videos");
   });
 
-  it("un módulo en 'muy pronto' deja de filtrar el feed y apunta a su sección", () => {
-    // Filtrar el feed por una vertical que todavía no abrió muestra una lista
-    // vacía sin explicar nada; su ruta, en cambio, tiene la pantalla que avisa.
-    const { filters, sections } = moduleCircles(
-      { eventos: false },
-      { eventos: true },
-    );
-    expect(filters.map((circle) => circle.tab)).not.toContain("eventos");
-    const eventos = sections.find((circle) => circle.key === "/eventos");
+  it("un módulo en 'muy pronto' se ve, lleva a su ruta y trae su estado", () => {
+    const circles = moduleCircles({ eventos: false }, { eventos: true });
+    const eventos = circles.find((circle) => circle.key === "/eventos");
     expect(eventos?.href).toBe("/eventos");
     expect(eventos?.state).toBe("soon");
   });
@@ -134,37 +153,35 @@ describe("ModuleCircles", () => {
 
   /**
    * REGRESIÓN (cliente 2026-08-20): "una barrita del color del tema que viene
-   * desde abajo del todo" al clickear un filtro en la compu.
+   * desde abajo del todo" al clickear un círculo en la compu.
    *
    * No era el anillo. La fila llamaba `scrollIntoView({ block: "nearest" })`,
    * que mira también el eje VERTICAL y pegaba un salto de PÁGINA cuando la fila
    * había quedado fuera de vista (o sea, cada vez que alguien venía scrolleando
-   * el feed). El anillo del módulo activo se anima con `layoutId` —midiendo la
-   * posición antes y después—, así que ese salto entraba en la medición y lo
-   * hacía cruzar la pantalla en diagonal.
+   * el feed). El anillo se anima con `layoutId` —midiendo la posición antes y
+   * después—, así que ese salto entraba en la medición y lo hacía cruzar la
+   * pantalla en diagonal.
    *
-   * Lo que se fija acá es la causa, no el síntoma: al montar la fila con un
-   * filtro elegido no se llama NADA que pueda mover el scroll vertical del
-   * documento. El ajuste horizontal se hace sobre el `scrollLeft` del carril,
-   * que no puede tocar la página.
+   * Lo que se fija acá es la causa, no el síntoma: montar la fila no llama NADA
+   * que pueda mover el scroll vertical del documento.
    */
-  it("traer a la vista el filtro elegido NO puede mover la página en vertical", () => {
+  it("traer a la vista el círculo marcado NO puede mover la página en vertical", () => {
     const intoView = vi.fn();
     Element.prototype.scrollIntoView = intoView;
 
-    renderRow("negocios");
+    renderRow("para-ti");
 
     expect(intoView).not.toHaveBeenCalled();
   });
 
-  it("cada círculo lleva adonde promete su nombre", () => {
+  it("cada círculo lleva adonde promete su nombre — a su sección, como en /buscar", () => {
     renderRow();
     expect(hrefs()).toEqual([
       "/feed",
-      "/feed?tab=propiedades",
-      "/feed?tab=eventos",
-      "/feed?tab=negocios",
-      "/feed?tab=profesionales",
+      "/propiedades",
+      "/eventos",
+      "/negocios",
+      "/profesionales",
       "/empleos",
       "/marketplace",
       "/creadores",
@@ -180,41 +197,55 @@ describe("ModuleCircles", () => {
     expect(screen.getByRole("link", { name: COPY.modules.paraTi })).toBeTruthy();
   });
 
-  it("son dos grupos con nombre: los que filtran acá y los que te llevan afuera", () => {
+  /**
+   * Los dos grupos y el hairline se fueron con el pedido del cliente: ya no hay
+   * dos clases de círculo que distinguir, así que anunciar dos listas sería
+   * describirle a quien escucha una diferencia que no existe.
+   */
+  it("es UNA sola fila, con un solo nombre accesible", () => {
     renderRow();
-    const listas = screen.getAllByRole("list");
-    expect(listas.map((lista) => lista.getAttribute("aria-label"))).toEqual([
-      COPY.modules.filtersLabel,
-      COPY.modules.sectionsLabel,
-    ]);
+    expect(screen.getAllByRole("list")).toHaveLength(1);
     expect(screen.getByRole("navigation").getAttribute("aria-label")).toBe(
       COPY.modules.ariaLabel,
     );
   });
 
-  it("marca aria-current='page' en el filtro vigente, y en uno solo", () => {
-    renderRow("negocios");
+  it("marca aria-current='page' en el feed, y en uno solo", () => {
+    renderRow("para-ti");
     const marcados = screen
       .getAllByRole("link")
       .filter((link) => link.getAttribute("aria-current") === "page");
     expect(marcados).toHaveLength(1);
-    expect(marcados[0]?.getAttribute("href")).toBe("/feed?tab=negocios");
+    expect(marcados[0]?.getAttribute("href")).toBe("/feed");
   });
 
-  it("el activo se distingue por forma, no sólo por color", () => {
-    renderRow("eventos");
-    const activo = screen.getByRole("link", { name: "Eventos" });
+  /**
+   * "Siguiendo" es el mismo feed visto con otro lente: el círculo sigue MARCADO
+   * (estás en el feed) pero la URL no es `/feed` pelada, así que `aria-current`
+   * —que afirma "esta ES la página"— no se puede poner. La distinción entre las
+   * dos señales ya existía en el componente y acá queda anclada.
+   */
+  it("en 'Siguiendo' el círculo del feed se marca, pero no dice ser la página", () => {
+    renderRow("siguiendo");
+    const feed = screen.getByRole("link", { name: COPY.modules.paraTi });
+    expect(feed.getAttribute("aria-current")).toBeNull();
+    expect(anillo(feed)).not.toBeNull();
+  });
+
+  it("el marcado se distingue por forma, no sólo por color", () => {
+    renderRow("para-ti");
+    const activo = screen.getByRole("link", { name: COPY.modules.paraTi });
     // El anillo (span extra dentro del enlace) y el peso del nombre: las dos
     // señales sobreviven a una pantalla en escala de grises.
-    expect(activo.querySelector(".rounded-full.pointer-events-none")).not.toBeNull();
-    expect(activo.textContent).toBe("Eventos");
+    expect(anillo(activo)).not.toBeNull();
     expect(activo.innerHTML).toContain("font-semibold");
   });
 
-  it("ninguna sección se marca activa: no son el estado de esta pantalla", () => {
+  it("ninguna sección se marca: no son el estado de esta pantalla", () => {
     renderRow("para-ti");
     const empleos = screen.getByRole("link", { name: t("nav", "moduleEmpleos") });
     expect(empleos.getAttribute("aria-current")).toBeNull();
+    expect(anillo(empleos)).toBeNull();
   });
 
   it("un módulo apagado desde el panel no aparece", () => {
@@ -224,9 +255,9 @@ describe("ModuleCircles", () => {
     expect(screen.queryByRole("link", { name: t("nav", "moduleMarketplace") })).toBeNull();
   });
 
-  it("apagar una vertical con tab le saca el círculo, no sólo el contenido", () => {
+  it("apagar una vertical le saca el círculo, no sólo el contenido", () => {
     renderRow("para-ti", { eventos: false }, {});
-    expect(hrefs()).not.toContain("/feed?tab=eventos");
+    expect(hrefs()).not.toContain("/eventos");
   });
 
   it("un módulo en 'muy pronto' se ve, lo dice con texto y sigue siendo enlace", () => {
@@ -240,31 +271,28 @@ describe("ModuleCircles", () => {
     expect(marketplace.textContent).toContain(t("nav", "moduleSoonBadge"));
   });
 
-  it("sin módulos que lleven afuera, no hay segundo grupo ni separador", () => {
-    renderRow(
-      "para-ti",
-      { empleos: false, marketplace: false, creadores: false, comunidad: false },
-      {},
-    );
-    expect(screen.getAllByRole("list")).toHaveLength(1);
-  });
-
   it("con la config vacía (DB caída / comunidad nueva) la fila sale entera", () => {
     // Ausente = activo: un hueco de configuración no puede parecerse a una
     // decisión de producto (ver shell/module-access.ts).
     renderRow("para-ti", null, null);
-    // 9 = 5 que filtran el feed + 4 que llevan afuera (Empleos, Marketplace,
-    // Influencers, Comunidad). Videos queda afuera: ya es pestaña del bottom nav.
+    // 9 = los diez módulos del registro menos Videos, que ya es pestaña del
+    // bottom nav.
     expect(screen.getAllByRole("link")).toHaveLength(9);
   });
 });
 
+/**
+ * `feedTabHref` ya no la usa la fila (ningún círculo filtra), pero los `?tab=`
+ * siguen existiendo como rutas y esta función sigue siendo dónde está escrita su
+ * forma. El test se queda por eso: si alguien le cambia la forma, se entera acá
+ * y no cuando un link viejo deja de abrir lo que prometía.
+ */
 describe("feedTabHref", () => {
   it("el feed sin filtrar no arrastra query", () => {
     expect(feedTabHref("para-ti")).toBe("/feed");
   });
 
-  it("los demás filtros viven en la URL, como antes", () => {
+  it("los demás tabs viven en la URL, como siempre", () => {
     expect(feedTabHref("propiedades")).toBe("/feed?tab=propiedades");
   });
 });
