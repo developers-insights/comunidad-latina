@@ -8,6 +8,7 @@ import { isStripeConfigured } from "@/lib/config/services";
 import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { BOOST_PACKAGES, getStripe } from "@/lib/stripe";
+import { crearCheckoutSession } from "@/lib/stripe/checkout";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -194,7 +195,7 @@ export async function crearBoostCheckout(
     // comunidad; antes del go-live real, migrar a Prices del dashboard.
     const stripe = getStripe();
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-    const session = await stripe.checkout.sessions.create({
+    const session = await crearCheckoutSession({
       mode: "payment",
       customer_email: user.email,
       line_items: [

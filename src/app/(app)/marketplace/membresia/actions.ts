@@ -5,6 +5,7 @@ import { isStripeConfigured } from "@/lib/config/services";
 import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
+import { crearCheckoutSession } from "@/lib/stripe/checkout";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { COPY } from "@/components/marketplace/copy";
 
@@ -121,7 +122,6 @@ export async function activarMembresiaTienda(input: unknown): Promise<MembresiaR
       .eq("store_id", storeId)
       .maybeSingle();
 
-    const stripe = getStripe();
     const base = siteUrl();
     const metadata = {
       tenant_id: tenant.id,
@@ -136,7 +136,7 @@ export async function activarMembresiaTienda(input: unknown): Promise<MembresiaR
       price_currency: precio.currency,
     };
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await crearCheckoutSession({
       mode: "subscription",
       ...(existing?.stripe_customer_id
         ? { customer: existing.stripe_customer_id }

@@ -7,6 +7,7 @@ import { createNotification } from "@/lib/notifications/notify";
 import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { POST_PROMO_PACKAGES, getStripe } from "@/lib/stripe";
+import { crearCheckoutSession } from "@/lib/stripe/checkout";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/types/database.types";
 import { requireTenantMatch } from "@/lib/tenant/guard";
@@ -284,7 +285,7 @@ export async function crearCampanaPost(
     //    que el boost: el mismo entero que quedó en la fila viaja a Stripe).
     const stripe = getStripe();
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-    const session = await stripe.checkout.sessions.create({
+    const session = await crearCheckoutSession({
       mode: "payment",
       customer_email: user.email,
       line_items: [

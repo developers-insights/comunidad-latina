@@ -12,6 +12,7 @@ import { LISTING_PREMIUM_KIND } from "@/lib/monetization/premium-webhook";
 import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
+import { crearCheckoutSession } from "@/lib/stripe/checkout";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 
 /**
@@ -137,7 +138,6 @@ export async function activarPremiumAviso(input: unknown): Promise<PremiumResult
   }
 
   try {
-    const stripe = getStripe();
     const base = siteUrl();
     const metadata = {
       tenant_id: tenant.id,
@@ -152,7 +152,7 @@ export async function activarPremiumAviso(input: unknown): Promise<PremiumResult
       price_currency: precio.currency,
     };
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await crearCheckoutSession({
       mode: "subscription",
       ...(existing?.stripe_customer_id
         ? { customer: existing.stripe_customer_id }

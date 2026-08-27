@@ -5,6 +5,7 @@ import { isStripeConfigured } from "@/lib/config/services";
 import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
+import { crearCheckoutSession } from "@/lib/stripe/checkout";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import {
@@ -159,7 +160,6 @@ export async function activarCheckAzul(input: unknown): Promise<VerificacionResu
   }
 
   try {
-    const stripe = getStripe();
     const base = siteUrl();
     const metadata = {
       tenant_id: tenant.id,
@@ -174,7 +174,7 @@ export async function activarCheckAzul(input: unknown): Promise<VerificacionResu
       price_currency: precio.currency,
     };
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await crearCheckoutSession({
       mode: "subscription",
       // Si ya hubo una suscripción, se reusa su customer para que el historial
       // de facturación de la persona no se parta en dos.

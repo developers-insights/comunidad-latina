@@ -4,7 +4,8 @@ import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
 import { getIdentidadActiva } from "@/lib/perfil-activo/identidad";
 import { getPrice } from "@/lib/pricing/read";
-import { getStripe, PLANES_PRESENCIA } from "@/lib/stripe";
+import { PLANES_PRESENCIA } from "@/lib/stripe";
+import { crearCheckoutSession } from "@/lib/stripe/checkout";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getTenant } from "@/lib/tenant/resolve";
 
@@ -162,7 +163,6 @@ export async function iniciarSuscripcion(
       businessAccountId = created.id;
     }
 
-    const stripe = getStripe();
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
     const metadata = {
       tenant_id: tenant.id,
@@ -184,7 +184,7 @@ export async function iniciarSuscripcion(
       price_currency: precio.currency,
     };
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await crearCheckoutSession({
       mode: "subscription",
       // Si ya es customer, reusar; si no, Stripe crea uno con el email.
       ...(existing?.stripe_customer_id
