@@ -37,6 +37,7 @@ interface FilaRpc {
   listing_id: string | null;
   rol: string;
   es_propietario: boolean;
+  verificada: boolean;
 }
 
 function fila(overrides: Partial<FilaRpc> = {}): FilaRpc {
@@ -47,6 +48,7 @@ function fila(overrides: Partial<FilaRpc> = {}): FilaRpc {
     listing_id: null,
     rol: "propietario",
     es_propietario: true,
+    verificada: false,
     ...overrides,
   };
 }
@@ -141,6 +143,36 @@ describe("listarIdentidadesDeNegocio", () => {
     expect(identidades[0].businessId).toBe(PANADERIA);
   });
 
+  it("trae la verificación de CADA negocio, sin una consulta por fila", async () => {
+    // La columna la agrega la 0121 a `identidades_disponibles()`. Sale de ahí y
+    // no de una lectura aparte porque el cambiador se pinta en cada navegación:
+    // preguntarla por negocio sería un N+1 en el header.
+    montar({
+      membresias: [
+        fila({ verificada: true }),
+        fila({ business_id: "019fa477-58e6-7ab9-ae4f-cc41716f6499", verificada: false }),
+      ],
+    });
+
+    const identidades = await listarIdentidadesDeNegocio();
+
+    expect(identidades.map((identidad) => identidad.verificada)).toEqual([true, false]);
+  });
+
+  it("una base SIN la 0121 no devuelve la columna: eso NO es 'verificado'", async () => {
+    // De los dos errores posibles, no pintar la insignia es invisible y
+    // pintarla de más es una afirmación falsa sobre alguien.
+    const supabase = montar({});
+    supabase.rpc.mockResolvedValue({
+      data: [{ ...fila(), verificada: undefined }],
+      error: null,
+    } as never);
+
+    const identidades = await listarIdentidadesDeNegocio();
+
+    expect(identidades[0].verificada).toBe(false);
+  });
+
   it("un error de la RPC devuelve lista vacía, no una excepción", async () => {
     const supabase = montar({});
     supabase.rpc.mockResolvedValue({ data: null, error: { message: "boom" } } as never);
@@ -162,6 +194,7 @@ describe("puedePublicar", () => {
           avatarUrl: null,
           rol: rol as never,
           esPropietario: false,
+          verificada: false,
         },
       });
 

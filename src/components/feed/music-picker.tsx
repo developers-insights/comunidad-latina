@@ -420,36 +420,43 @@ function MusicSheet({
             {MUSIC_COPY.trimLabel}
           </label>
           <p className="mt-0.5 text-xs text-foreground-secondary">
-            {MUSIC_COPY.trimHint(MUSIC_CLIP_SECONDS)}
+            {max === 0
+              ? MUSIC_COPY.trimWholeTrack(MUSIC_CLIP_SECONDS)
+              : MUSIC_COPY.trimHint(MUSIC_CLIP_SECONDS)}
           </p>
-          <input
-            id={trimId}
-            type="range"
-            min={0}
-            max={max}
-            step={1}
-            value={Math.min(draftStart, max)}
-            disabled={max === 0}
-            onChange={(event) => moveTrim(Number(event.target.value))}
-            // El lector de pantalla anuncia el TRAMO, no un número suelto: "45"
-            // no significa nada, "De 0:45 a 1:15" sí.
-            aria-valuetext={MUSIC_COPY.trimValueText(
-              formatClock(draftStart),
-              formatClock(clipEndSeconds(draftStart, draft.durationSeconds)),
-            )}
-            aria-label={MUSIC_COPY.trimSliderLabel}
-            className={cn(
-              // `h-11` es el blanco táctil; la barra visible la dibuja el track.
-              "mt-2 h-11 w-full cursor-pointer appearance-none bg-transparent",
-              "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-              "disabled:cursor-not-allowed disabled:opacity-45",
-              "[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-surface-subtle",
-              "[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-surface-subtle",
-              "[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:-mt-[7px] [&::-webkit-slider-thumb]:size-5",
-              "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-brand [&::-webkit-slider-thumb]:shadow-xs",
-              "[&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-brand",
-            )}
-          />
+          {/* SIN DESLIZADOR CUANDO NO HAY NADA QUE ELEGIR. Con una pista más
+              corta que el recorte, `maxStartSeconds` da 0 y el control quedaba
+              a la vista pero apagado: un deslizador deshabilitado y sin motivo
+              se lee como algo roto. La línea de arriba explica qué pasa y acá
+              no se pinta nada. */}
+          {max > 0 && (
+            <input
+              id={trimId}
+              type="range"
+              min={0}
+              max={max}
+              step={1}
+              value={Math.min(draftStart, max)}
+              onChange={(event) => moveTrim(Number(event.target.value))}
+              // El lector de pantalla anuncia el TRAMO, no un número suelto: "45"
+              // no significa nada, "De 0:45 a 1:15" sí.
+              aria-valuetext={MUSIC_COPY.trimValueText(
+                formatClock(draftStart),
+                formatClock(clipEndSeconds(draftStart, draft.durationSeconds)),
+              )}
+              aria-label={MUSIC_COPY.trimSliderLabel}
+              className={cn(
+                // `h-11` es el blanco táctil; la barra visible la dibuja el track.
+                "mt-2 h-11 w-full cursor-pointer appearance-none bg-transparent",
+                "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+                "[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-surface-subtle",
+                "[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-surface-subtle",
+                "[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:-mt-[7px] [&::-webkit-slider-thumb]:size-5",
+                "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-brand [&::-webkit-slider-thumb]:shadow-xs",
+                "[&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-brand",
+              )}
+            />
+          )}
           <p className="text-xs font-medium tabular-nums text-foreground-secondary">
             {MUSIC_COPY.trimValueText(
               formatClock(draftStart),

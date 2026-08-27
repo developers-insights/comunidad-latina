@@ -4,6 +4,7 @@ import { ArrowLeft, Lifebuoy } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import {
   ComunidadHeading,
+  OfrecerEnTema,
   OrigenNota,
   RecursoCard,
   RecursosSkeleton,
@@ -12,12 +13,13 @@ import {
   COMUNIDAD_COPY,
   RESOURCE_TOPIC_HINT,
   RESOURCE_TOPIC_LABEL,
+  isHelpTopic,
   isResourceTopic,
   type ResourceGroup,
   type ResourceTopic,
 } from "@/lib/comunidad";
 import { getTenant } from "@/lib/tenant/resolve";
-import { fetchResourceGroups } from "../queries";
+import { countOffersByResource, fetchResourceGroups } from "../queries";
 
 export const metadata = { title: "Dónde pedir ayuda" };
 
@@ -99,6 +101,21 @@ async function Grupos({ topic }: { topic: ResourceTopic | null }) {
   const grupos = await fetchResourceGroups(tenant.id);
   const visibles = topic ? grupos.filter((grupo) => grupo.topic === topic) : grupos;
 
+  /**
+   * Cuántas personas ya se ofrecieron en cada ficha (0120), en UNA consulta
+   * para toda la pantalla y sólo sobre los temas que aceptan avisos — pedir el
+   * conteo de una clínica sería traer filas que nunca van a existir.
+   *
+   * Va DESPUÉS del listado y no en paralelo a propósito: necesita los ids que
+   * devuelve la primera consulta. Si falla (o si quien mira no tiene sesión,
+   * que es lo más común porque el tablón pide cuenta) vuelve un Map vacío y las
+   * fichas simplemente no muestran contador.
+   */
+  const idsConTablon = visibles
+    .filter((grupo) => isHelpTopic(grupo.topic))
+    .flatMap((grupo) => grupo.resources.map((recurso) => recurso.id));
+  const ofrecimientos = await countOffersByResource(tenant.id, idsConTablon);
+
   if (visibles.length === 0) {
     const vacioDeTema = topic && topicEmptyCopy(topic);
     if (vacioDeTema) {
@@ -141,13 +158,19 @@ async function Grupos({ topic }: { topic: ResourceTopic | null }) {
   return (
     <div className="mt-8 space-y-10">
       {visibles.map((grupo) => (
-        <GrupoDeRecursos key={grupo.topic} grupo={grupo} />
+        <GrupoDeRecursos key={grupo.topic} grupo={grupo} ofrecimientos={ofrecimientos} />
       ))}
     </div>
   );
 }
 
-function GrupoDeRecursos({ grupo }: { grupo: ResourceGroup }) {
+function GrupoDeRecursos({
+  grupo,
+  ofrecimientos,
+}: {
+  grupo: ResourceGroup;
+  ofrecimientos: ReadonlyMap<string, number>;
+}) {
   return (
     <section aria-labelledby={`tema-${grupo.topic}`}>
       <header className="mb-3">
@@ -160,6 +183,13 @@ function GrupoDeRecursos({ grupo }: { grupo: ResourceGroup }) {
         <p className="mt-0.5 text-sm text-foreground-muted">
           {RESOURCE_TOPIC_HINT[grupo.topic]}
         </p>
+
+        {/* Las dos puertas del tema (0120): ofrecerse y pedir manos. Van en la
+            CABECERA del grupo y no dentro de cada ficha porque no dependen de
+            un lugar puntual — quien quiere ayudar "con comida" sin tener un
+            comedor en la cabeza entra por acá. `<OfrecerEnTema>` no dibuja nada
+            en los temas que no aceptan avisos. */}
+        <OfrecerEnTema topic={grupo.topic} className="mt-3" />
       </header>
 
       {/* Una ficha por fila en el celular: tienen mucha información y tres
@@ -167,7 +197,11 @@ function GrupoDeRecursos({ grupo }: { grupo: ResourceGroup }) {
           `sm`, donde el shell ya deja ancho suficiente. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {grupo.resources.map((recurso) => (
-          <RecursoCard key={recurso.id} recurso={recurso} />
+          <RecursoCard
+            key={recurso.id}
+            recurso={recurso}
+            ofrecimientos={ofrecimientos.get(recurso.id)}
+          />
         ))}
       </div>
     </section>

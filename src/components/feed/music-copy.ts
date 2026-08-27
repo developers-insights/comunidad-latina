@@ -44,6 +44,14 @@ export const MUSIC_COPY = {
   trimLabel: "¿Desde qué parte de la canción?",
   /** Ayuda del control: cuánto se publica, dicho en segundos redondos. */
   trimHint: (clipSeconds: number) => `Se publican ${clipSeconds} segundos`,
+  /**
+   * PISTA MÁS CORTA QUE EL RECORTE. Ahí no hay nada que elegir —la canción
+   * entra entera— y el deslizador quedaba a la vista, apagado, sin decir por
+   * qué. Un control deshabilitado sin explicación se lee como algo roto: ahora
+   * se muestra esta línea en su lugar.
+   */
+  trimWholeTrack: (clipSeconds: number) =>
+    `Esta canción dura menos de ${clipSeconds} segundos: se publica entera.`,
   /** Etiqueta accesible del deslizador. */
   trimSliderLabel: "Segundo en el que arranca la música",
   /** Texto del valor actual: "Desde 0:45". */

@@ -277,3 +277,71 @@ describe("VideoReels — la puerta no saca del video", () => {
     expect(await screen.findByRole("button", { name: VIDEOS_COPY.unsave })).toBeTruthy();
   });
 });
+
+/**
+ * =============================================================================
+ * UN VIDEO FIRMADO POR UN NEGOCIO NO DELATA A LA PERSONA
+ * =============================================================================
+ *
+ * Misma regla y mismo pedido del cliente que en la tarjeta del feed (ver
+ * `components/feed/post-card.test.tsx`): «cuando se publica con otro perfil,
+ * sacar la parte de por geovanny». El reel llevaba la misma línea, y es la
+ * superficie de MÁS alcance de la app — acá una fuga se ve más que en ningún
+ * otro lado.
+ *
+ * `post.entity` sale siempre de `posts.entity_listing_id`, o sea de la FIRMA
+ * (0023): si está, el video se emitió con la cara del negocio.
+ */
+describe("VideoReels — la firma del negocio no delata a la persona", () => {
+  const NEGOCIO = {
+    id: "019fa477-58e6-7ab9-ae4f-cc41716f6421",
+    title: "Panadería La esperanza",
+    kind: "business",
+    photoUrl: null,
+  };
+
+  /**
+   * El reel se dibuja en un PORTAL a `<body>` (ver el comentario de
+   * `createPortal` en video-reels.tsx), así que el `container` que devuelve
+   * `render` queda vacío: lo que hay que leer es el documento. Sin esto, un test
+   * que busque el nombre en `container` pasa siempre —incluso con la fuga
+   * puesta— y no protege nada.
+   */
+  const textoEnPantalla = () => document.body.textContent ?? "";
+
+  function montar(entity: PostCardModel["entity"]) {
+    return render(
+      <AuthSheetProvider>
+        <VideoReels
+          tenantId="tenant-1"
+          viewerId={null}
+          scope="para-ti"
+          initialItems={[{ ...VIDEO, entity }]}
+          initialCursor={null}
+        />
+      </AuthSheetProvider>,
+    );
+  }
+
+  it("no imprime el nombre personal de quien subió el video", () => {
+    montar(NEGOCIO);
+
+    expect(textoEnPantalla()).not.toContain(VIDEO.author.displayName);
+    // La frase exacta que el cliente señaló, no un "por " suelto: el copy de
+    // fin de scroll ("Viste todos los videos POR ahora") lo contiene y haría
+    // fallar el test por el motivo equivocado.
+    expect(textoEnPantalla()).not.toContain(`por ${VIDEO.author.displayName}`);
+  });
+
+  it("muestra el nombre del negocio como autor del video", () => {
+    montar(NEGOCIO);
+
+    expect(textoEnPantalla()).toContain(NEGOCIO.title);
+  });
+
+  it("sin firma, la autoría personal sigue entera", () => {
+    montar(null);
+
+    expect(textoEnPantalla()).toContain(VIDEO.author.displayName);
+  });
+});

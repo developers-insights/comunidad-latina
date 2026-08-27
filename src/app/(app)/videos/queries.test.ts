@@ -123,4 +123,41 @@ describe("fetchVideoReelsPage — scope por módulo", () => {
     expect(eqArgs).toContainEqual(["status", "published"]);
     expect(eqArgs).toContainEqual(["tenant_id", "tenant-1"]);
   });
+
+  /**
+   * «QUE SEA SOLO VIDEOS» (cliente, 2026-08-26).
+   *
+   * `video_type = 'short_video'` dice que la publicación se DECLARÓ un corto, no
+   * que hoy haya algo reproducible. Desde que el video se sube por Mux (0116) el
+   * post nace con `video_type` puesto y `mux_status` en `uploading`/`processing`,
+   * y un `errored` no llega nunca a tener archivo. Esas filas pasaban el filtro
+   * de la base y las descartaba `canEnterReel` en memoria: se pagaba traerlas y
+   * cada una comía un lugar de la barrida, así que una tanda de subidas en curso
+   * podía devolver una página corta o vacía y hacer ver el reel como "no hay
+   * más".
+   *
+   * El predicado no se puede escribir entero en PostgREST —`posts.media` es
+   * text[] sin columna de tipo y el kind se infiere por extensión— pero la MITAD
+   * de Mux sí, y las dos rutas del video son excluyentes. Este test fija esa
+   * mitad; el resto lo sigue resolviendo `hasVideoMedia`.
+   */
+  it("no trae videos que todavía no se pueden reproducir (Mux en curso o fallado)", async () => {
+    const stub = createStub();
+
+    await fetchPage(stub, "para-ti");
+
+    expect(stub.argsOf("posts", "or").map(([filtro]) => filtro)).toContainEqual(
+      "mux_status.is.null,mux_status.eq.ready",
+    );
+  });
+
+  it("el mismo filtro corre también con scope de módulo", async () => {
+    const stub = createStub();
+
+    await fetchPage(stub, "negocios");
+
+    expect(stub.argsOf("posts", "or").map(([filtro]) => filtro)).toContainEqual(
+      "mux_status.is.null,mux_status.eq.ready",
+    );
+  });
 });

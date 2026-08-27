@@ -80,6 +80,18 @@ import {
   MAX_PICKED_PHOTO_BYTES,
   checkPhotoPayload,
 } from "@/lib/media/post-media-limits";
+/**
+ * FORMATOS DE FOTO: importados, nunca escritos acá — mismo criterio que el
+ * cupo. Este archivo tenía su propia lista de tres MIME (jpeg/png/webp) y por
+ * eso HEIC —el default de cualquier iPhone— rebotaba antes de llegar a nada.
+ * El porqué del camino elegido está en el docblock de `photo-input.ts`.
+ */
+import {
+  PHOTO_FILE_ACCEPT,
+  checkPickedPhoto,
+  probePhotoDecodable,
+  type PhotoInputRejection,
+} from "@/lib/media/photo-input";
 import { ComposerSheet, type ComposerMode } from "./composer-sheet";
 import {
   DEFAULT_PHOTO_FILTER_ID,
@@ -101,7 +113,6 @@ import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { ArrowRight, X } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 
-const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 /**
  * FORMATO Y PESO DE VIDEO: importados de `@/lib/media/video-upload-limits`,
  * nunca escritos acá. Antes este archivo declaraba su propio mapa MIME→
@@ -547,32 +558,55 @@ export function PostComposerHost({
 
   /**
    * Lee el FileList VIVO del input de fotos de forma SÍNCRONA (gotcha de
-   * arriba) y agrega hasta completar el cupo de {@link MAX_PHOTOS}, validando tipo y peso.
+   * arriba) y agrega hasta completar el cupo de {@link MAX_PHOTOS}, validando
+   * tipo, peso y —desde el 2026-08-26— que el navegador PUEDA ABRIR el archivo.
    * Elegido al menos un archivo, se abre la hoja de texto: la foto y su pie
    * pasan a ser un solo paso.
+   *
+   * ES ASÍNCRONA POR LA TERCERA PRUEBA, y el orden importa: tipo y peso son
+   * instantáneos y no gastan memoria, así que van primero; decodificar es lo
+   * caro y sólo se hace sobre lo que ya pasó las otras dos. El FileList se lee
+   * en la PRIMERA línea, antes de cualquier `await`: `input.value = ""` lo
+   * vacía, y leerlo después de un await devolvería una lista vacía (mismo
+   * gotcha que documenta `selectVideo`).
+   *
+   * POR QUÉ SE DECODIFICA ACÁ Y NO AL PUBLICAR: un HEIC que este navegador no
+   * sabe abrir (Chrome en Android, con una foto que llegó de un iPhone) pasaba
+   * la puerta del tipo, moría adentro de `bakePhoto` —que devuelve el original
+   * cuando no puede hornear— y terminaba rechazado por el servidor con un
+   * código genérico, después de escribir el pie y tocar Publicar. Enterarse en
+   * el momento de elegir, y con el motivo real, es la diferencia entre "probá
+   * con otra" y "no se pudo publicar" sobre una foto que se ve perfecta en la
+   * galería.
    */
-  function selectPhotos(input: HTMLInputElement) {
+  async function selectPhotos(input: HTMLInputElement) {
     const files = Array.from(input.files ?? []);
     input.value = "";
     if (files.length === 0) return;
 
     const accepted: PickedMedia[] = [];
     let photoCount = photos.length;
-    let rejectedType = false;
-    let rejectedSize = false;
     let rejectedLimit = false;
+    /** El PRIMER motivo de rechazo. Un solo aviso, el más útil: una ráfaga de
+     *  cuatro toasts al elegir cinco fotos no la lee nadie. */
+    let rejection: PhotoInputRejection | null = null;
+    const note = (reason: PhotoInputRejection) => {
+      if (!rejection) rejection = reason;
+    };
 
     for (const file of files) {
       if (photoCount >= MAX_PHOTOS) {
         rejectedLimit = true;
         break;
       }
-      if (!PHOTO_TYPES.includes(file.type)) {
-        rejectedType = true;
+      const basics = checkPickedPhoto(file, MAX_PICKED_PHOTO_BYTES);
+      if (!basics.ok) {
+        note(basics.reason);
         continue;
       }
-      if (file.size > MAX_PICKED_PHOTO_BYTES) {
-        rejectedSize = true;
+      const decodable = await probePhotoDecodable(file);
+      if (!decodable.ok) {
+        note(decodable.reason);
         continue;
       }
       accepted.push({
@@ -580,8 +614,8 @@ export function PostComposerHost({
         kind: "photo",
         file,
         preview: URL.createObjectURL(file),
-        // Sin filtro, sin texto — pero YA presente: el horneado de abajo lee
-        // este objeto para CADA foto al publicar, la haya editado o no.
+        // Sin recorte, sin filtro, sin texto — pero YA presente: el horneado de
+        // abajo lee este objeto para CADA foto al publicar, la haya editado o no.
         edit: { ...DEFAULT_PHOTO_EDIT },
       });
       photoCount += 1;
@@ -592,10 +626,31 @@ export function PostComposerHost({
       openCompose("media");
     }
 
-    // Un solo aviso, el más útil (no una ráfaga de toasts).
-    if (rejectedLimit) toast({ title: COPY.composer.photoLimit, variant: "warning" });
-    else if (rejectedType) toast({ title: COPY.composer.photoWrongType, variant: "warning" });
-    else if (rejectedSize) toast({ title: COPY.composer.photoTooBig, variant: "warning" });
+    if (rejectedLimit) {
+      toast({ title: COPY.composer.photoLimit, variant: "warning" });
+      return;
+    }
+    if (!rejection) return;
+    // Cada motivo dice qué HACER, no qué salió mal. El de HEIC además evita
+    // decir que la foto está rota: no lo está, y quien la ve bien en su galería
+    // no le creería a un mensaje que le diga lo contrario.
+    const aviso: Record<PhotoInputRejection, Parameters<typeof toast>[0]> = {
+      type: { title: COPY.composer.photoWrongType, variant: "warning" },
+      size: { title: COPY.composer.photoTooBig, variant: "warning" },
+      heic: {
+        title: COPY.composer.photoHeicTitle,
+        description: COPY.composer.photoHeicBody,
+        variant: "warning",
+        duration: 9000,
+      },
+      decode: {
+        title: COPY.composer.photoUnreadableTitle,
+        description: COPY.composer.photoUnreadableBody,
+        variant: "warning",
+        duration: 9000,
+      },
+    };
+    toast(aviso[rejection]);
   }
 
   /**
@@ -1071,6 +1126,14 @@ export function PostComposerHost({
         (item): item is PickedMedia & { kind: "photo" } => item.kind === "photo",
       );
       let bakeFallbackCount = 0;
+      /**
+       * Cuántas fotos salieron con la tipografía de respaldo. Se cuenta aparte
+       * del fallback general porque NO es lo mismo: la foto se horneó bien y
+       * con todo lo demás: lo único distinto es la letra. Sin este contador el
+       * cambio sería invisible sobre un archivo que ya no se puede deshacer
+       * (ver `onFontFallback` en bake-photo.ts).
+       */
+      let fontFallbackCount = 0;
       const bakedByPhotoId = new Map<string, File>();
       if (photoItems.length > 0) {
         setBakingProgress({ done: 0, total: photoItems.length });
@@ -1085,15 +1148,27 @@ export function PostComposerHost({
                 text: captionText,
                 position: edit.captionPosition,
                 background: edit.captionBackground,
+                // Color y tipografía viajan con el texto: si se quedaran acá,
+                // el canvas dibujaría con el default y la frase publicada
+                // saldría blanca cuando se eligió amarilla.
+                color: edit.captionColor,
+                font: edit.captionFont,
               }
             : null;
 
           let fellBack = false;
           let baked = await bakePhoto(item.file, {
             filterCss,
+            // El recorte va PRIMERO en el horneado y define el recuadro contra
+            // el que se colocan el texto y los emojis (ver bake-photo.ts).
+            crop: edit.crop,
             caption,
+            stickers: edit.stickers,
             onFallback: () => {
               fellBack = true;
+            },
+            onFontFallback: () => {
+              fontFallbackCount += 1;
             },
           });
 
@@ -1107,7 +1182,9 @@ export function PostComposerHost({
           if (fellBack && filterCss) {
             baked = await bakePhoto(item.file, {
               filterCss: "",
+              crop: edit.crop,
               caption,
+              stickers: edit.stickers,
               onFallback: () => {},
             });
           }
@@ -1166,6 +1243,15 @@ export function PostComposerHost({
         toast({
           title: COPY.composer.bakeFallbackTitle,
           description: COPY.composer.bakeFallbackBody,
+          variant: "info",
+        });
+      } else if (fontFallbackCount > 0) {
+        // `else if` y no un segundo toast: si la foto ya salió sin editar, la
+        // tipografía es lo de menos y dos avisos apilados sobre lo mismo se
+        // leen como dos problemas distintos.
+        toast({
+          title: COPY.composer.fontFallbackTitle,
+          description: COPY.composer.fontFallbackBody,
           variant: "info",
         });
       }
@@ -1534,13 +1620,22 @@ export function PostComposerHost({
       <input
         ref={photoInputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        /**
+         * La lista sale de `photo-input.ts` e incluye HEIC/HEIF y las
+         * extensiones sueltas: varios pickers de Android entregan un HEIC con
+         * `file.type` vacío, y un `accept` sólo de MIME se lo mostraba EN GRIS
+         * —exactamente el mismo síntoma que el cliente reportó con los .mov.
+         */
+        accept={PHOTO_FILE_ACCEPT}
         multiple
         className="sr-only"
         tabIndex={-1}
         aria-hidden="true"
         id="post-composer-photos"
-        onChange={(event) => selectPhotos(event.currentTarget)}
+        // `void`: la prueba de decodificación es asíncrona, pero el FileList
+        // se lee SINCRÓNICAMENTE dentro (antes del primer await) — mismo
+        // patrón que el input de video de acá abajo.
+        onChange={(event) => void selectPhotos(event.currentTarget)}
       />
       <input
         ref={videoInputRef}

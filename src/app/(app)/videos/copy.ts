@@ -54,7 +54,12 @@ export const VIDEOS_COPY = {
 
   feedLabel: "Videos Cortos de la comunidad",
   videoOf: (author: string) => `Video de ${author}`,
-  byAuthor: (name: string) => `por ${name}`,
+  // Acá vivía `byAuthor: (name) => "por {name}"`, que el reel pintaba debajo del
+  // nombre del negocio cuando el video salía firmado por una ficha. Se borró con
+  // la línea que lo usaba (2026-08-26): publicar como negocio y que abajo
+  // apareciera el nombre personal de quien subió el video era una fuga de
+  // privacidad. El motivo completo está en `video-reels.tsx`, junto al lugar
+  // donde estaba.
   // Misma palabra que el feed (COPY.post.adChip): la divulgación de contenido
   // pago se lee igual en todas las superficies o deja de leerse.
   adChip: "Patrocinado",

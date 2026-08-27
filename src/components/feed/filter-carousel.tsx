@@ -125,9 +125,13 @@ export function FilterCarousel({
   return (
     <section aria-label={C.filtersLabel} className="shrink-0">
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wider text-foreground-muted">
-          {C.filtersLabel}
-        </p>
+        {/* El título VISIBLE se fue el 2026-08-26: desde que el editor tiene
+            pestañas, la que está activa ya dice "Filtros" justo arriba, y
+            repetirlo acá era la misma palabra dos veces en dos centímetros. El
+            `aria-label` del `<section>` y el del `radiogroup` siguen nombrando
+            el grupo para quien no ve las pestañas. Queda el renglón porque el
+            nombre del filtro elegido vive a su derecha. */}
+        <span aria-hidden="true" />
         {/* El nombre del elegido, ahí arriba: el rótulo del chip mide 11px y
             está pensado para reconocerse de reojo, no para leerse a fondo. */}
         <p

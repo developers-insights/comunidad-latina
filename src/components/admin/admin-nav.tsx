@@ -7,6 +7,7 @@ import {
   Briefcase,
   ChartLineUp,
   GlobeHemisphereWest,
+  HandsClapping,
   ShieldCheck,
   Star,
   Storefront,
@@ -66,6 +67,17 @@ const ITEMS: NavItem[] = [
     // la RLS de creator_eligibility_config (0064) exige el mismo rango.
     icon: <Star size={18} aria-hidden="true" />,
     minRank: 2,
+  },
+  {
+    href: "/admin/comunidad/ayuda-mutua",
+    label: "Ayuda mutua",
+    // moderator+: es moderación de CONTENIDO —decidir si un texto se publica—,
+    // que es lo que hace un moderador. La base pide lo mismo (app.is_staff()
+    // en el trigger de la 0120), así que acá el nav no es ni más ni menos
+    // estricto que el SQL. Pedir domain_admin sólo lograría que la cola dependa
+    // de una sola persona.
+    icon: <HandsClapping size={18} aria-hidden="true" />,
+    minRank: 1,
   },
   {
     href: "/admin/dominio",

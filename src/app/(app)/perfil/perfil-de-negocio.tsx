@@ -132,6 +132,8 @@ export function PerfilDeNegocio({
                 nombre: item.nombre,
                 avatarUrl: item.avatarUrl,
                 rol: item.rol,
+                esPropietario: item.esPropietario,
+                verificada: item.verificada,
               }))}
               activeBusinessId={negocio.businessId}
             />

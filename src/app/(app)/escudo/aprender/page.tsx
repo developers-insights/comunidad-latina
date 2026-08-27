@@ -5,6 +5,7 @@ import { Flag, Scales, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard } from "@/components/ui";
 import { ScamShieldNotice } from "@/components/trust";
 import { BackLink } from "@/components/escudo/back-link";
+import { ESCUDO_ENABLED } from "../feature-flag";
 
 /**
  * /escudo/aprender — guía educativa estática del Escudo (§3.3).
@@ -94,12 +95,6 @@ const SIGNALS: Signal[] = [
 ];
 
 export const metadata: Metadata = { title: COPY.title };
-
-// Feature oculta por pedido del cliente (2026-07-20): ver la nota en
-// app/(app)/escudo/page.tsx. Tipada como `boolean` (no el literal `false`)
-// para que TS no marque el resto de la función como código muerto y rompa
-// el narrowing de abajo.
-const ESCUDO_ENABLED: boolean = false;
 
 function SignalCard({ signal, index }: { signal: Signal; index: number }) {
   return (

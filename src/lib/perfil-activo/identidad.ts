@@ -82,6 +82,21 @@ export interface IdentidadNegocio {
   avatarUrl: string | null;
   rol: RolDeNegocio;
   esPropietario: boolean;
+  /**
+   * ¿Este NEGOCIO tiene su identidad verificada? (0121)
+   *
+   * NO es la verificación de la persona: son dos identidades distintas y ésta
+   * es la del perfil con el que se actúa. Sale de la misma RPC que todo lo
+   * demás porque el cambiador la pinta al lado de cada fila y preguntarla por
+   * separado sería un N+1 en el header, que se dibuja en cada navegación.
+   *
+   * La escribe `public.verificar_identidad_de_negocio()`: alguien con el
+   * documento ya validado por Stripe y rol propietario/administrador reclama la
+   * verificación del negocio. Un negocio que administrás pero nunca reclamaste
+   * queda en `false`, que es exactamente lo que el cliente pidió — «según cada
+   * perfil».
+   */
+  verificada: boolean;
 }
 
 export type IdentidadActiva =
@@ -105,6 +120,8 @@ interface FilaIdentidad {
   foto: string | null;
   rol: string;
   es_propietario: boolean;
+  /** `business_verifications.stripe_status = 'verified'` (0121). */
+  verificada: boolean;
 }
 
 /** Ver el aviso de ESCAPE DE TIPOS del encabezado. */
@@ -132,6 +149,10 @@ function aIdentidad(fila: FilaIdentidad): IdentidadNegocio | null {
     avatarUrl: fila.foto ? listingPhotoUrl(fila.foto) : null,
     rol: fila.rol,
     esPropietario: fila.es_propietario,
+    // `=== true` y no `Boolean(...)`: la columna es nueva (0121) y una base sin
+    // la migración devuelve `undefined`. Ante la duda, SIN verificar — el error
+    // caro es afirmar que un perfil está verificado cuando no lo sabemos.
+    verificada: fila.verificada === true,
   };
 }
 

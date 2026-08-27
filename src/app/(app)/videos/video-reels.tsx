@@ -381,21 +381,33 @@ function ReelSlide({
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 pb-[calc(6.25rem+env(safe-area-inset-bottom))]">
         <div className="mx-auto w-full max-w-lg px-4 pr-20">
           <div className="pointer-events-auto flex items-center gap-2.5">
+            {/* La FOTO de la ficha cuando el video salió como negocio (0116), no
+                la de la persona: ver el bloque de privacidad de abajo — la cara
+                filtra lo mismo que el nombre. */}
             <Avatar
               size="sm"
               name={displayTitle}
-              src={entity ? null : post.author.avatarUrl}
+              src={entity ? (entity.photoUrl ?? null) : post.author.avatarUrl}
             />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-on-media drop-shadow-md">
                 {displayTitle}
               </p>
               <div className="flex min-w-0 items-center gap-1.5">
-                {entity ? (
-                  <p className="truncate text-xs text-on-media/85 drop-shadow-md">
-                    {VIDEOS_COPY.byAuthor(post.author.displayName)}
-                  </p>
-                ) : (
+                {/* ── SIN "por {persona}" CUANDO EL VIDEO ES DE UNA FICHA ─────
+                    Misma regla y mismo motivo que la tarjeta del feed (ver el
+                    docblock de `EntityHeader` en components/feed/post-card.tsx):
+                    `post.entity` sale SIEMPRE de `posts.entity_listing_id`, que
+                    la 0023 define como la FIRMA de la publicación. O sea que el
+                    video se emitió con la cara del negocio, y poner debajo el
+                    nombre personal de quien lo subió expone a alguien que eligió
+                    no aparecer. El reel es además la superficie con MÁS alcance
+                    de la app: acá una fuga se ve más que en ningún otro lado.
+
+                    El Trust Score sigue siendo de la PERSONA, así que tampoco
+                    se pinta con firma de negocio: sin firma se muestra entero,
+                    con firma no se muestra nada. */}
+                {entity ? null : (
                   post.author.profileId && (
                     <span className="inline-flex rounded-full bg-media-scrim px-1.5 py-0.5">
                       <PublisherTrust

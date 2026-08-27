@@ -8,6 +8,21 @@
  */
 
 export {
+  HELP_AREA_MAX,
+  HELP_AREA_MIN,
+  HELP_AVAILABILITY_MAX,
+  HELP_BODY_MAX,
+  HELP_BODY_MIN,
+  HELP_DIRECTIONS,
+  HELP_MAX_OPEN,
+  HELP_NOTICE_COLUMNS,
+  HELP_ORG_MAX,
+  HELP_REVIEW_NOTE_MAX,
+  HELP_REVIEW_NOTE_MIN,
+  HELP_STATUSES,
+  HELP_TITLE_MAX,
+  HELP_TITLE_MIN,
+  HELP_TOPICS,
   LOST_FOUND_AREA_MAX,
   LOST_FOUND_AREA_MIN,
   LOST_FOUND_CATEGORIES,
@@ -22,6 +37,11 @@ export {
   RESOURCE_TOPICS,
   supabaseSinTiparComunidad,
   type CommunityResource,
+  type HelpDirection,
+  type HelpNotice,
+  type HelpNoticeRow,
+  type HelpStatus,
+  type HelpTopic,
   type LostFoundAttrs,
   type LostFoundCase,
   type LostFoundCategory,
@@ -34,11 +54,35 @@ export {
 
 export {
   COMUNIDAD_COPY,
+  HELP_DIRECTION_COPY,
+  HELP_LANGUAGES,
+  HELP_STATUS_HINT,
+  HELP_STATUS_LABEL,
+  HELP_TOPIC_HINT,
+  HELP_TOPIC_LABEL,
   LOST_FOUND_CATEGORY_LABEL,
   LOST_FOUND_TYPE_LABEL,
   RESOURCE_TOPIC_HINT,
   RESOURCE_TOPIC_LABEL,
 } from "./copy";
+
+export {
+  HELP_OPEN_STATUSES,
+  detectarDatoDeContacto,
+  esAvisoAbierto,
+  isHelpDirection,
+  isHelpStatus,
+  isHelpTopic,
+  primerDatoDeContacto,
+  puedeEditarContenido,
+  puedeTransicionar,
+  sortNeedsFirst,
+  toHelpNotice,
+  transicionesPosibles,
+  type DatoDeContacto,
+  type HelpActor,
+  type HelpNoticeContext,
+} from "./ayuda-mutua";
 
 export {
   LOST_FOUND_MAX_AGE_DAYS,

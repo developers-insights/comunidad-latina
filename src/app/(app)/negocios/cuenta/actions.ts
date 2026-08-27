@@ -3,6 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireTenantMatch } from "@/lib/tenant/guard";
+import { listarIdentidadesDeNegocio } from "@/lib/perfil-activo/identidad";
+import {
+  TOPE_DE_NEGOCIOS,
+  contarNegociosPropios,
+  esErrorDeTope,
+  lugaresDeNegocio,
+} from "@/lib/perfil-activo/tope";
 import { BUSINESS_CATEGORIES } from "../categories";
 import { COPY, MAX_NOMBRE_NEGOCIO } from "./copy";
 import type { AltaState } from "./estado";
@@ -33,6 +40,20 @@ import type { AltaState } from "./estado";
  * suya, y hacerlo de callado como efecto secundario de un alta es justo la clase
  * de sorpresa que hace que la persona publique algo con el nombre equivocado. Se
  * crea, se avisa, y el cambio es un botón aparte.
+ *
+ * ── HASTA DIEZ, Y EL TOPE LO PONE LA BASE (0121) ────────────────────────────
+ * Hasta la 0121 había un índice único (tenant_id, owner_id) y este archivo
+ * traducía su `23505` a «ya tenés una». Ese mensaje ya no existe: el cliente
+ * pidió diez.
+ *
+ * El tope vive en el trigger `app.business_accounts_enforce_cap()`, no acá.
+ * PostgREST está expuesto: un chequeo que sólo viva en esta función protege el
+ * formulario, no la tabla. Lo que hace este archivo es preguntar ANTES para
+ * poder decir una frase en español en vez de mostrar un error de Postgres —el
+ * mismo reparto de trabajo que `cambiarIdentidad` con la policy de
+ * `active_identities`—, y volver a mirar DESPUÉS por si dos pestañas abiertas
+ * crearon el décimo al mismo tiempo. Los dos chequeos son redundantes a
+ * propósito; el que manda es el de abajo.
  */
 
 const RUBROS = BUSINESS_CATEGORIES.map((categoria) => categoria.value);
@@ -82,6 +103,15 @@ export async function crearCuentaDeNegocio(
   const { supabase, user, tenant } = guard;
   const { nombre, rubro } = parsed.data;
 
+  // Antes de viajar: ¿le queda lugar? Sólo cuentan los PROPIOS — administrar
+  // negocios ajenos no consume el tope (doctrina de la 0103).
+  const lugares = lugaresDeNegocio(
+    contarNegociosPropios(await listarIdentidadesDeNegocio()),
+  );
+  if (!lugares.puedeCrear) {
+    return { estado: "error", mensaje: COPY.errors.tope(lugares.tope) };
+  }
+
   const { error } = await supabase.from("business_accounts").insert({
     tenant_id: tenant.id,
     owner_id: user.id,
@@ -90,10 +120,14 @@ export async function crearCuentaDeNegocio(
   });
 
   if (error) {
-    // 23505 = el índice único de la 0103 (una cuenta de negocio por persona y
-    // por comunidad). No es un error del sistema: es que ya la tiene.
-    if (error.code === "23505") {
-      return { estado: "error", mensaje: COPY.errors.yaExiste };
+    // El trigger de la 0121. Se reconoce por el PREFIJO del mensaje y no por el
+    // código: `P0001` es el de cualquier `raise exception` de esta base —lo
+    // usan también la guarda de billing (0008) y la de reseñas (0093)—, así que
+    // mirar sólo el código mostraría "llegaste al tope" ante errores que no lo
+    // son. Llega hasta acá cuando dos pestañas crean el décimo a la vez: el
+    // chequeo de arriba vio nueve en las dos.
+    if (esErrorDeTope(error)) {
+      return { estado: "error", mensaje: COPY.errors.tope(TOPE_DE_NEGOCIOS) };
     }
     // Log sin PII: solo el código y la comunidad.
     console.error("[cuenta-de-negocio] no se pudo crear", {

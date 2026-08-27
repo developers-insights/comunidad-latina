@@ -2,12 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, Heart, SpeakerHigh, SpeakerSlash } from "@phosphor-icons/react/dist/ssr";
+import { Eye, Heart } from "@phosphor-icons/react/dist/ssr";
 import { usePrefersReducedMotion } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { isPreviewTruncated, playbackCapSeconds } from "@/lib/media/video-policy";
-import { clampStartSeconds, clipEndSeconds } from "@/lib/media/audio-track";
-import { clipGain, musicTimeFor, resolveAudioMix } from "@/lib/media/audio-mix";
+import { usePostMusic } from "./post-music";
 import { VIDEOS_COPY } from "@/app/(app)/videos/copy";
 import { muxPlaybackMode } from "@/lib/media/mux-video";
 import { MuxVideoSurface } from "@/components/video/mux-player";
@@ -18,7 +17,7 @@ import { useCardLike } from "./card-like-context";
 import { useCardMedia } from "./card-media-context";
 import { useMediaViewer, type ViewerMediaItem } from "./media-viewer";
 import { COPY } from "./copy";
-import type { PostMusicView, VideoScopeProp } from "./helpers";
+import type { VideoScopeProp } from "./helpers";
 import styles from "./card-post-media.module.css";
 
 /** Umbral de visibilidad para autoplay (pedido cliente: "cuando se ve el 60%"). */
@@ -119,13 +118,6 @@ export interface CardVideoProps {
    */
   filterCss?: string;
   /**
-   * Pista asociada al POST (0090). null = sin música → el video se comporta
-   * exactamente como antes (manda su propio audio). Con música, gana la
-   * música: ver `resolveAudioMix` (audio-mix.ts), el árbitro único de qué
-   * suena y cuándo.
-   */
-  music?: PostMusicView | null;
-  /**
    * ---- EL VIDEO POR MUX (opcional, y ausente es el caso normal) -----------
    *
    * `posts.mux_playback_id` y `posts.mux_status`. Los dos ausentes —que es lo
@@ -189,7 +181,6 @@ export function CardVideo({
   active = true,
   onTap,
   className,
-  music = null,
   filterCss,
   muxPlaybackId = null,
   muxStatus,
@@ -214,28 +205,31 @@ export function CardVideo({
    */
   const videoRef = useRef<PlayableMedia | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const delayRef = useRef<number | null>(null);
   const tapTimer = useRef<number | null>(null);
-  /** Segundo del RECORTE (post_music.start_seconds) desde el que arranca la vuelta actual. */
-  const musicClipStartRef = useRef(0);
-  /** El GESTO de la persona: pidió sonido o no. Nunca se infiere de nada más. */
-  const [soundOn, setSoundOn] = useState(false);
   const [bursts, setBursts] = useState(0);
   /** Duración MEDIDA del archivo (metadata), no la declarada. null = todavía no. */
   const [measuredSeconds, setMeasuredSeconds] = useState<number | null>(null);
   const isPreview = isPreviewTruncated(measuredSeconds);
 
-  const hasMusic = Boolean(music);
   /**
-   * `videoHasSound` va en `true` a propósito: no hay forma de saber si el
-   * archivo trae pista de audio sin decodificarlo, y el botón de sonido YA
-   * estaba disponible para todo video antes de esta feature. El árbitro
-   * (audio-mix.ts) sigue siendo la única fuente de qué suena de verdad — acá
-   * sólo se le da el dato más conservador que se tiene.
+   * ---- QUIÉN DECIDE SI ESTE VIDEO SUENA ----------------------------------
+   *
+   * No este componente. La publicación tiene UNA pista y UN altavoz
+   * (`PostMusicProvider`, en post-music.tsx): acá sólo se lee el veredicto ya
+   * resuelto de `resolveAudioMix` y se aplica al elemento.
+   *
+   * Hasta el 2026-08-26 el `<audio>` de la música, el gesto de sonido y el
+   * altavoz vivían ACÁ ADENTRO, y ése era el bug: una publicación de fotos con
+   * música no montaba ninguno de los tres, porque no tenía video donde
+   * montarlos.
+   *
+   * Fuera de una publicación (sin provider) el video queda MUDO, que es el
+   * estado por defecto de siempre: nadie reproduce con sonido sin un gesto, y
+   * el gesto es de la publicación.
    */
-  const mix = resolveAudioMix({ hasMusic, videoHasSound: true, soundOn });
-  const muted = mix.source === "silent";
+  const postMusic = usePostMusic();
+  const videoMuted = postMusic?.mix.videoMuted ?? true;
 
   /**
    * ---- ¿QUÉ SE PINTA EN LA CAJA DEL VIDEO? -------------------------------
@@ -270,11 +264,11 @@ export function CardVideo({
 
   // Dejar de ser el medio activo (el usuario pasó a la foto siguiente del
   // carrusel) pausa YA, sin esperar a que el observer note que salió de vista.
-  // La música es del post: pausa junto con el video, nunca sigue sola.
+  // La MÚSICA no se toca acá: es de la publicación, no de esta diapositiva —
+  // pasar de un video a la foto de al lado no puede cortar la canción.
   useEffect(() => {
     if (active) return;
     videoRef.current?.pause();
-    audioRef.current?.pause();
   }, [active]);
 
   // El `<video muted>` es un atributo DOM que no se controla vía JSX (se pisa
@@ -284,19 +278,9 @@ export function CardVideo({
   useEffect(() => {
     const node = videoRef.current;
     if (!node) return;
-    node.muted = mix.videoMuted;
-    if (!mix.videoMuted) safePlay(node);
-  }, [mix.videoMuted]);
-
-  // Mismo trato para la música: mutear/desmutear el `<audio>` y retomarla al
-  // desmutear. Si no hay pista, `audioRef.current` es null (no se monta el
-  // elemento) y esto no hace nada.
-  useEffect(() => {
-    const node = audioRef.current;
-    if (!node) return;
-    node.muted = mix.musicMuted;
-    if (!mix.musicMuted) safePlay(node);
-  }, [mix.musicMuted]);
+    node.muted = videoMuted;
+    if (!videoMuted) safePlay(node);
+  }, [videoMuted]);
 
   useEffect(() => {
     // Reduced-motion: no autoplay. El video (y la música) quedan pausados.
@@ -328,18 +312,15 @@ export function CardVideo({
               delayRef.current = window.setTimeout(() => {
                 delayRef.current = null;
                 // Autoplay muted: si el navegador igual lo bloquea, no pasa nada.
+                // La MÚSICA tiene su propio observador, sobre la caja de la
+                // publicación (post-music.tsx): sigue a la publicación entera y
+                // no a este medio.
                 safePlay(videoRef.current);
-                // La música acompaña el mismo ciclo de vida que el video: sale
-                // de pantalla, se calla; vuelve a entrar, retoma (en silencio,
-                // como el video, hasta que la persona toque el altavoz).
-                const audioNode = audioRef.current;
-                if (audioNode) safePlay(audioNode);
               }, AUTOPLAY_DELAY_MS);
             }
           } else {
             clearDelay();
             videoRef.current?.pause();
-            audioRef.current?.pause();
           }
         }
       },
@@ -360,35 +341,6 @@ export function CardVideo({
     },
     [],
   );
-
-  /**
-   * El único gesto de sonido de la card: no decide DIRECTAMENTE qué mutear —
-   * sólo cambia el pedido de la persona. El árbitro (`mix`, arriba) es quien
-   * traduce ese pedido en video mudo / música sonando / video sonando, y los
-   * dos efectos de arriba son los que aplican esa traducción al DOM.
-   */
-  function toggleSound(event: React.MouseEvent) {
-    event.stopPropagation(); // el toque en el ícono NO abre el visor
-    setSoundOn((current) => !current);
-  }
-
-  /**
-   * El recorte se repite y se desvanece en las puntas — MISMO patrón que la
-   * vista previa del picker (`music-picker.tsx:handleTimeUpdate`): el propio
-   * `timeupdate` del `<audio>` dispara el loop, sin un `setInterval` propio
-   * que sobreviva a la card.
-   */
-  function handleMusicTimeUpdate() {
-    const node = audioRef.current;
-    if (!node || !music) return;
-    const start = musicClipStartRef.current;
-    const end = clipEndSeconds(start, music.track.durationSeconds);
-    const elapsed = node.currentTime - start;
-    node.volume = clipGain(elapsed, Math.max(0, end - start));
-    if (node.currentTime >= end) {
-      node.currentTime = musicTimeFor(start, 0, music.track.durationSeconds);
-    }
-  }
 
   /**
    * LAS DIAPOSITIVAS QUE VE EL VISOR. Cuando la tarjeta declaró sus medios —el
@@ -433,8 +385,8 @@ export function CardVideo({
     if (reduce) return;
     const node = videoRef.current;
     if (node) safePlay(node);
-    const audioNode = audioRef.current;
-    if (audioNode) safePlay(audioNode);
+    // Y la música de la publicación, que se calló al abrir (ver `openVideo`).
+    postMusic?.resume();
   }
 
   /**
@@ -468,7 +420,7 @@ export function CardVideo({
     // La tarjeta se calla ANTES de abrir: el visor arranca con sonido y dos
     // copias del mismo clip sonando juntas no se le hace a nadie.
     node?.pause();
-    audioRef.current?.pause();
+    postMusic?.pause();
     viewer.open({
       items,
       startIndex,
@@ -536,7 +488,7 @@ export function CardVideo({
           playbackId={muxVivo.playbackId}
           mediaRef={videoRef}
           filterCss={filterCss}
-          muted={mix.videoMuted}
+          muted={videoMuted}
           loop
           // El autoplay lo decide el observador de visibilidad de esta tarjeta
           // (60 % + 2 s), igual que con el `<video>`. Dejárselo al reproductor
@@ -575,25 +527,6 @@ export function CardVideo({
           if (node.currentTime >= PREVIEW_CAP_SECONDS) node.currentTime = 0;
         }}
       />
-      )}
-
-      {/* Hermano del video, no mezclado en el archivo (ver audio-mix.ts):
-          suena SINCRONIZADO por encima, nunca los dos a la vez con el video
-          (eso lo garantiza `mix`, arriba). `preload="none"`: un feed lleno de
-          videos con música no puede bajar 40 archivos de audio de arriba. */}
-      {music && (
-        <audio
-          ref={audioRef}
-          src={music.track.previewUrl}
-          preload="none"
-          muted
-          onLoadedMetadata={(event) => {
-            const start = clampStartSeconds(music.startSeconds, music.track.durationSeconds);
-            musicClipStartRef.current = start;
-            event.currentTarget.currentTime = start;
-          }}
-          onTimeUpdate={handleMusicTimeUpdate}
-        />
       )}
 
       {/* Capa de toque: simple = visor a pantalla completa sobre el propio
@@ -650,26 +583,12 @@ export function CardVideo({
         </span>
       )}
 
-      {/* Sonido: 44px de área táctil aunque el círculo sea de 36px. No navega.
-          Oculto cuando no hay NADA que sonar (`!mix.canToggleSound`): un
-          altavoz que no hace nada es peor que no tenerlo. */}
-      {mix.canToggleSound && (
-        <button
-          type="button"
-          onClick={toggleSound}
-          tabIndex={active ? 0 : -1}
-          aria-label={muted ? COPY.post.unmuteVideo : COPY.post.muteVideo}
-          className="absolute bottom-2 right-2 grid min-h-11 min-w-11 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-        >
-          <span className="grid size-9 place-items-center rounded-full bg-media-shade/60 text-on-media backdrop-blur-sm transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-90">
-            {muted ? (
-              <SpeakerSlash size={18} weight="fill" aria-hidden="true" />
-            ) : (
-              <SpeakerHigh size={18} weight="fill" aria-hidden="true" />
-            )}
-          </span>
-        </button>
-      )}
+      {/* EL ALTAVOZ YA NO VIVE ACÁ. Es uno por PUBLICACIÓN y lo pinta
+          `card-post-media.tsx` (`PostMusicSpeaker`), en esta misma esquina.
+          Mientras estuvo acá adentro, una publicación de fotos con música no
+          tenía ningún altavoz que tocar —el gesto no existía— y la canción
+          nunca podía pedirse. Un altavoz por diapositiva además saltaba de
+          lugar al pasar de la foto al video. */}
     </div>
   );
 }

@@ -10,6 +10,7 @@ const NEGOCIO: IdentidadNegocio = {
   avatarUrl: null,
   rol: "propietario",
   esPropietario: true,
+  verificada: false,
 };
 
 describe("tierDeIdentidadActiva", () => {
