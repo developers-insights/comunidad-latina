@@ -2109,16 +2109,21 @@ Gates: `tsc` 0 · `build` verde · 12 tests · `lint` 0 errores · smoke-test vi
 - 9 listings de Queens, 3 guías con fuentes oficiales, 5 posts + comentarios + reacciones, 1 verification_check.
 
 ## Pendientes (en orden)
-0. **🟡 DEPLOY — resuelto el bloqueo de git-author, falta consolidar el dominio/team canónico.** El bloqueo
-   original (team `manuelinsights`, plan Hobby + repo privado) se resolvió haciendo público el repo
-   `developers-insights/comunidad-latina` (commit `50c76ea`, **confirmado público hoy** con `gh repo view`,
-   2026-07-22) y fijando el remote por defecto (`d970b94`). Pero ningún archivo del repo documenta todavía CUÁL
-   proyecto/team de Vercel es el que recibe el auto-deploy real — eso solo vivía en memoria de sesión. Acción
-   pendiente de Manuel: confirmar en el dashboard de Vercel cuál team/dominio es el vigente (candidatos vistos
-   en distintas sesiones: `insights3`/`comunidad-latina-sigma.vercel.app`, `insights-apps`, `manuelinsights`) y
-   escribir la respuesta acá. Mientras tanto `comunidad-latina.vercel.app` (otro team) sirve una build vieja sin
-   Marketplace/Creadores, y `comunidad-latina-taupe.vercel.app` es LEGACY congelado — no usar ninguno de los dos
-   para demos. Detalle completo en `docs/HANDOFF.md`.
+0. **🟢 DEPLOY — RESUELTO el 2026-08-26.** El dato que faltaba desde julio (y que
+   sólo vivía en memoria de sesión) es: el proyecto que recibe el auto-deploy es
+   **`comunidad-latina` en el team `insights3`** (id de team literal: `insights3`,
+   nombre visible "InsightsApps"), y su **dominio de producción es
+   `https://www.comunidadlatina.com`**. Confirmado con `vercel project ls` sobre
+   la cuenta `developers-2878`. Para linkear la carpeta:
+   `vercel link --yes --scope insights3 --project comunidad-latina`.
+   Siguen valiendo las advertencias viejas: `comunidad-latina.vercel.app` es de
+   OTRO team y sirve una build vieja sin Marketplace/Creadores, y
+   `comunidad-latina-taupe.vercel.app` es LEGACY congelado — **no usar ninguno de
+   los dos para demos**.
+   ⚠️ **Cuenta de GitHub**: el remote es `developers-insights/comunidad-latina` y
+   la cuenta `manu-180` (la activa en `gh` hoy) **no tiene permiso de push**
+   (`permissions.push: false`). Hay que autenticarse como `developers-insights`,
+   cuyo token en el keyring figura inválido.
 1. **🔴 GATES HUMANOS antes del primer dato real (§5.2/§14.4 — NO construibles por agentes):** pentest humano adversarial + **firma de ingeniero senior** sobre migraciones y webhook Stripe. Sin esto NO se expone a usuarios reales.
 2. **Credenciales faltantes** (degradan con elegancia hoy): Stripe (test) → activa pagos reales del flujo ya construido · Resend → emails · Google Vision → moderación de imagen (hoy: pending_review) · Sentry → observabilidad (exigida antes de producción) · Vercel → deploy + dominios.
 3. **Hardening menor (requiere Dashboard — `storage.objects` lo posee `supabase_storage_admin`, ni el MCP ni el rol `postgres` pueden tocarlo):** (a) **listado de buckets** — SQL listo en [`supabase/manual/harden-storage-listing.sql`](../supabase/manual/harden-storage-listing.sql), pegar en Dashboard → SQL Editor (scopea el SELECT/list al dueño; cierra la enumeración de user_ids vía `avatars`; el acceso público por URL no se ve afectado; hoy buckets vacíos → riesgo 0); (b) **Leaked Password Protection** (HaveIBeenPwned) en Dashboard → Auth → Providers → Password (toggle, 1 click). Ambos van en el mismo pase que el pentest/firma senior.
