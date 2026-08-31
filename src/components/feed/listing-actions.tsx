@@ -8,7 +8,14 @@ import {
   recordListingShareAction,
   toggleSaveAction,
 } from "@/app/(app)/feed/engagement-actions";
-import { ACTION_ICON, ActionButton, ActionRow, ActionToggle } from "./action-bar";
+import {
+  ACTION_ICON,
+  ActionButton,
+  ActionGlyph,
+  ActionLabel,
+  ActionRow,
+  ActionToggle,
+} from "./action-bar";
 import type { PostLikeState } from "./card-like-context";
 import { useCommentsSheet } from "./comments-sheet";
 
@@ -79,6 +86,9 @@ const COPY = {
   like: "Me gusta",
   unlike: "Quitar me gusta",
   comments: "Comentarios",
+  // Verbo para el texto visible, sustantivo para la etiqueta accesible: ver la
+  // nota de `commentAction` en components/feed/copy.ts.
+  commentAction: "Comentar",
   share: "Compartir",
   shareCopiedTitle: "Link copiado",
   shareCopiedBody: "Pegalo donde quieras para compartir este aviso.",
@@ -244,10 +254,12 @@ export function ListingActions({
           active={like.liked}
           onToggle={like.toggle}
           label={`${like.liked ? COPY.unlike : COPY.like} · ${title}`}
-          className="pr-1.5"
         >
-          <Heart size={ACTION_ICON} weight={like.liked ? "fill" : "regular"} aria-hidden="true" />
-          <span className="numeric">{like.count}</span>
+          <ActionGlyph>
+            <Heart size={ACTION_ICON} weight={like.liked ? "fill" : "regular"} aria-hidden="true" />
+            <span className="numeric">{like.count}</span>
+          </ActionGlyph>
+          <ActionLabel>{COPY.like}</ActionLabel>
         </ActionToggle>
       )}
 
@@ -265,8 +277,11 @@ export function ListingActions({
           })
         }
       >
-        <ChatCircle size={ACTION_ICON} aria-hidden="true" />
-        {commentCount !== undefined && <span className="numeric">{commentCount}</span>}
+        <ActionGlyph>
+          <ChatCircle size={ACTION_ICON} aria-hidden="true" />
+          {commentCount !== undefined && <span className="numeric">{commentCount}</span>}
+        </ActionGlyph>
+        <ActionLabel>{COPY.commentAction}</ActionLabel>
       </ActionButton>
 
       {detailHref && (
@@ -274,10 +289,11 @@ export function ListingActions({
           tone="share"
           label={`${COPY.share} · ${title}`}
           onClick={share}
-          className="ml-auto"
         >
-          <ShareNetwork size={ACTION_ICON} aria-hidden="true" />
-          <span className="hidden sm:inline">{COPY.share}</span>
+          <ActionGlyph>
+            <ShareNetwork size={ACTION_ICON} aria-hidden="true" />
+          </ActionGlyph>
+          <ActionLabel>{COPY.share}</ActionLabel>
         </ActionButton>
       )}
 
@@ -286,9 +302,11 @@ export function ListingActions({
         active={saved}
         onToggle={toggleSave}
         label={`${saved ? COPY.unsave : COPY.save} · ${title}`}
-        className={detailHref ? undefined : "ml-auto"}
       >
-        <BookmarkSimple size={ACTION_ICON} weight={saved ? "fill" : "regular"} aria-hidden="true" />
+        <ActionGlyph>
+          <BookmarkSimple size={ACTION_ICON} weight={saved ? "fill" : "regular"} aria-hidden="true" />
+        </ActionGlyph>
+        <ActionLabel>{COPY.save}</ActionLabel>
       </ActionToggle>
     </ActionRow>
   );

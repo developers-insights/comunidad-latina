@@ -102,8 +102,23 @@ const TONE: Record<ActionTone, ToneStyles> = {
  * contenido sea un solo ícono, y `px-2.5` chico para que las cuatro acciones
  * entren en 375px sin scroll horizontal (con el CTA de la ficha debajo).
  */
+/**
+ * LA ACCIÓN ES UNA COLUMNA, NO UNA FILA — pedido del cliente (2026-08-31, con
+ * captura): el ícono con su número arriba, y debajo la palabra.
+ *
+ * No es sólo estética. La versión en fila obligaba a esconder las palabras
+ * (`hidden sm:inline`) porque cuatro acciones con texto al lado del ícono no
+ * entran en 375 px, y un ícono solo es una adivinanza: el de compartir y el de
+ * guardar se confunden, y quien no usa redes no tiene por qué saberlos. En
+ * columna la palabra entra SIEMPRE, en los cuatro y en cualquier ancho, porque
+ * cada acción ocupa un cuarto del ancho en vez de la suma de ícono + texto.
+ *
+ * `flex-1` reparte el ancho en cuatro partes iguales: así los divisores caen
+ * parejos y la fila se lee como una sola pieza, no como cuatro botones sueltos
+ * que se acomodaron donde entraron.
+ */
 const ACTION_BASE = cn(
-  "flex min-h-11 min-w-11 select-none items-center justify-center gap-1.5 rounded-md px-2.5 text-sm font-medium",
+  "flex min-h-14 flex-1 select-none flex-col items-center justify-center gap-1 rounded-md px-1 py-2 text-sm font-medium",
   "transition-[transform,color,background-color] duration-(--duration-fast) ease-(--ease-spring)",
   "active:scale-[0.94]",
   "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
@@ -128,7 +143,40 @@ export function ActionRow({
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={cn("flex items-center gap-0.5", className)}>{children}</div>;
+  return (
+    <div
+      className={cn(
+        // `divide-x` y no `gap`: el divisor sólo existe ENTRE acciones, así que
+        // se dibuja solo y no hay que saber cuál es la última. Con gap habría
+        // que elegir entre aire o línea; acá van las dos.
+        "flex items-stretch divide-x divide-border-subtle",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * El renglón de arriba de una acción: el ícono y, si lo hay, su número.
+ *
+ * Va aparte del label para que el número quede pegado al ícono —son el mismo
+ * dato: "24 me gusta"— y no flotando al lado de la palabra.
+ */
+export function ActionGlyph({ children }: { children: ReactNode }) {
+  return <span className="flex items-center gap-1.5 leading-none">{children}</span>;
+}
+
+/**
+ * La palabra debajo del ícono.
+ *
+ * Más chica que el número a propósito: lo que cambia entre publicaciones es el
+ * contador, no la etiqueta. Si las dos pesaran igual, el ojo tendría que
+ * releer "Me gusta" en cada tarjeta del feed para llegar al número.
+ */
+export function ActionLabel({ children }: { children: ReactNode }) {
+  return <span className="text-[11px] leading-none tracking-tight">{children}</span>;
 }
 
 /**
@@ -194,6 +242,12 @@ export function ActionToggle({
       label={label}
       particleColor={actionParticleColor(tone)}
       className={actionClass(tone, active, className)}
+      // El envoltorio interno de LikeBurst es `inline-flex` y los children son
+      // hijos SUYOS, no del botón: sin esto el `flex-col` del botón no los
+      // alcanza y la palabra queda al costado del ícono partida en dos
+      // renglones, mientras las acciones sin burst (comentar, compartir) sí
+      // apilan. Las cuatro tienen que verse iguales.
+      contentClassName="flex-col items-center gap-1"
     >
       {children}
     </LikeBurst>

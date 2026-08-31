@@ -13,6 +13,8 @@ import { toggleSaveAction } from "@/app/(app)/feed/engagement-actions";
 import {
   ACTION_ICON,
   ActionButton,
+  ActionGlyph,
+  ActionLabel,
   ActionRow,
   ActionToggle,
   actionClass,
@@ -225,8 +227,11 @@ export function PostActions({
 
   const commentsContent = (
     <>
-      <ChatCircle size={ICON} aria-hidden="true" />
-      <span className="numeric">{commentCount}</span>
+      <ActionGlyph>
+        <ChatCircle size={ICON} aria-hidden="true" />
+        <span className="numeric">{commentCount}</span>
+      </ActionGlyph>
+      <ActionLabel>{COPY.post.commentAction}</ActionLabel>
     </>
   );
 
@@ -237,14 +242,16 @@ export function PostActions({
         active={like.liked}
         onToggle={like.toggle}
         label={like.liked ? COPY.post.unlike : COPY.post.like}
-        className="pr-1.5"
       >
-        <Heart
-          size={ICON}
-          weight={like.liked ? "fill" : "regular"}
-          aria-hidden="true"
-        />
-        <span className="numeric">{like.count}</span>
+        <ActionGlyph>
+          <Heart
+            size={ICON}
+            weight={like.liked ? "fill" : "regular"}
+            aria-hidden="true"
+          />
+          <span className="numeric">{like.count}</span>
+        </ActionGlyph>
+        <ActionLabel>{COPY.post.like}</ActionLabel>
       </ActionToggle>
 
       {isDetail ? (
@@ -275,14 +282,11 @@ export function PostActions({
         </ActionButton>
       )}
 
-      <ActionButton
-        tone="share"
-        label={COPY.post.share}
-        onClick={share}
-        className="ml-auto"
-      >
-        <ShareNetwork size={ICON} aria-hidden="true" />
-        <span className="hidden sm:inline">{COPY.post.share}</span>
+      <ActionButton tone="share" label={COPY.post.share} onClick={share}>
+        <ActionGlyph>
+          <ShareNetwork size={ICON} aria-hidden="true" />
+        </ActionGlyph>
+        <ActionLabel>{COPY.post.share}</ActionLabel>
       </ActionButton>
 
       {/* Guardar al final, como el marcador de Instagram. Misma micro-celebración
@@ -294,11 +298,14 @@ export function PostActions({
         onToggle={toggleSave}
         label={saved ? COPY.post.unsave : COPY.post.save}
       >
-        <BookmarkSimple
-          size={ICON}
-          weight={saved ? "fill" : "regular"}
-          aria-hidden="true"
-        />
+        <ActionGlyph>
+          <BookmarkSimple
+            size={ICON}
+            weight={saved ? "fill" : "regular"}
+            aria-hidden="true"
+          />
+        </ActionGlyph>
+        <ActionLabel>{COPY.post.save}</ActionLabel>
       </ActionToggle>
     </ActionRow>
   );

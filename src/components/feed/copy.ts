@@ -600,6 +600,18 @@ export const COPY = {
     like: "Me gusta",
     unlike: "Quitar me gusta",
     comments: "Comentarios",
+    /**
+     * El texto que se VE debajo del ícono. Es un verbo, no un sustantivo, para
+     * que las cuatro acciones se lean parejas — "Me gusta · Comentar ·
+     * Compartir · Guardar" es una lista de cosas que podés hacer; con
+     * "Comentarios" en el medio, una de las cuatro describe un contenido en vez
+     * de ofrecer una acción.
+     *
+     * `comments` sigue existiendo aparte porque es la etiqueta ACCESIBLE, y ahí
+     * el sustantivo con la cuenta sí es lo correcto: quien usa lector de
+     * pantalla escucha "Comentarios (8)", no "Comentar 8".
+     */
+    commentAction: "Comentar",
     share: "Compartir",
     shareCopiedTitle: "Link copiado",
     shareCopiedBody: "Pegalo donde quieras para compartir la publicación.",

@@ -150,6 +150,53 @@ const VIDEO: PostMediaView = { kind: "video", url: "https://cdn.example.com/reel
  * banner (pregunta/texto sin medios) llega por el prop `immersiveBackground`
  * (wiring pendiente desde post-card.tsx, ver su doc en post-actions.tsx).
  */
+describe("PostActions — las cuatro acciones se ven iguales", () => {
+  afterEach(cleanup);
+
+  /**
+   * El cliente pidió (2026-08-31, con captura) que la fila se lea como cuatro
+   * acciones parejas: el ícono con su número arriba y la palabra debajo.
+   *
+   * Estos tests existen por un bug real y silencioso: `LikeBurst` envuelve a sus
+   * children en un `inline-flex` propio, y ese envoltorio le gana al `flex-col`
+   * del botón. Resultado: "Comentar" y "Compartir" apilaban, mientras "Me gusta"
+   * y "Guardar" —las dos que pasan por LikeBurst— quedaban con la palabra al
+   * costado, partida en dos renglones. En una captura de escritorio casi no se
+   * nota; en 375 px desalinea la fila entera.
+   *
+   * jsdom no calcula layout, así que no se puede medir la geometría acá. Lo que
+   * sí se puede anclar es la CAUSA: que las cuatro tengan su palabra visible, y
+   * que el envoltorio interno de las dos con burst pida la columna.
+   */
+
+  it("las cuatro muestran su palabra, no sólo el ícono", () => {
+    render(<PostActions {...BASE} />);
+    for (const palabra of [
+      COPY.post.like,
+      COPY.post.commentAction,
+      COPY.post.share,
+      COPY.post.save,
+    ]) {
+      expect(screen.getAllByText(palabra).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("las acciones con burst apilan igual que las otras dos", () => {
+    const { container } = render(<PostActions {...BASE} />);
+    const conBurst = [...container.querySelectorAll("button")].filter((b) =>
+      b.hasAttribute("aria-pressed"),
+    );
+    // Me gusta y Guardar.
+    expect(conBurst).toHaveLength(2);
+    for (const boton of conBurst) {
+      const envoltorio = [...boton.querySelectorAll("span")].find((s) =>
+        s.className.includes("inline-flex"),
+      );
+      expect(envoltorio?.className).toContain("flex-col");
+    }
+  });
+});
+
 describe("PostActions — la forma de la hoja sale del contexto de medios", () => {
   beforeEach(() => {
     state.openComments.mockClear();

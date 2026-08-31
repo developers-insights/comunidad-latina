@@ -17,6 +17,15 @@ export type LikeBurstProps = {
   /** Color de las partículas. Default var(--color-brand). */
   particleColor?: string;
   className?: string;
+  /**
+   * Clases del envoltorio INTERNO que sostiene a los children.
+   *
+   * Existe porque ese envoltorio es `inline-flex` —o sea, fila— y eso le gana a
+   * cualquier `flex-col` que el consumidor le ponga al botón: los children son
+   * hijos del span, no del botón. La barra de acciones del feed apila ícono y
+   * palabra, así que necesita pedir la columna acá adentro.
+   */
+  contentClassName?: string;
 };
 
 const PARTICLES = 6;
@@ -41,6 +50,7 @@ export function LikeBurst({
   label = "Me gusta",
   particleColor = "var(--color-brand)",
   className,
+  contentClassName,
 }: LikeBurstProps) {
   const reduce = usePrefersReducedMotion();
   const [bursting, setBursting] = useState(false);
@@ -96,7 +106,7 @@ export function LikeBurst({
           })}
         </span>
       )}
-      <span className="relative z-10 inline-flex">{children}</span>
+      <span className={cn("relative z-10 inline-flex", contentClassName)}>{children}</span>
     </button>
   );
 }
