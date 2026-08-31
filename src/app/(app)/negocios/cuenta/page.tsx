@@ -2,6 +2,8 @@ import Link from "next/link";
 import {
   CaretRight,
   CheckCircle,
+  SealCheck,
+  ShieldWarning,
   SignIn,
   Storefront,
   UserCircle,
@@ -13,6 +15,7 @@ import {
   listarIdentidadesDeNegocio,
 } from "@/lib/perfil-activo/identidad";
 import { PERFIL_ACTIVO_COPY } from "@/lib/perfil-activo/copy";
+import { contarNegociosPropios, lugaresDeNegocio } from "@/lib/perfil-activo/tope";
 import { cn } from "@/lib/utils";
 import { businessCategoryLabel } from "../categories";
 import { AltaForm } from "./alta-form";
@@ -44,6 +47,16 @@ export const metadata = { title: COPY.title };
  * Cuelga de /negocios, así que hereda el `ModuleGate` del layout: si la
  * comunidad tiene Negocios apagado, esta ruta no existe — y la fila de Ajustes
  * que lleva acá tampoco se pinta.
+ *
+ * ── DE UNO A DIEZ (0121) ────────────────────────────────────────────────────
+ * Antes esta pantalla tenía dos caras excluyentes: o el formulario de alta, o
+ * la tarjeta del único negocio. Con hasta diez, esas dos caras conviven — la
+ * lista arriba y el formulario abajo, con `id="nuevo"` para que la fila
+ * "Agregar otro negocio" del cambiador caiga directamente ahí.
+ *
+ * Cuando no quedan lugares el formulario NO se muestra. Un formulario que sólo
+ * puede terminar en error no es una función: es una trampa. En su lugar queda
+ * dicho cuál es el máximo y qué se puede seguir haciendo.
  */
 export default async function CuentaDeNegocioPage() {
   const [shell, negocios, identidad] = await Promise.all([
@@ -78,115 +91,153 @@ export default async function CuentaDeNegocioPage() {
   // Hoisted: adentro del `.map()` TypeScript pierde el estrechamiento del
   // `if (!shell.user)` de arriba.
   const nombrePersonal = shell.user.displayName;
+  // Sólo los PROPIOS consumen lugares: administrar negocios ajenos no tiene
+  // tope (0103) y por eso no puede empujar a nadie contra el máximo de diez.
+  const lugares = lugaresDeNegocio(contarNegociosPropios(negocios));
 
   return (
     <div className="flex flex-col gap-6">
       <Encabezado />
 
       {negocios.length === 0 ? (
-        <>
-          <BezelCard className="flex flex-col gap-3 p-4">
-            <h2 className="font-display text-base font-bold text-foreground">
-              {COPY.intro.title}
-            </h2>
-            <p className="text-sm text-foreground-secondary">{COPY.intro.body}</p>
-            <ul className="flex flex-col gap-2">
-              {COPY.intro.bullets.map((bullet) => (
-                <li key={bullet} className="flex items-start gap-2 text-sm text-foreground">
-                  <CheckCircle
-                    size={18}
-                    weight="fill"
-                    aria-hidden="true"
-                    className="mt-0.5 shrink-0 text-brand"
-                  />
-                  <span>{bullet}</span>
-                </li>
-              ))}
-            </ul>
-          </BezelCard>
-
-          <section className="flex flex-col gap-3">
-            <h2 className="font-display text-base font-bold text-foreground">
-              {COPY.form.legend}
-            </h2>
-            <AltaForm />
-          </section>
-        </>
+        <BezelCard className="flex flex-col gap-3 p-4">
+          <h2 className="font-display text-base font-bold text-foreground">
+            {COPY.intro.title}
+          </h2>
+          <p className="text-sm text-foreground-secondary">{COPY.intro.body}</p>
+          <ul className="flex flex-col gap-2">
+            {COPY.intro.bullets.map((bullet) => (
+              <li key={bullet} className="flex items-start gap-2 text-sm text-foreground">
+                <CheckCircle
+                  size={18}
+                  weight="fill"
+                  aria-hidden="true"
+                  className="mt-0.5 shrink-0 text-brand"
+                />
+                <span>{bullet}</span>
+              </li>
+            ))}
+          </ul>
+        </BezelCard>
       ) : (
-        <>
-          <section className="flex flex-col gap-3">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-foreground-muted">
-              {COPY.card.heading}
-            </h2>
+        <section className="flex flex-col gap-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-foreground-muted">
+            {COPY.card.heading}
+          </h2>
 
-            {negocios.map((negocio) => {
-              const activo = negocio.businessId === activeBusinessId;
-              const rubro = businessCategoryLabel(negocio.categoria);
-              return (
-                <BezelCard
-                  key={negocio.businessId}
-                  className="flex flex-col gap-3 p-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar size="md" name={negocio.nombre} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-foreground">
-                        {negocio.nombre}
-                      </p>
-                      <p className="truncate text-xs text-foreground-secondary">
-                        {[rubro, PERFIL_ACTIVO_COPY.roles[negocio.rol]]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                    </div>
+          {negocios.map((negocio) => {
+            const activo = negocio.businessId === activeBusinessId;
+            const rubro = businessCategoryLabel(negocio.categoria);
+            return (
+              <BezelCard key={negocio.businessId} className="flex flex-col gap-3 p-4">
+                <div className="flex items-center gap-3">
+                  <Avatar size="md" name={negocio.nombre} src={negocio.avatarUrl} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {negocio.nombre}
+                    </p>
+                    <p className="truncate text-xs text-foreground-secondary">
+                      {[rubro, PERFIL_ACTIVO_COPY.roles[negocio.rol]]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
                   </div>
+                </div>
 
-                  {/* El estado, con todas las letras. Ver el docblock de arriba. */}
-                  <p
-                    className={cn(
-                      "flex items-center gap-2 rounded-lg px-3 py-2 text-xs",
-                      activo
-                        ? "bg-brand-tint font-semibold text-brand-ink"
-                        : "bg-surface-subtle text-foreground-secondary",
-                    )}
-                  >
-                    {activo ? (
-                      <Storefront size={16} weight="fill" aria-hidden="true" />
-                    ) : (
-                      <UserCircle size={16} aria-hidden="true" />
-                    )}
-                    {activo ? COPY.card.activeNow : COPY.card.inactiveNow}
-                  </p>
+                {/* El estado, con todas las letras. Ver el docblock de arriba. */}
+                <p
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-xs",
+                    activo
+                      ? "bg-brand-tint font-semibold text-brand-ink"
+                      : "bg-surface-subtle text-foreground-secondary",
+                  )}
+                >
+                  {activo ? (
+                    <Storefront size={16} weight="fill" aria-hidden="true" />
+                  ) : (
+                    <UserCircle size={16} aria-hidden="true" />
+                  )}
+                  {activo ? COPY.card.activeNow : COPY.card.inactiveNow}
+                </p>
 
-                  <UsarPerfil
-                    businessId={negocio.businessId}
-                    nombre={negocio.nombre}
-                    nombrePersonal={nombrePersonal}
-                    activo={activo}
-                  />
-                </BezelCard>
-              );
-            })}
-          </section>
+                {/* La verificación de ESTE perfil (0121). Ícono + palabra, nunca
+                    sólo color: la mitad de la gente no distingue verde de gris.
+                    El camino para resolverlo es uno solo y está más abajo. */}
+                <p
+                  className={cn(
+                    "flex items-center gap-2 text-xs",
+                    negocio.verificada ? "text-success" : "text-foreground-secondary",
+                  )}
+                >
+                  {negocio.verificada ? (
+                    <SealCheck size={16} weight="fill" aria-hidden="true" />
+                  ) : (
+                    <ShieldWarning size={16} aria-hidden="true" />
+                  )}
+                  {negocio.verificada
+                    ? COPY.verificacion.verified
+                    : COPY.verificacion.pending}
+                </p>
 
-          <section className="flex flex-col gap-2">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-foreground-muted">
-              {COPY.next.heading}
-            </h2>
-            <div className="divide-y divide-border-subtle overflow-hidden rounded-xl border border-border-subtle bg-surface">
-              <SiguientePaso
-                href="/publicar?kind=business"
-                title={COPY.next.listingTitle}
-                description={COPY.next.listingBody}
-              />
-              <SiguientePaso
-                href="/negocios/presencia"
-                title={COPY.next.presenceTitle}
-                description={COPY.next.presenceBody}
-              />
-            </div>
-          </section>
-        </>
+                <UsarPerfil
+                  businessId={negocio.businessId}
+                  nombre={negocio.nombre}
+                  nombrePersonal={nombrePersonal}
+                  activo={activo}
+                />
+              </BezelCard>
+            );
+          })}
+        </section>
+      )}
+
+      {/* El alta. Vive acá abajo y no en una rama excluyente: con hasta diez
+          negocios, "los que tengo" y "agregar otro" son dos cosas que pasan en
+          la misma pantalla. El ancla la usa el cambiador de perfil. */}
+      {lugares.puedeCrear ? (
+        <section id="nuevo" className="flex flex-col gap-3 scroll-mt-20">
+          <h2 className="font-display text-base font-bold text-foreground">
+            {negocios.length === 0 ? COPY.form.legend : COPY.form.legendOtro}
+          </h2>
+          {lugares.usados > 0 && (
+            <p className="text-xs text-foreground-secondary">
+              {COPY.slots.left(lugares.restantes, lugares.tope)}
+            </p>
+          )}
+          <AltaForm />
+        </section>
+      ) : (
+        <BezelCard
+          id="nuevo"
+          className="flex flex-col gap-1 p-4 scroll-mt-20"
+          role="status"
+        >
+          <h2 className="font-display text-base font-bold text-foreground">
+            {COPY.slots.fullTitle(lugares.tope)}
+          </h2>
+          <p className="text-sm text-foreground-secondary">{COPY.slots.fullBody}</p>
+        </BezelCard>
+      )}
+
+      {negocios.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-foreground-muted">
+            {COPY.next.heading}
+          </h2>
+          <div className="divide-y divide-border-subtle overflow-hidden rounded-xl border border-border-subtle bg-surface">
+            <SiguientePaso
+              href="/perfil/verificar"
+              title={COPY.verificacion.cta}
+              description={COPY.verificacion.hint}
+            />
+            <SiguientePaso
+              href="/negocios/presencia"
+              title={COPY.next.presenceTitle}
+              description={COPY.next.presenceBody}
+            />
+          </div>
+        </section>
       )}
     </div>
   );

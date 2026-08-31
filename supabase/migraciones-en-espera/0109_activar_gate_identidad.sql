@@ -17,6 +17,17 @@
 -- `public.puedo_publicar_vertical`) ya existen desde la 0106 — lo único que
 -- falta es la condición en la policy, y es lo único que hace este archivo.
 --
+-- ── ACTUALIZADO POR LA 0121 (2026-08-26) ────────────────────────────────────
+-- La rama B ya no pregunta por la PERSONA sino por la IDENTIDAD ACTIVA
+-- (`app.identidad_verificada_activa()`), que es lo mismo mientras nadie use el
+-- cambiador de perfil y la verificación del negocio cuando sí. Es la doctrina
+-- de la 0116/0117 —«todo lo que emitís lleva la cara activa»— y el pedido del
+-- cliente de 2026-08-26: «según cada perfil». La UI pregunta por la MISMA
+-- función desde `public.puedo_publicar_vertical()`, que la 0121 ya cambió: si
+-- este archivo hubiera quedado con el predicado viejo, la pantalla y la policy
+-- habrían dicho cosas distintas — que es exactamente lo que la 0106 se propuso
+-- evitar cuando sacó la lista de verticales a una función.
+--
 -- La 0106 las creó por separado a propósito: la UI necesita poder hacer la
 -- misma pregunta ANTES de que la persona llene el formulario entero. Eso ya
 -- funciona hoy sin este archivo.
@@ -58,6 +69,10 @@
 --   1. `STRIPE_SECRET_KEY` cargada en producción y el flujo de
 --      `/perfil/verificar` probado de punta a punta con una identidad real.
 --      Sin esto, la llave del candado no existe.
+--      SIGUE SIN CUMPLIRSE al 2026-08-26: la clave sigue vacía y la base sigue
+--      teniendo 0 identidades verificadas sobre 20 perfiles (medido ese día).
+--      Y desde la 0121 la llave abre DOS puertas, no una: sin documento
+--      validado tampoco se puede reclamar la verificación de un negocio.
 --
 --   2. Las server actions que publican traducen el rechazo a copy de producto.
 --      El helper ya está: `requireIdentidadVerificada()` en
@@ -65,6 +80,10 @@
 --      `src/app/(app)/publicar/actions.ts`, `empleos/publicar/actions.ts` y
 --      `marketplace/publicar/actions.ts`, y que el formulario avise ANTES —no
 --      al final— con un camino a `/perfil/verificar`.
+--      SIGUE SIN CUMPLIRSE al 2026-08-26: `grep -rn requireIdentidadVerificada
+--      src/` devuelve sólo su definición y su test. Lo que SÍ cambió es que
+--      `/perfil/verificar` ya tiene a dónde llevar a cada perfil (la lista de
+--      "Tus perfiles" de la 0121), o sea que el camino de salida existe.
 --
 --   3. Las cuentas que hoy publican están verificadas, o se les avisó. Mirá
 --      quiénes son antes de cerrarles la puerta:
@@ -116,12 +135,17 @@ with check (
   -- antes en vez de reventar al final.
   and (
     not app.vertical_exige_identidad(kind, price_amount)
-    or app.identidad_verificada((select auth.uid()))
+    -- 0121: la cara activa, no la persona. Misma función que consulta la UI.
+    or app.identidad_verificada_activa()
   )
 
   -- ── C · Una sola ficha de negocio (0106) ─────────────────────────────────
   -- Corta el INSERT ciego de /publicar?kind=business en el acto. El `or` de
   -- adelante hace que la subconsulta ni se evalúe para las otras verticales.
+  -- 0121: la MISMA llamada, con la regla cambiada por dentro — «ya agotó sus
+  -- fichas» pasó de significar "tiene una" a "tiene tantas como cuentas de
+  -- negocio, con piso en uno". El texto de esta policy no cambió a propósito,
+  -- para que este archivo y la 0121 se puedan aplicar en cualquier orden.
   and (
     kind <> 'business'
     or not app.ya_tiene_ficha_de_negocio(
@@ -132,6 +156,6 @@ with check (
 );
 
 comment on policy listings_insert on public.listings is
-  'Base de 0050 (0048 ← 0039 ← 0038 ← 0004) SIN cambios, más dos gates: (1) una sola ficha kind=business viva por dueño y comunidad (0106); (2) identidad verificada para property/product/job y event pago —app.vertical_exige_identidad(), 0109—, que rige SÓLO al crear: listings_update no se tocó, así que nadie pierde acceso a lo que ya publicó, y como el dueño no puede escribir published por UPDATE (0075), INSERT es la única bisagra que tiene.';
+  'Base de 0050 (0048 ← 0039 ← 0038 ← 0004) SIN cambios, más dos gates: (1) no más fichas kind=business vivas que cuentas de negocio, con piso en una (0106 + 0121); (2) identidad de la CARA ACTIVA verificada para property/product/job y event pago —app.vertical_exige_identidad() + app.identidad_verificada_activa(), 0109 con la corrección de la 0121—, que rige SÓLO al crear: listings_update no se tocó, así que nadie pierde acceso a lo que ya publicó, y como el dueño no puede escribir published por UPDATE (0075), INSERT es la única bisagra que tiene.';
 
 commit;

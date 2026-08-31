@@ -16,12 +16,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const mocks = vi.hoisted(() => ({
+  getIdentidadActiva: vi.fn(),
   requireTenantMatch: vi.fn(),
   getTenant: vi.fn(),
   sessionsCreate: vi.fn(),
 }));
 
 vi.mock("@/lib/config/services", () => ({ isStripeConfigured: true }));
+vi.mock("@/lib/perfil-activo/identidad", () => ({
+  getIdentidadActiva: mocks.getIdentidadActiva,
+}));
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
 vi.mock("@/lib/tenant/resolve", () => ({ getTenant: mocks.getTenant }));
 vi.mock("@/lib/stripe", async (importOriginal) => ({
@@ -66,7 +70,13 @@ function priceRow(
   };
 }
 
-function userSupabase(rows: PriceRow[] | null) {
+type CuentaDeNegocio = { id: string; name: string; stripe_customer_id: string | null };
+
+const UNA_CUENTA: CuentaDeNegocio[] = [
+  { id: "biz-1", name: "Panadería", stripe_customer_id: null },
+];
+
+function userSupabase(rows: PriceRow[] | null, cuentas: CuentaDeNegocio[] = UNA_CUENTA) {
   return {
     // `getTenantPrices` reintenta por la RPC `tenant_public_prices` (0078)
     // cuando la lectura directa vuelve vacia: vacio aca deja regir las constantes.
@@ -79,14 +89,15 @@ function userSupabase(rows: PriceRow[] | null) {
         };
         return builder;
       }
-      // business_accounts: el negocio ya existe, así que no se crea nada.
+      // business_accounts: desde la 0121 la consulta trae TODAS las cuentas de
+      // la persona (hasta 10) ordenadas por antigüedad, no una sola —
+      // `.maybeSingle()` con dos filas devolvía PGRST116 y el código terminaba
+      // creando una cuenta fantasma. `cuentas` deja que cada caso elija cuántas
+      // hay; el default es una, que es el camino de siempre.
       const other = {
         select: () => other,
         eq: () => other,
-        maybeSingle: async () => ({
-          data: { id: "biz-1", name: "Panadería", stripe_customer_id: null },
-          error: null,
-        }),
+        order: async () => ({ data: cuentas, error: null }),
       };
       return other;
     },
@@ -98,9 +109,10 @@ async function cobrar(options: {
   plan?: "basico" | "destacado" | "pro";
   intervalo?: "mensual" | "anual";
   tenantId?: string;
+  cuentas?: CuentaDeNegocio[];
 }) {
   const tenantId = options.tenantId ?? "tenant-1";
-  const supabase = userSupabase(options.rows);
+  const supabase = userSupabase(options.rows, options.cuentas);
 
   mocks.getTenant.mockResolvedValue({ id: tenantId, slug: "comunidadlatina" });
   mocks.requireTenantMatch.mockResolvedValue({
@@ -132,6 +144,9 @@ async function cobrar(options: {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
+  // Por defecto se actúa como uno mismo, que es el caso de siempre. Los tests
+  // de la 0121 (abajo) lo pisan para actuar como un negocio.
+  mocks.getIdentidadActiva.mockResolvedValue({ tipo: "personal" });
 });
 
 describe("iniciarSuscripcion — de dónde sale el monto", () => {
@@ -225,5 +240,53 @@ describe("iniciarSuscripcion — de dónde sale el monto", () => {
       | undefined;
 
     expect(payload?.subscription_data?.metadata?.owner_id).toBe(USER);
+  });
+});
+
+/**
+ * =============================================================================
+ * HASTA DIEZ NEGOCIOS (0121) — a cuál se le cobra
+ * =============================================================================
+ *
+ * Mientras el índice `business_accounts_one_per_owner` existió, "la cuenta de
+ * negocio de esta persona" era una descripción completa. Al levantarlo dejó de
+ * serlo, y este bloque fija las tres respuestas posibles. El primero de los
+ * tests es el que importa: sin él, dos cuentas hacían que PostgREST devolviera
+ * PGRST116, la lectura quedaba en `null`, y la rama de "todavía no tiene
+ * ninguna" fabricaba una cuenta nueva con el nombre de la persona Y le cobraba
+ * la suscripción a ésa.
+ */
+describe("iniciarSuscripcion — qué negocio se hace verificado", () => {
+  const DOS_CUENTAS: CuentaDeNegocio[] = [
+    { id: "biz-1", name: "Panadería", stripe_customer_id: null },
+    { id: "biz-2", name: "Ferretería", stripe_customer_id: null },
+  ];
+
+  it("con varios negocios y ninguno activo NO adivina: pide elegir y no cobra", async () => {
+    const { result } = await cobrar({ rows: null, cuentas: DOS_CUENTAS });
+
+    expect(result).toMatchObject({ status: "error" });
+    // Lo que no puede pasar bajo ningún concepto: que se haya abierto un
+    // Checkout igual, contra un negocio elegido al azar.
+    expect(mocks.sessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it("actuando como un negocio, ÉSE es el que suscribe — sin preguntar nada", async () => {
+    mocks.getIdentidadActiva.mockResolvedValue({
+      tipo: "negocio",
+      negocio: { businessId: "biz-2", nombre: "Ferretería", rol: "owner" },
+    });
+
+    const { result, metadata } = await cobrar({ rows: null, cuentas: DOS_CUENTAS });
+
+    expect(result).toMatchObject({ status: "redirect" });
+    expect(metadata?.business_account_id).toBe("biz-2");
+  });
+
+  it("con un solo negocio no hay nada que preguntar: sigue siendo ése", async () => {
+    const { result, metadata } = await cobrar({ rows: null });
+
+    expect(result).toMatchObject({ status: "redirect" });
+    expect(metadata?.business_account_id).toBe("biz-1");
   });
 });

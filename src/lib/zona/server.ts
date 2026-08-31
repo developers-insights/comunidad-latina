@@ -119,7 +119,45 @@ export const getZonaActiva = cache(async (): Promise<ZonaActiva> => {
  * degrada a la etiqueta exacta, que es angosto pero honesto — y el estado vacío
  * de la zona ofrece la salida en un toque.
  */
+/**
+ * ── POR QUÉ ADEMÁS DEL `cache()` HAY UN MEMO CON VENCIMIENTO ────────────────
+ *
+ * `cache()` de React dedupe DENTRO de un request. Alcanza para pintar una
+ * pantalla —el header y los siete listados comparten una lectura— y no alcanza
+ * para el scroll infinito del feed, donde cada tanda es un request NUEVO: al
+ * recorrer una comunidad entera esta consulta se repetía una vez por tanda,
+ * trayendo 200 filas de `listings` cada vez para calcular un `distinct` que en
+ * la práctica devuelve los mismos barrios durante días.
+ *
+ * Lo que se cachea es un dato PÚBLICO y por comunidad —qué barrios tienen algo
+ * publicado—, sin nada de la persona que mira: no hay riesgo de servirle a
+ * alguien el estado de otro, que es lo único que haría inaceptable un memo
+ * compartido entre requests.
+ *
+ * Vive en memoria del proceso y no en Next: `cacheComponents` no está prendido
+ * en este proyecto (`next.config.ts`) y prenderlo cambia la semántica de
+ * renderizado de TODA la app — es una migración propia, no el peaje de una
+ * optimización de una función. En serverless cada instancia calienta su copia;
+ * eso es correcto para un acelerador, que ante la duda sólo puede costar un
+ * viaje de más.
+ *
+ * `VENCIMIENTO_MS` es corto a propósito: el precio de estar desactualizado es
+ * que un barrio recién estrenado tarde hasta cinco minutos en ensanchar el
+ * match de la zona, y `zonasCoincidentes` ya siembra con la zona elegida, así
+ * que ese barrio nunca desaparece del filtro — sólo tarda en sumar vecinos.
+ */
+const VENCIMIENTO_MS = 5 * 60 * 1000;
+const zonasPorTenant = new Map<string, { zonas: string[]; vence: number }>();
+
+/** Sólo para los tests: nada de estado colgado entre casos. */
+export function _olvidarZonasCacheadas(): void {
+  zonasPorTenant.clear();
+}
+
 export const listarZonasDelTenant = cache(async (tenantId: string): Promise<string[]> => {
+  const guardado = zonasPorTenant.get(tenantId);
+  if (guardado && guardado.vence > Date.now()) return guardado.zonas;
+
   try {
     const supabase = await createClient();
     const { data, error } = await supabase
@@ -131,15 +169,19 @@ export const listarZonasDelTenant = cache(async (tenantId: string): Promise<stri
       .limit(200);
     if (error) {
       console.warn("[zona] no se pudieron leer las zonas de la comunidad", { code: error.code });
+      // Un fallo NO se guarda: cachear el vacío durante cinco minutos
+      // convertiría un hipo de red en cinco minutos de filtro angosto.
       return [];
     }
-    return [
+    const zonas = [
       ...new Set(
         (data ?? [])
           .map((row) => row.area_label?.trim())
           .filter((label): label is string => Boolean(label)),
       ),
     ].sort((a, b) => a.localeCompare(b, "es"));
+    zonasPorTenant.set(tenantId, { zonas, vence: Date.now() + VENCIMIENTO_MS });
+    return zonas;
   } catch {
     return [];
   }

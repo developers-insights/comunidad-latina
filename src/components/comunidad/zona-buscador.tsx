@@ -29,7 +29,34 @@ const C = COMUNIDAD_COPY.perdidos.filters;
  * listados: recargar la lista entera en cada tecla es un parpadeo bajo el dedo.
  * Se busca al enviar — con Enter o tocando la lupa, que es un botón de verdad.
  */
-export function ZonaBuscador({ className }: { className?: string }) {
+export interface ZonaBuscadorProps {
+  className?: string;
+  /**
+   * Rótulo, marcador y ayuda. Tienen default —el copy de Perdido y encontrado,
+   * que es donde nació este buscador— y los sobreescribe el tablón de ayuda
+   * mutua (0120), que busca por la misma clave `?zona=` pero cuya ayuda no
+   * puede decir "donde creés que pasó": ahí no pasó nada, alguien vive ahí.
+   *
+   * Se parametrizó el TEXTO y no se duplicó el componente a propósito: lo que
+   * hace especial a este buscador —el parámetro propio, el "no busca mientras
+   * escribís", el botón de borrar que reemplaza al nativo de WebKit— es
+   * idéntico en las dos pantallas, y una copia se desincronizaría en el primer
+   * arreglo.
+   */
+  label?: string;
+  placeholder?: string;
+  help?: string;
+  /** id del input. Distinto por pantalla para no repetir ids en el documento. */
+  inputId?: string;
+}
+
+export function ZonaBuscador({
+  className,
+  label = C.areaLabel,
+  placeholder = C.areaPlaceholder,
+  help = C.areaHelp,
+  inputId = "comunidad-zona",
+}: ZonaBuscadorProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -59,8 +86,8 @@ export function ZonaBuscador({ className }: { className?: string }) {
       }}
       className={cn(isPending && "opacity-70", className)}
     >
-      <label htmlFor="comunidad-zona" className="mb-1.5 block text-sm font-medium text-foreground">
-        {C.areaLabel}
+      <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-foreground">
+        {label}
       </label>
 
       <div className="relative">
@@ -78,13 +105,13 @@ export function ZonaBuscador({ className }: { className?: string }) {
         </button>
 
         <Input
-          id="comunidad-zona"
+          id={inputId}
           type="search"
           inputMode="search"
           enterKeyHint="search"
           autoComplete="off"
-          placeholder={C.areaPlaceholder}
-          aria-describedby="comunidad-zona-help"
+          placeholder={placeholder}
+          aria-describedby={`${inputId}-help`}
           value={zona}
           onChange={(event) => setZona(event.target.value)}
           maxLength={80}
@@ -113,8 +140,8 @@ export function ZonaBuscador({ className }: { className?: string }) {
         )}
       </div>
 
-      <p id="comunidad-zona-help" className="mt-1.5 text-sm text-foreground-muted">
-        {C.areaHelp}
+      <p id={`${inputId}-help`} className="mt-1.5 text-sm text-foreground-muted">
+        {help}
       </p>
     </form>
   );

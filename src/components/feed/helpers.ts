@@ -169,6 +169,21 @@ export function parseTab(raw: string | undefined): FeedTabId {
   return found?.id ?? "para-ti";
 }
 
+/**
+ * ¿Este tab es un MODO del feed social ("Para ti" / "Siguiendo") y no una
+ * vertical?
+ *
+ * Vive acá —módulo puro, sin React— y no en el componente que la estrenó
+ * (`feed-mode-toggle.tsx`, que además la re-exporta para no mover su test)
+ * porque hoy la preguntan DOS superficies con dos runtimes distintos: ese
+ * conmutador, que es server, y la fila de círculos (`module-circles.tsx`), que
+ * es cliente. Duplicar la lista de tabs sociales en las dos era garantizar que
+ * el día que aparezca un tercer modo, una de las dos se entere y la otra no.
+ */
+export function esTabSocial(tab: FeedTabId): boolean {
+  return tab === "para-ti" || tab === "siguiendo";
+}
+
 // ---------------------------------------------------------------------------
 // View models que las cards reciben ya resueltos (server → UI)
 // ---------------------------------------------------------------------------

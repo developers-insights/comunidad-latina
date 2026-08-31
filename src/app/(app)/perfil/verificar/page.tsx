@@ -10,9 +10,11 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, ProximamentePremium, buttonVariants } from "@/components/ui";
 import { isStripeConfigured } from "@/lib/config/services";
+import { leerEstadoDeIdentidades } from "@/lib/verificacion/identidades";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { formatDate } from "@/lib/utils";
+import { PerfilesVerificacion } from "./perfiles";
 import { VerificarCta } from "./verificar-cta";
 
 export const metadata = { title: "Verificá tu identidad" };
@@ -85,6 +87,13 @@ export default async function VerificarIdentidadPage() {
     .maybeSingle();
   if (!profile) redirect("/bienvenida");
 
+  // Los perfiles de esta sesión con su verificación (0121). La persona está
+  // siempre; los negocios aparecen si tiene. Con una sola identidad la lista no
+  // se dibuja: sería una tabla de una fila diciendo lo que el resto de la
+  // pantalla ya dice, y quien no tiene negocio no ve NINGÚN cambio.
+  const identidades = await leerEstadoDeIdentidades(supabase, user.id);
+  const tieneNegocios = identidades.some((identidad) => identidad.tipo === "negocio");
+
   return (
     <div className="flex flex-col gap-6 pb-8">
       <Link
@@ -101,6 +110,13 @@ export default async function VerificarIdentidadPage() {
         </h1>
         <p className="mt-1 text-sm text-foreground-secondary">{COPY.subtitulo}</p>
       </header>
+
+      {tieneNegocios && (
+        <PerfilesVerificacion
+          identidades={identidades}
+          stripeConfigured={isStripeConfigured}
+        />
+      )}
 
       {profile.identity_verified ? (
         <BezelCard

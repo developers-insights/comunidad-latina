@@ -118,6 +118,16 @@ export const COPY = {
       title: "Privacidad y datos",
       description: "Qué guardamos, cómo borrarlo y cómo pedir una copia.",
     },
+    /**
+     * No dice "Seguridad" a secas: eso promete un panel de controles que hay
+     * que tocar, y acá no se configura nada. Se lee. El título nombra el acto
+     * —cuidar— y la descripción dice de dónde salen los números, que es lo
+     * único que hace que una pantalla así valga algo.
+     */
+    transparency: {
+      title: "Cómo cuidamos la comunidad",
+      description: "Denuncias, avisos dados de baja y casos reales. Los números salen solos.",
+    },
     theme: {
       title: "Tema",
       description: "Claro u oscuro, como te resulte más cómodo.",

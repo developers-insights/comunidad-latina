@@ -229,8 +229,48 @@ export function FeedList({
     });
   }, [isPending, cursor, tab, seenKeys]);
 
-  // Sentinel con rootMargin generoso: dispara la carga ANTES de que el
-  // usuario vea el fondo real (se siente "infinito", nunca un salto brusco).
+  /**
+   * Sentinel: dispara la carga ANTES de que el usuario vea el fondo real.
+   *
+   * ── DE DÓNDE SALE EL 200 % (medido, 2026-08-26) ────────────────────────────
+   * El cliente: «los videos/post en el feed principal tardan en cargar cuando se
+   * baja viendo los post viejos». Se midió antes de tocar nada, y lo que NO era
+   * quedó descartado con número:
+   *
+   *   · La query no es. `explain analyze` de `feed_posts_page` contra la base de
+   *     producción: **9,0 ms** de ejecución (0,058 ms de plan, 1874 buffers, todo
+   *     en caché) y 455 bytes por fila. No hay nada que optimizar ahí.
+   *   · El `content-visibility` tampoco. Se midieron las tarjetas reales a
+   *     375×812: 562–596 px contra el placeholder de 600 px de
+   *     `OFFSCREEN_SKIP_CLASS` — 25 px de error promedio, 200 px sobre una página
+   *     entera. Y las fotos ya se estaban pidiendo hasta 4007 px por debajo del
+   *     viewport, así que el salto de subtree tampoco estaba ahogando la carga
+   *     de imágenes. Los dos se dejaron como estaban.
+   *
+   * Lo que sí es: **una página del feed cuesta cuatro viajes ENCADENADOS a la
+   * base**, no uno. `fetchFeedPageAction` resuelve el tenant, después la zona
+   * (que a su vez lee el catálogo de zonas del tenant), después las dos RPC de
+   * la página, y recién después los batches de autores/likes/entidades/etc.
+   * Cada eslabón espera al anterior. Con el ida y vuelta a Supabase medido en
+   * **314–362 ms** desde una conexión doméstica (5 muestras, mediana 344 ms),
+   * eso es más de un segundo antes de que exista la próxima tanda; en producción
+   * misma-región son decenas de ms por eslabón, pero siguen siendo cuatro.
+   *
+   * Y el aviso llegaba tarde: 600 px fijos, con tarjetas de ~570 px medidas, es
+   * **poco más de UNA tarjeta** de anticipo. Un pulgar deslizando cruza eso en
+   * menos de medio segundo. O sea: se pedía la página cuando ya no quedaba
+   * tiempo para traerla, y el fondo del feed llegaba antes que el contenido.
+   *
+   * `200%` es un margen RELATIVO AL VIEWPORT (con root nulo los porcentajes se
+   * resuelven contra él), no un número de píxeles elegido a ojo: dos pantallas
+   * de anticipo son ~1600 px en un teléfono y se achican solos en una ventana
+   * chica, donde una página también tarda menos en pintarse. A la velocidad de
+   * un deslizamiento rápido eso compra ~0,8 s — el orden de magnitud del viaje
+   * de arriba, que es exactamente lo que hay que cubrir.
+   *
+   * El botón "Cargar más" de abajo NO se toca: sigue siendo el camino de teclado
+   * y el de un navegador sin IntersectionObserver.
+   */
   useEffect(() => {
     if (cursor === null) return;
     const node = sentinelRef.current;
@@ -239,7 +279,7 @@ export function FeedList({
       (entries) => {
         if (entries[0]?.isIntersecting) loadMore();
       },
-      { rootMargin: "600px 0px" },
+      { rootMargin: "200% 0px" },
     );
     io.observe(node);
     return () => io.disconnect();

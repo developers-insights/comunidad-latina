@@ -452,21 +452,17 @@ const INVENTARIO: Record<string, Entrada> = {
   },
   // Editor de foto del composer rápido (§2/§3 filtros y texto, feedback
   // cliente 2026-07-27): la vista previa en vivo del texto que se va a QUEMAR
-  // sobre la foto (`PhotoCaptionOverlay`) escribe tinta on-media sobre un velo
-  // — la misma pieza que la miniatura de la grilla en composer-sheet.tsx. NO
-  // es un <button>, así que la cobertura no es "control": `PhotoEditor` sólo
-  // se monta DENTRO del `BottomSheet` de `ComposerSheet` (reemplaza su
-  // contenido cuando se edita una foto — ver el docblock de este archivo), y
-  // ese panel entero ya lleva `cl-print-hide` (es la hoja donde se COMPONE una
-  // publicación: en papel no existe). La prueba apunta ahí, no acá.
-  "src/components/feed/photo-editor.tsx": {
-    inks: ["text-on-media"],
-    cobertura: "cl-print-hide",
-    prueba: {
-      archivo: "src/components/feed/composer-sheet.tsx",
-      contiene: ["cl-print-hide"],
-    },
-  },
+  // sobre la foto (`PhotoCaptionOverlay`) escribía tinta on-media sobre un velo.
+  //
+  // SALIÓ DEL INVENTARIO (2026-08-26): el texto sobre la foto pasó a poder
+  // elegir COLOR (photo-overlay.ts), así que su tinta dejó de ser el token
+  // `on-media` y pasó a ser un valor literal en `style.color` — el mismo que
+  // `bake-photo.ts` quema en el JPEG, que es justamente el punto: el archivo
+  // publicado no puede depender de un token que cambia con el tema. La
+  // cobertura de papel no cambió y sigue siendo la misma que estaba anotada
+  // acá: `PhotoEditor` sólo se monta dentro del `BottomSheet` de
+  // `ComposerSheet`, que lleva `cl-print-hide` entero (es la hoja donde se
+  // COMPONE una publicación: en papel no existe).
   // Carrusel de medios (2026-07-27). Dos tintas, dos mecanismos:
   //  · el contador "7/12" del indicador se apoya en un velo (bg-media-scrim):
   //    sin ese relleno impreso queda en 1.00:1. El hook va en el CONTENEDOR del
@@ -524,13 +520,26 @@ const INVENTARIO: Record<string, Entrada> = {
       contiene: ["cl-print-fill"],
     },
   },
-  // Video del feed, tres portadores y ninguno llega al papel: el toggle de
-  // sonido vive dentro de un <button>; la píldora de vistas se imprime con su
-  // velo (cl-print-fill); el corazón del doble-tap es transitorio (sólo existe
-  // mientras dura la animación). El hook explícito es el de la píldora.
+  // Video del feed, DOS portadores y ninguno llega al papel: la píldora de
+  // vistas se imprime con su velo (cl-print-fill) y el corazón del doble-tap es
+  // transitorio (sólo existe mientras dura la animación). El hook explícito es
+  // el de la píldora.
+  //
+  // ERAN TRES hasta el 2026-08-26: el altavoz se mudó a `post-music.tsx`, un
+  // nivel más arriba, cuando la música pasó a ser de la PUBLICACIÓN y no de un
+  // medio (bug del cliente: una publicación de fotos con música no tenía
+  // ningún altavoz que tocar). Sigue siendo un <button>, así que su cobertura
+  // no cambió — cambió de archivo.
   "src/components/feed/card-video.tsx": {
-    inks: ["text-on-media", "text-on-media", "text-on-media"],
+    inks: ["text-on-media", "text-on-media"],
     cobertura: "cl-print-fill",
+  },
+  // El altavoz de la publicación (0090). Es un <button>, y el bloque de
+  // `@media print` esconde los controles: en una hoja impresa un botón de
+  // sonido no significa nada.
+  "src/components/feed/post-music.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "control",
   },
   // feed-listing-card.tsx y listings/listing-card.tsx SALIERON del inventario
   // (2026-07-26): su título/precio/zona pasó a heredar la tinta de
@@ -557,8 +566,13 @@ const INVENTARIO: Record<string, Entrada> = {
   // había quedado en 10 y desactualizó este guard. 11 desde 2026-07-26: suma el
   // contador de vistas junto al autor y el corazón del doble-tap. 12 desde
   // 2026-07-30: la cápsula de categoría activa, que además es la salida al menú.
+  // De vuelta a 11 el 2026-08-26: se cayó el "por {persona}" que el reel
+  // imprimía debajo del nombre del negocio. No fue un ajuste de diseño — era la
+  // misma fuga de privacidad que se cerró en la tarjeta del feed (ver el
+  // docblock de `EntityHeader` en post-card.tsx): un video publicado como
+  // negocio delataba el nombre y apellido de quien está detrás.
   "src/app/(app)/videos/video-reels.tsx": {
-    inks: Array<string>(12).fill("text-on-media"),
+    inks: Array<string>(11).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
   // Dos tintas, mismo patrón: el glifo Play sobre el thumbnail de video y el

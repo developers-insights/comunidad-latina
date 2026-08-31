@@ -29,6 +29,19 @@ export const COMUNIDAD_ACCENT_VOLUNTARIOS = "var(--accent-comunidad-voluntarios)
  */
 export const COMUNIDAD_ACCENT_ACOPIO = "var(--accent-comunidad-acopio)";
 
+/**
+ * Ayuda mutua (0120) — séptimo sub-acento, verde 700.
+ *
+ * Elegido con el mismo criterio que sus hermanos: el hueco de matiz más grande
+ * que quedaba en ESTA grilla era el que va del lima de "Bancos de comida"
+ * (~100°) al cian de "Voluntarios" (~200°), y este verde cae en el medio —a
+ * ~45° de uno y ~55° del otro, por encima del par más ajustado que ya conviven
+ * (ámbar/rosa, ~50°)—. Misma convención de siempre: un tono "700" de la paleta,
+ * declarado en `globals.css` junto a los otros seis, fijo con el tema y nunca
+ * theming.
+ */
+export const COMUNIDAD_ACCENT_MANOS = "var(--accent-comunidad-manos)";
+
 export interface ComunidadHeadingProps {
   /** Ícono Phosphor de la pantalla, ya instanciado (28px). Decorativo. */
   icon: ReactNode;

@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { BezelCard, buttonVariants } from "@/components/ui";
+import { ESCUDO_ENABLED } from "../feature-flag";
 
 /**
  * Explicación educativa del Trust Score (§3.3): el "por qué" detrás del
@@ -57,12 +58,6 @@ const COPY = {
 } as const;
 
 export const metadata: Metadata = { title: COPY.title };
-
-// Feature oculta por pedido del cliente (2026-07-20): ver la nota en
-// app/(app)/escudo/page.tsx. Tipada como `boolean` (no el literal `false`)
-// para que TS no marque el resto de la función como código muerto y rompa
-// el narrowing de abajo.
-const ESCUDO_ENABLED: boolean = false;
 
 function SignalRow({
   icon: IconComponent,

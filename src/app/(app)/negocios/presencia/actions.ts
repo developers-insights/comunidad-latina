@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
+import { getIdentidadActiva } from "@/lib/perfil-activo/identidad";
 import { getPrice } from "@/lib/pricing/read";
 import { getStripe, PLANES_PRESENCIA } from "@/lib/stripe";
 import { requireTenantMatch } from "@/lib/tenant/guard";
@@ -13,6 +14,13 @@ const COPY = {
     "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo en un momento.",
   errorSinNegocio:
     "No pudimos preparar tu cuenta de negocio. Probá de nuevo en un momento.",
+  /**
+   * Varios negocios y ninguno activo. NO se adivina: acá se está por cobrar
+   * una suscripción, y suscribir al negocio equivocado se arregla con un
+   * reembolso y una conversación incómoda. Un cartel se arregla con un toque.
+   */
+  elegiNegocio:
+    "Tenés más de un negocio. Cambiá al perfil del negocio que querés hacer verificado —tocá tu foto arriba a la derecha— y volvé a esta pantalla.",
 } as const;
 
 const suscripcionSchema = z.object({
@@ -83,13 +91,49 @@ export async function iniciarSuscripcion(
   }
 
   try {
-    // Cuenta de negocio del dueño en este tenant (RLS aplica: solo la propia).
-    const { data: existing } = await supabase
+    /**
+     * QUÉ NEGOCIO SUSCRIBE — y por qué esto dejó de ser una línea.
+     *
+     * Hasta la 0121 había UNA cuenta de negocio por persona, así que
+     * "la del dueño" era una descripción completa y un `.maybeSingle()`
+     * alcanzaba. Con hasta 10, ese mismo `.maybeSingle()` es una trampa:
+     * PostgREST devuelve PGRST116 cuando la consulta trae más de una fila,
+     * `existing` quedaba `null` y la rama de abajo —pensada para "todavía no
+     * tiene ninguna"— creaba una cuenta NUEVA con el nombre de la persona.
+     * O sea: quien más negocios tiene, más cuentas fantasma se le fabrican,
+     * y encima se le cobra la suscripción a la equivocada.
+     *
+     * La respuesta la da la doctrina que ya gobierna el resto de la app desde
+     * la 0116: LA IDENTIDAD ACTIVA MANDA. Si estás actuando como Panadería,
+     * el que se hace verificado es Panadería. No hay ambigüedad que resolver.
+     *
+     * Si estás actuando como vos mismo, hay tres casos y sólo uno se puede
+     * decidir solo:
+     *   · ningún negocio → se crea el primero (lo de siempre).
+     *   · exactamente uno → ése, sin preguntar: no hay otra respuesta posible.
+     *   · varios → se PREGUNTA. Elegir por la persona acá es elegir a quién se
+     *     le cobra, y eso no se adivina por antigüedad ni por orden alfabético.
+     */
+    const identidad = await getIdentidadActiva();
+
+    const { data: propias } = await supabase
       .from("business_accounts")
       .select("id, name, stripe_customer_id")
       .eq("owner_id", user.id)
       .eq("tenant_id", tenant.id)
-      .maybeSingle();
+      .order("created_at", { ascending: true });
+
+    const cuentas = propias ?? [];
+    const existing =
+      identidad.tipo === "negocio"
+        ? cuentas.find((cuenta) => cuenta.id === identidad.negocio.businessId)
+        : cuentas.length === 1
+          ? cuentas[0]
+          : undefined;
+
+    if (!existing && cuentas.length > 1) {
+      return { status: "error", message: COPY.elegiNegocio };
+    }
 
     let businessAccountId = existing?.id ?? null;
     if (!businessAccountId) {

@@ -26,6 +26,7 @@ vi.mock("motion/react", async () =>
   (await import("@/test/motion-mock")).motionMock({ reducedMotion: false }),
 );
 
+import { DEFAULT_PHOTO_EDIT } from "./photo-editor";
 import { ComposerSheet, type ComposerMediaItem, type ComposerSheetProps } from "./composer-sheet";
 import { EMPTY_DECLARATION_VALUE } from "@/components/integrity/originality-fields";
 import { COPY } from "./copy";
@@ -329,7 +330,13 @@ describe("ComposerSheet — editor de foto (filtro + texto encima)", () => {
     mount({ mode: "media", media: [PHOTO] });
     fireEvent.click(screen.getByRole("button", { name: `${COPY.composer.editPhoto} 1` }));
 
-    expect(screen.getByText(COPY.composer.photoEditor.filtersLabel)).toBeTruthy();
+    // El editor abre en Filtros: es lo que se venía a hacer acá antes de que
+    // existieran el recorte y los emojis, y ninguna pestaña te mete de prepo en
+    // una superficie de arrastre.
+    expect(
+      screen.getByRole("tab", { selected: true }).textContent,
+    ).toContain(COPY.composer.photoEditor.tabFilters);
+    expect(screen.getByRole("radiogroup", { name: COPY.composer.photoEditor.filtersLabel })).toBeTruthy();
     expect(screen.getByRole("button", { name: COPY.composer.photoEditor.done })).toBeTruthy();
     expect(screen.getByRole("button", { name: COPY.composer.photoEditor.cancel })).toBeTruthy();
   });
@@ -353,7 +360,9 @@ describe("ComposerSheet — editor de foto (filtro + texto encima)", () => {
     const props = mount({ mode: "media", media: [PHOTO] });
     fireEvent.click(screen.getByRole("button", { name: `${COPY.composer.editPhoto} 1` }));
 
-    fireEvent.click(screen.getByRole("button", { name: COPY.composer.photoEditor.textButton }));
+    // El texto es una PESTAÑA del editor desde que también hay recorte y
+    // emojis: antes era un botón de revelado dentro de una sola columna.
+    fireEvent.click(screen.getByRole("tab", { name: COPY.composer.photoEditor.tabText }));
     fireEvent.change(screen.getByLabelText(COPY.composer.photoEditor.textareaLabel), {
       target: { value: "  Casa en venta  " },
     });
@@ -376,13 +385,10 @@ describe("ComposerSheet — editor de foto (filtro + texto encima)", () => {
   it("una foto con texto guardado lo muestra encima de la miniatura de la grilla", () => {
     const edited: ComposerMediaItem = {
       ...PHOTO,
-      edit: {
-        filterId: "original",
-        filterIntensity: 1,
-        captionText: "Se vende",
-        captionPosition: "bottom",
-        captionBackground: "solid",
-      },
+      // Se parte del default y sólo se cambia lo que este test mira: así
+      // sumar un campo a `PhotoEdit` (color, tipografía, recorte, emojis…) no
+      // obliga a tocar un test que no habla de eso.
+      edit: { ...DEFAULT_PHOTO_EDIT, captionText: "Se vende" },
     };
     mount({ mode: "media", media: [edited] });
     expect(screen.getByText("Se vende")).toBeTruthy();

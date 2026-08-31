@@ -13,6 +13,7 @@ import {
 import { BezelCard, Chip } from "@/components/ui";
 import { COMUNIDAD_COPY, mapsHref, telHref, type CommunityResource } from "@/lib/comunidad";
 import { cn, formatDate } from "@/lib/utils";
+import { OfrecerEnFicha } from "./ofrecer-cta";
 
 const C = COMUNIDAD_COPY.recursos;
 
@@ -80,7 +81,30 @@ function Meta({
   );
 }
 
-export function RecursoCard({ recurso }: { recurso: CommunityResource }) {
+/**
+ * ── EL BOTÓN DE "QUIERO AYUDAR ACÁ" (0120) ──────────────────────────────────
+ * Pedido textual del cliente: «falta un botón… para que la gente pueda aplicar
+ * a bancos de comida si quiere ofrecer sus servicios». Va DESPUÉS de los
+ * botones de contacto y ANTES de los detalles, y separado por una línea: es
+ * una acción de otra naturaleza —no es llegar al lugar, es sumarse a él— y
+ * mezclarla con "Llamar" haría dudar de cuál toca quien viene a pedir ayuda,
+ * que sigue siendo la mayoría.
+ *
+ * Sólo aparece en los temas que aceptan avisos: `<OfrecerEnFicha>` devuelve
+ * `null` en el resto, sin cartel ni explicación (ver su cabecera).
+ */
+export function RecursoCard({
+  recurso,
+  ofrecimientos,
+}: {
+  recurso: CommunityResource;
+  /**
+   * Cuántas personas ya se ofrecieron en esta ficha. Opcional: cuando no se
+   * pudo contar —el caso más común es que quien mira no tenga sesión— el
+   * contador no se dibuja. Nunca un "0" que diría algo que no sabemos.
+   */
+  ofrecimientos?: number;
+}) {
   const tel = telHref(recurso.phone);
   const maps = mapsHref(recurso.address);
 
@@ -140,6 +164,13 @@ export function RecursoCard({ recurso }: { recurso: CommunityResource }) {
           )}
         </div>
       )}
+
+      <OfrecerEnFicha
+        topic={recurso.topic}
+        resourceId={recurso.id}
+        ofrecimientos={ofrecimientos}
+        className="border-t border-border-subtle pt-3"
+      />
 
       {(recurso.hoursNote ||
         recurso.costNote ||

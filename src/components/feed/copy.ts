@@ -25,13 +25,15 @@ export const COPY = {
    */
   modules: {
     ariaLabel: "Módulos de tu comunidad",
-    /**
-     * Los dos grupos de la fila. Es la diferencia que el hairline dibuja para
-     * quien ve, dicha en palabras para quien escucha: los primeros círculos
-     * cambian lo que se ve ACÁ; los de después te llevan a otra sección.
+    /*
+     * Acá vivían `filtersLabel` ("Filtrar el feed") y `sectionsLabel` ("Otras
+     * secciones"), los nombres accesibles de los dos grupos que la fila tenía.
+     * Se fueron el 2026-08-26 junto con los grupos: desde el pedido del cliente
+     * («que tengan las mismas funciones que en el buscador») TODOS los círculos
+     * llevan a su sección, así que no hay dos clases de círculo que distinguir
+     * y anunciar dos listas describiría una diferencia que ya no existe.
+     * Ver el docblock de `module-circles.tsx`.
      */
-    filtersLabel: "Filtrar el feed",
-    sectionsLabel: "Otras secciones",
     /**
      * El feed sin filtrar.
      *
@@ -68,8 +70,36 @@ export const COPY = {
     removePhoto: "Quitar foto",
     /** Botón sobre la miniatura: abre el editor de filtro y texto de esa foto. */
     editPhoto: "Editar foto",
-    photoTooBig: "Esa foto es muy pesada — probá con una de menos de 5 MB.",
-    photoWrongType: "Solo podemos subir fotos (JPG, PNG o WebP).",
+    /**
+     * PESO AL ELEGIR. Desde el 2026-08-26 el tope es 25 MB y ya no se nombra el
+     * número: quien elige una foto de su galería no sabe cuánto pesa, y "menos
+     * de 25 MB" le pide que averigüe algo que su teléfono no le muestra. A ese
+     * peso sólo llegan archivos que no salieron de una cámara de teléfono, así
+     * que el consejo útil es de dónde sacar la foto, no cuánto tiene que pesar.
+     */
+    photoTooBig:
+      "Esa foto es enorme. Probá con una de tu galería o sacala con la cámara del teléfono.",
+    /**
+     * FORMATO. HEIC/HEIF (el que usa el iPhone por defecto) ahora entra, así
+     * que ya no se nombran los formatos uno por uno: la lista era una promesa
+     * incompleta —también entra HEIC— y a nadie le sirve saber la sigla. Lo
+     * único que importa es que el archivo elegido no era una foto.
+     */
+    photoWrongType: "Eso no parece una foto. Elegí una imagen de tu galería.",
+    /**
+     * HEIC QUE ESTE NAVEGADOR NO PUEDE ABRIR (típicamente Chrome en Android
+     * con una foto que llegó de un iPhone). El archivo está perfecto: lo que
+     * falta es el decodificador. Por eso el mensaje NO dice que la foto esté
+     * rota —se ve bien en la galería, decir eso sería mentirle— y sí da los dos
+     * caminos que de verdad funcionan.
+     */
+    photoHeicTitle: "Esta foto viene en un formato del iPhone",
+    photoHeicBody:
+      "Este navegador no puede abrirla. Compartila desde el iPhone o guardala como JPG y probá otra vez.",
+    /** Formato aceptado pero imagen ilegible: descarga cortada, archivo dañado. */
+    photoUnreadableTitle: "No pudimos abrir esa foto",
+    photoUnreadableBody:
+      "Puede que el archivo esté incompleto. Probá con otra o volvé a descargarla.",
     /**
      * Cupo por publicación. El número sale de `MAX_PHOTOS` y no de la mano: el
      * aviso y el tope real no pueden decir cosas distintas.
@@ -138,6 +168,15 @@ export const COPY = {
     bakeFallbackTitle: "Alguna foto se publicó sin editar",
     bakeFallbackBody:
       "No pudimos aplicarle el filtro o el texto en este navegador, así que salió tal cual — igual se publicó bien.",
+    /**
+     * LA TIPOGRAFÍA ELEGIDA NO ESTABA. La foto salió bien y con todo lo demás:
+     * lo único distinto es la letra. Se avisa porque el canvas cambia de fuente
+     * sin decir nada y el archivo ya no se puede deshacer — enterarse mirando
+     * la publicación es mucho peor que enterarse acá.
+     */
+    fontFallbackTitle: "El texto salió con otra tipografía",
+    fontFallbackBody:
+      "La que elegiste no llegó a cargar en este navegador. La foto se publicó igual, con la letra de siempre.",
     /**
      * PASOS POSTERIORES A LA PUBLICACIÓN. Las etiquetas y la música necesitan
      * el id del post, así que se guardan DESPUÉS de que ya salió. Estas dos
@@ -340,10 +379,14 @@ export const COPY = {
        */
       intensityLabel: "Intensidad",
       intensityValue: (percent: number) => `${percent}%`,
-      /** Botón que abre el panel de texto (todavía sin nada escrito). */
-      textButton: "Texto",
-      /** Mismo botón, una vez que ya hay una frase cargada. */
-      textButtonActive: "Editar texto",
+      /**
+       * Acá vivían `textButton` / `textButtonActive`, el botón de revelado que
+       * abría el panel de texto. Se fueron el 2026-08-26: con cuatro
+       * herramientas (recorte, filtros, texto, emojis) el panel pasó a ser una
+       * PESTAÑA, y su nombre es `tabText` — abajo. Dos claves con el mismo
+       * texto ("Texto") son la forma más rápida de que alguien cambie una y no
+       * la otra.
+       */
       textareaLabel: "Escribí algo sobre la foto",
       textareaPlaceholder: "Un título corto, si querés",
       positionLabel: "Dónde va",
@@ -354,6 +397,54 @@ export const COPY = {
       backgroundSolid: "Con fondo",
       backgroundNone: "Sin fondo",
       removeText: "Quitar texto",
+      /**
+       * COLOR Y TIPOGRAFÍA del texto (pedido del cliente 2026-08-26: "los
+       * textos que se agregan pueden cambiar de colores, tipografía, etc").
+       * Los nombres de las tipografías describen cómo SE VEN y no cómo se
+       * llaman: "General Sans" no le dice nada a nadie (viven en
+       * photo-overlay.ts, junto a los valores que se quemAN).
+       */
+      colorLabel: "Color del texto",
+      fontLabel: "Tipografía",
+
+      /* ---- Pestañas del editor ---------------------------------------- */
+      /**
+       * Cuatro herramientas no entran una debajo de la otra en una pantalla de
+       * teléfono: cada una ocupa lo suyo (el recorte necesita la foto grande y
+       * el dedo encima). Son PESTAÑAS y no un acordeón porque el trabajo es
+       * "estoy recortando" o "estoy escribiendo" — nunca las dos a la vez.
+       */
+      tabCrop: "Recortar",
+      tabFilters: "Filtros",
+      tabText: "Texto",
+      tabStickers: "Emojis",
+      tabsLabel: "Qué querés editar",
+
+      /* ---- Recorte ----------------------------------------------------- */
+      cropAspectLabel: "Forma de la foto",
+      /** "Original" no es una proporción: es la que ya trae la foto. */
+      cropOriginal: "Original",
+      /** 4:5 — la forma de la tarjeta del feed. Por eso va primera. */
+      cropPortrait: "Vertical",
+      cropSquare: "Cuadrada",
+      cropWide: "Panorámica",
+      /** Se nombran los dos gestos: con el dedo y con el deslizador de abajo. */
+      cropHint: "Arrastrá la foto para elegir qué se ve. Pellizcá para acercar.",
+      cropZoomLabel: "Acercar la foto",
+      cropZoomValue: (percent: number) => `${percent}% de acercamiento`,
+      cropReset: "Centrar de nuevo",
+      cropStageLabel: "Encuadre de la foto",
+
+      /* ---- Emojis ------------------------------------------------------ */
+      stickersHint: "Tocá un emoji para ponerlo sobre la foto. Después arrastralo a donde quieras.",
+      addSticker: (emoji: string) => `Poner ${emoji} sobre la foto`,
+      stickerFull: "Ya hay 8 emojis en la foto. Quitá uno para poner otro.",
+      stickerSizeLabel: "Tamaño del emoji",
+      removeSticker: "Quitar este emoji",
+      removeAllStickers: "Quitar todos",
+      /** Rótulo del emoji ya puesto, para quien navega con teclado o lector. */
+      stickerOnPhoto: (emoji: string, index: number, total: number) =>
+        `Emoji ${emoji}, ${index} de ${total}. Movelo con las flechas.`,
       cancel: "Cancelar",
       done: "Listo",
     },
@@ -531,6 +622,14 @@ export const COPY = {
     // Video en el feed: arranca solo y en silencio; el sonido se activa a mano.
     playVideo: "Ver el video",
     muteVideo: "Silenciar el video",
+    /**
+     * Mismo altavoz, otra cosa que callar. Cuando la publicación tiene una
+     * pista propia (0090) es la MÚSICA la que suena —el video queda mudo, ver
+     * audio-mix.ts—, y sobre una publicación de fotos no hay ningún video que
+     * silenciar. Decir "Silenciar el video" ahí sería nombrarle a un lector de
+     * pantalla algo que no está en la publicación.
+     */
+    muteMusic: "Silenciar la música",
     unmuteVideo: "Activar el sonido",
     // CTA de una campaña paga (SOLO posts promocionados) sobre la foto. El chip
     // "Publicidad" va aparte y SIEMPRE visible: eso es la divulgación honesta;

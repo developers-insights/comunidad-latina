@@ -49,10 +49,24 @@ describe("isSafeHttpUrl", () => {
 });
 
 describe("isResourceTopic", () => {
-  it("acepta los diez temas conocidos, incluidos voluntariado (0099) y acopio (0105)", () => {
+  it("acepta los catorce temas conocidos — voluntariado (0099), acopio (0105) y los cuatro de la 0120", () => {
     for (const topic of RESOURCE_TOPICS) {
       expect(isResourceTopic(topic)).toBe(true);
     }
+  });
+
+  it("incluye los cuatro temas que sumó la 0120, en el orden de urgencia del arreglo", () => {
+    // El ORDEN es el orden de la pantalla, así que se afirma la posición y no
+    // sólo la pertenencia: mover `adicciones` abajo de `educacion` no rompería
+    // ningún tipo, pero cambiaría lo que ve alguien que entra a las once de la
+    // noche. La razón de cada posición está en el docblock de RESOURCE_TOPICS.
+    const orden = [...RESOURCE_TOPICS];
+    expect(orden.indexOf("adicciones")).toBe(orden.indexOf("salud") + 1);
+    expect(orden.indexOf("medicinas")).toBe(orden.indexOf("adicciones") + 1);
+    expect(orden.indexOf("trabajo")).toBe(orden.indexOf("vivienda") + 1);
+    expect(orden.indexOf("fe")).toBeLessThan(orden.indexOf("voluntariado"));
+    // Los dos de "quiero dar" siguen cerrando la lista.
+    expect(orden.slice(-2)).toEqual(["voluntariado", "acopio"]);
   });
 
   it("rechaza cualquier otra cosa, incluido lo que puede llegar por un ?tema= a mano", () => {
