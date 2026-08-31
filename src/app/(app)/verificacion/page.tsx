@@ -204,7 +204,7 @@ export default async function VerificacionPage({
 
       {/* --------------------------------------- El requisito: la identidad */}
       {user && (
-        <BezelCard className="mt-6 p-4">
+        <BezelCard className="mt-6" coreClassName="p-4">
           <div className="flex items-start gap-3">
             <ShieldCheck
               size={22}
@@ -234,7 +234,7 @@ export default async function VerificacionPage({
 
       {/* ------------------------------------------- Tu impulso de regalo */}
       {activa && (
-        <BezelCard className="mt-6 p-4">
+        <BezelCard className="mt-6" coreClassName="p-4">
           <div className="flex items-start gap-3">
             <Rocket size={22} weight="fill" aria-hidden="true" className="shrink-0 text-info-ink" />
             <div className="min-w-0 flex-1">
@@ -297,7 +297,7 @@ export default async function VerificacionPage({
 
       {/* -------------------------------- Qué dice y qué NO dice la insignia */}
       <section className="mt-8">
-        <BezelCard className="p-4">
+        <BezelCard coreClassName="p-4">
           <div className="flex items-start gap-3">
             <SealCheck size={22} weight="fill" aria-hidden="true" className="shrink-0 text-info-ink" />
             <div className="min-w-0">
@@ -403,7 +403,7 @@ function PlanCard({
   const plan = VERIFICACION_PLANES[tier];
 
   return (
-    <BezelCard className="flex flex-col p-4">
+    <BezelCard coreClassName="flex flex-col p-4">
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-display text-base font-bold text-foreground">{plan.nombre}</h3>
         {esElContratado ? (

@@ -56,7 +56,7 @@ export default async function CuentaDeNegocioPage() {
     return (
       <div className="flex flex-col gap-4">
         <Encabezado />
-        <BezelCard className="flex flex-col items-start gap-3 p-4">
+        <BezelCard coreClassName="flex flex-col items-start gap-3 p-4">
           <h2 className="font-display text-base font-bold text-foreground">
             {COPY.signedOut.title}
           </h2>
@@ -85,7 +85,7 @@ export default async function CuentaDeNegocioPage() {
 
       {negocios.length === 0 ? (
         <>
-          <BezelCard className="flex flex-col gap-3 p-4">
+          <BezelCard coreClassName="flex flex-col gap-3 p-4">
             <h2 className="font-display text-base font-bold text-foreground">
               {COPY.intro.title}
             </h2>
@@ -125,7 +125,7 @@ export default async function CuentaDeNegocioPage() {
               return (
                 <BezelCard
                   key={negocio.businessId}
-                  className="flex flex-col gap-3 p-4"
+                  coreClassName="flex flex-col gap-3 p-4"
                 >
                   <div className="flex items-center gap-3">
                     <Avatar size="md" name={negocio.nombre} />
