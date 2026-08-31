@@ -2058,6 +2058,70 @@ y cableados en las superficies de confianza. Pipeline reproducible en [`assets-s
 
 Gates: `tsc` 0 · `build` verde · 12 tests · `lint` 0 errores · smoke-test visual a 375px (/escudo, aviso anti-estafa, hoja del Trust Score).
 
+## Feedback de Nacho del 31/8 — segunda tanda (✅ 2026-08-31)
+
+Las capturas del 31/8 son **posteriores** a los 14 puntos que cerró la tanda del
+26/8 (commit `2d86e2c`). De los ~40 ítems del feedback completo, **seis ya estaban
+hechos** y se verificaron uno por uno en vez de rehacerlos: el recorte de música
+de 30 s, los filtros y el texto sobre la foto, `/videos` filtrando sólo video, el
+boost por zona —que además ya cobra recargo por alcance— y la verificación de
+identidad, que ya era gratis para el usuario.
+
+**Lo entregado en esta tanda** (commit `b79e72d`):
+
+- **Ubicación y radio en millas (A1/A2)**. El header mandaba
+  `Permissions-Policy: geolocation=()` sobre todo el sitio — sin eso ningún botón
+  de ubicación podía funcionar. El radio se calcula sobre **centroides de barrio**
+  (72 de NY, dato público), nunca sobre la coordenada de la persona, que se
+  redondea a 3 decimales antes de salir del teléfono y no se persiste. 25 millas
+  queda **preseleccionado, no activo**: un radio que recorta sin que nadie lo haya
+  tocado esconde contenido en silencio. Se aplica dentro de `resolverVistaZona`,
+  así que los siete listados y el feed lo heredan sin una línea afuera.
+- **Changas (L1)**. Slug `one_off` (evita colisión con `price_period` y con el
+  vertical `creator_gig`), label **“Ocasional”** — no “changa”, que es jerga
+  rioplatense y la comunidad es mayoría dominicana. Se sumó “pago único”.
+- **Color y barra de acciones (J1/J2)**. Los `--accent-*` son **decorativos por
+  contrato** y `--accent-negocios` da 1.7:1 como texto; la barra usa la familia
+  `-ink`, peor caso **4.55:1** en las cinco superficies y ambos temas. Guardar no
+  sale de la marca a propósito: la elige cada comunidad. 43 tests fallan si alguien
+  reapunta esto a un acento.
+- **Emojis propios (K1)**. Catálogo + bucket + picker, tres superficies. Nace
+  **apagado** y sin assets del cliente. Encontrado en el camino: sin
+  `crossOrigin="anonymous"` el canvas queda *tainted*, `toBlob()` tira
+  `SecurityError` y el `catch` devuelve el original — un emoji se habría llevado
+  puesto el recorte, el filtro y el texto, en silencio.
+- **Pantallas rotas (M1/N1)**. Las dos tenían la **misma causa**: `BezelCard`
+  recibía `className` donde iba `coreClassName`. El padding engordaba el bisel y se
+  sumaba al del contenido (40 px por lado) y el `flex gap-3` no hacía nada porque
+  el marco tiene un solo hijo. Siete usos mal, los siete en esas dos pantallas.
+  Aparte: de los tres bullets de cada plan, **dos eran idénticos en los tres**.
+- **Gate de verificación (C1)**. Existía sólo en marketplace; alquileres y empleos
+  no tenían **nada**, ni app ni RLS. Ahora los tres cortan en el servidor y **antes
+  del formulario**. Verificado que Stripe **sí** está en producción (el webhook
+  devuelve `400 "Falta firma"`, no `503`), así que el gate no es un candado sin llave.
+
+**Gates**: `tsc` 0 · `eslint` 0 · **5299 tests** · build verde · contraste WCAG AA
+medido en pantalla · sin scroll horizontal a 375/768/1280 · rutas clave sirviendo
+200 · “Ocasional” y la comparativa de planes verificadas en el navegador con datos
+reales (los tres precios alineados en `right: 849`, bullets de 1 renglón donde
+antes eran 6).
+
+**⚠️ Pendiente de coordinar con el deploy** — detalle en
+[`docs/feedback/2026-08-31-feedback-nacho.md`](feedback/2026-08-31-feedback-nacho.md):
+
+- `0124_me_gusta_en_avisos` y `0125_emojis_de_la_comunidad` son **aditivas**: se
+  pueden aplicar antes del deploy sin riesgo.
+- `0126_activar_gate_identidad` **rechaza inserts**. Aplicarla con el código viejo
+  arriba deja a la gente con un `42501` crudo en vez del mensaje que explica que
+  verificarse es gratis. **Va con el deploy, nunca antes.** Al 31/8 había **1 perfil
+  verificado de 20**.
+- Faltan **los 60 assets de emoji** del cliente (PNG con transparencia, 512×512,
+  ≤256 KB, uno por archivo, con una frase de qué se ve para el texto alternativo).
+- **Decisión de producto abierta**: `reactions_one_per_subject` es único por
+  persona y post, así que reaccionar con un emoji propio **reemplaza** el me gusta,
+  y como el trigger sólo cuenta `kind='like'`, el contador del corazón **baja**.
+  Contar por tipo requiere tocar el trigger de la 0007.
+
 ## Revisión integral + Polish premium (✅ 2026-07-07)
 - **Revisión integral**: 6 fiscales adversariales en paralelo (correctness, seguridad+anti-honeypot, UX premium, performance, arquitectura, accesibilidad) → 23 findings únicos aplicados (5 críticos, 8 mayores, 10 menores).
 - **Polish premium**: splash de entrada por tenant (overlay, no bloquea LCP, reduced-motion), transiciones de página, primitivos de motion (TapScale, AnimatedNumber en Trust Score, LikeBurst en feed, Celebration al publicar/verificar/onboarding, Reveal, Shimmer), detalles de lujo en landing, emblema/escudo generados (nanobanana) + brand-mark SVG.
