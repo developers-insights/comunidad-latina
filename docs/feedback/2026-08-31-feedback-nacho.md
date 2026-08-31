@@ -305,3 +305,56 @@ minuto, así que el desbloqueo es fácil **si se comunica**.
 | `/publicar` (alquiler, empleo, evento pago) | **nada** | pantalla previa + server action |
 | `/empleos/publicar` | **nada** | pantalla previa + server action |
 | Policy `listings_insert` | sin gate | `0126`, pendiente de aplicar con el deploy |
+
+---
+
+# ✅ Desplegado y aplicado — 2026-08-31, 17:40
+
+Commit `09c8d67` en `main`, deploy de producción en READY sobre
+`www.comunidadlatina.com`. **Las tres migraciones aplicadas y verificadas.**
+
+## Orden que se siguió
+
+1. `0124_me_gusta_en_avisos` y `0125_emojis_de_la_comunidad` — aditivas, antes del deploy.
+2. Push → deploy → **se esperó a que producción sirviera el código nuevo.**
+   La señal usada fue el chip "Ocasional" en `/empleos`, que sólo existe en esta
+   tanda: sirve de detector de deploy y de verificación end-to-end a la vez.
+   (Se confirmó antes que producción NO lo tenía, para que el detector no diera
+   un falso positivo.)
+3. `0126_activar_gate_identidad` — recién con el código nuevo arriba.
+
+## Verificado contra producción
+
+| Qué | Resultado |
+|---|---|
+| `listings.like_count` + trigger | creados |
+| `community_emojis` | RLS **FORCE**, 4 policies, `anon` lee / no escribe, bucket creado, catálogo vacío |
+| Gate en `listings_insert` | activo |
+| `listings_update` | **intacta** — los 18 avisos gateados ya publicados siguen accesibles |
+| Advisors de seguridad | **0 errores**, 55 en total — los mismos de antes, ninguno nuevo |
+| Rutas de producción | `/entrar` `/empleos` `/publicar` `/verificacion` `/marketplace` `/comunidad` `/videos` → 200 |
+| "Ocasional" en producción | visible |
+
+## El gate, probado (no supuesto)
+
+| Vertical | ¿Exige identidad? |
+|---|---|
+| Alquiler · empleo · artículo | sí |
+| Evento **pago** | sí |
+| Evento **gratis** | no |
+| Ficha de negocio | no |
+| Sin sesión | `false` — fail-closed |
+
+## Lo que queda abierto
+
+1. **Avisarle a Geovanny.** Hay **1 perfil verificado de 20**: los otros 19 no
+   pueden publicar hasta verificarse. Es gratis y toma menos de un minuto, y las
+   tres pantallas lo explican antes del formulario — pero conviene decirlo, no
+   que lo descubran.
+2. **Los 60 emojis.** PNG con transparencia (nada de JPG), 512×512 cuadrado,
+   ≤256 KB, **un dibujo por archivo**, más una frase de qué se ve en cada uno.
+   El sistema está listo y el catálogo nace apagado.
+3. **Decisión de producto: reacciones.** `reactions_one_per_subject` es único por
+   persona y publicación, así que un emoji propio **reemplaza** el me gusta y el
+   contador del corazón **baja**. Contar por tipo requiere tocar el trigger de la
+   0007.
