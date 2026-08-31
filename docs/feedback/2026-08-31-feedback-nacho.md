@@ -358,3 +358,54 @@ Commit `09c8d67` en `main`, deploy de producción en READY sobre
    persona y publicación, así que un emoji propio **reemplaza** el me gusta y el
    contador del corazón **baja**. Contar por tipo requiere tocar el trigger de la
    0007.
+
+---
+
+# 🔴 Hallazgo aparte — los seis checkouts estaban caídos en producción
+
+Salió de revisar ramas sueltas al cerrar la sesión, no del feedback de Nacho.
+
+`fix(pagos): apagar Managed Payments` se hizo el 26/8 en la rama
+`claude/stripe-vercel-env-vars-5ad18d` y **se deployó a producción desde esa
+rama**. Nunca se mergeó a `main`. Cada deploy posterior de `main` lo fue pisando,
+y al 31/8 producción volvía a llamar `stripe.checkout.sessions.create` directo en
+los seis productos.
+
+## Confirmado contra la API de Stripe, no supuesto
+
+Reproducción en modo test (`sk_test_`, sin plata real):
+
+| Cómo | Resultado |
+|---|---|
+| Como lo hacía `main` — `price_data` sin `tax_code` | **FALLA**: *"the product tax code is missing"* |
+| Con `managed_payments[enabled]=false` | OK, sesión creada |
+
+Afectaba: impulsar aviso · impulsar publicación · membresía de marketplace ·
+presencia de negocio · aviso de presencia · check azul. Desde la app el síntoma
+es un genérico "algo salió mal".
+
+## Recuperado
+
+`git cherry-pick 20e9b91` sobre esta rama (al día) — limpio, sin conflictos.
+Verificado que quedan **cero** `checkout.sessions.create` directos y que los seis
+pasan por `src/lib/stripe/checkout.ts`, que fuerza `managed_payments: {enabled:
+false}` con el spread primero para que el apagado gane siempre.
+
+Gates: `tsc` 0 · `eslint` 0 · **5315 tests** · build verde.
+
+## La lección, que aplica a todo el repo
+
+**Un deploy a producción desde una rama no es una entrega.** Sobrevive hasta el
+próximo deploy de `main` y después desaparece sin un error, sin un log y sin que
+nadie lo note — acá lo que se rompía era un cobro, que falla del lado del
+usuario. Antes de dar por cerrado un fix desplegado, verificar que su **contenido
+esté en `main`**, no que su deploy diga READY.
+
+## Estado del resto de las ramas (31/8)
+
+| Rama | Estado |
+|---|---|
+| `comunidad-latina-modules-8ab545` | Descartada a propósito — tag `descartado/modulos-8ab545` |
+| `exciting-meninsky-328bfa` | Descartada a propósito — tag `descartado/tenant-t-328bfa`. `main` tiene ese fix **más nuevo** y refactorizado (127 líneas vs 285) |
+| `community-feed-music-playback-90c5d0` | WIP marcado "SIN TERMINAR", guardado adrede. Ojo: el bug de música ya se resolvió en `main` por otra vía (`PostMusicProvider`) — releer si sigue aplicando |
+| `multiple-video-upload-f88c00` | WIP "SIN TERMINAR". Su propio commit avisa que hay que rebasar sobre Mux antes de retomarlo |
