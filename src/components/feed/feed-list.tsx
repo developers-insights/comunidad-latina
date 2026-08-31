@@ -127,7 +127,7 @@ export function renderFeedItem(
     case "listing-property":
       return <ListingCard listing={item.listing} />;
     case "listing":
-      return <FeedListingCard listing={item.listing} />;
+      return <FeedListingCard listing={item.listing} engagement={item.engagement} />;
     case "guide":
       return <GuideCard guide={item.guide} />;
   }

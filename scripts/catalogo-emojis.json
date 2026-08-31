@@ -1,0 +1,69 @@
+{
+  "_comentario": [
+    "Manifiesto de los emojis de la comunidad (migración 0125).",
+    "",
+    "Las fichas de acá son las de PRUEBA — los seis dibujos de assets-source/emojis,",
+    "hechos a mano para verificar la máquina. NO son el pack del cliente.",
+    "",
+    "Cuando lleguen los 60 reales: se reemplaza `emojis` por la lista completa y se",
+    "corre `node scripts/cargar-emojis.mjs --desde <carpeta>`. Ver la cabecera del",
+    "script para el detalle de cada campo.",
+    "",
+    "`alt` es OBLIGATORIO y tiene que decir QUÉ SE VE, no cómo se llama el dibujo:",
+    "la base rechaza una ficha cuyo alt repita el `label` (check",
+    "community_emojis_alt_no_repite_el_nombre). Es lo único que escucha quien usa",
+    "lector de pantalla."
+  ],
+  "bucket": "community-emojis",
+  "carpeta": "global",
+  "emojis": [
+    {
+      "archivo": "prueba-saludo.svg",
+      "slug": "prueba-saludo",
+      "label": "Saludo",
+      "alt": "Una mano abierta saludando",
+      "category": "saludos",
+      "sort_order": 10
+    },
+    {
+      "archivo": "prueba-fuego.svg",
+      "slug": "prueba-fuego",
+      "label": "Fuego",
+      "alt": "Una llama encendida",
+      "category": "expresiones",
+      "sort_order": 20
+    },
+    {
+      "archivo": "prueba-aplauso.svg",
+      "slug": "prueba-aplauso",
+      "label": "Aplauso",
+      "alt": "Dos manos aplaudiendo",
+      "category": "animo",
+      "sort_order": 30
+    },
+    {
+      "archivo": "prueba-corazon.svg",
+      "slug": "prueba-corazon",
+      "label": "Corazón",
+      "alt": "Un corazón rojo",
+      "category": "animo",
+      "sort_order": 40
+    },
+    {
+      "archivo": "prueba-fiesta.svg",
+      "slug": "prueba-fiesta",
+      "label": "Fiesta",
+      "alt": "Un cotillón con papelitos de colores",
+      "category": "fiesta",
+      "sort_order": 50
+    },
+    {
+      "archivo": "prueba-cafecito.svg",
+      "slug": "prueba-cafecito",
+      "label": "Cafecito",
+      "alt": "Una taza de café humeante",
+      "category": "comida",
+      "sort_order": 60
+    }
+  ]
+}

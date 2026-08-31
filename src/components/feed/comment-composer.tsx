@@ -1,11 +1,13 @@
 "use client";
 
-import { useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PaperPlaneRight } from "@phosphor-icons/react/dist/ssr";
 import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
+import { EmojiPickerPopover } from "@/components/emojis";
 import { Spinner, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { CLASSIC_EMOJI_GROUPS, emojiShortcode } from "@/lib/emojis/catalog";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { createCommentAction } from "@/app/(app)/feed/actions";
 import { createListingCommentAction } from "@/app/(app)/marketplace/comments-actions";
@@ -95,6 +97,61 @@ export function CommentComposer(props: CommentComposerProps) {
   function autosize(element: HTMLTextAreaElement) {
     element.style.height = "auto";
     element.style.height = `${Math.min(element.scrollHeight, 140)}px`;
+  }
+
+  /* ------------------------------ Emojis -------------------------------- */
+
+  /**
+   * Dónde tiene que quedar el cursor DESPUÉS de que React pinte el texto nuevo.
+   *
+   * Va en un ref y se aplica en un efecto sin dependencias, no con un
+   * `setTimeout` ni un `requestAnimationFrame`: el valor del textarea lo escribe
+   * React al commitear, y mover el cursor antes de eso lo dejaría en una
+   * posición del texto viejo. Un ref y no un estado porque escribir estado
+   * dentro de un efecto encadena renders (`react-hooks/set-state-in-effect`).
+   */
+  const pendingCaret = useRef<number | null>(null);
+  useEffect(() => {
+    const caret = pendingCaret.current;
+    if (caret === null) return;
+    pendingCaret.current = null;
+    const element = textareaRef.current;
+    if (!element) return;
+    // El foco vuelve al campo: quien acaba de poner un emoji casi siempre sigue
+    // escribiendo, y quedarse parado en el botón del picker obliga a volver a
+    // tocar el campo para cada palabra.
+    element.focus();
+    element.setSelectionRange(caret, caret);
+    autosize(element);
+  });
+
+  /**
+   * Inserta EN EL CURSOR y no al final. Poner un emoji en el medio de una
+   * frase es lo normal; agregarlo siempre al final obligaría a cortar y pegar.
+   * Si hay texto seleccionado, lo reemplaza — que es lo que hace cualquier
+   * campo de texto.
+   */
+  function insertAtCaret(snippet: string) {
+    const element = textareaRef.current;
+    const start = element?.selectionStart ?? value.length;
+    const end = element?.selectionEnd ?? start;
+    const next = `${value.slice(0, start)}${snippet}${value.slice(end)}`.slice(0, MAX_LENGTH);
+    pendingCaret.current = Math.min(start + snippet.length, next.length);
+    setValue(next);
+  }
+
+  /**
+   * Un emoji de la comunidad viaja como CÓDIGO CORTO (`:klk:`) porque el cuerpo
+   * del comentario es texto. Se agrega un espacio detrás salvo que ya haya uno:
+   * sin él, escribir a continuación pega la palabra al código y queda `:klk:que`
+   * — que sigue leyéndose bien, pero se ve como un error de tipeo.
+   */
+  function insertShortcode(slug: string) {
+    const element = textareaRef.current;
+    const end = element?.selectionEnd ?? value.length;
+    const siguiente = value.charAt(end);
+    const sufijo = siguiente === "" || /\s/.test(siguiente) ? "" : " ";
+    insertAtCaret(`${emojiShortcode(slug)}${sufijo}`);
   }
 
   function resetField(focus: boolean) {
@@ -249,6 +306,27 @@ export function CommentComposer(props: CommentComposerProps) {
           : "focus-within:ring-[3px] focus-within:ring-focus-ring",
       )}
     >
+      {/* ── EMOJIS ──────────────────────────────────────────────────────────
+          A la IZQUIERDA del campo, como en cualquier app de mensajes: el lado
+          derecho es de "enviar", y una carita pegada al botón de enviar se toca
+          por error con el pulgar. El globo se abre hacia arriba (el teclado
+          ocupa lo de abajo) y anclado a este borde, así entra entero en 375 px.
+
+          ⚠️ EMOJIS PROPIOS EN COMENTARIOS: el picker ya los ofrece, pero el
+          `:slug:` que deja en el texto lo tiene que cambiar por la imagen quien
+          PINTA el comentario (`comment-item.tsx`, una línea: envolver `{body}`
+          en `<CommunityEmojiText>`). Hasta que eso esté, un emoji propio
+          encendido se leería como ":klk:". Por eso `community_emojis.is_active`
+          nace en false en la 0125: mientras el catálogo esté apagado, acá sólo
+          se pueden elegir los clásicos y no hay estado roto posible. */}
+      <EmojiPickerPopover
+        tone={tone}
+        disabled={isPending || disabled}
+        unicodeGroups={CLASSIC_EMOJI_GROUPS}
+        onPickUnicode={insertAtCaret}
+        onPickCommunity={(emoji) => insertShortcode(emoji.slug)}
+      />
+
       <label htmlFor={fieldId} className="sr-only">
         {COPY.comments.placeholder}
       </label>

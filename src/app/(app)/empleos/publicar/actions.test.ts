@@ -20,10 +20,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   requireTenantMatch: vi.fn(),
   limit: vi.fn(),
+  requireIdentidadVerificada: vi.fn(),
 }));
 
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
 vi.mock("@/lib/rate-limit", () => ({ DAY_MS: 86_400_000, limit: mocks.limit }));
+// El gate de identidad se mockea en el límite del módulo, igual que el guard de
+// tenant: su lógica (qué verticales exigen identidad, qué mira de la identidad
+// ACTIVA) es contrato de la 0106/0121 y se prueba en su propio archivo. Acá sólo
+// se prueba la INTEGRACIÓN — que createJobDraft lo llame antes de gastar la
+// cuota del día, y que traduzca el rechazo al resultado tipado que espera la UI.
+vi.mock("@/lib/verificacion/gate", () => ({
+  requireIdentidadVerificada: mocks.requireIdentidadVerificada,
+}));
 
 import { createJobDraft } from "./actions";
 
@@ -100,6 +109,11 @@ beforeEach(() => {
   mocks.requireTenantMatch.mockReset();
   mocks.limit.mockReset();
   mocks.limit.mockReturnValue({ ok: true, remaining: 9, retryAfterMs: 0 });
+  // Default: identidad verificada. Los tests que prueban el bloqueo lo dicen
+  // explícito — así el resto no arrastra un permiso implícito que, si el gate
+  // se rompiera, dejaría pasar todo sin que ningún test se entere.
+  mocks.requireIdentidadVerificada.mockReset();
+  mocks.requireIdentidadVerificada.mockResolvedValue({ permitido: true });
 });
 
 /* ---------------------------------- Tests --------------------------------- */
@@ -170,6 +184,43 @@ describe("createJobDraft — el salario no es opcional", () => {
   it("rechaza un período de pago que la DB no admite", async () => {
     const result = await createJobDraft(validInput({ payPeriod: "year" }));
     expect(result.ok).toBe(false);
+  });
+});
+
+/* ===========================================================================
+ * L1 — changas ("one_off"): el tercer valor del enum, validado por
+ * `z.enum(EMPLOYMENT_TYPES)` sin ninguna rama nueva en la action.
+ * =========================================================================== */
+
+describe("createJobDraft — L1 (changas): employmentType 'one_off'", () => {
+  it("acepta 'one_off' igual que full_time/part_time", async () => {
+    const stub = useGuardOk();
+
+    const result = await createJobDraft(validInput({ employmentType: "one_off" }));
+
+    expect(result.ok).toBe(true);
+    expect(insertedRow(stub)?.attrs).toMatchObject({ employment_type: "one_off" });
+  });
+
+  it("rechaza un employmentType inventado, sin tocar el guard", async () => {
+    const result = await createJobDraft(validInput({ employmentType: "freelance" }));
+    expect(result.ok).toBe(false);
+    expect(mocks.requireTenantMatch).not.toHaveBeenCalled();
+  });
+
+  /**
+   * "one_time" (pago único) suma para changas — la DB ya lo admite en
+   * `price_period` (0004_listings.sql) y ahora también en JOB_PAY_PERIODS.
+   */
+  it("acepta payPeriod 'one_time' (pago único)", async () => {
+    const stub = useGuardOk();
+
+    const result = await createJobDraft(
+      validInput({ employmentType: "one_off", payPeriod: "one_time" }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(insertedRow(stub)?.price_period).toBe("one_time");
   });
 });
 
@@ -256,6 +307,68 @@ describe("createJobDraft — guard y cuota antes de escribir", () => {
 
     expect(result.ok).toBe(false);
     expect(stub.calls).toHaveLength(0);
+  });
+});
+
+/* ===========================================================================
+ * Gate de identidad — «para vender tenés que estar verificado sí o sí»
+ *
+ * La regla también vive en la policy `listings_insert` (0126), que es la que
+ * de verdad no se puede saltear. Esta rama existe para que el rechazo llegue
+ * con un texto que se entiende: sin ella PostgREST devuelve un 42501 crudo y
+ * la persona no se entera de que le falta verificarse — ni de que es gratis.
+ * =========================================================================== */
+
+describe("createJobDraft — gate de identidad", () => {
+  it("sin identidad verificada no inserta, y lo dice con un mensaje accionable", async () => {
+    const stub = useGuardOk();
+    mocks.requireIdentidadVerificada.mockResolvedValue({
+      permitido: false,
+      motivo: "identidad",
+    });
+
+    const result = await createJobDraft(validInput());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.needsIdentity).toBe(true);
+    expect(result.error).toContain("verificar tu identidad");
+    // Que sea GRATIS es la mitad del mensaje: sin eso el bloqueo se lee como
+    // un muro de pago y la persona no intenta.
+    expect(result.error).toContain("gratis");
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  it("un empleo siempre gatea: pregunta por kind 'job', sin condición de precio", async () => {
+    useGuardOk();
+
+    await createJobDraft(validInput());
+
+    expect(mocks.requireIdentidadVerificada).toHaveBeenCalledWith(
+      expect.anything(),
+      { kind: "job" },
+    );
+  });
+
+  it("gatea ANTES del rate limit: quien no puede publicar no gasta su cuota del día", async () => {
+    useGuardOk();
+    mocks.requireIdentidadVerificada.mockResolvedValue({
+      permitido: false,
+      motivo: "identidad",
+    });
+
+    await createJobDraft(validInput());
+
+    expect(mocks.limit).not.toHaveBeenCalled();
+  });
+
+  it("con identidad verificada publica normal", async () => {
+    const stub = useGuardOk();
+
+    const result = await createJobDraft(validInput());
+
+    expect(result.ok).toBe(true);
+    expect(stub.calls.length).toBeGreaterThan(0);
   });
 });
 

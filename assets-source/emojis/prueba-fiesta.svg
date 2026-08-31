@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- ASSET DE PRUEBA. No pertenece al pack del cliente. -->
+  <path d="M70 442l104-282 168 168z" fill="#3f7fd6"/>
+  <path d="M70 442l52-140 88 88z" fill="#2a5da8"/>
+  <g fill="#ffc93c">
+    <circle cx="380" cy="112" r="26"/>
+    <circle cx="446" cy="212" r="18"/>
+    <circle cx="300" cy="66" r="16"/>
+  </g>
+  <g fill="#e0345a">
+    <rect x="404" y="286" width="34" height="34" rx="8" transform="rotate(24 421 303)"/>
+    <rect x="326" y="146" width="28" height="28" rx="7" transform="rotate(-18 340 160)"/>
+  </g>
+</svg>

@@ -344,6 +344,41 @@
   --color-sponsored: var(--cl-sponsored);
   --color-sponsored-ink: var(--cl-sponsored-ink);
 
+  /* ── LAS CUATRO TINTAS DE LA BARRA DE ACCIONES ────────────────────────────
+     Feedback cliente 2026-08-31: «agregar un poco más de color a los post».
+     Hasta hoy los cuatro botones nacían en `text-foreground-secondary` y sólo
+     me gusta y guardar se pintaban AL ACTIVARSE: la barra era gris el 99% del
+     tiempo, que es exactamente lo que el cliente ve.
+
+     POR QUÉ NO SALEN DE `--accent-*`. Los acentos por módulo son DECORATIVOS y
+     su propio comentario lo dice: «el texto encima usa siempre tokens -ink /
+     on-media». `--accent-negocios` es el amarillo de la marca — 1.7:1 como
+     texto sobre la tarjeta blanca. Un ícono con su número al lado ES texto
+     (WCAG 1.4.3), así que la barra tiene que salir de la familia `-ink`, que es
+     justamente la que existe para esto y ya está medida a ≥4.5:1 contra las
+     cinco superficies y en los dos temas (theme-contrast.test.ts).
+
+     Son ALIAS y no colores nuevos a propósito: cero riesgo de contraste nuevo,
+     y el nombre semántico deja mover una acción de tinta sin tocar un solo
+     componente. `feed/action-bar.test.ts` vuelve a medir los cuatro por si
+     alguien los reapunta a un acento.
+
+     La ELECCIÓN de cada tinta:
+       like    → rojo: el corazón ya era rojo al activarse; ahora también en reposo.
+       comment → azul: es el `info` de la app, y conversar es informar.
+       share   → verde: en esta comunidad compartir es, casi siempre, WhatsApp.
+       save    → dorado: el marcador. Y sale de `--color-brand` a propósito —
+                 la marca la elige el tenant, y un tenant de marca ROJA tenía
+                 guardar y me gusta del mismo color.
+
+     El color NUNCA es la única señal (WCAG 1.4.1): el estado activo cambia el
+     PESO del glifo (regular → fill), suma un lavado del mismo tono y viaja en
+     `aria-pressed`. Ver `action-bar.tsx`. */
+  --color-action-like: var(--cl-danger-ink);
+  --color-action-comment: var(--cl-info-ink);
+  --color-action-share: var(--cl-success-ink);
+  --color-action-save: var(--cl-gold-ink);
+
   /* Marca dependiente del tema (§2.8). --color-brand y --color-brand-foreground
      NO van acá: tienen que existir como custom property real porque hay call
      sites con `var(--color-brand)`. Se redefinen en :root, más abajo. */

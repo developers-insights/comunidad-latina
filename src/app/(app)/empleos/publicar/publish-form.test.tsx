@@ -409,6 +409,101 @@ describe("Paso 2 — pago, modalidad y la ficha plegada", () => {
   });
 });
 
+/* ===========================================================================
+ * L1 — changas: la tercera dedicación ("Ocasional" / one_off) y los campos
+ * que dejan de tener sentido para un trabajo de una sola vez.
+ * =========================================================================== */
+
+describe("Paso 2 — 'Ocasional' (changa) y los campos que no aplican", () => {
+  it("ofrece Ocasional como tercera dedicación, junto a las otras dos", () => {
+    mount();
+    goToPay();
+    expect(screen.getByRole("radio", { name: "Tiempo completo" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Medio tiempo" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Ocasional" })).toBeTruthy();
+  });
+
+  it("por defecto (Tiempo completo) la ficha sigue mostrando los días recurrentes", () => {
+    mount();
+    goToPay();
+    expect(screen.getByText(C.steps.pay.daysLabel)).toBeTruthy();
+    expect(screen.getByLabelText(C.steps.pay.startsOnLabel)).toBeTruthy();
+  });
+
+  /**
+   * Una changa no tiene "días que se trabaja" en el sentido recurrente del
+   * campo: si el trabajo se repite cada semana el tipo correcto es "Medio
+   * tiempo", no "Ocasional". El resto de la ficha (horario, experiencia,
+   * idiomas, fecha límite) sigue aplicando igual.
+   */
+  it("elegir Ocasional oculta los días recurrentes, pero conserva el resto de la ficha", () => {
+    mount();
+    goToPay();
+    fireEvent.click(screen.getByRole("radio", { name: "Ocasional" }));
+
+    expect(screen.queryByText(C.steps.pay.daysLabel)).toBeNull();
+    expect(screen.getByLabelText(C.steps.pay.scheduleLabel)).toBeTruthy();
+    expect(screen.getByLabelText(C.steps.pay.experienceLabel)).toBeTruthy();
+    expect(screen.getByLabelText(C.steps.pay.applyByLabel)).toBeTruthy();
+  });
+
+  /** Volver a Tiempo completo/Medio tiempo devuelve los días — no se pierde el control. */
+  it("volver a Tiempo completo muestra los días de nuevo", () => {
+    mount();
+    goToPay();
+    fireEvent.click(screen.getByRole("radio", { name: "Ocasional" }));
+    expect(screen.queryByText(C.steps.pay.daysLabel)).toBeNull();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Tiempo completo" }));
+    expect(screen.getByText(C.steps.pay.daysLabel)).toBeTruthy();
+  });
+
+  /** "Cuándo empieza" no tiene sentido para un trabajo de una sola vez. */
+  it("elegir Ocasional cambia la etiqueta de fecha a 'Fecha del trabajo'", () => {
+    mount();
+    goToPay();
+    expect(screen.getByLabelText(C.steps.pay.startsOnLabel)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Ocasional" }));
+
+    expect(screen.queryByLabelText(C.steps.pay.startsOnLabel)).toBeNull();
+    expect(screen.getByLabelText(C.steps.pay.startsOnLabelOneOff)).toBeTruthy();
+  });
+
+  /** ¿Salario por hora vs. pago único? Ahora el período lo ofrece. */
+  it("el período de pago ofrece 'Pago único', además de hora/día/semana/mes", () => {
+    mount();
+    goToPay();
+    const select = screen.getByLabelText(C.steps.pay.periodLabel) as HTMLSelectElement;
+    const labels = Array.from(select.options).map((option) => option.text);
+    expect(labels).toEqual(["Por hora", "Por día", "Por semana", "Por mes", "Pago único"]);
+  });
+
+  it("publica una changa: employmentType 'one_off' y sin días recurrentes", async () => {
+    mount();
+    goToPay();
+    fireEvent.click(screen.getByRole("radio", { name: "Ocasional" }));
+    fireEvent.change(screen.getByLabelText(C.steps.pay.amountLabel), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText(C.steps.pay.periodLabel), {
+      target: { value: "one_time" },
+    });
+    clickNext();
+    clickNext();
+    fireEvent.change(screen.getByLabelText(C.steps.where.areaLabel), {
+      target: { value: "Corona, Queens" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: C.nav.submit }));
+
+    await waitFor(() => expect(mocks.createJobDraft).toHaveBeenCalledTimes(1));
+    expect(mocks.createJobDraft.mock.calls[0][0]).toMatchObject({
+      employmentType: "one_off",
+      payPeriod: "one_time",
+      salaryAmount: 50,
+      days: [],
+    });
+  });
+});
+
 describe("Paso 4 — zona según modalidad y negocio vinculado", () => {
   it("pide la zona cuando el trabajo es presencial", () => {
     mount();

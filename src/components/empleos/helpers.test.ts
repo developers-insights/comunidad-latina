@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  EMPLOYMENT_TYPE_LABEL,
+  EMPLOYMENT_TYPES,
+  JOB_PAY_PERIODS,
   jobQuestionsSchema,
   labelJobAnswers,
   parseJobAnswers,
@@ -50,6 +53,14 @@ describe("parseJobAttrs", () => {
     expect(attrs.questions[1].options).toEqual(["Mañanas", "Tardes", "Fines de semana"]);
   });
 
+  /**
+   * L1 (changas): tercer valor del enum. Mismo camino que full_time/part_time
+   * — nada especial que romper, y es justo lo que hay que probar.
+   */
+  it("lee el nuevo employment_type 'one_off' (changa) igual que los otros dos", () => {
+    expect(parseJobAttrs({ employment_type: "one_off" }).employmentType).toBe("one_off");
+  });
+
   it("no lanza con attrs basura y degrada a valores vacíos", () => {
     for (const raw of [null, undefined, "texto", 42, [], { questions: "nope" }]) {
       const attrs = parseJobAttrs(raw);
@@ -62,11 +73,49 @@ describe("parseJobAttrs", () => {
     expect(parseJobAttrs({ employment_type: "freelance" }).employmentType).toBeNull();
   });
 
+  /**
+   * Retrocompatibilidad (hard rule del encargo): hay avisos en producción con
+   * "gig" nunca existió como valor real, pero el punto es el mismo que protege
+   * a "freelance" — cualquier string que NO esté en EMPLOYMENT_TYPES actual se
+   * degrada a null en vez de explotar o colarse. Así un aviso viejo con un
+   * valor que quedó obsoleto sigue rindiendo sin romper la pantalla.
+   */
+  it("un employment_type que dejó de existir se degrada a null sin lanzar", () => {
+    expect(parseJobAttrs({ employment_type: "gig" }).employmentType).toBeNull();
+  });
+
   it("si UNA pregunta está rota descarta el bloque entero (no muestra a medias)", () => {
     const attrs = parseJobAttrs({
       questions: [YES_NO, { id: "q9", type: "multiple_choice", label: "Sin opciones" }],
     });
     expect(attrs.questions).toEqual([]);
+  });
+});
+
+/* ------------------------- EMPLOYMENT_TYPES / labels ----------------------- */
+
+describe("EMPLOYMENT_TYPES / EMPLOYMENT_TYPE_LABEL (L1 — changas)", () => {
+  it("incluye las tres categorías, full_time y part_time primero (retrocompatibilidad de orden)", () => {
+    expect(EMPLOYMENT_TYPES).toEqual(["full_time", "part_time", "one_off"]);
+  });
+
+  it("cada tipo tiene una etiqueta en español, ninguna vacía", () => {
+    for (const type of EMPLOYMENT_TYPES) {
+      expect(EMPLOYMENT_TYPE_LABEL[type]).toBeTruthy();
+    }
+  });
+
+  it("la etiqueta de 'one_off' NO es 'Changa' (jerga regional que la comunidad no reconoce)", () => {
+    expect(EMPLOYMENT_TYPE_LABEL.one_off).toBe("Ocasional");
+    expect(EMPLOYMENT_TYPE_LABEL.one_off.toLowerCase()).not.toContain("changa");
+  });
+});
+
+/* ------------------------------ JOB_PAY_PERIODS ---------------------------- */
+
+describe("JOB_PAY_PERIODS (L1 — pago único para changas)", () => {
+  it("suma 'one_time' sin sacar ninguno de los períodos existentes", () => {
+    expect(JOB_PAY_PERIODS).toEqual(["hour", "day", "week", "month", "one_time"]);
   });
 });
 

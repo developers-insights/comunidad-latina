@@ -31,6 +31,34 @@ export {
 
 export { zonasCoincidentes, ZONAS_MATCH_MAX } from "./coincidencias";
 
+export {
+  barrioMasCercano,
+  CENTROIDES,
+  centroideDeZona,
+  distanciaEnMillas,
+  esCoordenadaValida,
+  RADIO_TIERRA_MILLAS,
+  SNAP_MAX_MILLAS,
+  zonasEnRadio,
+  type BarrioCercano,
+  type Centroide,
+  type Coordenada,
+} from "./centroides";
+
+export {
+  encodeRadioCookie,
+  RADIO_COOKIE,
+  RADIO_COOKIE_MAX_AGE,
+  RADIO_DEFAULT,
+  RADIO_SOLO_ZONA,
+  RADIOS_MILLAS,
+  radioAplicado,
+  readRadioCookie,
+  sanitizeRadio,
+  type RadioCookie,
+  type RadioMillas,
+} from "./radio";
+
 export { campanaAlcanzaZona, zonasDeCampana, type ZonasDeCampana } from "./campanas";
 
 export { ZONA_COPY } from "./copy";

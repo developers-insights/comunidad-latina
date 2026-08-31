@@ -16,6 +16,7 @@ import {
   Megaphone,
   PencilSimple,
   RocketLaunch,
+  ShieldCheck,
   Storefront,
   Tag,
   Ticket,
@@ -25,6 +26,7 @@ import {
 import {
   BezelCard,
   Button,
+  EmptyState,
   Field,
   Input,
   ProgressDots,
@@ -468,12 +470,44 @@ export interface PublishFormProps {
    * Sin param (uso de siempre desde /publicar a mano), todo igual que antes.
    */
   initialKind?: Kind | null;
+  /**
+   * GATE DE IDENTIDAD (spec cliente, cerrado 2026-08-31). ¿La identidad ACTIVA
+   * de esta sesión ya pasó `requireIdentidadVerificada()`? La trae page.tsx,
+   * server-side (gate.ts tiene `import "server-only"` — no se puede volver a
+   * preguntar desde acá). Default `true` a propósito: un caller que no pasa
+   * este prop (cualquier test existente, por ejemplo) recupera el
+   * comportamiento de ANTES de este gate — mostrar el bloqueo es SIEMPRE una
+   * decisión explícita de quien monta el componente, nunca un default que
+   * pueda tapar el wizard sin que nadie lo haya pedido. La barrera real —la
+   * que no se puede saltear cambiando un prop— es el gate server-side de
+   * ./actions.ts más la RLS (0126); esto es sólo la cortesía de avisar antes.
+   */
+  identidadVerificada?: boolean;
+  /**
+   * Qué kinds exigen identidad SIEMPRE, sin mirar precio — dato, no regla:
+   * viene de `VERTICALES_QUE_EXIGEN_IDENTIDAD` (src/lib/verificacion/gate.ts)
+   * tal cual page.tsx lo importa. No se retipea la lista acá adentro —si
+   * mañana gate.ts suma o saca un vertical, este wizard lo seguiría solo con
+   * que page.tsx pase el array actualizado.
+   */
+  kindsQueExigenIdentidad?: readonly string[];
+  /**
+   * El único vertical de este wizard cuya exigencia depende del precio
+   * ("event" hoy — `VERTICAL_CONDICIONADA_AL_PRECIO` de gate.ts). Con
+   * `eventTicket === "pago"` alcanza como señal: pedir de más ante la duda es
+   * el error que este gate tolera (ver gate.ts), así que no hace falta
+   * repetir acá el parseo exacto del precio que ya hace `precioComoNumero`.
+   */
+  verticalCondicionadaAlPrecio?: string;
 }
 
 export function PublishForm({
   tenantId,
   initialKind = null,
   allowedKinds,
+  identidadVerificada = true,
+  kindsQueExigenIdentidad = ["property", "product", "job"],
+  verticalCondicionadaAlPrecio = "event",
 }: PublishFormProps) {
   // Orden del catálogo, no el que venga en la prop: el selector se lee siempre
   // igual. Nunca queda vacío — con los cinco módulos apagados este componente
@@ -591,6 +625,39 @@ export function PublishForm({
    * de verdad de ese evento.
    */
   const zoneStepIsVirtual = isOnlineEvent;
+
+  /**
+   * GATE DE IDENTIDAD — ¿esta combinación de kind/precio, con la sesión
+   * actual, exige mostrar el aviso de verificación? Ver el docblock de
+   * `identidadVerificada` en `PublishFormProps` para el porqué de cada pieza.
+   *
+   *  · "kind": property o job — se sabe apenas se elige en el paso 0, así que
+   *    el aviso puede aparecer ANTES de que la persona escriba una sola letra.
+   *  · "event": recién se sabe cuando se marca "Con entrada paga" en el paso
+   *    2 — sigue siendo "antes de llenar el formulario entero" (faltan zona,
+   *    fotos y revisión), que es la garantía que pidió el cliente.
+   *
+   * `null` mientras `kind` no se eligió: nada que gatear todavía.
+   */
+  const identityGateReason: "kind" | "event" | null = identidadVerificada
+    ? null
+    : kind !== null && kindsQueExigenIdentidad.includes(kind)
+      ? "kind"
+      : kind === verticalCondicionadaAlPrecio && eventTicket === "pago"
+        ? "event"
+        : null;
+
+  /** Vuelve del gate de identidad al punto exacto donde se disparó, sin perder nada más. */
+  function volverDelGateDeIdentidad() {
+    setError(null);
+    if (identityGateReason === "event") {
+      setEventTicket("");
+      setStep(2);
+    } else {
+      setKind(null);
+      setStep(0);
+    }
+  }
 
   /**
    * La frecuencia que se va a guardar. Una sola fuente para el borrador y para
@@ -947,6 +1014,39 @@ export function PublishForm({
           </Button>
         </div>
       </>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Gate de identidad (spec cliente, cerrado 2026-08-31) — reemplaza TODO el
+  // wizard, mismo patrón que la pantalla de éxito de arriba y que el gate de
+  // marketplace/publicar/page.tsx: nunca un botón "Publicar" que el servidor
+  // va a rechazar. Después de esto: property/job elegidos, o un evento recién
+  // marcado "Con entrada paga", sin identidad activa verificada.
+  // -------------------------------------------------------------------------
+  if (identityGateReason) {
+    return (
+      <EmptyState
+        icon={<ShieldCheck />}
+        title={C.needIdentityTitle}
+        message={C.needIdentityMessage}
+        action={
+          <div className="flex w-full flex-col gap-2">
+            <Link
+              href="/perfil/verificar"
+              className={buttonVariants({ variant: "primary", size: "md" })}
+            >
+              {C.needIdentityCta}
+            </Link>
+            <Button variant="outline" className="w-full" onClick={volverDelGateDeIdentidad}>
+              {identityGateReason === "event"
+                ? C.needIdentityBackEvent
+                : C.needIdentityBackKind}
+            </Button>
+          </div>
+        }
+        className="py-20"
+      />
     );
   }
 

@@ -38,6 +38,25 @@ export const COPY = {
       "Con tu cuenta publicás el aviso y recibís todas las postulaciones ordenadas en un solo lugar.",
     needLoginCta: "Entrar",
 
+    /**
+     * Bloqueo por identidad, ANTES del formulario.
+     *
+     * Un empleo siempre exige identidad verificada (`job` está en
+     * VERTICALES_QUE_EXIGEN_IDENTIDAD), así que acá se puede cortar la pantalla
+     * entera — a diferencia de /publicar, donde el wizard tiene que esperar a
+     * saber qué vertical eligió la persona.
+     *
+     * Se corta ANTES y no al enviar porque el formulario son cuatro pasos:
+     * enterarse del bloqueo después de escribir el puesto, el sueldo y las
+     * preguntas es perder el trabajo hecho y la paciencia. Mismo texto que
+     * /publicar y /marketplace/publicar — el mismo bloqueo no puede explicarse
+     * de tres maneras distintas.
+     */
+    needIdentityTitle: "Verificá tu identidad para publicar",
+    needIdentityBody:
+      "Así quien se postule sabe que hay una persona real del otro lado, y nos ayuda a cuidar a la comunidad de estafas. Verificarte es gratis y toma menos de un minuto: una foto de tu cédula, pasaporte o licencia alcanza. La revisa Stripe — tu documento nunca queda guardado en Comunidad Latina.",
+    needIdentityCta: "Verificar mi identidad",
+
     /** Cintillo del paso actual, arriba del título. */
     stepEyebrow: (current: number, total: number) => `Paso ${current} de ${total}`,
 
@@ -212,6 +231,18 @@ export const COPY = {
         "La fecha límite para postularse tiene que ser antes de que empiece el trabajo.",
       businessLinkInvalid:
         "No pudimos vincular el aviso a ese negocio. Elegí uno tuyo o publicalo a nombre personal.",
+      /**
+       * Fallback server-side del gate de identidad (`requireIdentidadVerificada`,
+       * policy `listings_insert` de la 0126). La explicación completa —por qué
+       * se pide, que es gratis, que el documento no lo guardamos nosotros— vive
+       * en la pantalla, no en este texto: acá sólo se llega si el aviso previo
+       * no alcanzó a mostrarse (sesión vieja, pestaña abierta desde antes, o
+       * una llamada directa a la action). Mismo criterio y mismo texto que
+       * /publicar y /marketplace/publicar, para que la app no diga tres cosas
+       * distintas ante el mismo bloqueo.
+       */
+      identityRequired:
+        "Para publicar esto primero necesitás verificar tu identidad. Es gratis y toma menos de un minuto.",
       questionLabelShort: "Escribí la pregunta completa.",
       questionOptionsShort: "Una pregunta de opción múltiple necesita al menos 2 opciones.",
       questionOptionEmpty: "Completá todas las opciones o quitá las que sobran.",

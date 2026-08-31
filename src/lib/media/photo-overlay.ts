@@ -221,12 +221,57 @@ export function captionFontShorthand(
 export interface PhotoSticker {
   /** Sólo para React y para poder borrar el que se tocó. No se publica. */
   id: string;
+  /**
+   * El glifo Unicode. VACÍO cuando el sticker es un emoji propio de la
+   * comunidad (`image`), que se dibuja con `drawImage` y no con `fillText`.
+   */
   emoji: string;
+  /**
+   * EMOJI PROPIO DE LA COMUNIDAD (migración 0125): una imagen, no un glifo.
+   * Ausente = sticker Unicode de siempre, que es como venía funcionando esto.
+   *
+   * Es un campo OPCIONAL y no una unión discriminada a propósito: todo lo que
+   * hay alrededor —posición, tamaño, recorte, arrastre, `stickerBox`— es
+   * idéntico para los dos, y lo único que cambia es la última línea, la que
+   * pinta. Una unión obligaría a ramificar en cada función que hoy no necesita
+   * saber la diferencia.
+   */
+  image?: PhotoStickerImage;
   /** Centro del emoji, 0–1 sobre el ancho/alto del recuadro publicado. */
   x: number;
   y: number;
   /** Alto del emoji como fracción del LADO CORTO del recuadro. */
   size: number;
+}
+
+/** Lo mínimo que hace falta para pintar y para nombrar un emoji de la comunidad. */
+export interface PhotoStickerImage {
+  /** Código corto del catálogo. Identifica el dibujo sin depender de la URL. */
+  slug: string;
+  /** URL pública del archivo en el bucket `community-emojis`. */
+  url: string;
+  /**
+   * Qué se ve en el dibujo. OBLIGATORIO: es el nombre accesible del emoji
+   * mientras se lo arrastra sobre la foto, y sin él la capa de stickers se
+   * anuncia como una fila de botones sin nombre.
+   */
+  alt: string;
+}
+
+/**
+ * Las URLs que hay que tener descargadas antes de hornear, sin repetir.
+ *
+ * Vive acá —con el resto del contrato— y no en el horneado porque el mismo
+ * dato lo puede querer una vista previa que precargue. Devuelve `[]` cuando no
+ * hay ningún emoji de imagen, que es el caso normal y el que no tiene que
+ * pagar nada.
+ */
+export function stickerImageUrls(stickers: readonly PhotoSticker[]): string[] {
+  return [...new Set(stickers.map((sticker) => sticker.image?.url).filter(isUrl))];
+}
+
+function isUrl(value: string | undefined): value is string {
+  return typeof value === "string" && value.length > 0;
 }
 
 /** Cuántos entran. Más que esto no es una foto con emojis, es una calcomanía. */
@@ -237,16 +282,15 @@ export const MIN_STICKER_SIZE = 0.07;
 export const MAX_STICKER_SIZE = 0.6;
 
 /**
- * Catálogo por temas. Cortito a propósito: un teclado de emojis completo dentro
- * de una hoja ya abierta es una pantalla entera de scroll para elegir una
- * carita. Estos son los que la gente usa en una foto de comunidad.
+ * Catálogo Unicode por temas.
+ *
+ * SE MUDÓ a `src/lib/emojis/catalog.ts` cuando el picker pasó a ser compartido
+ * (0125): la misma lista la usa ahora la pestaña "Clásicos" del comentario. Se
+ * re-exporta con este nombre para no tocar a quien ya la importaba de acá —el
+ * editor de fotos y su test—, y para que no queden dos listas que alguien tenga
+ * que acordarse de mantener iguales.
  */
-export const STICKER_GROUPS: ReadonlyArray<{ label: string; emojis: readonly string[] }> = [
-  { label: "Caras", emojis: ["😀", "😍", "🥹", "😎", "🤣", "😮", "🥳", "😴"] },
-  { label: "Gestos", emojis: ["❤️", "🔥", "👏", "🙌", "💪", "🙏", "👌", "✌️"] },
-  { label: "Fiesta", emojis: ["🎉", "🎂", "🎈", "🍻", "🎶", "⚽", "🏆", "✨"] },
-  { label: "Nuestro", emojis: ["🌎", "🇦🇷", "🇨🇴", "🇲🇽", "🇻🇪", "🇵🇪", "🇪🇸", "🌴"] },
-];
+export { CLASSIC_EMOJI_GROUPS as STICKER_GROUPS } from "@/lib/emojis/catalog";
 
 /**
  * Familia de emoji para el canvas. `fillText` con un emoji dibuja la fuente de
@@ -278,12 +322,22 @@ export function normalizeSticker(sticker: PhotoSticker): PhotoSticker {
   return { ...sticker, x, y, size: clampStickerSize(sticker.size) };
 }
 
-/** Deja como mucho {@link MAX_STICKERS}, ya normalizados. */
+/**
+ * Deja como mucho {@link MAX_STICKERS}, ya normalizados.
+ *
+ * Descarta los que no tienen NADA que pintar —ni glifo ni imagen—: desde que un
+ * sticker puede ser una imagen, `emoji: ""` es un estado alcanzable, y un
+ * `fillText("")` no dibuja nada pero ocupa uno de los ocho lugares. Se filtra
+ * ANTES del corte para que el cupo lo gasten los que sí se ven.
+ */
 export function normalizeStickers(
   stickers: readonly PhotoSticker[] | undefined | null,
 ): PhotoSticker[] {
   if (!stickers?.length) return [];
-  return stickers.slice(0, MAX_STICKERS).map(normalizeSticker);
+  return stickers
+    .filter((sticker) => Boolean(sticker.image?.url) || sticker.emoji.trim().length > 0)
+    .slice(0, MAX_STICKERS)
+    .map(normalizeSticker);
 }
 
 export interface StickerBox {

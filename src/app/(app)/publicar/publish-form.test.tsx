@@ -43,10 +43,17 @@ import { PublishForm } from "./publish-form";
 
 const C = COPY.publish;
 
-function mount(initialKind?: "property" | "business" | "professional" | "event" | "job") {
+function mount(
+  initialKind?: "property" | "business" | "professional" | "event" | "job",
+  opts?: { identidadVerificada?: boolean },
+) {
   return render(
     <ToastProvider>
-      <PublishForm tenantId="tenant-1" initialKind={initialKind} />
+      <PublishForm
+        tenantId="tenant-1"
+        initialKind={initialKind}
+        identidadVerificada={opts?.identidadVerificada}
+      />
     </ToastProvider>,
   );
 }
@@ -131,8 +138,8 @@ describe("PublishForm — copy del paso texto según kind (feedback Geovanny)", 
  * =========================================================================== */
 
 /** Avanza del paso 0 (tipo) al paso 2 (precio y detalles) para un kind dado. */
-function irAlPasoDePrecio(kind: "property" | "event") {
-  mount(kind);
+function irAlPasoDePrecio(kind: "property" | "event", opts?: { identidadVerificada?: boolean }) {
+  mount(kind, opts);
   fireEvent.change(screen.getByLabelText(C.steps.text.titleLabel), {
     target: { value: "Cuarto amplio en casa compartida" },
   });
@@ -232,5 +239,74 @@ describe("PublishForm — evento: los campos que faltaban", () => {
     const bloque = screen.getByText("Más datos del evento").closest("details");
     expect(bloque).toBeTruthy();
     expect((bloque as HTMLDetailsElement).open).toBe(false);
+  });
+});
+
+/* ===========================================================================
+ * Gate de identidad (spec cliente, cerrado 2026-08-31): "para vender dentro
+ * de la plataforma, tenés que estar verificado sí o sí". Sin `identidadVerificada`
+ * (como en TODOS los tests de arriba), el wizard se comporta exactamente
+ * igual que antes de este gate — por eso el default del prop es `true`.
+ * =========================================================================== */
+
+describe("PublishForm — gate de identidad", () => {
+  it("property sin identidad verificada: bloquea apenas se elige, antes del paso 1", () => {
+    mount("property", { identidadVerificada: false });
+
+    expect(screen.getByText(C.needIdentityTitle)).toBeTruthy();
+    // Nunca llegó a mostrar el paso 1 — ni una letra del formulario.
+    expect(screen.queryByText(C.steps.text.title("property"))).toBeNull();
+  });
+
+  it("job sin identidad verificada también bloquea", () => {
+    mount("job", { identidadVerificada: false });
+    expect(screen.getByText(C.needIdentityTitle)).toBeTruthy();
+  });
+
+  it("business y professional NO bloquean aunque la identidad no esté verificada", () => {
+    mount("business", { identidadVerificada: false });
+    expect(screen.queryByText(C.needIdentityTitle)).toBeNull();
+    expect(screen.getByText(C.steps.text.title("business"))).toBeTruthy();
+  });
+
+  it("property CON identidad verificada no bloquea", () => {
+    mount("property", { identidadVerificada: true });
+    expect(screen.queryByText(C.needIdentityTitle)).toBeNull();
+    expect(screen.getByText(C.steps.text.title("property"))).toBeTruthy();
+  });
+
+  it('"Elegir otro tipo de aviso" saca del gate y vuelve al selector', () => {
+    mount("property", { identidadVerificada: false });
+    fireEvent.click(screen.getByText(C.needIdentityBackKind));
+
+    expect(screen.getByText(C.steps.kind.title)).toBeTruthy();
+    expect(screen.queryByText(C.needIdentityTitle)).toBeNull();
+  });
+
+  it("un evento gratis NO bloquea sin identidad — sólo cobrar entrada lo hace", () => {
+    irAlPasoDePrecio("event", { identidadVerificada: false });
+    expect(screen.queryByText(C.needIdentityTitle)).toBeNull();
+
+    fireEvent.click(screen.getByText("Con entrada paga"));
+
+    expect(screen.getByText(C.needIdentityTitle)).toBeTruthy();
+  });
+
+  it('evento pago: "Volver" saca del gate sin perder el título ya escrito', () => {
+    irAlPasoDePrecio("event", { identidadVerificada: false });
+    fireEvent.click(screen.getByText("Con entrada paga"));
+    expect(screen.getByText(C.needIdentityTitle)).toBeTruthy();
+
+    fireEvent.click(screen.getByText(C.needIdentityBackEvent));
+
+    // De vuelta en el paso de precio, con "Entrada" otra vez sin elegir.
+    expect(screen.getByText("Entrada")).toBeTruthy();
+    expect(screen.queryByText(C.needIdentityTitle)).toBeNull();
+  });
+
+  it("el botón lleva a /perfil/verificar", () => {
+    mount("job", { identidadVerificada: false });
+    const link = screen.getByText(C.needIdentityCta).closest("a");
+    expect(link?.getAttribute("href")).toBe("/perfil/verificar");
   });
 });

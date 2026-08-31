@@ -1,11 +1,11 @@
 import Link from "next/link";
 import {
   Check,
-  Info,
   Rocket,
   SealCheck,
   ShieldCheck,
   Sparkle,
+  Star,
   Warning,
 } from "@phosphor-icons/react/dist/ssr";
 import { Badge, Banner, BezelCard, buttonVariants } from "@/components/ui";
@@ -21,6 +21,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { formatDate } from "@/lib/utils";
 import {
+  VERIFICACION_INCLUIDO_SIEMPRE,
   VERIFICACION_PLANES,
   VERIFICACION_TIER_IDS,
   type VerificacionTier,
@@ -203,41 +204,43 @@ export default async function VerificacionPage({
       )}
 
       {/* --------------------------------------- El requisito: la identidad */}
+      {/* `coreClassName` y no `className`: en BezelCard, `className` viste el
+          MARCO (el bisel de 6px) y `coreClassName` el contenido. Estaba al
+          revés, así que el marco medía 16px y el contenido conservaba su `p-6`
+          de default: 40px de aire muerto por lado. Ver la nota del grid de
+          planes, más abajo — es la misma causa. */}
       {user && (
-        <BezelCard className="mt-6 p-4">
-          <div className="flex items-start gap-3">
-            <ShieldCheck
-              size={22}
-              weight="fill"
-              aria-hidden="true"
-              className={identidadVerificada ? "shrink-0 text-success-ink" : "shrink-0 text-warning-ink"}
-            />
-            <div className="min-w-0">
-              <h2 className="font-display text-base font-bold text-foreground">
-                {identidadVerificada ? C.identidad.listaTitle : C.identidad.faltaTitle}
-              </h2>
-              <p className="mt-1 text-sm text-foreground-muted">
-                {identidadVerificada ? C.identidad.listaBody : C.identidad.faltaBody}
-              </p>
-              {!identidadVerificada && (
-                <Link
-                  href="/perfil/verificar"
-                  className={`${buttonVariants({ variant: "outline", size: "sm" })} mt-3`}
-                >
-                  {C.identidad.faltaCta}
-                </Link>
-              )}
-            </div>
+        <BezelCard className="mt-6" coreClassName="flex items-start gap-3 p-4">
+          <ShieldCheck
+            size={22}
+            weight="fill"
+            aria-hidden="true"
+            className={identidadVerificada ? "shrink-0 text-success-ink" : "shrink-0 text-warning-ink"}
+          />
+          <div className="min-w-0">
+            <h2 className="font-display text-base font-bold text-foreground">
+              {identidadVerificada ? C.identidad.listaTitle : C.identidad.faltaTitle}
+            </h2>
+            <p className="mt-1 text-sm text-foreground-muted">
+              {identidadVerificada ? C.identidad.listaBody : C.identidad.faltaBody}
+            </p>
+            {!identidadVerificada && (
+              <Link
+                href="/perfil/verificar"
+                className={`${buttonVariants({ variant: "outline", size: "sm" })} mt-3`}
+              >
+                {C.identidad.faltaCta}
+              </Link>
+            )}
           </div>
         </BezelCard>
       )}
 
       {/* ------------------------------------------- Tu impulso de regalo */}
       {activa && (
-        <BezelCard className="mt-6 p-4">
-          <div className="flex items-start gap-3">
-            <Rocket size={22} weight="fill" aria-hidden="true" className="shrink-0 text-info-ink" />
-            <div className="min-w-0 flex-1">
+        <BezelCard className="mt-6" coreClassName="flex items-start gap-3 p-4">
+          <Rocket size={22} weight="fill" aria-hidden="true" className="shrink-0 text-info-ink" />
+          <div className="min-w-0 flex-1">
               <h2 className="font-display text-base font-bold text-foreground">
                 {C.regalo.title}
               </h2>
@@ -259,7 +262,6 @@ export default async function VerificacionPage({
               ) : (
                 <p className="mt-3 text-sm text-foreground-muted">{C.regalo.sinRegalo}</p>
               )}
-            </div>
           </div>
         </BezelCard>
       )}
@@ -271,7 +273,47 @@ export default async function VerificacionPage({
         </h2>
         {!activa && <p className="mt-1 text-sm text-foreground-muted">{C.page.elegirPlanAyuda}</p>}
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Lo que llevan los tres, ANTES de los tres. Va acá y no dentro de
+            cada tarjeta porque es literalmente el mismo texto para todos:
+            repetido tres veces era el 66% de la comparativa y tapaba lo único
+            que se compara (para quién es, y cuánto sale). Continúa la frase de
+            arriba —"el check es el mismo en los tres"— en vez de contradecirla
+            con tres listas iguales. */}
+        <div className="mt-4 rounded-xl bg-surface-subtle px-4 py-3">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-foreground-muted">
+            {VERIFICACION_INCLUIDO_SIEMPRE.titulo}
+          </h3>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {VERIFICACION_INCLUIDO_SIEMPRE.items.map((item) => (
+              <li key={item} className="flex items-start gap-2 text-sm text-foreground">
+                <Check
+                  size={16}
+                  weight="bold"
+                  aria-hidden="true"
+                  className="mt-1 shrink-0 text-success"
+                />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* UNA COLUMNA, y no un grid con breakpoints de viewport.
+            ────────────────────────────────────────────────────────────────
+            Acá había `sm:grid-cols-2 lg:grid-cols-3`. El detalle que lo hacía
+            ilegible: `sm:`/`lg:` miden el VIEWPORT, pero el shell de la app
+            (app/(app)/layout.tsx) capa el contenido en `max-w-lg` = 512px
+            SIEMPRE, también en desktop. Así que en una pantalla de 1280px se
+            encendía `lg:grid-cols-3` y repartía 480px útiles en tres columnas
+            de 152px; descontando el bisel y el padding de la tarjeta quedaban
+            72px medidos de texto real, o sea una palabra por renglón.
+
+            La pantalla hermana de este mismo shell —negocios/presencia, la
+            otra suscripción— ya resuelve esto apilando (`flex flex-col`), y
+            esta era la única del repo que usaba breakpoints de viewport dentro
+            del shell. Se apila igual: dos pantallas de precios que se linkean
+            entre sí no pueden estar estructuradas distinto. */}
+        <div className="mt-4 flex flex-col gap-4">
           {VERIFICACION_TIER_IDS.map((tier) => (
             <PlanCard
               key={tier}
@@ -297,7 +339,7 @@ export default async function VerificacionPage({
 
       {/* -------------------------------- Qué dice y qué NO dice la insignia */}
       <section className="mt-8">
-        <BezelCard className="p-4">
+        <BezelCard coreClassName="p-4">
           <div className="flex items-start gap-3">
             <SealCheck size={22} weight="fill" aria-hidden="true" className="shrink-0 text-info-ink" />
             <div className="min-w-0">
@@ -401,49 +443,90 @@ function PlanCard({
   coincideConTuCuenta: boolean;
 }) {
   const plan = VERIFICACION_PLANES[tier];
+  // El escalón que la pantalla destaca. Cuando ya hay suscripción, el destacado
+  // es EL CONTRATADO y no "el más elegido": a quien ya pagó, resaltarle otro
+  // plan es venderle algo que no pidió.
+  const destacada = esElContratado || (plan.destacado && !activa);
+  // Con la suscripción activa, las DOS tarjetas que no son la contratada se
+  // quedan sin botón (no se ofrece contratar de nuevo, y el portal va sólo en
+  // la del plan que se paga). Sin este gate quedaba montado un contenedor
+  // vacío, y el `gap-4` de la tarjeta le regalaba 16px de aire abajo: un hueco
+  // que sólo veía quien ya pagó.
+  const hayAcciones = !activa || (esElContratado && tieneFacturacion);
 
   return (
-    <BezelCard className="flex flex-col p-4">
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="font-display text-base font-bold text-foreground">{plan.nombre}</h3>
-        {esElContratado ? (
-          <Badge variant="info">{C.page.tuPlan}</Badge>
-        ) : (
-          plan.destacado && !activa && <Badge variant="brand">{C.page.masElegido}</Badge>
-        )}
+    <BezelCard
+      // `featured` tinta el BISEL con el color de la comunidad. Es el recurso
+      // que ya usa negocios/presencia para el plan recomendado, y evita el
+      // parche de meter un bloque de color adentro de una tarjeta que ya tiene
+      // marco propio.
+      variant={destacada ? "featured" : "default"}
+      // `@container`: de acá para adentro se mide EL ANCHO DE LA TARJETA, no el
+      // del viewport. Es lo que faltaba — los `sm:`/`lg:` de antes preguntaban
+      // por la ventana, que en esta app no dice nada porque el shell capa todo
+      // en 512px. Con esto la tarjeta responde a lo que realmente tiene: ~291px
+      // a 375px de viewport, ~428px de 768px para arriba.
+      coreClassName="@container flex flex-col gap-4 p-5"
+    >
+      {/* Identidad del plan + precio. Pasados los 384px de tarjeta el precio se
+          va al margen derecho, y como las tres tarjetas son igual de anchas los
+          tres precios quedan alineados en una columna: se comparan de un
+          vistazo, que es lo único que esta pantalla tiene que hacer fácil. */}
+      <div className="flex flex-col gap-3 @sm:flex-row @sm:items-start @sm:justify-between @sm:gap-5">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-display text-xl font-bold text-foreground">{plan.nombre}</h3>
+            {esElContratado ? (
+              <Badge variant="info">{C.page.tuPlan}</Badge>
+            ) : (
+              plan.destacado &&
+              !activa && (
+                <Badge variant="brand">
+                  <Star size={12} weight="fill" aria-hidden="true" />
+                  {C.page.masElegido}
+                </Badge>
+              )
+            )}
+          </div>
+          <p className="mt-1 text-sm text-foreground-secondary">{plan.paraQuien}</p>
+        </div>
+
+        <p className="flex items-baseline gap-1.5 @sm:shrink-0 @sm:flex-col @sm:items-end @sm:gap-0">
+          <span className="numeric font-display text-3xl font-bold leading-none text-foreground">
+            {precio}
+          </span>
+          <span className="text-xs text-foreground-secondary @sm:mt-1">{C.page.porMes}</span>
+        </p>
       </div>
 
-      <p className="mt-1 text-sm text-foreground-muted">{plan.paraQuien}</p>
+      {/* Lo único que cambia entre escalones. Lo compartido ya se dijo arriba. */}
+      <p className="flex items-start gap-2 text-sm text-foreground">
+        <SealCheck
+          size={18}
+          weight="fill"
+          aria-hidden="true"
+          className="mt-0.5 shrink-0 text-info-ink"
+        />
+        <span>{plan.distintivo}</span>
+      </p>
+
       {coincideConTuCuenta && (
-        <p className="mt-1 flex items-center gap-1 text-xs font-medium text-brand-ink">
-          <Check size={12} weight="bold" aria-hidden="true" />
+        <p className="flex items-center gap-1.5 text-xs font-medium text-brand-ink">
+          <Check size={12} weight="bold" aria-hidden="true" className="shrink-0" />
           {C.page.coincideConTuCuenta}
         </p>
       )}
 
-      <p className="mt-3">
-        <span className="font-display text-2xl font-bold text-foreground">{precio}</span>{" "}
-        <span className="text-sm text-foreground-muted">{C.page.porMes}</span>
-      </p>
-
-      <ul className="mt-3 flex flex-1 flex-col gap-1.5">
-        {plan.incluye.map((item) => (
-          <li key={item} className="flex items-start gap-2 text-sm text-foreground-muted">
-            <Info size={16} weight="fill" aria-hidden="true" className="mt-0.5 shrink-0 text-info-ink" />
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-4">
+      {hayAcciones && (
         <VerificacionActions
           tier={tier}
           yaActiva={activa}
-          // El portal se ofrece SÓLO en la tarjeta del plan contratado: repetirlo
-          // en los tres haría parecer que cada uno tiene su propia facturación.
+          // El portal se ofrece SÓLO en la tarjeta del plan contratado:
+          // repetirlo en los tres haría parecer que cada uno tiene su propia
+          // facturación.
           tieneFacturacion={esElContratado && tieneFacturacion}
         />
-      </div>
+      )}
     </BezelCard>
   );
 }

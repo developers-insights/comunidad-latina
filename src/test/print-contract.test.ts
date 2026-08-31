@@ -330,6 +330,16 @@ const INVENTARIO: Record<string, Entrada> = {
   //    con tone="media", y ese tono lo pasa ÚNICAMENTE la hoja de comentarios
   //    abierta sobre un video. De ahí que la prueba apunte a la hoja: el panel
   //    entero lleva cl-print-hide, así que esa tinta no llega nunca al papel.
+  // Botón que abre los emojis, dentro de la píldora del composer (0125). Las
+  // tres tintas son el MISMO <button> en su variante sobre vidrio: la de
+  // reposo, la de hover y la de abierto. La regla de <button> del @media print
+  // lo esconde igual que al de enviar, y encima sólo existe con tone="media",
+  // que únicamente pasa la hoja de comentarios sobre un video — la misma que
+  // ya lleva cl-print-hide.
+  "src/components/emojis/emoji-picker-popover.tsx": {
+    inks: ["text-on-media", "text-on-media", "text-on-media"],
+    cobertura: "control",
+  },
   "src/components/feed/comment-composer.tsx": {
     inks: ["text-brand-foreground", "text-on-media", "text-on-media"],
     cobertura: "cl-print-hide",

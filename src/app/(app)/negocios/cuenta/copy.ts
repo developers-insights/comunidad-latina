@@ -49,11 +49,43 @@ export const COPY = {
 
   /** Ya tiene al menos uno. */
   card: {
-    heading: "Tus negocios",
-    roleLabel: "Tu rol",
-    activeNow: "Estás usando la app con este perfil.",
-    inactiveNow: "Ahora estás usando la app con tu perfil personal.",
-    useIt: (nombre: string) => `Usar la app como ${nombre}`,
+    /**
+     * Nombre accesible de la lista, no un título visible: arriba ya está el
+     * <h1> "Tus negocios" y repetirlo veinte píxeles más abajo era ruido. Lleva
+     * el número porque con tope de diez "cuántos tengo" es una pregunta real, y
+     * así el lector de pantalla la contesta al entrar en la lista.
+     */
+    heading: (cantidad: number) =>
+      cantidad === 1 ? "Tu negocio" : `Tus ${cantidad} negocios`,
+
+    /**
+     * CON QUÉ PERFIL ESTÁS ACTUANDO — una sola vez, arriba de la lista.
+     *
+     * Antes esta frase vivía DENTRO de cada tarjeta, así que con nueve negocios
+     * inactivos se leía nueve veces la misma oración sobre el perfil personal.
+     * Es un dato de la persona, no de cada negocio: se dice una vez y listo. La
+     * tarjeta activa sólo se marca a sí misma, para poder encontrarla.
+     */
+    usingPersonal: (nombre: string) => `Ahora publicás como ${nombre}, tu perfil personal.`,
+    usingBusiness: (nombre: string) => `Ahora publicás como ${nombre}.`,
+
+    /**
+     * Marca en la tarjeta activa. Es un LOCALIZADOR —"cuál de las diez"—, no la
+     * explicación: esa la da entera la frase de arriba ("Ahora publicás como
+     * Panadería La Esperanza."). Corta a propósito para que entre en la misma
+     * línea que el chip de verificación en una tarjeta de 299px.
+     */
+    activeNow: "En uso ahora",
+
+    /**
+     * Etiqueta del botón. Corta a propósito: el nombre del negocio ya está en
+     * la tarjeta, y "Usar la app como Panadería Doña Rosa del Barrio" no entra
+     * en un botón de 291px sin desbordar la pantalla. El nombre completo sigue
+     * viajando en el `aria-label`, que es donde hace falta para no tener diez
+     * botones que suenan igual.
+     */
+    useIt: "Usar este perfil",
+    useItAria: (nombre: string) => `Usar la app como ${nombre}`,
     backToPersonal: "Volver a mi perfil personal",
     switching: "Cambiando…",
   },

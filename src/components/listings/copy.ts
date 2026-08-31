@@ -190,6 +190,23 @@ export const COPY = {
     needLoginMessage:
       "Publicar es gratis y toma dos minutos. Necesitamos que entres a tu cuenta para proteger tu aviso y tu contacto.",
     needLoginCta: "Entrar a mi cuenta",
+    // --- Gate de identidad (spec cliente, cerrado 2026-08-31: "para vender
+    // dentro de la plataforma, tenés que estar verificado sí o sí") ----------
+    // Sólo lo ven quienes eligieron property/job, o un event con precio —
+    // publish-form.tsx decide cuándo, page.tsx trae el dato server-side (ver
+    // el porqué en publicar/page.tsx). Escrito con la skill ux-writing:
+    // explica el POR QUÉ en términos de la persona (no "política"), dice qué
+    // hacer y cuánto cuesta, y tranquiliza sobre el documento — mismo tono que
+    // /perfil/verificar (src/app/(app)/perfil/verificar/page.tsx) y que el
+    // gate ya existente de marketplace/publicar (src/components/marketplace/copy.ts).
+    needIdentityTitle: "Verificá tu identidad para publicar",
+    needIdentityMessage:
+      "Así tu comunidad sabe que hay una persona real del otro lado, y nos ayuda a cuidarla de estafas. Verificarte es gratis y toma menos de un minuto: una foto de tu cédula, pasaporte o licencia alcanza. La revisa Stripe — tu documento nunca queda guardado en Comunidad Latina.",
+    needIdentityCta: "Verificar mi identidad",
+    // Acción secundaria de la pantalla de bloqueo: vuelve al wizard sin haber
+    // perdido nada — a elegir otro tipo de aviso, o a reconsiderar el precio.
+    needIdentityBackKind: "Elegir otro tipo de aviso",
+    needIdentityBackEvent: "Volver",
     // La comunidad todavía no abrió ningún vertical de avisos (los cinco
     // módulos apagados o en "muy pronto"). Se dice qué SÍ se puede hacer hoy
     // —contar algo en el feed, que nunca se apaga— en vez de dejar un wizard

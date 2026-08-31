@@ -34,6 +34,7 @@ import {
   fetchPromotionsForPosts,
   fetchViewerLikes,
   fetchViewerSaves,
+  fetchViewerSavedListingIds,
   toFeedListingModel,
   toListingCardModel,
   toPostCardModel,
@@ -463,6 +464,7 @@ async function assembleFeedPage({
     authors,
     likedIds,
     savedIds,
+    savedListingIds,
     pollByPostId,
     listingExtras,
     entityById,
@@ -485,6 +487,15 @@ async function assembleFeedPage({
       supabase,
       viewerId,
       visiblePosts.map((entry) => entry.id),
+    ),
+    // Guardados de las FICHAS de la tanda, en el mismo lote que los de posts:
+    // la barra de la ficha necesita saber qué ya estaba guardado, y pedirlo
+    // aparte sería un viaje más por página en la pantalla que ya se reportó
+    // lenta.
+    fetchViewerSavedListingIds(
+      supabase,
+      viewerId,
+      visibleListings.map((row) => row.id),
     ),
     fetchPostPolls(supabase, viewerId, questionPostIds),
     fetchListingExtras(supabase, tenantId, visibleListings, locale),
@@ -544,6 +555,12 @@ async function assembleFeedPage({
       createdAt: entry.createdAt,
       id: entry.id,
       listing: toFeedListingModel(row, listingExtras, locale),
+      engagement: {
+        // `?? undefined`: la columna es anulable hasta el backfill de la 0038 y
+        // el botón dibuja la ausencia como ausencia, no como un 0 que mentiría.
+        commentCount: row.comment_count ?? undefined,
+        savedByViewer: savedListingIds.has(row.id),
+      },
     };
   });
 
@@ -645,7 +662,16 @@ async function loadListingsPage({
     return { items: [], nextCursor: null };
   }
 
-  const extras = await fetchListingExtras(supabase, tenantId, rows, locale);
+  // En paralelo con los extras, no encadenado: es la misma tanda del scroll y
+  // esta pantalla ya viene señalada como lenta.
+  const [extras, savedListingIds] = await Promise.all([
+    fetchListingExtras(supabase, tenantId, rows, locale),
+    fetchViewerSavedListingIds(
+      supabase,
+      viewerId,
+      rows.map((row) => row.id),
+    ),
+  ]);
   const lastRow = rows[rows.length - 1];
 
   const items: FeedItem[] = rows.map((row) =>
@@ -661,6 +687,10 @@ async function loadListingsPage({
           createdAt: row.created_at,
           id: row.id,
           listing: toFeedListingModel(row, extras, locale),
+          engagement: {
+            commentCount: row.comment_count ?? undefined,
+            savedByViewer: savedListingIds.has(row.id),
+          },
         },
   );
 

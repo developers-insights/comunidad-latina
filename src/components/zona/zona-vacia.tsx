@@ -25,7 +25,24 @@ import { ZONA_COPY as C } from "@/lib/zona";
  * — borrar el parámetro, no escribir una preferencia que el parámetro va a
  * seguir tapando. Ver `resolverVistaZona` en `@/lib/zona/server`.
  */
-export function ZonaVacia({ zona, className }: { zona: string; className?: string }) {
+export function ZonaVacia({
+  zona,
+  radioMillas = null,
+  className,
+}: {
+  zona: string;
+  /**
+   * Las millas a la redonda que se aplicaron, si el filtro tenía radio.
+   *
+   * OPCIONAL: los ocho listados que hoy renderizan este vacío no lo pasan
+   * todavía (están fuera del alcance de este cambio) y sin él el texto es el de
+   * siempre. Cuando lo pasen —sale de `resolverVistaZona().radioMillas`— el
+   * vacío deja de decir "no hay nada en Corona" cuando en realidad buscó en 25
+   * millas a la redonda y tampoco había.
+   */
+  radioMillas?: number | null;
+  className?: string;
+}) {
   const [saliendo, setSaliendo] = useState(false);
   const [, startTransition] = useTransition();
   const { toast } = useToast();
@@ -47,8 +64,16 @@ export function ZonaVacia({ zona, className }: { zona: string; className?: strin
     <EmptyState
       className={className}
       illustration="/images/empty-state-search.png"
-      title={C.vacio.titulo(zona)}
-      message={C.vacio.mensaje(zona)}
+      title={
+        radioMillas === null
+          ? C.vacio.titulo(zona)
+          : C.vacio.tituloConRadio(radioMillas, zona)
+      }
+      message={
+        radioMillas === null
+          ? C.vacio.mensaje(zona)
+          : C.vacio.mensajeConRadio(radioMillas, zona)
+      }
       action={
         <Button variant="primary" size="md" onClick={verTodo} loading={saliendo}>
           <GlobeHemisphereWest size={18} aria-hidden="true" />

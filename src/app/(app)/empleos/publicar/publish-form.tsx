@@ -705,7 +705,11 @@ export function JobPublishForm({
           // aviso se describe por su modalidad, que es un dato real.
           areaLabel: needsArea ? areaLabel.trim() : null,
           questions: buildQuestionsPayload(),
-          days,
+          // Una changa no tiene días recurrentes (por diseño: si se repite
+          // cada semana, el tipo correcto es "Medio tiempo", no "Ocasional").
+          // El campo puede traer datos viejos de haber tocado el tipo antes de
+          // elegir el definitivo, así que se descartan acá y no sólo se ocultan.
+          days: employmentType === "one_off" ? [] : days,
           schedule: schedule.trim() || null,
           experience: experience || null,
           languages,
@@ -981,9 +985,16 @@ export function JobPublishForm({
               <legend className="mb-1 text-sm font-semibold text-foreground">
                 {C.steps.pay.typeLegend}
               </legend>
-              <div role="radiogroup" aria-label={C.steps.pay.typeLegend} className="grid grid-cols-2 gap-2">
+              {/* grid-cols-3 + ícono arriba: mismo patrón que MODALIDAD, un poco
+                  más abajo en este paso. "Tiempo completo" ya no entraba cómodo
+                  en una fila horizontal de tres columnas — apilar ícono y texto
+                  es lo que lo resuelve para las tres, no sólo para la nueva. */}
+              <div role="radiogroup" aria-label={C.steps.pay.typeLegend} className="grid grid-cols-3 gap-2">
                 {EMPLOYMENT_TYPES.map((type) => {
                   const selected = employmentType === type;
+                  // "Ocasional" no es una jornada con reloj: un calendario con
+                  // check comunica mejor "un día puntual" que las manecillas.
+                  const TypeIcon = type === "one_off" ? CalendarCheck : Clock;
                   return (
                     <button
                       key={type}
@@ -993,7 +1004,7 @@ export function JobPublishForm({
                       onClick={() => setEmploymentType(type)}
                       className={cn(
                         TAP_CARD,
-                        "px-3 py-3",
+                        "h-full flex-col items-center gap-1 px-2 py-3 text-center",
                         selected
                           ? "text-foreground"
                           : "border-border bg-surface text-foreground-secondary hover:border-border-strong",
@@ -1004,13 +1015,15 @@ export function JobPublishForm({
                           : undefined
                       }
                     >
-                      <Clock
+                      <TypeIcon
                         size={18}
                         weight={selected ? "fill" : "regular"}
                         aria-hidden="true"
                         style={selected ? { color: ACCENT } : undefined}
                       />
-                      {EMPLOYMENT_TYPE_LABEL[type]}
+                      <span className="text-sm font-semibold leading-snug">
+                        {EMPLOYMENT_TYPE_LABEL[type]}
+                      </span>
                     </button>
                   );
                 })}
@@ -1073,20 +1086,26 @@ export function JobPublishForm({
               hint={C.steps.pay.moreHint}
               icon={<Clock weight="fill" />}
             >
-              <ToggleChips
-                legend={C.steps.pay.daysLabel}
-                help={C.steps.pay.daysHelp}
-                square
-                // La etiqueta visible es una letra; el nombre accesible es el día
-                // completo, porque "X" no se puede escuchar y entender.
-                options={WORK_DAYS.map((day) => ({
-                  value: day.value,
-                  label: day.short,
-                  ariaLabel: day.label,
-                }))}
-                selected={days}
-                onToggle={(value) => setDays((current) => toggleInList(current, value))}
-              />
+              {/* Días de semana RECURRENTES no aplican a una changa: si el
+                  trabajo se repite cada sábado, es "Medio tiempo", no
+                  "Ocasional" — esa distinción vive en qué tipo se eligió
+                  arriba, no en un campo aparte que habría que repetir. */}
+              {employmentType !== "one_off" && (
+                <ToggleChips
+                  legend={C.steps.pay.daysLabel}
+                  help={C.steps.pay.daysHelp}
+                  square
+                  // La etiqueta visible es una letra; el nombre accesible es el día
+                  // completo, porque "X" no se puede escuchar y entender.
+                  options={WORK_DAYS.map((day) => ({
+                    value: day.value,
+                    label: day.short,
+                    ariaLabel: day.label,
+                  }))}
+                  selected={days}
+                  onToggle={(value) => setDays((current) => toggleInList(current, value))}
+                />
+              )}
 
               <Field htmlFor="job-schedule" label={C.steps.pay.scheduleLabel} optional>
                 <Input
@@ -1122,7 +1141,17 @@ export function JobPublishForm({
               />
 
               <div className="grid grid-cols-2 gap-3">
-                <Field htmlFor="job-starts-on" label={C.steps.pay.startsOnLabel} optional>
+                <Field
+                  htmlFor="job-starts-on"
+                  // Para una changa "empieza" suena a algo que sigue después:
+                  // acá la pregunta real es qué día es el trabajo.
+                  label={
+                    employmentType === "one_off"
+                      ? C.steps.pay.startsOnLabelOneOff
+                      : C.steps.pay.startsOnLabel
+                  }
+                  optional
+                >
                   <Input
                     id="job-starts-on"
                     type="date"

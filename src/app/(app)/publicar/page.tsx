@@ -6,6 +6,11 @@ import { moduleAvailability } from "@/components/shell/module-access";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
+import {
+  requireIdentidadVerificada,
+  VERTICALES_QUE_EXIGEN_IDENTIDAD,
+  VERTICAL_CONDICIONADA_AL_PRECIO,
+} from "@/lib/verificacion/gate";
 import { PublishForm, type Kind } from "./publish-form";
 
 export const metadata = { title: "Publicar" };
@@ -112,6 +117,29 @@ export default async function PublicarPage({
     );
   }
 
+  // GATE DE IDENTIDAD (spec cliente, cerrado 2026-08-31: "para vender dentro
+  // de la plataforma, tenés que estar verificado sí o sí"). A diferencia de
+  // marketplace/publicar/page.tsx —que sólo publica `product` y corta la
+  // página ENTERA antes del formulario— acá NO se puede cortar la página: de
+  // los cinco verticales de este wizard sólo property/job (siempre) y event
+  // con precio (VERTICAL_CONDICIONADA_AL_PRECIO) exigen identidad;
+  // business/professional y un evento gratis no piden nada, y cuál es cuál
+  // recién se sabe DENTRO del wizard (el kind se elige en el paso 0, y el
+  // precio del evento en el paso 2). Bloquear la página completa le cerraría
+  // la puerta a un negocio o un profesional que no necesita verificarse.
+  //
+  // Por eso el chequeo se hace UNA vez acá —server-side, con
+  // `requireIdentidadVerificada()`, la misma función que ya usa la action
+  // (./actions.ts)— y el resultado (un booleano) baja como prop al wizard,
+  // que decide POR KIND cuándo mostrar el aviso, antes de dejar avanzar a la
+  // persona. "property" alcanza como sonda: la pregunta real es "la identidad
+  // ACTIVA de esta sesión pasa `identidad_verificada_activa()`", y esa
+  // respuesta no cambia según cuál de los verticales gateados se pregunte —
+  // sólo cambia SI hace falta preguntar, y eso lo decide el wizard con
+  // `kindsQueExigenIdentidad`/`verticalCondicionadaAlPrecio` (los mismos
+  // catálogos de gate.ts, pasados como datos — no una copia de la regla).
+  const identidad = await requireIdentidadVerificada(supabase, { kind: "property" });
+
   return (
     <>
       <h1 className={cn("mb-6 font-display text-2xl font-bold tracking-tight text-foreground")}>
@@ -121,6 +149,9 @@ export default async function PublicarPage({
         tenantId={tenant.id}
         initialKind={initialKind}
         allowedKinds={allowedKinds}
+        identidadVerificada={identidad.permitido}
+        kindsQueExigenIdentidad={VERTICALES_QUE_EXIGEN_IDENTIDAD}
+        verticalCondicionadaAlPrecio={VERTICAL_CONDICIONADA_AL_PRECIO}
       />
     </>
   );

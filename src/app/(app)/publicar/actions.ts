@@ -5,6 +5,7 @@ import { limit, DAY_MS } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { isVisionConfigured } from "@/lib/config/services";
+import { requireIdentidadVerificada } from "@/lib/verificacion/gate";
 import { MONETIZATION_COPY, checkPhotoCount } from "@/lib/monetization";
 import {
   TIER_AUTO,
@@ -95,6 +96,16 @@ import {
  * no es posible con JWT de usuario — la policy listings_insert/update solo
  * permite draft/pending_review (anti bait-and-switch, gana el contrato de DB).
  * Sin fotos el aviso queda pending_review salvo auto-aprobación dev.
+ *
+ * GATE DE IDENTIDAD (spec cliente: "para vender dentro de la plataforma, tenés
+ * que estar verificado sí o sí" — cerrado 2026-08-31): `createListingDraft`
+ * pregunta `requireIdentidadVerificada()` (src/lib/verificacion/gate.ts) ANTES
+ * del rate limit y de cualquier efecto, mismo criterio que el guard de tenant
+ * de arriba — no quemamos cuota por una escritura que la RLS (0126) va a
+ * rechazar igual. Sólo corta para property/job (siempre) y event con precio
+ * (VERTICALES_QUE_EXIGEN_IDENTIDAD / VERTICAL_CONDICIONADA_AL_PRECIO en
+ * gate.ts): business/professional y un evento gratis nunca preguntan. Esto es
+ * la SUPERFICIE — la barrera real es la policy `listings_insert` de la 0126.
  */
 
 const KINDS = ["property", "business", "professional", "event", "job"] as const;
@@ -139,6 +150,17 @@ const COPY = {
   saleWithFrequency:
     "Una venta lleva un precio único. Si el precio es por mes, semana o día, la operación es alquiler.",
   needsAuth: "Para publicar necesitás entrar a tu cuenta.",
+  /**
+   * Gate de identidad (spec cliente, cerrado 2026-08-31). Corto a propósito:
+   * es el fallback server-side, defensa en profundidad para cuando el aviso
+   * previo del wizard (publish-form.tsx) no llegó a mostrarse — sesión vieja,
+   * pestaña abierta desde antes, o una llamada directa a la action. La
+   * explicación completa (por qué, cómo, que es gratis y que el documento no
+   * lo guardamos nosotros) vive en la pantalla, no acá — mismo criterio que
+   * marketplace/publicar/actions.ts.
+   */
+  identityRequired:
+    "Para publicar esto primero necesitás verificar tu identidad. Es gratis y toma menos de un minuto.",
   tooManyToday:
     "Ya creaste varios avisos hoy. Para cuidar la calidad del directorio, esperá hasta mañana para publicar otro.",
   genericError:
@@ -326,7 +348,7 @@ export type DraftInput = z.input<typeof draftSchema>;
 
 export type CreateDraftResult =
   | { ok: true; listingId: string }
-  | { ok: false; error: string; needsAuth?: boolean };
+  | { ok: false; error: string; needsAuth?: boolean; needsIdentity?: boolean };
 
 const GENERIC_ERROR = COPY.genericError;
 
@@ -343,6 +365,20 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
   }
   const input = parsed.data;
 
+  // Precio resuelto YA, antes de cualquier guard: el gate de identidad de
+  // event depende del precio REAL que se va a guardar, no del que haya en el
+  // input crudo. Hoisteado desde más abajo (antes vivía junto al INSERT) —
+  // misma variable, un solo lugar que la calcula, para que el gate y la fila
+  // final nunca puedan decir precios distintos.
+  //
+  // Un evento declarado GRATIS no lleva precio, punto. Se fuerza acá y no se
+  // confía en que el formulario haya limpiado el campo: se puede escribir un
+  // precio, volver atrás y marcar "gratis", y el estado del input sobrevive.
+  // Publicar "Gratis · $25" sería mentirle a quien lee — y dejaría pasar el
+  // gate de identidad de un evento que en los hechos es gratuito.
+  const isFreeEvent = input.kind === "event" && input.eventFree === true;
+  const priceAmount = isFreeEvent ? null : (input.priceAmount ?? null);
+
   // Guard ANTES del rate limit: si el tenant del JWT no coincide con el del
   // header, la RLS va a rechazar el insert — no le quemamos la cuota diaria
   // al usuario por una escritura que no podía prosperar.
@@ -354,6 +390,27 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
     return { ok: false, error: guard.message };
   }
   const { tenant, supabase, user } = guard;
+
+  // GATE DE IDENTIDAD (spec cliente, cerrado 2026-08-31: "para vender dentro
+  // de la plataforma, tenés que estar verificado sí o sí"). Va ACÁ, antes del
+  // rate limit y de cualquier efecto, mismo criterio que el guard de arriba:
+  // no le quemamos la cuota diaria a alguien por una escritura que la RLS de
+  // la 0126 va a rechazar de todos modos.
+  //
+  // `requireIdentidadVerificada` (src/lib/verificacion/gate.ts, este mismo
+  // agente) ya sabe para qué verticales preguntar — property y job SIEMPRE,
+  // event sólo si `priceAmount` es positivo, business/professional nunca — y
+  // corta antes de viajar a la base cuando la vertical no exige nada. La
+  // pregunta real la contesta `public.puedo_publicar_vertical()`, la MISMA
+  // función que ya usa la pantalla (page.tsx) para no ofrecer el formulario
+  // entero a quien no va a poder publicar.
+  const identidad = await requireIdentidadVerificada(supabase, {
+    kind: input.kind,
+    precio: priceAmount,
+  });
+  if (!identidad.permitido) {
+    return { ok: false, error: COPY.identityRequired, needsIdentity: true };
+  }
 
   // Rate limit: 10 publicaciones/día por usuario (anti-flood de avisos).
   if (!limit(`publicar:${user.id}`, 10, DAY_MS).ok) {
@@ -449,14 +506,9 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
   // lo corrige: una VENTA se guarda como `one_time` aunque el payload traiga
   // otra cosa, así el precio nunca se muestra con un "/mes" que nadie quiso.
   // El caso contradictorio ya lo frenó el esquema; acá sólo queda el defensivo.
+  // `isFreeEvent`/`priceAmount` ya se calcularon arriba, antes del gate de
+  // identidad — se reusan tal cual, no se recalculan.
   // -------------------------------------------------------------------------
-  // Un evento declarado GRATIS no lleva precio, punto. Se fuerza acá y no se
-  // confía en que el formulario haya limpiado el campo: se puede escribir un
-  // precio, volver atrás y marcar "gratis", y el estado del input sobrevive.
-  // Publicar "Gratis · $25" sería mentirle a quien lee.
-  const isFreeEvent = input.kind === "event" && input.eventFree === true;
-  const priceAmount = isFreeEvent ? null : (input.priceAmount ?? null);
-
   let pricePeriod: "month" | "week" | "day" | "one_time" | null = priceAmount
     ? (input.pricePeriod ?? "month")
     : null;

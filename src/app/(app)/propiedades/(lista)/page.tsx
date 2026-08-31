@@ -512,7 +512,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
         // no hay ningún otro filtro puesto — con una búsqueda encima, el cartel
         // correcto es el de la búsqueda.
         sinFiltros && vistaZona.filtraPorPreferencia && vistaZona.zona.label ? (
-          <ZonaVacia zona={vistaZona.zona.label} />
+          <ZonaVacia zona={vistaZona.zona.label} radioMillas={vistaZona.radioMillas} />
         ) : (
         <EmptyState
           illustration="/images/empty-state-search.png"

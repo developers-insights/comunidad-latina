@@ -53,12 +53,37 @@ export interface VerificacionPlan {
   /** Para quién es, en una línea. Ayuda a elegir escalón sin leer la tabla. */
   paraQuien: string;
   /**
-   * Lo que se lleva. HONESTO: describe lo que la plataforma hace, no lo que la
+   * LO ÚNICO QUE CAMBIA entre los tres escalones: dónde se ve el check.
+   *
+   * Antes cada plan traía una lista `incluye` de tres líneas, y dos de esas
+   * tres eran idénticas palabra por palabra en los tres planes. Repetidas al
+   * lado, esas seis líneas duplicadas eran el 66% del texto de la comparativa y
+   * enterraban justo lo que había que comparar. Ahora lo compartido se dice una
+   * sola vez, abajo (`VERIFICACION_INCLUIDO_SIEMPRE`), y en la tarjeta queda
+   * sólo esto.
+   *
+   * HONESTO, igual que antes: describe lo que la plataforma hace, no lo que la
    * gente va a sentir. Nada de "más confianza" ni "más ventas".
    */
-  incluye: string[];
+  distintivo: string;
   destacado: boolean;
 }
+
+/**
+ * Lo que llevan LOS TRES, dicho una sola vez.
+ *
+ * Es el mismo texto que antes se repetía dentro de cada plan: no se agregó ni
+ * se quitó ninguna promesa. Vive acá y no en `components/verificacion/copy.ts`
+ * porque es un dato del catálogo —cambia si cambia un plan—, y así viaja junto
+ * a los escalones que describe.
+ */
+export const VERIFICACION_INCLUIDO_SIEMPRE = {
+  titulo: "Los tres incluyen",
+  items: [
+    "Un impulso de 7 días de regalo cada mes, para el aviso que vos elijas",
+    "Tu identidad ya confirmada con documento, visible junto al check",
+  ],
+} as const;
 
 /**
  * [EJEMPLO §18] Los tres precios textuales del cliente: «$6.99 para el check
@@ -74,11 +99,7 @@ export const VERIFICACION_PLANES: Record<VerificacionTier, VerificacionPlan> = {
     nombre: "Cuenta personal",
     precioMensualUsd: 6.99,
     paraQuien: "Para vos, que usás la app para vender o hacer negocios.",
-    incluye: [
-      "El check azul al lado de tu nombre en toda la comunidad",
-      "Un impulso de 7 días de regalo cada mes, para el aviso que vos elijas",
-      "Tu identidad ya confirmada con documento, visible junto al check",
-    ],
+    distintivo: "El check azul al lado de tu nombre en toda la comunidad",
     destacado: false,
   },
   negocio: {
@@ -86,11 +107,7 @@ export const VERIFICACION_PLANES: Record<VerificacionTier, VerificacionPlan> = {
     nombre: "Negocio",
     precioMensualUsd: 9.99,
     paraQuien: "Para negocios con local, tienda o servicio a la comunidad.",
-    incluye: [
-      "El check azul al lado del nombre de tu negocio",
-      "Un impulso de 7 días de regalo cada mes, para el aviso que vos elijas",
-      "Tu identidad ya confirmada con documento, visible junto al check",
-    ],
+    distintivo: "El check azul al lado del nombre de tu negocio",
     destacado: true,
   },
   profesional: {
@@ -98,11 +115,7 @@ export const VERIFICACION_PLANES: Record<VerificacionTier, VerificacionPlan> = {
     nombre: "Profesional",
     precioMensualUsd: 19.99,
     paraQuien: "Para quien ofrece servicios profesionales: oficios, salud, legales.",
-    incluye: [
-      "El check azul al lado de tu nombre profesional",
-      "Un impulso de 7 días de regalo cada mes, para el aviso que vos elijas",
-      "Tu identidad ya confirmada con documento, visible junto al check",
-    ],
+    distintivo: "El check azul al lado de tu nombre profesional",
     destacado: false,
   },
 };

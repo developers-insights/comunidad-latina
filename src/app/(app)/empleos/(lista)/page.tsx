@@ -13,10 +13,9 @@ import {
   Skeleton,
   buttonVariants,
 } from "@/components/ui";
-import { ModuleSearchBar, sanitizeSearchQuery } from "@/components/search";
+import { ModuleSearchBar } from "@/components/search";
 import { COPY } from "@/components/empleos/copy";
 import { EmploymentTypeChips } from "@/components/empleos/employment-type-chips";
-import { EMPLOYMENT_TYPES, type EmploymentType } from "@/components/empleos/helpers";
 import { JobCard } from "@/components/empleos/job-card";
 import { JobListSkeleton } from "@/components/empleos/job-skeletons";
 import { t } from "@/lib/i18n";
@@ -26,6 +25,7 @@ import { resolverVistaZona } from "@/lib/zona/server";
 import { cn } from "@/lib/utils";
 import { ImpulsosDeOtrasComunidades } from "@/components/boosts";
 import { fetchJobsPage } from "../queries";
+import { parseFilters, type Filters } from "./filters";
 
 export const metadata = { title: "Empleos" };
 
@@ -39,29 +39,6 @@ const SECCION = {
 } as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-interface Filters {
-  tipo: EmploymentType | "";
-  q: string;
-  cursor: string;
-}
-
-function firstValue(value: string | string[] | undefined): string {
-  return (Array.isArray(value) ? value[0] : value) ?? "";
-}
-
-function isEmploymentType(value: string): value is EmploymentType {
-  return (EMPLOYMENT_TYPES as readonly string[]).includes(value);
-}
-
-function parseFilters(sp: Record<string, string | string[] | undefined>): Filters {
-  const tipo = firstValue(sp.tipo).slice(0, 20);
-  return {
-    tipo: isEmploymentType(tipo) ? tipo : "",
-    q: sanitizeSearchQuery(firstValue(sp.q)),
-    cursor: firstValue(sp.cursor).slice(0, 200),
-  };
-}
 
 export default async function EmpleosPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
@@ -173,7 +150,7 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
         // Empleos parece muerto cuando lo único que pasa es que no hay avisos
         // en ese barrio.
         !hayFiltro && vistaZona.filtraPorPreferencia && vistaZona.zona.label ? (
-          <ZonaVacia zona={vistaZona.zona.label} />
+          <ZonaVacia zona={vistaZona.zona.label} radioMillas={vistaZona.radioMillas} />
         ) : (
           <EmptyState
             illustration="/images/empty-state-search.png"

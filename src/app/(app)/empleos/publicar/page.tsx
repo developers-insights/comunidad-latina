@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { SignIn } from "@phosphor-icons/react/dist/ssr";
+import { SealCheck, SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/empleos/copy";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { requireIdentidadVerificada } from "@/lib/verificacion/gate";
 import { JobPublishForm } from "./publish-form";
 
 export const metadata = { title: "Publicar un empleo" };
@@ -43,6 +44,32 @@ export default async function PublicarEmpleoPage() {
             className={buttonVariants({ variant: "primary", size: "md" })}
           >
             {C.needLoginCta}
+          </Link>
+        }
+        className="py-20"
+      />
+    );
+  }
+
+  // Identidad verificada, ANTES de mostrar el formulario. Publicar un empleo
+  // siempre la exige (`job` ∈ VERTICALES_QUE_EXIGEN_IDENTIDAD) y la policy
+  // `listings_insert` (0126) la va a exigir igual, así que ofrecer los cuatro
+  // pasos a quien no puede publicar es hacerle escribir el puesto, el sueldo y
+  // las preguntas para rechazarlo al final. Es la misma función que usa la
+  // action — una sola fuente para la regla, dos momentos para preguntarla.
+  const identidad = await requireIdentidadVerificada(supabase, { kind: "job" });
+  if (!identidad.permitido) {
+    return (
+      <EmptyState
+        icon={<SealCheck />}
+        title={C.needIdentityTitle}
+        message={C.needIdentityBody}
+        action={
+          <Link
+            href={`/perfil/verificar?next=${encodeURIComponent("/empleos/publicar")}`}
+            className={buttonVariants({ variant: "primary", size: "md" })}
+          >
+            {C.needIdentityCta}
           </Link>
         }
         className="py-20"

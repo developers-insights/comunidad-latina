@@ -201,6 +201,16 @@ export interface VistaZona {
    * la URL manda el filtro del módulo, que ya tiene su propio "limpiar filtros".
    */
   filtraPorPreferencia: boolean;
+  /**
+   * Las millas a la redonda que se están aplicando, o `null` si el recorte es
+   * sólo por nombre de barrio.
+   *
+   * Se expone para que el estado vacío pueda decir la verdad completa. "Todavía
+   * no hay nada en Corona" es engañoso cuando en realidad se buscó en 25 millas
+   * a la redonda y tampoco había: quien lo lee ampliaría el radio esperando
+   * resultados que ya se miraron.
+   */
+  radioMillas: RadioMillas | null;
 }
 
 /**
@@ -210,20 +220,59 @@ export interface VistaZona {
  * Vivienda, `?ciudad=` en Eventos). Si viene puesto, GANA: un enlace compartido
  * muestra lo que promete. Y en ese caso `areaLabels` queda vacío a propósito —
  * el módulo ya aplica su `.eq()` exacto de siempre y nada cambia.
+ *
+ * ── EL RADIO SE APLICA ACÁ Y EN NINGÚN OTRO LADO ────────────────────────────
+ * Los siete listados y el feed ya consumen `areaLabels` de esta función. Meter
+ * las millas ADENTRO de la resolución hace que el radio funcione en todos ellos
+ * sin tocar una línea de sus queries — y, más importante, hace imposible que un
+ * módulo se olvide de aplicarlo y muestre otra cosa que el resto de la app.
+ *
+ * El `?zona=` de la URL sigue ganándole al radio, y no es un descuido: un
+ * enlace a "Jackson Heights" promete Jackson Heights. Ensancharlo a 25 millas
+ * porque quien lo abre tiene esa preferencia sería entregar algo distinto de lo
+ * que el enlace decía.
+ *
+ * Cuando el radio no se puede aplicar —el catálogo de centroides no conoce la
+ * zona elegida, típico de una etiqueta escrita a mano— `zonasEnRadio` devuelve
+ * `null` y esto cae al filtro por nombre de siempre. Degradar al comportamiento
+ * anterior es la peor cosa que puede pasar acá, y `radioMillas` refleja lo que
+ * REALMENTE se aplicó: si el radio no entró, no se anuncia.
  */
 export const resolverVistaZona = cache(
   async (tenantId: string, urlZona?: string | null): Promise<VistaZona> => {
     const zonaUrl = resolverZona({ urlZona });
     if (zonaUrl.origen === "url") {
-      return { zona: zonaUrl, areaLabels: [], filtraPorPreferencia: false };
+      return {
+        zona: zonaUrl,
+        areaLabels: [],
+        filtraPorPreferencia: false,
+        radioMillas: null,
+      };
     }
 
     const zona = await getZonaActiva();
     if (!zona.label) {
-      return { zona: TODA_LA_COMUNIDAD, areaLabels: [], filtraPorPreferencia: false };
+      return {
+        zona: TODA_LA_COMUNIDAD,
+        areaLabels: [],
+        filtraPorPreferencia: false,
+        radioMillas: null,
+      };
     }
 
-    const areaLabels = zonasCoincidentes(zona.label, await listarZonasDelTenant(tenantId));
-    return { zona, areaLabels, filtraPorPreferencia: areaLabels.length > 0 };
+    const [zonasDelTenant, radio] = await Promise.all([
+      listarZonasDelTenant(tenantId),
+      getRadioActivo(),
+    ]);
+
+    const conRadio = radio === null ? null : zonasEnRadio(zona.label, radio, zonasDelTenant);
+    const areaLabels = conRadio ?? zonasCoincidentes(zona.label, zonasDelTenant);
+
+    return {
+      zona,
+      areaLabels,
+      filtraPorPreferencia: areaLabels.length > 0,
+      radioMillas: conRadio === null ? null : radio,
+    };
   },
 );

@@ -201,3 +201,107 @@ sobre geo/comunidad/empleos, media, perfiles/pagos y feed/performance.
 - **C6** — Nacho mezcla dos cosas: lo que Stripe le cobra a Comunidad Latina (primeras 50 verificaciones gratis, después por verificación) y lo que Comunidad Latina le cobra al usuario (hoy **$0**). Verificar gratis ya funciona y no depende de que Stripe sea gratis.
 - **C2/C4** — la pantalla que mandó no corresponde a esta versión del código. Conviene confirmar qué build estuvo mirando antes de dar por buena la comparación.
 - **K1** — hacen falta los 60 assets individuales; las capturas de los packs no sirven como archivos.
+
+---
+
+# ⚠️ Corrección — 2026-08-31, más tarde
+
+**La sección "Estado auditado" de arriba quedó obsoleta.** Se escribió sobre un
+worktree que estaba **3 commits atrás** de `developers-insights/main`. Al consultar la
+base de producción apareció una migración (`0121_diez_perfiles`) que no existía en el
+repo local, y de ahí se destapó todo: **otra sesión ya había procesado las nueve
+capturas del 26/8 e implementado 14 puntos**, con las migraciones `0120`–`0123`
+aplicadas en producción.
+
+Se frenaron los agentes en curso, se mergeó `developers-insights/main` (119 archivos,
+16.080 líneas) y se descartaron los duplicados.
+
+## Resuelto por el commit `2d86e2c`
+
+| ID | Cómo se resolvió |
+|---|---|
+| **D1** | El `<audio>` vivía dentro de `card-video.tsx`, un nivel debajo de donde vive el dato. Se subió a `PostMusicProvider`, la caja de medios de la publicación. |
+| **C3** | No era cosmético: publicar como negocio exponía nombre y apellido del dueño. Antes de borrarlo se verificó que `entity` siempre significa "publicado con esta cara". Cerrado también en el reel. |
+| **B1–B6** | Migración `0120`: tabla con `direction: offer \| need`, cola de aprobación del admin, temas nuevos (adicciones, medicinas, fe, trabajo). **Cero columnas de dinero** — "monetariamente no se ayuda" quedó como regla del schema, no como copy. |
+| **C4 / C5** | Migración `0121`: cae el índice único, entra un trigger con advisory lock. Y la ficha del directorio pasó a colgar del negocio, no del dueño — sin eso el negocio nº2 se robaba la cara del nº1. |
+| **E1 / E4 / E5** | Editor de fotos: recorte, emojis, color y tipografía, todo horneado en el archivo final. |
+| **H2** | Imágenes de cualquier formato y peso, HEIC/HEIF incluido. Se ensanchó la puerta del navegador, no los topes del servidor. |
+| **G1** | Los círculos del feed navegan como el buscador, tomando el href del mismo registro de módulos. |
+| **I1** | **Se midió antes de tocar**: no era la query (9 ms) sino el sentinel avisando tarde — 1,05 tarjetas de anticipo contra 4 viajes encadenados de 344 ms. Quedó en 2,9 tarjetas y 12 ítems por tanda. |
+
+Gates de esa entrega: `tsc` 0 · `eslint` 0 · 5058 tests · build verde (101 páginas) ·
+advisors security 56→55, performance 137→135 · verificado en vivo a 375 y 1280 px.
+
+## Lo que quedó pendiente — y es lo que Nacho mandó HOY
+
+Las capturas del 31/8 son posteriores a ese trabajo. De ahí sale el resto:
+
+| ID | Estado |
+|---|---|
+| **A1 / A2** | Ubicación y radio en millas. `next.config.ts` ya pasó a `geolocation=(self)`; hay catálogo de **72 barrios con centroide** y cálculo de radio. Falta cerrar la UI. |
+| **L1** | ✅ **Cerrado.** Slug `one_off` (evita colisión con `price_period` y con el vertical `creator_gig`), label **"Ocasional"** (no "changa": jerga rioplatense que la comunidad dominicana no reconoce), y "pago único" sumado a los períodos de pago. |
+| **J1 / J2** | Color en la barra de acciones y barra completa en las cards de ficha. |
+| **K1** | Sistema de emojis propios, catálogo compartido por reacciones, editor de fotos y comentarios. **Faltan los 60 archivos** — las capturas de los packs no sirven como assets. |
+| **M1 / N1** | Las dos pantallas rotas. N1 confirmado vigente: `lg:grid-cols-3` dentro de un shell de `max-w-lg`. |
+| **C1** | Decisión del dueño: **cerrar y activar**. Hoy sólo marketplace tiene gate; alquileres y empleos no. Se asume que 19 de 20 perfiles quedan sin poder publicar hasta verificarse. |
+
+## Decisiones de arquitectura tomadas en esta ronda
+
+- **El radio en millas se calcula sobre centroides de barrio**, dato público, nunca sobre
+  la coordenada del usuario. "Usar mi ubicación" resuelve el barrio más cercano y guarda
+  sólo la etiqueta. Respeta el anti-honeypot, y a 25 millas (~40 km) la precisión de
+  barrio sobra.
+- **25 millas queda preseleccionado, no activo por default.** Un radio activo sin que
+  nadie lo haya tocado recorta contenido en silencio.
+- **J1 se resuelve con la paleta de acentos por vertical que ya existe**, no copiando la
+  barra de reacciones de Facebook. El cliente pidió color, no otro modelo de reacciones.
+
+---
+
+# Orden de publicación — 2026-08-31
+
+⚠️ **Las migraciones de esta tanda NO se aplican todas igual.** Hay una que rompe
+producción si entra antes que el código.
+
+## 1 · Aditivas — se pueden aplicar antes del deploy, sin riesgo
+
+| Migración | Qué agrega | Por qué es segura |
+|---|---|---|
+| `0124_me_gusta_en_avisos` | Columna `listings.like_count` + rama del trigger de contadores | El código viejo ni la selecciona. Una columna nueva que nadie lee no cambia nada. |
+| `0125_emojis_de_la_comunidad` | Catálogo de emojis + bucket | Tabla nueva. Sin consumidores hasta el deploy. |
+
+## 2 · Restrictiva — va CON el deploy, nunca antes
+
+| Migración | Qué hace | Por qué el orden importa |
+|---|---|---|
+| `0126_activar_gate_identidad` | Enchufa el gate de identidad a la policy `listings_insert` | **Rechaza inserts.** Si entra mientras producción corre el código viejo, quien intente publicar recibe un `42501` crudo de PostgREST en vez del mensaje que explica que verificarse es gratis y toma un minuto. La RLS no distingue de qué ruta vino el insert. |
+
+**Antes de aplicar la `0126`, verificar en producción:**
+
+```sql
+select count(*) filter (where identity_verified) as verificados, count(*) as total
+from public.profiles;
+```
+
+Al 31/8 daba **1 de 20**. Es la decisión ya tomada (activar igual), pero conviene
+avisar a Geovanny antes y no después: verificar es gratis y toma menos de un
+minuto, así que el desbloqueo es fácil **si se comunica**.
+
+## Ya verificado
+
+- ✅ **Stripe está configurado en producción.** Sondeado sobre
+  `www.comunidadlatina.com/api/webhooks/stripe`: devuelve `400 "Falta firma"`, no
+  `503`. El endpoint responde 503 cuando falta `STRIPE_SECRET_KEY` o
+  `STRIPE_WEBHOOK_SECRET`, así que ambas están. `/perfil/verificar` va a mostrar
+  el botón real y no "Muy pronto" — el gate no deja a nadie encerrado sin salida.
+- ✅ **Los grants de música (0114) están aplicados**, así que el bug de D1 era
+  sólo el reproductor faltante, no un fallo silencioso de permisos.
+
+## Gates de identidad — cobertura final
+
+| Ruta | Antes | Ahora |
+|---|---|---|
+| `/marketplace/publicar` | server action | sin cambios |
+| `/publicar` (alquiler, empleo, evento pago) | **nada** | pantalla previa + server action |
+| `/empleos/publicar` | **nada** | pantalla previa + server action |
+| Policy `listings_insert` | sin gate | `0126`, pendiente de aplicar con el deploy |

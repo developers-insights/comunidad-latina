@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- ASSET DE PRUEBA. No pertenece al pack del cliente. -->
+  <path d="M256 442S64 330 64 202c0-62 47-108 106-108 38 0 71 20 86 50 15-30 48-50 86-50 59 0 106 46 106 108 0 128-192 240-192 240z" fill="#e0345a"/>
+  <path d="M150 138c-26 8-44 32-44 62 0 10 8 18 18 18s18-8 18-18c0-14 9-26 22-30 9-3 14-13 11-22s-15-13-25-10z" fill="#ff92ab"/>
+</svg>

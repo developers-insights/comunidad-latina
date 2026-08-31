@@ -30,6 +30,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   requireTenantMatch: vi.fn(),
   limit: vi.fn(),
+  requireIdentidadVerificada: vi.fn(),
 }));
 
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
@@ -37,6 +38,15 @@ vi.mock("@/lib/rate-limit", () => ({
   DAY_MS: 86_400_000,
   HOUR_MS: 3_600_000,
   limit: mocks.limit,
+}));
+// Gate de identidad (spec cliente, cerrado 2026-08-31): se mockea en el
+// LÍMITE del módulo, igual que requireTenantMatch — gate.ts ya tiene su
+// propia batería de tests (./src/lib/verificacion/gate.test.ts) contra el
+// contrato de la 0106/0121; acá sólo se prueba la INTEGRACIÓN — que
+// createListingDraft lo llame con el kind/precio correctos, en el momento
+// correcto, y que traduzca el rechazo al resultado tipado que espera la UI.
+vi.mock("@/lib/verificacion/gate", () => ({
+  requireIdentidadVerificada: mocks.requireIdentidadVerificada,
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/config/services", () => ({ isVisionConfigured: false }));
@@ -135,10 +145,21 @@ const EVENT: DraftInput = {
   eventFree: true,
 };
 
+const JOB: DraftInput = {
+  kind: "job",
+  title: "Se busca ayudante de cocina en Queens",
+  description:
+    "Turno de tarde, restaurante familiar dominicano. Buen ambiente y buenas propinas.",
+  areaLabel: "Corona, Queens",
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "warn").mockImplementation(() => {});
   mocks.limit.mockReturnValue({ ok: true, remaining: 9, retryAfterMs: 0 });
+  // Default permisivo: cada test que NO es sobre el gate no tiene que acordarse
+  // de habilitarlo. Los tests del gate lo pisan explícitamente.
+  mocks.requireIdentidadVerificada.mockResolvedValue({ permitido: true });
 });
 
 /* ------------------------ 1. La venta ya no se crea ----------------------- */
@@ -401,5 +422,150 @@ describe("eventos", () => {
     const result = await createListingDraft({ ...EVENT, eventCategory: "carnaval" });
     expect(result.ok).toBe(true);
     expect(attrsOf(stub)).not.toHaveProperty("category");
+  });
+});
+
+/* --------------------- 5. Gate de identidad (2026-08-31) ------------------ */
+
+describe("createListingDraft — gate de identidad", () => {
+  it("property: sin identidad verificada, corta antes del rate limit y no inserta", async () => {
+    mocks.requireIdentidadVerificada.mockResolvedValue({
+      permitido: false,
+      motivo: "identidad_no_verificada",
+    });
+    const stub = useGuardOk();
+
+    const result = await createListingDraft(RENTAL);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.needsIdentity).toBe(true);
+      expect(result.error).toMatch(/identidad/i);
+    }
+    expect(mocks.limit).not.toHaveBeenCalled();
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  it("job: también gatea, aunque no sea vivienda", async () => {
+    mocks.requireIdentidadVerificada.mockResolvedValue({
+      permitido: false,
+      motivo: "identidad_no_verificada",
+    });
+    const stub = useGuardOk();
+
+    const result = await createListingDraft(JOB);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.needsIdentity).toBe(true);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  /**
+   * OJO CON EL LÍMITE DEL MOCK: acá no se prueba "un evento gratis nunca
+   * gatea" preguntándole al MOCK que conteste `permitido: false` — eso
+   * probaría lo contrario de lo real, porque createListingDraft SIEMPRE
+   * delega en `requireIdentidadVerificada()` (nunca pre-filtra el kind con su
+   * propia copia de `verticalExigeIdentidad`) y el corto-circuito para
+   * "esta vertical no exige nada" vive DENTRO de gate.ts — que acá está
+   * mockeado entero. Lo que SÍ es responsabilidad de esta action, y lo que
+   * este test prueba, es que le pregunte con el precio CORRECTO (null para
+   * un evento gratis, sin importar lo que traiga el payload crudo) — la
+   * garantía de que un evento gratis nunca bloquea en la práctica la da
+   * gate.test.ts, contra la función real.
+   */
+  it("un evento GRATIS pregunta con precio null (nunca con el crudo del payload)", async () => {
+    const stub = useGuardOk();
+
+    const result = await createListingDraft({ ...EVENT, eventFree: true });
+
+    expect(result.ok).toBe(true);
+    expect(mocks.requireIdentidadVerificada).toHaveBeenCalledWith(stub.client, {
+      kind: "event",
+      precio: null,
+    });
+  });
+
+  it("un evento PAGO sin identidad verificada gatea", async () => {
+    mocks.requireIdentidadVerificada.mockResolvedValue({
+      permitido: false,
+      motivo: "identidad_no_verificada",
+    });
+    useGuardOk();
+
+    const result = await createListingDraft({ ...EVENT, eventFree: false, priceAmount: 25 });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.needsIdentity).toBe(true);
+  });
+
+  /**
+   * EL CASO QUE ESTE GATE TIENE QUE ACERTAR: se puede escribir un precio,
+   * volver atrás y marcar "gratis" — el campo `priceAmount` del payload sigue
+   * teniendo el número viejo. Si el gate preguntara con el precio CRUDO en vez
+   * del YA RESUELTO (mismo cálculo que termina en la fila), un evento
+   * declarado gratis exigiría identidad igual. Espeja el test de
+   * actions.test.ts / draft.test.ts "un evento gratis se guarda con free=true
+   * y SIN precio".
+   */
+  it("un evento marcado GRATIS con priceAmount viejo en el payload pregunta con precio null", async () => {
+    useGuardOk();
+
+    await createListingDraft({ ...EVENT, eventFree: true, priceAmount: 25 });
+
+    expect(mocks.requireIdentidadVerificada).toHaveBeenCalledWith(
+      expect.anything(),
+      { kind: "event", precio: null },
+    );
+  });
+
+  it("le pasa a la RPC el precio real de un evento pago", async () => {
+    useGuardOk();
+
+    await createListingDraft({ ...EVENT, eventFree: false, priceAmount: 25 });
+
+    expect(mocks.requireIdentidadVerificada).toHaveBeenCalledWith(
+      expect.anything(),
+      { kind: "event", precio: 25 },
+    );
+  });
+
+  it("business y professional preguntan igual (gate.ts decide no viajar a la base), pero nunca bloquean con el mock permisivo", async () => {
+    const negocio = useGuardOk();
+    const resultNegocio = await createListingDraft({
+      kind: "business",
+      title: "Panadería dominicana en Jackson Heights",
+      description: "Pan de agua, pan de leche y bizcochos hechos todos los días.",
+      areaLabel: "Jackson Heights, Queens",
+    });
+    expect(resultNegocio.ok).toBe(true);
+    expect(mocks.requireIdentidadVerificada).toHaveBeenCalledWith(negocio.client, {
+      kind: "business",
+      precio: null,
+    });
+
+    const profesional = useGuardOk();
+    const resultProfesional = await createListingDraft({
+      kind: "professional",
+      title: "Abogado de inmigración en Queens",
+      description: "Casos de asilo, residencia y ciudadanía. Primera consulta gratis.",
+      areaLabel: "Corona, Queens",
+      category: "abogado",
+    });
+    expect(resultProfesional.ok).toBe(true);
+    expect(mocks.requireIdentidadVerificada).toHaveBeenCalledWith(profesional.client, {
+      kind: "professional",
+      precio: null,
+    });
+  });
+
+  it("con identidad verificada, property pasa el gate y publica el borrador", async () => {
+    mocks.requireIdentidadVerificada.mockResolvedValue({ permitido: true });
+    const stub = useGuardOk();
+
+    const result = await createListingDraft(RENTAL);
+
+    expect(result).toEqual({ ok: true, listingId: LISTING_ID });
+    expect(mocks.limit).toHaveBeenCalledWith(`publicar:${USER_ID}`, 10, 86_400_000);
+    expect(insertedRow(stub)).toMatchObject({ kind: "property", status: "draft" });
   });
 });

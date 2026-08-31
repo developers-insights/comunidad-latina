@@ -43,10 +43,12 @@ import {
   resolveCaptionColor,
   resolveCaptionFont,
   stickerBox,
+  stickerImageUrls,
   type CaptionColorId,
   type CaptionFontId,
   type PhotoSticker,
 } from "./photo-overlay";
+import { loadStickerImages } from "@/lib/emojis/sticker-image";
 import {
   FULL_CROP,
   cropOutputSize,
@@ -183,7 +185,21 @@ export async function bakePhoto(file: File, options: BakePhotoOptions = {}): Pro
     }
 
     // (4) Los emojis, arriba de todo: es donde se los vio al ponerlos.
-    drawStickers(ctx, targetWidth, targetHeight, normalizeStickers(stickers));
+    //
+    // Los emojis PROPIOS de la comunidad (0125) son imágenes, no glifos, y hay
+    // que tenerlas DESCARGADAS antes de dibujar: `drawImage` con una imagen a
+    // medio cargar no espera ni falla — no dibuja nada, en silencio, sobre un
+    // archivo que ya no se puede deshacer. Es el mismo modo de fallar que
+    // `ensureCaptionFont` resuelve para la tipografía, y se resuelve igual:
+    // esperando antes de tocar el canvas.
+    //
+    // La descarga va con CORS (ver `loadStickerImages`) porque una imagen de
+    // otro origen sin CORS ENSUCIA el canvas y hace fallar el `toBlob()` de
+    // abajo — o sea, un emoji se llevaría puesto el recorte, el filtro y el
+    // texto. Lo que no cargue se publica sin ese dibujo y queda logueado.
+    const bakedStickers = normalizeStickers(stickers);
+    const stickerImages = await loadStickerImages(stickerImageUrls(bakedStickers));
+    drawStickers(ctx, targetWidth, targetHeight, bakedStickers, stickerImages);
 
     const blob = await canvasToBlob(canvas, quality);
     return new File([blob], deriveFileName(file.name), {
@@ -409,6 +425,8 @@ function drawStickers(
   canvasWidth: number,
   canvasHeight: number,
   stickers: readonly PhotoSticker[],
+  /** Imágenes ya descargadas de los emojis de la comunidad, por URL. */
+  images: ReadonlyMap<string, CanvasImageSource>,
 ) {
   if (stickers.length === 0) return;
   const box = { width: canvasWidth, height: canvasHeight };
@@ -420,14 +438,53 @@ function drawStickers(
 
   for (const sticker of stickers) {
     const { centerX, centerY, fontSize } = stickerBox(sticker, box);
-    ctx.font = `${fontSize}px ${STICKER_FONT_FAMILY}`;
+    // El halo va antes de elegir cómo se pinta: vale igual para el glifo y para
+    // la imagen (`drawImage` también respeta la sombra del contexto), y un
+    // dibujo oscuro sobre una foto oscura desaparece en los dos casos.
     ctx.shadowBlur = Math.round(fontSize * 0.18);
+
+    const image = sticker.image ? images.get(sticker.image.url) : undefined;
+    if (image) {
+      // `fontSize` es el ALTO, igual que para un glifo — así el deslizador de
+      // tamaño significa lo mismo para los dos tipos de emoji. El ancho sale de
+      // la proporción real del archivo: el catálogo pide PNG cuadrado, pero si
+      // alguna vez entra uno que no lo es, se respeta en vez de aplastarlo.
+      const { width, height } = imageBox(image, fontSize);
+      ctx.drawImage(image, centerX - width / 2, centerY - height / 2, width, height);
+      continue;
+    }
+
+    // Sin glifo Y sin imagen no hay nada que pintar: es un emoji de la
+    // comunidad cuya imagen no se pudo descargar. Se saltea —ya quedó logueado
+    // en `loadStickerImages`— en vez de dibujar un cuadrado vacío.
+    if (!sticker.emoji) continue;
+    ctx.font = `${fontSize}px ${STICKER_FONT_FAMILY}`;
     ctx.fillText(sticker.emoji, centerX, centerY);
   }
 
   ctx.shadowColor = "transparent";
   ctx.shadowBlur = 0;
   ctx.textBaseline = "alphabetic";
+}
+
+/**
+ * Caja de una imagen para un alto dado, respetando su proporción.
+ *
+ * `CanvasImageSource` es una unión de siete cosas y cada una guarda su tamaño
+ * en una propiedad distinta (`naturalWidth` en un `<img>`, `width` en un
+ * `ImageBitmap`, `videoWidth` en un `<video>`). Se leen las dos que pueden
+ * aparecer acá y, si ninguna da un número usable, se cae al cuadrado — que es
+ * lo que el catálogo pide igual.
+ */
+function imageBox(image: CanvasImageSource, height: number): { width: number; height: number } {
+  const candidato = image as { naturalWidth?: number; naturalHeight?: number; width?: number; height?: number };
+  const w = candidato.naturalWidth || candidato.width || 0;
+  const h = candidato.naturalHeight || candidato.height || 0;
+  const ratio = h > 0 ? w / h : 1;
+  return {
+    width: Number.isFinite(ratio) && ratio > 0 ? height * ratio : height,
+    height,
+  };
 }
 
 /** Ajuste de línea simple por palabra completa; corta en `maxLines`. */

@@ -76,6 +76,8 @@ import {
   type PhotoSticker,
 } from "@/lib/media/photo-overlay";
 import { NEUTRAL_THUMB, capturePosterFrame } from "@/lib/media/video-poster";
+import { EMOJI_COPY, EmojiPicker } from "@/components/emojis";
+import { useCommunityEmojis } from "@/lib/emojis/use-community-emojis";
 import { FilterCarousel } from "./filter-carousel";
 import { COPY, VIDEO_EDITOR_COPY } from "./copy";
 
@@ -305,6 +307,21 @@ export function PhotoEditor({
   const [selectedSticker, setSelectedSticker] = useState<string | null>(null);
   const [stickerNotice, setStickerNotice] = useState(false);
 
+  /**
+   * El catálogo propio (0125). Se pide al TOCAR la pestaña "Emojis", no al
+   * abrir el editor: quien entra a elegir un filtro —la enorme mayoría de las
+   * veces, ver el default de `tab`— no paga esa consulta. La caché de
+   * `useCommunityEmojis` hace que el picker del comentario y éste compartan
+   * una sola lectura por pestaña del navegador.
+   */
+  const communityEmojis = useCommunityEmojis();
+
+  /** Cambiar de pestaña, y de paso pedir lo que esa pestaña necesita. */
+  function openTab(next: EditorTab) {
+    setTab(next);
+    if (next === "stickers") communityEmojis.load();
+  }
+
   /** Tamaño real de la foto. Sin esto no hay recorte posible: todas las cuentas
    *  de `photo-crop.ts` se apoyan en él. */
   const [natural, setNatural] = useState<Size | null>(null);
@@ -504,19 +521,25 @@ export function PhotoEditor({
 
   /* ------------------------------ Emojis ------------------------------- */
 
-  function addSticker(emoji: string) {
+  /**
+   * Pega un emoji sobre la foto. Uno solo para los dos tipos —el glifo del
+   * teclado y el dibujo propio de la comunidad (0125)— porque todo lo que
+   * sigue (posición, tamaño, arrastre, cupo, horneado) es idéntico: lo único
+   * que cambia es con qué se pinta la última capa.
+   */
+  function addSticker(parte: Pick<PhotoSticker, "emoji"> & Partial<PhotoSticker>) {
     if (draft.stickers.length >= MAX_STICKERS) {
       setStickerNotice(true);
       return;
     }
     const sticker: PhotoSticker = {
       id: crypto.randomUUID(),
-      emoji,
       // Al centro: es el único lugar que se ve siempre, cualquiera sea el
       // recorte. Después se arrastra a donde vaya.
       x: 0.5,
       y: 0.5,
       size: DEFAULT_STICKER_SIZE,
+      ...parte,
     };
     setStickerNotice(false);
     setSelectedSticker(sticker.id);
@@ -735,7 +758,7 @@ export function PhotoEditor({
                 type="button"
                 role="tab"
                 aria-selected={on}
-                onClick={() => setTab(item.id)}
+                onClick={() => openTab(item.id)}
                 className={cn(
                   "relative flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-t-lg px-1 pb-2 pt-1",
                   "text-[11px] font-medium transition-colors duration-(--duration-fast)",
@@ -1081,34 +1104,33 @@ export function PhotoEditor({
               </p>
             )}
 
-            {STICKER_GROUPS.map((group) => (
-              <fieldset key={group.label}>
-                <legend className="text-xs font-medium uppercase tracking-wider text-foreground-muted">
-                  {group.label}
-                </legend>
-                {/* 4 columnas en 375 px: con 8, cada celda mide 41 px de ancho
-                    y el blanco táctil deja de llegar a 44. Ocho emojis por
-                    grupo entran justo en dos filas. */}
-                <div className="mt-1.5 grid grid-cols-4 gap-1.5 sm:grid-cols-8">
-                  {group.emojis.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => addSticker(emoji)}
-                      aria-label={COPY.composer.photoEditor.addSticker(emoji)}
-                      className={cn(
-                        "grid min-h-11 place-items-center rounded-lg text-2xl leading-none",
-                        "transition-transform duration-(--duration-fast) ease-(--ease-spring)",
-                        "hover:bg-surface-hover active:scale-90",
-                        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-                      )}
-                    >
-                      <span aria-hidden="true">{emoji}</span>
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-            ))}
+            {/* EL MISMO PICKER QUE EL COMENTARIO (components/emojis).
+                Antes acá vivía una grilla propia con `STICKER_GROUPS`; desde la
+                0125 hay emojis PROPIOS de la comunidad y tienen que aparecer en
+                las tres superficies. Dos grillas distintas —una acá y otra en el
+                comentario— serían dos lugares donde arreglar el mismo problema
+                de accesibilidad, de carga diferida y de estados vacíos. Los
+                clásicos siguen estando: son la pestaña "Clásicos" del picker. */}
+            <EmojiPicker
+              community={communityEmojis.state}
+              onRetry={communityEmojis.retry}
+              onPickCommunity={(emoji) =>
+                addSticker({
+                  // Sin glifo: lo que se pinta es la imagen. `photo-overlay.ts`
+                  // descarta un sticker que no tenga ni una cosa ni la otra.
+                  emoji: "",
+                  image: { slug: emoji.slug, url: emoji.url, alt: emoji.alt },
+                })
+              }
+              unicodeGroups={STICKER_GROUPS}
+              onPickUnicode={(emoji) => addSticker({ emoji })}
+              // Acá el emoji no "se agrega": se PONE sobre la foto y después se
+              // arrastra. El nombre accesible tiene que decir eso, y tiene que
+              // decir lo mismo para un glifo y para un dibujo de la comunidad —
+              // son dos botones vecinos que hacen exactamente lo mismo.
+              labelForUnicode={COPY.composer.photoEditor.addSticker}
+              labelForCommunity={EMOJI_COPY.addToPhoto}
+            />
 
             {draft.stickers.length > 0 && (
               <button
@@ -1307,9 +1329,13 @@ export function StickerLayer({
         const style: React.CSSProperties = {
           left: centerX,
           top: centerY,
-          fontSize,
-          lineHeight: 1,
-          fontFamily: STICKER_FONT_FAMILY,
+          // Un emoji de la comunidad (0125) es una IMAGEN: se mide en píxeles,
+          // no en cuerpo de fuente. `fontSize` sigue siendo el ALTO en los dos
+          // casos —la cuenta de `stickerBox` no cambia—, así que el deslizador
+          // de tamaño significa lo mismo para un glifo y para un dibujo.
+          ...(sticker.image
+            ? { width: fontSize, height: fontSize }
+            : { fontSize, lineHeight: 1, fontFamily: STICKER_FONT_FAMILY }),
           // Halo suave, igual que el horneado: un emoji oscuro sobre una foto
           // oscura desaparece y no tiene barra donde apoyarse.
           filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.35))",
@@ -1322,7 +1348,7 @@ export function StickerLayer({
               style={style}
               className="absolute -translate-x-1/2 -translate-y-1/2 select-none"
             >
-              {sticker.emoji}
+              <StickerFace sticker={sticker} />
             </span>
           );
         }
@@ -1332,8 +1358,12 @@ export function StickerLayer({
             key={sticker.id}
             type="button"
             style={style}
+            // Para un emoji de la comunidad el nombre sale de `alt`, que la
+            // base exige (0125). Sin eso, un dibujo pegado sobre la foto se
+            // anunciaría como un botón sin nombre y no habría forma de saber
+            // cuál de los ocho se está por mover.
             aria-label={COPY.composer.photoEditor.stickerOnPhoto(
-              sticker.emoji,
+              sticker.image?.alt ?? sticker.emoji,
               index + 1,
               stickers.length,
             )}
@@ -1381,12 +1411,39 @@ export function StickerLayer({
               !reduce && "transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-110",
             )}
           >
-            <span aria-hidden="true">{sticker.emoji}</span>
+            <StickerFace sticker={sticker} />
           </button>
         );
       })}
     </div>
   );
+}
+
+/**
+ * LO QUE SE VE del sticker: un glifo o el dibujo de la comunidad.
+ *
+ * Siempre `aria-hidden`: el nombre accesible lo pone quien envuelve (el botón
+ * que se arrastra, o nada en la miniatura, que es pura pintura). Un `alt` acá
+ * adentro haría que un lector de pantalla leyera la descripción dos veces.
+ *
+ * Es un `<img>` pelado y no `next/image` por lo mismo que en el picker: el
+ * archivo ya viene optimizado del bucket, y tiene que ser la MISMA URL que
+ * después pide el horneado para que salga de la caché del navegador.
+ */
+function StickerFace({ sticker }: { sticker: PhotoSticker }) {
+  if (sticker.image) {
+    return (
+      /* eslint-disable-next-line @next/next/no-img-element -- ver el docblock */
+      <img
+        src={sticker.image.url}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+        className="pointer-events-none block size-full select-none object-contain"
+      />
+    );
+  }
+  return <span aria-hidden="true">{sticker.emoji}</span>;
 }
 
 // ---------------------------------------------------------------------------

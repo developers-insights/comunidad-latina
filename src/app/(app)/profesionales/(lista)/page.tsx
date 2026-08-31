@@ -462,7 +462,7 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
         // Vacío por "Tu zona" y sin ningún filtro puesto: el cartel nombra la
         // zona y ofrece volver a toda la comunidad en un toque.
         !filtering && vistaZona.filtraPorPreferencia && vistaZona.zona.label ? (
-          <ZonaVacia zona={vistaZona.zona.label} />
+          <ZonaVacia zona={vistaZona.zona.label} radioMillas={vistaZona.radioMillas} />
         ) : filtering ? (
           <EmptyState
             illustration="/images/empty-state-search.png"

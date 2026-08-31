@@ -29,19 +29,25 @@ import { ZONAS_MATCH_MAX, zonasCoincidentes } from "./coincidencias";
  * que la persona podría haber elegido a mano de la misma lista. O sea: la
  * feature ahorra toques, no baja el listón de privacidad ni un punto.
  *
- * ── POR QUÉ EL CATÁLOGO ESTÁ ACÁ Y TAMBIÉN EN LA BASE ───────────────────────
- * La fuente de verdad de RUNTIME es esta constante, no la tabla: resolver el
- * barrio más cercano es una cuenta sobre ~70 filas fijas que no cambian nunca,
- * y hacerla contra la base sería una consulta por request en el camino más
- * caliente de la app (`resolverVistaZona` corre en las siete pantallas). La
- * 0120 materializa las MISMAS filas en `public.zone_centroids` para que la
- * geografía sea consultable desde SQL — y para que un barrio nuevo se pueda
- * agregar sin esperar un deploy cuando haga falta.
+ * ── POR QUÉ EL CATÁLOGO VIVE EN EL CÓDIGO Y NO EN UNA TABLA ─────────────────
+ * Resolver el barrio más cercano es una cuenta sobre ~70 filas fijas que no
+ * cambian nunca. Hacerla contra la base sería una consulta por request en el
+ * camino más caliente de la app: `resolverVistaZona` corre en el header y en
+ * los siete listados, y el scroll infinito del feed la repite en cada tanda
+ * (el mismo problema que el memo de `listarZonasDelTenant` acaba de resolver
+ * para las zonas publicadas). Un `select` para leer una constante es una
+ * consulta que no se puede justificar.
  *
- * Dos copias del mismo dato es exactamente cómo empieza una divergencia
- * silenciosa, así que no se confía en la disciplina: `centroides.test.ts` PARSEA
- * la migración y falla si una sola fila difiere. La regla tiene puerta
- * automática o no existe.
+ * Y son datos de otra naturaleza: los barrios de Nueva York no son contenido de
+ * la comunidad, son geografía. No los edita nadie desde la app, no dependen del
+ * tenant y no tienen RLS que discutir. Un `const` es la forma honesta de decir
+ * eso; una tabla insinuaría que se administran.
+ *
+ * SI ALGÚN DÍA hace falta administrarlos —agregar un barrio sin deploy, o que
+ * el filtro de radio se resuelva del lado de SQL dentro de una función de
+ * página— la tabla `public.zone_centroids` es el paso siguiente, sembrada
+ * DESDE esta constante y con un test de paridad que impida la divergencia. Hoy
+ * no existe, y este módulo no la necesita para funcionar.
  *
  * ── CÓMO SE ELIGIERON LOS BARRIOS ───────────────────────────────────────────
  * Arranca por los que YA aparecen en los datos de esta comunidad (Corona,
@@ -97,8 +103,10 @@ export const SNAP_MAX_MILLAS = 60;
  * resolución). Más precisión sería falsa: un barrio no es un punto.
  *
  * ORDEN: Queens primero (es donde vive esta comunidad), después el resto de los
- * condados, después el área metropolitana, y al final los condados enteros. La
- * migración 0120 repite este mismo orden y el test de paridad lo exige.
+ * condados, después el área metropolitana, y al final los condados enteros —
+ * ver por qué los enteros van últimos en `centroideDeZona`. Adentro de cada
+ * bloque, alfabético, y el test lo verifica: una lista de 70 nombres sin orden
+ * garantizado se llena de duplicados en el tercer agregado.
  */
 export const CENTROIDES: readonly Centroide[] = [
   // ── Queens ───────────────────────────────────────────────────────────────

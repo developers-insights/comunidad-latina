@@ -99,10 +99,15 @@ export function VerificacionActions({
         </div>
       )}
 
+      {/* Ancho completo, como el CTA de negocios/presencia: es el único botón
+          de su tarjeta y el borde de la tarjeta es su blanco de tap. Antes
+          quedaba encogido contra el margen izquierdo — un `inline-flex` dentro
+          de una columna de 152px. */}
       {!yaActiva && (
         <Button
           variant="primary"
-          size="md"
+          size="lg"
+          className="w-full"
           loading={pending === "activar"}
           onClick={() => run("activar")}
         >
@@ -113,7 +118,8 @@ export function VerificacionActions({
       {tieneFacturacion && (
         <Button
           variant="outline"
-          size="md"
+          size="lg"
+          className="w-full"
           loading={pending === "gestionar"}
           onClick={() => run("gestionar")}
         >

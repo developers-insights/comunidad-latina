@@ -110,5 +110,18 @@ export const ZONA_COPY = {
     mensaje: (zona: string) =>
       `Estás viendo solo ${zona}. Ampliá la vista y mirá lo que publicó el resto de la comunidad.`,
     cta: "Ver toda la comunidad",
+
+    /**
+     * El mismo vacío, pero cuando además hay un radio puesto.
+     *
+     * Sin esto el mensaje MIENTE por omisión: decir "no hay nada en Corona"
+     * cuando en realidad se buscó en 25 millas a la redonda hace que la persona
+     * agrande el radio esperando resultados que el servidor ya miró y no
+     * encontró. Nombrar la distancia le ahorra ese viaje.
+     */
+    tituloConRadio: (millas: number, zona: string) =>
+      `Todavía no hay nada a ${millas} millas de ${zona}`,
+    mensajeConRadio: (millas: number, zona: string) =>
+      `Buscamos en ${millas} millas a la redonda de ${zona} y todavía no hay nada. Mirá lo que publicó el resto de la comunidad.`,
   },
 } as const;

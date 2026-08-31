@@ -35,6 +35,7 @@ import { sendListingMessageAction } from "@/app/(app)/mensajes/inline-actions";
 import { useCloseOnBack } from "@/lib/design/use-overlay";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
+import { ListingActions, type ListingEngagement } from "./listing-actions";
 import { useMediaViewer } from "./media-viewer";
 import type { FeedListingModel } from "./helpers";
 
@@ -423,8 +424,22 @@ function AccentCta({
  * pidió.
  *
  * Los listings de propiedades usan SIEMPRE la ListingCard real.
+ *
+ * ── LA BARRA DE ACCIONES (2026-08-31) ──────────────────────────────────────
+ * `engagement` es OPCIONAL y sin él la barra igual se dibuja: guardar,
+ * comentar y compartir funcionan de punta a punta con el id que la tarjeta ya
+ * tiene. Lo que el prop agrega es lo que la tarjeta NO puede saber sola —
+ * cuántos comentarios hay, si este viewer ya lo guardó, y el me gusta— y todo
+ * eso sale de una tanda de queries que hoy no se piden. Ver `ListingEngagement`
+ * para qué significa cada ausencia; ninguna se rellena con un cero inventado.
  */
-export function FeedListingCard({ listing }: { listing: FeedListingModel }) {
+export function FeedListingCard({
+  listing,
+  engagement,
+}: {
+  listing: FeedListingModel;
+  engagement?: ListingEngagement;
+}) {
   const [open, setOpen] = useState(false);
   const viewer = useMediaViewer();
   const KindIcon = KIND_ICON[listing.kind] ?? Storefront;
@@ -577,6 +592,28 @@ export function FeedListingCard({ listing }: { listing: FeedListingModel }) {
                 {COPY.listing.externalPublisher(listing.publisherName)}
               </p>
             ) : null}
+
+            {/*
+              LA BARRA, ARRIBA DEL CTA — y sin quitarle nada a la tarjeta.
+
+              El cliente la circuló en verde exactamente en este lugar
+              (2026-08-31), y el orden importa: primero lo social —lo que se
+              hace SIN irse— y al final el CTA, que es la salida deliberada
+              hacia la ficha. Al revés, el botón grande se comería los cuatro
+              chicos.
+
+              Ninguna de las acciones navega (ver `ListingActions`), así que la
+              regla del 2026-08-20 —"tocar una tarjeta nunca te saca del feed"—
+              sigue entera: esto suma gestos, no los cambia.
+            */}
+            <ListingActions
+              listingId={listing.id}
+              title={listing.title}
+              detailHref={detailHref}
+              commentCount={engagement?.commentCount}
+              savedByViewer={engagement?.savedByViewer}
+              like={engagement?.like}
+            />
 
             <AccentCta accent={accent} detailHref={detailHref} onOpen={openSheet}>
               {COPY.listing.viewDetails}

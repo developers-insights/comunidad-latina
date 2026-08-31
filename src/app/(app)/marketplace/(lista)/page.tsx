@@ -609,7 +609,7 @@ async function MarketplaceStoresContent({ filters }: { filters: StoreFilters }) 
         // Vacío por "Tu zona" y sin búsqueda encima: se nombra la zona y se
         // ofrece volver a toda la comunidad en un toque.
         !isSearching && vistaZona.filtraPorPreferencia && vistaZona.zona.label ? (
-          <ZonaVacia zona={vistaZona.zona.label} />
+          <ZonaVacia zona={vistaZona.zona.label} radioMillas={vistaZona.radioMillas} />
         ) : (
           <EmptyState
             illustration="/images/empty-state-search.png"

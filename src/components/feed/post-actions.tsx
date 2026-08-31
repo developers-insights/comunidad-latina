@@ -9,9 +9,14 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { useToast } from "@/components/ui";
-import { LikeBurst } from "@/components/motion";
-import { cn } from "@/lib/utils";
 import { toggleSaveAction } from "@/app/(app)/feed/engagement-actions";
+import {
+  ACTION_ICON,
+  ActionButton,
+  ActionRow,
+  ActionToggle,
+  actionClass,
+} from "./action-bar";
 import { COPY } from "./copy";
 import { useCardLike, useOptimisticLike } from "./card-like-context";
 import { useCardMedia } from "./card-media-context";
@@ -52,14 +57,7 @@ export interface PostActionsProps {
 }
 
 /** Botones grandes y táctiles (§4): íconos 22px, 44px de área, feedback al toque. */
-const ICON = 22;
-
-const actionClass = cn(
-  "flex min-h-11 min-w-11 select-none items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-foreground-secondary",
-  "transition-[transform,color,background-color] duration-(--duration-fast) ease-(--ease-spring)",
-  "hover:bg-surface-subtle active:scale-[0.94]",
-  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-);
+const ICON = ACTION_ICON;
 
 /**
  * Acciones sociales de un post (§4.b): me gusta optimista, comentarios,
@@ -233,34 +231,36 @@ export function PostActions({
   );
 
   return (
-    <div className={cn("flex items-center gap-0.5", className)}>
-      <span className={cn("flex items-center", like.liked && "text-danger")}>
-        <LikeBurst
-          active={like.liked}
-          onToggle={like.toggle}
-          label={like.liked ? COPY.post.unlike : COPY.post.like}
-          particleColor="var(--color-danger)"
-          className={cn(actionClass, "pr-1.5", like.liked && "text-danger")}
-        >
-          <Heart
-            size={ICON}
-            weight={like.liked ? "fill" : "regular"}
-            aria-hidden="true"
-          />
-          <span className="numeric">{like.count}</span>
-        </LikeBurst>
-      </span>
+    <ActionRow className={className}>
+      <ActionToggle
+        tone="like"
+        active={like.liked}
+        onToggle={like.toggle}
+        label={like.liked ? COPY.post.unlike : COPY.post.like}
+        className="pr-1.5"
+      >
+        <Heart
+          size={ICON}
+          weight={like.liked ? "fill" : "regular"}
+          aria-hidden="true"
+        />
+        <span className="numeric">{like.count}</span>
+      </ActionToggle>
 
       {isDetail ? (
+        /* En el detalle los comentarios YA están en la página: el botón queda
+           como dato, no como acción. Por eso pierde el hover y el rebote — pero
+           NO la tinta: sigue siendo el mismo dato de la misma familia. */
         <span
-          className={cn(actionClass, "hover:bg-transparent active:scale-100")}
+          className={actionClass("comment", false, "hover:bg-transparent active:scale-100")}
           aria-label={COPY.post.comments}
         >
           {commentsContent}
         </span>
       ) : (
-        <button
-          type="button"
+        <ActionButton
+          tone="comment"
+          label={`${COPY.post.comments} (${commentCount})`}
           onClick={() =>
             commentsSheet.open({
               postId,
@@ -270,41 +270,36 @@ export function PostActions({
               ...(commentsSurface ? { surface: commentsSurface } : {}),
             })
           }
-          aria-label={`${COPY.post.comments} (${commentCount})`}
-          className={actionClass}
         >
           {commentsContent}
-        </button>
+        </ActionButton>
       )}
 
-      <button
-        type="button"
+      <ActionButton
+        tone="share"
+        label={COPY.post.share}
         onClick={share}
-        aria-label={COPY.post.share}
-        className={cn(actionClass, "ml-auto")}
+        className="ml-auto"
       >
         <ShareNetwork size={ICON} aria-hidden="true" />
         <span className="hidden sm:inline">{COPY.post.share}</span>
-      </button>
+      </ActionButton>
 
       {/* Guardar al final, como el marcador de Instagram. Misma micro-celebración
-          que el me gusta (LikeBurst) para que las dos reacciones se sientan de la
-          misma familia — acá con el acento de marca en vez del rojo. */}
-      <span className={cn("flex items-center", saved && "text-brand")}>
-        <LikeBurst
-          active={saved}
-          onToggle={toggleSave}
-          label={saved ? COPY.post.unsave : COPY.post.save}
-          particleColor="var(--color-brand)"
-          className={cn(actionClass, saved && "text-brand")}
-        >
-          <BookmarkSimple
-            size={ICON}
-            weight={saved ? "fill" : "regular"}
-            aria-hidden="true"
-          />
-        </LikeBurst>
-      </span>
-    </div>
+          que el me gusta para que las dos reacciones se sientan de la misma
+          familia — acá con el dorado del marcador en vez del rojo. */}
+      <ActionToggle
+        tone="save"
+        active={saved}
+        onToggle={toggleSave}
+        label={saved ? COPY.post.unsave : COPY.post.save}
+      >
+        <BookmarkSimple
+          size={ICON}
+          weight={saved ? "fill" : "regular"}
+          aria-hidden="true"
+        />
+      </ActionToggle>
+    </ActionRow>
   );
 }

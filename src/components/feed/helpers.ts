@@ -472,7 +472,13 @@ export interface GuideCardModel {
 export type FeedItem =
   | { type: "post"; createdAt: string; id: string; post: PostCardModel }
   | { type: "listing-property"; createdAt: string; id: string; listing: ListingCardModel }
-  | { type: "listing"; createdAt: string; id: string; listing: FeedListingModel }
+  | {
+      type: "listing";
+      createdAt: string;
+      id: string;
+      listing: FeedListingModel;
+      engagement?: import("./listing-actions").ListingEngagement;
+    }
   | { type: "guide"; createdAt: string; id: string; guide: GuideCardModel };
 
 export function postKindOf(raw: string): "post" | "question" | "text" {

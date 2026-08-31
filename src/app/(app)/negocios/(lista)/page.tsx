@@ -619,7 +619,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
         // Vacío por "Tu zona" y sin ningún filtro puesto: se nombra la zona y se
         // ofrece volver a toda la comunidad en un toque.
         !filtering && filtraZona && vistaZona.zona.label ? (
-          <ZonaVacia className="mt-4" zona={vistaZona.zona.label} />
+          <ZonaVacia className="mt-4" zona={vistaZona.zona.label} radioMillas={vistaZona.radioMillas} />
         ) : filtering ? (
           /* Buscó y no hay ⇒ mensaje de búsqueda, no el de sección vacía. Decir
              "todavía no hay negocios publicados" cuando en realidad hay pero

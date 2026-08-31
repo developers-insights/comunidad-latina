@@ -6,6 +6,7 @@ import { DAY_MS, limit } from "@/lib/rate-limit";
 import { isVisionConfigured } from "@/lib/config/services";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
+import { requireIdentidadVerificada } from "@/lib/verificacion/gate";
 import {
   TIER_AUTO,
   TIER_HUMAN,
@@ -155,7 +156,7 @@ export type JobDraftInput = z.input<typeof jobDraftSchema>;
 
 export type CreateJobDraftResult =
   | { ok: true; listingId: string }
-  | { ok: false; error: string; needsAuth?: boolean };
+  | { ok: false; error: string; needsAuth?: boolean; needsIdentity?: boolean };
 
 /**
  * Los mensajes del esquema que SÍ se le muestran a la persona tal cual. El
@@ -191,6 +192,20 @@ export async function createJobDraft(
     return { ok: false, error: guard.message };
   }
   const { tenant, supabase, user } = guard;
+
+  // Identidad verificada, ANTES del rate limit: quien no puede publicar no
+  // consume su cuota del día por intentarlo. `job` está en
+  // VERTICALES_QUE_EXIGEN_IDENTIDAD, así que acá el gate es incondicional — no
+  // hay condición de precio como en /publicar, donde un evento gratis no gatea.
+  //
+  // Va también en la policy `listings_insert` (0126). Esta rama existe para que
+  // el rechazo llegue con un texto que se entiende: sin ella, PostgREST
+  // devuelve un 42501 crudo y la persona no se entera de que le falta
+  // verificarse ni de que es gratis.
+  const identidad = await requireIdentidadVerificada(supabase, { kind: "job" });
+  if (!identidad.permitido) {
+    return { ok: false, error: C.errors.identityRequired, needsIdentity: true };
+  }
 
   if (!limit(`empleos-publicar:${user.id}`, 10, DAY_MS).ok) {
     return { ok: false, error: C.errors.generic };

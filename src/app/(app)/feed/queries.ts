@@ -858,10 +858,13 @@ export interface ListingRow {
   created_by: string | null;
   publisher_name: string | null;
   created_at: string;
+  /** `listings.comment_count` (0038). La barra de la ficha lo muestra al lado
+   *  de "Comentar"; ausente se dibuja como ausencia, nunca como un 0 inventado. */
+  comment_count: number | null;
 }
 
 export const LISTING_COLUMNS =
-  "id, kind, title, description, price_amount, price_currency, price_period, area_label, photos, created_by, publisher_name, created_at";
+  "id, kind, title, description, price_amount, price_currency, price_period, area_label, photos, created_by, publisher_name, created_at, comment_count";
 
 export interface ListingExtras {
   verificationByListing: Map<string, VerificationView>;

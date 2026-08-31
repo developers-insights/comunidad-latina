@@ -249,7 +249,7 @@ async function FeedRoot({
     vistaZona.zona.label;
 
   if (items.length === 0 && zonaSinNadaPropio) {
-    return <ZonaVacia zona={vistaZona.zona.label as string} />;
+    return <ZonaVacia zona={vistaZona.zona.label as string} radioMillas={vistaZona.radioMillas} />;
   }
 
   if (items.length === 0 && tab === "siguiendo") {
@@ -337,7 +337,7 @@ async function FeedRoot({
         intercalado={intercalado}
       />
       {zonaSinNadaPropio ? (
-        <ZonaVacia className="mt-2" zona={vistaZona.zona.label as string} />
+        <ZonaVacia className="mt-2" zona={vistaZona.zona.label as string} radioMillas={vistaZona.radioMillas} />
       ) : null}
     </>
   );

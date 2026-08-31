@@ -1,6 +1,8 @@
 import { Storefront } from "@phosphor-icons/react/dist/ssr";
 import { Avatar } from "@/components/ui";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
+import { CommunityEmojiText } from "@/components/emojis";
+import type { CommunityEmoji } from "@/lib/emojis/catalog";
 import { cn } from "@/lib/utils";
 import type { AuthorView } from "./helpers";
 
@@ -33,6 +35,17 @@ export interface CommentItemProps {
    */
   entity?: { nombre: string; avatarUrl: string | null } | null;
   body: string;
+  /**
+   * Catálogo de emojis propios ACTIVOS, para cambiar los códigos cortos
+   * (`:klk:`) por su dibujo. Lo trae `readCommunityEmojiCatalog()` desde el
+   * server component que arma el hilo.
+   *
+   * Opcional y con default vacío a propósito: sin catálogo el cuerpo se pinta
+   * tal cual, que es exactamente lo que corresponde mientras los emojis estén
+   * apagados. Así el código corto nunca queda a la vista como texto crudo en
+   * una superficie y renderizado en otra.
+   */
+  emojiCatalog?: readonly CommunityEmoji[];
   /**
    * Texto del slot de tiempo. El padre decide qué va: "hace 3 min" para uno ya
    * publicado, o el copy de "Enviando…" para el comentario optimista en vuelo.
@@ -68,6 +81,7 @@ export function CommentItem({
   author,
   entity = null,
   body,
+  emojiCatalog,
   timeAgoLabel,
   pending = false,
   tone = "surface",
@@ -145,7 +159,7 @@ export function CommentItem({
             onMedia ? "text-on-media" : "text-foreground",
           )}
         >
-          {body}
+          <CommunityEmojiText text={body} catalog={emojiCatalog ?? []} />
         </p>
       </div>
     </li>

@@ -326,7 +326,7 @@ async function EventosContent({ filters }: { filters: Filters }) {
         // nombre de la zona y ofrece salir en un toque. Sin esto, la sección
         // parece muerta cuando en realidad hay eventos en otros barrios.
         !filtering && vistaZona.filtraPorPreferencia && vistaZona.zona.label ? (
-          <ZonaVacia className="mt-5" zona={vistaZona.zona.label} />
+          <ZonaVacia className="mt-5" zona={vistaZona.zona.label} radioMillas={vistaZona.radioMillas} />
         ) : filtering ? (
           /* Buscó y no hay: se dice qué probar y se ofrece salir de los filtros
              — no el mismo cartel de "todavía no hay eventos", que sería mentira

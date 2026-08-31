@@ -27,6 +27,24 @@ vi.mock("@/lib/media/video-poster", () => ({
   capturePosterFrame: vi.fn(async () => null),
 }));
 
+/**
+ * Desde la 0125 la pestaña de emojis monta el picker compartido, que al abrirse
+ * pide el catálogo propio con una server action. Acá se devuelve VACÍO, que es
+ * el estado real en producción hasta que lleguen los archivos del cliente: con
+ * el catálogo vacío la única pestaña del picker son los "Clásicos", que es
+ * exactamente lo que este archivo viene testeando desde siempre.
+ *
+ * Sin el mock, la action intenta leer `cookies()` fuera de un pedido y el test
+ * se llena de rechazos sin manejar.
+ */
+vi.mock("@/lib/emojis/actions", () => ({
+  listCommunityEmojisAction: vi.fn(async () => ({ ok: true, emojis: [] })),
+}));
+
+// El subrayado de las pestañas del picker se anima con motion: neutralizado,
+// el DOM refleja el estado al instante (mismo patrón que comments-sheet.test).
+vi.mock("motion/react", async () => (await import("@/test/motion-mock")).motionMock());
+
 afterEach(cleanup);
 
 const C = COPY.composer.photoEditor;

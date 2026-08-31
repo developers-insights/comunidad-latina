@@ -177,6 +177,12 @@ describe("JobCard", () => {
     expect(screen.queryByText("Medio tiempo")).toBeNull();
     expect(screen.queryByText("Tiempo completo")).toBeNull();
   });
+
+  /** L1 — changas: el tercer tipo se pinta igual que los otros dos, sin tocar la card. */
+  it("una changa muestra el chip 'Ocasional'", () => {
+    render(<JobCard job={{ ...BASE, employmentType: "one_off" }} />);
+    expect(screen.getByText("Ocasional")).toBeTruthy();
+  });
 });
 
 describe("JobCard: la foto abre el visor, solo 'Ver empleo' navega", () => {

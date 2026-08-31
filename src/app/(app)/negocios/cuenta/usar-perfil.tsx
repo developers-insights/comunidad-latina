@@ -35,6 +35,14 @@ export function UsarPerfil({
     <Button
       type="button"
       variant={activo ? "outline" : "primary"}
+      // Ancho completo: es la única acción de su tarjeta, y en una lista de
+      // hasta diez, diez botones de ancho distinto (según el largo del nombre)
+      // se leen como diez cosas distintas.
+      className="w-full"
+      // El label es corto para no desbordar los 291px de una tarjeta a 375px;
+      // el nombre completo va acá, que es donde importa: sin esto, un lector de
+      // pantalla anuncia diez botones idénticos.
+      aria-label={activo ? undefined : COPY.card.useItAria(nombre)}
       loading={pending}
       onClick={() =>
         startTransition(async () => {
@@ -57,7 +65,7 @@ export function UsarPerfil({
         ? COPY.card.switching
         : activo
           ? COPY.card.backToPersonal
-          : COPY.card.useIt(nombre)}
+          : COPY.card.useIt}
     </Button>
   );
 }
