@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { CardVideo } from "./card-video";
 import { CAROUSEL_COPY } from "./carousel-copy";
 import { COPY } from "./copy";
-import type { PostMediaView, PostMusicView, VideoScopeProp } from "./helpers";
+import type { PostMediaView, VideoScopeProp } from "./helpers";
 
 /**
  * CARRUSEL de medios de un post (feedback cliente 2026-07-27: "tú ves en
@@ -98,11 +98,13 @@ export interface MediaCarouselProps {
   /** Clases extra de la fila de puntitos (p. ej. subirla sobre el CTA de campaña). */
   dotsClassName?: string;
   /**
-   * Pista asociada al POST (0090), no a un medio en particular: si alguna
-   * diapositiva es un video, baja hasta CardVideo para que la reproduzca
-   * sincronizada. Ausente en un carrusel sin música.
+   * LA MÚSICA NO PASA POR ACÁ (y por eso no hay prop). Hasta el 2026-08-26 este
+   * riel recibía `music` y se la bajaba SÓLO a `CardVideo`: un carrusel de
+   * fotos con música mostraba la insignia y no montaba ningún `<audio>`. La
+   * pista es de la publicación (`post_music`, PK `post_id`), así que su
+   * reproductor vive un nivel más arriba —`PostMusicProvider`, en
+   * card-post-media.tsx— y este riel no tiene nada que repartir.
    */
-  music?: PostMusicView | null;
 }
 
 export function MediaCarousel({
@@ -117,7 +119,6 @@ export function MediaCarousel({
   onPhotoDoubleTap,
   onVideoTap,
   dotsClassName,
-  music = null,
 }: MediaCarouselProps) {
   const reduce = usePrefersReducedMotion();
   const trackRef = useRef<HTMLDivElement>(null);
@@ -252,7 +253,6 @@ export function MediaCarousel({
                   viewCount={viewCount}
                   active={active}
                   onTap={onVideoTap ? () => onVideoTap(slideIndex) : undefined}
-                  music={music}
                   // Filtro de ESTA diapositiva (0104), ya resuelto a CSS por el
                   // servidor. Viaja dentro del medio y no como prop del carrusel
                   // porque es una decisión POR ARCHIVO: un post puede traer un

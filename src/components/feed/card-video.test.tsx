@@ -5,7 +5,7 @@ import { CardVideo } from "./card-video";
 import { CardLikeProvider } from "./card-like-context";
 import { CardMediaProvider } from "./card-media-context";
 import { PREMIUM_DETAIL_MAX_SECONDS } from "@/lib/media/video-policy";
-import type { PostMediaView, PostMusicView } from "./helpers";
+import type { PostMediaView } from "./helpers";
 
 /**
  * Gramática táctil del video en el feed (§5 + feedback 2026-07-26): un toque
@@ -291,19 +291,10 @@ describe("CardVideo: píldora de vistas", () => {
     expect(screen.queryByText(/vistas/)).toBeNull();
   });
 
-  it("el botón de sonido sigue siendo suyo: no abre el video ni likea", () => {
-    renderCard();
-    fireEvent.click(screen.getByRole("button", { name: /silenciar el video|activar el sonido/i }));
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
-
-    expect(nav.push).not.toHaveBeenCalled();
-    expect(viewer.open).not.toHaveBeenCalled();
-    expect(supa.insert).not.toHaveBeenCalled();
-  });
 });
 
+// ---------------------------------------------------------------------------
+// VISTA PREVIA DE 59 s (contrato 2026-07-30 §6)
 // ---------------------------------------------------------------------------
 // VISTA PREVIA DE 59 s (contrato 2026-07-30 §6)
 // ---------------------------------------------------------------------------
@@ -386,149 +377,36 @@ describe("CardVideo: la tarjeta muestra 59 s, no el video entero", () => {
 });
 
 // ---------------------------------------------------------------------------
-// MÚSICA ASOCIADA (contrato 0090): el árbitro es resolveAudioMix (audio-mix.ts,
-// ya testeado ahí); acá se cubre que la card lo APLIQUE de verdad al DOM — el
-// <audio> hermano, el silencio por defecto, que la música gane al tocar
-// sonido, que nunca suenen los dos a la vez, y que el recorte haga loop.
+// LA MÚSICA YA NO ES DE ESTE COMPONENTE (arreglo 2026-08-26)
 // ---------------------------------------------------------------------------
+//
+// El `<audio>` de la pista, el gesto de sonido y el altavoz vivían acá adentro,
+// y ése era exactamente el bug que reportó el cliente: una publicación de FOTO
+// con música no montaba ninguno de los tres, porque no tenía video donde
+// montarlos — la insignia prometía una canción que no existía en el DOM.
+//
+// La pista es de la PUBLICACIÓN (`post_music`, PK `post_id`), así que su
+// reproductor se mudó a `post-music.tsx` y su contrato se prueba ahí y en
+// card-post-media.test.tsx. Lo que queda por probar ACÁ es lo contrario: que
+// esta tarjeta NO se traiga nada de vuelta.
 
-const MUSIC: PostMusicView = {
-  startSeconds: 20,
-  track: {
-    id: "track-1",
-    title: "Cumbia del barrio",
-    artist: "Los del Sur",
-    durationSeconds: 180,
-    previewUrl: "https://cdn.example.com/track.mp3",
-    licenseKind: "cc0",
-    attributionRequired: false,
-    attributionText: null,
-    category: "tropical",
-  },
-};
-
-function renderWithMusic({
-  music = MUSIC,
-  active = true,
-}: { music?: PostMusicView | null; active?: boolean } = {}) {
-  return render(
-    <CardLikeProvider
-      postId={POST_ID}
-      tenantId="tenant-1"
-      viewerId="viewer-1"
-      initialLiked={false}
-      initialCount={3}
-    >
-      <CardVideo
-        src="https://cdn.example.com/clip.mp4"
-        postId={POST_ID}
-        scope="negocios"
-        music={music}
-        active={active}
-      />
-    </CardLikeProvider>,
-  );
-}
-
-function audioNode(): HTMLAudioElement | null {
-  return document.querySelector("audio");
-}
-
-describe("CardVideo: música asociada a la publicación (0090)", () => {
-  it("sin música no monta un <audio> (el video se comporta como siempre)", () => {
-    renderWithMusic({ music: null });
-    expect(audioNode()).toBeNull();
+describe("CardVideo ya no reproduce música por su cuenta", () => {
+  it("no monta ningún <audio> propio: hay UNO por publicación, no uno por medio", () => {
+    renderCard();
+    expect(document.querySelector("audio")).toBeNull();
   });
 
-  it("con música, monta un <audio> hermano del video, silencioso por defecto", () => {
-    renderWithMusic();
-    const audio = audioNode();
-    expect(audio).toBeTruthy();
-    expect(audio?.muted).toBe(true);
-    // Silencio por defecto SIEMPRE: tampoco suena el video sin gesto.
+  it("no pinta su propio altavoz: el de la publicación es uno solo y no salta de diapositiva", () => {
+    renderCard();
+    expect(screen.queryByRole("button", { name: /activar el sonido|silenciar/i })).toBeNull();
+  });
+
+  it("sin contexto de publicación el video queda MUDO — nadie suena sin un gesto", () => {
+    renderCard();
     expect((videoNode() as HTMLVideoElement).muted).toBe(true);
-  });
-
-  it("el <audio> carga bajo demanda (preload=none): un feed con música no baja 40 mp3", () => {
-    renderWithMusic();
-    expect(audioNode()?.getAttribute("preload")).toBe("none");
-  });
-
-  it("tocar el botón de sonido hace ganar a la MÚSICA — el video queda mudo", () => {
-    renderWithMusic();
-    fireEvent.click(screen.getByRole("button", { name: "Activar el sonido" }));
-
-    expect((videoNode() as HTMLVideoElement).muted).toBe(true);
-    expect((audioNode() as HTMLAudioElement).muted).toBe(false);
-  });
-
-  it("tocar de nuevo vuelve al silencio — nunca los dos audios sonando juntos", () => {
-    renderWithMusic();
-    const tapSound = () =>
-      screen.getByRole("button", { name: /silenciar el video|activar el sonido/i });
-    fireEvent.click(tapSound());
-    fireEvent.click(tapSound());
-
-    expect((audioNode() as HTMLAudioElement).muted).toBe(true);
-  });
-
-  it("sin música, el botón de sonido sigue activando el audio del VIDEO (regla 3, sin cambios)", () => {
-    renderWithMusic({ music: null });
-    fireEvent.click(screen.getByRole("button", { name: "Activar el sonido" }));
-
-    expect((videoNode() as HTMLVideoElement).muted).toBe(false);
-  });
-
-  it("el audio arranca en el segundo elegido del recorte (post_music.start_seconds)", () => {
-    renderWithMusic();
-    const audio = audioNode() as HTMLAudioElement;
-    const clock = stubMediaClock(audio, 180);
-    fireEvent.loadedMetadata(audio);
-
-    expect(clock.now()).toBe(20);
-  });
-
-  it("el recorte hace loop al llegar a su fin (30 s desde el arranque, MUSIC_CLIP_SECONDS)", () => {
-    renderWithMusic();
-    const audio = audioNode() as HTMLAudioElement;
-    const clock = stubMediaClock(audio, 180);
-    fireEvent.loadedMetadata(audio); // arranca en el segundo 20
-
-    clock.seek(20 + 29);
-    fireEvent.timeUpdate(audio);
-    expect(clock.now()).toBe(49); // todavía dentro del recorte
-
-    clock.seek(20 + 30); // fin exacto del recorte de 30 s
-    fireEvent.timeUpdate(audio);
-    expect(clock.now()).toBe(20); // vuelve al arranque del recorte, no al 0 del archivo
-  });
-
-  it("la música se pausa cuando la card deja de ser el medio activo del carrusel", () => {
-    const { rerender } = renderWithMusic({ active: true });
-    const audio = audioNode() as HTMLAudioElement;
-    const pause = vi.spyOn(audio, "pause");
-
-    rerender(
-      <CardLikeProvider
-        postId={POST_ID}
-        tenantId="tenant-1"
-        viewerId="viewer-1"
-        initialLiked={false}
-        initialCount={3}
-      >
-        <CardVideo
-          src="https://cdn.example.com/clip.mp4"
-          postId={POST_ID}
-          scope="negocios"
-          music={MUSIC}
-          active={false}
-        />
-      </CardLikeProvider>,
-    );
-
-    expect(pause).toHaveBeenCalled();
   });
 });
+
 
 /* ---------------- Filtro de presentación del video (0104) ----------------- */
 

@@ -42,7 +42,31 @@ const NEGOCIO: IdentidadNegocioUI = {
   nombre: "Panadería Giovanni",
   avatarUrl: null,
   rol: "propietario",
+  esPropietario: true,
+  verificada: false,
 };
+
+/** N negocios propios, para probar el tope y el scroll de la lista. */
+function negociosPropios(cantidad: number): IdentidadNegocioUI[] {
+  return Array.from({ length: cantidad }, (_, indice) => ({
+    ...NEGOCIO,
+    businessId: `1111111${indice}-1111-4111-8111-111111111111`,
+    nombre: `Negocio ${indice + 1}`,
+  }));
+}
+
+/** Abre la hoja desde la puerta de /perfil y devuelve el diálogo. */
+function abrirHoja(negocios: IdentidadNegocioUI[]) {
+  render(
+    <PerfilCambiarIdentidad
+      personal={PERSONAL}
+      negocios={negocios}
+      activeBusinessId={null}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /Estás como/i }));
+  return screen.getByRole("dialog");
+}
 
 beforeEach(() => {
   state.cambiarIdentidad.mockReset();
@@ -131,5 +155,114 @@ describe("IdentitySwitcher (avatar del header): comportamiento sin cambios", () 
 
     fireEvent.click(screen.getByRole("button", { name: /Giovanni Pérez/ }));
     expect(state.cambiarIdentidad).toHaveBeenCalledWith({ businessId: null });
+  });
+});
+
+
+/**
+ * =============================================================================
+ * HASTA DIEZ NEGOCIOS (0121)
+ * =============================================================================
+ *
+ * El pedido del cliente llegó con una captura de esta hoja: la última fila
+ * decía "Administrar tu cuenta de negocio" y no había ninguna que dijera
+ * agregar. Lo que se fija acá es que agregar y administrar sean DOS filas
+ * distintas que van a DOS lugares distintos, y que cuando no quedan lugares no
+ * quede un botón que sólo puede fallar.
+ */
+describe("agregar otro negocio", () => {
+  it("hay una fila para AGREGAR, distinta de la de administrar y a otra ruta", () => {
+    abrirHoja([NEGOCIO]);
+
+    const agregar = screen.getByRole("link", { name: /Agregar otro negocio/i });
+    const administrar = screen.getByRole("link", { name: /Administrar tus negocios/i });
+
+    expect(agregar.getAttribute("href")).toBe("/negocios/cuenta#nuevo");
+    expect(administrar.getAttribute("href")).toBe("/negocios/cuenta");
+    expect(agregar).not.toBe(administrar);
+  });
+
+  it("dice cuántos lugares quedan", () => {
+    abrirHoja(negociosPropios(7));
+
+    expect(screen.getByText(/Podés crear 3 más \(de 10\)/)).toBeTruthy();
+  });
+
+  it("con uno solo restante habla en singular", () => {
+    abrirHoja(negociosPropios(9));
+
+    expect(screen.getByText(/Podés crear 1 más \(de 10\)/)).toBeTruthy();
+  });
+
+  it("con diez, NO hay botón de agregar: se dice el máximo y qué sí se puede", () => {
+    abrirHoja(negociosPropios(10));
+
+    expect(screen.queryByRole("link", { name: /Agregar otro negocio/i })).toBeNull();
+    expect(screen.getByText(/Llegaste al máximo de 10 negocios/)).toBeTruthy();
+    // Administrar sigue estando: llegar al tope no te saca lo que ya tenés.
+    expect(screen.getByRole("link", { name: /Administrar tus negocios/i })).toBeTruthy();
+  });
+
+  it("los negocios AJENOS no empujan contra el tope", () => {
+    // Diez negocios que administrás para otras personas: el tope es sobre los
+    // propios (0103), así que la fila de agregar tiene que seguir ahí.
+    const ajenos = negociosPropios(10).map((negocio) => ({
+      ...negocio,
+      esPropietario: false,
+      rol: "administrador" as const,
+    }));
+
+    abrirHoja(ajenos);
+
+    expect(screen.getByRole("link", { name: /Agregar otro negocio/i })).toBeTruthy();
+    expect(screen.queryByText(/Llegaste al máximo/)).toBeNull();
+  });
+
+  it("sin el dato de propiedad, ofrece agregar y no muestra contador", () => {
+    // Los tres consumidores mapean campo por campo y pueden no mandar
+    // `esPropietario`. Ante la duda se ofrece el lugar —la base lo rechaza con
+    // un mensaje humano— en vez de esconder la función.
+    const sinDato = negociosPropios(10).map(({ esPropietario: _omitido, ...resto }) => resto);
+
+    abrirHoja(sinDato);
+
+    expect(screen.getByRole("link", { name: /Agregar otro negocio/i })).toBeTruthy();
+    expect(screen.queryByText(/Podés crear/)).toBeNull();
+    expect(screen.queryByText(/Llegaste al máximo/)).toBeNull();
+  });
+});
+
+describe("la lista scrollea por dentro y las acciones quedan ancladas", () => {
+  it("con once filas, la lista tiene su propio scroll", () => {
+    // Es lo que impide que "Agregar otro negocio" se vaya de la pantalla a
+    // 375 px: sin esto scrollea la hoja entera y las acciones quedan abajo de
+    // todo, después de diez negocios.
+    abrirHoja(negociosPropios(10));
+
+    const lista = screen.getByRole("dialog").querySelector("ul");
+    expect(lista).toBeTruthy();
+    expect(lista?.className).toContain("overflow-y-auto");
+    expect(lista?.className).toContain("min-h-0");
+    // Once filas: el perfil personal + los diez negocios.
+    expect(lista?.querySelectorAll("li")).toHaveLength(11);
+  });
+});
+
+describe("la insignia de verificado", () => {
+  it("aparece en el perfil verificado y NO en el que falta", () => {
+    abrirHoja([
+      { ...NEGOCIO, nombre: "Verificado SA", verificada: true },
+      {
+        ...NEGOCIO,
+        businessId: "22222222-2222-4222-8222-222222222222",
+        nombre: "Pendiente SA",
+        verificada: false,
+      },
+    ]);
+
+    // Una sola insignia para dos negocios: el que no la tiene no muestra nada.
+    // Con cero identidades verificadas en la base, el aviso negativo aparecería
+    // en las once filas y la hoja dejaría de ser un cambiador.
+    expect(screen.getAllByText("Verificado")).toHaveLength(1);
   });
 });

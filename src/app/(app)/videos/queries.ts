@@ -197,6 +197,37 @@ export async function fetchVideoReelsPage({
       query = query.eq("listings.kind", kind).eq("listings.status", "published");
     }
 
+    /**
+     * ---- QUE SEA SOLO VIDEOS, TAMBIÉN DEL LADO DE LA BASE (0116 Mux) --------
+     *
+     * `video_type = 'short_video'` dice que la publicación SE DECLARÓ un corto;
+     * no dice que hoy haya un video reproducible. Con el bucket las dos cosas
+     * iban juntas (el archivo estaba en `posts.media` antes del insert), pero
+     * con Mux no: el post nace con `video_type` puesto y `mux_status` en
+     * `uploading`/`processing`, y el archivo aparece recién cuando el webhook
+     * avisa. Un `errored` no aparece nunca.
+     *
+     * Esas filas pasaban el filtro de la base y las descartaba `canEnterReel`
+     * EN MEMORIA, con dos costos: se pagaba traerlas (y con ellas su `body` y
+     * su `media`), y cada una comía un lugar de la barrida de SCAN_CHUNK, así
+     * que una tanda de subidas en curso podía dejar una página corta —o vacía—
+     * y hacer ver el reel como "no hay más".
+     *
+     * Las dos rutas del video son EXCLUYENTES (ver `toPostCardModel`: la
+     * diapositiva de Mux se arma sólo si `media` no trae ya un video), así que
+     * el predicado es exacto y no descarta nada bueno:
+     *   · `mux_status is null`  → el video, si existe, está en `media`, y eso
+     *                             PostgREST no lo puede mirar (text[] sin
+     *                             columna de tipo): lo sigue resolviendo
+     *                             `hasVideoMedia` en memoria.
+     *   · `mux_status = ready`  → el video vive en Mux y ya se puede reproducir.
+     * Cualquier otro estado no tiene video que mostrar HOY. No se pierde: en
+     * cuanto el webhook lo pone en `ready` entra en la próxima tanda, que es
+     * exactamente lo que el filtro en memoria ya decidía — sólo que ahora lo
+     * decide antes de gastar la fila.
+     */
+    query = query.or("mux_status.is.null,mux_status.eq.ready");
+
     // Alcance "para vos" (los ids vienen de la DB, no del usuario — mismo
     // patrón que el feed). PostgREST AND-ea cada .or() de nivel superior.
     query = query.or(

@@ -85,28 +85,36 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/**
+ * NOTA SOBRE LA FORMA DE `drawImage`. Desde que el editor recorta, el horneado
+ * usa siempre la versión de NUEVE argumentos (rectángulo de fuente + destino):
+ * sin recorte el rectángulo de fuente es la imagen completa y el resultado es
+ * idéntico al de la versión de cinco. Se usa una sola forma a propósito — dos
+ * caminos de dibujo son dos formas de que el recorte se aplique en uno y no en
+ * el otro.
+ */
+function drawArgs(): unknown[] {
+  const call = currentCtx.drawImage.mock.calls.at(-1);
+  if (!call) throw new Error("no se llamó a drawImage");
+  return call as unknown[];
+}
+
 describe("bakePhoto — redimensiona sin agrandar", () => {
   it("baja el lado largo a MAX_LONG_SIDE cuando la foto es más grande", async () => {
     await bakePhoto(makeFile());
     const expectedHeight = Math.round(2400 * (MAX_LONG_SIDE / 3200));
-    expect(currentCtx.drawImage).toHaveBeenCalledWith(
-      expect.anything(),
-      0,
-      0,
-      MAX_LONG_SIDE,
-      expectedHeight,
-    );
+    expect(drawArgs().slice(1)).toEqual([0, 0, 3200, 2400, 0, 0, MAX_LONG_SIDE, expectedHeight]);
   });
 
   it("NUNCA agranda una foto más chica que el tope", async () => {
     stubBitmap(800, 1000);
     await bakePhoto(makeFile());
-    expect(currentCtx.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 800, 1000);
+    expect(drawArgs().slice(1)).toEqual([0, 0, 800, 1000, 0, 0, 800, 1000]);
   });
 
   it("respeta un maxLongSide custom", async () => {
     await bakePhoto(makeFile(), { maxLongSide: 800 });
-    expect(currentCtx.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 800, 600);
+    expect(drawArgs().slice(1)).toEqual([0, 0, 3200, 2400, 0, 0, 800, 600]);
   });
 });
 
@@ -232,5 +240,172 @@ describe("bakePhoto — texto sobre la foto", () => {
       caption: { text: "   ", position: "bottom", background: "solid" },
     });
     expect(currentCtx.fillText).not.toHaveBeenCalled();
+  });
+});
+
+/* ==========================================================================
+ * RECORTE, EMOJIS Y ESTILO DEL TEXTO (2026-08-26)
+ * ==========================================================================
+ *
+ * Lo nuevo del editor tiene que QUEMARSE igual que el filtro y el texto: si se
+ * ve en la vista previa y no llega al archivo, la persona publica algo distinto
+ * de lo que aprobó — y el horneado no se puede deshacer.
+ */
+
+import {
+  DEFAULT_STICKER_SIZE,
+  resolveCaptionColor,
+  type PhotoSticker,
+} from "./photo-overlay";
+import { FULL_CROP } from "./photo-crop";
+
+function sticker(over: Partial<PhotoSticker> = {}): PhotoSticker {
+  return { id: "s1", emoji: "🔥", x: 0.5, y: 0.5, size: DEFAULT_STICKER_SIZE, ...over };
+}
+
+describe("bakePhoto — el recorte se quema en los píxeles", () => {
+  it("sin recorte dibuja la imagen entera (mismo resultado que antes del recorte)", async () => {
+    await bakePhoto(makeFile(), { crop: FULL_CROP });
+    expect(drawArgs().slice(1, 5)).toEqual([0, 0, 3200, 2400]);
+  });
+
+  it("un recorte central toma SOLO esa porción de la fuente", async () => {
+    // La mitad central de una foto de 3200×2400.
+    await bakePhoto(makeFile(), { crop: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 } });
+    expect(drawArgs().slice(1, 5)).toEqual([800, 600, 1600, 1200]);
+  });
+
+  it("el canvas toma la FORMA del recorte, no la de la foto original", async () => {
+    // Una franja 16:9 sobre una foto 4:3: el archivo publicado tiene que salir
+    // apaisado, o el recorte no existió.
+    const canvas = document.createElement("canvas");
+    vi.spyOn(document, "createElement").mockReturnValue(canvas);
+    await bakePhoto(makeFile(), { crop: { x: 0, y: 0.25, width: 1, height: 0.5 } });
+    expect(canvas.width / canvas.height).toBeCloseTo(3200 / 1200, 2);
+  });
+
+  it("recortar NO agranda: una porción chica sale con sus propios píxeles", async () => {
+    // Un 10% de 3200×2400 son 320×240, muy por debajo del tope: interpolar
+    // hasta MAX_LONG_SIDE sería inventar píxeles y engordar el archivo.
+    await bakePhoto(makeFile(), { crop: { x: 0.4, y: 0.4, width: 0.1, height: 0.1 } });
+    expect(drawArgs().slice(5)).toEqual([0, 0, 320, 240]);
+  });
+});
+
+describe("bakePhoto — los emojis se queman arriba de todo", () => {
+  it("dibuja un emoji por sticker", async () => {
+    await bakePhoto(makeFile(), {
+      stickers: [sticker({ id: "a", emoji: "🔥" }), sticker({ id: "b", emoji: "❤️" })],
+    });
+    const dibujados = currentCtx.fillText.mock.calls.map((call) => call[0]);
+    expect(dibujados).toEqual(["🔥", "❤️"]);
+  });
+
+  it("los ubica con la MISMA cuenta que la vista previa (fracción del recuadro)", async () => {
+    // Foto 3200×2400 → canvas 1600×1200. Un sticker en (0.25, 0.75) tiene que
+    // caer en (400, 900): si la cuenta se hiciera acá aparte, este número sería
+    // el primero en separarse del que muestra la pantalla.
+    await bakePhoto(makeFile(), { stickers: [sticker({ x: 0.25, y: 0.75 })] });
+    const [, x, y] = currentCtx.fillText.mock.calls.at(-1) as [string, number, number];
+    expect(x).toBe(400);
+    expect(y).toBe(900);
+  });
+
+  it("van DESPUÉS del texto: quien los puso los vio arriba", async () => {
+    await bakePhoto(makeFile(), {
+      caption: { text: "Hola", position: "bottom", background: "none" },
+      stickers: [sticker({ emoji: "🎉" })],
+    });
+    const dibujados = currentCtx.fillText.mock.calls.map((call) => call[0]);
+    expect(dibujados.at(-1)).toBe("🎉");
+  });
+
+  it("sin emojis no toca el contexto de texto", async () => {
+    await bakePhoto(makeFile(), { stickers: [] });
+    expect(currentCtx.fillText).not.toHaveBeenCalled();
+  });
+
+  it("nunca dibuja más de los que entran (MAX_STICKERS)", async () => {
+    const muchos = Array.from({ length: 20 }, (_, index) =>
+      sticker({ id: `s${index}`, emoji: "⭐" }),
+    );
+    await bakePhoto(makeFile(), { stickers: muchos });
+    expect(currentCtx.fillText.mock.calls).toHaveLength(8);
+  });
+});
+
+describe("bakePhoto — color y tipografía del texto", () => {
+  it("usa la tinta elegida, no el blanco por defecto", async () => {
+    const fills: string[] = [];
+    // `fillStyle` se pisa varias veces (barra y texto): se captura cada valor
+    // en el momento de dibujar, que es lo único que importa.
+    currentCtx.fillText.mockImplementation(() => {
+      fills.push(currentCtx.fillStyle);
+    });
+    await bakePhoto(makeFile(), {
+      caption: { text: "Hola", position: "bottom", background: "none", color: "amarillo" },
+    });
+    expect(fills).toContain(resolveCaptionColor("amarillo").fill);
+  });
+
+  it("sin color elegido se queda en el blanco de siempre (una edición vieja no cambia)", async () => {
+    const fills: string[] = [];
+    currentCtx.fillText.mockImplementation(() => {
+      fills.push(currentCtx.fillStyle);
+    });
+    await bakePhoto(makeFile(), {
+      caption: { text: "Hola", position: "bottom", background: "none" },
+    });
+    expect(fills).toContain("#f7f6f3");
+  });
+
+  it("una tinta OSCURA con fondo pinta una barra CLARA — o el texto no se lee", async () => {
+    const barras: string[] = [];
+    currentCtx.fillRect.mockImplementation(() => {
+      barras.push(currentCtx.fillStyle);
+    });
+    await bakePhoto(makeFile(), {
+      caption: { text: "Hola", position: "top", background: "solid", color: "negro" },
+    });
+    expect(barras[0]).toBe("rgba(247, 246, 243, 0.72)");
+  });
+
+  it("la tipografía elegida llega a ctx.font", async () => {
+    const fuentes: string[] = [];
+    currentCtx.fillText.mockImplementation(() => {
+      fuentes.push(currentCtx.font);
+    });
+    await bakePhoto(makeFile(), {
+      caption: { text: "Hola", position: "bottom", background: "none", font: "clasica" },
+    });
+    expect(fuentes[0]).toContain("Georgia");
+  });
+
+  it("avisa cuando la tipografía no estaba disponible (el canvas cambia de letra sin decir nada)", async () => {
+    const aviso = vi.fn();
+    // `document.fonts` con un `check` que dice que no: es exactamente lo que
+    // pasa cuando la familia todavía no cargó.
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: { load: vi.fn(async () => []), check: vi.fn(() => false) },
+    });
+    await bakePhoto(makeFile(), {
+      caption: { text: "Hola", position: "bottom", background: "none", font: "titular" },
+      onFontFallback: aviso,
+    });
+    expect(aviso).toHaveBeenCalledWith("Titular");
+  });
+
+  it("no avisa nada cuando la tipografía SÍ estaba", async () => {
+    const aviso = vi.fn();
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: { load: vi.fn(async () => []), check: vi.fn(() => true) },
+    });
+    await bakePhoto(makeFile(), {
+      caption: { text: "Hola", position: "bottom", background: "none", font: "titular" },
+      onFontFallback: aviso,
+    });
+    expect(aviso).not.toHaveBeenCalled();
   });
 });

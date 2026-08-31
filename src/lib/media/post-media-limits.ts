@@ -19,15 +19,17 @@
  * (`prepareMediaUploadAction` + policy 0025), justamente para no chocar con
  * este límite. Por eso el presupuesto de abajo habla sólo de fotos.
  *
- *  · Al ELEGIR del disco se acepta hasta `MAX_PICKED_PHOTO_BYTES` (5 MB): es el
+ *  · Al ELEGIR del disco se acepta hasta `MAX_PICKED_PHOTO_BYTES`: es el
  *    archivo crudo de una cámara de teléfono y no tiene sentido rechazarlo,
- *    porque nunca se manda así.
+ *    porque nunca se manda así. Este número NO cierra contra `bodySizeLimit`
+ *    —el crudo no viaja— y por eso es el único de los cuatro que se puede mover
+ *    solo. Ver su propio comentario.
  *  · Antes de publicar, `bakePhoto` recomprime SIEMPRE (1600 px de lado largo,
  *    JPEG ~0.85) → entre 250 y 800 KB por foto.
  *  · `MAX_PHOTO_BYTES` (2 MB) es el techo de lo que el servidor acepta RECIBIR
  *    por foto. Deja 2,5× de margen sobre el peor horneado realista y, al mismo
- *    tiempo, cierra la puerta a que se cuele un crudo de 5 MB — sea por un
- *    horneado fallido o por un cliente modificado.
+ *    tiempo, cierra la puerta a que se cuele un crudo — sea por un horneado
+ *    fallido o por un cliente modificado.
  *  · `MAX_TOTAL_PHOTO_BYTES` (10 MB) es el techo del CONJUNTO. Sin él, 10 fotos
  *    de 2 MB serían 20 MB "válidos" que el propio `bodySizeLimit` corta antes
  *    de llegar: una validación que aprueba lo imposible no valida nada.
@@ -45,8 +47,37 @@ export const MAX_PHOTOS = 10;
 /** Videos por publicación. No viaja por el body: sube directo al bucket. */
 export const MAX_VIDEOS = 1;
 
-/** Peso máximo de una foto TAL COMO SE ELIGE del disco (sólo navegador). */
-export const MAX_PICKED_PHOTO_BYTES = 5 * 1024 * 1024;
+/**
+ * Peso máximo de una foto TAL COMO SE ELIGE del disco. SÓLO NAVEGADOR: el
+ * servidor nunca ve este número, porque nunca ve este archivo.
+ *
+ * ─── POR QUÉ SUBIÓ DE 5 MB A 25 MB (2026-08-26) ────────────────────────────
+ * El cliente reportó que las fotos rebotan por peso y por formato, igual que le
+ * pasaba al video antes de Mux. Los 5 MB eran el número equivocado en el lugar
+ * equivocado: una foto de un teléfono de 48 MP pesa 12-18 MB, y una HEIC de
+ * iPhone en máxima calidad se va por arriba de 5 MB sin ningún esfuerzo. Se
+ * rechazaban fotos absolutamente normales.
+ *
+ * Y se rechazaban por nada, porque el crudo NO VIAJA: `bakePhoto` recomprime
+ * SIEMPRE a 1600 px de lado largo y JPEG ~0.85 —la haya editado alguien o no—
+ * antes de armar el FormData. Lo que llega al servidor son 250-800 KB, mida lo
+ * que mida el original. Los tres topes de abajo (`MAX_PHOTO_BYTES`,
+ * `MAX_TOTAL_PHOTO_BYTES` y el `bodySizeLimit` de `next.config.ts`) miden ESO
+ * y no se movieron ni un byte: la cadena que verifica `post-media-limits.test.ts`
+ * quedó intacta.
+ *
+ * ENTONCES, POR QUÉ SIGUE HABIENDO UN TOPE ACÁ. Porque el límite real de esta
+ * puerta no es la red: es la MEMORIA del teléfono. Hornear decodifica la foto
+ * entera a un bitmap RGBA (4 bytes por píxel) antes de escalarla; una foto de
+ * 100 MP son ~400 MB de RAM y Safari mata la pestaña sin decir nada. 25 MB
+ * cubre con aire cualquier cámara de teléfono actual y deja afuera los TIFF y
+ * los RAW de una réflex, que es justo donde empieza ese problema.
+ *
+ * La red del final sigue estando igual: si por lo que sea el horneado no puede
+ * achicar el archivo, `checkPhotoPayload` lo frena antes de mandarlo y lo dice
+ * con todas las letras.
+ */
+export const MAX_PICKED_PHOTO_BYTES = 25 * 1024 * 1024;
 
 /** Peso máximo de una foto TAL COMO LLEGA al servidor (ya horneada). */
 export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;

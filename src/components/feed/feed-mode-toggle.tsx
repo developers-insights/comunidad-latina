@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
-import type { FeedTabId } from "./helpers";
+import { esTabSocial, type FeedTabId } from "./helpers";
 
 /**
  * SELECTOR DE MODO DEL FEED SOCIAL — "Para ti" | "Siguiendo".
@@ -32,10 +32,13 @@ const MODOS: readonly { id: FeedTabId; label: string }[] = [
   { id: "siguiendo", label: COPY.modules.modeSiguiendo },
 ];
 
-/** Solo estos dos tabs muestran el selector. */
-export function esTabSocial(tab: FeedTabId): boolean {
-  return tab === "para-ti" || tab === "siguiendo";
-}
+/**
+ * Solo estos dos tabs muestran el selector. La función se mudó a `./helpers`
+ * (módulo puro) cuando la fila de círculos —que es cliente— también necesitó
+ * preguntarlo; se re-exporta desde acá para no mover su test ni obligar a
+ * ningún consumidor a cambiar de import.
+ */
+export { esTabSocial };
 
 /**
  * Misma regla que `feedTabHref()` de module-circles.tsx ("para-ti" es el feed

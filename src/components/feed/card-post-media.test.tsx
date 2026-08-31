@@ -440,3 +440,56 @@ describe("filtro de presentación (0104) — llega desde el medio, no del post",
     }
   });
 });
+
+/**
+ * ---------------------------------------------------------------------------
+ * LA MÚSICA TIENE QUE SONAR TAMBIÉN SOBRE UNA FOTO (bug del cliente,
+ * 2026-08-26: "cuando se publica con música, no se escucha la música").
+ * ---------------------------------------------------------------------------
+ *
+ * La captura que mandó era una publicación de FOTO: la insignia se veía —esos
+ * tests ya estaban más arriba y pasaban— y no sonaba nada. El `<audio>` de la
+ * pista se montaba ÚNICAMENTE dentro de `CardVideo`, así que un carrusel sin
+ * un solo video no montaba ninguno: la insignia prometía una canción que no
+ * existía en el DOM.
+ *
+ * Estos tests fijan el contrato a nivel PUBLICACIÓN, que es donde vive la
+ * pista (`post_music`, PK `post_id`): un `<audio>` por post, exista o no un
+ * video entre las diapositivas, y NUNCA dos.
+ */
+describe("CardPostMedia: la música suena sobre cualquier medio (0090)", () => {
+  const audios = () => Array.from(document.querySelectorAll("audio"));
+
+  it("una publicación de FOTO con música monta su <audio>", () => {
+    renderMedia([PHOTO(1)], "para-ti", {}, { music: MUSIC });
+    expect(audios()).toHaveLength(1);
+    expect(audios()[0]?.getAttribute("src")).toBe(MUSIC.track.previewUrl);
+  });
+
+  it("y ofrece el altavoz: sin él, la insignia promete una canción que no se puede escuchar", () => {
+    renderMedia([PHOTO(1)], "para-ti", {}, { music: MUSIC });
+    expect(screen.getByRole("button", { name: "Activar el sonido" })).toBeTruthy();
+  });
+
+  it("silencio por defecto: sin gesto no suena nada, ni sobre una foto", () => {
+    renderMedia([PHOTO(1)], "para-ti", {}, { music: MUSIC });
+    expect(audios()[0]?.muted).toBe(true);
+  });
+
+  it("tocar el altavoz sobre una FOTO desmutea la pista", () => {
+    renderMedia([PHOTO(1)], "para-ti", {}, { music: MUSIC });
+    fireEvent.click(screen.getByRole("button", { name: "Activar el sonido" }));
+    expect(audios()[0]?.muted).toBe(false);
+  });
+
+  it("un carrusel MIXTO (fotos + video) monta UNA sola pista, no dos encimadas", () => {
+    renderMedia([PHOTO(1), VIDEO(1), PHOTO(2)], "para-ti", {}, { music: MUSIC });
+    expect(audios()).toHaveLength(1);
+  });
+
+  it("sin música no monta ningún <audio> ni ofrece altavoz sobre fotos", () => {
+    renderMedia([PHOTO(1), PHOTO(2)]);
+    expect(audios()).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /sonido|silenciar/i })).toBeNull();
+  });
+});

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ToastProvider } from "@/components/ui";
 import type { SaveTagsResult, SearchTaggableResult } from "@/app/(app)/feed/tag-actions";
 import type {
@@ -389,10 +389,18 @@ describe("PostComposer — una foto se publica sin escribir nada", () => {
    * donde estaba el segundo freno: además del botón apagado, `submit()` cortaba
    * en seco con `trimmed.length < 2` y el toque no hacía absolutamente nada.
    */
-  function pickPhoto() {
+  /**
+   * ASÍNCRONO desde el 2026-08-26: antes de aceptar una foto se prueba a
+   * DECODIFICARLA (`probePhotoDecodable`), que es la única forma de saber si
+   * este navegador puede abrir un HEIC. El `act` vacío deja pasar esa promesa
+   * y el render que dispara; sin él, lo que sigue corre contra la pantalla
+   * anterior a la foto.
+   */
+  async function pickPhoto() {
     const input = document.getElementById("post-composer-photos") as HTMLInputElement;
     const file = new File([new Uint8Array([1, 2, 3])], "feria.jpg", { type: "image/jpeg" });
     fireEvent.change(input, { target: { files: [file] } });
+    await act(async () => {});
   }
 
   it("elegir una foto y tocar Publicar manda kind='post' con el cuerpo vacío", async () => {
@@ -400,7 +408,7 @@ describe("PostComposer — una foto se publica sin escribir nada", () => {
     mount();
     await openMenu();
     fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
-    pickPhoto();
+    await pickPhoto();
 
     const publish = await screen.findByRole("button", {
       name: new RegExp(COPY.composer.publish),
@@ -420,7 +428,7 @@ describe("PostComposer — una foto se publica sin escribir nada", () => {
     mount();
     await openMenu();
     fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
-    pickPhoto();
+    await pickPhoto();
 
     fireEvent.change(sheetBody(), { target: { value: "Se llenó la feria." } });
     fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
@@ -495,11 +503,80 @@ describe("PostComposer — el tope de publicaciones se explica como lo que es", 
   });
 });
 
+/**
+ * ---------------------------------------------------------------------------
+ * QUÉ FOTO ENTRA Y QUÉ SE LE DICE A ALGUIEN CUANDO NO (2026-08-26)
+ * ---------------------------------------------------------------------------
+ *
+ * Reporte del cliente: "el mismo problema con los videos grandes o el tipo de
+ * formato de video pasa con las imágenes". El caso que más duele es el HEIC del
+ * iPhone abierto desde Chrome en Android: el archivo está perfecto —se ve bien
+ * en la galería— y este navegador no lo puede decodificar.
+ *
+ * Antes eso moría adentro de `bakePhoto`, viajaba igual y el servidor lo
+ * rechazaba con un código genérico DESPUÉS de escribir el pie y tocar Publicar.
+ * Acá se ancla lo contrario: se avisa al elegir, y el mensaje dice qué hacer.
+ */
+describe("PostComposer — formatos de foto y mensajes que se entienden", () => {
+  async function elegir(name: string, type: string) {
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+    const input = document.getElementById("post-composer-photos") as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [new File([new Uint8Array([1, 2, 3])], name, { type })] },
+    });
+    await act(async () => {});
+  }
+
+  it("un HEIC que este navegador NO puede abrir avisa con el motivo real", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => {
+        throw new Error("The source image could not be decoded.");
+      }),
+    );
+
+    await elegir("IMG_0042.heic", "image/heic");
+
+    // NO dice que la foto esté rota: no lo está.
+    expect(screen.getByText(COPY.composer.photoHeicTitle)).toBeTruthy();
+    expect(screen.getByText(COPY.composer.photoHeicBody)).toBeTruthy();
+
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("un HEIC que SÍ se puede abrir entra como cualquier foto (Safari, iOS)", async () => {
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({ close: vi.fn() })),
+    );
+
+    await elegir("IMG_0042.heic", "image/heic");
+
+    expect(screen.queryByText(COPY.composer.photoHeicTitle)).toBeNull();
+    expect(
+      await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) }),
+    ).toBeTruthy();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("lo que no es una foto sigue rebotando, sin nombrar formatos que ya no son la lista", async () => {
+    await elegir("clip.mp4", "video/mp4");
+    expect(screen.getByText(COPY.composer.photoWrongType)).toBeTruthy();
+  });
+});
+
 describe("PostComposer — composer premium (más fotos + horneado al publicar)", () => {
-  function pickPhoto(name = "feria.jpg") {
+  /** Ver el docblock del `pickPhoto` de más arriba: elegir una foto es asíncrono. */
+  async function pickPhoto(name = "feria.jpg") {
     const input = document.getElementById("post-composer-photos") as HTMLInputElement;
     const file = new File([new Uint8Array([1, 2, 3])], name, { type: "image/jpeg" });
     fireEvent.change(input, { target: { files: [file] } });
+    await act(async () => {});
   }
 
   it("el cupo subió a 10: la foto número 11 se rechaza con el aviso correcto", async () => {
@@ -526,7 +603,7 @@ describe("PostComposer — composer premium (más fotos + horneado al publicar)"
     mount();
     await openMenu();
     fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
-    pickPhoto();
+    await pickPhoto();
 
     fireEvent.click(
       await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) }),
@@ -570,13 +647,15 @@ describe("PostComposer — composer premium (más fotos + horneado al publicar)"
    * nada. El servidor valida igual (`checkPhotoPayload`): esto es cortesía, no
    * seguridad.
    */
-  function pickPhotos(count: number) {
+  /** Ver el docblock de `pickPhoto`: cada foto se prueba a decodificar. */
+  async function pickPhotos(count: number) {
     const input = document.getElementById("post-composer-photos") as HTMLInputElement;
     const files = Array.from(
       { length: count },
       (_, index) => new File([new Uint8Array([index])], `foto-${index}.jpg`, { type: "image/jpeg" }),
     );
     fireEvent.change(input, { target: { files } });
+    await act(async () => {});
   }
 
   it("si las fotos horneadas se pasan del total, avisa claro y NO llama a la action", async () => {
@@ -589,7 +668,7 @@ describe("PostComposer — composer premium (más fotos + horneado al publicar)"
     mount();
     await openMenu();
     fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
-    pickPhotos(10);
+    await pickPhotos(10);
 
     fireEvent.click(
       await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) }),
@@ -609,7 +688,7 @@ describe("PostComposer — composer premium (más fotos + horneado al publicar)"
     mount();
     await openMenu();
     fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
-    pickPhoto();
+    await pickPhoto();
 
     fireEvent.click(
       await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) }),
@@ -641,7 +720,7 @@ describe("PostComposer — composer premium (más fotos + horneado al publicar)"
     mount();
     await openMenu();
     fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
-    pickPhoto();
+    await pickPhoto();
 
     // Abrir el editor de esa foto y elegir un filtro (sin filtro no hay nada
     // que pueda fallar: `filterCss` viajaría vacío).
@@ -677,7 +756,7 @@ describe("PostComposer — composer premium (más fotos + horneado al publicar)"
     mount();
     await openMenu();
     fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
-    pickPhoto();
+    await pickPhoto();
 
     fireEvent.click(
       await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) }),
@@ -717,17 +796,19 @@ describe("PostComposer — música y etiquetas montadas en la hoja", () => {
     category: "tropical" as const,
   };
 
-  function pickPhoto() {
+  /** Ver el docblock del primer `pickPhoto`: elegir una foto es asíncrono. */
+  async function pickPhoto() {
     const input = document.getElementById("post-composer-photos") as HTMLInputElement;
     const file = new File([new Uint8Array([1, 2, 3])], "feria.jpg", { type: "image/jpeg" });
     fireEvent.change(input, { target: { files: [file] } });
+    await act(async () => {});
   }
 
   async function openPhotoComposer() {
     mount();
     await openMenu();
     fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
-    pickPhoto();
+    await pickPhoto();
     await screen.findByRole("button", { name: new RegExp(COPY.composer.publish) });
   }
 

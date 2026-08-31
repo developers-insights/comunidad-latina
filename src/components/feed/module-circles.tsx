@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { m, useReducedMotion, type Transition } from "motion/react";
 import type { Icon } from "@phosphor-icons/react";
@@ -10,7 +10,7 @@ import { visibleModules, type VisibleModuleState } from "@/components/shell/modu
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
-import { type FeedTabId } from "./helpers";
+import { esTabSocial, type FeedTabId } from "./helpers";
 
 /**
  * FILA DE MÓDULOS DEL FEED — círculo con el ícono del módulo y el nombre debajo.
@@ -24,34 +24,54 @@ import { type FeedTabId } from "./helpers";
  * ni gradientes ni sombras propias: el ícono ya trae su color, y todo lo demás
  * es un anillo y una palabra.
  *
- * ─── La decisión difícil: la fila mezcla DOS cosas ───
+ * ─── LA FILA HACE UNA SOLA COSA (cliente, 2026-08-26) ───────────────────────
  *
- * En la captura conviven "Eventos / Vivienda / Negocios / Profesionales", que
- * son FILTROS del feed (`?tab=`, la misma pantalla con otro contenido), con
- * "Trabajos / Creator Marketplace", que son SECCIONES aparte (`/empleos`,
- * `/creadores`). Dibujarlas iguales y hacer que se comporten distinto sin
- * avisar es lo único que no se podía hacer: un círculo no puede mentir sobre a
- * dónde lleva.
+ * Este archivo tenía anotada, desde el día uno, la tensión que el cliente
+ * terminó señalando: la fila mezclaba círculos que FILTRABAN el feed (`?tab=`:
+ * Vivienda, Eventos, Negocios, Profesionales) con círculos que NAVEGABAN a su
+ * sección (Empleos, Marketplace, Influencers, Comunidad), separados por un
+ * hairline. Los rodeó a todos con un círculo verde y pidió: «que tengan las
+ * mismas funciones que en el buscador».
  *
- * La resolución: cada círculo va adonde su nombre promete, y la fila lo dice
- * con su estructura en vez de con un cartel.
+ * En /buscar, tocar "Vivienda" te deja en /propiedades: la sección completa,
+ * con su buscador y sus filtros ("apartamento, cuarto, de cuánto a cuánto").
+ * Acá, tocar "Vivienda" te dejaba en `/feed?tab=propiedades`: una lista de
+ * avisos de vivienda en orden cronológico, SIN buscador y SIN un solo filtro.
+ * Dos círculos con el mismo nombre, el mismo ícono y el mismo color, en la
+ * misma app, entregando cosas distintas — y el peor de los dos ganaba, porque
+ * está en la pantalla donde la gente abre la app.
  *
- *  · Los módulos que TIENEN tab de feed (Todo, Vivienda, Eventos,
- *    Negocios, Profesionales) filtran el feed y te dejan donde estabas. Van en
- *    el primer grupo, y son los únicos que pueden quedar marcados como activos
- *    —porque el estado que marcan es el de ESTA pantalla.
- *  · Los que no tienen tab (Empleos, Marketplace, Influencers) navegan a su
- *    sección. Van en el segundo grupo, después de un hairline, y nunca se
- *    marcan activos.
+ * La resolución es la que el cliente pidió y la que el docblock viejo ya
+ * apuntaba como única salida honesta: **un círculo = un módulo = su sección**.
+ * Todos los círculos hacen lo mismo, van adonde dice su nombre, y ese destino
+ * es EXACTAMENTE el mismo `item.href` que usa la burbuja de /buscar
+ * (`ModuleBubble`) — no una ruta parecida escrita al lado.
  *
- * Los dos grupos son `<ul>` con su propio nombre accesible dentro de un mismo
- * `<nav>`: quien escucha la pantalla oye "Filtrar el feed" antes de los cinco
- * primeros y "Otras secciones" antes de los otros, que es exactamente la
- * diferencia que el hairline dibuja para quien ve.
+ * Consecuencias, dichas de frente:
+ *  · Desaparecen los dos grupos y el hairline: ya no hay dos clases de círculo
+ *    que distinguir, así que no hay nada que separar. La `<nav>` vuelve a ser
+ *    una sola lista con un solo nombre accesible.
+ *  · Los tabs verticales del feed (`?tab=propiedades|negocios|profesionales|
+ *    eventos`) dejan de tener puerta en la UI. NO se borran: `parseTab` los
+ *    sigue entendiendo y `load-more.ts` los sigue sirviendo, así que un link
+ *    viejo —compartido, guardado, indexado— muestra lo mismo que mostraba.
+ *    Sacarles la entrada visual no es romperlos.
+ *  · El círculo del propio feed (`/feed`) se queda, y es el único que puede
+ *    marcarse: es el "estás acá" de esta pantalla. "Siguiendo" sigue entrando
+ *    por el conmutador (`feed-mode-toggle.tsx`), que es donde corresponde — es
+ *    un modo del mismo feed, no un módulo.
+ *  · Ningún círculo prefetchea. Antes los filtros sí, porque eran esta misma
+ *    pantalla; ahora todos llevan a una sección entera, y traerse media app
+ *    cada vez que alguien abre el feed sería peor que el toque. Es el mismo
+ *    criterio que ya había tomado `ModuleBubble` en /buscar.
+ *
+ * Lo que NO cambia, y es la regla que sostiene todo esto: **qué círculos se ven
+ * lo decide el panel** (`tenants.modules` / `modules_soon`, vía
+ * `visibleModules`), nunca una lista de nombres escrita acá.
  *
  * Todo es `<a>`: no hay `role="tablist"` porque no hay paneles que se muestren
- * y se oculten en el cliente — cada filtro es una URL server-rendered, igual
- * que antes (`?tab=`), y anunciar tabs falsos rompería la promesa del rol.
+ * y se oculten en el cliente — cada círculo es una URL server-rendered, y
+ * anunciar tabs falsos rompería la promesa del rol.
  */
 
 /** Módulo con pestaña propia en el bottom nav: no repite lugar acá. */
@@ -61,20 +81,16 @@ const VIDEOS_HREF = "/videos";
 const FEED_HREF = "/feed";
 
 /**
- * Puente entre los dos espacios de identificadores: el `href` del registro de
- * módulos y el `id` del tab del feed. Es la ÚNICA lista escrita a mano de este
- * archivo, y está cubierta por test en los dos sentidos (ningún href fantasma;
- * ningún tab del feed sin su círculo).
+ * URL de un tab del feed. "para-ti" es el feed pelado: sin query que ensucie el
+ * link.
+ *
+ * LA FILA YA NO CONSTRUYE NINGUNA DE ESTAS URLs (ver la cabecera): los círculos
+ * llevan a la sección de su módulo. Sigue acá —y sigue exportada— porque los
+ * `?tab=` no dejaron de existir: `parseTab` los entiende, `load-more.ts` los
+ * sirve y un link viejo los abre. Esta función es DÓNDE ESTÁ ESCRITA su forma,
+ * con su test al lado; si alguna pantalla vuelve a necesitar armar uno, sale de
+ * acá y no de una plantilla suelta.
  */
-const FEED_TAB_BY_HREF: Record<string, FeedTabId> = {
-  [FEED_HREF]: "para-ti",
-  "/propiedades": "propiedades",
-  "/negocios": "negocios",
-  "/profesionales": "profesionales",
-  "/eventos": "eventos",
-};
-
-/** URL del filtro. "para-ti" es el feed pelado: sin query que ensucie el link. */
 export function feedTabHref(tab: FeedTabId): string {
   return tab === "para-ti" ? FEED_HREF : `${FEED_HREF}?tab=${tab}`;
 }
@@ -83,73 +99,84 @@ export interface ModuleCircle {
   /** `href` del módulo en el registro — único, sirve de key. */
   key: string;
   label: string;
-  /** Adónde lleva de verdad el círculo. */
+  /** Adónde lleva el círculo: la ruta del módulo, la misma que usa /buscar. */
   href: string;
   /** Ícono 3D del set del menú; ausente = cae al Phosphor de `icon`. */
   image?: string;
   icon: Icon;
   /** `var(--accent-*)` del módulo. */
   accent: string;
-  /** Tab que filtra, o null si el círculo navega a otra sección. */
-  tab: FeedTabId | null;
+  /** `true` sólo para el círculo del propio feed: el "estás acá" de la fila. */
+  esElFeed: boolean;
   state: VisibleModuleState;
 }
 
-export interface ModuleCircleGroups {
-  /** Filtran el feed y te dejan en esta pantalla. */
-  filters: ModuleCircle[];
-  /** Llevan a otra sección de la plataforma. */
-  sections: ModuleCircle[];
-}
+/**
+ * Alias de retrocompatibilidad del barril (`components/feed/index.ts`, que este
+ * archivo no puede editar). La fila ya no tiene grupos: es una sola lista.
+ */
+export type ModuleCircleGroups = ModuleCircle[];
 
 /**
  * La fila, armada desde el REGISTRO de módulos y la configuración del tenant —
  * nunca desde una lista de nombres escrita acá. Un módulo que el panel
  * (/admin/dominio) apagó no aparece, y uno en "muy pronto" aparece con su
- * etiqueta.
+ * etiqueta y sigue siendo un enlace real (su ruta tiene la pantalla que avisa).
  *
- * Un módulo en "muy pronto" pierde su condición de filtro aunque tenga tab: el
- * filtro mostraría avisos de una sección que todavía no abrió. Se va al segundo
- * grupo y apunta a su ruta, que es donde vive la pantalla de "Muy pronto".
+ * El destino de cada círculo es `item.href` TAL CUAL: el mismo valor que la
+ * burbuja de /buscar le da a su enlace. Que salga del registro y no de una
+ * transformación local es lo que garantiza «las mismas funciones que en el
+ * buscador» — si mañana un módulo cambia de ruta, las dos superficies cambian
+ * juntas o ninguna.
+ *
+ * Videos queda afuera y es lo único que se excluye a mano: ya es una pestaña del
+ * bottom nav, y repetirlo acá le enseña a la gente que hay dos caminos para lo
+ * mismo. Es el mismo criterio con el que `BROWSE_MODULES` lo saca de /buscar.
+ * (Y por eso mismo esta fila NO usa `BROWSE_MODULES`: aquella lista saca también
+ * el feed —que acá es el ancla de "estás acá"— y suma Boost, que es una compra,
+ * no una vertical que se navegue.)
  */
 export function moduleCircles(
   modules: Record<string, boolean> | null | undefined,
   modulesSoon: Record<string, boolean> | null | undefined,
-): ModuleCircleGroups {
-  const filters: ModuleCircle[] = [];
-  const sections: ModuleCircle[] = [];
+): ModuleCircle[] {
+  const circles: ModuleCircle[] = [];
 
   for (const { item, state } of visibleModules(MODULES, modules, modulesSoon)) {
     if (item.href === VIDEOS_HREF) continue;
 
-    const tab = state === "active" ? (FEED_TAB_BY_HREF[item.href] ?? null) : null;
-    const circle: ModuleCircle = {
+    circles.push({
       key: item.href,
-      // El círculo del feed no nombra el destino /feed sino el filtro SIN
-      // filtrar, así que al lado de "Vivienda" o "Eventos" tiene que nombrar la
-      // misma clase de cosa. Y NO puede llamarse "Comunidad": ese nombre es del
+      // El círculo del feed no nombra el destino ("Feed") sino lo que se ve al
+      // entrar: al lado de "Vivienda" o "Eventos" tiene que nombrar la misma
+      // clase de cosa. Y NO puede llamarse "Comunidad": ese nombre es del
       // módulo de ayuda mutua, que está en esta misma fila.
       label: item.href === FEED_HREF ? COPY.modules.paraTi : item.label,
-      href: tab ? feedTabHref(tab) : item.href,
+      href: item.href,
       image: item.image,
       icon: item.icon,
       accent: item.palette.icon,
-      tab,
+      esElFeed: item.href === FEED_HREF,
       state,
-    };
-    (tab ? filters : sections).push(circle);
+    });
   }
 
-  return { filters, sections };
+  return circles;
 }
 
 /**
- * Resorte del anillo activo, en función de cuántos círculos saltó (heredado de
- * los tabs viejos, donde el pedido del cliente —2026-07-20— fue explícito: que
- * "se pase un poquitín y vuelva", y que cuanto más lejos salte, un poquitín
- * más). `bounce` es la amplitud del sobrepaso y `visualDuration` el tiempo
- * percibido hasta asentarse; los topes están puestos para que el efecto se note
- * pero nunca se lea como "rebotó".
+ * Resorte del anillo, en función de cuántos círculos saltó (heredado de los tabs
+ * viejos, donde el pedido del cliente —2026-07-20— fue explícito: que "se pase
+ * un poquitín y vuelva", y que cuanto más lejos salte, un poquitín más).
+ * `bounce` es la amplitud del sobrepaso y `visualDuration` el tiempo percibido
+ * hasta asentarse; los topes están puestos para que el efecto se note pero nunca
+ * se lea como "rebotó".
+ *
+ * Desde que los círculos navegan a su sección (ver la cabecera) el anillo ya no
+ * SALTA de un círculo a otro dentro de la misma pantalla: marca el feed, que es
+ * donde estás. Así que la fila lo usa con distancia 1 —la entrada más suave del
+ * rango— y la curva sigue viviendo acá, con su test, porque es la misma que
+ * usan el resto de los indicadores de estado de la app.
  */
 export function ringSpring(distance: number) {
   const d = Math.min(Math.max(distance, 1), 4);
@@ -161,7 +188,11 @@ export function ringSpring(distance: number) {
 }
 
 export interface ModuleCirclesProps {
-  /** Tab vigente según la URL (`?tab=`) — la verdad, no el optimismo. */
+  /**
+   * Tab vigente según la URL (`?tab=`). Ya no elige círculo —ninguno filtra—:
+   * sirve para saber si estamos parados en el feed social, que es lo que marca
+   * el anillo del primer círculo.
+   */
   active: FeedTabId;
   /** `tenants.modules` tal cual lo resuelve el server. */
   modules: Record<string, boolean> | null | undefined;
@@ -172,31 +203,26 @@ export interface ModuleCirclesProps {
 export function ModuleCircles({ active, modules, modulesSoon }: ModuleCirclesProps) {
   const reduceMotion = useReducedMotion();
   const activeItemRef = useRef<HTMLLIElement>(null);
-  /** El carril horizontal: es lo ÚNICO que se mueve al cambiar de filtro. */
+  /** El carril horizontal: es lo ÚNICO que se puede mover acá adentro. */
   const railRef = useRef<HTMLDivElement>(null);
 
-  const { filters, sections } = moduleCircles(modules, modulesSoon);
-
-  // Optimista + de dónde venía (para graduar el salto del anillo). La URL manda:
-  // cuando la navegación aterriza, el optimista se descarta. Estas rutas son
-  // server-rendered con queries a la base y tardan; atado sólo al server, el
-  // anillo saltaba recién al terminar de cargar y se sentía tosco.
-  const [optimistic, setOptimistic] = useState<FeedTabId | null>(null);
-  const [lastActive, setLastActive] = useState<FeedTabId>(active);
-  const [from, setFrom] = useState<FeedTabId>(active);
-
-  if (active !== lastActive) {
-    setFrom(lastActive);
-    setLastActive(active);
-    setOptimistic(null);
-  }
-
-  const current = optimistic ?? active;
-  const indexOf = (tab: FeedTabId) => filters.findIndex((circle) => circle.tab === tab);
-  const distance = Math.abs(indexOf(current) - indexOf(from));
+  const circles = moduleCircles(modules, modulesSoon);
 
   /**
-   * El círculo elegido siempre visible: si quedó fuera del scroll horizontal,
+   * El anillo marca el círculo del FEED mientras estemos en un modo social del
+   * feed ("Para ti" o "Siguiendo"): esta fila sólo se pinta ahí, y los dos son
+   * la misma pantalla vista con otro lente.
+   *
+   * `aria-current="page"` es más estricto que el anillo a propósito: sólo con
+   * la URL exacta (`/feed`, o sea "para-ti"). Estando en `?tab=siguiendo` la
+   * página NO es /feed pelado, y quien la anuncia ya tiene el conmutador
+   * marcado. La distinción entre "marcado en la UI" y "esta ES la página" ya
+   * existía en este componente y se conserva tal cual.
+   */
+  const enElFeed = esTabSocial(active);
+
+  /**
+   * El círculo marcado siempre visible: si quedó fuera del scroll horizontal,
    * entra solo. Imperativo a propósito (no toca estado de React).
    *
    * ── POR QUÉ NO ES `scrollIntoView` (cliente 2026-08-20) ─────────────────
@@ -204,19 +230,19 @@ export function ModuleCircles({ active, modules, modulesSoon }: ModuleCirclesPro
    * "nearest" })`, y tenía un efecto que nadie pidió: `block: "nearest"` mira
    * también el eje VERTICAL, así que cuando la fila de módulos había quedado
    * fuera de vista —o sea, cada vez que alguien venía scrolleando el feed— el
-   * click en un filtro pegaba un salto vertical de toda la página.
+   * click en un círculo pegaba un salto vertical de toda la página.
    *
-   * Y ese salto se veía, además, como un defecto raro: el anillo del módulo
-   * activo se anima con `layoutId`, o sea midiendo la posición ANTES y DESPUÉS
-   * del cambio. Si entremedio la página se movió en vertical, esa diferencia
-   * entra en la medición y el anillo cruza la pantalla en diagonal — el
-   * cliente lo describió como "una barrita del color del tema que viene desde
-   * abajo del todo". No era el anillo: era el scroll de la página metiéndose
-   * en la medición.
+   * Y ese salto se veía, además, como un defecto raro: el anillo se anima con
+   * `layoutId`, o sea midiendo la posición ANTES y DESPUÉS del cambio. Si
+   * entremedio la página se movió en vertical, esa diferencia entra en la
+   * medición y el anillo cruza la pantalla en diagonal — el cliente lo
+   * describió como "una barrita del color del tema que viene desde abajo del
+   * todo". No era el anillo: era el scroll de la página metiéndose en la
+   * medición.
    *
-   * Ahora se mueve SÓLO el carril, con su propio `scrollLeft`. Un scroll
-   * horizontal de un contenedor no puede tocar el scroll vertical del
-   * documento, así que el defecto no puede volver por otro camino.
+   * Se mueve SÓLO el carril, con su propio `scrollLeft`. Un scroll horizontal
+   * de un contenedor no puede tocar el scroll vertical del documento, así que
+   * el defecto no puede volver por otro camino.
    */
   useEffect(() => {
     const rail = railRef.current;
@@ -225,7 +251,7 @@ export function ModuleCircles({ active, modules, modulesSoon }: ModuleCirclesPro
 
     const railBox = rail.getBoundingClientRect();
     const itemBox = item.getBoundingClientRect();
-    // El mismo respiro que el `px-4` del carril: el círculo elegido no queda
+    // El mismo respiro que el `px-4` del carril: el círculo marcado no queda
     // pegado al borde, así se sigue viendo que hay más a los costados.
     const margin = 16;
 
@@ -240,21 +266,20 @@ export function ModuleCircles({ active, modules, modulesSoon }: ModuleCirclesPro
     // `scrollBy` puede no existir en jsdom: el ajuste es cosmético y no vale
     // romper un test por él.
     rail.scrollBy?.({ left: delta, behavior: reduceMotion ? "auto" : "smooth" });
-  }, [current, reduceMotion]);
+  }, [enElFeed, reduceMotion]);
 
   return (
     <nav aria-label={COPY.modules.ariaLabel} className="-mx-4">
-      {/* Un solo carril de scroll para los dos grupos: la fila se lee como una
-          sola cosa aunque por dentro sean dos listas. `snap-x` sin `mandatory`
-          — el snap acomoda el gesto, no lo pelea (con `mandatory` no se puede
-          dejar medio círculo asomando, que es justo la pista de "hay más"). */}
+      {/* Un carril, una lista. `snap-x` sin `mandatory` — el snap acomoda el
+          gesto, no lo pelea (con `mandatory` no se puede dejar medio círculo
+          asomando, que es justo la pista de "hay más"). */}
       <div
         ref={railRef}
         className="flex snap-x items-start gap-1 overflow-x-auto px-4 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        <ul aria-label={COPY.modules.filtersLabel} className="flex items-start gap-1">
-          {filters.map((circle) => {
-            const isCurrent = circle.tab === current;
+        <ul className="flex items-start gap-1">
+          {circles.map((circle) => {
+            const isCurrent = circle.esElFeed && enElFeed;
             return (
               <li
                 key={circle.key}
@@ -264,38 +289,13 @@ export function ModuleCircles({ active, modules, modulesSoon }: ModuleCirclesPro
                 <ModuleCircleLink
                   circle={circle}
                   isCurrent={isCurrent}
-                  isActivePage={circle.tab === active}
-                  ringTransition={reduceMotion ? { duration: 0 } : ringSpring(distance)}
-                  onSelect={() => {
-                    if (!circle.tab || circle.tab === current) return;
-                    setFrom(current);
-                    setOptimistic(circle.tab);
-                  }}
+                  isActivePage={circle.esElFeed && active === "para-ti"}
+                  ringTransition={reduceMotion ? { duration: 0 } : ringSpring(1)}
                 />
               </li>
             );
           })}
         </ul>
-
-        {sections.length > 0 && (
-          // Hairline: la única marca de que a partir de acá los círculos SALEN
-          // del feed. Es decorativa —el nombre de cada lista ya lo dice para
-          // quien escucha— así que no entra en el árbol de accesibilidad.
-          <span
-            aria-hidden="true"
-            className="mx-1 mt-6 h-8 w-px shrink-0 bg-border-subtle"
-          />
-        )}
-
-        {sections.length > 0 && (
-          <ul aria-label={COPY.modules.sectionsLabel} className="flex items-start gap-1">
-            {sections.map((circle) => (
-              <li key={circle.key} className="shrink-0 snap-start">
-                <ModuleCircleLink circle={circle} isCurrent={false} isActivePage={false} />
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
     </nav>
   );
@@ -311,15 +311,13 @@ function ModuleCircleLink({
   isCurrent,
   isActivePage,
   ringTransition,
-  onSelect,
 }: {
   circle: ModuleCircle;
-  /** Marcado en la UI (puede ir adelantado a la navegación). */
+  /** Marcado en la UI: el módulo en el que estás parado. */
   isCurrent: boolean;
-  /** La URL YA está en este filtro: recién ahí se puede decir `aria-current`. */
+  /** La URL YA es exactamente esta: recién ahí se puede decir `aria-current`. */
   isActivePage: boolean;
   ringTransition?: Transition;
-  onSelect?: () => void;
 }) {
   const IconComponent = circle.icon;
   const soon = circle.state === "soon";
@@ -327,11 +325,10 @@ function ModuleCircleLink({
   return (
     <Link
       href={circle.href}
-      onClick={onSelect}
-      // Los filtros se prefetchean (es la misma pantalla y el cambio tiene que
-      // sentirse inmediato); las secciones no, para no traerse media app cada
-      // vez que alguien abre el feed.
-      prefetch={circle.tab ? undefined : false}
+      // Sin prefetch, igual que la burbuja de /buscar: cada círculo lleva a una
+      // SECCIÓN entera, y prefetchear ocho secciones cada vez que alguien abre
+      // el feed le cuesta datos a un público que los cuenta.
+      prefetch={false}
       aria-current={isActivePage ? "page" : undefined}
       style={bubbleStyle(circle.accent)}
       className={cn(

@@ -67,7 +67,39 @@ import {
  * que no hace falta autenticar: RLS ya decide qué ve cada quien.
  */
 
-const PAGE_SIZE = 8;
+/**
+ * Cuántos ítems trae una página del feed.
+ *
+ * ── POR QUÉ 12 Y NO 8 (medido, 2026-08-26) ─────────────────────────────────
+ * El cliente: «los videos/post en el feed principal tardan en cargar cuando se
+ * baja viendo los post viejos». Una página de este feed no cuesta UNA consulta:
+ * cuesta CUATRO viajes ENCADENADOS a la base —el tenant, después la zona (que a
+ * su vez lee el catálogo de zonas), después las dos RPC de la página, y recién
+ * después los batches de autores/likes/entidades/etiquetas/música/promociones—.
+ * Ese costo es casi todo LATENCIA y es el MISMO trajera 8 filas o 12: sólo
+ * cambia cuántas veces hay que pagarlo para recorrer el mismo feed.
+ *
+ * Lo que cuesta traer más filas se midió y es despreciable al lado de eso:
+ * `explain analyze` de `feed_posts_page` contra producción da **9,0 ms** de
+ * ejecución con todo en caché, y una fila de `posts` pesa **455 bytes** de
+ * promedio (cuerpo medio de 67 caracteres). Cuatro filas más son ~1,8 KB y
+ * ningún viaje extra. El ida y vuelta a Supabase, en cambio, se midió en
+ * **314–362 ms** desde una conexión doméstica (mediana 344 ms).
+ *
+ * O sea: 8 → 12 saca un tercio de las tandas del recorrido completo del feed
+ * sin agregar una sola consulta ni un salto perceptible por tanda. Las tarjetas
+ * de más tampoco cuestan pintado: fuera de pantalla el navegador las saltea
+ * (`content-visibility` en feed-list.tsx).
+ *
+ * El otro lado del mismo arreglo vive en `feed-list.tsx`: el sentinel ahora
+ * avisa con dos pantallas de anticipo en vez de 600 px fijos. Las dos cosas
+ * atacan la misma causa —el feed pedía tarde y cada pedido costaba caro— y
+ * ninguna sirve sola.
+ *
+ * Techo: el RPC clampea a 50 (`least(greatest(coalesce(p_limit,9),1),50)`), y
+ * los llamadores mandan `PAGE_SIZE + 1` para saber si hay más.
+ */
+const PAGE_SIZE = 12;
 
 // Espeja el flag de page.tsx (oculto por pedido cliente 2026-07-20): la guía
 // destacada del feed no se intercala hoy. Booleano explícito por la misma

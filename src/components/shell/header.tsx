@@ -170,6 +170,8 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
               nombre: negocio.nombre,
               avatarUrl: negocio.avatarUrl,
               rol: negocio.rol,
+              esPropietario: negocio.esPropietario,
+              verificada: negocio.verificada,
             }))}
             activeBusinessId={
               identidad.tipo === "negocio" ? identidad.negocio.businessId : null

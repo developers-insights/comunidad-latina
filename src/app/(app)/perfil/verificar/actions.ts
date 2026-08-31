@@ -1,7 +1,12 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
+import { esReclamoCodigo, type ReclamoCodigo } from "@/lib/verificacion/identidades";
+import { supabaseSinTiparVerificacion } from "@/lib/verificacion/types";
+import { requireTenantMatch } from "@/lib/tenant/guard";
 import { DAY_MS, limit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
@@ -135,4 +140,95 @@ export async function crearSesionIdentidad(): Promise<CrearSesionIdentidadResult
     );
     return { status: "error", message: COPY.errorGenerico };
   }
+}
+
+
+/* ===========================================================================
+ * VERIFICAR UN PERFIL DE NEGOCIO — el reclamo (migración 0121)
+ * ===========================================================================
+ *
+ * Pedido del cliente: «según cada perfil, debería de hacerse la verificación de
+ * stripe si quieren abrir negocios/empleos/creador».
+ *
+ * ── ESTO NO ABRE UNA SESIÓN DE STRIPE, Y NO ES UN ATAJO ─────────────────────
+ * Stripe Identity verifica el documento de UNA PERSONA; no existe el documento
+ * de una panadería. La llave sigue siendo la misma —hay que tener el documento
+ * validado— y lo que se evita es pedir la misma foto (y pagarla) diez veces.
+ * El detalle está en el encabezado de `src/lib/verificacion/identidades.ts`.
+ *
+ * ── LA AUTORIZACIÓN NO ESTÁ ACÁ ─────────────────────────────────────────────
+ * Está en `public.verificar_identidad_de_negocio()` (0121), que vuelve a exigir
+ * rol propietario/administrador y documento validado, corriendo como
+ * `security definer` del lado del servidor. Esta función traduce su código a
+ * una frase en español y nada más. Si alguien llama a la RPC por PostgREST se
+ * topa exactamente con las mismas dos condiciones.
+ *
+ * ── DEGRADACIÓN SIN STRIPE ──────────────────────────────────────────────────
+ * Sin `STRIPE_SECRET_KEY` nadie tiene el documento validado, así que esto
+ * devuelve siempre `identidad_personal_pendiente` — que es la verdad, dicha con
+ * el camino a seguir. Nunca revienta ni promete lo que no puede dar: es el
+ * mismo trato de §5.6 que ya usa `crearSesionIdentidad()` arriba.
+ */
+
+const RECLAMO_COPY: Record<ReclamoCodigo, string> = {
+  ok: "",
+  sin_sesion: "Entrá a tu cuenta para verificar este perfil.",
+  sin_permiso:
+    "Para verificar este perfil tenés que ser dueño o administrador del negocio.",
+  identidad_personal_pendiente:
+    "Primero verificá tu identidad personal. Con eso listo, verificás tus negocios en un toque.",
+};
+
+const reclamoSchema = z.object({ businessId: z.uuid() });
+
+export type VerificarPerfilResult =
+  | { ok: true }
+  | { ok: false; mensaje: string; motivo: Exclude<ReclamoCodigo, "ok"> | "error" };
+
+export async function verificarPerfilDeNegocio(
+  input: unknown,
+): Promise<VerificarPerfilResult> {
+  const parsed = reclamoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, motivo: "error", mensaje: COPY.errorGenerico };
+  }
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    return {
+      ok: false,
+      motivo: guard.reason === "unauthenticated" ? "sin_sesion" : "error",
+      mensaje:
+        guard.reason === "unauthenticated" ? RECLAMO_COPY.sin_sesion : guard.message,
+    };
+  }
+
+  const { data, error } = await supabaseSinTiparVerificacion(guard.supabase).rpc(
+    "verificar_identidad_de_negocio",
+    { p_business: parsed.data.businessId },
+  );
+
+  if (error) {
+    // Log sin PII: ni el negocio ni la persona, sólo el código y la comunidad.
+    console.error("[verificacion] no se pudo verificar el perfil de negocio", {
+      code: error.code,
+      tenant: guard.tenant.slug,
+    });
+    return { ok: false, motivo: "error", mensaje: COPY.errorGenerico };
+  }
+
+  // Un `null` es lo que devuelve PostgREST cuando la función todavía no existe
+  // en esa base (0121 sin aplicar). No es permiso ni es éxito: es "no sé".
+  if (!esReclamoCodigo(data)) {
+    return { ok: false, motivo: "error", mensaje: COPY.errorGenerico };
+  }
+  if (data !== "ok") {
+    return { ok: false, motivo: data, mensaje: RECLAMO_COPY[data] };
+  }
+
+  // El estado del perfil se pinta en el cambiador, que vive en el layout: como
+  // en `cambiarIdentidad`, revalidar sólo esta pantalla dejaría el resto de la
+  // app diciendo que el negocio sigue sin verificar.
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

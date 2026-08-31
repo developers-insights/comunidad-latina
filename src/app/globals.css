@@ -740,6 +740,7 @@
   --accent-comunidad-comida: #4d7c0f;       /* verde lima: alimento fresco */
   --accent-comunidad-voluntarios: #0e7490;  /* cian: manos que se suman */
   --accent-comunidad-acopio: #a21caf;       /* fucsia: dejar una donación, no recibirla */
+  --accent-comunidad-manos: #15803d;        /* verde: dar y pedir una mano (0120) */
 
   /* Iconografía (§2.6) y targets táctiles (§3.2) */
   --icon-sm: 16px;
