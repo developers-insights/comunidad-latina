@@ -4,7 +4,14 @@ import { cookies } from "next/headers";
 import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { readZonaCookie, ZONA_COOKIE } from "./cookie";
 import { zonasCoincidentes } from "./coincidencias";
+import { zonasEnRadio } from "./centroides";
 import { resolverZona, TODA_LA_COMUNIDAD, type ZonaActiva } from "./precedencia";
+import {
+  RADIO_COOKIE,
+  radioAplicado,
+  readRadioCookie,
+  type RadioMillas,
+} from "./radio";
 
 /**
  * =============================================================================
@@ -27,6 +34,27 @@ const getZonaCookieRaw = cache(async (): Promise<string | null> => {
   try {
     const store = await cookies();
     return store.get(ZONA_COOKIE)?.value ?? null;
+  } catch {
+    // Fuera de un request (build estático): no hay cookie que leer.
+    return null;
+  }
+});
+
+/**
+ * El radio en millas que la persona eligió, o `null` para no aplicar ninguno.
+ *
+ * `cache()`-eado igual que todo lo de este archivo: lo pide `resolverVistaZona`
+ * (una vez por request gracias al dedupe) y también la action que arma la hoja
+ * del selector.
+ *
+ * NUNCA toca la base: el radio es una cookie y nada más. Que la ausencia de
+ * cookie signifique "sin radio" —y no 25 millas— es la decisión de producto que
+ * documenta `radioAplicado` en `./radio`.
+ */
+export const getRadioActivo = cache(async (): Promise<RadioMillas | null> => {
+  try {
+    const store = await cookies();
+    return radioAplicado(readRadioCookie(store.get(RADIO_COOKIE)?.value ?? null));
   } catch {
     // Fuera de un request (build estático): no hay cookie que leer.
     return null;

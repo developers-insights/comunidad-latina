@@ -17,16 +17,44 @@ export const MAX_JOB_QUESTIONS = 5;
 export const JOB_QUESTION_MIN_OPTIONS = 2;
 export const JOB_QUESTION_MAX_OPTIONS = 6;
 
-export const EMPLOYMENT_TYPES = ["full_time", "part_time"] as const;
+/**
+ * "one_off" = changa (trabajo de una sola vez, ej. cortar el pasto un fin de
+ * semana). Dos slugs candidatos, descartados a propósito:
+ *   · "gig" ya es OTRO vertical del producto: `listings.kind = 'creator_gig'`
+ *     (Creator Marketplace — gig_applications, gig_contracts, createGigDraft
+ *     en creadores/actions.ts). Reusarlo acá mezclaría dos conceptos distintos
+ *     bajo la misma palabra.
+ *   · "one_time" ya es un PERÍODO DE PAGO (`price_period`, PERIOD_SUFFIX en
+ *     components/listings/helpers.ts) y ahora también vive en JOB_PAY_PERIODS
+ *     (ver abajo). Un aviso "one_off" pagado "one_time" tendría el mismo
+ *     string en dos columnas con dos significados distintos — confuso al leer
+ *     la fila cruda o al gregar el código.
+ */
+export const EMPLOYMENT_TYPES = ["full_time", "part_time", "one_off"] as const;
 export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
 
 export const EMPLOYMENT_TYPE_LABEL: Record<EmploymentType, string> = {
   full_time: "Tiempo completo",
   part_time: "Medio tiempo",
+  /**
+   * NO "Changa": así lo nombró el cliente al pedirlo, pero es jerga
+   * rioplatense que buena parte de esta comunidad (mayoría dominicana) no
+   * reconoce. "Trabajo por única vez" es preciso pero largo para un chip de
+   * mobile. "Ocasional" solo sigue la MISMA elipsis que ya usan las otras dos
+   * etiquetas (ninguna dice "empleo de...") y entra cómodo en un chip.
+   */
+  one_off: "Ocasional",
 };
 
-/** Períodos de pago que ofrece el form de empleos (la DB ya admite 'hour'). */
-export const JOB_PAY_PERIODS = ["hour", "day", "week", "month"] as const;
+/**
+ * Períodos de pago que ofrece el form de empleos (la DB ya admite 'hour').
+ * "one_time" (pago único, sin sufijo — PERIOD_SUFFIX ya lo sabe) suma para
+ * changas: "US$ 50 por cortar el pasto" no es una tarifa por hora/día/semana/
+ * mes, es un monto cerrado por todo el trabajo. Queda disponible para
+ * CUALQUIER jornada y no sólo "one_off": un aviso full_time también puede
+ * pagarse de una sola vez en algún caso puntual.
+ */
+export const JOB_PAY_PERIODS = ["hour", "day", "week", "month", "one_time"] as const;
 export type JobPayPeriod = (typeof JOB_PAY_PERIODS)[number];
 
 export const jobQuestionSchema = z

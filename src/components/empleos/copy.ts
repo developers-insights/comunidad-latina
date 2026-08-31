@@ -20,6 +20,8 @@ const PAY_PERIOD_LABEL = {
   day: "Por día",
   week: "Por semana",
   month: "Por mes",
+  /** Monto cerrado por todo el trabajo — el caso típico de una changa. */
+  one_time: "Pago único",
 } satisfies Record<JobPayPeriod, string>;
 
 export const COPY = {
@@ -76,7 +78,12 @@ export const COPY = {
         periodHelp: "Cómo se calcula ese pago.",
         previewLabel: "Así se va a ver en tu aviso",
         typeLegend: "Dedicación",
-        typeHelp: "Elegí lo que más se parezca a la carga horaria.",
+        /**
+         * "Se parezca a la carga horaria" dejó de alcanzar con tres opciones:
+         * una changa no tiene "carga horaria". Genérico a propósito para que
+         * sirva por igual con Tiempo completo, Medio tiempo y Ocasional.
+         */
+        typeHelp: "Elegí la opción que mejor describa este trabajo.",
         modeLegend: "Dónde se trabaja",
         modeHelp: "Si es a distancia, después no hace falta poner una zona.",
 
@@ -95,6 +102,12 @@ export const COPY = {
         languagesLabel: "Idiomas necesarios",
         languagesHelp: "Marcá todos los que hagan falta para el puesto.",
         startsOnLabel: "Cuándo empieza",
+        /**
+         * Mismo dato (`starts_on`), otra pregunta: para un trabajo de una sola
+         * vez "cuándo EMPIEZA" suena a algo que sigue después. Lo que hay que
+         * saber es qué día es el trabajo.
+         */
+        startsOnLabelOneOff: "Fecha del trabajo",
         applyByLabel: "Hasta cuándo se puede postular",
       },
 

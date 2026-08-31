@@ -199,10 +199,19 @@ const securityHeaders = [
   // og:image al compartir un aviso — que es un canal de distribución real de
   // este producto, no un detalle. Si algún día hay un recurso que de verdad no
   // debe embeberse, va con CORP en su propia ruta, no acá.
-  // Permissions mínimas: no usamos cámara/mic/geo desde el navegador.
+  // Permissions mínimas. `geolocation=(self)` y no `()` desde "Usar mi
+  // ubicación" (0120): con la lista vacía el navegador ni siquiera muestra el
+  // permiso — `getCurrentPosition` falla con PERMISSION_DENIED sin preguntar
+  // nada, así que la feature se ve como un botón roto y no hay forma de
+  // depurarlo desde la app. `(self)` habilita SOLO a este origen; los iframes
+  // de terceros (Stripe, Mux) siguen sin poder pedirla.
+  //
+  // Que el navegador PUEDA preguntar no es que nosotros guardemos nada: la
+  // coordenada cruda vive lo que dura la server action, se convierte en el
+  // barrio más cercano y se descarta. Ver `lib/zona/centroides.ts` y la 0120.
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=(self)",
+    value: "camera=(), microphone=(), geolocation=(self), payment=(self)",
   },
   { key: "Content-Security-Policy", value: csp },
 ];
