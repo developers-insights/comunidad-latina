@@ -409,6 +409,12 @@ esté en `main`**, no que su deploy diga READY.
 | `exciting-meninsky-328bfa` | Descartada a propósito — tag `descartado/tenant-t-328bfa`. `main` tiene ese fix **más nuevo** y refactorizado (127 líneas vs 285) |
 | `community-feed-music-playback-90c5d0` | WIP marcado "SIN TERMINAR", guardado adrede. Ojo: el bug de música ya se resolvió en `main` por otra vía (`PostMusicProvider`) — releer si sigue aplicando |
 | `multiple-video-upload-f88c00` | WIP "SIN TERMINAR". Su propio commit avisa que hay que rebasar sobre Mux antes de retomarlo |
+| `stripe-vercel-env-vars-5ad18d` | ⚠️ **NO MERGEAR.** Su único commit propio (`20e9b91`, el fix de Managed Payments) ya está en `main` por cherry-pick, pero la rama quedó **24.000 líneas atrás**: mergearla revierte 194 archivos — las migraciones 0120–0126, todo `lib/zona`, el gate de BezelCard. Verificado que en `main` el único `checkout.sessions.create` vive en `lib/stripe/checkout.ts` y fuerza `managed_payments: false`, o sea que la rama no aporta nada |
+
+**Conclusión al 1/9: ninguna de las cinco se mergea.** Dos descartadas a
+propósito con tag, dos WIP que sus propios commits marcan SIN TERMINAR, y una
+superada cuyo merge sería destructivo. Que una rama tenga commits que `main` no
+tiene NO significa que haya trabajo pendiente adentro.
 
 ---
 
