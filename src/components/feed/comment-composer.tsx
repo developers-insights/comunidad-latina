@@ -312,13 +312,12 @@ export function CommentComposer(props: CommentComposerProps) {
           por error con el pulgar. El globo se abre hacia arriba (el teclado
           ocupa lo de abajo) y anclado a este borde, así entra entero en 375 px.
 
-          ⚠️ EMOJIS PROPIOS EN COMENTARIOS: el picker ya los ofrece, pero el
-          `:slug:` que deja en el texto lo tiene que cambiar por la imagen quien
-          PINTA el comentario (`comment-item.tsx`, una línea: envolver `{body}`
-          en `<CommunityEmojiText>`). Hasta que eso esté, un emoji propio
-          encendido se leería como ":klk:". Por eso `community_emojis.is_active`
-          nace en false en la 0125: mientras el catálogo esté apagado, acá sólo
-          se pueden elegir los clásicos y no hay estado roto posible. */}
+          EMOJIS PROPIOS EN COMENTARIOS: el picker deja un `:slug:` en el texto
+          y quien PINTA el comentario lo cambia por la imagen — `comment-item.tsx`
+          envuelve `{body}` en `<CommunityEmojiText>`. El circuito está cerrado de
+          punta a punta, así que encender `community_emojis.is_active` (la 0125 lo
+          deja en false) ya no deja ningún ":klk:" a la vista. Si alguna vez se
+          quita ese renderer, hay que apagar el catálogo en el mismo movimiento. */}
       <EmojiPickerPopover
         tone={tone}
         disabled={isPending || disabled}
