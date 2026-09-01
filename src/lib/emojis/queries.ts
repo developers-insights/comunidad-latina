@@ -38,9 +38,9 @@ import {
 type OpenClient = SupabaseClient;
 
 /**
- * Cuántas fichas se traen. El pack del cliente son 60; el tope deja lugar a
- * que una comunidad sume las suyas sin que esto se convierta en una consulta
- * sin límite.
+ * Cuántas fichas se traen. El pack global son 60 (`scripts/catalogo-emojis.json`);
+ * el tope deja lugar a que una comunidad sume las suyas sin que esto se
+ * convierta en una consulta sin límite.
  */
 const CATALOG_LIMIT = 300;
 

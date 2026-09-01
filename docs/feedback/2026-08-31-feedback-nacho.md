@@ -409,3 +409,79 @@ esté en `main`**, no que su deploy diga READY.
 | `exciting-meninsky-328bfa` | Descartada a propósito — tag `descartado/tenant-t-328bfa`. `main` tiene ese fix **más nuevo** y refactorizado (127 líneas vs 285) |
 | `community-feed-music-playback-90c5d0` | WIP marcado "SIN TERMINAR", guardado adrede. Ojo: el bug de música ya se resolvió en `main` por otra vía (`PostMusicProvider`) — releer si sigue aplicando |
 | `multiple-video-upload-f88c00` | WIP "SIN TERMINAR". Su propio commit avisa que hay que rebasar sobre Mux antes de retomarlo |
+
+---
+
+# K1 cerrado — 2026-09-01 · los 60 emojis los dibujamos nosotros
+
+## Por qué el cliente no los iba a conseguir
+
+Lo que Nacho mandó son dos **láminas** de 30 emojis cada una: capturas de
+pantalla, con fondo, los 30 dibujos pegados en una sola imagen. La pedida que le
+quedó a Giovanny era "los mismos, pero sueltos y sin fondo", y eso no iba a
+llegar por un motivo técnico que no es culpa de nadie: **esas láminas se hicieron
+con un generador de imágenes, y los modelos de imagen no producen canal alpha.**
+Devuelven un PNG opaco. No existe un "exportalos sin fondo" del otro lado.
+
+Así que el pack se dibujó acá, con el mismo tipo de herramienta y agregando el
+paso que faltaba.
+
+## El pipeline, en tres scripts
+
+Todo sale de **`scripts/catalogo-emojis.json`**, la única fuente de verdad: ahí
+viven la ficha que va a la base (`label`, `alt`, `category`, `sort_order`) **y**
+el prompt con el que se dibuja el archivo. Juntos a propósito — si mañana hay que
+rehacer un dibujo, el prompt exacto está al lado de su ficha y no en el historial
+de un chat.
+
+| Paso | Script | Qué hace |
+|---|---|---|
+| 1 | `generar-emojis.mjs` | Dibuja los 60 sobre **verde chroma plano**. Reintentos con espera creciente: la API tira 503 en tandas de varios minutos y sin eso una corrida termina a la mitad. Saltea los que ya existen. |
+| 2 | `quitar-fondo-emojis.mjs` | Recorta el fondo → PNG con alpha, ajustado al dibujo. |
+| 3 | `cargar-emojis.mjs` | Ya existía. Normaliza a 512 × 512, sube al bucket y escribe las fichas. |
+
+**El recorte no es un keying global.** Es flood fill desde el borde, con una
+segunda pasada de tolerancia estricta para los huecos de fondo **encerrados** por
+el dibujo (el triángulo entre una mano levantada y la cara, el ojo de un asa). Los
+dos niveles de tolerancia son lo que permite comerse el fondo sin comerse un verde
+legítimo del dibujo —las hojas de una palmera, el verde de una bandera—, que está
+sombreado y por eso queda lejos del chroma plano. Más rampa de antialias y despill,
+porque sin despill queda un contorno verde fluorescente alrededor de todo.
+
+## Qué dicen los 60
+
+El vocabulario sale de lo legible en las láminas y de lo ya documentado (KLK,
+Chévere, Bacán, De una, Qué lo qué, Parranda, Cafecito, Empanada, Tostones, Wepa,
+Chancletazo, Mi pana, Vacilón, Abrazo); el resto se completó con el mismo
+registro. Reparto: 8 saludos · 12 dichos · 10 ánimo · 9 fiesta · 11 comida ·
+10 varios.
+
+**Los tonos de piel varían entre los dibujos.** La comunidad es mayoría dominicana
+pero no sólo: un pack donde todas las caras son del mismo tono le dice a una parte
+de la gente que no es para ella.
+
+**Los dibujos no llevan texto adentro**, aunque las láminas del cliente sí. El
+emoji se ve a 22 px dentro de un comentario y a 24 px como reacción: a ese tamaño
+una palabra es una mancha. El nombre ya viaja en el `label` — lo dice el lector de
+pantalla y lo encuentra el buscador del picker.
+
+**Todos llevan contorno blanco.** No es decorativo: el mismo emoji se pega **sobre
+fotos** en el editor, y sin contorno un dibujo oscuro sobre una foto oscura
+desaparece.
+
+## Encendido
+
+El catálogo nacía en `is_active = false` porque en comentarios el emoji viaja como
+código corto (`:klk:`) y hacía falta que el renderer estuviera en producción. **Ya
+está**: `comment-item.tsx` envuelve el cuerpo en `<CommunityEmojiText>` desde el
+commit `b79e72d`, desplegado. El comentario de `comment-composer.tsx` que decía lo
+contrario quedó viejo y se corrigió.
+
+Reacciones no se toca: `action-bar.tsx` deja la puerta abierta pero todavía no
+ofrece emojis propios, así que no hay ningún `:slug:` que pueda quedar a la vista.
+
+## Si algún día llegan los archivos del cliente
+
+No hay que tocar código. Se ajusta `archivo` en el manifiesto y se corre el paso 3
+apuntando a la carpeta nueva: `storage_path` es UNIQUE con `upsert`, así que
+**pisa** en vez de duplicar.

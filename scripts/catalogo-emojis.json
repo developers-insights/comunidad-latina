@@ -1,13 +1,34 @@
 {
   "_comentario": [
-    "Manifiesto de los emojis de la comunidad (migración 0125).",
+    "Manifiesto de los EMOJIS DE LA COMUNIDAD (migración 0125).",
     "",
-    "Las fichas de acá son las de PRUEBA — los seis dibujos de assets-source/emojis,",
-    "hechos a mano para verificar la máquina. NO son el pack del cliente.",
+    "Este archivo es la ÚNICA fuente de verdad del pack: de acá salen la ficha que",
+    "va a la base (`label`, `alt`, `category`, `sort_order`) Y el prompt con el que",
+    "se dibuja el archivo. Tenerlos juntos es lo que hace el pack reproducible: si",
+    "mañana hay que rehacer un dibujo, el prompt exacto está al lado de su ficha y",
+    "no en el historial de un chat.",
     "",
-    "Cuando lleguen los 60 reales: se reemplaza `emojis` por la lista completa y se",
-    "corre `node scripts/cargar-emojis.mjs --desde <carpeta>`. Ver la cabecera del",
-    "script para el detalle de cada campo.",
+    "PIPELINE COMPLETO, en tres pasos:",
+    "  1. node scripts/generar-emojis.mjs --hacia <carpeta-cruda>",
+    "     dibuja los 60 sobre fondo verde chroma (la IA no sabe hacer transparencia).",
+    "  2. node scripts/quitar-fondo-emojis.mjs --desde <carpeta-cruda> --hacia <carpeta>",
+    "     recorta el fondo y deja PNG con alpha.",
+    "  3. node scripts/cargar-emojis.mjs --desde <carpeta> --revisar   (y después sin --revisar, con --activar)",
+    "",
+    "EL PACK ES NUESTRO, NO DEL CLIENTE. El cliente mandó dos LÁMINAS de 30 emojis",
+    "cada una —capturas, no archivos sueltos, y con fondo—, así que los dibujos se",
+    "generaron acá. El vocabulario sale de lo que se lee en esas láminas y de lo",
+    "que ya estaba documentado (KLK, Chévere, Bacán, De una, Qué lo qué, Parranda,",
+    "Cafecito, Empanada, Tostones, Wepa, Chancletazo, Mi pana, Vacilón, Abrazo) y",
+    "el resto se completó con el mismo registro. Si el cliente manda la lista",
+    "exacta, se cambia ESTE archivo y se vuelve a correr el pipeline: no hay nada",
+    "más que tocar.",
+    "",
+    "REGISTRO: la comunidad es MAYORÍA DOMINICANA en Queens, con colombianos,",
+    "mexicanos, venezolanos y ecuatorianos. Por eso el vocabulario es caribeño",
+    "primero pero no exclusivo, y por eso los tonos de piel VARÍAN entre los",
+    "dibujos: un pack donde todas las caras son del mismo tono le dice a una parte",
+    "de la comunidad que no es para ella.",
     "",
     "`alt` es OBLIGATORIO y tiene que decir QUÉ SE VE, no cómo se llama el dibujo:",
     "la base rechaza una ficha cuyo alt repita el `label` (check",
@@ -16,54 +37,565 @@
   ],
   "bucket": "community-emojis",
   "carpeta": "global",
+  "_estilo": [
+    "Dirección de arte, IGUAL para los 60. Va acá y no repetida en cada prompt",
+    "porque es lo que hace que el pack se vea como UN pack y no como 60 dibujos",
+    "sueltos: si el estilo vive en 60 lugares, en algún momento dos dejan de",
+    "coincidir.",
+    "",
+    "EL FONDO VERDE NO ES UN CAPRICHO: los modelos de imagen no generan canal",
+    "alpha. Se dibuja sobre un verde chroma plano y `quitar-fondo-emojis.mjs` lo",
+    "recorta por flood fill desde el borde. De ahí que el prompt insista en PLANO",
+    "y SIN SOMBRA: un degradado o una sombra proyectada sobre el fondo hacen que",
+    "el recorte deje un cerco gris.",
+    "",
+    "EL CONTORNO BLANCO tampoco es decorativo: el emoji se pega SOBRE FOTOS en el",
+    "editor, y sin contorno un dibujo oscuro sobre una foto oscura desaparece."
+  ],
+  "estilo": {
+    "prefijo": "A single vibrant 3D glossy emoji sticker, Pixar-style 3D render with soft studio lighting and subtle gloss highlights, warm saturated Caribbean color palette.",
+    "sufijo": "Thin clean white sticker outline hugging the whole silhouette. The subject is centered and fills the frame edge to edge with almost no empty margin. Completely isolated on a perfectly flat solid pure chroma-key green background (#00FF00), the exact same green across the entire background. No drop shadow, no cast shadow on the background, no gradient, no vignette, no texture, no border, no frame, no text, no letters, no numbers, no watermark, no signature. Square composition."
+  },
   "emojis": [
     {
-      "archivo": "prueba-saludo.svg",
-      "slug": "prueba-saludo",
-      "label": "Saludo",
+      "archivo": "klk.png",
+      "slug": "klk",
+      "label": "KLK",
+      "alt": "Una cara sonriente saludando con la mano en alto y el puño listo para chocar",
+      "category": "saludos",
+      "sort_order": 10,
+      "motivo": "A cheerful cartoon face with medium-brown skin and short curly black hair, one hand raised in a relaxed greeting and the other hand in a fist ready for a fist bump, eyebrows up, big warm smile"
+    },
+    {
+      "archivo": "que-lo-que.png",
+      "slug": "que-lo-que",
+      "label": "Qué lo qué",
+      "alt": "Dos amigos chocando los puños",
+      "category": "saludos",
+      "sort_order": 20,
+      "motivo": "Two cartoon friends shown from the chest up, one with dark brown skin and one with light tan skin, bumping fists in the center of the frame, both grinning at each other"
+    },
+    {
+      "archivo": "wepa.png",
+      "slug": "wepa",
+      "label": "Wepa",
+      "alt": "Una cara gritando de alegría con los dos brazos levantados",
+      "category": "saludos",
+      "sort_order": 30,
+      "motivo": "A joyful cartoon face with warm brown skin shouting with delight, mouth wide open in a happy yell, both arms thrown up in the air, eyes squeezed shut with joy, tiny sparkles around the head"
+    },
+    {
+      "archivo": "mi-pana.png",
+      "slug": "mi-pana",
+      "label": "Mi pana",
+      "alt": "Dos amigos abrazados por el hombro, sonriendo",
+      "category": "saludos",
+      "sort_order": 40,
+      "motivo": "Two cartoon friends side by side with an arm around each other's shoulders, one with dark skin and an afro, one with olive skin and straight black hair, both smiling warmly at the viewer"
+    },
+    {
+      "archivo": "buenas.png",
+      "slug": "buenas",
+      "label": "Buenas",
       "alt": "Una mano abierta saludando",
       "category": "saludos",
-      "sort_order": 10
+      "sort_order": 50,
+      "motivo": "A single open hand with medium-brown skin waving hello, fingers spread, palm facing the viewer, small motion arcs beside it"
     },
     {
-      "archivo": "prueba-fuego.svg",
-      "slug": "prueba-fuego",
-      "label": "Fuego",
-      "alt": "Una llama encendida",
+      "archivo": "bienvenido.png",
+      "slug": "bienvenido",
+      "label": "Bienvenido",
+      "alt": "Una cara sonriente con los brazos abiertos recibiendo a alguien",
+      "category": "saludos",
+      "sort_order": 60,
+      "motivo": "A warm cartoon face with brown skin and both arms opened wide in a welcoming gesture, big generous smile, small heart floating above one shoulder"
+    },
+    {
+      "archivo": "abrazo.png",
+      "slug": "abrazo",
+      "label": "Abrazo",
+      "alt": "Dos caritas abrazadas muy fuerte",
+      "category": "saludos",
+      "sort_order": 70,
+      "motivo": "Two round cartoon faces hugging each other tightly, cheeks squished together, eyes closed with contentment, one face with deep brown skin and one with light brown skin"
+    },
+    {
+      "archivo": "bendicion.png",
+      "slug": "bendicion",
+      "label": "Bendición",
+      "alt": "Una persona mayor apoyando la mano en la cabeza de alguien más joven",
+      "category": "saludos",
+      "sort_order": 80,
+      "motivo": "An older cartoon woman with grey hair and warm brown skin gently resting her hand on the head of a younger person who is leaning in respectfully, both smiling with affection, a soft golden glow around the hand"
+    },
+    {
+      "archivo": "chevere.png",
+      "slug": "chevere",
+      "label": "Chévere",
+      "alt": "Un pulgar arriba con destellos alrededor",
       "category": "expresiones",
-      "sort_order": 20
+      "sort_order": 90,
+      "motivo": "A confident thumbs-up hand with medium-brown skin, small bright sparkles bursting around the thumb"
     },
     {
-      "archivo": "prueba-aplauso.svg",
-      "slug": "prueba-aplauso",
+      "archivo": "bacano.png",
+      "slug": "bacano",
+      "label": "Bacano",
+      "alt": "Una cara con lentes de sol y sonrisa de costado",
+      "category": "expresiones",
+      "sort_order": 100,
+      "motivo": "A cool cartoon face with brown skin wearing shiny black sunglasses, one corner of the mouth curled into a confident smirk, a tiny glint on the lens"
+    },
+    {
+      "archivo": "de-una.png",
+      "slug": "de-una",
+      "label": "De una",
+      "alt": "Una cara decidida señalando al frente con el dedo índice",
+      "category": "expresiones",
+      "sort_order": 110,
+      "motivo": "A determined cartoon face with tan skin pointing straight forward at the viewer with the index finger, one eye winking, an energetic grin"
+    },
+    {
+      "archivo": "tremendo.png",
+      "slug": "tremendo",
+      "label": "Tremendo",
+      "alt": "Una cara con los ojos saltones y un estallido de colores sobre la cabeza",
+      "category": "expresiones",
+      "sort_order": 120,
+      "motivo": "An amazed cartoon face with brown skin, eyes bulging wide open and jaw dropped, no hands visible, a small colorful burst of energy and stars exploding upward off the top of the head"
+    },
+    {
+      "archivo": "que-vaina.png",
+      "slug": "que-vaina",
+      "label": "Qué vaina",
+      "alt": "Una cara tapándose los ojos con la palma de la mano",
+      "category": "expresiones",
+      "sort_order": 130,
+      "motivo": "An exasperated cartoon face with light brown skin doing a facepalm, one palm covering the eyes, mouth in a flat resigned line, a small grey puff above the head"
+    },
+    {
+      "archivo": "no-me-diga.png",
+      "slug": "no-me-diga",
+      "label": "No me diga",
+      "alt": "Una cara con las dos manos en las mejillas y los ojos muy abiertos",
+      "category": "expresiones",
+      "sort_order": 140,
+      "motivo": "A scandalized cartoon face with medium-brown skin, both hands flat against the cheeks, wide disbelieving eyes, small oval mouth of surprise"
+    },
+    {
+      "archivo": "vacilon.png",
+      "slug": "vacilon",
+      "label": "Vacilón",
+      "alt": "Una cara muerta de risa con lágrimas de tanto reírse",
+      "category": "expresiones",
+      "sort_order": 150,
+      "motivo": "A cartoon face with warm brown skin doubled over laughing, eyes squeezed into happy arcs, big open laughing mouth, two shiny tears of laughter flying off"
+    },
+    {
+      "archivo": "chancletazo.png",
+      "slug": "chancletazo",
+      "label": "Chancletazo",
+      "alt": "Una chancla voladora con estelas de velocidad",
+      "category": "expresiones",
+      "sort_order": 160,
+      "motivo": "A single bright pink flip-flop sandal flying through the air at high speed, tilted diagonally, with cartoon speed lines and a small puff of air trailing behind it"
+    },
+    {
+      "archivo": "tato.png",
+      "slug": "tato",
+      "label": "Tato",
+      "alt": "Una mano haciendo el gesto de OK con el pulgar y el índice",
+      "category": "expresiones",
+      "sort_order": 170,
+      "motivo": "A hand with brown skin making the OK gesture, thumb and index finger forming a circle, the other three fingers relaxed, one small sparkle at the fingertip"
+    },
+    {
+      "archivo": "dique.png",
+      "slug": "dique",
+      "label": "Dique",
+      "alt": "Una cara de costado con una ceja levantada y los ojos entrecerrados",
+      "category": "expresiones",
+      "sort_order": 180,
+      "motivo": "A skeptical cartoon face with tan skin turned slightly to the side, one eyebrow arched high, eyes narrowed, lips pressed into a doubtful smirk"
+    },
+    {
+      "archivo": "tranquilo.png",
+      "slug": "tranquilo",
+      "label": "Tranquilo",
+      "alt": "Una cara serena con las dos palmas hacia abajo, calmando",
+      "category": "expresiones",
+      "sort_order": 190,
+      "motivo": "A calm cartoon face with medium-brown skin, eyes gently closed, a peaceful small smile, both palms facing down in a soothing calm-down gesture"
+    },
+    {
+      "archivo": "ya-tu-sabe.png",
+      "slug": "ya-tu-sabe",
+      "label": "Ya tú sabe",
+      "alt": "Una cara guiñando un ojo y apuntando con el pulgar hacia un costado",
+      "category": "expresiones",
+      "sort_order": 200,
+      "motivo": "A knowing cartoon face with dark brown skin winking one eye and jerking a thumb sideways, a sly complicit grin"
+    },
+    {
+      "archivo": "dale.png",
+      "slug": "dale",
+      "label": "Dale",
+      "alt": "Un puño cerrado hacia adelante con líneas de impulso",
+      "category": "animo",
+      "sort_order": 210,
+      "motivo": "A closed fist with brown skin punching forward toward the viewer with energy, motion lines radiating behind it, a small burst of orange energy"
+    },
+    {
+      "archivo": "echa-pa-lante.png",
+      "slug": "echa-pa-lante",
+      "label": "Echa pa'lante",
+      "alt": "Una cara decidida caminando hacia adelante con el puño en alto",
+      "category": "animo",
+      "sort_order": 220,
+      "motivo": "A determined cartoon character with brown skin striding forward with one fist raised high, chin up, eyes fixed ahead, a small trail of forward motion lines"
+    },
+    {
+      "archivo": "tu-puedes.png",
+      "slug": "tu-puedes",
+      "label": "Tú puedes",
+      "alt": "Un brazo flexionado mostrando el bíceps",
+      "category": "animo",
+      "sort_order": 230,
+      "motivo": "A flexed arm with medium-brown skin showing a strong bicep, fist clenched, a small spark of energy at the top of the muscle"
+    },
+    {
+      "archivo": "aplauso.png",
+      "slug": "aplauso",
       "label": "Aplauso",
-      "alt": "Dos manos aplaudiendo",
+      "alt": "Dos manos aplaudiendo con destellos",
       "category": "animo",
-      "sort_order": 30
+      "sort_order": 240,
+      "motivo": "Two hands with warm brown skin clapping together, small motion arcs and bright sparkles bursting between the palms"
     },
     {
-      "archivo": "prueba-corazon.svg",
-      "slug": "prueba-corazon",
+      "archivo": "corazon.png",
+      "slug": "corazon",
       "label": "Corazón",
-      "alt": "Un corazón rojo",
+      "alt": "Un corazón rojo brillante con un pequeño reflejo",
       "category": "animo",
-      "sort_order": 40
+      "sort_order": 250,
+      "motivo": "A plump glossy red heart with a bright highlight on the upper left, slightly tilted, radiating a soft warm glow"
     },
     {
-      "archivo": "prueba-fiesta.svg",
-      "slug": "prueba-fiesta",
-      "label": "Fiesta",
-      "alt": "Un cotillón con papelitos de colores",
+      "archivo": "fuego.png",
+      "slug": "fuego",
+      "label": "Fuego",
+      "alt": "Una llama naranja y amarilla encendida",
+      "category": "animo",
+      "sort_order": 260,
+      "motivo": "A single bright flame with an orange outer body and a yellow-white core, dancing upward, glossy and vivid"
+    },
+    {
+      "archivo": "orgullo.png",
+      "slug": "orgullo",
+      "label": "Orgullo",
+      "alt": "Una cara con la mano en el pecho y el mentón en alto",
+      "category": "animo",
+      "sort_order": 270,
+      "motivo": "A proud cartoon face with dark brown skin, chin lifted, one hand flat over the heart, eyes shining, a dignified smile"
+    },
+    {
+      "archivo": "gracias.png",
+      "slug": "gracias",
+      "label": "Gracias",
+      "alt": "Dos manos juntas en señal de agradecimiento con un corazón encima",
+      "category": "animo",
+      "sort_order": 280,
+      "motivo": "Two hands with tan skin pressed together in a thankful gesture, a small red heart floating just above them, soft warm light"
+    },
+    {
+      "archivo": "felicidades.png",
+      "slug": "felicidades",
+      "label": "Felicidades",
+      "alt": "Una cara festejando con papelitos de colores cayendo",
+      "category": "animo",
+      "sort_order": 290,
+      "motivo": "A celebrating cartoon face with light brown skin, arms up, colorful confetti pieces falling all around, eyes bright with joy"
+    },
+    {
+      "archivo": "bien-ahi.png",
+      "slug": "bien-ahi",
+      "label": "Bien ahí",
+      "alt": "Dos manos chocando los cinco en el aire",
+      "category": "animo",
+      "sort_order": 300,
+      "motivo": "Two open hands of different skin tones meeting in a high five, a bright impact burst of light where the palms meet, small stars flying out"
+    },
+    {
+      "archivo": "parranda.png",
+      "slug": "parranda",
+      "label": "Parranda",
+      "alt": "Una cara con gorrito de fiesta y matasuegras entre serpentinas",
       "category": "fiesta",
-      "sort_order": 50
+      "sort_order": 310,
+      "motivo": "A cartoon face with brown skin wearing a colorful cone party hat and blowing a party horn, streamers and confetti swirling around"
     },
     {
-      "archivo": "prueba-cafecito.svg",
-      "slug": "prueba-cafecito",
+      "archivo": "dembow.png",
+      "slug": "dembow",
+      "label": "Dembow",
+      "alt": "Un parlante grande retumbando con notas musicales saliendo",
+      "category": "fiesta",
+      "sort_order": 320,
+      "motivo": "A big black speaker box booming, its cone pushed forward, vibration rings and colorful music notes flying out of it"
+    },
+    {
+      "archivo": "bachata.png",
+      "slug": "bachata",
+      "label": "Bachata",
+      "alt": "Una pareja bailando muy pegada, ella con vestido rojo",
+      "category": "fiesta",
+      "sort_order": 330,
+      "motivo": "A cartoon couple dancing close together, the woman in a flowing red dress mid-turn, the man in a white shirt leading, music notes floating around them"
+    },
+    {
+      "archivo": "merengue.png",
+      "slug": "merengue",
+      "label": "Merengue",
+      "alt": "Una pareja bailando rápido con las manos en alto",
+      "category": "fiesta",
+      "sort_order": 340,
+      "motivo": "A lively cartoon couple dancing fast with joined hands raised high, hips tilted, motion arcs at their feet, bright festive colors"
+    },
+    {
+      "archivo": "tambora.png",
+      "slug": "tambora",
+      "label": "Tambora",
+      "alt": "Un tambor de dos parches con un palo golpeándolo",
+      "category": "fiesta",
+      "sort_order": 350,
+      "motivo": "A traditional double-headed Dominican tambora drum lying on its side, a wooden stick striking one head, impact rings and small music notes around it"
+    },
+    {
+      "archivo": "guira.png",
+      "slug": "guira",
+      "label": "Güira",
+      "alt": "Un raspador metálico con su peine de metal",
+      "category": "fiesta",
+      "sort_order": 360,
+      "motivo": "A shiny metal Dominican güira scraper cylinder with its metal comb brush beside it mid-scrape, tiny rhythm marks radiating out"
+    },
+    {
+      "archivo": "cumpleanos.png",
+      "slug": "cumpleanos",
+      "label": "Cumpleaños",
+      "alt": "Una torta con velitas encendidas",
+      "category": "fiesta",
+      "sort_order": 370,
+      "motivo": "A colorful frosted birthday cake with three lit candles on top, sprinkles on the icing, a small ribbon around the base"
+    },
+    {
+      "archivo": "brindis.png",
+      "slug": "brindis",
+      "label": "Brindis",
+      "alt": "Dos vasos chocando con burbujas saltando",
+      "category": "fiesta",
+      "sort_order": 380,
+      "motivo": "Two glasses clinking together in a toast, golden bubbly drink inside, bubbles and a small sparkle at the point of contact"
+    },
+    {
+      "archivo": "confeti.png",
+      "slug": "confeti",
+      "label": "Confeti",
+      "alt": "Un cotillón reventando con papelitos de colores",
+      "category": "fiesta",
+      "sort_order": 390,
+      "motivo": "A party popper cone bursting open with a spray of colorful confetti and streamers shooting out diagonally"
+    },
+    {
+      "archivo": "cafecito.png",
+      "slug": "cafecito",
       "label": "Cafecito",
-      "alt": "Una taza de café humeante",
+      "alt": "Una tacita de café humeante",
       "category": "comida",
-      "sort_order": 60
+      "sort_order": 400,
+      "motivo": "A small white ceramic cup of dark coffee on a saucer, steam curling up in soft ribbons, a tiny spoon resting on the saucer"
+    },
+    {
+      "archivo": "mangu.png",
+      "slug": "mangu",
+      "label": "Mangú",
+      "alt": "Un puré de plátano con cebolla roja encima y huevo frito al lado",
+      "category": "comida",
+      "sort_order": 410,
+      "motivo": "A plate of Dominican mangú: a mound of smooth mashed green plantain topped with pickled red onion rings, a fried egg beside it, a slice of fried cheese on the edge"
+    },
+    {
+      "archivo": "tostones.png",
+      "slug": "tostones",
+      "label": "Tostones",
+      "alt": "Rodajas de plátano frito apiladas en un plato",
+      "category": "comida",
+      "sort_order": 420,
+      "motivo": "A small stack of golden crispy fried plantain rounds on a plate, slightly irregular edges, a tiny dish of dipping sauce beside them"
+    },
+    {
+      "archivo": "empanada.png",
+      "slug": "empanada",
+      "label": "Empanada",
+      "alt": "Una empanada dorada con el borde repulgado",
+      "category": "comida",
+      "sort_order": 430,
+      "motivo": "A single golden-brown baked empanada with a crimped braided edge, a small bite missing from one corner showing the filling, glossy crust"
+    },
+    {
+      "archivo": "sancocho.png",
+      "slug": "sancocho",
+      "label": "Sancocho",
+      "alt": "Una olla de sopa espesa humeante con verduras",
+      "category": "comida",
+      "sort_order": 440,
+      "motivo": "A rustic pot of thick hearty stew with chunks of vegetables, corn and meat visible, steam rising, a wooden spoon resting inside"
+    },
+    {
+      "archivo": "arepa.png",
+      "slug": "arepa",
+      "label": "Arepa",
+      "alt": "Una arepa abierta y rellena de queso",
+      "category": "comida",
+      "sort_order": 450,
+      "motivo": "A round golden corn arepa split open and stuffed with melting white cheese, slightly toasted surface"
+    },
+    {
+      "archivo": "taco.png",
+      "slug": "taco",
+      "label": "Taco",
+      "alt": "Un taco con carne, cebolla y cilantro",
+      "category": "comida",
+      "sort_order": 460,
+      "motivo": "A folded soft corn tortilla taco filled with seasoned meat, diced onion, fresh cilantro and a lime wedge on top"
+    },
+    {
+      "archivo": "morir-sonando.png",
+      "slug": "morir-sonando",
+      "label": "Morir soñando",
+      "alt": "Un vaso alto de jugo de naranja con leche y una pajita",
+      "category": "comida",
+      "sort_order": 470,
+      "motivo": "A tall glass of creamy orange-and-milk drink with ice cubes and a striped straw, condensation droplets on the glass, an orange slice on the rim"
+    },
+    {
+      "archivo": "habichuela-con-dulce.png",
+      "slug": "habichuela-con-dulce",
+      "label": "Habichuela con dulce",
+      "alt": "Un pote de dulce cremoso color canela con galletitas encima",
+      "category": "comida",
+      "sort_order": 480,
+      "motivo": "A small bowl of creamy cinnamon-colored sweet bean dessert topped with little round milk cookies and a sprinkle of cinnamon"
+    },
+    {
+      "archivo": "chimi.png",
+      "slug": "chimi",
+      "label": "Chimi",
+      "alt": "Un sándwich de pan redondo con carne y repollo",
+      "category": "comida",
+      "sort_order": 490,
+      "motivo": "A Dominican chimi burger: a round bread bun stuffed with a seasoned meat patty, shredded cabbage and pink sauce spilling out the side"
+    },
+    {
+      "archivo": "sazon.png",
+      "slug": "sazon",
+      "label": "El sazón",
+      "alt": "Una mano espolvoreando condimento sobre una olla",
+      "category": "comida",
+      "sort_order": 500,
+      "motivo": "A hand with brown skin pinching and sprinkling colorful seasoning over a small pot, tiny grains falling, a puff of aroma curling up"
+    },
+    {
+      "archivo": "nuestra-tierra.png",
+      "slug": "nuestra-tierra",
+      "label": "Nuestra tierra",
+      "alt": "Un globo terráqueo mostrando América Latina",
+      "category": "general",
+      "sort_order": 510,
+      "motivo": "A glossy cartoon globe tilted to show the Americas, with Central and South America facing the viewer in vivid green land and deep blue ocean, a small warm glow on the upper left"
+    },
+    {
+      "archivo": "colmado.png",
+      "slug": "colmado",
+      "label": "El colmado",
+      "alt": "La fachada de un almacén de barrio con su toldo rayado",
+      "category": "general",
+      "sort_order": 520,
+      "motivo": "The tiny facade of a neighborhood corner store with a striped awning, crates of fruit outside, a hanging sign with no writing on it"
+    },
+    {
+      "archivo": "guagua.png",
+      "slug": "guagua",
+      "label": "La guagua",
+      "alt": "Un colectivo de frente con las luces prendidas",
+      "category": "general",
+      "sort_order": 530,
+      "motivo": "A chunky cartoon city bus seen from the front three-quarter angle, headlights on, rounded friendly shape, blank destination sign"
+    },
+    {
+      "archivo": "casa-nueva.png",
+      "slug": "casa-nueva",
+      "label": "Casa nueva",
+      "alt": "Una casita con un manojo de llaves colgando al frente",
+      "category": "general",
+      "sort_order": 540,
+      "motivo": "A small cozy house with a red roof and a golden key with a tag hanging in front of it, a tiny sparkle on the key"
+    },
+    {
+      "archivo": "trabajo.png",
+      "slug": "trabajo",
+      "label": "Trabajo",
+      "alt": "Un casco de obra junto a un maletín",
+      "category": "general",
+      "sort_order": 550,
+      "motivo": "A yellow hard hat resting next to a brown work briefcase and a pair of gloves, sturdy and glossy"
+    },
+    {
+      "archivo": "chelito.png",
+      "slug": "chelito",
+      "label": "Chelito",
+      "alt": "Un fajo de billetes con unas monedas al lado",
+      "category": "general",
+      "sort_order": 560,
+      "motivo": "A neat folded stack of plain green banknotes with a paper band around the middle and two gold coins leaning against the stack, the banknotes completely blank with no printing, no writing, no numbers and no faces on them, a small sparkle above"
+    },
+    {
+      "archivo": "barrio.png",
+      "slug": "barrio",
+      "label": "El barrio",
+      "alt": "Tres edificios pegados con escaleras de incendio al frente",
+      "category": "general",
+      "sort_order": 570,
+      "motivo": "Three narrow brick row buildings side by side with black fire escapes on the front, small stoops at street level, warm brick tones"
+    },
+    {
+      "archivo": "verificado.png",
+      "slug": "verificado",
+      "label": "Verificado",
+      "alt": "Un escudo azul con un tilde blanco adentro",
+      "category": "general",
+      "sort_order": 580,
+      "motivo": "A glossy blue shield badge with a bold white checkmark in the center, a small light glint on the upper edge"
+    },
+    {
+      "archivo": "palmera.png",
+      "slug": "palmera",
+      "label": "La isla",
+      "alt": "Una palmera sobre un montículo de arena",
+      "category": "general",
+      "sort_order": 590,
+      "motivo": "A single curved palm tree on a small mound of golden sand, green fronds spread wide, two tiny coconuts at the crown"
+    },
+    {
+      "archivo": "nieve.png",
+      "slug": "nieve",
+      "label": "Frío",
+      "alt": "Una cara temblando de frío envuelta en una bufanda",
+      "category": "general",
+      "sort_order": 600,
+      "motivo": "A shivering cartoon face with brown skin wrapped in a thick red scarf and a wool beanie, cheeks and nose flushed, a small snowflake beside it"
     }
   ]
 }
