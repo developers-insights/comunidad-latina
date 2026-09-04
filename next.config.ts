@@ -231,6 +231,27 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/", destination: "/entrar", permanent: false },
+      // "Ayuda mutua" pasó a ser el tablón "Pedir ayuda" (0130, pedido del
+      // cliente del 2026-09-03). Las rutas viejas están linkeadas desde avisos
+      // por mail, desde notificaciones ya enviadas y desde el historial de los
+      // teléfonos: 308 y no 307 porque el cambio no vuelve atrás.
+      // El orden importa: los subpaths van ANTES que el prefijo, o el comodín
+      // se los come y todos caen en el tablón.
+      {
+        source: "/comunidad/ayuda-mutua/publicar",
+        destination: "/comunidad/pedir-ayuda/publicar",
+        permanent: true,
+      },
+      {
+        source: "/comunidad/ayuda-mutua/mios",
+        destination: "/comunidad/pedir-ayuda/mios",
+        permanent: true,
+      },
+      {
+        source: "/comunidad/ayuda-mutua/:path*",
+        destination: "/comunidad/pedir-ayuda",
+        permanent: true,
+      },
     ];
   },
   async headers() {

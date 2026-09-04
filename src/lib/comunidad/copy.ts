@@ -1,4 +1,5 @@
 import type {
+  HelpDirection,
   HelpStatus,
   HelpTopic,
   LostFoundCategory,
@@ -692,6 +693,17 @@ export const HELP_TOPIC_HINT: Record<HelpTopic, string> = {
   voluntariado: "Buscás gente que quiera colaborar con algo de la comunidad.",
   acopio: "Necesitás ropa, muebles o insumos, o buscás dónde llevarlos.",
   otro: "Lo que no entra en ninguno de los anteriores.",
+};
+
+/**
+ * Etiqueta de la dirección de un aviso. Sólo la lee la MODERACIÓN: el tablón
+ * público ya no muestra ninguna, porque desde la 0130 todo lo que se publica es
+ * un pedido. `offer` sobrevive para que quien modera entienda por qué una fila
+ * archivada dice lo que dice — no para ofrecer el camino de crear una nueva.
+ */
+export const HELP_DIRECTION_LABEL: Record<HelpDirection, string> = {
+  offer: "Se ofrecía (legado)",
+  need: "Pide ayuda",
 };
 
 export const HELP_STATUS_LABEL: Record<HelpStatus, string> = COMUNIDAD_COPY.pedirAyuda.estado;

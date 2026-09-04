@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { CreateNotificationInput } from "@/lib/notifications/notify";
 
 /**
  * Tests de las server actions de GRUPOS.
@@ -26,7 +27,12 @@ const mocks = vi.hoisted(() => ({
     score: 0,
     skipped: true,
   })),
-  createNotification: vi.fn(async () => ({ ok: true as const })),
+  // Los parámetros van declarados aunque el cuerpo los ignore: sin ellos vitest
+  // infiere `calls: []` y leer `calls[0][1]` deja de compilar — que es lo que
+  // hacen los tests del aviso acá abajo.
+  createNotification: vi.fn(
+    async (_admin: unknown, _input: CreateNotificationInput) => ({ ok: true as const }),
+  ),
 }));
 
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
@@ -355,9 +361,7 @@ describe("enviarMensajeAlGrupoAction", () => {
     });
 
     // A quien escribió NO se le avisa de su propio mensaje.
-    const avisados = mocks.createNotification.mock.calls.map(
-      (call) => (call[1] as { profileId: string }).profileId,
-    );
+    const avisados = mocks.createNotification.mock.calls.map((call) => call[1].profileId);
     expect(avisados).toEqual([OTRO_ID]);
   });
 
@@ -370,10 +374,7 @@ describe("enviarMensajeAlGrupoAction", () => {
 
     await enviarMensajeAlGrupoAction({ groupId: GROUP_ID, body: "Dato sensible" });
 
-    const aviso = mocks.createNotification.mock.calls[0]?.[1] as {
-      title: string;
-      body: string;
-    };
+    const aviso = mocks.createNotification.mock.calls[0][1];
     expect(aviso.body).not.toContain("Dato sensible");
     expect(aviso.title).not.toContain("Dato sensible");
   });

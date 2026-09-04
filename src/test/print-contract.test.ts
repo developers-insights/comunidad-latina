@@ -581,8 +581,17 @@ const INVENTARIO: Record<string, Entrada> = {
   // misma fuga de privacidad que se cerró en la tarjeta del feed (ver el
   // docblock de `EntityHeader` en post-card.tsx): un video publicado como
   // negocio delataba el nombre y apellido de quien está detrás.
+  // 12 desde el 2026-09-03: el placeholder de carga del slide (el FilmSlate que
+  // late mientras baja la primera tanda del reel abierto sobre el feed).
   "src/app/(app)/videos/video-reels.tsx": {
-    inks: Array<string>(11).fill("text-on-media"),
+    inks: Array<string>(12).fill("text-on-media"),
+    cobertura: "cl-print-hide",
+  },
+  // El MARCO del reel abierto sobre el feed (2026-09-03): sólo escribe la X de
+  // cerrar, sobre bg-media-scrim. El contenedor raíz del overlay entero lleva
+  // cl-print-hide, igual que el reel de la sección — imprimir un reel no existe.
+  "src/app/(app)/videos/reel-overlay.tsx": {
+    inks: ["text-on-media"],
     cobertura: "cl-print-hide",
   },
   // Dos tintas, mismo patrón: el glifo Play sobre el thumbnail de video y el
@@ -638,6 +647,12 @@ const INVENTARIO: Record<string, Entrada> = {
     cobertura: "cl-print-fill",
   },
   "src/components/messaging/composer.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "control",
+  },
+  // Composer de un GRUPO (0133). Es el mismo botón redondo de enviar que el
+  // hilo 1-a-1 —un <button>, no un <Button>—, así que se cubre igual.
+  "src/components/messaging/group-composer.tsx": {
     inks: ["text-brand-foreground"],
     cobertura: "control",
   },

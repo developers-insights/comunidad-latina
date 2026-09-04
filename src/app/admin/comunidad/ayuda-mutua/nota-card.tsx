@@ -16,7 +16,7 @@ import { Badge, Chip, Label, Textarea } from "@/components/ui";
 import { formatAdminDateTime } from "@/components/admin/format";
 import { PendingButton } from "@/components/admin/pending-button";
 import {
-  HELP_DIRECTION_COPY,
+  HELP_DIRECTION_LABEL,
   HELP_STATUS_LABEL,
   HELP_TOPIC_LABEL,
   type HelpDirection,
@@ -130,7 +130,7 @@ export function NotaCard({ aviso }: { aviso: HelpNoticeCardData }) {
               )
             }
           >
-            {HELP_DIRECTION_COPY[aviso.direction].badge}
+            {HELP_DIRECTION_LABEL[aviso.direction]}
           </Chip>
           <span className="text-sm text-foreground-muted">{HELP_TOPIC_LABEL[aviso.topic]}</span>
         </div>

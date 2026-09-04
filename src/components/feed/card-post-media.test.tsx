@@ -51,6 +51,20 @@ vi.mock("./media-viewer", () => ({
   useMediaViewer: () => ({ open: viewerOpen, available: true }),
 }));
 
+/**
+ * El reel que CardVideo monta con `next/dynamic` cuando la publicación SÍ lo
+ * abre. Se stubea para poder afirmar cuál de los dos caminos tomó el toque —el
+ * reel o el visor— sin traer el reel de verdad al jsdom.
+ */
+const reelMount = vi.hoisted(() => vi.fn());
+
+vi.mock("@/app/(app)/videos/reel-overlay", () => ({
+  ReelOverlay: (props: { postId: string; scope: string }) => {
+    reelMount(props);
+    return null;
+  },
+}));
+
 const PHOTO = (n: number): PostMediaView => ({
   kind: "image",
   url: `https://cdn.example.com/foto-${n}.webp`,
@@ -253,21 +267,25 @@ describe("CardPostMedia: el visor abre en el medio que se estaba viendo", () => 
 });
 
 describe("CardPostMedia: el reel infinito sólo donde corresponde", () => {
-  it("en el feed, tocar el video lo abre ACÁ MISMO y no te manda a /videos", () => {
-    // Pedido del cliente 2026-08-20: "no te tiene que mover a otra publicación;
-    // ahí nomás dentro de pantalla se tiene que fluir sin sacarte del feed". El
-    // scroll vertical entre publicaciones sigue existiendo en Videos Cortos,
-    // que es donde se va a buscarlo a propósito.
+  it("en el feed, tocar el video abre el reel ACÁ MISMO y no te manda a /videos", async () => {
+    // Los dos pedidos del cliente, juntos: el 2026-08-20 pidió no perder el
+    // lugar ("no te tiene que mover a otra publicación; ahí nomás dentro de
+    // pantalla se tiene que fluir sin sacarte del feed") y el 2026-09-03 pidió
+    // la música y el scroll a los otros videos cortos. El reel montado ENCIMA
+    // del feed cumple los dos: no hay navegación, así que al cerrar el feed
+    // sigue donde estaba.
     renderMedia([VIDEO(1)], "eventos");
     fireEvent.click(screen.getByRole("button", { name: /ver el video/i }));
     act(() => {
       vi.advanceTimersByTime(300);
     });
+    await act(async () => {});
 
     expect(nav.push).not.toHaveBeenCalled();
-    expect(viewerOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ startIndex: 0, postId: POST_ID }),
+    expect(reelMount).toHaveBeenCalledWith(
+      expect.objectContaining({ postId: POST_ID, scope: "eventos" }),
     );
+    expect(viewerOpen).not.toHaveBeenCalled();
   });
 
   it("fuera del feed (detalle de una publicación) el video abre el visor y NO el reel", () => {
@@ -278,8 +296,14 @@ describe("CardPostMedia: el reel infinito sólo donde corresponde", () => {
     });
 
     expect(nav.push).not.toHaveBeenCalled();
+    // Y con el tope de PUBLICACIÓN (5 min), no con el de anuncio (10): es el
+    // único camino que todavía elige un tope, porque el reel no lleva ninguno.
     expect(viewerOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ startIndex: 0, postId: POST_ID }),
+      expect.objectContaining({
+        startIndex: 0,
+        postId: POST_ID,
+        maxPlaybackSeconds: PREMIUM_DETAIL_MAX_SECONDS,
+      }),
     );
   });
 
@@ -350,20 +374,24 @@ describe("CardPostMedia: un anuncio nunca te tira al reel", () => {
     );
   });
 
-  it("un post orgánico tampoco navega, pero se mira con el tope de publicación", () => {
-    // Lo que distingue al orgánico del anuncio ya no es a DÓNDE va el toque
-    // —los dos abren el visor sobre el feed— sino cuánto video se reproduce:
-    // 5 minutos la publicación, 10 el anuncio.
+  it("un post orgánico tampoco navega, pero SÍ abre el reel (es la diferencia con el anuncio)", async () => {
+    // Ninguno de los dos navega. Lo que los distingue desde el 2026-09-03 es
+    // QUÉ se abre encima del feed: el orgánico abre el reel —con su música y su
+    // scroll a los otros videos cortos—, el anuncio se queda en el visor de su
+    // propia publicación, que es exactamente lo que pidió el cliente el 29/7
+    // ("tiene que quedarse dentro del anuncio").
     renderMedia([VIDEO(1)], "para-ti", { videoType: "short_video" });
     fireEvent.click(screen.getByRole("button", { name: /ver el video/i }));
     act(() => {
       vi.advanceTimersByTime(300);
     });
+    await act(async () => {});
 
     expect(nav.push).not.toHaveBeenCalled();
-    expect(viewerOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ maxPlaybackSeconds: PREMIUM_DETAIL_MAX_SECONDS }),
+    expect(reelMount).toHaveBeenCalledWith(
+      expect.objectContaining({ postId: POST_ID, scope: "para-ti" }),
     );
+    expect(viewerOpen).not.toHaveBeenCalled();
     expect(screen.queryByText("Patrocinado")).toBeNull();
   });
 });

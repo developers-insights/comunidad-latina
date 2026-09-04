@@ -4,14 +4,12 @@ import {
   ForkKnife,
   HandHeart,
   HandsClapping,
-  Lifebuoy,
   MagnifyingGlass,
   Package,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
 import { Skeleton, SquareTile } from "@/components/ui";
 import {
-  COMUNIDAD_ACCENT,
   COMUNIDAD_ACCENT_ACOPIO,
   COMUNIDAD_ACCENT_COMIDA,
   COMUNIDAD_ACCENT_GUIAS,
@@ -23,7 +21,7 @@ import {
 } from "@/components/comunidad";
 import { COMUNIDAD_COPY } from "@/lib/comunidad";
 import { getTenant } from "@/lib/tenant/resolve";
-import { countOpenCases, countOpenHelpNeeds } from "../queries";
+import { countOpenCases, countPedidosAbiertos } from "../queries";
 
 export const metadata = { title: "Comunidad" };
 
@@ -87,23 +85,29 @@ const C = COMUNIDAD_COPY.index;
  * `style` inline: es un fucsia 700, el matiz que más se separa de los otros
  * cinco acentos que conviven en ESTA grilla.
  *
- * ── SÉPTIMA CATEGORÍA: AYUDA MUTUA (0120) ────────────────────────────────────
- * Y acá el criterio SE ROMPE, a propósito. Las seis anteriores llevan a
- * contenido curado o a Perdido y encontrado; ésta lleva al único tablón del
- * módulo donde publica la gente en las DOS direcciones — se ofrece o pide
- * manos—. Es el pedido textual del cliente: «falta un botón en la parte de
- * comunidad, en casi todas las opciones… tanto de parte de la persona que
- * quiere prestar sus servicios o el lugar donde necesita prestar los
- * servicios», y «todo esto se verifica vía geovanny con la cuenta de admin».
+ * ── LA PRIMERA TARJETA: PEDIR AYUDA (0120 → 0130) ───────────────────────────
+ * Y acá el criterio SE ROMPE, a propósito. Las otras cinco llevan a contenido
+ * curado o a Perdido y encontrado; ésta lleva al único tablón del módulo donde
+ * publica la gente. Por eso va primera: es lo que cambia todos los días.
  *
- * NO reemplaza a "Voluntarios" ni a "Centro de acopio": aquéllas siguen siendo
- * el DIRECTORIO de organizaciones (fichas con fuente citada) y ésta es la capa
- * de POSTULACIÓN que va encima. Desde cada ficha y desde cada tema se llega
- * igual, con el tema y el lugar ya puestos — ver `<OfrecerEnFicha>`.
+ * Antes eran DOS tarjetas y hoy es una sola, y el cambio no fue de diseño:
  *
- * Lleva contador de "piden manos" y no de avisos totales: un pedido tiene
- * urgencia y cupo, un ofrecimiento sigue disponible mañana. El número que hace
- * que alguien entre hoy es el primero.
+ *   · "Pedir ayuda" nombraba al DIRECTORIO (`/comunidad/recursos`, fichas
+ *     curadas con fuente). Sigue existiendo y se sigue llegando a él por las
+ *     tres tarjetas de tema (Bancos de comida, Voluntarios, Centro de acopio)
+ *     y desde Guías — no se perdió ninguna puerta, se perdió la duplicada.
+ *   · "Ayuda mutua" era el tablón de dos direcciones. El cliente sacó los
+ *     ofrecimientos el 2026-09-03 (responsabilidad legal si alguien se lastima
+ *     dando una mano, y la bifurcación «Quiero ayudar / Necesito manos» lo
+ *     confundía). Lo que queda son los pedidos con respuestas públicas, y ese
+ *     tablón se llama "Pedir ayuda" — que es lo que la gente va a hacer ahí.
+ *
+ * Tener las dos habría dejado dos tarjetas con el mismo título llevando a
+ * pantallas distintas: el peor resultado posible en una grilla que se escanea.
+ *
+ * El contador cuenta PEDIDOS ABIERTOS: es el número que hace que alguien entre
+ * hoy. Si quien mira no tiene sesión el tablón no devuelve nada, y entonces no
+ * aparece ningún número — nunca un cero que diga que nadie necesita nada.
  */
 export default async function ComunidadPage() {
   return (
@@ -124,11 +128,16 @@ export default async function ComunidadPage() {
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <li>
             <SquareTile
-              href="/comunidad/recursos"
-              label={C.cards.recursos.title}
-              hint={C.cards.recursos.hint}
-              icon={<Lifebuoy size={28} weight="fill" aria-hidden="true" />}
-              accent={COMUNIDAD_ACCENT}
+              href="/comunidad/pedir-ayuda"
+              label={C.cards.pedirAyuda.title}
+              hint={C.cards.pedirAyuda.hint}
+              icon={<HandsClapping size={28} weight="fill" aria-hidden="true" />}
+              accent={COMUNIDAD_ACCENT_MANOS}
+              badge={
+                <Suspense fallback={<Skeleton className="h-5 w-24 rounded-full" />}>
+                  <PidenAyuda />
+                </Suspense>
+              }
             />
           </li>
           <li>
@@ -181,20 +190,6 @@ export default async function ComunidadPage() {
               accent={COMUNIDAD_ACCENT_ACOPIO}
             />
           </li>
-          <li>
-            <SquareTile
-              href="/comunidad/ayuda-mutua"
-              label={C.cards.manos.title}
-              hint={C.cards.manos.hint}
-              icon={<HandsClapping size={28} weight="fill" aria-hidden="true" />}
-              accent={COMUNIDAD_ACCENT_MANOS}
-              badge={
-                <Suspense fallback={<Skeleton className="h-5 w-24 rounded-full" />}>
-                  <PidenManos />
-                </Suspense>
-              }
-            />
-          </li>
         </ul>
       </nav>
     </>
@@ -220,19 +215,19 @@ async function CasosAbiertos() {
 }
 
 /**
- * Contador de lugares que están pidiendo manos hoy. Igual que `CasosAbiertos`:
- * su propio Suspense —es lo único de la tarjeta que consulta la base— y si la
+ * Contador de pedidos abiertos en el tablón. Igual que `CasosAbiertos`: su
+ * propio Suspense —es lo único de la tarjeta que consulta la base— y si la
  * consulta falla, o si quien mira no tiene sesión (el tablón pide cuenta), no
  * aparece nada. Nunca un cero que diga que nadie necesita ayuda.
  */
-async function PidenManos() {
+async function PidenAyuda() {
   const tenant = await getTenant();
-  const pedidos = await countOpenHelpNeeds(tenant.id);
+  const pedidos = await countPedidosAbiertos(tenant.id);
   if (pedidos === 0) return null;
 
   return (
     <span className="inline-flex items-center rounded-full bg-[color-mix(in_oklab,var(--accent-comunidad-manos)_18%,var(--color-surface))] px-2.5 py-0.5 text-xs font-semibold tabular-nums text-foreground">
-      {pedidos === 1 ? "1 pide manos" : `${pedidos} piden manos`}
+      {pedidos === 1 ? "1 pedido abierto" : `${pedidos} pedidos abiertos`}
     </span>
   );
 }
