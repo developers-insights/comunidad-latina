@@ -89,6 +89,19 @@ function useKeyboardInset(active: boolean): number {
     const vv = window.visualViewport;
     if (!vv) return;
     const update = () => {
+      // UN PELLIZCO NO ES EL TECLADO. Los dos encogen el visual viewport de la
+      // misma forma, así que `height`/`offsetTop` no los distinguen: sólo
+      // `scale` los separa, porque el teclado nunca cambia el zoom. Sin esto,
+      // recortar una foto con dos dedos —que ES un pellizco: el segundo dedo
+      // cae fuera del stage, sobre panel sin `touch-action`, y ahí iOS hace
+      // zoom de página— se leía como un teclado gigante. Medido en vivo a
+      // 375px: la hoja saltaba a `bottom: 406px` y su alto caía de 714 a 398.
+      // Con el zoom puesto, el teclado no se puede medir de esta manera y el
+      // valor honesto es 0: la hoja se queda donde está.
+      if (vv.scale > 1.01) {
+        setInset(0);
+        return;
+      }
       const overlap = window.innerHeight - (vv.height + vv.offsetTop);
       setInset(Math.max(0, Math.round(overlap)));
     };
