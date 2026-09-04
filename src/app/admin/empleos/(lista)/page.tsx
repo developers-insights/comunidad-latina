@@ -34,6 +34,16 @@ const COPY = {
   title: "Empleos de la comunidad",
   intro:
     "Los avisos de trabajo y cuánta gente se postuló. Entrá a uno para ver el detalle de sus postulaciones.",
+  /**
+   * Los servicios van en su propio grupo y no mezclados con los empleos: la fila
+   * del listado cuenta postulaciones, y un servicio no las tiene. Sin el
+   * agrupador, cada servicio diría "Sin postulaciones" y parecería un aviso que
+   * a nadie le interesó en vez de un aviso de otra clase.
+   */
+  jobsHeading: "Empleos",
+  servicesHeading: "Servicios que ofrece la gente",
+  servicesNote:
+    "Un servicio no recibe postulaciones: quien lo quiera contratar escribe por Mensajes. Se modera igual que un empleo.",
   pendingSummary: (n: number) =>
     n === 1
       ? "1 postulación esperando respuesta"
@@ -87,6 +97,8 @@ export default async function AdminEmpleosPage({
   }
 
   const pendingTotal = jobs.reduce((sum, job) => sum + job.pending, 0);
+  const empleos = jobs.filter((job) => job.kind !== "service");
+  const servicios = jobs.filter((job) => job.kind === "service");
 
   return (
     <section aria-labelledby="empleos-title" className="flex flex-col gap-4">
@@ -124,11 +136,38 @@ export default async function AdminEmpleosPage({
           message={COPY.emptyMessage}
         />
       ) : (
-        <ul className="flex flex-col gap-2">
-          {jobs.map((job) => (
-            <JobListingRow key={job.id} job={job} readOnly={scope.isForeign} />
-          ))}
-        </ul>
+        <div className="flex flex-col gap-6">
+          {empleos.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {servicios.length > 0 && (
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">
+                  {COPY.jobsHeading}
+                </h3>
+              )}
+              <ul className="flex flex-col gap-2">
+                {empleos.map((job) => (
+                  <JobListingRow key={job.id} job={job} readOnly={scope.isForeign} />
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {servicios.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">
+                {COPY.servicesHeading}
+              </h3>
+              <p className="text-xs leading-relaxed text-foreground-muted">
+                {COPY.servicesNote}
+              </p>
+              <ul className="flex flex-col gap-2">
+                {servicios.map((service) => (
+                  <JobListingRow key={service.id} job={service} readOnly={scope.isForeign} />
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
     </section>
   );

@@ -86,6 +86,13 @@ export const COPY = {
      */
     useIt: "Usar este perfil",
     useItAria: (nombre: string) => `Usar la app como ${nombre}`,
+    /**
+     * La puerta al editor de la página (0127). Corta, como `useIt`, y con el
+     * nombre completo en el `aria-label`: con diez negocios en la pantalla,
+     * diez botones que suenan igual no le sirven a nadie.
+     */
+    edit: "Editar la página",
+    editAria: (nombre: string) => `Editar la página de ${nombre}`,
     backToPersonal: "Volver a mi perfil personal",
     switching: "Cambiando…",
   },

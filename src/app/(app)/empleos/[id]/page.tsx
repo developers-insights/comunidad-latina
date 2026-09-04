@@ -32,7 +32,12 @@ import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
 import { DirectoryDetailHero } from "@/components/directory";
 import { ScamShieldNotice } from "@/components/trust";
 import { COPY } from "@/components/empleos/copy";
-import { EMPLOYMENT_TYPE_LABEL, parseJobAttrs, type JobQuestion } from "@/components/empleos/helpers";
+import {
+  EMPLEOS_KINDS,
+  EMPLOYMENT_TYPE_LABEL,
+  parseJobAttrs,
+  type JobQuestion,
+} from "@/components/empleos/helpers";
 import { JobApplicationStatus } from "@/components/empleos/job-application-status";
 import { JobApplySheet } from "@/components/empleos/job-apply-sheet";
 import {
@@ -46,6 +51,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { VENCIMIENTO_COPY, isClosedReason } from "@/lib/listings";
 import { cn, formatDate } from "@/lib/utils";
+import { ServiceDetail } from "./service-detail";
 import {
   fetchApplicantProfilePreview,
   fetchJobApplicationCounts,
@@ -62,14 +68,15 @@ export async function generateMetadata({ params }: { params: Params }) {
   const { id } = await params;
   if (!UUID_RE.test(id)) return { title: C.metadataFallback };
   // Mismo scope que la página: sin esto, /empleos/<uuid-de-una-propiedad>
-  // devolvería 404 con el título de la propiedad en el <title>.
+  // devolvería 404 con el título de la propiedad en el <title>. Los DOS kinds
+  // de la sección — un servicio también vive en /empleos/[id].
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
   const { data } = await supabase
     .from("listings")
     .select("title")
     .eq("id", id)
     .eq("tenant_id", tenant.id)
-    .eq("kind", "job")
+    .in("kind", [...EMPLEOS_KINDS])
     .maybeSingle();
   return { title: data?.title ?? C.metadataFallback };
 }
@@ -83,10 +90,10 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
   const { data: listing } = await supabase
     .from("listings")
     .select(
-      "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, price_amount, price_currency, price_period",
+      "id, tenant_id, kind, title, description, attrs, area_label, work_mode, photos, status, created_by, publisher_name, price_amount, price_currency, price_period",
     )
     .eq("id", id)
-    .eq("kind", "job")
+    .in("kind", [...EMPLEOS_KINDS])
     .maybeSingle();
 
   // RLS ya limita qué filas existen para este usuario (published | propias | staff).
@@ -95,6 +102,28 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  /**
+   * SERVICIO → otra pantalla, desde acá.
+   *
+   * El corte va ANTES de cualquier trabajo propio del empleo (jornada, ficha
+   * del puesto, preguntas, bandeja de candidatos): un servicio no tiene nada de
+   * eso, así que calcularlo para tirarlo sería pagar seis lecturas y un montón
+   * de líneas por una rama que no se usa. Lo compartido —`listings_select`, la
+   * URL canónica, el guardado, el escudo anti-estafa— ya pasó.
+   */
+  if (listing.kind === "service") {
+    const savedService = await fetchListingSaved(supabase, tenant.id, listing.id, user?.id);
+    return (
+      <ServiceDetail
+        listing={listing}
+        locale={tenant.locale}
+        viewerId={user?.id ?? null}
+        initialSaved={savedService}
+        photoUrls={(listing.photos ?? []).map(listingPhotoUrl)}
+      />
+    );
+  }
 
   const attrs = parseJobAttrs(listing.attrs);
   const isOwner = Boolean(user && listing.created_by === user.id);

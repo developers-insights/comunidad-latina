@@ -359,6 +359,7 @@ export const COPY = {
         title: "Revisá y publicá",
         intro: "Así lo va a ver la comunidad. Si algo no te cierra, volvé y cambialo.",
         whatTitle: "Tu servicio",
+        descriptionTitle: "Lo que contás",
         whereTitle: "Dónde",
         whenTitle: "Cuándo",
         priceTitle: "Precio",

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { AnimatePresence } from "motion/react";
 import { useRouter } from "next/navigation";
 import { Eye, Heart } from "@phosphor-icons/react/dist/ssr";
 import { usePrefersReducedMotion } from "@/components/motion";
@@ -19,6 +21,29 @@ import { useMediaViewer, type ViewerMediaItem } from "./media-viewer";
 import { COPY } from "./copy";
 import type { VideoScopeProp } from "./helpers";
 import styles from "./card-post-media.module.css";
+
+/**
+ * EL REEL, EN DIFERIDO Y A PROPÓSITO (2026-09-03).
+ *
+ * Dos razones, las dos concretas:
+ *
+ *  1. PESO. El reel arrastra su scroll infinito, el riel de acciones, el me
+ *     gusta optimista y la hoja de comentarios. Un feed con veinte tarjetas no
+ *     puede pagar ese chunk en el primer render para algo que se abre sólo si
+ *     alguien toca un video — es exactamente el tipo de JavaScript que hunde el
+ *     LCP de la pantalla más visitada de la app.
+ *  2. EL CICLO. `videos/video-reels.tsx` importa de `@/components/feed`, que
+ *     re-exporta este archivo. Un import estático de vuelta cerraría el círculo;
+ *     el `import()` diferido lo corta, porque se evalúa cuando el barril ya
+ *     terminó de cargarse.
+ *
+ * `ssr: false`: el overlay sólo existe después de un toque, así que no hay nada
+ * que renderizar en el servidor.
+ */
+const ReelOverlay = dynamic(
+  () => import("@/app/(app)/videos/reel-overlay").then((mod) => mod.ReelOverlay),
+  { ssr: false },
+);
 
 /** Umbral de visibilidad para autoplay (pedido cliente: "cuando se ve el 60%"). */
 const VISIBLE_RATIO = 0.6;
@@ -134,6 +159,18 @@ export interface CardVideoProps {
    */
   muxPlaybackId?: string | null;
   muxStatus?: unknown;
+  /**
+   * PRIMER CUADRO DEL VIDEO, capturado al subir (0132). Lo que el `<video>`
+   * pinta mientras el archivo del bucket todavía no llegó.
+   *
+   * Sin esto, un `.mp4` crudo no tiene NADA que mostrar hasta que baja su
+   * metadata: es el rectángulo en blanco que el cliente reportó al scrollear
+   * (2026-09-03, 1:07:00). Ausente —los videos anteriores a la 0132, o un
+   * archivo que el navegador no pudo decodificar al subir— el elemento se
+   * comporta como siempre sobre el fondo `surface-subtle` de su caja, que ya es
+   * un color de la marca y no un hueco blanco.
+   */
+  posterUrl?: string | null;
 }
 
 /** Segundos que la TARJETA reproduce. El completo se abre desde la publicación. */
@@ -184,6 +221,7 @@ export function CardVideo({
   filterCss,
   muxPlaybackId = null,
   muxStatus,
+  posterUrl = null,
 }: CardVideoProps) {
   const router = useRouter();
   const reduce = usePrefersReducedMotion();
@@ -208,6 +246,21 @@ export function CardVideo({
   const delayRef = useRef<number | null>(null);
   const tapTimer = useRef<number | null>(null);
   const [bursts, setBursts] = useState(0);
+  /**
+   * ¿ESTÁ ABIERTO EL REEL SOBRE ESTA TARJETA? (2026-09-03)
+   *
+   * El estado vive acá, en la tarjeta que recibió el toque, y no en un provider
+   * de la app. No es por comodidad: el reel necesita el contexto de la hoja de
+   * comentarios y de la firma activa, y los dos providers están MÁS ADENTRO que
+   * `MediaViewerProvider` en el layout. Un overlay montado desde allá arriba se
+   * quedaría sin ellos (el contexto sigue el árbol de React, no el portal).
+   * Montándolo desde la tarjeta, el reel ve exactamente lo mismo que ve el feed.
+   *
+   * Que sea por tarjeta no permite dos reels abiertos: sólo un toque puede estar
+   * en curso, y mientras el overlay está abierto el scroll del cuerpo está
+   * bloqueado, así que la tarjeta no puede desmontarse por debajo.
+   */
+  const [reelAbierto, setReelAbierto] = useState(false);
   /** Duración MEDIDA del archivo (metadata), no la declarada. null = todavía no. */
   const [measuredSeconds, setMeasuredSeconds] = useState<number | null>(null);
   const isPreview = isPreviewTruncated(measuredSeconds);
@@ -401,14 +454,15 @@ export function CardVideo({
    * scroll vertical entre publicaciones ES lo que la persona fue a buscar. Lo
    * que cambió es el gesto de la tarjeta, que nunca lo pidió.
    */
-  function openVideo() {
-    // Quien monta el video puede decidirlo (el detalle de una publicación y los
-    // anuncios abren el visor con sus propias diapositivas y su propio tope).
-    if (onTap) {
-      onTap();
-      return;
-    }
-    // Sin provider de visor montado el toque quedaría muerto: ahí sí, el reel.
+  /**
+   * EL VISOR DE LA PROPIA PUBLICACIÓN — el camino de siempre, hoy usado como
+   * RESPALDO del reel: si el reel no tiene nada que mostrar para este post (dejó
+   * de ser elegible entre que se pintó el feed y el dedo tocó), esto es lo que
+   * queda, y sigue siendo mejor que nada — el video se ve completo, encima del
+   * feed, y al cerrar volvés al mismo lugar.
+   */
+  function openViewer() {
+    // Sin provider de visor montado el toque quedaría muerto: ahí sí, navegar.
     if (!viewer.available) {
       router.push(
         `/videos?start=${encodeURIComponent(postId)}&scope=${encodeURIComponent(scope)}`,
@@ -430,6 +484,60 @@ export function CardVideo({
       startSeconds: node?.currentTime,
       onClose: resumeAfterViewer,
     });
+  }
+
+  /**
+   * EL TOQUE ABRE EL REEL, ENCIMA DEL FEED (cliente 2026-09-03, 17:23–18:20:
+   * «ahí no te sale la música… debería hacer scrolling los videos»).
+   *
+   * ---- LA HISTORIA, PORQUE ESTO YA CAMBIÓ DOS VECES ----------------------
+   *
+   *  · Hasta el 2026-08-20 el toque NAVEGABA a `/videos?start=`. Eso era el reel
+   *    con música y scroll, sí, pero volver costaba un "atrás" que perdía el
+   *    scroll del feed y dejaba a la persona parada en otra publicación. El
+   *    cliente pidió sacarlo: «no te tiene que mover a otra publicación».
+   *  · Desde entonces abría el visor de la propia publicación, acá nomás. Eso
+   *    resolvió lo del scroll del feed y creó lo otro: el visor no monta la
+   *    música (vive en la tarjeta) y no lleva a ningún otro video.
+   *
+   * Los dos pedidos no se contradicen —uno es sobre PERDER EL LUGAR y el otro
+   * sobre PODER SEGUIR VIENDO— y esto cumple los dos: el reel completo, montado
+   * ENCIMA del feed. No hay navegación, así que al cerrar el feed sigue donde
+   * estaba y esta tarjeta retoma con `resumeAfterViewer`.
+   *
+   * FOTOS, TEXTO Y ENCUESTAS NO CAMBIAN: siguen resolviéndose en la tarjeta con
+   * el visor de siempre. Y los videos que NO abren reel —el detalle de una
+   * publicación, los anuncios— tampoco: ésos llegan con `onTap`, que es cómo
+   * `CardPostMedia` aplica la regla de `videoOpensReel`.
+   */
+  function openVideo() {
+    // Quien monta el video puede decidirlo (el detalle de una publicación y los
+    // anuncios abren el visor con sus propias diapositivas y su propio tope).
+    if (onTap) {
+      onTap();
+      return;
+    }
+    // La tarjeta se calla ANTES de abrir: el reel arranca con su propio sonido y
+    // dos copias del mismo clip sonando juntas no se le hace a nadie.
+    videoRef.current?.pause();
+    postMusic?.pause();
+    setReelAbierto(true);
+  }
+
+  /** Cerrar el reel: la tarjeta retoma exactamente como al cerrar el visor. */
+  function closeReel() {
+    setReelAbierto(false);
+    resumeAfterViewer();
+  }
+
+  /**
+   * El reel no tenía nada para este post. Se cierra sin ruido y se abre el visor
+   * de la publicación: la persona tocó un video y tiene que ver un video, no un
+   * cartel explicando por qué el scroll no está disponible.
+   */
+  function reelSinContenido() {
+    setReelAbierto(false);
+    openViewer();
   }
 
   function handleDoubleTap() {
@@ -515,6 +623,9 @@ export function CardVideo({
         loop
         playsInline
         preload="metadata"
+        // Cadena vacía → sin atributo: un `poster=""` es una imagen rota, y el
+        // navegador se queda con ella en vez de mostrar el primer cuadro.
+        poster={posterUrl || undefined}
         onLoadedMetadata={(event) => {
           const value = event.currentTarget.duration;
           setMeasuredSeconds(Number.isFinite(value) ? value : null);
@@ -589,6 +700,22 @@ export function CardVideo({
           tenía ningún altavoz que tocar —el gesto no existía— y la canción
           nunca podía pedirse. Un altavoz por diapositiva además saltaba de
           lugar al pasar de la foto al video. */}
+
+      {/* EL REEL, ENCIMA DEL FEED. `AnimatePresence` para que la salida se
+          anime: sin él, cerrar sería un corte seco y la vuelta al feed se
+          sentiría como si la app se hubiera caído en vez de como un objeto que
+          se va. El chunk baja recién con el primer toque (ver `ReelOverlay`). */}
+      <AnimatePresence>
+        {reelAbierto && (
+          <ReelOverlay
+            key="reel-overlay"
+            postId={postId}
+            scope={scope}
+            onClose={closeReel}
+            onUnavailable={reelSinContenido}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -2,6 +2,22 @@ export { AcceptBanner } from "./accept-banner";
 export { Composer } from "./composer";
 export { ConversationActions } from "./conversation-actions";
 export { COPY } from "./copy";
+// Grupos de chat (0133) + bandeja por persona (0134).
+export { GroupCard } from "./group-card";
+export { GroupComposer } from "./group-composer";
+export { GroupForm, type GrupoEditable } from "./group-form";
+export { GroupJoinButton } from "./group-join-button";
+export { GroupLive } from "./group-live";
+export {
+  GroupDangerActions,
+  GroupInvite,
+  GroupMemberList,
+  type MiembroVisible,
+} from "./group-manage";
+export { GroupMessageBubble } from "./group-message-bubble";
+export { InboxSearch } from "./inbox-search";
+export { InboxTabs } from "./inbox-tabs";
+export { PeopleSearch, type PersonaEncontrada } from "./people-search";
 export {
   ContactDone,
   InlineContact,

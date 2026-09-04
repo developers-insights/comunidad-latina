@@ -48,6 +48,14 @@ export const BUSINESS_PROFILE_COPY = {
 
   reviewsTitle: "Reseñas",
 
+  /**
+   * La puerta al editor de la página (0127). "Editar la página" y no "editar
+   * el aviso": para el dueño esto es su perfil de negocio, no una publicación
+   * clasificada — es la palabra que usó el cliente («editar la información de
+   * la otra cuenta»).
+   */
+  editCta: "Editar la página",
+
   photosTitle: "Fotos",
   ownerBanner: "Así ven tu negocio los demás.",
   pendingBanner: "Tu negocio todavía está en revisión: por ahora solo lo ves vos.",

@@ -88,3 +88,46 @@ function limpiar(valor: string | null): string | null {
   const path = valor?.trim() ?? "";
   return path.length > 0 ? path : null;
 }
+
+/**
+ * Logo y portada de VARIOS negocios de una, para el directorio.
+ *
+ * En lote y no una consulta por tarjeta: el listado ya resuelve así las
+ * calificaciones y los estados de apertura, y una tarjeta que dispara su propia
+ * consulta es un N+1 esperando a que la comunidad crezca.
+ *
+ * Tolerante por el mismo motivo que `fetchPaginaDeNegocio`: si la 0127 no está
+ * aplicada, devuelve un mapa vacío y el directorio se ve exactamente como
+ * antes. Estas columnas NO se agregan al `select` grande del listado justamente
+ * para que un `column does not exist` no deje la sección entera vacía.
+ */
+export async function fetchFotosDeNegocios(
+  client: unknown,
+  listingIds: readonly string[],
+): Promise<Map<string, { logoUrl: string | null; coverUrl: string | null }>> {
+  const mapa = new Map<string, { logoUrl: string | null; coverUrl: string | null }>();
+  if (listingIds.length === 0) return mapa;
+
+  try {
+    const supabase = client as SupabaseClient;
+    const { data, error } = await supabase
+      .from("listings")
+      .select("id, logo_path, cover_path")
+      .in("id", [...listingIds]);
+
+    if (error || !data) return mapa;
+
+    for (const fila of data as (FilaPagina & { id: string })[]) {
+      const logoPath = limpiar(fila.logo_path);
+      const coverPath = limpiar(fila.cover_path);
+      if (!logoPath && !coverPath) continue;
+      mapa.set(fila.id, {
+        logoUrl: logoPath ? listingPhotoUrl(logoPath) : null,
+        coverUrl: coverPath ? listingPhotoUrl(coverPath) : null,
+      });
+    }
+    return mapa;
+  } catch {
+    return mapa;
+  }
+}

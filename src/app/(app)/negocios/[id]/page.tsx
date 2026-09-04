@@ -162,6 +162,7 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
     resenas,
     puestos,
     eventos,
+    pagina,
   ] = await Promise.all([
       listing.created_by
         ? supabase
@@ -209,6 +210,10 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
         locale: tenant.locale,
         timeZone: viewerZone ?? DEFAULT_TIME_ZONE,
       }),
+      // Servicios, logo y portada (0127). Consulta propia y tolerante: en un
+      // entorno sin esa migración devuelve todo vacío y la página se ve igual
+      // que antes, en vez de caerse entera por un `column does not exist`.
+      fetchPaginaDeNegocio(supabase, listing.id),
     ]);
 
   const posts = (postsResult.data ?? []).map((post) => {
@@ -285,7 +290,13 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
 
   const categoryLabel = businessCategoryLabel(businessCategoryOf(listing.attrs));
   const isOwner = Boolean(user && listing.created_by === user.id);
-  const photos = (listing.photos ?? []).map(listingPhotoUrl);
+  // La PORTADA (0127) abre el hero: es la foto que el negocio eligió como su
+  // banner, y por eso va antes que la galería del aviso —que no se pierde,
+  // queda detrás en el mismo carrusel—. Sin portada, todo sigue igual que antes.
+  const photos = [
+    ...(pagina.coverUrl ? [pagina.coverUrl] : []),
+    ...(listing.photos ?? []).map(listingPhotoUrl),
+  ];
   const address = listing.cta_address;
 
   // Cierre (0117): mismo criterio que propiedades/[id] — `listings_select`
@@ -330,11 +341,21 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
         className="mb-4"
       />
 
-      {/* Cabecera: el nombre manda, y debajo lo que lo ubica de un vistazo. */}
+      {/* Cabecera: el nombre manda, y debajo lo que lo ubica de un vistazo.
+          Desde la 0127 el LOGO va a su izquierda cuando existe: es la misma
+          cara que la persona ve en el cambiador de perfil y en el directorio, y
+          verla acá es lo que confirma que la foto que subió quedó puesta. Sin
+          logo no se dibuja un círculo vacío —el título arranca solo, como
+          siempre—: un placeholder gris al lado del nombre no aporta nada. */}
       <BezelCard variant={listing.store_verified ? "featured" : "default"} coreClassName="p-4">
-        <h1 className="font-display text-xl font-bold leading-snug text-foreground">
-          {listing.title}
-        </h1>
+        <div className="flex items-start gap-3">
+          {pagina.logoUrl && (
+            <Avatar size="lg" name={listing.title} src={pagina.logoUrl} />
+          )}
+          <h1 className="min-w-0 flex-1 font-display text-xl font-bold leading-snug text-foreground">
+            {listing.title}
+          </h1>
+        </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {categoryLabel && (
             <Chip className={ACCENT_CHIP_CLASS.negocios}>{categoryLabel}</Chip>
@@ -361,6 +382,25 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
           <p className="mt-1.5 text-xs text-foreground-muted">{C.verifiedHint}</p>
         )}
       </BezelCard>
+
+      {/* EDITAR LA PÁGINA (0127) — sólo para quien la administra, y arriba de
+          todo. El cliente entró a su propio negocio buscando dónde cambiar la
+          información y no había ninguna puerta: el editor de horarios estaba
+          escondido siete secciones más abajo y era lo único editable. Ahora la
+          puerta está donde se la busca, y desde ahí se llega también a la foto
+          y a los servicios. */}
+      {resenas.administraElAviso && (
+        <Link
+          href={`/negocios/${listing.id}/editar`}
+          className={cn(
+            buttonVariants({ variant: "outline", size: "sm" }),
+            "mt-3 w-full",
+          )}
+        >
+          <PencilSimple size={16} aria-hidden="true" />
+          {C.editCta}
+        </Link>
+      )}
 
       {/* Seguir el negocio (0023): sólo con dueño con cuenta — sin cuenta no
           hay quién publique novedades para seguir. */}
@@ -423,6 +463,21 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
         ) : (
           <SectionEmpty icon={<Storefront size={20} />}>{C.aboutEmpty}</SectionEmpty>
         )}
+      </section>
+
+      {/* SERVICIOS (0127). Va pegado a la descripción y ANTES de la dirección:
+          quien entra pregunta primero «¿esto me sirve?» y recién después
+          «¿dónde queda?». La sección se dibuja siempre —a diferencia de puestos
+          y eventos— porque su vacío sí le sirve a alguien: al visitante le dice
+          que puede preguntar, y al dueño le muestra el hueco con el botón que
+          lo llena. */}
+      <section className="mt-6">
+        <SectionTitle>{SERVICIOS_TITULO}</SectionTitle>
+        <ServiciosSeccion
+          servicios={pagina.servicios}
+          administra={resenas.administraElAviso}
+          listingId={listing.id}
+        />
       </section>
 
       <section className="mt-6">

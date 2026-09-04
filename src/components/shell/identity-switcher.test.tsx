@@ -266,3 +266,62 @@ describe("la insignia de verificado", () => {
     expect(screen.getAllByText("Verificado")).toHaveLength(1);
   });
 });
+
+/**
+ * =============================================================================
+ * EL HEADER ACTUANDO COMO NEGOCIO (2026-09-03)
+ * =============================================================================
+ *
+ * Pedido textual del cliente, mirando la esquina de arriba a la derecha de su
+ * propia pantalla: «debería quedar solamente el nombre de la página». Lo que
+ * había era su avatar personal con la insignia del local encima. Lo que se fija
+ * acá es que en modo negocio se lea el NOMBRE del negocio, que no aparezca el
+ * de la persona, y que con el perfil personal no cambie absolutamente nada.
+ */
+describe("IdentitySwitcher: qué se ve en el header según la identidad", () => {
+  it("como negocio, el control muestra el nombre del negocio", () => {
+    render(
+      <IdentitySwitcher
+        personal={PERSONAL}
+        negocios={[NEGOCIO]}
+        activeBusinessId={NEGOCIO.businessId}
+      />,
+    );
+
+    const boton = screen.getByRole("button", { name: /Estás como Panadería Giovanni/i });
+    expect(boton.textContent).toContain("Panadería Giovanni");
+    // Y NO el de la persona: eso es exactamente lo que el cliente pidió sacar.
+    expect(boton.textContent).not.toContain("Giovanni Pérez");
+  });
+
+  it("como negocio, la foto del header es la del NEGOCIO y no la de la persona", () => {
+    render(
+      <IdentitySwitcher
+        personal={{ displayName: "Giovanni Pérez", avatarUrl: "https://ejemplo.test/yo.jpg" }}
+        negocios={[{ ...NEGOCIO, avatarUrl: "https://ejemplo.test/local.jpg" }]}
+        activeBusinessId={NEGOCIO.businessId}
+      />,
+    );
+
+    const boton = screen.getByRole("button", { name: /Estás como Panadería Giovanni/i });
+    const foto = boton.querySelector("img");
+    expect(foto?.getAttribute("src")).toBe("https://ejemplo.test/local.jpg");
+  });
+
+  it("con el perfil personal sigue siendo el avatar de siempre, sin texto", () => {
+    // Cero regresión: quien no cambió de perfil no tiene que notar nada.
+    render(
+      <IdentitySwitcher
+        personal={PERSONAL}
+        negocios={[NEGOCIO]}
+        activeBusinessId={null}
+      />,
+    );
+
+    const boton = screen.getByRole("button", { name: /Estás como Giovanni Pérez/i });
+    // Sigue siendo el círculo de 44 px de siempre (adentro, el Avatar puede
+    // pintar las iniciales), no el chip ancho con el nombre escrito.
+    expect(boton.className).toContain("size-11");
+    expect(boton.textContent).not.toContain("Giovanni Pérez");
+  });
+});

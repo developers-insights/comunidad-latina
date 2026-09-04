@@ -11,18 +11,21 @@ import {
 } from "@/components/listings";
 import {
   HELP_NOTICE_COLUMNS,
+  HELP_REPLY_COLUMNS,
   LOST_FOUND_KIND,
   RESOURCE_COLUMNS,
   parseLostFoundAttrs,
   sanitizeAreaFilter,
+  sanitizeSearchFilter,
   sortCasesOpenFirst,
-  sortNeedsFirst,
   supabaseSinTiparComunidad,
   toHelpNotice,
+  toHelpReply,
   toResourceGroups,
-  type HelpDirection,
   type HelpNotice,
   type HelpNoticeRow,
+  type HelpReply,
+  type HelpReplyRow,
   type HelpTopic,
   type LostFoundCase,
   type LostFoundCategory,
@@ -322,25 +325,29 @@ export async function countOpenCases(tenantId: string): Promise<number> {
 }
 
 // ===========================================================================
-// Ayuda mutua — `public.community_help_notices` (0120)
+// Pedir ayuda — `community_help_notices` (0120) + `community_help_replies` (0130)
 //
 // Todo con el cliente del USUARIO, como el resto del archivo: la RLS decide
 // qué se ve, y acá decide más que en ningún otro lado. La policy de SELECT de
-// esta tabla NO incluye a `anon` (§4 de la 0120), así que para alguien sin
-// sesión estas funciones devuelven vacío — no es un bug, es la medida: un
-// tablón de personas ofreciendo ayuda, indexable desde afuera, sería el padrón
-// que §5.4 existe para que no exista.
+// estas dos tablas NO incluye a `anon` (§4 de la 0120, §2.3 de la 0130), así
+// que para alguien sin sesión estas funciones devuelven vacío — no es un bug,
+// es la medida: un tablón de gente pidiendo ayuda, indexable desde afuera,
+// sería el padrón que §5.4 existe para que no exista.
 // ===========================================================================
 
 const HELP_PAGE_SIZE = 12;
+
+/** Tope de respuestas por pedido en una sola lectura. Ver `fetchHelpReplies`. */
+const HELP_REPLIES_LIMIT = 200;
 
 export interface HelpBoardFilters {
   tenantId: string;
   viewerId: string | null;
   topic?: HelpTopic | null;
-  direction?: HelpDirection | null;
   /** Zona tal cual la tecleó la persona; acá se sanitiza para el `ilike`. */
   area?: string | null;
+  /** Búsqueda libre sobre título y cuerpo. Se sanitiza antes de tocar la base. */
+  search?: string | null;
   cursor?: string | null;
 }
 
@@ -351,14 +358,11 @@ export interface HelpBoardPage {
   failed: boolean;
   /**
    * `failed` porque la RLS/los grants no dejan mirar sin sesión, que NO es una
-   * falla del sistema sino el diseño de esta sección (ver la 0120: el tablón no
-   * le da SELECT a `anon` a propósito — un listado público de nombre + barrio +
-   * "necesito ayuda con X" es un padrón).
-   *
-   * Existe separado de `failed` porque las dos situaciones se le cuentan a la
-   * persona de manera opuesta: una es "entrá y lo ves", la otra es "se nos
-   * rompió algo". Pintar la primera de rojo es acusar al sistema de un error
-   * que no cometió, y encima deja a alguien sin saber que la puerta existe.
+   * falla del sistema sino el diseño de esta sección. Existe separado de
+   * `failed` porque las dos situaciones se le cuentan a la persona de manera
+   * opuesta: una es "entrá y lo ves", la otra es "se nos rompió algo". Pintar
+   * la primera de rojo es acusar al sistema de un error que no cometió, y
+   * encima deja a alguien sin saber que la puerta existe.
    */
   needsSession: boolean;
 }
@@ -366,15 +370,15 @@ export interface HelpBoardPage {
 /**
  * Nombres de autores y de fichas, por lote y no por fila.
  *
- * Con doce avisos, resolverlo aviso por aviso serían veinticuatro
- * round-trips. Mismo criterio que `loadPublishers` acá arriba.
+ * Con doce pedidos, resolverlo uno por uno serían veinticuatro round-trips.
+ * Mismo criterio que `loadPublishers` acá arriba.
  *
  * Del autor se pide SÓLO `display_name` — ni avatar, ni Trust Score, ni
  * verificación. En Perdido y encontrado el publicador va con toda su señal de
  * confianza porque ahí alguien dice tener TUS documentos y hay plata de por
- * medio en la estafa clásica; acá no se transa nada: se ofrece un rato. Pintar
- * un puntaje al lado de quien se ofrece a servir un sábado convertiría la
- * ayuda en una competencia de reputación.
+ * medio en la estafa clásica; acá no se transa nada: alguien pregunta algo.
+ * Pintar un puntaje al lado de quien pide ayuda sería ponerle nota a la
+ * necesidad.
  */
 async function loadHelpLabels(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -411,12 +415,22 @@ async function loadHelpLabels(
   };
 }
 
+/** 42501 = permission denied. Acá significa "estás mirando sin sesión". */
+function esFaltaDeSesion(code: string | undefined): boolean {
+  return code === "42501";
+}
+
 /**
- * El tablón: lo APROBADO de esta comunidad, paginado por keyset
- * `(created_at, id)` como el resto de los listados del repo.
+ * El tablón: los PEDIDOS publicados de esta comunidad, lo más nuevo arriba,
+ * paginado por keyset `(created_at, id)` como el resto de los listados del
+ * repo.
+ *
+ * `direction = 'need'` está en el `where` y no sólo en el índice: la 0130
+ * archivó los ofrecimientos que había, pero un filtro que depende de que un
+ * UPDATE de migración haya corrido bien es un filtro que un día no filtra.
  *
  * SIN IMPULSOS y sin ningún criterio de orden comprable, igual que Perdido y
- * encontrado: no se le vende el primer lugar a alguien que ofrece ayuda.
+ * encontrado: no se le vende el primer lugar a alguien que necesita algo.
  */
 export async function fetchHelpBoard(filters: HelpBoardFilters): Promise<HelpBoardPage> {
   const supabase = await createClient();
@@ -427,17 +441,33 @@ export async function fetchHelpBoard(filters: HelpBoardFilters): Promise<HelpBoa
     .select(HELP_NOTICE_COLUMNS)
     .eq("tenant_id", filters.tenantId)
     .eq("status", "approved")
+    .eq("direction", "need")
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(HELP_PAGE_SIZE + 1);
 
   if (filters.topic) query = query.eq("topic", filters.topic);
-  if (filters.direction) query = query.eq("direction", filters.direction);
 
   // Coincidencia PARCIAL con los comodines de LIKE ya escapados: la gente
-  // escribe "Corona" y el aviso dice "Corona, Queens".
+  // escribe "Corona" y el pedido dice "Corona, Queens".
   const area = sanitizeAreaFilter(filters.area);
   if (area) query = query.ilike("area_label", `%${area}%`);
+
+  /**
+   * Búsqueda: título O cuerpo. Es un `ilike` y no búsqueda de texto completo a
+   * propósito — `global_search` (0052) no indexa esta tabla y sumarla sería una
+   * migración propia. Con el volumen real de un tablón vecinal (decenas de
+   * filas por comunidad) un ilike es instantáneo; el día que deje de serlo, el
+   * arreglo es un índice trigram y no reescribir esta pantalla.
+   *
+   * `sanitizeSearchFilter` es LOAD-BEARING: PostgREST separa las condiciones de
+   * un `.or()` con comas, así que una coma sin sacar parte la expresión en dos
+   * y el filtro pasa a decir cualquier cosa.
+   */
+  const busqueda = sanitizeSearchFilter(filters.search);
+  if (busqueda) {
+    query = query.or(`title.ilike.%${busqueda}%,body.ilike.%${busqueda}%`);
+  }
 
   const cursor = decodeCursor(filters.cursor || undefined);
   if (cursor) {
@@ -448,15 +478,14 @@ export async function fetchHelpBoard(filters: HelpBoardFilters): Promise<HelpBoa
 
   const { data, error } = await query;
   if (error) {
-    // 42501 = permission denied. Acá significa "estás mirando sin sesión": la
-    // 0120 le da SELECT sólo a `authenticated`, así que es el camino ESPERADO
-    // de un visitante anónimo, no un incidente. Mismo código que documentó la
-    // 0114 cuando la música no sonaba sin cuenta, y misma lección: en esta base
-    // las tablas nuevas no nacen con grants para `anon`, así que un 42501 hay
-    // que leerlo antes de pintarlo de rojo.
-    const sinSesion = error.code === "42501";
+    // La 0120 le da SELECT sólo a `authenticated`, así que un 42501 es el
+    // camino ESPERADO de un visitante anónimo, no un incidente. Mismo código
+    // que documentó la 0114 cuando la música no sonaba sin cuenta, y misma
+    // lección: en esta base las tablas nuevas no nacen con grants para `anon`,
+    // así que un 42501 hay que leerlo antes de pintarlo de rojo.
+    const sinSesion = esFaltaDeSesion(error.code);
     if (!sinSesion) {
-      console.warn("[comunidad] query del tablón de ayuda falló", { code: error.code });
+      console.warn("[comunidad] query del tablón de pedidos falló", { code: error.code });
     }
     return { items: [], nextCursor: null, failed: !sinSesion, needsSession: sinSesion };
   }
@@ -468,33 +497,144 @@ export async function fetchHelpBoard(filters: HelpBoardFilters): Promise<HelpBoa
   const { nombrePorAutor, nombrePorFicha } = await loadHelpLabels(supabase, pageRows);
   const now = new Date();
   const items = pageRows.flatMap((row) => {
-    const aviso = toHelpNotice(row, {
+    const pedido = toHelpNotice(row, {
       viewerId: filters.viewerId,
       nombrePorAutor,
       nombrePorFicha,
       now,
     });
-    return aviso ? [aviso] : [];
+    return pedido ? [pedido] : [];
   });
 
   const last = pageRows.at(-1);
   return {
-    // Los pedidos arriba DE ESTA PÁGINA. No se ordena en la base a propósito:
-    // el keyset necesita su orden estable por (created_at, id) y meterle un
-    // criterio más lo rompería — mismo razonamiento que `sortCasesOpenFirst`.
-    items: sortNeedsFirst(items),
+    items,
     nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id) : null,
     failed: false,
     needsSession: false,
   };
 }
 
+export interface HelpNoticeDetail {
+  pedido: HelpNotice | null;
+  needsSession: boolean;
+}
+
 /**
- * "Mis avisos": TODOS los estados, incluidos los borradores y los rechazados.
+ * UN pedido por id, para la pantalla de detalle.
  *
- * Es la única pantalla donde alguien ve el motivo por el que no se le publicó
- * algo. Sin ella, un rechazo sería una desaparición silenciosa — la persona
- * volvería a escribir el mismo aviso y lo volveríamos a rechazar.
+ * El `eq("tenant_id")` no es la seguridad —la RLS ya la hace— pero sí es lo que
+ * convierte "no existe", "es de otra comunidad" y "lo ocultó el equipo" en la
+ * misma respuesta: `null`. Desde una URL no se puede confirmar la existencia de
+ * un pedido ajeno.
+ *
+ * No filtra por `status`: su autor tiene que poder abrir el suyo aunque esté
+ * oculto o resuelto (la RLS le deja ver los propios), y el equipo tiene que
+ * poder mirar lo que ocultó. Quien no es ninguno de los dos no recibe la fila.
+ */
+export async function fetchHelpNotice(input: {
+  id: string;
+  tenantId: string;
+  viewerId: string | null;
+}): Promise<HelpNoticeDetail> {
+  const supabase = await createClient();
+  const sinTipar = supabaseSinTiparComunidad(supabase);
+
+  const { data, error } = await sinTipar
+    .from("community_help_notices")
+    .select(HELP_NOTICE_COLUMNS)
+    .eq("id", input.id)
+    .eq("tenant_id", input.tenantId)
+    .maybeSingle();
+
+  if (error) {
+    const sinSesion = esFaltaDeSesion(error.code);
+    if (!sinSesion) {
+      console.warn("[comunidad] query del pedido falló", { code: error.code });
+    }
+    return { pedido: null, needsSession: sinSesion };
+  }
+
+  const row = (data ?? null) as unknown as HelpNoticeRow | null;
+  if (!row) return { pedido: null, needsSession: false };
+
+  const { nombrePorAutor, nombrePorFicha } = await loadHelpLabels(supabase, [row]);
+  return {
+    pedido: toHelpNotice(row, {
+      viewerId: input.viewerId,
+      nombrePorAutor,
+      nombrePorFicha,
+    }),
+    needsSession: false,
+  };
+}
+
+/**
+ * Las respuestas de UN pedido, en orden de conversación (lo más viejo primero:
+ * una respuesta contesta a lo de arriba).
+ *
+ * SIN PAGINADO, y con tope. Un pedido vecinal junta cinco o diez respuestas; el
+ * tope de 200 existe para el caso patológico, no para el normal. Paginar un
+ * hilo corto es peor experiencia (hay que tocar "ver más" para leer algo que
+ * entraba en una pantalla) y esconde justo lo último, que suele ser lo que
+ * resolvió el pedido.
+ *
+ * `toHelpReply` decide qué se muestra: lo visible de todos, más lo propio en
+ * cualquier estado. Una respuesta oculta ajena no llega ni al render aunque la
+ * RLS se la deje leer al staff.
+ */
+export async function fetchHelpReplies(input: {
+  noticeId: string;
+  tenantId: string;
+  viewerId: string | null;
+}): Promise<HelpReply[]> {
+  const supabase = await createClient();
+  const sinTipar = supabaseSinTiparComunidad(supabase);
+
+  const { data, error } = await sinTipar
+    .from("community_help_replies")
+    .select(HELP_REPLY_COLUMNS)
+    .eq("notice_id", input.noticeId)
+    .eq("tenant_id", input.tenantId)
+    .order("created_at", { ascending: true })
+    .limit(HELP_REPLIES_LIMIT);
+
+  if (error) {
+    if (!esFaltaDeSesion(error.code)) {
+      console.warn("[comunidad] query de respuestas falló", { code: error.code });
+    }
+    return [];
+  }
+
+  const rows = (data ?? []) as unknown as HelpReplyRow[];
+  if (rows.length === 0) return [];
+
+  const autores = [...new Set(rows.map((row) => row.created_by))];
+  const { data: perfiles } = await supabase
+    .from("profiles")
+    .select("id, display_name")
+    .in("id", autores);
+
+  const nombrePorAutor = new Map(
+    ((perfiles ?? []) as { id: string; display_name: string | null }[]).map((row) => [
+      row.id,
+      row.display_name,
+    ]),
+  );
+
+  const now = new Date();
+  return rows.flatMap((row) => {
+    const respuesta = toHelpReply(row, { viewerId: input.viewerId, nombrePorAutor, now });
+    return respuesta ? [respuesta] : [];
+  });
+}
+
+/**
+ * "Mis pedidos": TODOS los estados, incluidos los ocultos y los resueltos.
+ *
+ * Es la única pantalla donde alguien ve el motivo por el que el equipo bajó
+ * algo suyo. Sin ella, ocultar un pedido sería una desaparición silenciosa — la
+ * persona volvería a escribir el mismo texto y lo volveríamos a ocultar.
  */
 export async function fetchMyHelpNotices(input: {
   tenantId: string;
@@ -512,7 +652,7 @@ export async function fetchMyHelpNotices(input: {
     .limit(60);
 
   if (error) {
-    console.warn("[comunidad] query de mis avisos de ayuda falló", { code: error.code });
+    console.warn("[comunidad] query de mis pedidos falló", { code: error.code });
     return [];
   }
 
@@ -520,18 +660,18 @@ export async function fetchMyHelpNotices(input: {
   const { nombrePorAutor, nombrePorFicha } = await loadHelpLabels(supabase, rows);
   const now = new Date();
   return rows.flatMap((row) => {
-    const aviso = toHelpNotice(row, {
+    const pedido = toHelpNotice(row, {
       viewerId: input.viewerId,
       nombrePorAutor,
       nombrePorFicha,
       now,
     });
-    return aviso ? [aviso] : [];
+    return pedido ? [pedido] : [];
   });
 }
 
-/** Cuántos lugares están pidiendo manos hoy — el número del índice del módulo. */
-export async function countOpenHelpNeeds(tenantId: string): Promise<number> {
+/** Cuántos pedidos hay abiertos hoy — el número de la tarjeta del índice. */
+export async function countPedidosAbiertos(tenantId: string): Promise<number> {
   const supabase = supabaseSinTiparComunidad(await createClient());
   const { count, error } = await supabase
     .from("community_help_notices")
@@ -541,20 +681,27 @@ export async function countOpenHelpNeeds(tenantId: string): Promise<number> {
     .eq("direction", "need");
 
   if (error) {
-    console.warn("[comunidad] conteo de pedidos de manos falló", { code: error.code });
+    // Sin sesión no hay número, y está bien: nunca un cero que diga que nadie
+    // necesita nada.
+    if (!esFaltaDeSesion(error.code)) {
+      console.warn("[comunidad] conteo de pedidos falló", { code: error.code });
+    }
     return 0;
   }
   return count ?? 0;
 }
 
 /**
- * Cuántas personas se ofrecieron en cada ficha, en UNA consulta para toda la
- * pantalla.
+ * Cuántas personas se ofrecieron en cada ficha del directorio.
+ *
+ * LEGADO de la 0120. Sigue exportada porque la consume
+ * `comunidad/recursos/page.tsx`, que es de otro frente y no se toca en esta
+ * ronda; después de la 0130 devuelve ceros (los ofrecimientos quedaron
+ * archivados) y ninguna tarjeta dibuja el número. Cuando ese frente limpie su
+ * pantalla, esta función se va con él.
  *
  * Devuelve un Map vacío ante cualquier problema —incluido el más común, que es
- * que quien mira no tenga sesión (la policy pide cuenta)—. La tarjeta
- * simplemente no muestra el contador: nunca un cero que mienta diciendo que
- * nadie se ofreció.
+ * que quien mira no tenga sesión—. Nunca un cero que mienta.
  */
 export async function countOffersByResource(
   tenantId: string,
@@ -574,7 +721,9 @@ export async function countOffersByResource(
     .limit(1000);
 
   if (error) {
-    console.warn("[comunidad] conteo de ofrecimientos por ficha falló", { code: error.code });
+    if (!esFaltaDeSesion(error.code)) {
+      console.warn("[comunidad] conteo de ofrecimientos por ficha falló", { code: error.code });
+    }
     return conteo;
   }
 
@@ -583,68 +732,4 @@ export async function countOffersByResource(
     conteo.set(row.resource_id, (conteo.get(row.resource_id) ?? 0) + 1);
   }
   return conteo;
-}
-
-/**
- * Fichas publicadas de los temas que aceptan avisos, para el selector del
- * formulario de alta.
- *
- * Se traen TODAS de una y el formulario filtra por tema en el cliente: son
- * pocas, no cambian mientras alguien escribe, y así elegir el tema no dispara
- * una consulta nueva a mitad del formulario. `id, name, topic` y nada más —
- * el selector no muestra teléfono ni dirección.
- */
-export async function fetchHelpResourceOptions(
-  tenantId: string,
-  topics: readonly string[],
-): Promise<{ id: string; name: string; topic: string }[]> {
-  const supabase = supabaseSinTiparComunidad(await createClient());
-  const { data, error } = await supabase
-    .from("community_resources")
-    .select("id, name, topic")
-    .eq("status", "published")
-    .in("topic", [...topics])
-    .or(`tenant_id.is.null,tenant_id.eq.${tenantId}`)
-    .order("name", { ascending: true })
-    .limit(300);
-
-  if (error) {
-    console.warn("[comunidad] query de lugares para el alta falló", { code: error.code });
-    return [];
-  }
-  return (data ?? []) as { id: string; name: string; topic: string }[];
-}
-
-/**
- * UN borrador propio, para volver a abrirlo en el formulario.
- *
- * Los tres `eq` no son redundantes con la RLS: son lo que hace que "no existe",
- * "es de otra comunidad", "es de otra persona" y "ya no es un borrador" den
- * todos el mismo `null`. El formulario, ante `null`, simplemente arranca vacío
- * — nunca le confirma a nadie la existencia de un aviso ajeno.
- *
- * `status = 'draft'` es la parte que importa: un aviso ya enviado NO se edita
- * (el trigger de la 0120 lo congela), así que abrirlo en el formulario sería
- * ofrecer algo que la base va a rechazar.
- */
-export async function fetchMyHelpDraft(input: {
-  avisoId: string;
-  tenantId: string;
-  viewerId: string;
-}): Promise<HelpNoticeRow | null> {
-  const supabase = supabaseSinTiparComunidad(await createClient());
-  const { data, error } = await supabase
-    .from("community_help_notices")
-    .select(HELP_NOTICE_COLUMNS)
-    .eq("id", input.avisoId)
-    .eq("tenant_id", input.tenantId)
-    .eq("created_by", input.viewerId)
-    .eq("status", "draft")
-    .maybeSingle();
-
-  if (error) {
-    console.warn("[comunidad] query del borrador de ayuda falló", { code: error.code });
-    return null;
-  }
-  return (data ?? null) as unknown as HelpNoticeRow | null;
 }

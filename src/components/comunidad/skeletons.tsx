@@ -92,12 +92,12 @@ export function GuiaListSkeleton() {
 }
 
 /**
- * Silueta de un aviso del tablón de ayuda mutua. Reserva el alto real de la
- * `ManoCard`: chip de dirección, título, zona, dos líneas de texto y el pie con
- * el botón de escribir. Sin foto —esa tarjeta no tiene—, así que no hay bloque
- * 4:3 que reservar.
+ * Silueta de un pedido del tablón. Reserva el alto real de la `PedidoCard`:
+ * chip de tema, título, zona, tres líneas de texto y el pie con el autor y el
+ * contador de respuestas. Sin foto —esa tarjeta no tiene—, así que no hay
+ * bloque 4:3 que reservar.
  */
-export function ManoCardSkeleton() {
+export function PedidoCardSkeleton() {
   return (
     <div className="rounded-lg border border-border-subtle bg-surface p-5">
       <div className="flex items-center justify-between gap-2">
@@ -112,17 +112,37 @@ export function ManoCardSkeleton() {
       </div>
       <div className="mt-4 flex items-center justify-between gap-2 border-t border-border-subtle pt-3">
         <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-10 w-28 rounded-full" />
+        <Skeleton className="h-4 w-24" />
       </div>
     </div>
   );
 }
 
-export function ManoListSkeleton() {
+export function PedidoListSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" aria-hidden="true">
       {Array.from({ length: 4 }, (_, index) => (
-        <ManoCardSkeleton key={index} />
+        <PedidoCardSkeleton key={index} />
+      ))}
+    </div>
+  );
+}
+
+/** Silueta del hilo: tres respuestas con su encabezado y dos líneas de texto. */
+export function RespuestasSkeleton() {
+  return (
+    <div className="flex flex-col gap-3" aria-hidden="true">
+      {Array.from({ length: 3 }, (_, index) => (
+        <div key={index} className="rounded-lg border border-border-subtle bg-surface p-4">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-3 w-12" />
+          </div>
+          <div className="mt-2 flex flex-col gap-1.5">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/5" />
+          </div>
+        </div>
       ))}
     </div>
   );

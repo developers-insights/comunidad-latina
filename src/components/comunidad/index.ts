@@ -11,10 +11,12 @@ export {
 } from "./heading";
 export { OrigenNota } from "./origen-nota";
 export { RecursoCard } from "./recurso-card";
-export { ManoCard } from "./mano-card";
-export { MiAvisoCard } from "./mi-aviso-card";
+export { PedidoCard } from "./pedido-card";
+export { MiPedidoCard } from "./mi-pedido-card";
+export { RespuestaItem } from "./respuesta-item";
+export { ResponderForm } from "./responder-form";
 export { EscribirBoton } from "./escribir-boton";
-export { OfrecerEnFicha, OfrecerEnTema } from "./ofrecer-cta";
+export { OfrecerEnTema } from "./ofrecer-cta";
 export { ReglasDeAyuda } from "./reglas-de-ayuda";
 export { CasoCard } from "./caso-card";
 export { ZonaBuscador } from "./zona-buscador";
@@ -23,8 +25,9 @@ export {
   CasoCardSkeleton,
   CasoListSkeleton,
   GuiaListSkeleton,
-  ManoCardSkeleton,
-  ManoListSkeleton,
+  PedidoCardSkeleton,
+  PedidoListSkeleton,
   RecursoCardSkeleton,
   RecursosSkeleton,
+  RespuestasSkeleton,
 } from "./skeletons";

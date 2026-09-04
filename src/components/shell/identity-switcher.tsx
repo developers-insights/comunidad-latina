@@ -44,10 +44,15 @@ import { cn } from "@/lib/utils";
  * sola opción es un menú que estorba.
  *
  * ── LA PROMESA VISUAL ───────────────────────────────────────────────────────
- * Mientras se actúa como negocio, el avatar muestra la insignia del local. No es
- * decoración: es la única señal permanente de que lo que se publique NO va a
- * salir con el nombre propio. Por eso está siempre visible y no dentro de la
- * hoja.
+ * Mientras se actúa como negocio, el control del header muestra el NOMBRE del
+ * negocio junto a su foto. No es decoración: es la única señal permanente de
+ * que lo que se publique NO va a salir con el nombre propio. Por eso está
+ * siempre visible y no dentro de la hoja.
+ *
+ * Hasta el 2026-09-03 esa señal era una insignia de local sobre el avatar
+ * PERSONAL, y el cliente la leyó como lo que era —su cara con otra cosa
+ * encima—: «debería quedar solamente el nombre de la página». Ver el docblock
+ * de `IdentitySwitcher`, abajo.
  *
  * ── LA SEGUNDA PUERTA (2026-08-24) ──────────────────────────────────────────
  * El cliente fue a buscar el cambiador en /perfil, no en el header — ahí es
@@ -127,8 +132,13 @@ export interface IdentitySwitcherProps {
   activeBusinessId: string | null;
 }
 
-/** Insignia de negocio sobre el avatar. El anillo la despega del fondo. */
-function BusinessBadge({ small = false }: { small?: boolean }) {
+/**
+ * Insignia de negocio sobre el avatar, DENTRO DE LA HOJA. Ahí las filas son
+ * círculos parecidos entre sí y la insignia es lo que separa un negocio del
+ * perfil personal de un vistazo. En el header ya no va: el nombre escrito al
+ * lado dice lo mismo y mejor (ver el docblock de `IdentitySwitcher`).
+ */
+function BusinessBadge() {
   return (
     <span
       aria-hidden="true"
@@ -136,11 +146,10 @@ function BusinessBadge({ small = false }: { small?: boolean }) {
         // `cl-print-hide`: el glifo es tinta `brand-foreground` (clara) sobre un
         // relleno que el papel no imprime — sin el hook queda 1.00:1. Y con qué
         // identidad estabas navegando no significa nada en una hoja impresa.
-        "cl-print-hide flex items-center justify-center rounded-full bg-brand text-brand-foreground ring-2 ring-surface",
-        small ? "size-3.5" : "size-4",
+        "cl-print-hide flex size-4 items-center justify-center rounded-full bg-brand text-brand-foreground ring-2 ring-surface",
       )}
     >
-      <Storefront size={small ? 9 : 11} weight="fill" />
+      <Storefront size={11} weight="fill" />
     </span>
   );
 }
@@ -392,7 +401,33 @@ function VerificadaChip() {
   );
 }
 
-/** El avatar del header. Comportamiento sin cambios — ver el docblock de arriba. */
+/**
+ * El control de identidad del header.
+ *
+ * ── ACTUANDO COMO NEGOCIO SE VE EL NEGOCIO, Y NADA MÁS (2026-09-03) ─────────
+ * Pedido textual del cliente, mirando su propia pantalla arriba a la derecha:
+ * «debería quedar solamente el nombre de la página». Lo que había era el avatar
+ * de la PERSONA con la insignia del local encima —dos caras superpuestas en 32
+ * píxeles—, que es exactamente lo que él describió y lo que hacía que cambiar
+ * de perfil se sintiera decorativo.
+ *
+ * Ahora, con un negocio activo, el control es un chip: la foto del negocio (o
+ * su inicial) y SU NOMBRE, truncado. Con el perfil personal no cambia nada —
+ * sigue siendo el avatar redondo de siempre, sin regresión para quien no tiene
+ * ningún negocio.
+ *
+ * La insignia de local se va del chip a propósito. Existía para desambiguar
+ * cuando la única señal era un círculo; con el nombre escrito al lado no
+ * desambigua nada y compite con la foto que el negocio acaba de subir (0127).
+ * La regla de §3.2 —nunca depender sólo del color— se cumple mejor que antes:
+ * ahora hay una PALABRA, que es la señal más fuerte que existe. Adentro de la
+ * hoja, donde las filas sí son círculos parecidos, la insignia se queda.
+ *
+ * El ancho está acotado (`max-w-[7.5rem]`): a 375 px el header lleva logo,
+ * zona, campana y mensajes, y un nombre largo no puede empujarlos. El header
+ * colabora escondiendo el wordmark mientras hay negocio activo, igual que ya
+ * hacía con la zona elegida (ver `header.tsx`).
+ */
 export function IdentitySwitcher(props: IdentitySwitcherProps) {
   const { personal } = props;
   const { open, setOpen, pendiente, activo, elegir } = useIdentitySwitcherState(props);
@@ -406,15 +441,32 @@ export function IdentitySwitcher(props: IdentitySwitcherProps) {
         aria-label={C.switcherLabel(nombreActivo)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex size-11 shrink-0 items-center justify-center rounded-full transition-colors duration-(--duration-fast) hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+        className={cn(
+          "flex h-11 items-center justify-center rounded-full",
+          "transition-colors duration-(--duration-fast) hover:bg-surface-hover",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          activo
+            ? // Puede ENCOGERSE (no `shrink-0`) y el nombre trunca: a 375 px el
+              // header lleva además logo, zona, campana y mensajes, y un chip
+              // rígido con un nombre largo provocaría scroll horizontal — que es
+              // la única cosa que no se negocia en esta barra. El avatar de
+              // adentro sí es rígido, así que nunca se deforma.
+              "min-w-0 max-w-[9rem] shrink gap-1.5 border border-brand/25 bg-brand-tint pl-1 pr-2.5"
+            : "size-11 shrink-0",
+        )}
       >
         {activo ? (
-          <Avatar
-            size="sm"
-            name={activo.nombre}
-            src={activo.avatarUrl}
-            badge={<BusinessBadge small />}
-          />
+          <>
+            <Avatar
+              size="sm"
+              name={activo.nombre}
+              src={activo.avatarUrl}
+              className="shrink-0"
+            />
+            <span className="min-w-0 truncate text-sm font-semibold text-brand-ink">
+              {activo.nombre}
+            </span>
+          </>
         ) : (
           <Avatar size="sm" name={personal.displayName} src={personal.avatarUrl} />
         )}

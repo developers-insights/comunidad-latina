@@ -218,7 +218,7 @@ export default async function PerfilPublicoPage({
                 {COPY.sendMessage}
               </Link>
             ) : (
-              <MessageCta firstName={firstName} />
+              <MessageCta firstName={firstName} profileId={id} />
             )}
             <div className="flex items-center justify-center gap-2">
               <FollowButton

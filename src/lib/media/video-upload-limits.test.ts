@@ -383,9 +383,15 @@ describe("el peso en la ruta de Mux", () => {
     ).toEqual({ ok: false, reason: "size" });
   });
 
-  it("el techo de Mux es órdenes de magnitud mayor que el del bucket", () => {
+  it("el techo de Mux sigue siendo de otro orden que el del bucket", () => {
     expect(MAX_MUX_VIDEO_BYTES).toBe(5 * 1024 * 1024 * 1024);
-    expect(MAX_MUX_VIDEO_BYTES).toBeGreaterThan(MAX_VIDEO_BYTES * 50);
+    // El factor era 50 cuando el bucket eran 60 MB; con 200 MB (2026-09-03) son
+    // 25. Lo que el test protege no es el número exacto sino la RELACIÓN: por
+    // Mux el peso deja de ser una limitación de producto, y el tope que muerde
+    // pasa a ser el de DURACIÓN. Si algún día esta distancia se achica a menos
+    // de un orden de magnitud, es que el parche del bucket dejó de ser un
+    // parche y hay que discutirlo, no ajustar el número acá.
+    expect(MAX_MUX_VIDEO_BYTES).toBeGreaterThan(MAX_VIDEO_BYTES * 10);
   });
 });
 

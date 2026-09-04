@@ -97,17 +97,38 @@ const openReelSchema = z.object({
   startId: z.string().max(64),
 });
 
+/**
+ * La tanda MÁS quién la está mirando.
+ *
+ * La página `/videos` recibe `tenantId` y `viewerId` del server component que la
+ * monta; el overlay lo abre una TARJETA DEL FEED, que no tiene por qué conocer
+ * ninguno de los dos. Viajan en la respuesta —no como props que el cliente
+ * tenga que acarrear— porque el servidor ya los resolvió para armar esta misma
+ * página: el reel los necesita para el me gusta y el guardado, que escriben con
+ * el tenant y el perfil de quien mira.
+ */
+export interface ReelOverlayPage extends VideoReelsPage {
+  tenantId: string;
+  viewerId: string | null;
+}
+
 export async function openReelAtPostAction(input: {
   scope: string;
   startId: string;
-}): Promise<VideoReelsPage> {
+}): Promise<ReelOverlayPage> {
+  const vacio: ReelOverlayPage = {
+    items: [],
+    nextCursor: null,
+    tenantId: "",
+    viewerId: null,
+  };
   const parsed = openReelSchema.safeParse(input);
-  if (!parsed.success) return { items: [], nextCursor: null };
+  if (!parsed.success) return vacio;
 
   // El id se valida con la MISMA función que valida `?start=` en la URL: un post
   // que llega por acá no puede ser más laxo que uno que llega por un link.
   const startId = parseStartId(parsed.data.startId);
-  if (!startId) return { items: [], nextCursor: null };
+  if (!startId) return vacio;
 
   const scope = parseVideosScope(parsed.data.scope);
 
@@ -115,11 +136,12 @@ export async function openReelAtPostAction(input: {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const viewerId = user?.id ?? null;
 
-  return fetchVideoReelsPage({
+  const page = await fetchVideoReelsPage({
     supabase,
     tenantId: tenant.id,
-    viewerId: user?.id ?? null,
+    viewerId,
     scope,
     // SIN filtro de tema: el reel que abre el feed sigue "los otros videos
     // cortos", que es lo que pidió el cliente — no los de la categoría del
@@ -129,4 +151,6 @@ export async function openReelAtPostAction(input: {
     startId,
     pageSize: OVERLAY_PAGE_SIZE,
   });
+
+  return { ...page, tenantId: tenant.id, viewerId };
 }

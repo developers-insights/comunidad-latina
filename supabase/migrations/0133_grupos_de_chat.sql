@@ -699,39 +699,28 @@ grant all on table public.chat_group_messages to service_role;
 
 
 -- ---------------------------------------------------------------------------
--- 8 · Realtime
+-- 8 · Por qué acá NO se toca Realtime
 --
--- El chat 1-a-1 de hoy NO usa Realtime: se refresca con polling suave cada 15 s
--- (`src/components/messaging/thread-refresh.tsx`, «Realtime de Supabase queda
--- para R2»). En un grupo eso se nota mucho más —hay más gente escribiendo— así
--- que la tabla se suma a la publicación para que el navegador pueda escuchar
--- los INSERT. La pantalla igual conserva el polling como red: si la publicación
--- no existe en este proyecto, o el canal no conecta, el chat sigue andando 15 s
--- más lento en vez de quedarse mudo.
+-- El pedido original de este frente decía "sumar la tabla de mensajes de grupo
+-- a la publicación que ya use `messages`". Esa publicación NO EXISTE: en todo
+-- el repo no hay un solo `alter publication`, ni una sola llamada a
+-- `.channel()` o `postgres_changes` en `src/`. El chat 1-a-1 se actualiza con
+-- polling suave cada 15 s (`src/components/messaging/thread-refresh.tsx`, que
+-- lo deja escrito: «Realtime de Supabase queda para R2»).
 --
--- Envuelto en un DO porque `alter publication` explota si la publicación no
--- existe o si la tabla ya es miembro, y esta migración tiene que poder
--- aplicarse dos veces.
+-- Sumar la tabla a `supabase_realtime` acá habría prendido replicación lógica
+-- para una publicación que ningún cliente escucha: costo sin efecto. Y montar
+-- Realtime de verdad es una decisión de infraestructura —la propia
+-- documentación de Supabase hoy desaconseja `postgres_changes` y empuja a
+-- Broadcast from Database, que necesita triggers, canales privados y RLS sobre
+-- `realtime.messages`— que no se toma de costado dentro de la migración de una
+-- feature.
+--
+-- El grupo se refresca con el MISMO mecanismo que el chat 1-a-1, con un
+-- intervalo más corto porque hay más gente escribiendo
+-- (`src/components/messaging/group-live.tsx`). Cuando Realtime entre, entra
+-- para los dos chats a la vez y en su propia migración.
 -- ---------------------------------------------------------------------------
-do $$
-begin
-  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    if not exists (
-      select 1 from pg_publication_tables
-       where pubname = 'supabase_realtime'
-         and schemaname = 'public'
-         and tablename = 'chat_group_messages'
-    ) then
-      alter publication supabase_realtime add table public.chat_group_messages;
-    end if;
-  end if;
-exception
-  when others then
-    -- Realtime es una MEJORA, no un requisito: si esto falla, el polling de la
-    -- pantalla cubre el caso y la migración no se cae por un adorno.
-    raise notice 'No se pudo sumar chat_group_messages a supabase_realtime: %', sqlerrm;
-end;
-$$;
 
 
 -- ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ import {
   JOB_PAY_PERIODS,
   jobQuestionsSchema,
   parseJobAttrs,
+  type EmpleosKind,
   type JobQuestion,
 } from "@/components/empleos/helpers";
 import { COPY } from "@/components/empleos/copy";
@@ -314,6 +315,30 @@ export async function finalizeJob(rawInput: {
   listingId: string;
   photoPaths: string[];
 }): Promise<FinalizeJobResult> {
+  return finalizeEmpleosListing(rawInput, "job");
+}
+
+/**
+ * Cierre del aviso de SERVICIO. Mismo motor que el empleo con `kind='service'`
+ * y SIN fotos: el wizard del servicio no las pide (tres pasos, un minuto desde
+ * el teléfono), así que la lista viaja vacía y toda la rama de paths de storage
+ * queda inerte sola.
+ *
+ * Comparte el cuerpo en vez de copiarlo porque lo que hace no es "publicar un
+ * empleo": es la política de publicación de ESTE módulo —moderar el texto,
+ * decidir published vs pending_review, encolar en /admin/moderacion— y tenerla
+ * dos veces es tenerla mal la segunda vez que alguien la toque.
+ */
+export async function finalizeService(rawInput: {
+  listingId: string;
+}): Promise<FinalizeJobResult> {
+  return finalizeEmpleosListing({ listingId: rawInput.listingId, photoPaths: [] }, "service");
+}
+
+async function finalizeEmpleosListing(
+  rawInput: { listingId: string; photoPaths: string[] },
+  kind: EmpleosKind,
+): Promise<FinalizeJobResult> {
   const parsed = finalizeJobSchema.safeParse(rawInput);
   if (!parsed.success) {
     return { ok: false, error: C.errors.generic };
@@ -358,7 +383,7 @@ export async function finalizeJob(rawInput: {
     .eq("id", listingId)
     .eq("tenant_id", tenant.id)
     .eq("created_by", user.id)
-    .eq("kind", "job")
+    .eq("kind", kind)
     .in("status", ["draft", "pending_review"])
     .select("id, title, description, attrs")
     .maybeSingle();
@@ -449,4 +474,147 @@ export async function finalizeJob(rawInput: {
   }
 
   return { ok: true, status };
+}
+
+// ===========================================================================
+// SERVICIO — el otro lado del mostrador (listing kind='service', 0129)
+// ===========================================================================
+
+/**
+ * Qué se le pide a un servicio, y qué NO.
+ *
+ * Un empleo exige salario (transparencia: un aviso sin monto recibe menos
+ * postulaciones y esconde la peor parte del trato). Un SERVICIO no: el jardinero
+ * cotiza mirando el patio, y obligarlo a poner un número lo empujaría a inventar
+ * uno que después no sostiene. Por eso `priceAmount` es opcional y su ausencia
+ * significa "a convenir", que la pantalla dice con todas las letras.
+ *
+ * Tampoco hay `employmentType` (no hay jornada que declarar), ni `questions`
+ * (no hay postulación), ni fotos.
+ */
+const serviceDraftSchema = z
+  .object({
+    title: z.string().trim().min(8).max(120),
+    description: z.string().trim().min(30).max(4000),
+    /** Piso del precio de referencia. `null`/ausente = a convenir. */
+    priceAmount: z.number().positive().max(MAX_SALARY).nullish(),
+    payPeriod: z.enum(JOB_PAY_PERIODS),
+    /** Modalidad → COLUMNA `listings.work_mode` (0087), igual que el empleo. */
+    workMode: z.enum(WORK_MODES).nullish(),
+    areaLabel: z.string().trim().max(80).nullish(),
+    /** Disponibilidad: MISMAS claves de `attrs` que ya usa un empleo. */
+    days: z.array(z.string()).max(7).nullish(),
+    schedule: z.string().trim().max(MAX_SCHEDULE_LENGTH).nullish(),
+  })
+  .superRefine((value, ctx) => {
+    if (requiresArea(value.workMode ?? null) && (value.areaLabel ?? "").trim().length < 3) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["areaLabel"],
+        message: COPY.servicePublish.errors.areaShort,
+      });
+    }
+  });
+
+export type ServiceDraftInput = z.input<typeof serviceDraftSchema>;
+
+const SERVICE_USER_FACING_ISSUES = new Set<string>([COPY.servicePublish.errors.areaShort]);
+
+/**
+ * Borrador del servicio. Mismo flujo de dos fases que el empleo (lo dicta la
+ * RLS de `listings`, 0004: un aviso de usuario no puede NACER published), y las
+ * mismas tres barreras en el mismo orden: zod puro → guard de tenant → cuota.
+ *
+ * ── POR QUÉ ACÁ NO HAY GATE DE IDENTIDAD, Y ES UNA DECISIÓN, NO UN OLVIDO ──
+ * `app.vertical_exige_identidad()` (0106/0126) exige identidad verificada en
+ * property, product, job y en el evento que cobra entrada. `service` NO está en
+ * esa lista, así que la policy `listings_insert` tampoco la va a pedir, y este
+ * código no puede exigir algo que la base no respalda sin volverse la única
+ * verdad.
+ *
+ * El criterio de producto detrás: un servicio es el aviso de menor fricción del
+ * módulo —"soy jardinero, sábados y domingos"— y pedirle documento a alguien
+ * que ofrece cortar el pasto apagaría la pestaña antes de que arranque. La red
+ * de seguridad que SÍ corre es la misma que en Profesionales, que tampoco lo
+ * exige: moderación del texto antes de publicar, Trust Score visible en la
+ * tarjeta y en el detalle, reportes y auto-pausa (0118).
+ *
+ * PENDIENTE DE PRODUCTO (queda anotado acá porque es donde se cambia): el
+ * feedback del 2026-09-03 dejó abierto confirmar con el cliente que un servicio
+ * es "un aviso simple sin verificación". Si la respuesta cambia, esto es una
+ * línea acá MÁS la rama en `app.vertical_exige_identidad` — nunca sólo acá.
+ */
+export type CreateServiceDraftResult =
+  | { ok: true; listingId: string }
+  | { ok: false; error: string; needsAuth?: boolean };
+
+export async function createServiceDraft(
+  rawInput: ServiceDraftInput,
+): Promise<CreateServiceDraftResult> {
+  const parsed = serviceDraftSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    const explicit = parsed.error.issues.find((issue) =>
+      SERVICE_USER_FACING_ISSUES.has(issue.message),
+    );
+    return { ok: false, error: explicit?.message ?? COPY.servicePublish.errors.generic };
+  }
+  const input = parsed.data;
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") {
+      return { ok: false, needsAuth: true, error: C.needLoginCta };
+    }
+    return { ok: false, error: guard.message };
+  }
+  const { tenant, supabase, user } = guard;
+
+  // MISMO balde que los empleos y no uno propio: el abuso que la cuota frena
+  // —inundar la sección de avisos— es el mismo se llame empleo o servicio, y
+  // dos baldes de 10 serían 20 avisos por día con otro nombre.
+  if (!limit(`empleos-publicar:${user.id}`, 10, DAY_MS).ok) {
+    return { ok: false, error: COPY.servicePublish.errors.generic };
+  }
+
+  // `attrs` sólo lleva lo DECLARADO: una clave ausente se lee como "no lo dijo"
+  // (readServiceDetails), y escribir un arreglo vacío convertiría ese silencio
+  // en una afirmación.
+  const attrs: Record<string, string | string[]> = {};
+  const days = normalizeWorkDays((input.days ?? []).filter(isWorkDay));
+  if (days.length > 0) attrs[WORK_DAYS_ATTR] = days;
+  if (input.schedule) attrs[SCHEDULE_ATTR] = input.schedule;
+
+  const workMode = input.workMode ?? null;
+  const areaLabel = requiresArea(workMode) ? (input.areaLabel ?? "").trim() || null : null;
+  const priceAmount = input.priceAmount ?? null;
+
+  const open = supabase as unknown as SupabaseClient;
+  const { data: created, error } = await open
+    .from("listings")
+    .insert({
+      tenant_id: tenant.id,
+      kind: "service",
+      title: input.title,
+      description: input.description,
+      price_amount: priceAmount,
+      price_currency: tenant.currency,
+      // Un período SIN monto no significa nada ("por hora" de cuánto), y peor:
+      // dejaría a `formatListingPrice` con medio dato. Sin monto, null.
+      price_period: priceAmount === null ? null : input.payPeriod,
+      attrs,
+      area_label: areaLabel,
+      work_mode: workMode,
+      status: "draft",
+      created_by: user.id,
+    })
+    .select("id")
+    .returns<{ id: string }[]>()
+    .single();
+
+  if (error || !created) {
+    console.warn("[empleos] insert de borrador de servicio falló", { code: error?.code });
+    return { ok: false, error: COPY.servicePublish.errors.generic };
+  }
+
+  return { ok: true, listingId: created.id };
 }

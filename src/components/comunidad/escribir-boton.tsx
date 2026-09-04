@@ -2,15 +2,21 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChatCircleDots } from "@phosphor-icons/react/dist/ssr";
+import { EnvelopeSimple } from "@phosphor-icons/react/dist/ssr";
 import { Button, useToast } from "@/components/ui";
 import { COMUNIDAD_COPY } from "@/lib/comunidad";
-import { contactarAvisoDeAyuda } from "@/app/(app)/comunidad/ayuda-mutua/actions";
+import { contactarPedido } from "@/app/(app)/comunidad/pedir-ayuda/actions";
 
-const C = COMUNIDAD_COPY.ayudaMutua.card;
+const C = COMUNIDAD_COPY.pedirAyuda.card;
 
 /**
- * "Escribirle" — la ÚNICA forma de llegar a quien publicó un aviso de ayuda.
+ * "Escribirle" — el canal PRIVADO con quien escribió el pedido.
+ *
+ * Convive con las respuestas públicas y no compite con ellas: la respuesta
+ * pública es la que le sirve a los próximos veinte que busquen lo mismo (que es
+ * el producto entero), y el mensaje privado es para lo que no se publica —una
+ * dirección particular, el nombre de alguien que va a atender, coordinar una
+ * entrega—. Por eso es secundario en la pantalla y no primario.
  *
  * No es un `mailto:` ni un `tel:` porque no hay nada de eso guardado: la tabla
  * de la 0120 no tiene una sola columna de contacto, a propósito. Este botón
@@ -18,17 +24,13 @@ const C = COMUNIDAD_COPY.ayudaMutua.card;
  * la app ya sabe pedir aceptación, reportar y bloquear.
  *
  * Sin confirmación previa: abrir un hilo no destruye nada y del otro lado no
- * pasa nada hasta que se escribe el primer mensaje. Un "¿estás seguro?" acá
- * sería fricción sobre alguien que está tratando de ayudar.
+ * pasa nada hasta que se escribe el primer mensaje.
  */
 export function EscribirBoton({
-  avisoId,
-  esPedido,
+  pedidoId,
   className,
 }: {
-  avisoId: string;
-  /** `true` cuando el aviso es un lugar pidiendo manos: cambia sólo la etiqueta. */
-  esPedido: boolean;
+  pedidoId: string;
   className?: string;
 }) {
   const router = useRouter();
@@ -38,10 +40,12 @@ export function EscribirBoton({
   async function escribir() {
     setEnviando(true);
     try {
-      const resultado = await contactarAvisoDeAyuda({ avisoId });
+      const resultado = await contactarPedido({ pedidoId });
       if (!resultado.ok) {
         if (resultado.needsAuth) {
-          router.push(`/entrar?next=${encodeURIComponent("/comunidad/ayuda-mutua")}`);
+          router.push(
+            `/entrar?next=${encodeURIComponent(`/comunidad/pedir-ayuda/${pedidoId}`)}`,
+          );
           return;
         }
         toast({ variant: "danger", title: resultado.error });
@@ -58,15 +62,15 @@ export function EscribirBoton({
   return (
     <Button
       type="button"
-      variant="primary"
+      variant="outline"
       size="sm"
       onClick={escribir}
       disabled={enviando}
       aria-busy={enviando}
       className={className}
     >
-      <ChatCircleDots size={18} aria-hidden="true" />
-      {esPedido ? C.escribirNeed : C.escribir}
+      <EnvelopeSimple size={18} aria-hidden="true" />
+      {C.escribir}
     </Button>
   );
 }

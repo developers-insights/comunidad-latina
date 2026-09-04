@@ -1,7 +1,14 @@
-import { SealCheck, ShieldWarning, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, BezelCard, Chip } from "@/components/ui";
+import Link from "next/link";
+import {
+  PencilSimple,
+  SealCheck,
+  ShieldWarning,
+  Storefront,
+} from "@phosphor-icons/react/dist/ssr";
+import { Avatar, BezelCard, Chip, buttonVariants } from "@/components/ui";
 import type { IdentidadNegocio } from "@/lib/perfil-activo/identidad";
 import { PERFIL_ACTIVO_COPY } from "@/lib/perfil-activo/copy";
+import { cn } from "@/lib/utils";
 import { businessCategoryLabel } from "../categories";
 import { COPY } from "./copy";
 import { UsarPerfil } from "./usar-perfil";
@@ -87,15 +94,32 @@ export function NegocioCard({
         </Chip>
       </div>
 
-      {/* La acción, anclada a una línea. Es lo que le faltaba: antes quedaba
-          suelta contra el bloque de color de arriba, sin nada que la separara. */}
-      <div className="border-t border-border-subtle pt-3">
+      {/* Las acciones, ancladas a una línea. Es lo que le faltaba: antes
+          quedaban sueltas contra el bloque de color de arriba, sin nada que las
+          separara.
+
+          "Editar la página" (0127) va DEBAJO de "Usar este perfil" y no al
+          lado: son dos verbos de peso muy distinto —uno cambia con qué nombre
+          publicás, el otro abre un formulario— y ponerlos a la par invitaba a
+          tocar el equivocado. Sin ficha publicada no se ofrece: sería un link
+          a una pantalla que devuelve 404. */}
+      <div className="flex flex-col gap-2 border-t border-border-subtle pt-3">
         <UsarPerfil
           businessId={negocio.businessId}
           nombre={negocio.nombre}
           nombrePersonal={nombrePersonal}
           activo={activo}
         />
+        {negocio.listingId && (
+          <Link
+            href={`/negocios/${negocio.listingId}/editar`}
+            aria-label={COPY.card.editAria(negocio.nombre)}
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "w-full")}
+          >
+            <PencilSimple size={16} aria-hidden="true" />
+            {COPY.card.edit}
+          </Link>
+        )}
       </div>
     </BezelCard>
   );

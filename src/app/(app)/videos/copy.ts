@@ -115,6 +115,13 @@ export const VIDEOS_COPY = {
     backToMenu: "Cambiar de categoría",
     activeCategory: (label: string) => `Viendo: ${label}`,
     allLabel: "Todos",
+    /**
+     * La salida del reel que se abre ENCIMA del feed (2026-09-03). Dice adónde
+     * vuelve el toque y no sólo "Cerrar": el reel se abrió sobre el feed sin
+     * navegar, así que la promesa —volvés al mismo lugar donde estabas— es
+     * justamente lo que hay que nombrar.
+     */
+    close: "Volver al feed",
   },
 
   /** Vacío de una categoría concreta: no es "no hay videos", es "acá todavía". */

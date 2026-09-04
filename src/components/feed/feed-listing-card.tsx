@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   Briefcase,
+  Toolbox,
   CalendarBlank,
   ChatCircleDots,
   Info,
@@ -46,8 +47,23 @@ const KIND_ICON: Record<string, Icon> = {
   professional: UserGear,
   event: CalendarBlank,
   job: Briefcase,
+  service: Toolbox,
   product: ShoppingBagOpen,
   creator_gig: Sparkle,
+};
+
+/**
+ * Rótulo del vertical que `COPY.listing.kindLabel` todavía no tiene.
+ *
+ * `service` (0129) es el kind nuevo de /empleos: alguien que OFRECE lo que sabe
+ * hacer. Su etiqueta vive acá y no en `copy.ts` por COORDINACIÓN, no por diseño
+ * — ese archivo lo está tocando otro frente en esta misma tanda, y sin esta
+ * tabla el fallback pintaba la palabra cruda "service" en la insignia de la
+ * tarjeta. Mismo precedente que `SHEET_COPY` y `CONTACT_KIND_COPY`, más abajo:
+ * MOVER a `COPY.listing.kindLabel` cuando ese archivo se pueda editar.
+ */
+const KIND_LABEL_EXTRA: Record<string, string> = {
+  service: "Servicio",
 };
 
 /**
@@ -65,6 +81,9 @@ const KIND_ICON: Record<string, Icon> = {
  */
 const DETAIL_ROUTE: Record<string, (id: string) => string> = {
   business: (id) => `/negocios/${id}`,
+  // Un servicio se lee en la MISMA página que un empleo: `/empleos/[id]` acepta
+  // los dos kinds y elige la pantalla según el que sea.
+  service: (id) => `/empleos/${id}`,
   event: (id) => `/eventos/${id}`,
   professional: (id) => `/profesionales/${id}`,
   product: (id) => `/marketplace/${id}`,
@@ -78,6 +97,9 @@ const LISTING_ACCENT: Record<string, string> = {
   professional: "var(--accent-profesionales)",
   event: "var(--accent-eventos)",
   job: "var(--accent-empleos)",
+  // Mismo acento que Empleos, y a propósito: un servicio vive en esa sección y
+  // se abre en /empleos/[id]. Un color propio prometería un módulo aparte.
+  service: "var(--accent-empleos)",
   product: "var(--accent-marketplace)",
   creator_gig: "var(--accent-creadores)",
 };
@@ -126,6 +148,16 @@ const CONTACT_KIND_COPY: Record<string, { trigger: string; placeholder: string }
   professional: {
     trigger: "Consultar por el servicio",
     placeholder: "Hola, quería consultarte por tu servicio.",
+  },
+  /**
+   * SERVICIO (0129) — el rótulo dice a QUIÉN se le escribe, igual que sus
+   * hermanos: del otro lado hay una persona que ofrece su trabajo, no una
+   * empresa ni un aviso. Es además el ÚNICO camino que tiene este kind: un
+   * servicio no se postula, se contacta.
+   */
+  service: {
+    trigger: "Escribirle a quien lo ofrece",
+    placeholder: "Hola, vi tu servicio. ¿Estás disponible?",
   },
   event: {
     trigger: "Consultar por el evento",
@@ -443,7 +475,8 @@ export function FeedListingCard({
   const [open, setOpen] = useState(false);
   const viewer = useMediaViewer();
   const KindIcon = KIND_ICON[listing.kind] ?? Storefront;
-  const kindLabel = COPY.listing.kindLabel[listing.kind] ?? listing.kind;
+  const kindLabel =
+    COPY.listing.kindLabel[listing.kind] ?? KIND_LABEL_EXTRA[listing.kind] ?? listing.kind;
   const detailHref = DETAIL_ROUTE[listing.kind]?.(listing.id) ?? null;
   const accent = LISTING_ACCENT[listing.kind] ?? "var(--accent-feed)";
   const photoUrl = listing.photoUrl;

@@ -10,6 +10,7 @@ import {
   Trophy,
 } from "@phosphor-icons/react/dist/ssr";
 import { allPhotoUrls, decodeCursor, firstNameOf, firstPhotoUrl } from "@/components/listings";
+import { fetchFotosDeNegocios } from "@/lib/negocios/pagina-query";
 import { OfertasPanel, PublicacionesPanel } from "@/components/negocios";
 import {
   ModuleFilterSelect,
@@ -421,7 +422,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
     new Set(orderedRows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
   );
 
-  const [scoresResult, ownersResult, ratings, horarios] = await Promise.all([
+  const [scoresResult, ownersResult, ratings, horarios, fotosPropias] = await Promise.all([
     ownerIds.length > 0
       ? supabase
           .from("trust_scores")
@@ -437,6 +438,11 @@ async function NegociosContent({ filters }: { filters: Filters }) {
     fetchListingRatings(supabase, listingIds),
     // Horarios: dos consultas por lote (cabecera + tramos), nunca dos por card.
     fetchHorariosDeNegocios(supabase, listingIds),
+    // Logo y portada (0127), también en lote. En su propia consulta y no en el
+    // `select` de arriba a propósito: si la migración todavía no está aplicada,
+    // esto devuelve un mapa vacío en vez de dejar el directorio ENTERO sin
+    // resultados por un `column does not exist`.
+    fetchFotosDeNegocios(supabase, listingIds),
   ]);
 
   const trustByOwner = new Map<string, OwnerTrustRow>();
@@ -695,7 +701,15 @@ async function NegociosContent({ filters }: { filters: Filters }) {
               description: negocio.description,
               categoryLabel: businessCategoryLabel(businessCategoryOf(negocio.attrs)),
               areaLabel: negocio.area_label,
-              photoUrl: firstPhotoUrl(negocio.photos),
+              // La foto de la tarjeta, por orden de intención: la PORTADA que
+              // el negocio eligió, después su LOGO, y recién ahí la galería del
+              // aviso (0127). Un negocio que subió su cara tiene que verse con
+              // esa cara en el directorio; el fallback de siempre queda para
+              // los que todavía no subieron ninguna.
+              photoUrl:
+                fotosPropias.get(negocio.id)?.coverUrl ??
+                fotosPropias.get(negocio.id)?.logoUrl ??
+                firstPhotoUrl(negocio.photos),
               // Tocar la foto abre el visor con todas; "Ver negocio" sigue
               // abriendo la ficha (feedback 2026-07-26).
               photos: allPhotoUrls(negocio.photos),

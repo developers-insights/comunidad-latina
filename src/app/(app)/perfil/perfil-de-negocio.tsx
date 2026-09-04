@@ -4,6 +4,7 @@ import {
   Gear,
   ImageSquare,
   Info,
+  PencilSimple,
   Storefront,
 } from "@phosphor-icons/react/dist/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -61,8 +62,10 @@ const COPY = {
     "Lo que publiques y comentes va a salir con este nombre. Tu perfil personal queda intacto: cambiá cuando quieras desde el botón de arriba.",
   fotoTitle: "Ponele una foto a tu negocio",
   fotoBody:
-    "Es lo primero que ve la gente en el directorio y en cada cosa que publiques. Se sube desde la página del negocio.",
+    "Es lo primero que ve la gente en el directorio y en cada cosa que publiques. Se sube en un toque.",
   fotoCta: "Subir la foto",
+  editTitle: "Editar la página de tu negocio",
+  editDesc: "La foto, la descripción, el rubro, la zona y los servicios que ofrecés.",
   manageTitle: "Administrar tu cuenta de negocio",
   manageDesc: "Cambiar de perfil, ver tu rol y la presencia verificada.",
   settingsTitle: "Ajustes de tu cuenta",
@@ -194,8 +197,13 @@ export function PerfilDeNegocio({
             <span className="mt-0.5 block text-sm text-foreground-secondary">
               {COPY.fotoBody}
             </span>
+            {/* El destino cambió el 2026-09-03 y ése era EL bug: este botón
+                llevaba a la ficha pública «porque la foto se sube desde la
+                página del negocio», y en la página del negocio no había ningún
+                campo para subir nada. La subida no existía. Ahora va al editor
+                (0127), que es donde efectivamente se sube. */}
             <Link
-              href={paginaHref}
+              href={`${paginaHref}/editar#fotos`}
               className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-3")}
             >
               {COPY.fotoCta}
@@ -206,6 +214,18 @@ export function PerfilDeNegocio({
 
       <section className="flex flex-col gap-2">
         <div className="divide-y divide-border-subtle overflow-hidden rounded-xl border border-border-subtle bg-surface">
+          {/* Primera fila y no última: «editar la información de la otra
+              cuenta» (call 3/9) es lo que la persona vino a hacer acá, mientras
+              que cambiar de perfil o ver el rol son cosas que ya resolvió. Sin
+              ficha publicada no se ofrece —arriba se ofrece crearla. */}
+          {paginaHref && (
+            <Fila
+              href={`${paginaHref}/editar`}
+              icon={<PencilSimple size={20} />}
+              title={COPY.editTitle}
+              description={COPY.editDesc}
+            />
+          )}
           <Fila
             href="/negocios/cuenta"
             icon={<Storefront size={20} />}
@@ -285,14 +305,27 @@ export async function fetchNegocioPerfilData(
         .eq("tenant_id", tenantId)
         .eq("target_kind", "listing")
         .eq("target_id", listingId),
-      supabase.from("listings").select("photos").eq("id", listingId).maybeSingle(),
+      // `logo_path` es la foto de la IDENTIDAD del negocio (0127) y `photos`
+      // la galería del aviso. Se preguntan las dos y alcanza con cualquiera:
+      // un negocio cuya ficha ya tenía fotos no puede recibir el aviso de
+      // "ponele una foto" como si no tuviera ninguna. El `select` va sin tipar
+      // porque `database.types.ts` está generado hasta la 0076.
+      supabase
+        .from("listings")
+        .select("photos, logo_path")
+        .eq("id", listingId)
+        .maybeSingle(),
     ]);
 
-    const photos = (ficha.data as { photos?: string[] } | null)?.photos ?? [];
+    const ficha_ = ficha.data as { photos?: string[]; logo_path?: string | null } | null;
+    const photos = ficha_?.photos ?? [];
+    const logo = ficha_?.logo_path ?? null;
     return {
       postsCount: posts.count ?? 0,
       followersCount: followers.count ?? 0,
-      tieneFoto: photos.some((path) => path && path.trim().length > 0),
+      tieneFoto:
+        (logo !== null && logo.trim().length > 0) ||
+        photos.some((path) => path && path.trim().length > 0),
     };
   } catch {
     return { postsCount: 0, followersCount: 0, tieneFoto: false };

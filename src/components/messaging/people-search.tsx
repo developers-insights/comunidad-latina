@@ -64,11 +64,19 @@ export function PeopleSearch({
   const [estado, setEstado] = useState<Estado>({ fase: "vacio" });
   const abortRef = useRef<AbortController | null>(null);
 
+  const termino = valor.trim();
+  const buscable = termino.length >= 2;
+
   useEffect(() => {
-    const termino = valor.trim();
-    if (termino.length < 2) {
+    /**
+     * El estado "vacío" NO se setea acá: se DERIVA más abajo (`vista`). Setear
+     * estado sincrónicamente dentro de un efecto dispara un render en cascada
+     * —y el lint del repo lo prohíbe— cuando lo único que hace falta es no
+     * mostrar resultados de una búsqueda que ya no corresponde. Lo que sí es
+     * trabajo de efecto: cortar la petición en vuelo.
+     */
+    if (!buscable) {
       abortRef.current?.abort();
-      setEstado({ fase: "vacio" });
       return;
     }
 
@@ -100,11 +108,26 @@ export function PeopleSearch({
     }, 200);
 
     return () => window.clearTimeout(timer);
-  }, [valor]);
+  }, [termino, buscable]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const hayResultados = estado.fase === "listo" && estado.personas.length > 0;
+  /**
+   * Lo que se PINTA, derivado de lo que hay escrito.
+   *
+   * Sin término buscable no hay resultados que mostrar, y mientras el término
+   * cambió pero la respuesta todavía no llegó se muestra "buscando" en vez de
+   * los resultados del término anterior: ver una lista de "Ram" cuando en
+   * pantalla ya dice "Ramón" es la forma más rápida de que un buscador parezca
+   * roto.
+   */
+  const vista: Estado = !buscable
+    ? { fase: "vacio" }
+    : estado.fase === "listo" && estado.termino !== termino
+      ? { fase: "buscando" }
+      : estado;
+
+  const hayResultados = vista.fase === "listo" && vista.personas.length > 0;
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
@@ -146,33 +169,33 @@ export function PeopleSearch({
 
       {/* La única promesa accesible que hacemos: cuántos resultados hay. */}
       <p role="status" aria-live="polite" className="sr-only">
-        {estado.fase === "buscando"
+        {vista.fase === "buscando"
           ? COPY.inbox.searchHint
-          : estado.fase === "listo"
-            ? `${estado.personas.length} ${estado.personas.length === 1 ? "persona" : "personas"}`
+          : vista.fase === "listo"
+            ? `${vista.personas.length} ${vista.personas.length === 1 ? "persona" : "personas"}`
             : ""}
       </p>
 
-      {estado.fase === "buscando" && (
+      {vista.fase === "buscando" && (
         <p className="flex items-center gap-2 px-1 text-sm text-foreground-muted">
           <Spinner size={16} />
           {COPY.inbox.searchHint}
         </p>
       )}
 
-      {estado.fase === "error" && (
+      {vista.fase === "error" && (
         <p className="px-1 text-sm text-foreground-secondary">{COPY.inbox.searchError}</p>
       )}
 
-      {estado.fase === "listo" && estado.personas.length === 0 && (
+      {vista.fase === "listo" && vista.personas.length === 0 && (
         <p className="px-1 text-sm text-foreground-secondary">
-          {COPY.inbox.searchEmpty(estado.termino)}
+          {COPY.inbox.searchEmpty(vista.termino)}
         </p>
       )}
 
       {hayResultados && (
         <ul className="flex flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface">
-          {estado.personas.map((persona, index) => (
+          {vista.personas.map((persona, index) => (
             <li
               key={persona.id}
               className={index > 0 ? "border-t border-border-subtle" : undefined}

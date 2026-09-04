@@ -25,11 +25,20 @@ import { LikeBurst, usePrefersReducedMotion } from "@/components/motion";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import { useCommentsSheet, type PostCardModel } from "@/components/feed";
 import { ViewerVideo } from "@/components/feed/media-viewer";
+/**
+ * De `post-music` se importa por RUTA DIRECTA y no por el barril del feed a
+ * propósito: el barril arrastra la hoja de comentarios entera (Supabase + las
+ * actions del marketplace) y este módulo sólo necesita el reproductor de la
+ * pista. Es el mismo criterio con el que ya entra `ViewerVideo` de acá al lado.
+ */
+import { PostMusicProvider, usePostMusic } from "@/components/feed/post-music";
+import { MusicBadge } from "@/components/feed/music-badge";
 import heartStyles from "@/components/feed/card-post-media.module.css";
 import {
   recordPostViewAction,
   toggleSaveAction,
 } from "@/app/(app)/feed/engagement-actions";
+import { attributionLine } from "@/lib/media/audio-track";
 import { useMounted } from "@/lib/design/use-overlay";
 import { useFirmaActiva } from "@/lib/perfil-activo/firma-activa";
 import { cn } from "@/lib/utils";
@@ -96,6 +105,112 @@ export function VideoReels({
   initialItems,
   initialCursor,
 }: VideoReelsProps) {
+  // PORTAL a <body> (mismo patrón que MediaViewer): el template de página
+  // anima con transform y un ancestro transformado convierte `fixed` en un
+  // posicionamiento relativo a él — los reels medían 358×0 dentro de la
+  // columna. Fuera del árbol de la página, el fixed vuelve a ser viewport.
+  const mounted = useMounted();
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      className="cl-print-hide fixed inset-x-0 bottom-0 top-0 z-30 bg-media-shade"
+      aria-label={VIDEOS_COPY.feedLabel}
+    >
+      <h1 className="sr-only">{VIDEOS_COPY.title}</h1>
+
+      {/* Qué se está viendo + la salida al menú. Llegar por el menú y no poder
+          volver a él sin el botón del sistema sería un callejón: la categoría
+          es un filtro, y un filtro siempre tiene que poder deshacerse. */}
+      {category && <ReelCategoryBar category={category} />}
+
+      <ReelStream
+        tenantId={tenantId}
+        viewerId={viewerId}
+        scope={scope}
+        category={category}
+        initialItems={initialItems}
+        initialCursor={initialCursor}
+        surface="page"
+      />
+    </div>,
+    document.body,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// El scroll de videos, sin el marco — lo comparten la SECCIÓN y el OVERLAY
+// ---------------------------------------------------------------------------
+
+/**
+ * DÓNDE ESTÁ MONTADO EL SCROLL, y lo único que cambia entre los dos lugares:
+ * cuánto espacio hay que dejar libre abajo.
+ *
+ *  · `page` — la sección `/videos`. El contenedor vive POR DEBAJO del header y
+ *    del bottom nav (z-30 < z-40), así que las acciones y la barra de progreso
+ *    tienen que despejar la nav o quedan tapadas por ella.
+ *  · `overlay` — el reel que abre un toque en el feed. Va ENCIMA de todo
+ *    (z-[60]), tapa la nav, y el borde inferior de la pantalla es suyo.
+ *
+ * Es un mapa de clases y no dos componentes porque la diferencia es exactamente
+ * ésta: mismos slides, mismo scroll, mismas acciones, distinto piso.
+ */
+export type ReelSurface = "page" | "overlay";
+
+export interface ReelOffsets {
+  videoControls: string;
+  rail: string;
+  caption: string;
+  status: string;
+  adChip: string;
+}
+
+const REEL_SURFACE: Record<ReelSurface, ReelOffsets> = {
+  page: {
+    videoControls: "pb-[calc(4rem+env(safe-area-inset-bottom))]",
+    rail: "bottom-[calc(6.25rem+env(safe-area-inset-bottom))]",
+    caption: "pb-[calc(6.25rem+env(safe-area-inset-bottom))]",
+    status: "bottom-[calc(4.5rem+env(safe-area-inset-bottom))]",
+    adChip: "top-[7.25rem]",
+  },
+  overlay: {
+    videoControls: "pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
+    rail: "bottom-[calc(3.5rem+env(safe-area-inset-bottom))]",
+    caption: "pb-[calc(3.5rem+env(safe-area-inset-bottom))]",
+    status: "bottom-[calc(1.25rem+env(safe-area-inset-bottom))]",
+    adChip: "top-[4.75rem]",
+  },
+};
+
+/**
+ * CUÁNTOS SLIDES MANTIENEN UN `<video>` VIVO alrededor del activo.
+ *
+ * 1 = el de arriba, el de abajo y el que se está viendo. Los demás siguen
+ * OCUPANDO su lugar en el scroll (el índice activo se calcula por posición, así
+ * que un slide que midiera distinto desincronizaría el reel entero) pero
+ * muestran el poster en vez de montar un decodificador.
+ *
+ * El número no es capricho: con una tanda de 8 videos, montarlos todos son 8
+ * decodificadores compitiendo en un teléfono de gama media — parte del "se
+ * demoran mucho" que reportó el cliente. Con ±1, el siguiente ya está listo
+ * cuando llegás y el anterior sigue vivo si volvés, que son los dos únicos
+ * movimientos posibles desde donde estás parado.
+ */
+const MOUNT_WINDOW = 1;
+
+export interface ReelStreamProps extends VideoReelsProps {
+  surface?: ReelSurface;
+}
+
+export function ReelStream({
+  tenantId,
+  viewerId,
+  scope,
+  category = null,
+  initialItems,
+  initialCursor,
+  surface = "page",
+}: ReelStreamProps) {
   // El filtro se aplica al ENTRAR al estado, no al pintar: el índice activo se
   // calcula por posición de scroll, así que la lista que se renderiza y la que
   // se indexa tienen que ser exactamente la misma.
@@ -105,11 +220,19 @@ export function VideoReels({
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [activeIndex, setActiveIndex] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
-  // Sonido compartido entre slides: silenciar uno silencia el reel entero
-  // (comportamiento estándar de Instagram/TikTok).
+  /**
+   * Sonido compartido entre slides: silenciar uno silencia el reel entero
+   * (comportamiento estándar de Instagram/TikTok).
+   *
+   * Desde el 2026-09-03 es TAMBIÉN el gesto que gobierna la MÚSICA de cada
+   * publicación: cada slide monta su `PostMusicProvider` controlado por este
+   * estado, así que deslizar al siguiente video no vuelve al silencio — el gesto
+   * ya está hecho y vale para todo el reel.
+   */
   const [muted, setMuted] = useState(false);
   const loadingRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const offsets = REEL_SURFACE[surface];
 
   /**
    * CON LA PUERTA ABIERTA, EL VIDEO SE PARA.
@@ -206,60 +329,67 @@ export function VideoReels({
   const atEnd =
     !cursor && !loadingMore && items.length > 0 && activeIndex >= items.length - 1;
 
-  // PORTAL a <body> (mismo patrón que MediaViewer): el template de página
-  // anima con transform y un ancestro transformado convierte `fixed` en un
-  // posicionamiento relativo a él — los reels medían 358×0 dentro de la
-  // columna. Fuera del árbol de la página, el fixed vuelve a ser viewport.
-  const mounted = useMounted();
-  if (!mounted) return null;
+  if (isEmpty) return <EmptyReels category={category} />;
 
-  return createPortal(
-    <div
-      className="cl-print-hide fixed inset-x-0 bottom-0 top-0 z-30 bg-media-shade"
-      aria-label={VIDEOS_COPY.feedLabel}
-    >
-      <h1 className="sr-only">{VIDEOS_COPY.title}</h1>
-
-      {/* Qué se está viendo + la salida al menú. Llegar por el menú y no poder
-          volver a él sin el botón del sistema sería un callejón: la categoría
-          es un filtro, y un filtro siempre tiene que poder deshacerse. */}
-      {category && <ReelCategoryBar category={category} />}
-
-      {isEmpty ? (
-        <EmptyReels category={category} />
-      ) : (
-        <div
-          ref={scrollRef}
-          onScroll={onScroll}
-          className={cn(
-            "h-full w-full snap-y snap-mandatory overflow-y-auto overscroll-contain",
-            "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-          )}
-        >
-          {items.map((post, index) => (
-            <ReelSlide
-              key={post.id}
-              post={post}
-              tenantId={tenantId}
-              viewerId={viewerId}
-              active={index === activeIndex && !authOpen}
-              muted={muted}
-              onMutedChange={setMuted}
-            />
-          ))}
-        </div>
-      )}
+  return (
+    <>
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        /**
+         * La marca que busca el gesto de cerrar del overlay: el arrastre hacia
+         * abajo sólo cierra si ESTE scroll ya está arriba de todo. Sin el
+         * atributo, ese gesto no podría distinguirse de un scroll y se comería
+         * el deslizar entre videos (ver `reel-overlay.tsx`).
+         */
+        data-reel-scroll=""
+        className={cn(
+          "h-full w-full snap-y snap-mandatory overflow-y-auto overscroll-contain",
+          "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        )}
+      >
+        {items.map((post, index) => (
+          <ReelSlide
+            key={post.id}
+            post={post}
+            tenantId={tenantId}
+            viewerId={viewerId}
+            active={index === activeIndex && !authOpen}
+            /**
+             * Sólo el activo y sus dos vecinos montan un reproductor; el resto
+             * ocupa su lugar con el poster (ver `MOUNT_WINDOW`).
+             */
+            mounted={Math.abs(index - activeIndex) <= MOUNT_WINDOW}
+            /**
+             * PRECARGA COMPLETA para el que se está viendo y para el SIGUIENTE.
+             * El de abajo es el único movimiento que la persona va a hacer
+             * seguro, así que cuando llegue tiene que estar listo — es la otra
+             * mitad del "salen en blanco" que reportó el cliente. El de arriba
+             * (que ya se vio) se queda en `metadata`: su archivo casi seguro
+             * sigue en la caché del navegador.
+             */
+            preload={
+              index === activeIndex || index === activeIndex + 1 ? "auto" : "metadata"
+            }
+            muted={muted}
+            onMutedChange={setMuted}
+            offsets={offsets}
+          />
+        ))}
+      </div>
 
       {(loadingMore || atEnd) && (
         <p
           role="status"
-          className="absolute bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-20 max-w-[85%] -translate-x-1/2 rounded-full bg-media-scrim px-3.5 py-1.5 text-center text-xs font-medium text-on-media"
+          className={cn(
+            "absolute left-1/2 z-20 max-w-[85%] -translate-x-1/2 rounded-full bg-media-scrim px-3.5 py-1.5 text-center text-xs font-medium text-on-media",
+            offsets.status,
+          )}
         >
           {loadingMore ? VIDEOS_COPY.loadingMore : VIDEOS_COPY.endOfFeed}
         </p>
       )}
-    </div>,
-    document.body,
+    </>
   );
 }
 
@@ -272,15 +402,23 @@ function ReelSlide({
   tenantId,
   viewerId,
   active,
+  mounted,
+  preload,
   muted,
   onMutedChange,
+  offsets,
 }: {
   post: PostCardModel;
   tenantId: string;
   viewerId: string | null;
   active: boolean;
+  /** ¿Este slide monta un reproductor, o alcanza con su poster? (MOUNT_WINDOW) */
+  mounted: boolean;
+  /** Cuánto se baja de este archivo antes de que nadie lo mire. */
+  preload: "none" | "metadata" | "auto";
   muted: boolean;
   onMutedChange: (muted: boolean) => void;
+  offsets: ReelOffsets;
 }) {
   const reduce = usePrefersReducedMotion();
   const like = useReelLike({ post, tenantId, viewerId });
@@ -292,6 +430,11 @@ function ReelSlide({
    * miniatura. Ausente = archivo del bucket, el camino de siempre.
    */
   const muxPlaybackId = videoItem?.muxPlaybackId ?? null;
+  /**
+   * Primer cuadro capturado al subir (0132). En un video de Mux no hace falta:
+   * su `url` YA es la miniatura que genera Mux, así que se usa ésa.
+   */
+  const posterUrl = videoItem?.posterUrl ?? (muxPlaybackId ? videoItem?.url : null) ?? null;
   const entity = post.entity;
   const displayTitle = entity ? entity.title : post.author.displayName;
 
@@ -329,25 +472,40 @@ function ReelSlide({
       aria-label={VIDEOS_COPY.videoOf(displayTitle)}
       className="relative h-full w-full snap-start snap-always"
     >
-      <div className="mx-auto h-full w-full max-w-lg">
-        <ViewerVideo
-          url={videoUrl ?? ""}
-          muxPlaybackId={muxPlaybackId}
-          active={active}
-          muted={muted}
-          onMutedChange={onMutedChange}
-          authorLabel={displayTitle}
-          fit="cover"
-          showMute={false}
-          onDoubleTap={handleDoubleTap}
-          // Videos Cortos es corto también cuando el archivo no lo es: los 7
-          // videos anteriores a la 0046 no declaran duración, y su archivo puede
-          // durar lo que sea. A los 90 s el reel vuelve a empezar.
-          maxPlaybackSeconds={playbackCapSeconds("reel")}
-          // La barra de progreso queda por ENCIMA del bottom nav (z-40 fijo).
-          controlsClassName="pb-[calc(4rem+env(safe-area-inset-bottom))]"
-        />
-      </div>
+      {/**
+       * LA MÚSICA DE LA PUBLICACIÓN, TAMBIÉN ACÁ (cliente 2026-09-03, 17:23:
+       * «ahí no te sale la música»).
+       *
+       * El reel montaba el video y nada más: una publicación con canción sonaba
+       * en el feed y llegaba muda a Videos Cortos. `PostMusicProvider` es el
+       * mismo que usa la tarjeta —mismo `<audio>`, mismo recorte con sus
+       * desvanecidos, mismo árbitro (`resolveAudioMix`)— montado acá con DOS
+       * diferencias que hacen a un reel:
+       *
+       *  · CONTROLADO por el sonido del reel entero: el gesto es "que este reel
+       *    suene", no "que suene esta publicación". Sin eso, cada deslizada
+       *    montaba un provider nuevo en silencio y había que volver a tocar.
+       *  · SIN su altavoz propio (`PostMusicSpeaker`): el reel ya tiene el suyo
+       *    en el riel derecho, y dos controles para el mismo estado, en dos
+       *    esquinas distintas, es peor que uno.
+       *
+       * Es también quien decide si el VIDEO va mudo: con canción, manda la
+       * canción (regla 2 de `audio-mix`), igual que en el feed.
+       */}
+      <ReelSlideMedia
+        post={post}
+        active={active}
+        mounted={mounted}
+        preload={preload}
+        muted={muted}
+        onMutedChange={onMutedChange}
+        videoUrl={videoUrl ?? ""}
+        muxPlaybackId={muxPlaybackId}
+        posterUrl={posterUrl}
+        displayTitle={displayTitle}
+        onDoubleTap={handleDoubleTap}
+        offsets={offsets}
+      />
 
       {/* Corazón grande del doble-tap (decorativo: el estado lo dice el riel). */}
       {bursts > 0 && (
@@ -369,7 +527,7 @@ function ReelSlide({
 
       {/* Chip honesto de campaña paga (igual que la card del feed) */}
       {post.isPromoted && (
-        <div className="pointer-events-none absolute right-4 top-[7.25rem] z-10">
+        <div className={cn("pointer-events-none absolute right-4 z-10", offsets.adChip)}>
           <Chip variant="brand" size="sm">
             <Megaphone size={14} weight="fill" aria-hidden="true" />
             {VIDEOS_COPY.adChip}
@@ -378,7 +536,12 @@ function ReelSlide({
       )}
 
       {/* Info del autor + cuerpo, sobre el degradado del propio ViewerVideo */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 pb-[calc(6.25rem+env(safe-area-inset-bottom))]">
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 z-10",
+          offsets.caption,
+        )}
+      >
         <div className="mx-auto w-full max-w-lg px-4 pr-20">
           <div className="pointer-events-auto flex items-center gap-2.5">
             {/* La FOTO de la ficha cuando el video salió como negocio (0116), no
@@ -442,6 +605,17 @@ function ReelSlide({
               {post.body}
             </p>
           )}
+          {/* La canción de la publicación, con el mismo rótulo que en el feed:
+              quien la escucha tiene que poder saber qué está sonando. */}
+          {post.music && (
+            <div className="pointer-events-auto mt-2 flex">
+              <MusicBadge
+                title={post.music.track.title}
+                artist={post.music.track.artist}
+                attribution={attributionLine(post.music.track)}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -452,8 +626,175 @@ function ReelSlide({
         like={like}
         muted={muted}
         onMutedChange={onMutedChange}
+        offsets={offsets}
       />
     </section>
+  );
+}
+
+/**
+ * EL RECTÁNGULO DEL VIDEO: su pista, su reproductor y —cuando el slide está
+ * lejos del activo o el archivo todavía no llegó— su poster.
+ *
+ * Vive aparte de `ReelSlide` por una razón mecánica: `videoMuted` sale del
+ * contexto que monta `PostMusicProvider`, y un componente no puede consumir un
+ * contexto que él mismo monta. El de afuera declara la pista; éste la usa. Es
+ * exactamente el mismo par que `CardPostMedia` / `PostMediaLayers` en el feed.
+ */
+function ReelSlideMedia({
+  post,
+  active,
+  mounted,
+  preload,
+  muted,
+  onMutedChange,
+  videoUrl,
+  muxPlaybackId,
+  posterUrl,
+  displayTitle,
+  onDoubleTap,
+  offsets,
+}: {
+  post: PostCardModel;
+  active: boolean;
+  mounted: boolean;
+  preload: "none" | "metadata" | "auto";
+  muted: boolean;
+  onMutedChange: (muted: boolean) => void;
+  videoUrl: string;
+  muxPlaybackId: string | null;
+  posterUrl: string | null;
+  displayTitle: string;
+  onDoubleTap: () => void;
+  offsets: ReelOffsets;
+}) {
+  return (
+    <PostMusicProvider
+      music={post.music}
+      // Todo slide del reel ES un video, así que siempre hay algo que escuchar.
+      hasVideo
+      // El gesto es del REEL, no de esta publicación (ver el docblock del
+      // slide). `muted` invertido: acá se habla de "sonido encendido".
+      soundOn={!muted}
+      onSoundOnChange={(soundOn) => onMutedChange(!soundOn)}
+      className="mx-auto h-full w-full max-w-lg"
+    >
+      {mounted ? (
+        <ReelVideo
+          videoUrl={videoUrl}
+          muxPlaybackId={muxPlaybackId}
+          posterUrl={posterUrl}
+          preload={preload}
+          active={active}
+          onMutedChange={onMutedChange}
+          displayTitle={displayTitle}
+          onDoubleTap={onDoubleTap}
+          offsets={offsets}
+        />
+      ) : (
+        /**
+         * FUERA DE LA VENTANA DE MONTAJE. El slide conserva su tamaño exacto
+         * —el índice activo se calcula por posición de scroll— y muestra el
+         * poster. No monta `<video>`: ocho decodificadores a la vez en un
+         * teléfono es parte de por qué el reel "se demora mucho".
+         */
+        <ReelPoster posterUrl={posterUrl} />
+      )}
+    </PostMusicProvider>
+  );
+}
+
+/** El reproductor, ya con el veredicto de audio de la publicación aplicado. */
+function ReelVideo({
+  videoUrl,
+  muxPlaybackId,
+  posterUrl,
+  preload,
+  active,
+  onMutedChange,
+  displayTitle,
+  onDoubleTap,
+  offsets,
+}: {
+  videoUrl: string;
+  muxPlaybackId: string | null;
+  posterUrl: string | null;
+  preload: "none" | "metadata" | "auto";
+  active: boolean;
+  onMutedChange: (muted: boolean) => void;
+  displayTitle: string;
+  onDoubleTap: () => void;
+  offsets: ReelOffsets;
+}) {
+  const postMusic = usePostMusic();
+  /**
+   * Quién habla lo decide `resolveAudioMix`, no este componente: con canción, el
+   * video va mudo y suena la pista (regla 2 de audio-mix). Sin provider —que no
+   * puede pasar acá, pero el hook es opcional por contrato— el video queda mudo,
+   * que es el default seguro de siempre.
+   */
+  const videoMuted = postMusic?.mix.videoMuted ?? true;
+
+  return (
+    <ViewerVideo
+      url={videoUrl}
+      muxPlaybackId={muxPlaybackId}
+      active={active}
+      muted={videoMuted}
+      /**
+       * El único caso en que el reproductor pide cambiar el mute es cuando el
+       * navegador RECHAZA el autoplay con audio. Eso es un "no se pudo" del
+       * sistema, no un gesto: se propaga al sonido del reel para que el altavoz
+       * del riel diga la verdad y un toque lo desbloquee.
+       */
+      onMutedChange={onMutedChange}
+      authorLabel={displayTitle}
+      fit="cover"
+      showMute={false}
+      onDoubleTap={onDoubleTap}
+      posterUrl={posterUrl}
+      preload={preload}
+      // Videos Cortos es corto también cuando el archivo no lo es: los 7
+      // videos anteriores a la 0046 no declaran duración, y su archivo puede
+      // durar lo que sea. A los 90 s el reel vuelve a empezar.
+      maxPlaybackSeconds={playbackCapSeconds("reel")}
+      // La barra de progreso queda por ENCIMA del bottom nav (z-40 fijo) cuando
+      // el reel es la sección; en el overlay no hay nav que despejar.
+      controlsClassName={offsets.videoControls}
+    />
+  );
+}
+
+/**
+ * LO QUE SE VE MIENTRAS NO HAY VIDEO — y nunca es un rectángulo en blanco.
+ *
+ * Dos casos, un solo respaldo: el slide está fuera de la ventana de montaje, o
+ * el video no tiene poster (los anteriores a la 0132, o un archivo que el
+ * navegador no pudo decodificar al subir).
+ *
+ * Sin poster no se pinta un vacío: va un fondo con los tokens de la marca —un
+ * degradado cálido sobre el `media-shade`, nunca negro plano— y un ícono que
+ * dice que ahí abajo hay un video cargando. Es la diferencia entre "se rompió"
+ * y "ya viene", que es literalmente lo que el cliente no podía distinguir.
+ */
+function ReelPoster({ posterUrl }: { posterUrl: string | null }) {
+  return (
+    <div className="relative h-full w-full overflow-hidden" aria-hidden="true">
+      <div className="absolute inset-0 bg-media-shade bg-[radial-gradient(115%_85%_at_50%_20%,var(--color-brand-900),var(--color-media-shade)_70%)]" />
+      {posterUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- poster del bucket a pantalla completa, sin optimizador
+        <img
+          src={posterUrl}
+          alt=""
+          className="relative h-full w-full object-cover"
+          draggable={false}
+        />
+      ) : (
+        <span className="absolute inset-0 grid place-items-center">
+          <FilmSlate size={40} className="animate-pulse text-on-media/45" />
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -604,12 +945,14 @@ function ReelActions({
   like,
   muted,
   onMutedChange,
+  offsets,
 }: {
   post: PostCardModel;
   viewerId: string | null;
   like: ReelLikeState;
   muted: boolean;
   onMutedChange: (muted: boolean) => void;
+  offsets: ReelOffsets;
 }) {
   const requireAuth = useRequireAuth();
   const { toast } = useToast();
@@ -711,7 +1054,12 @@ function ReelActions({
   }
 
   return (
-    <div className="pointer-events-none absolute bottom-[calc(6.25rem+env(safe-area-inset-bottom))] right-2 z-10 flex flex-col items-center gap-3">
+    <div
+      className={cn(
+        "pointer-events-none absolute right-2 z-10 flex flex-col items-center gap-3",
+        offsets.rail,
+      )}
+    >
       <span className={cn("flex", liked && "text-danger")}>
         <LikeBurst
           active={liked}

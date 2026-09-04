@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { SealCheck, SignIn } from "@phosphor-icons/react/dist/ssr";
+import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/empleos/copy";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { requireIdentidadVerificada } from "@/lib/verificacion/gate";
-import { JobPublishForm } from "./publish-form";
+import { PublishRouter } from "./publish-router";
 
-export const metadata = { title: "Publicar un empleo" };
+export const metadata = { title: "Publicar un empleo o un servicio" };
 
 const C = COPY.publish;
 
@@ -51,31 +51,20 @@ export default async function PublicarEmpleoPage() {
     );
   }
 
-  // Identidad verificada, ANTES de mostrar el formulario. Publicar un empleo
-  // siempre la exige (`job` ∈ VERTICALES_QUE_EXIGEN_IDENTIDAD) y la policy
-  // `listings_insert` (0126) la va a exigir igual, así que ofrecer los cuatro
-  // pasos a quien no puede publicar es hacerle escribir el puesto, el sueldo y
-  // las preguntas para rechazarlo al final. Es la misma función que usa la
-  // action — una sola fuente para la regla, dos momentos para preguntarla.
+  /**
+   * Identidad verificada: se RESUELVE acá y se DECIDE abajo, en el router.
+   *
+   * Antes esta rama cortaba la pantalla entera, y con el selector de Empleo /
+   * Servicio arriba eso pasó a ser incorrecto: un servicio NO está en
+   * VERTICALES_QUE_EXIGEN_IDENTIDAD ni en la policy `listings_insert` (0126), así
+   * que bloquear la página completa le cerraría la puerta a quien viene a
+   * ofrecer un servicio por un requisito que su aviso no tiene. El bloqueo sigue
+   * apareciendo ANTES del formulario del empleo — ver `publish-router.tsx`.
+   *
+   * Es la misma función que usa la server action: una sola fuente para la regla,
+   * dos momentos para preguntarla.
+   */
   const identidad = await requireIdentidadVerificada(supabase, { kind: "job" });
-  if (!identidad.permitido) {
-    return (
-      <EmptyState
-        icon={<SealCheck />}
-        title={C.needIdentityTitle}
-        message={C.needIdentityBody}
-        action={
-          <Link
-            href={`/perfil/verificar?next=${encodeURIComponent("/empleos/publicar")}`}
-            className={buttonVariants({ variant: "primary", size: "md" })}
-          >
-            {C.needIdentityCta}
-          </Link>
-        }
-        className="py-20"
-      />
-    );
-  }
 
   // Fichas de negocio PROPIAS y PUBLICADAS. Las dos condiciones son las mismas
   // que exige app.check_business_listing_link() (0107): ofrecer en el
@@ -91,19 +80,15 @@ export default async function PublicarEmpleoPage() {
     .order("title")
     .limit(20);
 
+  // El encabezado ya no vive acá: lo dibuja el router, porque el título cambia
+  // según lo que se elija ("Publicar un empleo" / "Publicar un servicio") y
+  // antes de elegir el que manda es el del selector.
   return (
-    <>
-      <header className="mb-6">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-          {C.title}
-        </h1>
-        <p className="mt-1 text-sm text-foreground-secondary">{C.subtitle}</p>
-      </header>
-      <JobPublishForm
-        tenantId={tenant.id}
-        currency={tenant.currency}
-        businesses={businessRows ?? []}
-      />
-    </>
+    <PublishRouter
+      tenantId={tenant.id}
+      currency={tenant.currency}
+      businesses={businessRows ?? []}
+      identidadVerificada={identidad.permitido}
+    />
   );
 }

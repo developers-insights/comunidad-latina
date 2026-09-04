@@ -304,12 +304,17 @@ function OptionalSection({
 /**
  * Chips de selección múltiple con el acento del módulo.
  *
+ * EXPORTADO (y no privado) porque el wizard del SERVICIO usa exactamente los
+ * mismos chips de días: dos copias del mismo control se desincronizan a la
+ * primera corrección de accesibilidad. Vive acá y no en un archivo aparte para
+ * no mover código que este agente no necesita mover.
+ *
  * `min-h-11` en cada chip: 44px es el mínimo táctil y no se negocia por
  * estética, ni siquiera en un control opcional que vive plegado. Los días usan
  * además `w-11` para quedar cuadrados — siete cuadraditos "L M X J V S D" en una
  * fila se leen como un calendario y se marcan sin apuntar.
  */
-function ToggleChips<T extends string>({
+export function ToggleChips<T extends string>({
   legend,
   help,
   options,
@@ -361,7 +366,7 @@ function ToggleChips<T extends string>({
 }
 
 /** Alterna un valor dentro de una lista, sin mutar. */
-function toggleInList<T>(list: T[], value: T): T[] {
+export function toggleInList<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
 }
 

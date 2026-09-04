@@ -53,6 +53,14 @@ const COPY = {
   } as Record<string, string>,
   publishedBy: (name: string) => `Publicado por ${name}`,
   applicationsTitle: "Postulaciones",
+  /**
+   * Un SERVICIO (0129) no tiene embudo de postulación: se contacta por Mensajes.
+   * La sección entera se reemplaza por esta línea en vez de mostrar un "Todavía
+   * nadie se postuló", que sobre un servicio no es un dato — es una categoría
+   * que no existe.
+   */
+  serviceNoApplications:
+    "Este aviso es un SERVICIO: lo publicó alguien que ofrece lo que sabe hacer, así que no recibe postulaciones — quien lo quiera contratar le escribe por Mensajes. Se modera, se reporta y se da de baja igual que un empleo.",
   countLine: (total: number, pending: number) =>
     pending > 0
       ? `${total} en total · ${pending} sin responder`
@@ -202,6 +210,11 @@ export default async function AdminEmpleoDetallePage({ params }: { params: Param
         </div>
       )}
 
+      {detail.kind === "service" ? (
+        <p className="rounded-lg border border-border-subtle bg-surface-subtle px-4 py-3 text-sm leading-relaxed text-foreground-secondary">
+          {COPY.serviceNoApplications}
+        </p>
+      ) : (
       <section aria-labelledby="postulaciones-title" className="flex flex-col gap-3">
         <div>
           <h3
@@ -242,6 +255,7 @@ export default async function AdminEmpleoDetallePage({ params }: { params: Param
           </ul>
         )}
       </section>
+      )}
     </div>
   );
 }

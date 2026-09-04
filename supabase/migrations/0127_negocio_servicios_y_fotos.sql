@@ -109,7 +109,15 @@ as $$
 $$;
 
 comment on function app.servicios_de_negocio_validos(text[]) is
-  'Forma de listings.services: hasta 12 ítems, cada uno de 1 a 60 caracteres una vez recortado, ninguno nulo. IMMUTABLE porque la usa un CHECK (que no admite subconsultas). El array vacío es válido: un negocio sin servicios cargados es el estado normal del día uno.';
+  'Forma de listings.services: hasta 12 ítems, cada uno de 1 a 60 caracteres una vez recortado, ninguno nulo. IMMUTABLE porque la usa un CHECK (que no admite subconsultas). El array vacío es válido: un negocio sin servicios cargados es el estado normal del día uno. NO lleva revoke de PUBLIC a propósito: quien hace un UPDATE sobre listings necesita EXECUTE para que su CHECK se pueda evaluar.';
+
+-- ⚠️ ACÁ NO VA UN `revoke ... from public`. Es la excepción a la regla que
+-- siguen todas las demás funciones de este repo, y tiene un motivo mecánico: un
+-- CHECK que llama a una función exige EXECUTE al rol que escribe la fila. Si se
+-- le revoca a `public`, TODO update de `listings` empieza a fallar con
+-- "permission denied for function" — incluidos los del webhook de pagos y los
+-- de moderación. La función no revela nada: recibe un array y devuelve un
+-- booleano sobre ese mismo array.
 
 alter table public.listings
   add column if not exists services text[] not null default '{}'::text[];
@@ -205,6 +213,7 @@ declare
   v_category  text := nullif(pg_catalog.btrim(coalesce(p_category, '')), '');
   v_area      text := nullif(pg_catalog.btrim(coalesce(p_area_label, '')), '');
   v_services  text[];
+  v_restriccion text;
 begin
   if v_uid is null or v_tenant is null then
     return 'sin_sesion';
@@ -279,7 +288,16 @@ begin
        and tenant_id = v_tenant;
   exception
     when check_violation then
-      return 'contacto_premium';
+      -- CUÁL check rebotó, no "alguno": `listings_cta_premium_only` (0048) es
+      -- el único que esta función puede disparar por una razón que le importa a
+      -- la persona («los botones son del plan»). Devolver ese mensaje ante
+      -- cualquier otro CHECK sería mandar a alguien a comprar un plan por un
+      -- servicio mal escrito.
+      get stacked diagnostics v_restriccion = constraint_name;
+      if v_restriccion = 'listings_cta_premium_only' then
+        return 'contacto_premium';
+      end if;
+      return 'datos_invalidos';
   end;
 
   return 'ok';

@@ -134,7 +134,9 @@ export function EditarPaginaForm({ listingId, inicial, esPremium }: EditarPagina
       {/* Las FOTOS van fuera del <form>: se guardan solas al elegirlas (ver el
           docblock de FotoDeNegocioField). Dejarlas adentro haría creer que
           esperan al botón de abajo. */}
-      <BezelCard coreClassName="flex flex-col gap-5 p-4">
+      {/* `id="fotos"`: es el ancla a la que apunta "Subir la foto" desde el
+          perfil-como-negocio, para caer directo en esta tarjeta. */}
+      <BezelCard id="fotos" className="scroll-mt-20" coreClassName="flex flex-col gap-5 p-4">
         <SeccionTitulo>{C.fotos.heading}</SeccionTitulo>
         <FotoDeNegocioField
           listingId={listingId}

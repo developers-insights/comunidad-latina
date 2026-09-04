@@ -464,6 +464,8 @@ export const COMUNIDAD_COPY = {
     publicarCta: "Escribir un pedido",
     misPedidosCta: "Mis pedidos",
     verTodos: "Ver todos los pedidos",
+    /** El puente desde el directorio de recursos hacia el tablón (`<OfrecerEnTema>`). */
+    desdeRecursos: "Preguntarle a la comunidad",
 
     vacio: {
       title: "Todavía no hay pedidos por acá",

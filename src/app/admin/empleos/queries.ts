@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database.types";
-import { labelJobAnswers, parseJobAttrs } from "@/components/empleos/helpers";
+import { EMPLEOS_KINDS, labelJobAnswers, parseJobAttrs } from "@/components/empleos/helpers";
 import { timeAgo } from "@/lib/utils";
 import {
   discloseApplication,
@@ -42,6 +42,12 @@ export type JobStatus = "draft" | "pending_review" | "published" | "removed" | s
 /** Fila del listado: metadatos de moderación + conteos. Sin datos personales. */
 export interface AdminJobRow {
   id: string;
+  /**
+   * `job` o `service` (0129). El panel lista los DOS: un servicio es un aviso
+   * de la misma sección, se modera igual y se reporta igual — lo único que no
+   * tiene es postulaciones.
+   */
+  kind: string;
   title: string;
   status: JobStatus;
   /** Quién publicó: nombre del perfil, o el `publisher_name` de un aviso sembrado. */
@@ -69,6 +75,7 @@ export interface AdminJobRow {
 /** Aviso + sus postulaciones ya filtradas por la política de divulgación. */
 export interface AdminJobDetail {
   id: string;
+  kind: string;
   title: string;
   status: JobStatus;
   publisherLabel: string;
@@ -90,9 +97,9 @@ export async function fetchAdminJobs(
 ): Promise<AdminJobRow[]> {
   const { data: jobs, error } = await supabase
     .from("listings")
-    .select("id, title, status, created_at, created_by, publisher_name")
+    .select("id, kind, title, status, created_at, created_by, publisher_name")
     .eq("tenant_id", tenantId)
-    .eq("kind", "job")
+    .in("kind", [...EMPLEOS_KINDS])
     .order("created_at", { ascending: false })
     .limit(JOBS_LIMIT);
 
@@ -164,6 +171,7 @@ export async function fetchAdminJobs(
     const counts = tally.get(row.id) ?? { total: 0, pending: 0 };
     return {
       id: row.id,
+      kind: row.kind,
       title: row.title,
       status: row.status,
       publisherLabel:
@@ -207,10 +215,10 @@ export async function fetchAdminJobDetail(
 ): Promise<AdminJobDetail | null> {
   const { data: job, error } = await supabase
     .from("listings")
-    .select("id, title, status, area_label, attrs, created_at, created_by, publisher_name")
+    .select("id, kind, title, status, area_label, attrs, created_at, created_by, publisher_name")
     .eq("id", input.jobId)
     .eq("tenant_id", input.tenantId)
-    .eq("kind", "job")
+    .in("kind", [...EMPLEOS_KINDS])
     .maybeSingle();
 
   if (error) {
@@ -253,6 +261,7 @@ export async function fetchAdminJobDetail(
     const counts = (tallyRows ?? [])[0] ?? { total: 0, pending: 0 };
     return {
       id: job.id,
+      kind: job.kind,
       title: job.title,
       status: job.status,
       publisherLabel: await publisherLabelFor(supabase, job),
@@ -352,6 +361,7 @@ export async function fetchAdminJobDetail(
 
   return {
     id: job.id,
+    kind: job.kind,
     title: job.title,
     status: job.status,
     publisherLabel:

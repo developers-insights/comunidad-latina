@@ -13,7 +13,6 @@ import {
 import { BezelCard, Chip } from "@/components/ui";
 import { COMUNIDAD_COPY, mapsHref, telHref, type CommunityResource } from "@/lib/comunidad";
 import { cn, formatDate } from "@/lib/utils";
-import { OfrecerEnFicha } from "./ofrecer-cta";
 
 const C = COMUNIDAD_COPY.recursos;
 
@@ -82,26 +81,23 @@ function Meta({
 }
 
 /**
- * ── EL BOTÓN DE "QUIERO AYUDAR ACÁ" (0120) ──────────────────────────────────
- * Pedido textual del cliente: «falta un botón… para que la gente pueda aplicar
- * a bancos de comida si quiere ofrecer sus servicios». Va DESPUÉS de los
- * botones de contacto y ANTES de los detalles, y separado por una línea: es
- * una acción de otra naturaleza —no es llegar al lugar, es sumarse a él— y
- * mezclarla con "Llamar" haría dudar de cuál toca quien viene a pedir ayuda,
- * que sigue siendo la mayoría.
- *
- * Sólo aparece en los temas que aceptan avisos: `<OfrecerEnFicha>` devuelve
- * `null` en el resto, sin cartel ni explicación (ver su cabecera).
+ * ── EL BOTÓN DE "QUIERO AYUDAR ACÁ" YA NO ESTÁ (0130) ───────────────────────
+ * La 0120 puso acá un CTA para ofrecerse a trabajar en el lugar de la ficha.
+ * El cliente lo sacó el 2026-09-03: ofrecer manos es responsabilidad legal de
+ * Comunidad Latina si alguien se lastima. La ficha vuelve a ser lo que era
+ * —información de contacto de un lugar— y la puerta al tablón quedó en la
+ * cabecera de cada tema (`<OfrecerEnTema>`), donde no depende de un lugar
+ * puntual.
  */
 export function RecursoCard({
   recurso,
-  ofrecimientos,
 }: {
   recurso: CommunityResource;
   /**
-   * Cuántas personas ya se ofrecieron en esta ficha. Opcional: cuando no se
-   * pudo contar —el caso más común es que quien mira no tenga sesión— el
-   * contador no se dibuja. Nunca un "0" que diría algo que no sabemos.
+   * LEGADO: cuántas personas se habían ofrecido en esta ficha. Ya no se dibuja
+   * —los ofrecimientos se archivaron con la 0130— pero la prop sigue declarada
+   * porque `comunidad/recursos/page.tsx` la pasa, y esa pantalla es de otro
+   * frente. Se va cuando ese frente saque la llamada a `countOffersByResource`.
    */
   ofrecimientos?: number;
 }) {
@@ -164,13 +160,6 @@ export function RecursoCard({
           )}
         </div>
       )}
-
-      <OfrecerEnFicha
-        topic={recurso.topic}
-        resourceId={recurso.id}
-        ofrecimientos={ofrecimientos}
-        className="border-t border-border-subtle pt-3"
-      />
 
       {(recurso.hoursNote ||
         recurso.costNote ||

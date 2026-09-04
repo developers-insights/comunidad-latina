@@ -64,6 +64,20 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
     listarIdentidadesDeNegocio(),
     getIdentidadActiva(),
   ]);
+  /**
+   * ¿Se está actuando como un negocio? Desde el 2026-09-03 eso cambia la
+   * esquina derecha entera: el control de identidad deja de ser un círculo de
+   * 44 px y pasa a ser un chip con el NOMBRE del negocio (pedido textual del
+   * cliente: «debería quedar solamente el nombre de la página»).
+   *
+   * Ese chip necesita ancho, y a 375 px el ancho lo tiene que ceder alguien.
+   * Lo cede el wordmark, con el mismo criterio que ya se aplicó cuando hay una
+   * zona elegida: el isotipo a la izquierda ya dice de qué app se trata,
+   * mientras que con qué identidad estás publicando no se lee en ningún otro
+   * lado de la pantalla — y equivocarse en eso cuesta una publicación firmada
+   * con el nombre que no era.
+   */
+  const hayNegocioActivo = identidad.tipo === "negocio";
   // Single-community: si el tenant no trae logo propio, cae al logo de la
   // plataforma (las tres figuras azul·amarillo·rojo).
   const logoSrc = tenant.logoUrl ?? "/brand/logo-mark.png";
@@ -126,7 +140,7 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
               @/lib/brand. */}
           <span
             className={`truncate text-base font-bold tracking-tight text-brand-ink${
-              hayZona ? " max-sm:hidden" : ""
+              hayZona || hayNegocioActivo ? " max-sm:hidden" : ""
             }`}
           >
             {BRAND_NAME}

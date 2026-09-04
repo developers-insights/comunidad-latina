@@ -92,13 +92,20 @@ const C = COPY.list;
 
 const BASE: JobCardModel = {
   id: "job-1",
+  // Un EMPLEO. El otro kind de la sección ("service") tiene su propia tarjeta
+  // y su propio test: acá nunca entra.
+  kind: "job",
   title: "Niñera para dos nenes, tardes",
+  description: "Retirarlos del colegio, merienda y tarea.",
   salaryLabel: "US$ 18/hora",
   // Sin techo cargado, el rango es igual al piso — que es lo que devuelve
   // `etiquetaDeSalario` cuando `attrs.salary_max` viene vacío (el caso común).
   salaryRangeLabel: "US$ 18/hora",
   workMode: null,
   employmentType: "part_time",
+  // Los dos son SOLO de servicios: en un empleo viajan siempre en null.
+  availabilityLabel: null,
+  fromPriceLabel: null,
   areaLabel: "Washington Heights",
   photoUrl: null,
   photos: [],
