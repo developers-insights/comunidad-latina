@@ -364,7 +364,14 @@ export function PostCard({
           )}
 
           {showTextBanner && (
-            <TextBanner postId={post.id} text={post.body} isDetail={isDetail} />
+            <TextBanner
+              postId={post.id}
+              text={post.body}
+              // El fondo que eligió quien publicó (0128). Ausente = Automático:
+              // el banner sortea uno por el id, como siempre.
+              background={post.textBackground}
+              isDetail={isDetail}
+            />
           )}
 
           {hasMedia && (

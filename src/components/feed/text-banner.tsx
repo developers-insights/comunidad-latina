@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { m, useReducedMotion } from "motion/react";
 import { Heart } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
+import { textBackgroundOf } from "@/lib/feed/text-backgrounds";
 import { COPY } from "./copy";
 import { useCardLike } from "./card-like-context";
 
@@ -30,49 +31,36 @@ import { useCardLike } from "./card-like-context";
  * Lo que lo distingue de QuestionBanner:
  *  · ORNAMENTO. Nada de "¿ ?" — un texto no es una pregunta. Van comillas
  *    tipográficas grandes, en las mismas esquinas.
- *  · TRES VARIANTES PROPIAS. Mismos ángulos de luz que la fórmula general,
- *    pero con su propio recorrido de color: que un texto y una pregunta
- *    vecinos en el feed no salgan de la misma paleta en el mismo orden.
+ *  · FONDO ELEGIBLE. Ocho fondos propios (`@/lib/feed/text-backgrounds`), que
+ *    quien publica elige en el composer y quedan guardados en la publicación.
+ *    Sin elección se sortea uno por el id, que es lo que pasaba siempre.
  *  · SIN ENCUESTA. `kind='text'` nunca lleva poll_kind (posts_poll_only_on_question,
  *    0041) — no hay prop de footer.
+ *
+ * ── EL CUERPO NO SE ACHICA A MEDIDA QUE SE ESCRIBE (call 3/9, punto 15) ─────
+ *
+ * «Mientras más se escribe, se van haciendo más pequeñas; parece que hay sólo
+ * un espacio pequeño en el centro de la tarjeta.» Era literal: había una
+ * escalera de cuatro cuerpos (text-3xl → text-2xl → text-xl → text-lg) atada al
+ * largo del texto, más un recorte de líneas que empezaba en cualquier texto de
+ * más de tres renglones. El resultado es el que describió el cliente: la letra
+ * se iba encogiendo sola mientras escribía, y el texto quedaba apretado en el
+ * medio de una tarjeta que nunca crecía.
+ *
+ * Ahora hay DOS cuerpos y nada más (ver `textTypeScale`), el párrafo usa todo
+ * el ancho disponible, y la tarjeta CRECE con el contenido —el 4:5 pasó a ser
+ * un piso, no una jaula: el espaciador y el texto comparten celda de grilla, y
+ * la fila mide lo que mida el más alto de los dos—. El recorte quedó sólo para
+ * los textos de verdad largos, con "Ver completo" que expande EN EL LUGAR.
  */
 
 const DOUBLE_TAP_MS = 250;
 const SHADE = "var(--color-media-shade)";
 
-const tinte = (accent: string, pct: number) =>
-  `color-mix(in oklab, ${accent} ${pct}%, ${SHADE})`;
 const luz = (pct: number) =>
   `color-mix(in oklab, var(--color-on-media) ${pct}%, transparent)`;
 const velo = (pct: number) =>
   `color-mix(in oklab, ${SHADE} ${pct}%, transparent)`;
-
-/**
- * Tres identidades propias (ver docblock). Los porcentajes de `tinte` se
- * eligieron por DEBAJO de los máximos ya probados en QuestionBanner (blue
- * ≤90%, red ≤80%, yellow ≤50% — la original usa amarillo hasta 58% y rojo
- * hasta 84%) y se verificaron con `culori` (oklab, mismo espacio que
- * `color-mix`) sumando el brillo como un overlay PLANO al 100% de su opacidad
- * —más severo que el degradado radial real, que solo pega así de fuerte en un
- * punto— y el peor caso dio 5.90:1, con margen sobre el 4.5:1 de AA.
- */
-const VARIANTS = [
-  {
-    // Amanecer — amarillo que se abre en azul, el recorrido inverso al de Pregunta.
-    field: `linear-gradient(148deg, ${tinte("var(--brand-yellow)", 60)} 0%, ${tinte("var(--brand-blue)", 62)} 46%, ${tinte("var(--brand-blue)", 92)} 100%)`,
-    glow: `radial-gradient(86% 60% at 18% 8%, ${luz(9)} 0%, transparent 64%)`,
-  },
-  {
-    // Noche — azul que se hunde en un rojo casi negro.
-    field: `linear-gradient(160deg, ${tinte("var(--brand-blue)", 88)} 0%, ${tinte("var(--brand-blue)", 52)} 40%, ${tinte("var(--brand-red)", 70)} 100%)`,
-    glow: `radial-gradient(80% 58% at 82% 12%, ${luz(8)} 0%, transparent 60%)`,
-  },
-  {
-    // Plaza — rojo que se calienta en amarillo, sin pasar por el azul.
-    field: `linear-gradient(150deg, ${tinte("var(--brand-red)", 82)} 0%, ${tinte("var(--brand-red)", 50)} 42%, ${tinte("var(--brand-yellow)", 66)} 100%)`,
-    glow: `radial-gradient(90% 62% at 22% 90%, ${luz(7)} 0%, transparent 66%)`,
-  },
-] as const;
 
 const VIGNETTE = `radial-gradient(118% 96% at 50% 46%, transparent 34%, ${velo(46)} 100%)`;
 const GRAIN = `radial-gradient(var(--color-on-media) 0.5px, transparent 0.6px)`;
@@ -111,55 +99,74 @@ function BrandWatermark() {
   );
 }
 
-/** Hash determinístico sobre el id — mismo id, misma variante, siempre. */
-export function textVariantOf(postId: string): number {
-  let hash = 0;
-  for (let i = 0; i < postId.length; i++) {
-    hash = (hash * 33 + postId.charCodeAt(i)) >>> 0;
-  }
-  return hash % VARIANTS.length;
-}
-
-const LONG_TEXT = 300;
+/**
+ * Hasta acá el texto se CENTRA: una o dos frases se leen como una declaración,
+ * y centradas ocupan la tarjeta como la pieza gráfica que son. Pasado el
+ * umbral, un párrafo centrado es incómodo de leer —los renglones no comparten
+ * margen izquierdo— así que se alinea a la izquierda, como cualquier texto
+ * corrido. Se decide solo, sin preguntarle nada a quien publica: la alternativa
+ * (un selector de alineación) es otra decisión más antes de publicar, otra
+ * columna y otro catálogo, para un problema que la regla resuelve bien.
+ */
+const TEXTO_CENTRADO = 120;
+/**
+ * EL ÚNICO ESCALÓN. Arriba de esto el cuerpo baja de 24 a 20 px — no para que
+ * "entre", sino porque un texto de varios párrafos a 24 px se lee peor que a
+ * 20. Es el ajuste que un diseñador haría a mano una vez, no una escalera que
+ * encoge la letra mientras la persona escribe.
+ */
+const TEXTO_COMPACTO = 280;
+/**
+ * A partir de acá el feed recorta y ofrece "Ver completo" (que expande EN EL
+ * LUGAR, sin sacar a nadie del feed). Está alto a propósito: hasta 600
+ * caracteres la tarjeta simplemente crece, que es lo que el cliente mostró con
+ * el ejemplo de Instagram. El detalle (`isDetail`) nunca recorta.
+ */
+const TEXTO_LARGO = 600;
+/** Cuántos renglones se ven antes del recorte. A 20 px son ~14 de tarjeta llena. */
+const CLAMP_LARGO = "line-clamp-[14]";
 
 export interface TextTypeScale {
+  /** Cuerpo del texto. Sólo dos valores posibles — ver `TEXTO_COMPACTO`. */
   size: string;
+  /** Interlineado y tracking. */
   rhythm: string;
+  /** Alineación + modo de corte de renglón (balance para frases, pretty para párrafos). */
+  align: string;
+  /** Clase de recorte, o null cuando el texto se lee entero. */
   clamp: string | null;
 }
 
-const CLAMP: Record<number, string> = {
-  3: "line-clamp-[3]",
-  4: "line-clamp-[4]",
-  5: "line-clamp-[5]",
-  6: "line-clamp-[6]",
-  7: "line-clamp-[7]",
-  8: "line-clamp-[8]",
-  9: "line-clamp-[9]",
-  10: "line-clamp-[10]",
-  11: "line-clamp-[11]",
-};
-
-/** Mismos tramos que QuestionBanner (misma card, mismo 4:5 mínimo). */
-export function textTypeScale(text: string, isDetail: boolean): TextTypeScale {
+/**
+ * DOS CUERPOS Y NADA MÁS. `unclamped` es "este texto se lee entero" (detalle, o
+ * ya expandido en el feed) y sólo afecta al recorte: el cuerpo NO cambia entre
+ * el feed y el detalle, así que una publicación se ve igual en los dos lados.
+ */
+export function textTypeScale(text: string, unclamped: boolean): TextTypeScale {
   const length = text.trim().length;
-  const clamp = (lines: number) => (isDetail ? null : (CLAMP[Math.max(3, lines)] ?? CLAMP[3]));
-  if (length <= 48) {
-    return { size: "text-3xl", rhythm: "leading-tight tracking-tight", clamp: clamp(7) };
-  }
-  if (length <= 110) {
-    return { size: "text-2xl", rhythm: "leading-snug tracking-tight", clamp: clamp(9) };
-  }
-  if (length <= 200) {
-    return { size: "text-xl", rhythm: "leading-snug", clamp: clamp(11) };
-  }
-  return { size: "text-lg", rhythm: "leading-relaxed", clamp: clamp(11) };
+  const compacto = length > TEXTO_COMPACTO;
+  return {
+    size: compacto ? "text-xl" : "text-2xl",
+    rhythm: compacto ? "leading-relaxed" : "leading-snug tracking-tight",
+    align:
+      length <= TEXTO_CENTRADO ? "text-center text-balance" : "text-left text-pretty",
+    clamp: unclamped || length <= TEXTO_LARGO ? null : CLAMP_LARGO,
+  };
 }
 
 export interface TextBannerProps {
   postId: string;
   /** El cuerpo del post: acá ES la pieza gráfica, no se repite abajo. */
   text: string;
+  /**
+   * Fondo elegido al publicar (`posts.text_background`). null/ausente = modo
+   * Automático: se sortea por el id, que es lo que hacían TODAS las
+   * publicaciones antes de que esto se pudiera elegir. Llega como string suelto
+   * a propósito —es lo que devuelve la base— y `textBackgroundOf` es quien lo
+   * valida contra el catálogo: un valor desconocido cae al sorteo, nunca a una
+   * tarjeta sin fondo.
+   */
+  background?: string | null;
   /** true en /feed/[id]: sin recorte. */
   isDetail?: boolean;
   /** Vista previa del composer: sin capa de toque, sin doble-toque. */
@@ -167,7 +174,14 @@ export interface TextBannerProps {
   className?: string;
 }
 
-export function TextBanner({ postId, text, isDetail = false, preview = false, className }: TextBannerProps) {
+export function TextBanner({
+  postId,
+  text,
+  background = null,
+  isDetail = false,
+  preview = false,
+  className,
+}: TextBannerProps) {
   const reduce = useReducedMotion();
   const like = useCardLike();
   const [bursts, setBursts] = useState(0);
@@ -182,9 +196,11 @@ export function TextBanner({ postId, text, isDetail = false, preview = false, cl
   );
 
   const unclamped = isDetail || expanded;
-  const variant = VARIANTS[textVariantOf(postId)];
+  const variant = textBackgroundOf(postId, background);
   const type = textTypeScale(text, unclamped);
-  const showMore = !unclamped && !preview && text.trim().length > LONG_TEXT;
+  // La misma regla que decide el recorte, del lado del botón: si `type.clamp`
+  // es null no hay nada escondido, así que ofrecer "Ver completo" mentiría.
+  const showMore = !preview && type.clamp !== null;
 
   function handleDoubleTap() {
     if (!like) return;
@@ -249,15 +265,23 @@ export function TextBanner({ postId, text, isDetail = false, preview = false, cl
         ”
       </span>
 
-      <div className="col-start-1 row-start-1 flex flex-col items-center justify-center gap-4 px-7 py-10">
+      {/* El espaciador de arriba y esta columna comparten CELDA de grilla, así
+          que la fila mide lo que mida el más alto: el 4:5 es el piso y la
+          tarjeta crece con el texto. `items-stretch` (el default) es lo que deja
+          al párrafo usar todo el ancho —antes iba `items-center`, que lo
+          encogía al contenido y era la mitad del "espacio pequeño en el centro"
+          que reportó el cliente—; el botón de "Ver completo" se centra solo,
+          sin estirarse, porque va envuelto en su propia fila. */}
+      <div className="col-start-1 row-start-1 flex flex-col justify-center gap-4 px-6 py-10 sm:px-8">
         <m.p
           initial={reduce ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
           className={cn(
-            "whitespace-pre-wrap text-center font-display font-semibold text-balance",
+            "w-full whitespace-pre-wrap font-display font-semibold",
             type.size,
             type.rhythm,
+            type.align,
             type.clamp,
           )}
           style={{ textShadow: `0 1px 3px ${velo(40)}` }}
@@ -266,13 +290,15 @@ export function TextBanner({ postId, text, isDetail = false, preview = false, cl
         </m.p>
 
         {showMore && (
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            className="relative z-20 cursor-pointer rounded-full border border-on-media/25 bg-media-scrim px-3 py-1 text-xs font-semibold transition-colors duration-(--duration-fast) hover:bg-on-media/15 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60"
-          >
-            {COPY.post.textReadFull}
-          </button>
+          <span className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="relative z-20 cursor-pointer rounded-full border border-on-media/25 bg-media-scrim px-3 py-1 text-xs font-semibold transition-colors duration-(--duration-fast) hover:bg-on-media/15 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60"
+            >
+              {COPY.post.textReadFull}
+            </button>
+          </span>
         )}
       </div>
 

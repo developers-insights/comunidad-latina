@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, SignIn } from "@phosphor-icons/react/dist/ssr";
+import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COMUNIDAD_COPY } from "@/lib/comunidad";
 import { createClient } from "@/lib/supabase/server";
@@ -47,14 +47,6 @@ export default async function PublicarCasoPage() {
 
   return (
     <>
-      <Link
-        href="/comunidad/perdidos"
-        className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        {COMUNIDAD_COPY.perdidos.title}
-      </Link>
-
       <header className="mb-6 mt-3">
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           {C.title}

@@ -13,6 +13,7 @@ import {
 import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
+import { uploadVideoWithProgress } from "@/lib/media/upload-video";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { CreateMenu, type QuickPostKind } from "@/components/shell/create-menu";
 import { ComposerMenuProvider } from "./composer-context";
@@ -94,6 +95,7 @@ import {
   probePhotoDecodable,
   type PhotoInputRejection,
 } from "@/lib/media/photo-input";
+import type { TextBackgroundId } from "@/lib/feed/text-backgrounds";
 import { ComposerSheet, type ComposerMode } from "./composer-sheet";
 import {
   DEFAULT_PHOTO_FILTER_ID,
@@ -393,6 +395,12 @@ export function PostComposerHost({
   const [composeMode, setComposeMode] = useState<ComposerMode | null>(null);
   /** Encuesta Sí/No de la pregunta (contrato 0041). */
   const [pollEnabled, setPollEnabled] = useState(false);
+  /**
+   * Fondo elegido de una publicación de TEXTO (0128). `null` = Automático, que
+   * es como arranca y como se publicaba todo hasta ahora: el banner sortea uno
+   * por el id del post.
+   */
+  const [textBackground, setTextBackground] = useState<TextBackgroundId | null>(null);
   /** Categoría de Videos Cortos (0046). Opcional: arranca en el default. */
   const [videoCategory, setVideoCategory] = useState<VideoCategory>(
     DEFAULT_VIDEO_CATEGORY,
@@ -936,6 +944,9 @@ export function PostComposerHost({
     setBody("");
     setComposeMode(null);
     setPollEnabled(false);
+    // El fondo es de ESTA publicación: arrastrarlo a la siguiente pintaría de
+    // Fiesta un texto que nadie eligió pintar así.
+    setTextBackground(null);
     setVideoCategory(DEFAULT_VIDEO_CATEGORY);
     // Si quedaba una subida a Mux en vuelo (se cerró el composer, se descartó el
     // borrador), se corta acá: nada de archivos viajando para una publicación
@@ -1335,6 +1346,13 @@ export function PostComposerHost({
       formData.set("kind", isQuestion ? "question" : isText ? "text" : "post");
       // Solo una pregunta puede llevar encuesta; el server lo re-valida igual.
       if (isQuestion && pollEnabled) formData.set("pollKind", "yes_no");
+      /**
+       * EL FONDO ELEGIDO (0128) — sólo el ID del catálogo, nunca el CSS: el
+       * degradado lo arma `text-backgrounds.ts` al pintar. Ausente = Automático
+       * (la columna queda NULL y el banner sortea por id). El servidor lo
+       * re-valida contra el mismo catálogo y lo ignora si el kind no es texto.
+       */
+      if (isText && textBackground) formData.set("textBackground", textBackground);
       /**
        * LA FIRMA (`posts.entity_listing_id`, 0023). Sólo viaja cuando hay una
        * ficha elegida: su ausencia ES "publico como yo", igual que el `null` de
@@ -1771,6 +1789,8 @@ export function PostComposerHost({
         onSavePhotoEdit={savePhotoEdit}
         pollEnabled={pollEnabled}
         onPollChange={setPollEnabled}
+        textBackground={textBackground}
+        onTextBackgroundChange={setTextBackground}
         videoCategory={videoCategory}
         onVideoCategoryChange={setVideoCategory}
         declaration={declaration}
@@ -1870,52 +1890,3 @@ export function PostComposerHost({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Subida directa con progreso. supabase-js no expone onprogress (usa fetch):
-// hacemos el MISMO request que haría el SDK (POST /storage/v1/object/...)
-// con XHR y el token de la sesión — la policy post_media_insert (0025) valida
-// el prefijo {tenant}/{user} contra el JWT igual que siempre.
-// ---------------------------------------------------------------------------
-
-async function uploadVideoWithProgress(
-  file: File,
-  path: string,
-  onProgress: (pct: number) => void,
-  /**
-   * Content-Type CANÓNICO del contenedor (ver `checkVideoFile` en
-   * `video-upload-limits.ts`), no `file.type` crudo: algunos navegadores
-   * reportan vacío para formatos poco comunes (.3gp, .mkv en ciertos
-   * Android), y mandar ese vacío mentiría sobre qué es el archivo en Storage.
-   */
-  contentType: string,
-): Promise<boolean> {
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const accessToken = session?.access_token;
-  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!accessToken || !baseUrl || !anonKey) return false;
-
-  return new Promise<boolean>((resolve) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${baseUrl}/storage/v1/object/post-media/${path}`);
-    xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
-    xhr.setRequestHeader("apikey", anonKey);
-    xhr.setRequestHeader("x-upsert", "false");
-    xhr.setRequestHeader("Content-Type", contentType || "application/octet-stream");
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && event.total > 0) {
-        onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
-      }
-    };
-    xhr.onload = () => {
-      onProgress(100);
-      resolve(xhr.status >= 200 && xhr.status < 300);
-    };
-    xhr.onerror = () => resolve(false);
-    xhr.onabort = () => resolve(false);
-    xhr.send(file);
-  });
-}

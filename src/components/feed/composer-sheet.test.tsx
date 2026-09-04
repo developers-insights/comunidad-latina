@@ -56,6 +56,8 @@ function mount(overrides: Partial<ComposerSheetProps> = {}) {
     onSavePhotoEdit: vi.fn(),
     pollEnabled: false,
     onPollChange: vi.fn(),
+    textBackground: null,
+    onTextBackgroundChange: vi.fn(),
     videoCategory: "otros",
     onVideoCategoryChange: vi.fn(),
     declaration: EMPTY_DECLARATION_VALUE,
@@ -432,5 +434,129 @@ describe("ComposerSheet — horneado de fotos al publicar", () => {
   it("no muestra nada mientras bakingProgress es null", () => {
     mount({ mode: "media", media: [PHOTO], bakingProgress: null });
     expect(screen.queryByText(/Preparando tus fotos/)).toBeNull();
+  });
+});
+
+/* ---------------- Selector de fondo de la publicación de texto ------------- */
+
+/**
+ * EL PEDIDO (call 3/9, punto 15): fondos «más llamativos, más bonitos, o que la
+ * gente los pueda cambiar». Lo que se ancla acá es que el selector EXISTA sólo
+ * donde tiene sentido, que sea un grupo de radios de verdad (no botones con
+ * `aria-pressed`: adentro de una hoja con trampa de foco, las flechas del
+ * teclado tienen que moverse entre las opciones sin que lo implementemos), que
+ * arranque en Automático y que elegir avise para arriba.
+ */
+describe("ComposerSheet — el fondo de una publicación de texto", () => {
+  function fondos(): HTMLInputElement[] {
+    return screen.getAllByRole("radio", { name: /.*/ }) as HTMLInputElement[];
+  }
+
+  it("en modo texto ofrece Automático más los fondos del catálogo", async () => {
+    const { TEXT_BACKGROUNDS } = await import("@/lib/feed/text-backgrounds");
+    mount({ mode: "text", body: "Hoy abrió la feria del barrio." });
+
+    expect(screen.getByText(COPY.composer.compose.backgroundLabel)).toBeTruthy();
+    expect(
+      screen.getByRole("radio", { name: COPY.composer.compose.backgroundAuto }),
+    ).toBeTruthy();
+    for (const fondo of TEXT_BACKGROUNDS) {
+      expect(screen.getByRole("radio", { name: fondo.label })).toBeTruthy();
+    }
+  });
+
+  it("arranca en Automático: es la opción marcada cuando no se eligió nada", () => {
+    mount({ mode: "text", body: "Hoy abrió la feria del barrio.", textBackground: null });
+    const auto = screen.getByRole("radio", {
+      name: COPY.composer.compose.backgroundAuto,
+    }) as HTMLInputElement;
+    expect(auto.checked).toBe(true);
+    expect(fondos().filter((radio) => radio.checked)).toHaveLength(1);
+  });
+
+  it("elegir un fondo avisa para arriba con su id", () => {
+    const props = mount({ mode: "text", body: "Hoy abrió la feria del barrio." });
+    fireEvent.click(screen.getByRole("radio", { name: "Fiesta" }));
+    expect(props.onTextBackgroundChange).toHaveBeenCalledWith("fiesta");
+  });
+
+  it("volver a Automático avisa con null, no con un id vacío", () => {
+    const props = mount({
+      mode: "text",
+      body: "Hoy abrió la feria del barrio.",
+      textBackground: "fiesta",
+    });
+    fireEvent.click(
+      screen.getByRole("radio", { name: COPY.composer.compose.backgroundAuto }),
+    );
+    expect(props.onTextBackgroundChange).toHaveBeenCalledWith(null);
+  });
+
+  it("el fondo elegido se ve MARCADO, y es el único", () => {
+    mount({
+      mode: "text",
+      body: "Hoy abrió la feria del barrio.",
+      textBackground: "caribe",
+    });
+    expect((screen.getByRole("radio", { name: "Caribe" }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect(fondos().filter((radio) => radio.checked)).toHaveLength(1);
+  });
+
+  it("se ofrece también con el campo vacío: elegir antes de escribir es válido", () => {
+    mount({ mode: "text", body: "" });
+    expect(screen.getByText(COPY.composer.compose.backgroundLabel)).toBeTruthy();
+  });
+
+  it("en una PREGUNTA no aparece: tiene su propio banner", () => {
+    mount({ mode: "question", body: "¿Alguien vio el perro de la esquina?" });
+    expect(screen.queryByText(COPY.composer.compose.backgroundLabel)).toBeNull();
+  });
+
+  it("en una publicación con FOTO no aparece: no hay campo de color que pintar", () => {
+    mount({ mode: "media", media: [PHOTO], body: "" });
+    expect(screen.queryByText(COPY.composer.compose.backgroundLabel)).toBeNull();
+  });
+
+  it("mientras se publica, los fondos quedan deshabilitados", () => {
+    // Se mira el <fieldset>, que es el mecanismo real: en el navegador apaga a
+    // todos sus controles de una. (jsdom no propaga ese estado a la propiedad
+    // `disabled` de cada input, así que preguntárselo a los radios daría un
+    // falso negativo sobre algo que en la pantalla sí funciona.)
+    mount({ mode: "text", body: "Hoy abrió la feria del barrio.", isPending: true });
+    const grupo = fondos()[0].closest("fieldset") as HTMLFieldSetElement;
+    expect(grupo.disabled).toBe(true);
+  });
+});
+
+describe("ComposerSheet — con el editor abierto, la hoja no se arrastra (feedback 2026-09-03)", () => {
+  // El bug del cliente: en el celular, arrastrar un emoji o panear el recorte
+  // movía la HOJA (drag="y" de motion sobre el panel entero) y al soltar la
+  // cerraba — "se regresa al paso uno". `BottomSheet` ya sabe bloquearse
+  // (`gesturesLocked`, probado en bottom-sheet.test.tsx); lo que se ancla acá es
+  // que `ComposerSheet` efectivamente lo pida mientras hay una foto en edición,
+  // y lo suelte al salir. El asa pierde el cursor de agarre cuando el gesto no
+  // existe: es la señal observable de que el bloqueo llegó al panel.
+  const handle = () => document.querySelector<HTMLElement>(".bg-border");
+
+  it("abrir el editor bloquea el gesto y salir con Cancelar lo devuelve", () => {
+    mount({ mode: "media", media: [PHOTO] });
+    expect(handle()?.className).toContain("cursor-grab");
+
+    fireEvent.click(screen.getByRole("button", { name: `${COPY.composer.editPhoto} 1` }));
+    expect(handle()?.className).not.toContain("cursor-grab");
+
+    fireEvent.click(screen.getByRole("button", { name: COPY.composer.photoEditor.cancel }));
+    expect(handle()?.className).toContain("cursor-grab");
+  });
+
+  it("salir con Listo también devuelve el gesto", () => {
+    mount({ mode: "media", media: [PHOTO] });
+    fireEvent.click(screen.getByRole("button", { name: `${COPY.composer.editPhoto} 1` }));
+    expect(handle()?.className).not.toContain("cursor-grab");
+
+    fireEvent.click(screen.getByRole("button", { name: COPY.composer.photoEditor.done }));
+    expect(handle()?.className).toContain("cursor-grab");
   });
 });

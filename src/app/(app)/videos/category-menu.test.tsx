@@ -43,8 +43,28 @@ describe("Menú de entrada de Videos Cortos", () => {
       expect(link.getAttribute("href")).toBe(`/videos?cat=${category}`);
     }
 
-    // Diez salidas exactas: nada de más, nada de menos.
-    expect(screen.getAllByRole("link")).toHaveLength(VIDEO_CATEGORIES.length + 1);
+    // Once salidas exactas: "Todos", las nueve categorías, y —desde el
+    // 2026-09-03— Videos largos. Nada de más, nada de menos.
+    expect(screen.getAllByRole("link")).toHaveLength(VIDEO_CATEGORIES.length + 2);
+  });
+
+  /**
+   * VIDEOS LARGOS (cliente 2026-09-03, pedido dos veces en la misma call): la
+   * sección donde un video de 5 minutos se ve entero. Entra por acá, y no como
+   * una categoría más: los nueve temas de arriba son puertas al MISMO contenido
+   * —los cortos de la comunidad— y esto es otra clase de video.
+   */
+  it("ofrece la salida a Videos largos, aparte de los temas", () => {
+    render(<VideoCategoryMenu />);
+
+    const largos = screen.getByRole("link", { name: "Ver los videos largos" });
+    expect(largos.getAttribute("href")).toBe("/videos/largos");
+    // No se disfraza de tema: ninguna categoría linkea ahí.
+    for (const category of VIDEO_CATEGORIES) {
+      const label = VIDEO_CATEGORY_LABELS[category];
+      const link = screen.getByRole("link", { name: `Ver videos de ${label}` });
+      expect(link.getAttribute("href")).not.toContain("/largos");
+    }
   });
 
   it("cada categoría se lee, no sólo se reconoce por su ícono", () => {

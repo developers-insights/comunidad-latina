@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { requireIdentidadVerificada } from "@/lib/verificacion/gate";
 import { PublishRouter } from "./publish-router";
+import { SectionTopBar } from "@/components/shell";
 
 export const metadata = { title: "Publicar un empleo o un servicio" };
 
@@ -34,20 +35,26 @@ export default async function PublicarEmpleoPage() {
 
   if (!user) {
     return (
-      <EmptyState
-        icon={<SignIn />}
-        title={C.needLoginTitle}
-        message={C.needLoginBody}
-        action={
-          <Link
-            href={`/entrar?next=${encodeURIComponent("/empleos/publicar")}`}
-            className={buttonVariants({ variant: "primary", size: "md" })}
-          >
-            {C.needLoginCta}
-          </Link>
-        }
-        className="py-20"
-      />
+      <>
+        {/* Sin sesión también hay que poder salir. La barra la monta acá esta
+            rama y no un layout porque las OTRAS ramas la montan adentro del
+            wizard, donde Volver retrocede un paso en vez de irse. */}
+        <SectionTopBar fallbackHref="/empleos" />
+        <EmptyState
+          icon={<SignIn />}
+          title={C.needLoginTitle}
+          message={C.needLoginBody}
+          action={
+            <Link
+              href={`/entrar?next=${encodeURIComponent("/empleos/publicar")}`}
+              className={buttonVariants({ variant: "primary", size: "md" })}
+            >
+              {C.needLoginCta}
+            </Link>
+          }
+          className="py-20"
+        />
+      </>
     );
   }
 

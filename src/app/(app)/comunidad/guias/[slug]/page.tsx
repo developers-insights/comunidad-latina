@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowSquareOut, Buildings, Clock } from "@phosphor-icons/react/dist/ssr";
+import { ArrowSquareOut, Buildings, Clock } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, Chip } from "@/components/ui";
 import {
   estimateReadingMinutes,
@@ -48,14 +47,6 @@ export default async function ComunidadGuiaPage({ params }: Props) {
 
   return (
     <article>
-      <Link
-        href="/comunidad/guias"
-        className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        {C.back}
-      </Link>
-
       <header className="mt-4">
         {guia.topics.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-1.5">

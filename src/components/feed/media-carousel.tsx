@@ -86,6 +86,14 @@ export interface MediaCarouselProps {
   videoScope: VideoScopeProp;
   /** Vistas del post (píldora sobre los medios de video). */
   viewCount?: number;
+  /**
+   * posts.video_type (0046). Pasa DE LARGO por este riel —no se opina acá— para
+   * que `CardVideo` sepa si el video es largo: los `advertising_video` se ven 59
+   * segundos en el feed y ofrecen "Ver video completo" (cliente 2026-09-03).
+   * Es del POST y no de la diapositiva, por eso viaja como prop del carrusel y
+   * no dentro de `PostMediaView` como el filtro o el poster.
+   */
+  videoType?: string | null;
   /** Toque simple sobre una FOTO: abre el visor global en ese índice. */
   onPhotoTap: (index: number) => void;
   /** Doble toque sobre una FOTO: me gusta (el video lo resuelve CardVideo). */
@@ -115,6 +123,7 @@ export function MediaCarousel({
   authorName,
   videoScope,
   viewCount = 0,
+  videoType = null,
   onPhotoTap,
   onPhotoDoubleTap,
   onVideoTap,
@@ -266,6 +275,9 @@ export function MediaCarousel({
                   // `<video>` pinta mientras el archivo del bucket todavía no
                   // llegó, en vez del rectángulo en blanco de siempre.
                   posterUrl={item.posterUrl}
+                  // El tipo es del POST, no de la diapositiva: dice si el video
+                  // es largo y por lo tanto se ve entero en /videos/largos.
+                  videoType={videoType}
                 />
               ) : (
                 <>

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Tests de las server actions de GRUPOS.
@@ -26,7 +26,12 @@ const mocks = vi.hoisted(() => ({
     score: 0,
     skipped: true,
   })),
-  createNotification: vi.fn(async () => ({ ok: true as const })),
+  // Los parámetros van declarados —aunque no se usen— para que
+  // `mock.calls[n][1]` tenga tipo: sin firma, vitest infiere una tupla vacía y
+  // leer el segundo argumento es un error de compilación.
+  createNotification: vi.fn(async (_admin: unknown, _input: unknown) => ({
+    ok: true as const,
+  })),
 }));
 
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
@@ -46,7 +51,9 @@ vi.mock("@/lib/notifications/notify", () => ({
 }));
 
 import {
+  borrarMensajeDeGrupoAction,
   crearGrupoAction,
+  editarGrupoAction,
   enviarMensajeAlGrupoAction,
   expulsarDelGrupoAction,
   invitarAlGrupoAction,
@@ -59,6 +66,8 @@ const TENANT_ID = "11111111-1111-4111-8111-111111111111";
 const USER_ID = "99999999-9999-4999-8999-999999999999";
 const OTRO_ID = "88888888-8888-4888-8888-888888888888";
 const GROUP_ID = "22222222-2222-4222-8222-222222222222";
+const MESSAGE_ID = "33333333-3333-4333-8333-333333333333";
+const OTRO_TENANT_ID = "44444444-4444-4444-8444-444444444444";
 
 type OpResult = { data?: unknown; error?: unknown; count?: number | null };
 
@@ -72,6 +81,8 @@ function crearStub(config: {
   terminal?: Record<string, OpResult>;
   single?: Record<string, OpResult>;
   lista?: Record<string, OpResult>;
+  /** Respuesta por nombre de RPC (`expulsar_de_grupo`, 0135). */
+  rpc?: Record<string, OpResult>;
 } = {}) {
   const calls: RecordedCall[] = [];
 
@@ -99,8 +110,12 @@ function crearStub(config: {
     return builder;
   });
 
-  const rpc = vi.fn(async () => ({ data: null, error: null }));
-  return { client: { from, rpc }, calls };
+  const rpcCalls: [string, unknown][] = [];
+  const rpc = vi.fn(async (nombre: string, args: unknown) => {
+    rpcCalls.push([nombre, args]);
+    return config.rpc?.[nombre] ?? { data: null, error: null };
+  });
+  return { client: { from, rpc }, calls, rpcCalls };
 }
 
 function guardOk(stub: ReturnType<typeof crearStub>) {
@@ -300,26 +315,6 @@ describe("invitarAlGrupoAction", () => {
   });
 });
 
-describe("expulsarDelGrupoAction", () => {
-  it("saca a la persona del grupo", async () => {
-    const stub = crearStub({ terminal: { chat_group_members: { error: null, count: 1 } } });
-    guardOk(stub);
-
-    await expect(
-      expulsarDelGrupoAction({ groupId: GROUP_ID, profileId: OTRO_ID }),
-    ).resolves.toEqual({ ok: true, groupId: GROUP_ID });
-  });
-
-  it("si no borró ninguna fila es que la policy no lo dejó: forbidden, no 'listo'", async () => {
-    const stub = crearStub({ terminal: { chat_group_members: { error: null, count: 0 } } });
-    guardOk(stub);
-
-    await expect(
-      expulsarDelGrupoAction({ groupId: GROUP_ID, profileId: OTRO_ID }),
-    ).resolves.toEqual({ ok: false, code: "forbidden" });
-  });
-});
-
 /* --------------------------------- Mensajes ------------------------------- */
 
 describe("enviarMensajeAlGrupoAction", () => {
@@ -436,5 +431,234 @@ describe("enviarMensajeAlGrupoAction", () => {
     await expect(
       enviarMensajeAlGrupoAction({ groupId: GROUP_ID, body: "hola" }),
     ).resolves.toEqual({ ok: true, groupId: GROUP_ID });
+  });
+});
+
+/* ------------------------- Los cierres de la 0135 ------------------------- */
+
+describe("borrarMensajeDeGrupoAction (H-1)", () => {
+  /**
+   * Hasta la 0135 esta action NO PODÍA FUNCIONAR NUNCA, ni para el autor ni
+   * para quien administra: `chat_group_messages_select` exigía `deleted_at is
+   * null`, y el USING de un SELECT se aplica también a la fila nueva de un
+   * UPDATE, así que la fila borrada no podía existir y la base contestaba 42501
+   * siempre. Lo que el test puede fijar desde acá es que la action traduzca
+   * bien; que la policy ya no lo bloquee está probado contra la base (dry-run
+   * con rollback) y escrito en `lib/messaging/grupos.test.ts`.
+   */
+  it("baja el mensaje y contesta que sí", async () => {
+    const stub = crearStub({
+      terminal: { chat_group_messages: { error: null, count: 1 } },
+    });
+    guardOk(stub);
+
+    await expect(
+      borrarMensajeDeGrupoAction({ groupId: GROUP_ID, messageId: MESSAGE_ID }),
+    ).resolves.toEqual({ ok: true, groupId: GROUP_ID });
+
+    const update = stub.calls.find(
+      (c) => c.table === "chat_group_messages" && c.method === "update",
+    );
+    // Sólo `deleted_at`: el cuerpo no se toca desde acá (y el trigger de la
+    // 0135 lo volvería a pisar si alguien lo intentara).
+    expect(Object.keys(update?.args[0] as object)).toEqual(["deleted_at"]);
+  });
+
+  it("si no borró ninguna fila es un 'no' de la base, no un 'listo'", async () => {
+    const stub = crearStub({
+      terminal: { chat_group_messages: { error: null, count: 0 } },
+    });
+    guardOk(stub);
+
+    await expect(
+      borrarMensajeDeGrupoAction({ groupId: GROUP_ID, messageId: MESSAGE_ID }),
+    ).resolves.toEqual({ ok: false, code: "forbidden" });
+  });
+
+  it("un id que no es uuid no llega al guard", async () => {
+    await expect(
+      borrarMensajeDeGrupoAction({ groupId: GROUP_ID, messageId: "nope" }),
+    ).resolves.toEqual({ ok: false, code: "invalid" });
+    expect(mocks.requireTenantMatch).not.toHaveBeenCalled();
+  });
+});
+
+describe("expulsarDelGrupoAction, ahora con veto (H-3)", () => {
+  /**
+   * El cambio de fondo: dejó de ser un DELETE sobre `chat_group_members` para
+   * ser UNA RPC. Si volviera a ser dos escrituras desde acá, expulsar de un
+   * grupo público volvería a durar hasta el toque siguiente.
+   */
+  it("llama a la RPC y no borra la membresía por su cuenta", async () => {
+    const stub = crearStub({ rpc: { expulsar_de_grupo: { data: "ok" } } });
+    guardOk(stub);
+
+    await expect(
+      expulsarDelGrupoAction({ groupId: GROUP_ID, profileId: OTRO_ID }),
+    ).resolves.toEqual({ ok: true, groupId: GROUP_ID });
+
+    expect(stub.rpcCalls).toEqual([
+      ["expulsar_de_grupo", { p_group: GROUP_ID, p_profile: OTRO_ID }],
+    ]);
+    // La atomicidad la da la función: acá no puede quedar media operación.
+    expect(stub.calls.some((c) => c.method === "delete")).toBe(false);
+  });
+
+  it("'no_estaba' es éxito: el resultado que se quería ya es cierto", async () => {
+    const stub = crearStub({ rpc: { expulsar_de_grupo: { data: "no_estaba" } } });
+    guardOk(stub);
+
+    await expect(
+      expulsarDelGrupoAction({ groupId: GROUP_ID, profileId: OTRO_ID }),
+    ).resolves.toEqual({ ok: true, groupId: GROUP_ID });
+  });
+
+  it("'sin_permiso' —un miembro común, o el dueño del grupo— es forbidden", async () => {
+    const stub = crearStub({ rpc: { expulsar_de_grupo: { data: "sin_permiso" } } });
+    guardOk(stub);
+
+    await expect(
+      expulsarDelGrupoAction({ groupId: GROUP_ID, profileId: OTRO_ID }),
+    ).resolves.toEqual({ ok: false, code: "forbidden" });
+  });
+});
+
+describe("unirmeAlGrupoAction: 'te sacaron' no es 'probá de nuevo' (H-3)", () => {
+  it("con veto contesta banned, para que la pantalla lo diga en serio", async () => {
+    const stub = crearStub({
+      terminal: { chat_group_members: { error: { code: "42501" } } },
+      single: { chat_group_bans: { data: { profile_id: USER_ID } } },
+    });
+    guardOk(stub);
+
+    await expect(unirmeAlGrupoAction(GROUP_ID)).resolves.toEqual({
+      ok: false,
+      code: "banned",
+    });
+  });
+
+  it("sin veto, el mismo 42501 sigue siendo forbidden (privado o cerrado)", async () => {
+    const stub = crearStub({
+      terminal: { chat_group_members: { error: { code: "42501" } } },
+      single: { chat_group_bans: { data: null } },
+    });
+    guardOk(stub);
+
+    await expect(unirmeAlGrupoAction(GROUP_ID)).resolves.toEqual({
+      ok: false,
+      code: "forbidden",
+    });
+  });
+
+  it("un error que no es 42501 no dispara la consulta del veto", async () => {
+    const stub = crearStub({
+      terminal: { chat_group_members: { error: { code: "08006" } } },
+    });
+    guardOk(stub);
+
+    await expect(unirmeAlGrupoAction(GROUP_ID)).resolves.toEqual({
+      ok: false,
+      code: "error",
+    });
+    expect(stub.calls.some((c) => c.table === "chat_group_bans")).toBe(false);
+  });
+
+  it("cuando entra bien, no se pregunta nada de vetos", async () => {
+    const stub = crearStub();
+    guardOk(stub);
+
+    await unirmeAlGrupoAction(GROUP_ID);
+    expect(stub.calls.some((c) => c.table === "chat_group_bans")).toBe(false);
+  });
+});
+
+describe("invitarAlGrupoAction levanta el veto antes de sumar (H-3)", () => {
+  it("borra el veto y recién después da el alta", async () => {
+    const stub = crearStub({ single: { chat_groups: { data: { name: "Ciclistas" } } } });
+    guardOk(stub);
+
+    await expect(
+      invitarAlGrupoAction({ groupId: GROUP_ID, profileId: OTRO_ID }),
+    ).resolves.toMatchObject({ ok: true });
+
+    const veto = stub.calls.findIndex(
+      (c) => c.table === "chat_group_bans" && c.method === "delete",
+    );
+    const alta = stub.calls.findIndex(
+      (c) => c.table === "chat_group_members" && c.method === "insert",
+    );
+    expect(veto).toBeGreaterThan(-1);
+    expect(alta).toBeGreaterThan(-1);
+    // El orden importa: al revés, un fallo del delete dejaría a la persona
+    // adentro y vetada a la vez, y nadie entendería por qué no puede volver
+    // si algún día se va sola.
+    expect(veto).toBeLessThan(alta);
+  });
+});
+
+describe("la foto del grupo tiene que ser de esta comunidad (H-9)", () => {
+  const SUPA = "https://proyecto.supabase.co";
+  const OLD = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const propia = `${SUPA}/storage/v1/object/public/avatars/${TENANT_ID}/${USER_ID}/g.jpg`;
+
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = SUPA;
+  });
+  afterAll(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = OLD;
+  });
+
+  it("una URL de otro host no llega ni al guard", async () => {
+    await expect(
+      crearGrupoAction({
+        ...grupoValido,
+        avatarUrl: "https://rastreador.example/foto.jpg",
+      }),
+    ).resolves.toEqual({ ok: false, code: "invalid" });
+    expect(mocks.requireTenantMatch).not.toHaveBeenCalled();
+  });
+
+  it("la foto de OTRA comunidad se corta con el tenant del guard, sin escribir", async () => {
+    const stub = crearStub({ single: { chat_groups: { data: { id: GROUP_ID } } } });
+    guardOk(stub);
+
+    const ajena = `${SUPA}/storage/v1/object/public/avatars/${OTRO_TENANT_ID}/${USER_ID}/g.jpg`;
+    await expect(
+      crearGrupoAction({ ...grupoValido, avatarUrl: ajena }),
+    ).resolves.toEqual({ ok: false, code: "invalid" });
+    expect(stub.calls.some((c) => c.method === "insert")).toBe(false);
+  });
+
+  it("la foto propia se guarda como siempre", async () => {
+    const stub = crearStub({ single: { chat_groups: { data: { id: GROUP_ID } } } });
+    guardOk(stub);
+
+    await expect(
+      crearGrupoAction({ ...grupoValido, avatarUrl: propia }),
+    ).resolves.toEqual({ ok: true, groupId: GROUP_ID });
+
+    const insert = stub.calls.find((c) => c.method === "insert");
+    expect((insert?.args[0] as { avatar_url: string }).avatar_url).toBe(propia);
+  });
+
+  it("sin foto se sigue pudiendo crear un grupo", async () => {
+    const stub = crearStub({ single: { chat_groups: { data: { id: GROUP_ID } } } });
+    guardOk(stub);
+
+    await expect(crearGrupoAction(grupoValido)).resolves.toEqual({
+      ok: true,
+      groupId: GROUP_ID,
+    });
+  });
+
+  it("editar tampoco acepta una foto ajena", async () => {
+    const stub = crearStub({ terminal: { chat_groups: { error: null, count: 1 } } });
+    guardOk(stub);
+
+    const ajena = `${SUPA}/storage/v1/object/public/avatars/${OTRO_TENANT_ID}/${USER_ID}/g.jpg`;
+    await expect(
+      editarGrupoAction({ groupId: GROUP_ID, ...grupoValido, avatarUrl: ajena }),
+    ).resolves.toEqual({ ok: false, code: "invalid" });
+    expect(stub.calls.some((c) => c.method === "update")).toBe(false);
   });
 });

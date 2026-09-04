@@ -13,10 +13,18 @@ import type { PostMediaView } from "./helpers";
  * foto. Acá se testea esa ventana con timers falsos: sin ella, el doble-tap
  * sería indistinguible de dos aperturas.
  *
- * Desde el 2026-08-20 ese toque NO navega: abre el visor global sobre el mismo
- * feed ("no te tiene que mover a otra publicación… sin sacarte del feed"). Los
- * tests de acá abajo son los que impiden que `/videos` vuelva a colarse en el
- * gesto de la tarjeta.
+ * QUÉ ABRE ESE TOQUE — cambió dos veces y los tests son la memoria de por qué:
+ *
+ *  · hasta el 2026-08-20 NAVEGABA a `/videos`, y volver perdía el scroll del
+ *    feed ("no te tiene que mover a otra publicación… sin sacarte del feed");
+ *  · desde entonces abría el visor de la propia publicación, que arregló eso y
+ *    dejó el otro agujero: sin música y sin scroll a los demás videos;
+ *  · desde el 2026-09-03 abre el REEL ENCIMA del feed, que cumple los dos
+ *    pedidos ("ahí no te sale la música… debería hacer scrolling los videos").
+ *
+ * Los tests de acá abajo fijan las tres cosas a la vez: que abra el reel, que
+ * NO navegue, y que el visor siga siendo el respaldo cuando el reel no tiene
+ * ese video (y `/videos`, el respaldo del respaldo).
  *
  * El estado de me gusta se comparte con el resto de la card vía CardLikeProvider
  * (el mismo que monta PostCard), así que el doble-tap escribe en `reactions` por
@@ -40,6 +48,37 @@ vi.mock("next/navigation", () => ({
 vi.mock("./media-viewer", () => ({
   useMediaViewer: () => ({ open: viewer.open, available: viewer.available }),
 }));
+
+/**
+ * EL REEL ENTRA POR `next/dynamic` (chunk aparte: no puede pesar en el primer
+ * render del feed, y además corta un ciclo de imports). Acá se reemplaza esa
+ * carga diferida por un stub SINCRÓNICO: lo que este archivo testea es el
+ * GESTO de la tarjeta —qué abre, con qué datos, y qué pasa al cerrar— no el
+ * reel, que tiene sus propios tests en `videos/`.
+ *
+ * El stub expone los dos caminos de vuelta que la tarjeta tiene que manejar:
+ * cerrar normal, y "el reel no tenía este video".
+ */
+vi.mock("next/dynamic", async () => {
+  const React = await import("react");
+  interface StubProps {
+    postId: string;
+    scope: string;
+    onClose: () => void;
+    onUnavailable: () => void;
+  }
+  return {
+    default: () =>
+      function ReelOverlayStub({ postId, scope, onClose, onUnavailable }: StubProps) {
+        return React.createElement(
+          "div",
+          { "data-testid": "reel-overlay", "data-post": postId, "data-scope": scope },
+          React.createElement("button", { onClick: onClose }, "stub-cerrar-reel"),
+          React.createElement("button", { onClick: onUnavailable }, "stub-reel-vacio"),
+        );
+      },
+  };
+});
 
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
@@ -67,7 +106,13 @@ const POST_ID = "11111111-1111-4111-8111-111111111111";
 function renderCard({
   viewerId = "viewer-1",
   viewCount = 0,
-}: { viewerId?: string | null; viewCount?: number } = {}) {
+  videoType = null,
+}: {
+  viewerId?: string | null;
+  viewCount?: number;
+  /** posts.video_type — `advertising_video` es lo que hace largo a un video. */
+  videoType?: string | null;
+} = {}) {
   return render(
     <CardLikeProvider
       postId={POST_ID}
@@ -82,6 +127,7 @@ function renderCard({
         scope="negocios"
         authorName="Doña Rosa"
         viewCount={viewCount}
+        videoType={videoType}
       />
     </CardLikeProvider>,
   );
@@ -115,84 +161,57 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("CardVideo: un toque abre el video SIN sacarte del feed", () => {
-  it("abre el visor sobre la misma pantalla y no navega a ningún lado", () => {
+describe("CardVideo: un toque abre el REEL, encima del feed", () => {
+  it("abre el reel en ESTE post y no navega a ningún lado", () => {
     renderCard();
     fireEvent.click(tapLayer());
 
     // Todavía dentro de la ventana de doble-tap: no se abrió nada.
-    expect(viewer.open).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("reel-overlay")).toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(250);
     });
 
+    const overlay = screen.getByTestId("reel-overlay");
+    // Arranca en el video tocado y con el scope del feed que montó la tarjeta:
+    // esos dos datos son los que hacen que el scroll siga "los otros videos
+    // cortos" y no una lista cualquiera.
+    expect(overlay.getAttribute("data-post")).toBe(POST_ID);
+    expect(overlay.getAttribute("data-scope")).toBe("negocios");
+    // Sin navegar: el feed sigue montado detrás, en su misma posición. Es la
+    // mitad del pedido que ya estaba ganada el 2026-08-20 y no se resigna.
     expect(nav.push).not.toHaveBeenCalled();
-    expect(viewer.open).toHaveBeenCalledTimes(1);
-    expect(viewer.open).toHaveBeenCalledWith(
-      expect.objectContaining({
-        postId: POST_ID,
-        startIndex: 0,
-        items: [{ kind: "video", url: "https://cdn.example.com/clip.mp4" }],
-        // El encabezado del visor nombra al autor: por este camino también, o
-        // el video de una card diría menos que su propia foto.
-        authorName: "Doña Rosa",
-      }),
-    );
+    // Y el visor de una sola publicación deja de ser el destino del toque: era
+    // justamente donde no había ni música ni scroll.
+    expect(viewer.open).not.toHaveBeenCalled();
   });
 
-  it("lo que abre es el video COMPLETO, no otra vista previa de 59 s", () => {
-    renderCard();
-    fireEvent.click(tapLayer());
-    act(() => {
-      vi.advanceTimersByTime(250);
-    });
-
-    expect(viewer.open).toHaveBeenCalledWith(
-      expect.objectContaining({ maxPlaybackSeconds: PREMIUM_DETAIL_MAX_SECONDS }),
-    );
-  });
-
-  it("sigue donde venía: el visor hereda el segundo de la tarjeta, no vuelve a cero", () => {
-    renderCard();
-    const clock = stubMediaClock(videoNode(), 90);
-    clock.seek(12.5);
-
-    fireEvent.click(tapLayer());
-    act(() => {
-      vi.advanceTimersByTime(250);
-    });
-
-    expect(viewer.open).toHaveBeenCalledWith(
-      expect.objectContaining({ startSeconds: 12.5 }),
-    );
-  });
-
-  it("la tarjeta se calla al abrir y retoma sola al cerrarse el visor", () => {
+  it("la tarjeta se calla al abrir el reel y retoma sola al cerrarlo", () => {
     renderCard();
     const node = videoNode();
     const pause = vi.spyOn(node, "pause").mockImplementation(() => undefined);
-    const play = vi
-      .spyOn(node, "play")
-      .mockImplementation(() => Promise.resolve());
+    const play = vi.spyOn(node, "play").mockImplementation(() => Promise.resolve());
 
     fireEvent.click(tapLayer());
     act(() => {
       vi.advanceTimersByTime(250);
     });
+    // Dos copias del mismo clip sonando juntas no se le hace a nadie.
     expect(pause).toHaveBeenCalled();
     expect(play).not.toHaveBeenCalled();
 
-    // El visor avisa que se cerró (la X, Escape, atrás o el arrastre).
-    const args = viewer.open.mock.calls[0][0] as { onClose?: () => void };
-    act(() => {
-      args.onClose?.();
-    });
+    // La X, Escape, el "atrás" del teléfono o el arrastre hacia abajo.
+    fireEvent.click(screen.getByText("stub-cerrar-reel"));
 
+    expect(screen.queryByTestId("reel-overlay")).toBeNull();
+    // Volver al feed devuelve la tarjeta como estaba, no congelada en el frame
+    // donde la pausamos: el observador de visibilidad no la despierta solo
+    // porque nunca dejó de estar a la vista.
     expect(play).toHaveBeenCalledTimes(1);
   });
 
-  it("con las diapositivas del post, abre TODAS y arranca en el video tocado", () => {
+  it("si el reel no tiene ese video, cae al visor de la propia publicación", () => {
     const items: PostMediaView[] = [
       { kind: "image", url: "https://cdn.example.com/foto.webp" },
       { kind: "video", url: "https://cdn.example.com/clip.mp4" },
@@ -203,6 +222,7 @@ describe("CardVideo: un toque abre el video SIN sacarte del feed", () => {
           src="https://cdn.example.com/clip.mp4"
           postId={POST_ID}
           scope="negocios"
+          authorName="Doña Rosa"
         />
       </CardMediaProvider>,
     );
@@ -211,25 +231,79 @@ describe("CardVideo: un toque abre el video SIN sacarte del feed", () => {
       vi.advanceTimersByTime(250);
     });
 
-    // Tocar el video deja llegar a la foto, igual que tocar la foto deja llegar
-    // al video: es el mismo carrusel, no dos visores distintos.
+    // El post dejó de ser elegible entre que el feed se pintó y el dedo tocó.
+    fireEvent.click(screen.getByText("stub-reel-vacio"));
+
+    expect(screen.queryByTestId("reel-overlay")).toBeNull();
+    // Tocó un video y tiene que ver un video: se abre el de la publicación, con
+    // TODAS sus diapositivas y arrancando en la que tocó.
     expect(viewer.open).toHaveBeenCalledWith(
-      expect.objectContaining({ items, startIndex: 1 }),
+      expect.objectContaining({
+        items,
+        startIndex: 1,
+        postId: POST_ID,
+        authorName: "Doña Rosa",
+        // Y completo, no otra vista previa de 59 s.
+        maxPlaybackSeconds: PREMIUM_DETAIL_MAX_SECONDS,
+      }),
     );
   });
 
-  it("sin visor montado el toque NO queda muerto: cae al reel de /videos", () => {
-    // `/videos` sigue existiendo y sigue siendo un destino válido; lo que dejó
-    // de ser es el destino del gesto cuando hay visor.
+  it("sin visor montado, el respaldo del respaldo sigue siendo /videos", () => {
+    // El último eslabón: sin provider de visor, un reel vacío dejaría el toque
+    // muerto. `/videos` sigue existiendo y sigue siendo un destino válido.
     viewer.available = false;
     renderCard();
     fireEvent.click(tapLayer());
     act(() => {
       vi.advanceTimersByTime(250);
     });
+    fireEvent.click(screen.getByText("stub-reel-vacio"));
 
     expect(viewer.open).not.toHaveBeenCalled();
     expect(nav.push).toHaveBeenCalledWith(`/videos?start=${POST_ID}&scope=negocios`);
+  });
+
+  it("con `onTap` propio (detalle y anuncios) NO abre el reel", () => {
+    // La regla la aplica `CardPostMedia` con `videoOpensReel`: dentro de una
+    // propiedad, un evento o un anuncio el video se mira ahí y no saca a nadie
+    // a un scroll donde ese video, por contrato, ni siquiera existe.
+    const onTap = vi.fn();
+    render(
+      <CardVideo
+        src="https://cdn.example.com/clip.mp4"
+        postId={POST_ID}
+        scope="sin-reel"
+        onTap={onTap}
+      />,
+    );
+    fireEvent.click(tapLayer());
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(onTap).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("reel-overlay")).toBeNull();
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("pinta el poster mientras el archivo no llegó (nunca un rectángulo vacío)", () => {
+    // El bug del cliente (2026-09-03, 1:07:00): sin `poster`, un .mp4 crudo no
+    // tiene NADA que mostrar hasta que baja su metadata.
+    render(
+      <CardVideo
+        src="https://cdn.example.com/clip.mp4"
+        postId={POST_ID}
+        scope="negocios"
+        posterUrl="https://cdn.example.com/poster.jpg"
+      />,
+    );
+    expect(videoNode().getAttribute("poster")).toBe("https://cdn.example.com/poster.jpg");
+  });
+
+  it("sin poster no escribe el atributo: un `poster=\"\"` es una imagen rota", () => {
+    renderCard();
+    expect(videoNode().hasAttribute("poster")).toBe(false);
   });
 });
 
@@ -373,6 +447,93 @@ describe("CardVideo: la tarjeta muestra 59 s, no el video entero", () => {
     fireEvent.loadedMetadata(node);
 
     expect(screen.queryByText("Vista previa")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VIDEO LARGO: 59 s Y "VER VIDEO COMPLETO" (cliente 2026-09-03, 21:00)
+// ---------------------------------------------------------------------------
+//
+// «En el feed y en Videos Cortos solamente sale los 59 segundos y ahí va a
+// estar un botón que dice ver video completo… como Instagram: ves el video, se
+// para en cierta cantidad de segundos y dice ver video completo.»
+//
+// La diferencia entre un corto y un largo NO es el tope —los 59 s son los
+// mismos para los dos— sino qué pasa al llegar: el corto vuelve a empezar, el
+// largo se FRENA y ofrece la sección. Estos tests fijan las dos mitades, porque
+// cada una sin la otra es un bug: frenar sin botón parece un video roto, y el
+// botón sin frenar es un cartel que aparece mientras el video sigue.
+
+describe("CardVideo: video largo — se frena a los 59 s y ofrece la sección", () => {
+  const CTA = "Ver el video completo en Videos largos";
+
+  it("un corto no ofrece nada: vuelve a empezar, como siempre", () => {
+    renderCard();
+    const node = videoNode();
+    const clock = stubMediaClock(node, 300);
+    fireEvent.loadedMetadata(node);
+
+    clock.seek(59);
+    fireEvent.timeUpdate(node);
+
+    expect(clock.now()).toBe(0);
+    expect(screen.queryByRole("link", { name: CTA })).toBeNull();
+  });
+
+  it("un video publicitario se frena y aparece 'Ver video completo'", () => {
+    renderCard({ videoType: "advertising_video" });
+    const node = videoNode();
+    const clock = stubMediaClock(node, 300);
+    fireEvent.loadedMetadata(node);
+
+    clock.seek(58);
+    fireEvent.timeUpdate(node);
+    expect(screen.queryByRole("link", { name: CTA })).toBeNull();
+
+    clock.seek(59);
+    fireEvent.timeUpdate(node);
+
+    // NO rebobina: el corte tiene que verse, es lo que explica el botón.
+    expect(clock.now()).toBe(59);
+    const cta = screen.getByRole("link", { name: CTA });
+    expect(cta.getAttribute("href")).toBe(`/videos/largos/${POST_ID}`);
+    expect(cta.textContent).toContain("Ver video completo");
+  });
+
+  it("el toque sobre un video largo promete una vista previa, no el completo", () => {
+    // El botón grande abre la MISMA vista previa a pantalla completa; el video
+    // entero está a un toque del otro botón. Decir "Ver el video completo" acá
+    // sería prometer lo que hace el otro.
+    renderCard({ videoType: "advertising_video" });
+
+    expect(
+      screen.getByRole("button", { name: "Ver la vista previa en grande" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Ver el video completo" })).toBeNull();
+  });
+
+  it("al volver del visor la vista previa empieza de nuevo, no frenada", () => {
+    renderCard({ videoType: "advertising_video" });
+    const node = videoNode();
+    const clock = stubMediaClock(node, 300);
+    fireEvent.loadedMetadata(node);
+
+    clock.seek(59);
+    fireEvent.timeUpdate(node);
+    expect(screen.getByRole("link", { name: CTA })).toBeTruthy();
+
+    // Abrir el reel y cerrarlo: la tarjeta retoma (`resumeAfterViewer`). La
+    // capa de toque de un video largo se llama distinto — ver el test de arriba.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ver la vista previa en grande" }),
+    );
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    fireEvent.click(screen.getByText("stub-cerrar-reel"));
+
+    expect(clock.now()).toBe(0);
+    expect(screen.queryByRole("link", { name: CTA })).toBeNull();
   });
 });
 

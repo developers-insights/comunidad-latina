@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Briefcase, CaretLeft } from "@phosphor-icons/react/dist/ssr";
+import { Briefcase } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, SectionHeading, Skeleton, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/empleos/copy";
 import { MyApplicationCard } from "@/components/empleos/my-application-card";
@@ -179,16 +179,6 @@ async function Content({ filter }: { filter: Filter }) {
 function Header() {
   return (
     <>
-      <Link
-        href="/empleos"
-        className={cn(
-          "mb-2 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-foreground-secondary",
-          "hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-        )}
-      >
-        <CaretLeft size={16} weight="bold" aria-hidden="true" />
-        {C.backToJobs}
-      </Link>
       <SectionHeading
         accent={SECCION.accent}
         image={SECCION.image}

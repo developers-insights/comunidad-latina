@@ -1,5 +1,111 @@
 # PROGRESS — Comunidad Latina
 
+## El feedback del cliente del 3/9 — 15 puntos, implementados en una tanda (✅ 2026-09-04)
+
+Fuente: `docs/feedback/2026-09-03-feedback-cliente.md` (call de 78 min con
+Geovanny + WhatsApp de Nacho + 4 videos). Se hizo con 12 subagentes en
+paralelo sobre este mismo worktree, con fronteras de archivo, y un cierre de
+integración (typecheck, lint, suite completa, verificación en vivo, revisión
+de código y de seguridad). Migraciones 0127–0134 aplicadas en la base
+operativa `ktmbtpuhqqofdkisqseq` con `get_advisors` y `check:rls` verdes.
+
+### Qué quedó, punto por punto
+
+| # | Punto | Estado | Dónde |
+|---|---|---|---|
+| 1 | Editor de fotos en el celular (emojis, recorte, texto) | ✅ | `ui/bottom-sheet.tsx` (`gesturesLocked`), `feed/photo-editor.tsx` |
+| 2 | Subir foto del negocio | ✅ | `negocios/[id]/editar/**`, `lib/negocios/pagina.ts`, 0127 |
+| 3 | Volver atrás en secciones y wizards | ✅ | `shell/section-top-bar.tsx`, `internal-history.ts`, 60 layouts |
+| 4 | Video del feed → reel con música y scroll | ✅ | `videos/reel-overlay.tsx`, `feed/card-video.tsx`, `post-music.tsx` |
+| 5 | Videos Cortos en blanco al scrollear | ✅ posters + precarga | `videos/video-reels.tsx`, `measure-video.ts`, 0132 |
+| 6 | Video de 1:29 rechazado (60 MB) | ✅ parche 200 MB | `video-upload-limits.ts`, bucket 250 MB. **Mux sigue apagado** |
+| 7 | Mensajes: buscador por persona + grupos | ✅ v1 | `mensajes/grupos/**`, `messaging/group-*`, 0133/0134 |
+| 8 | Pedir ayuda como tablón con respuestas · sacar Ayuda mutua | ✅ | `comunidad/pedir-ayuda/**`, 0130 (redirects 308 desde `ayuda-mutua`) |
+| 9 | Voluntarios: registrarme + pedir voluntarios (privados) | ✅ | `comunidad/voluntarios/**`, `admin/comunidad/registros`, 0131 |
+| 10 | Centro de acopio / bancos de comida: registrar mi lugar + carga admin | ✅ | `comunidad/recursos/registrar`, `admin/comunidad/recursos` |
+| 11 | Espacio comunitario (tarjeta nueva + formulario) | ✅ | `comunidad/espacio/**` |
+| 12 | Empleos: Empleos · Ocasional · Servicios + selector Empleo/Servicio | ✅ | `empleos/**`, `listings.kind += 'service'` (0129) |
+| 13 | Videos largos: sección + "Ver video completo" a los 59 s | ✅ | `videos/largos/**`, `card-video.tsx`, `media-viewer.tsx` |
+| 13b | Alguien tiene que poder SUBIR un video largo | ✅ desde Impulsar con campaña activa | `impulsar-post/[postId]/video-publicitario.ts` |
+| 14 | Negocio: editar info + servicios · encabezado solo con el negocio | ✅ | `negocios/[id]/editar`, `shell/identity-switcher.tsx` |
+| 15 | Texto sin achicar + fondos elegibles | ✅ | `feed/text-banner.tsx`, `lib/feed/text-backgrounds.ts`, 0128 |
+
+### Decisiones que se tomaron sobre la marcha (confirmar con el cliente)
+
+- **Los pedidos de "Pedir ayuda" se publican al instante**, sin cola previa:
+  detector de datos de contacto, `moderateText` como gate, cupo de 5 abiertos,
+  moderación posterior y reporte. Contradice el "todo se verifica vía
+  Geovanny" anterior; se eligió porque el propio cliente lo describió como "un
+  grupo de WhatsApp donde la gente contesta". Las respuestas NO pasan por el
+  detector de teléfonos a propósito (la historia del consulado es alguien
+  pasando un número).
+- **Video largo = solo con campaña activa en Impulsar** (600 s, `advertising_video`).
+  No es preferencia: la base rechaza `advertising_video` en el INSERT hasta con
+  service_role, y el composer está clavado en 90 s. Un video corto que se
+  reemplaza por uno largo queda largo para siempre (0046 lo congela).
+- **Grupos v1:** el owner no puede salir (cierra el grupo), no hay borrado (solo
+  cierre), sin ascender a admin desde la UI, sin encuadre de foto. Polling de
+  6 s: no hay Realtime en el repo (el 1-a-1 también hace polling).
+- **Registros de comunidad los ve `domain_admin`, no `moderator`**: son
+  teléfonos y emails de vecinos. Lo descartado se purga a los 180 días; lo vivo
+  no (la lista de voluntarios ES el producto).
+- **Un servicio no exige verificación de identidad** (`app.vertical_exige_identidad`
+  no incluye `service`). Si el cliente la quiere, es una rama en esa función SQL
+  más el código, no solo el código.
+- **Texto:** dos cuerpos fijos (24 px hasta 280 caracteres, 20 px después),
+  alineación automática (centrada hasta 120, izquierda después), sin selector
+  de alineación. Fondos: 8 + Automático, contraste AA verificado por test.
+- **`/videos` no lleva barra Volver** (es raíz de pestaña, la barra taparía el
+  reproductor); `/videos/largos` sí.
+
+### Lo que se verificó, y cómo
+
+- `npm run typecheck` 0 errores · `npx eslint src` limpio · suite completa
+  **5747 tests / 335 archivos** (una sola falla, el skeleton de `/videos`
+  cubriendo el 404 de `/videos/largos/[id]`, resuelta moviendo el riel a
+  `videos/(reels)/`) · `check:rls` verde (106 superficies) · `get_advisors`
+  sin nuevos avisos de seguridad en nivel error.
+- En vivo (dev server contra la base operativa, sesión demo `carlos@demo`):
+  feed, Empleos con chips nuevos y selector Empleo/Servicio, Comunidad,
+  Mensajes con Personas · Grupos y buscador, Grupos, Videos largos, composer
+  de texto con fondos y vista previa, editor de fotos con emojis en 375 px.
+- **Bug encontrado en vivo y corregido:** "Volver" caía al fallback (`/buscar`)
+  en la PRIMERA visita a una sección. Next hace el `pushState` recién cuando
+  terminó de traer los datos, después del efecto que sellaba el historial.
+  Ahora se sella en el `pushState` mismo (`installHistoryStamping`) — probado:
+  feed → Eventos (primera vez) → Volver → feed.
+- Retoques de integración: vista previa del composer que se desplaza en vez
+  de cortar el texto largo; panel de emojis a 30 dvh para que la foto gane
+  alto en el teléfono; `MessageCta` del perfil de creador con `profileId`;
+  inventario de tintas de impresión al día.
+
+### Incidentes de la sesión (para que no se repitan)
+
+- **Un "dry-run" aplicó la 0127 en producción.** Las migraciones traen su
+  propio `begin;`/`commit;`; envolverlas en una transacción externa no protege.
+  Ahora existe `scripts/dryrun-migraciones.mjs` (neutraliza begin/commit,
+  rollback garantizado) y es la única forma aceptada de validar SQL contra la
+  base real. Memoria: `dryrun-de-migraciones-commit-interno`.
+- **El hook `Stop` `auto-merge-main.mjs` pusheó a main trabajo a medio hacer**
+  (23:13 y 23:26 del 3/9). Los dos deploys fallaron en el build y producción
+  no se enteró, de suerte. Quedaron dos commits `auto:` en main. Memoria:
+  `hook-auto-merge-main-pushea-al-terminar`.
+
+### Pendiente / inputs
+
+1. **Mux** (credenciales): sin eso, 200 MB es un parche y un video de 5 minutos
+   de celular no entra ni carga bien. El código está desde 0116.
+2. **Listado de bancos de comida** de NYC: `/admin/comunidad/recursos` está
+   listo para cargarlo con su fuente; falta la fuente.
+3. Confirmar con el cliente: publicación inmediata de pedidos; owner que no
+   puede salir del grupo; servicio sin licencia ni verificación.
+4. **Actualizar `next` (16.2.12 → 16.3.x):** `npm audit --omit=dev` marca 7 high; el que importa es el `sharp@0.34.5` INTERNO de Next (CVE-2026-33327/33328/35590/35591 de libvips), que decodifica cada imagen de `next/image` — fotos de perfil, logos y portadas subidas por la gente. El `sharp` de nivel superior (0.35.3) no está afectado. Es un upgrade de framework: se hace aparte, con su build y su pasada de tests, no dentro de esta tanda. Los otros cinco salen con `npm audit fix`.
+5. Técnica, no urgente: índices sobre FKs nuevas que el advisor marca como
+   INFO (`chat_group_messages.tenant_id`, `community_help_replies.created_by`/
+   `moderated_by`, `community_registrations.*_by`/`resource_id`); un editor de
+   fotos a pantalla completa en el celular si la hoja sigue quedando chica;
+   copy de Impulsar sobre la espera del webhook de Stripe.
+
 ## El feedback de Nacho del 26-ago — los 14 puntos, cerrados (✅ 2026-08-26)
 
 Nueve capturas de WhatsApp con pedidos sueltos, algunos que eran bugs y otros

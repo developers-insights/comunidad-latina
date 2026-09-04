@@ -85,6 +85,10 @@ import {
   MAX_PHOTO_BYTES,
   MAX_TOTAL_PHOTO_BYTES,
 } from "@/lib/media/post-media-limits";
+import {
+  PREMIUM_DETAIL_MAX_SECONDS,
+  SHORT_VIDEO_MAX_SECONDS,
+} from "@/lib/media/video-policy";
 
 /* -------------------------------- Fixtures -------------------------------- */
 
@@ -219,10 +223,21 @@ function postForm(input: {
    * mandan basura, que es justamente el caso que la action tiene que frenar.
    */
   videoFilters?: unknown;
+  /** `posts.video_poster_path` (0132) — el fotograma que capturó el navegador. */
+  videoPosterPath?: string;
+  /**
+   * `posts.text_background` (0128) — el fondo elegido de una publicación de
+   * texto. `string` y no el tipo del catálogo a propósito: buena parte de estas
+   * pruebas manda un id que no existe, que es justo lo que la action frena.
+   */
+  textBackground?: string;
 }): FormData {
   const data = new FormData();
   data.set("body", input.body);
   data.set("kind", input.kind ?? "post");
+  if (input.textBackground !== undefined) {
+    data.set("textBackground", input.textBackground);
+  }
   for (const file of input.photos ?? []) data.append("photos", file);
   if (input.videoPaths?.length) {
     data.set("videoPaths", JSON.stringify(input.videoPaths));
@@ -232,6 +247,9 @@ function postForm(input: {
   }
   if (input.videoFilters !== undefined) {
     data.set("videoFilters", JSON.stringify(input.videoFilters));
+  }
+  if (input.videoPosterPath !== undefined) {
+    data.set("videoPosterPath", input.videoPosterPath);
   }
   return data;
 }
@@ -492,6 +510,89 @@ describe("createPostAction — el path del video acepta el mismo catálogo que e
   });
 });
 
+/* ------------------- El poster del video (0132, 2026-09-03) ---------------- */
+
+/**
+ * EL FOTOGRAMA QUE HACE QUE EL VIDEO NO SALGA EN BLANCO.
+ *
+ * El navegador lo captura al elegir el archivo y lo sube al mismo prefijo del
+ * bucket; acá llega sólo la RUTA. O sea que es un campo que dice "esto es mío" y
+ * hay que comprobarlo, exactamente igual que el path del video: el bucket es
+ * público de lectura, así que sin este chequeo cualquiera con un token del
+ * tenant podría colgarle de poster a su publicación un archivo del prefijo de
+ * otra persona.
+ */
+describe("createPostAction — el poster del video se valida como propio", () => {
+  const VIDEO = `${TENANT_ID}/${USER_ID}/video-abc.mp4`;
+
+  it("guarda la ruta del poster cuando es del prefijo de quien publica", async () => {
+    const stub = useGuardOk();
+    const poster = `${TENANT_ID}/${USER_ID}/poster-abc.jpg`;
+
+    const result = await createPostAction(
+      postForm({ body: "", videoPaths: [VIDEO], videoPosterPath: poster }),
+    );
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)?.video_poster_path).toBe(poster);
+  });
+
+  it("sin poster la columna queda en NULL, que es lo que significa", async () => {
+    // Es el caso de TODOS los videos anteriores a esta feature, y también el de
+    // un archivo cuyo primer cuadro el navegador no pudo decodificar. Ninguno de
+    // los dos puede impedir publicar.
+    const stub = useGuardOk();
+
+    const result = await createPostAction(postForm({ body: "", videoPaths: [VIDEO] }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)?.video_poster_path).toBeNull();
+  });
+
+  it("rechaza el poster del prefijo de OTRA persona", async () => {
+    const stub = useGuardOk();
+    const ajeno = `${TENANT_ID}/00000000-0000-4000-8000-000000000000/poster-abc.jpg`;
+
+    const result = await createPostAction(
+      postForm({ body: "", videoPaths: [VIDEO], videoPosterPath: ajeno }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "photo" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it.each([
+    [`${TENANT_ID}/${USER_ID}/../../otro/poster.jpg`, "traversal"],
+    [`${TENANT_ID}/${USER_ID}/poster-abc.mp4`, "no es una imagen"],
+    [`${TENANT_ID}/${USER_ID}/poster-abc.JPG`, "mayúsculas: el CHECK de la 0132 no las acepta"],
+    [`${TENANT_ID}/poster-abc.jpg`, "le falta un segmento"],
+  ])("rechaza %s (%s)", async (poster) => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({ body: "", videoPaths: [VIDEO], videoPosterPath: poster }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "photo" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("un poster SIN video no se guarda: describe algo que no existe", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({
+        body: "Un texto cualquiera",
+        photos: [photo()],
+        videoPosterPath: `${TENANT_ID}/${USER_ID}/poster-abc.jpg`,
+      }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "photo" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+});
+
 /* ---------------------- Sin medio el cuerpo es obligatorio ----------------- */
 
 describe("createPostAction — sin medio no hay publicación vacía", () => {
@@ -532,6 +633,91 @@ describe("createPostAction — sin medio no hay publicación vacía", () => {
     expect(result).toMatchObject({ ok: true });
     expect(insertedPost(stub)?.kind).toBe("text");
     expect(insertedPost(stub)?.media).toEqual([]);
+  });
+});
+
+/* ---------------- Fondo de una publicación de texto (0128) ---------------- */
+
+/**
+ * EL CATÁLOGO CERRADO ES LA FRONTERA. El selector del composer sólo ofrece los
+ * ocho fondos, pero lo que llega acá es un string del navegador: un cliente
+ * viejo, un script o una pestaña con JS modificado pueden mandar cualquier
+ * cosa. Y lo que se guarde en esa columna termina, pintado, dentro de un
+ * `style` en la tarjeta de cada persona que abra el feed.
+ */
+describe("createPostAction — el fondo del texto sale del catálogo o no sale", () => {
+  const TEXTO = "Abrió la panadería nueva en la esquina.";
+
+  it("guarda el fondo elegido cuando es uno del catálogo", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({ body: TEXTO, kind: "text", textBackground: "fiesta" }),
+    );
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)?.text_background).toBe("fiesta");
+  });
+
+  it("rechaza un fondo que no está en el catálogo, sin escribir nada", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({ body: TEXTO, kind: "text", textBackground: "violeta-generico" }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "invalid" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("rechaza CSS crudo: lo que viaja es un id, nunca un degradado", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({
+        body: TEXTO,
+        kind: "text",
+        textBackground: "linear-gradient(90deg, red, blue)",
+      }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "invalid" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("sin elegir fondo, la columna queda NULL (modo Automático)", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(postForm({ body: TEXTO, kind: "text" }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)?.text_background).toBeNull();
+  });
+
+  it("una FOTO no se queda con el fondo aunque lo mande: se ignora", async () => {
+    // Mismo criterio que `pollKind` en un post común. En una publicación con
+    // foto no hay campo de color que pintar: guardarlo sería un dato que no se
+    // muestra en ningún lado y que dentro de seis meses alguien lee como si
+    // significara algo. El CHECK de la 0128 dice lo mismo del lado de la base.
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({ body: TEXTO, photos: [photo()], textBackground: "fiesta" }),
+    );
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)?.text_background).toBeNull();
+  });
+
+  it("una PREGUNTA tampoco: tiene su propio banner, con sus propias variantes", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({ body: "¿Alguien vio el perro de la esquina?", kind: "question", textBackground: "caribe" }),
+    );
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)?.text_background).toBeNull();
   });
 });
 
@@ -886,5 +1072,96 @@ describe("createPostAction — publicar un video de Mux", () => {
     expect(result).toMatchObject({ ok: true });
     expect(insertedPost(stub)).toBeDefined();
     expect(updatedPost(stub)).toBeUndefined();
+  });
+});
+
+/* ---------- El composer NO es la puerta del video largo (2026-09-04) -------- */
+
+/**
+ * DESDE QUE EXISTE EL VIDEO PUBLICITARIO, ESTO IMPORTA MÁS QUE ANTES.
+ *
+ * `/impulsar-post/[postId]` ya permite subir un video de hasta 10 minutos —pero
+ * SÓLO con una campaña activa y sólo como `advertising_video`
+ * (`video-publicitario.ts`)—. Esa puerta nueva vuelve tentador aflojar ésta, y
+ * es exactamente lo que no puede pasar: acá se publica gratis.
+ *
+ * La base ya lo impide de dos formas (el CHECK `posts_short_feed_duration` para
+ * la duración y el trigger `app.posts_validate_video` para el tipo, que rechaza
+ * nacer publicitario incluso con service_role). Estos tests fijan que la action
+ * lo frene ANTES, con un motivo que el composer sabe traducir a una frase, en
+ * vez de dejar que vuelva un 23514 sin copy.
+ */
+describe("createPostAction — el video orgánico sigue clavado en 90 s", () => {
+  /** El FormData del composer, con la declaración de video en la mano. */
+  function videoForm(videoType: string, durationSeconds: number): FormData {
+    const data = new FormData();
+    data.set("body", "");
+    data.set("kind", "post");
+    data.set("videoPaths", JSON.stringify([`${TENANT_ID}/${USER_ID}/video-abc.mp4`]));
+    data.set("videoType", videoType);
+    data.set("durationSeconds", String(durationSeconds));
+    return data;
+  }
+
+  it("acepta un video justo en el tope orgánico", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(videoForm("short_video", SHORT_VIDEO_MAX_SECONDS));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)?.video_type).toBe("short_video");
+    expect(insertedPost(stub)?.duration_seconds).toBe(SHORT_VIDEO_MAX_SECONDS);
+  });
+
+  it("rechaza un segundo más, sin insertar nada", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      videoForm("short_video", SHORT_VIDEO_MAX_SECONDS + 1),
+    );
+
+    // `code: "video"` es lo que el composer traduce a SHORT_VIDEO_LIMIT_MESSAGE
+    // ("…para publicar un video más largo, debe formar parte de una publicidad
+    // pagada"), que desde hoy es una frase con destino real.
+    expect(result).toEqual({ ok: false, code: "video", reason: "too-long" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("rechaza los 5 minutos del video de campaña: acá no es la puerta", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      videoForm("short_video", PREMIUM_DETAIL_MAX_SECONDS),
+    );
+
+    expect(result).toEqual({ ok: false, code: "video", reason: "too-long" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("un cliente que se declara advertising_video no publica", async () => {
+    const stub = useGuardOk();
+
+    // Aunque la duración entre en el tope de los cortos: nacer publicitario es
+    // imposible por contrato (la campaña referencia al post y todavía no
+    // existe), así que declararlo es un cliente mintiendo.
+    const result = await createPostAction(videoForm("advertising_video", 45));
+
+    expect(result).toMatchObject({ ok: false, code: "video" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("una duración DESCONOCIDA tampoco publica", async () => {
+    const stub = useGuardOk();
+
+    const data = new FormData();
+    data.set("body", "");
+    data.set("kind", "post");
+    data.set("videoPaths", JSON.stringify([`${TENANT_ID}/${USER_ID}/video-abc.mp4`]));
+    data.set("videoType", "short_video");
+
+    const result = await createPostAction(data);
+
+    expect(result).toEqual({ ok: false, code: "video", reason: "unknown" });
+    expect(insertedPost(stub)).toBeUndefined();
   });
 });

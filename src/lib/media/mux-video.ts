@@ -194,7 +194,7 @@ function esTicket(valor: unknown): valor is MuxUploadTicket {
  * un video, y su respuesta decide el camino entero:
  *
  *   ok            → UpChunk contra `uploadUrl`: resumible y sin nuestro tope de peso.
- *   sin-mux (503) → subida al bucket, como siempre, con su tope de 60 MB.
+ *   sin-mux (503) → subida al bucket, como siempre, con su tope de 200 MB (parche del 2026-09-03 hasta que Mux tenga credenciales).
  *   falló         → también al bucket. Si el archivo entra por el tope viejo, la
  *                   persona publica igual y no se entera de nada; si no entra,
  *                   ahí sí se le avisa. Un problema nuestro no puede convertirse

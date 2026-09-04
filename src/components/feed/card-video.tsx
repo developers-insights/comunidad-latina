@@ -2,12 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { AnimatePresence } from "motion/react";
+import Link from "next/link";
+import { AnimatePresence, m } from "motion/react";
 import { useRouter } from "next/navigation";
-import { Eye, Heart } from "@phosphor-icons/react/dist/ssr";
+import { Eye, Heart, Play } from "@phosphor-icons/react/dist/ssr";
 import { usePrefersReducedMotion } from "@/components/motion";
 import { cn } from "@/lib/utils";
-import { isPreviewTruncated, playbackCapSeconds } from "@/lib/media/video-policy";
+import {
+  isLongVideo,
+  isPreviewTruncated,
+  playbackCapSeconds,
+} from "@/lib/media/video-policy";
 import { usePostMusic } from "./post-music";
 import { VIDEOS_COPY } from "@/app/(app)/videos/copy";
 import { muxPlaybackMode } from "@/lib/media/mux-video";
@@ -171,6 +176,23 @@ export interface CardVideoProps {
    * un color de la marca y no un hueco blanco.
    */
   posterUrl?: string | null;
+  /**
+   * ---- ¿ESTE VIDEO ES LARGO? (0046 + cliente 2026-09-03) ------------------
+   *
+   * `posts.video_type`. Sólo `advertising_video` puede pasar de los 90 s
+   * (constraint `posts_short_video_duration`), así que es lo que distingue a un
+   * video que se ve entero en `/videos/largos` de un corto que se ve entero acá
+   * nomás. Ausente —la mayoría de las tarjetas, y todos los videos personales—
+   * la tarjeta se comporta exactamente como antes.
+   *
+   * NO se adivina desde el archivo. La duración MEDIDA por el navegador también
+   * dice "esto dura más de 90 s", pero hay videos anteriores a la 0046 que
+   * declaran duración DESCONOCIDA y cuyo archivo puede durar cualquier cosa:
+   * ofrecerles "Ver video completo" mandaría a la persona a una sección donde
+   * ese video no está (la lista se arma con la duración DECLARADA). El tipo es
+   * el único dato que no miente en las dos puntas.
+   */
+  videoType?: string | null;
 }
 
 /** Segundos que la TARJETA reproduce. El completo se abre desde la publicación. */
@@ -222,6 +244,7 @@ export function CardVideo({
   muxPlaybackId = null,
   muxStatus,
   posterUrl = null,
+  videoType = null,
 }: CardVideoProps) {
   const router = useRouter();
   const reduce = usePrefersReducedMotion();
@@ -264,6 +287,24 @@ export function CardVideo({
   /** Duración MEDIDA del archivo (metadata), no la declarada. null = todavía no. */
   const [measuredSeconds, setMeasuredSeconds] = useState<number | null>(null);
   const isPreview = isPreviewTruncated(measuredSeconds);
+  /**
+   * ---- VIDEO LARGO: 59 SEGUNDOS Y UN BOTÓN (cliente 2026-09-03, 21:00) ----
+   *
+   * «En el feed y en Videos Cortos solamente sale los 59 segundos y ahí va a
+   * estar un botón que dice ver video completo… como Instagram: ves el video,
+   * se para en cierta cantidad de segundos y dice ver video completo.»
+   *
+   * La diferencia con un corto NO es el tope —los 59 s de vista previa son los
+   * mismos para todos— sino QUÉ PASA al llegar: un corto vuelve a empezar
+   * (sigue siendo un anticipo de algo que se ve completo a un toque de acá), y
+   * un largo se FRENA y ofrece la sección donde se ve entero. Si el largo
+   * también volviera a empezar, el corte quedaría escondido y el botón no
+   * tendría de qué hablar.
+   */
+  const esLargo = isLongVideo({ videoType });
+  const [frenadoEnTope, setFrenadoEnTope] = useState(false);
+  /** Dónde se ve entero. La sección lo vuelve a validar contra la fila (404). */
+  const longVideoHref = `/videos/largos/${postId}`;
 
   /**
    * ---- QUIÉN DECIDE SI ESTE VIDEO SUENA ----------------------------------
@@ -341,6 +382,11 @@ export function CardVideo({
     // Fuera de la diapositiva visible no se arranca nada: dos videos del mismo
     // post no pueden sonar juntos.
     if (!active) return;
+    // Un video largo que ya se frenó en su tope no se despierta al volver a
+    // entrar en pantalla: retomaría en el segundo 59 y se frenaría de nuevo en
+    // el mismo cuadro. Quien quiera verlo de nuevo toca; quien quiera el
+    // completo, toca el botón.
+    if (frenadoEnTope) return;
     // Se observa la CAJA, no el medio: ver el comentario de `boxRef` arriba.
     // Quien arranca y pausa sigue siendo el medio, que se lee de la ref en el
     // momento de usarlo — con Mux el reproductor se monta un instante después
@@ -384,7 +430,7 @@ export function CardVideo({
       clearDelay();
       io.disconnect();
     };
-  }, [reduce, active, muxMontado]);
+  }, [reduce, active, muxMontado, frenadoEnTope]);
 
   // Si la card se desmonta con un toque en vuelo (scroll rápido), no dejar que
   // el timer abra el visor desde una card que ya no está en pantalla.
@@ -428,6 +474,34 @@ export function CardVideo({
   }
 
   /**
+   * EL TOPE DE LA VISTA PREVIA, aplicado igual al `<video>` del bucket y al
+   * reproductor de Mux — los dos llaman acá desde su `timeupdate`, que es el
+   * único punto que ve el reloj sin montar un temporizador por tarjeta.
+   */
+  function aplicarTope(current: number) {
+    const node = videoRef.current;
+    if (!node || current < PREVIEW_CAP_SECONDS) return;
+    if (esLargo) {
+      node.pause();
+      setFrenadoEnTope(true);
+      return;
+    }
+    node.currentTime = 0;
+  }
+
+  /** Volver a empezar la vista previa (después del corte de un video largo). */
+  function reiniciarVistaPrevia() {
+    const node = videoRef.current;
+    setFrenadoEnTope(false);
+    if (!node) return;
+    try {
+      node.currentTime = 0;
+    } catch {
+      // Sin reloj disponible: arranca donde pueda.
+    }
+  }
+
+  /**
    * Al cerrarse el visor la tarjeta retoma sola. Sin esto quedaba congelada en
    * el frame donde la pausamos: el observador de visibilidad no vuelve a
    * dispararse porque la card nunca dejó de estar a la vista (el visor es un
@@ -436,6 +510,9 @@ export function CardVideo({
    */
   function resumeAfterViewer() {
     if (reduce) return;
+    // Si la tarjeta venía FRENADA en el tope, retomar ahí sería volver a
+    // frenarse en el mismo cuadro: la vista previa empieza de nuevo.
+    if (frenadoEnTope) reiniciarVistaPrevia();
     const node = videoRef.current;
     if (node) safePlay(node);
     // Y la música de la publicación, que se calló al abrir (ver `openVideo`).
@@ -481,6 +558,10 @@ export function CardVideo({
       postId,
       authorName,
       maxPlaybackSeconds: VIEWER_CAP_SECONDS,
+      // Un video largo se ve 59 s también a pantalla completa: el visor lo
+      // frena y ofrece la sección, igual que la tarjeta (ver `fullVideoHref`
+      // en media-viewer.tsx, donde el tope y el botón son una sola decisión).
+      fullVideoHref: esLargo ? longVideoHref : null,
       startSeconds: node?.currentTime,
       onClose: resumeAfterViewer,
     });
@@ -605,10 +686,7 @@ export function CardVideo({
           ariaLabel={COPY.post.playVideo}
           onReady={() => setMuxMontado(true)}
           onLoadedMetadata={(seconds) => setMeasuredSeconds(seconds)}
-          onTimeUpdate={(current) => {
-            const node = videoRef.current;
-            if (node && current >= PREVIEW_CAP_SECONDS) node.currentTime = 0;
-          }}
+          onTimeUpdate={(current) => aplicarTope(current)}
           onError={() => setReproductorFallado(true)}
         />
       ) : (
@@ -633,10 +711,7 @@ export function CardVideo({
         // El tope de la vista previa: al llegar vuelve a empezar (el `loop` ya
         // está puesto, así que no hay corte). Escribir `currentTime` acá y no
         // en un intervalo propio evita un timer por cada video del feed.
-        onTimeUpdate={(event) => {
-          const node = event.currentTarget;
-          if (node.currentTime >= PREVIEW_CAP_SECONDS) node.currentTime = 0;
-        }}
+        onTimeUpdate={(event) => aplicarTope(event.currentTarget.currentTime)}
       />
       )}
 
@@ -651,7 +726,13 @@ export function CardVideo({
         // La etiqueta dice lo que el toque HACE. Sobre una vista previa eso es
         // "ver el video completo", que además es la única forma de enterarse de
         // que hay más video sin ver la píldora.
-        aria-label={isPreview ? COPY.post.playFullVideo : COPY.post.playVideo}
+        aria-label={
+          esLargo
+            ? COPY.post.playLongVideoPreview
+            : isPreview
+              ? COPY.post.playFullVideo
+              : COPY.post.playVideo
+        }
         className="absolute inset-0 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring"
       />
 
@@ -675,6 +756,54 @@ export function CardVideo({
           )}
         </span>
       )}
+
+      {/**
+       * "VER VIDEO COMPLETO" — el botón que pidió el cliente (2026-09-03,
+       * 21:00), sólo cuando el video largo YA se frenó en sus 59 segundos.
+       *
+       * Va en el CENTRO y no abajo: la esquina inferior izquierda es de la
+       * píldora ("Vista previa · 12 vistas") y la superior derecha es del
+       * altavoz de la publicación. En el centro no tapa ningún control, y es
+       * exactamente donde estaba el ojo cuando la imagen se detuvo.
+       *
+       * `stopPropagation` en el toque: encima está la capa que abre la vista
+       * previa a pantalla completa, y sin esto un toque en el botón haría las
+       * dos cosas (navegar y abrir el visor) por el mismo dedo.
+       *
+       * La animación es corta y en una sola dirección; con reduced-motion sólo
+       * aparece. El movimiento acá tiene un trabajo: decir que esto REEMPLAZA
+       * al video que se frenó.
+       */}
+      <AnimatePresence>
+        {frenadoEnTope && (
+          <m.div
+            key="ver-video-completo"
+            initial={reduce ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.12 } }}
+            transition={{ duration: reduce ? 0.15 : 0.26, ease: [0.32, 0.72, 0, 1] }}
+            // La franja NO intercepta toques: sólo el botón. Debajo está la capa
+            // que abre el video, y un contenedor a todo el ancho se comería los
+            // toques a los costados del botón.
+            className="pointer-events-none absolute inset-x-0 top-1/2 z-[2] flex -translate-y-1/2 justify-center px-6"
+          >
+            <Link
+              href={longVideoHref}
+              onClick={(event) => event.stopPropagation()}
+              aria-label={COPY.post.watchFullVideoLabel}
+              className={cn(
+                "pointer-events-auto inline-flex min-h-11 items-center gap-2 rounded-full bg-on-media px-5",
+                "font-display text-sm font-bold text-media-shade shadow-lg",
+                "transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.96]",
+                "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60",
+              )}
+            >
+              <Play size={16} weight="fill" aria-hidden="true" />
+              {COPY.post.watchFullVideo}
+            </Link>
+          </m.div>
+        )}
+      </AnimatePresence>
 
       {/* Corazón grande del doble-tap (decorativo; el estado lo comunica el botón). */}
       {bursts > 0 && (

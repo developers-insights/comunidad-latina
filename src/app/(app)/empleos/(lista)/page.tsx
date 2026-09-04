@@ -50,7 +50,7 @@ export default async function EmpleosPage({ searchParams }: { searchParams: Sear
   // La key remonta el Suspense en cada cambio de filtro/página: el skeleton
   // vuelve a aparecer en vez de dejar la lista vieja congelada.
   return (
-    <Suspense key={JSON.stringify(filters)} fallback={<PageSkeleton />}>
+    <Suspense key={JSON.stringify(filters)} fallback={<PageSkeleton tipo={filters.tipo} />}>
       <EmpleosContent filters={filters} />
     </Suspense>
   );
@@ -168,7 +168,7 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
               filters.tipo
                 ? C.emptyFilteredTitle(EMPLEOS_TAB_LABEL[filters.tipo])
                 : hayFiltro
-                  ? C.emptyFilteredTitle(C.filterAll.toLowerCase())
+                  ? C.emptySearchTitle
                   : C.emptyTitle
             }
             message={hayFiltro ? C.emptyFilteredMessage : C.emptyMessage}
@@ -225,7 +225,7 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
 // Fallback: silueta del header + chips + cards (shimmer, §5.2)
 // ---------------------------------------------------------------------------
 
-function PageSkeleton() {
+function PageSkeleton({ tipo }: { tipo: Filters["tipo"] }) {
   return (
     <div aria-busy="true">
       <SectionHeading
@@ -246,7 +246,7 @@ function PageSkeleton() {
         <Skeleton className="h-11 w-36 rounded-full" />
         <Skeleton className="h-11 w-32 rounded-full" />
       </div>
-      <JobListSkeleton />
+      <JobListSkeleton variant={tipo === "servicios" ? "service" : "job"} />
     </div>
   );
 }

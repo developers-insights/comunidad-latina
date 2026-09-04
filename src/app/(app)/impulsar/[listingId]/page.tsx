@@ -19,6 +19,7 @@ import { getTenantPrices } from "@/lib/pricing/read";
 import { BOOST_IDS, BOOST_PACKAGES, type BoostId } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { SectionTopBar } from "@/components/shell";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { cn } from "@/lib/utils";
 import { FormularioCampana, type CampaignDraft } from "./formulario-campana";
@@ -191,6 +192,8 @@ export default async function PromocionarPage({
 
   return (
     <div className="flex flex-col gap-5 pb-8">
+      {/* Salida de la pantalla (feedback 2026-09-03, punto 3): la ruta tiene hijos (botones, estadísticas), así que la barra va en la página. */}
+      <SectionTopBar fallbackHref="/impulsar" />
       <Link
         href={backHref}
         className="flex min-h-11 w-fit items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground"

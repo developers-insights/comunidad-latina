@@ -4,6 +4,7 @@ import {
   Buildings,
   Confetti,
   DotsThreeCircle,
+  FilmSlate,
   ForkKnife,
   MusicNotes,
   Play,
@@ -192,9 +193,82 @@ export function VideoCategoryMenu() {
         })}
       </ul>
 
+      {/**
+       * VIDEOS LARGOS (cliente 2026-09-03, 19:40–23:44, pedido dos veces): "una
+       * sección de los videos largos donde la gente vaya a ver su video de 5
+       * minutos".
+       *
+       * Va ABAJO de la grilla y no arriba, y no es timidez: los temas de arriba
+       * son nueve puertas al MISMO contenido (los cortos de la comunidad), y
+       * ésta es otra clase de video. Meterla entre las categorías la haría leer
+       * como un tema más — "Comida, Música, Videos largos" — que es justo lo que
+       * no es. Acá abajo cierra la pantalla contestando la pregunta que deja la
+       * nota al pie: sí, hay videos de más de 90 segundos, y están en otro lado.
+       *
+       * Formato ancho, como "Todos": es un destino, no un filtro.
+       */}
+      <Link
+        href="/videos/largos"
+        aria-label={VIDEOS_COPY.largos.openSection}
+        className={cn(
+          "group mt-3 block rounded-xl p-1 shadow-bezel",
+          "transition-transform duration-(--duration-base) ease-(--ease-out-premium)",
+          "active:scale-[0.985]",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          styles.item,
+        )}
+        // Mismo doble bisel que las categorías, teñido con el acento de
+        // Creadores: los videos largos son, hoy, contenido de quien publica
+        // pagando. El acento sólo TIÑE — el texto se queda en tinta
+        // `foreground`, que es lo único AA garantizado en los dos temas.
+        style={{
+          ...stagger(VIDEO_CATEGORY_ORDER.length + 2),
+          backgroundColor:
+            "color-mix(in oklab, var(--accent-creadores) 16%, var(--color-surface-subtle))",
+        }}
+      >
+        <span
+          className={cn(
+            "flex items-center gap-3.5 rounded-[calc(var(--radius-xl)-4px)] bg-surface px-4 py-4",
+            "shadow-[inset_0_1px_0_var(--cl-bezel-highlight)]",
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className="grid size-11 shrink-0 place-items-center rounded-full text-foreground"
+            style={{
+              backgroundColor:
+                "color-mix(in oklab, var(--accent-creadores) 18%, var(--color-surface))",
+              boxShadow:
+                "inset 0 0 0 1px color-mix(in oklab, var(--accent-creadores) 32%, transparent)",
+            }}
+          >
+            <FilmSlate size={20} weight="duotone" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-display text-base font-bold text-foreground">
+              {VIDEOS_COPY.largos.menuLabel}
+            </span>
+            <span className="mt-0.5 block text-sm leading-snug text-foreground-secondary">
+              {VIDEOS_COPY.largos.menuHint}
+            </span>
+          </span>
+          <span
+            aria-hidden="true"
+            className={cn(
+              "grid size-8 shrink-0 place-items-center rounded-full bg-surface-subtle text-foreground-secondary",
+              "transition-transform duration-(--duration-base) ease-(--ease-out-premium)",
+              "group-hover:translate-x-0.5 group-hover:bg-brand-tint group-hover:text-brand-ink",
+            )}
+          >
+            <ArrowRight size={15} weight="bold" />
+          </span>
+        </span>
+      </Link>
+
       <p
         className={cn("mt-5 text-center text-xs text-foreground-muted", styles.item)}
-        style={stagger(VIDEO_CATEGORY_ORDER.length + 2)}
+        style={stagger(VIDEO_CATEGORY_ORDER.length + 3)}
       >
         {VIDEOS_COPY.menu.footnote}
       </p>

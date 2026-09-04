@@ -1,11 +1,12 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeft, Lifebuoy } from "@phosphor-icons/react/dist/ssr";
+import { Lifebuoy } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import {
+  AccionesDeTema,
   ComunidadHeading,
-  OfrecerEnTema,
   OrigenNota,
+  PreguntarleALaComunidad,
   RecursoCard,
   RecursosSkeleton,
 } from "@/components/comunidad";
@@ -13,13 +14,13 @@ import {
   COMUNIDAD_COPY,
   RESOURCE_TOPIC_HINT,
   RESOURCE_TOPIC_LABEL,
-  isHelpTopic,
   isResourceTopic,
   type ResourceGroup,
   type ResourceTopic,
 } from "@/lib/comunidad";
 import { getTenant } from "@/lib/tenant/resolve";
-import { countOffersByResource, fetchResourceGroups } from "../queries";
+import { fetchResourceGroups } from "../queries";
+import { SectionTopBar } from "@/components/shell";
 
 export const metadata = { title: "Dónde pedir ayuda" };
 
@@ -63,13 +64,7 @@ export default async function RecursosPage({
 
   return (
     <>
-      <Link
-        href="/comunidad"
-        className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        {COMUNIDAD_COPY.index.title}
-      </Link>
+      <SectionTopBar fallbackHref="/comunidad" />
 
       <ComunidadHeading
         className="mt-2"
@@ -101,27 +96,19 @@ async function Grupos({ topic }: { topic: ResourceTopic | null }) {
   const grupos = await fetchResourceGroups(tenant.id);
   const visibles = topic ? grupos.filter((grupo) => grupo.topic === topic) : grupos;
 
-  /**
-   * Cuántas personas ya se ofrecieron en cada ficha (0120), en UNA consulta
-   * para toda la pantalla y sólo sobre los temas que aceptan avisos — pedir el
-   * conteo de una clínica sería traer filas que nunca van a existir.
-   *
-   * Va DESPUÉS del listado y no en paralelo a propósito: necesita los ids que
-   * devuelve la primera consulta. Si falla (o si quien mira no tiene sesión,
-   * que es lo más común porque el tablón pide cuenta) vuelve un Map vacío y las
-   * fichas simplemente no muestran contador.
-   */
-  const idsConTablon = visibles
-    .filter((grupo) => isHelpTopic(grupo.topic))
-    .flatMap((grupo) => grupo.resources.map((recurso) => recurso.id));
-  const ofrecimientos = await countOffersByResource(tenant.id, idsConTablon);
-
   if (visibles.length === 0) {
     const vacioDeTema = topic && topicEmptyCopy(topic);
     if (vacioDeTema) {
       // Vacío de UN tema (hay directorio, no hay fichas de éste todavía):
       // nunca el mensaje genérico de abajo, que suena a "no hay nada" cuando
       // en realidad sobra ayuda en los demás temas.
+      //
+      // Desde la 0131 el vacío tiene SALIDA propia: los tres temas que llegan
+      // acá desde la portada (comida, voluntariado, acopio) ya tienen su
+      // formulario, así que la acción principal es registrarse y no irse a otro
+      // tema. Es lo que convierte «todavía no hay nada» en «todavía no hay
+      // nada, y podés ser el primero» — sin prometer nada, porque registrarse
+      // no publica: lo revisa el equipo.
       return (
         <EmptyState
           className="mt-8"
@@ -129,9 +116,15 @@ async function Grupos({ topic }: { topic: ResourceTopic | null }) {
           title={vacioDeTema.title}
           message={vacioDeTema.message}
           action={
-            <Link href="/comunidad/recursos" className={buttonVariants({ variant: "primary", size: "md" })}>
-              {C.allTopicsCta}
-            </Link>
+            <div className="flex flex-col items-center gap-3">
+              <AccionesDeTema topic={topic} className="justify-center" />
+              <Link
+                href="/comunidad/recursos"
+                className="min-h-11 text-sm font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 hover:decoration-brand-ink focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+              >
+                {C.allTopicsCta}
+              </Link>
+            </div>
           }
         />
       );
@@ -158,19 +151,13 @@ async function Grupos({ topic }: { topic: ResourceTopic | null }) {
   return (
     <div className="mt-8 space-y-10">
       {visibles.map((grupo) => (
-        <GrupoDeRecursos key={grupo.topic} grupo={grupo} ofrecimientos={ofrecimientos} />
+        <GrupoDeRecursos key={grupo.topic} grupo={grupo} />
       ))}
     </div>
   );
 }
 
-function GrupoDeRecursos({
-  grupo,
-  ofrecimientos,
-}: {
-  grupo: ResourceGroup;
-  ofrecimientos: ReadonlyMap<string, number>;
-}) {
+function GrupoDeRecursos({ grupo }: { grupo: ResourceGroup }) {
   return (
     <section aria-labelledby={`tema-${grupo.topic}`}>
       <header className="mb-3">
@@ -184,12 +171,15 @@ function GrupoDeRecursos({
           {RESOURCE_TOPIC_HINT[grupo.topic]}
         </p>
 
-        {/* Las dos puertas del tema (0120): ofrecerse y pedir manos. Van en la
-            CABECERA del grupo y no dentro de cada ficha porque no dependen de
-            un lugar puntual — quien quiere ayudar "con comida" sin tener un
-            comedor en la cabeza entra por acá. `<OfrecerEnTema>` no dibuja nada
-            en los temas que no aceptan avisos. */}
-        <OfrecerEnTema topic={grupo.topic} className="mt-3" />
+        {/* Las puertas del tema. Van en la CABECERA del grupo y no dentro de
+            cada ficha porque no dependen de un lugar puntual: quien quiere
+            preguntar "sobre comida" —o registrar SU comedor— no tiene una ficha
+            en la cabeza. Las dos se dibujan solas en los temas que no las
+            tienen. */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <PreguntarleALaComunidad topic={grupo.topic} />
+          <AccionesDeTema topic={grupo.topic} />
+        </div>
       </header>
 
       {/* Una ficha por fila en el celular: tienen mucha información y tres
@@ -197,11 +187,7 @@ function GrupoDeRecursos({
           `sm`, donde el shell ya deja ancho suficiente. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {grupo.resources.map((recurso) => (
-          <RecursoCard
-            key={recurso.id}
-            recurso={recurso}
-            ofrecimientos={ofrecimientos.get(recurso.id)}
-          />
+          <RecursoCard key={recurso.id} recurso={recurso} />
         ))}
       </div>
     </section>

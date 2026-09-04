@@ -311,6 +311,44 @@ describe("PostComposer — Texto abre su propio paso, sin encuesta", () => {
     expect(sent.get("kind")).toBe("text");
     expect(sent.get("pollKind")).toBeNull();
   });
+
+  /**
+   * EL FONDO ELEGIDO (0128) — lo que viaja es el ID del catálogo y nada más.
+   * Si algún día alguien decide mandar el degradado desde acá, este test es el
+   * que lo frena: ese string termina dentro de un `style` en la tarjeta de
+   * cada persona que abre el feed.
+   */
+  it("el fondo elegido viaja como id, y sin elegir no viaja nada", async () => {
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.text.title));
+
+    fireEvent.change(await screen.findByLabelText(COPY.composer.compose.textPlaceholder), {
+      target: { value: "Hoy abrió la feria del barrio y estaba llenísima." },
+    });
+
+    // Sin tocar nada: modo Automático, el campo ni se manda.
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    expect((createPostAction.mock.calls[0]?.[0] as FormData).get("textBackground")).toBeNull();
+
+    createPostAction.mockClear();
+
+    // Y ahora eligiendo uno.
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.text.title));
+    fireEvent.change(await screen.findByLabelText(COPY.composer.compose.textPlaceholder), {
+      target: { value: "Hoy abrió la feria del barrio y estaba llenísima." },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "Fiesta" }));
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    expect((createPostAction.mock.calls[0]?.[0] as FormData).get("textBackground")).toBe(
+      "fiesta",
+    );
+  });
 });
 
 describe("PostComposer — la pregunta abre su propio paso", () => {
@@ -980,6 +1018,18 @@ async function abrirHojaDeTexto() {
   return screen.findByLabelText(COPY.composer.compose.textPlaceholder);
 }
 
+/**
+ * Los radios de la AUTORÍA y nada más. La hoja de texto tiene otro grupo de
+ * radios —el selector de fondo (0128)—, así que un `getAllByRole("radio")`
+ * suelto devolvería los dos grupos mezclados y estos tests contarían opciones
+ * de una pantalla que no están mirando.
+ */
+function radiosDeAutoria(): HTMLInputElement[] {
+  return (screen.getAllByRole("radio") as HTMLInputElement[]).filter(
+    (radio) => radio.name === "composer-autoria",
+  );
+}
+
 describe("PostComposer — con qué perfil se publica", () => {
   it("sin ninguna ficha propia no hay selector y el post sale personal", async () => {
     createPostAction.mockResolvedValue({ ok: true, status: "published" });
@@ -1025,7 +1075,7 @@ describe("PostComposer — con qué perfil se publica", () => {
     await screen.findByText(COPY.composer.autoria.label);
 
     // El grupo de opciones es de radios REALES: se eligen por su nombre.
-    const opciones = screen.getAllByRole("radio") as HTMLInputElement[];
+    const opciones = radiosDeAutoria();
     expect(opciones.length).toBe(2);
     fireEvent.click(opciones[0]);
 
@@ -1044,7 +1094,7 @@ describe("PostComposer — con qué perfil se publica", () => {
     const body = await abrirHojaDeTexto();
     await screen.findByText(COPY.composer.autoria.label);
 
-    const opciones = screen.getAllByRole("radio") as HTMLInputElement[];
+    const opciones = radiosDeAutoria();
     // Arranca en personal (`porDefecto: null`) y se cambia a la ficha.
     expect(opciones[0].checked).toBe(true);
     fireEvent.click(opciones[1]);

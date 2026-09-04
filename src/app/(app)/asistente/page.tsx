@@ -72,8 +72,10 @@ export default async function AsistentePage() {
         </p>
       </header>
 
-      {/* Disclaimer legal FIJO — sticky bajo el header del shell (h-14) */}
-      <div className="sticky top-14 z-30 -mx-4 bg-canvas/95 px-4 py-2 backdrop-blur-sm">
+      {/* Disclaimer legal FIJO — pegajoso debajo del header del shell (59px) Y
+          de la barra de Volver (48px + su hairline), que ahora va arriba de
+          todo: con `top-14` quedaba a media altura de la barra y se solapaban. */}
+      <div className="sticky top-[108px] z-20 -mx-4 bg-canvas/95 px-4 py-2 backdrop-blur-sm">
         <p
           role="note"
           className="flex items-start gap-2 rounded-md bg-info-bg px-3 py-2.5 text-[13px] leading-snug text-info"

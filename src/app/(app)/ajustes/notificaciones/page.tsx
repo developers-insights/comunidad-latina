@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, DeviceMobile } from "@phosphor-icons/react/dist/ssr";
+import { DeviceMobile } from "@phosphor-icons/react/dist/ssr";
 import { Badge, Banner } from "@/components/ui";
 import { CategoryIcon, PrefRow, PREFS_COPY } from "@/components/notifications";
 import {
@@ -12,7 +11,6 @@ import {
 } from "@/lib/notifications/categories";
 import { prefsFromRows, resolvePref, type NotificationPrefRow } from "@/lib/notifications/prefs";
 import { createClient, getAuthUserId } from "@/lib/supabase/server";
-import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: PREFS_COPY.title };
 
@@ -48,17 +46,6 @@ export default async function AjustesNotificacionesPage() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link
-          href="/ajustes"
-          className={cn(
-            "-ml-1 inline-flex min-h-11 items-center gap-1.5 rounded-md px-1 text-sm font-medium",
-            "text-foreground-secondary transition-colors duration-(--duration-fast)",
-            "hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-          )}
-        >
-          <ArrowLeft size={16} aria-hidden="true" />
-          {PREFS_COPY.back}
-        </Link>
         <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-foreground">
           {PREFS_COPY.title}
         </h1>

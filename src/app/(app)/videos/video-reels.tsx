@@ -44,6 +44,7 @@ import { useFirmaActiva } from "@/lib/perfil-activo/firma-activa";
 import { cn } from "@/lib/utils";
 import {
   isEligibleForShortFeed,
+  isLongVideo,
   playbackCapSeconds,
   type VideoCategory,
 } from "@/lib/media/video-policy";
@@ -435,6 +436,24 @@ function ReelSlide({
    * su `url` YA es la miniatura que genera Mux, así que se usa ésa.
    */
   const posterUrl = videoItem?.posterUrl ?? (muxPlaybackId ? videoItem?.url : null) ?? null;
+  /**
+   * ---- SEGUNDA LLAVE: UN VIDEO LARGO NO SE REPRODUCE ENTERO ACÁ ------------
+   *
+   * Por contrato (0046) un `advertising_video` NUNCA entra a Videos Cortos, y
+   * `reelPlayable` lo vuelve a filtrar antes de montar este slide: en el camino
+   * normal esta constante es siempre `null`. Está igual porque el cliente pidió
+   * el botón "en el feed y en Videos Cortos" (2026-09-03, 21:00) y porque una
+   * lista que llegue por otro camino —una acción futura, un fixture, una fila
+   * con el tipo mal escrito— no puede convertir el reel en el lugar donde
+   * alguien mira diez minutos de publicidad. Con el destino puesto, `ViewerVideo`
+   * frena a los 59 s y ofrece la sección; sin él, el reel es el de siempre.
+   */
+  const longVideoHref = isLongVideo({
+    videoType: post.videoType,
+    durationSeconds: post.durationSeconds,
+  })
+    ? `/videos/largos/${post.id}`
+    : null;
   const entity = post.entity;
   const displayTitle = entity ? entity.title : post.author.displayName;
 
@@ -505,6 +524,7 @@ function ReelSlide({
         displayTitle={displayTitle}
         onDoubleTap={handleDoubleTap}
         offsets={offsets}
+        longVideoHref={longVideoHref}
       />
 
       {/* Corazón grande del doble-tap (decorativo: el estado lo dice el riel). */}
@@ -654,6 +674,7 @@ function ReelSlideMedia({
   displayTitle,
   onDoubleTap,
   offsets,
+  longVideoHref,
 }: {
   post: PostCardModel;
   active: boolean;
@@ -667,6 +688,8 @@ function ReelSlideMedia({
   displayTitle: string;
   onDoubleTap: () => void;
   offsets: ReelOffsets;
+  /** `/videos/largos/<id>` si el video es largo (ver el slide). null casi siempre. */
+  longVideoHref: string | null;
 }) {
   return (
     <PostMusicProvider
@@ -690,6 +713,7 @@ function ReelSlideMedia({
           displayTitle={displayTitle}
           onDoubleTap={onDoubleTap}
           offsets={offsets}
+          longVideoHref={longVideoHref}
         />
       ) : (
         /**
@@ -715,6 +739,7 @@ function ReelVideo({
   displayTitle,
   onDoubleTap,
   offsets,
+  longVideoHref,
 }: {
   videoUrl: string;
   muxPlaybackId: string | null;
@@ -725,6 +750,7 @@ function ReelVideo({
   displayTitle: string;
   onDoubleTap: () => void;
   offsets: ReelOffsets;
+  longVideoHref: string | null;
 }) {
   const postMusic = usePostMusic();
   /**
@@ -758,6 +784,9 @@ function ReelVideo({
       // videos anteriores a la 0046 no declaran duración, y su archivo puede
       // durar lo que sea. A los 90 s el reel vuelve a empezar.
       maxPlaybackSeconds={playbackCapSeconds("reel")}
+      // Y si el video resultara ser largo, manda esto: 59 s y "Ver video
+      // completo" (ver `longVideoHref` en el slide — es la segunda llave).
+      fullVideoHref={longVideoHref}
       // La barra de progreso queda por ENCIMA del bottom nav (z-40 fijo) cuando
       // el reel es la sección; en el overlay no hay nav que despejar.
       controlsClassName={offsets.videoControls}
@@ -809,7 +838,7 @@ const railButtonClass = cn(
   "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60 rounded-md",
 );
 
-interface ReelLikeState {
+export interface ReelLikeState {
   liked: boolean;
   count: number;
   toggle: (next: boolean) => void;
@@ -820,8 +849,15 @@ interface ReelLikeState {
  * porque lo comparten DOS gestos: el doble toque sobre el video y el corazón
  * del riel — con estados separados se desincronizaban, igual que pasaba en la
  * card del feed antes de CardLikeProvider.
+ *
+ * EXPORTADO desde el 2026-09-03 para la pantalla de un video largo
+ * (`/videos/largos/[id]`), que necesita exactamente esto: optimista, con la
+ * firma activa, con la hoja de entrada en vez de una navegación a /entrar, y
+ * con el pendiente que se aplica recién cuando vuelve el viewer verdadero.
+ * Reescribirlo allá habría sido un me gusta que se comporta distinto según la
+ * pantalla — y el mismo bug de sincronización, otra vez.
  */
-function useReelLike({
+export function useReelLike({
   post,
   tenantId,
   viewerId,
@@ -939,25 +975,30 @@ function useReelLike({
   return { liked, count, toggle };
 }
 
-function ReelActions({
+export interface ReelSaveState {
+  saved: boolean;
+  /** Guardar / quitar de guardados. Sin sesión abre la hoja de entrada. */
+  toggle: () => void;
+}
+
+/**
+ * GUARDAR una publicación de video, optimista y con la puerta de entrada
+ * incluida. Vive en un hook —y no dentro del riel— desde el 2026-09-03, cuando
+ * la pantalla de un video largo (`/videos/largos/[id]`) necesitó el mismo botón
+ * con otra forma: acá es un ícono del riel vertical, allá una píldora de una
+ * fila horizontal. Lo que NO puede cambiar entre las dos es el comportamiento:
+ * el optimismo, la reversión cuando el servidor dice que no, y el reintento de
+ * la sesión vencida.
+ */
+export function useReelSave({
   post,
   viewerId,
-  like,
-  muted,
-  onMutedChange,
-  offsets,
 }: {
   post: PostCardModel;
   viewerId: string | null;
-  like: ReelLikeState;
-  muted: boolean;
-  onMutedChange: (muted: boolean) => void;
-  offsets: ReelOffsets;
-}) {
+}): ReelSaveState {
   const requireAuth = useRequireAuth();
   const { toast } = useToast();
-  const commentsSheet = useCommentsSheet();
-  const { liked, count, toggle: toggleLike } = like;
   const [saved, setSaved] = useState(post.savedByViewer);
   const [savePending, setSavePending] = useState(false);
 
@@ -1034,6 +1075,29 @@ function ReelActions({
       }
     })();
   }
+
+  return { saved, toggle: toggleSave };
+}
+
+function ReelActions({
+  post,
+  viewerId,
+  like,
+  muted,
+  onMutedChange,
+  offsets,
+}: {
+  post: PostCardModel;
+  viewerId: string | null;
+  like: ReelLikeState;
+  muted: boolean;
+  onMutedChange: (muted: boolean) => void;
+  offsets: ReelOffsets;
+}) {
+  const { toast } = useToast();
+  const commentsSheet = useCommentsSheet();
+  const { liked, count, toggle: toggleLike } = like;
+  const { saved, toggle: toggleSave } = useReelSave({ post, viewerId });
 
   async function share() {
     const url = `${window.location.origin}/feed/${post.id}`;
@@ -1195,6 +1259,20 @@ function EmptyReels({ category }: { category?: VideoCategoryFilter | null }) {
         className={buttonVariants({ variant: "primary", size: "md" })}
       >
         {filtered ? VIDEOS_COPY.emptyCategoryCta : VIDEOS_COPY.emptyCta}
+      </Link>
+      {/* La otra sección de videos, como salida secundaria: quien llegó hasta un
+          reel vacío vino a ver videos, y los largos son videos que sí puede
+          haber. Va como enlace de texto y no como segundo botón — la acción
+          principal sigue siendo una sola. */}
+      <Link
+        href="/videos/largos"
+        className={cn(
+          "min-h-11 rounded-lg px-2 py-2.5 text-sm font-semibold text-on-media/80 underline underline-offset-4",
+          "transition-colors duration-(--duration-fast) hover:text-on-media",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60",
+        )}
+      >
+        {VIDEOS_COPY.largos.openSection}
       </Link>
     </div>
   );

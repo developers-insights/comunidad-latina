@@ -15,6 +15,7 @@ import { formatJobCode, matchesJobCode } from "@/lib/creators/job-code";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
+import { SectionTopBar } from "@/components/shell";
 
 export const metadata = { title: "Mis colaboraciones" };
 
@@ -32,9 +33,12 @@ const SEARCH_COPY = {
 
 export default function ContratosPage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <ContractsContent searchParams={searchParams} />
-    </Suspense>
+    <>
+      <SectionTopBar fallbackHref="/creadores" />
+      <Suspense fallback={<PageSkeleton />}>
+        <ContractsContent searchParams={searchParams} />
+      </Suspense>
+    </>
   );
 }
 

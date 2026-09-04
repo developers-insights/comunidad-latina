@@ -128,10 +128,12 @@ export default async function PedirAyudaPage({ searchParams }: { searchParams: S
           no pasa por las categorías. La zona va al final porque es el filtro
           que se usa una vez y queda puesto. */}
       <Bubble tone="tray" shape="tile" size="none" className="mb-5 mt-4 space-y-4 p-4">
+        {/* Sin `resetParams`: la barra ya borra `cursor` sola, y los otros dos
+            filtros (tema y zona) NO se tocan a propósito — se busca DENTRO de
+            lo que ya está filtrado, como en el resto de la app. */}
         <ModuleSearchBar
           label={C.filtros.buscarLabel}
           placeholder={C.filtros.buscarPlaceholder}
-          resetParams={["cursor"]}
         />
         <ModuleFilterChips param="tema" label={C.filtros.temaLabel} options={OPCIONES_TEMA} />
         <ZonaBuscador

@@ -15,6 +15,10 @@ import {
   type VideoUploadProgress,
 } from "@/components/video/upload-progress";
 import { licenseLabel } from "@/lib/integrity/declarations";
+import {
+  TEXT_BACKGROUNDS,
+  type TextBackgroundId,
+} from "@/lib/feed/text-backgrounds";
 import { COPY, VIDEO_EDITOR_COPY } from "./copy";
 import { QuestionBanner } from "./question-banner";
 import { TextBanner } from "./text-banner";
@@ -92,6 +96,14 @@ export interface ComposerSheetProps {
   onSavePhotoEdit: (id: string, edit: PhotoEdit) => void;
   pollEnabled: boolean;
   onPollChange: (next: boolean) => void;
+  /**
+   * FONDO ELEGIDO de una publicación de texto (0128). `null` = Automático, que
+   * es como arranca: el banner sortea uno por el id del post. Sólo se ofrece en
+   * modo `text` — en una foto o en una pregunta no hay campo de color que
+   * pintar, y `createPostAction` ignora el campo igual.
+   */
+  textBackground: TextBackgroundId | null;
+  onTextBackgroundChange: (next: TextBackgroundId | null) => void;
   /** Categoría de Videos Cortos elegida (0046). Sólo se usa si hay video. */
   videoCategory: VideoCategory;
   onVideoCategoryChange: (next: VideoCategory) => void;
@@ -223,7 +235,8 @@ function PollPreview() {
 function PreviewFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-40 flex-1 items-center justify-center [container-type:size]">
-      <div className="max-h-full w-[min(100%,80cqh)] overflow-hidden rounded-xl border border-border-subtle">
+      {/* `overflow-y-auto` y no `hidden`: desde el 2026-09-03 la tarjeta de texto crece con lo escrito (feedback nº15), y un texto largo excedía el marco sin ninguna señal — parecía que la app lo cortaba. Ahora la vista previa se desplaza. */}
+      <div className="max-h-full w-[min(100%,80cqh)] overflow-y-auto rounded-xl border border-border-subtle">
         {children}
       </div>
     </div>
@@ -360,6 +373,96 @@ function DeclarationDisclosure({
   );
 }
 
+/**
+ * SELECTOR DE FONDO de una publicación de texto (0128).
+ *
+ * Radios REALES con `peer sr-only`, igual que la categoría de video de esta
+ * misma hoja: adentro de un contenedor con trampa de foco, las flechas del
+ * teclado tienen que moverse entre las opciones sin que lo implementemos a
+ * mano, y un grupo de radios lo da gratis. Nueve botones con `aria-pressed`
+ * habrían sido nueve paradas de tabulación.
+ *
+ * Cada círculo se pinta con el MISMO `background-image` que va a llevar la
+ * publicación —el degradado sale del catálogo, no se dibuja de nuevo acá—, así
+ * que la muestra no puede mentir sobre el resultado.
+ *
+ * El estado elegido NO se lee sólo por el anillo de color: adentro entra un
+ * tilde (mismo criterio que el resto de la app). El anillo va por FUERA del
+ * círculo (`ring` + `ring-offset`) para no taparle el degradado justo en el
+ * borde, que es donde se ve el final del recorrido.
+ */
+function TextBackgroundPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: TextBackgroundId | null;
+  onChange: (next: TextBackgroundId | null) => void;
+  disabled?: boolean;
+}) {
+  /** Muestra del modo Automático: la marca tricolor, que es lo que sortea. */
+  const AUTO_SWATCH =
+    "conic-gradient(from 210deg, var(--brand-blue) 0deg 120deg, var(--brand-yellow) 120deg 240deg, var(--brand-red) 240deg 360deg)";
+
+  const opciones: { id: TextBackgroundId | null; label: string; swatch: string }[] = [
+    { id: null, label: COPY.composer.compose.backgroundAuto, swatch: AUTO_SWATCH },
+    ...TEXT_BACKGROUNDS.map((fondo) => ({
+      id: fondo.id as TextBackgroundId | null,
+      label: fondo.label,
+      swatch: fondo.field,
+    })),
+  ];
+
+  return (
+    <fieldset className="mt-3 shrink-0" disabled={disabled}>
+      <legend className="text-sm font-semibold text-foreground">
+        {COPY.composer.compose.backgroundLabel}
+      </legend>
+      <p className="mt-0.5 text-xs text-foreground-secondary">
+        {COPY.composer.compose.backgroundHint}
+      </p>
+      {/* La tira scrollea de costado: nueve círculos de 44 px no entran en un
+          teléfono, y apilarlos en dos filas le comería alto a la vista previa,
+          que es lo que la persona está mirando mientras escribe. */}
+      <div className="mt-2.5 flex gap-2.5 overflow-x-auto scrollbar-none pb-1">
+        {opciones.map((opcion) => {
+          const elegida = value === opcion.id;
+          return (
+            <label key={opcion.id ?? "auto"} className="shrink-0 cursor-pointer">
+              <input
+                type="radio"
+                name="composer-text-background"
+                value={opcion.id ?? "auto"}
+                checked={elegida}
+                onChange={() => onChange(opcion.id)}
+                aria-label={opcion.label}
+                className="peer sr-only"
+              />
+              <span
+                className={cn(
+                  "flex size-11 items-center justify-center rounded-full",
+                  "ring-offset-2 ring-offset-surface transition-shadow duration-(--duration-fast)",
+                  elegida ? "ring-2 ring-brand" : "ring-1 ring-border",
+                  "peer-focus-visible:outline-none peer-focus-visible:ring-[3px] peer-focus-visible:ring-focus-ring",
+                  "peer-disabled:opacity-45",
+                )}
+                style={{
+                  backgroundColor: "var(--color-media-backdrop)",
+                  backgroundImage: opcion.swatch,
+                }}
+              >
+                {elegida && (
+                  <Check size={18} weight="bold" className="text-on-media" aria-hidden="true" />
+                )}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 /** Interruptor accesible de verdad: `role="switch"` + `aria-checked`, 44px. */
 function PollSwitch({
   checked,
@@ -440,6 +543,8 @@ export function ComposerSheet({
   onSavePhotoEdit,
   pollEnabled,
   onPollChange,
+  textBackground,
+  onTextBackgroundChange,
   videoCategory,
   onVideoCategoryChange,
   declaration,
@@ -609,11 +714,27 @@ export function ComposerSheet({
                 </p>
                 {trimmed.length > 0 ? (
                   <PreviewFrame>
-                    <TextBanner preview postId={previewId} text={body} />
+                    <TextBanner
+                      preview
+                      postId={previewId}
+                      text={body}
+                      background={textBackground}
+                    />
                   </PreviewFrame>
                 ) : (
                   <PreviewPlaceholder label={COPY.composer.compose.textPlaceholder} />
                 )}
+
+                {/* El selector va DEBAJO de la vista previa y no arriba: la
+                    pregunta "¿de qué color?" recién existe cuando ya hay algo
+                    escrito que mirar. Se ofrece igual con el campo vacío —el
+                    fondo se ve en el marcador de posición y elegirlo antes es
+                    tan válido como elegirlo después. */}
+                <TextBackgroundPicker
+                  value={textBackground}
+                  onChange={onTextBackgroundChange}
+                  disabled={isPending}
+                />
               </>
             ) : (
               <div className="shrink-0">

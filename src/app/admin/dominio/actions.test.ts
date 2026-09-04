@@ -32,12 +32,19 @@ vi.mock("next/cache", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mocks.createAdminClient }));
 
-import { updateTenantModules, type DomainActionState } from "./actions";
+import {
+  resolveScamReport,
+  updateTenantModules,
+  type DomainActionState,
+} from "./actions";
 import { toModuleColumns } from "./modules";
 
 const TENANT_ID = "11111111-1111-4111-8111-111111111111";
 const USER_ID = "22222222-2222-4222-8222-222222222222";
 const IDLE: DomainActionState = { status: "idle" };
+const REPORT_ID = "33333333-3333-4333-8333-333333333333";
+const MESSAGE_ID = "44444444-4444-4444-8444-444444444444";
+const LISTING_ID = "55555555-5555-4555-8555-555555555555";
 
 const ALL_KEYS = [
   "feed",
@@ -365,5 +372,140 @@ describe("updateTenantModules · comunidad del formulario", () => {
     // `.eq('id', …)`: la action rechaza en vez de escribir a ciegas.
     expect(state.status).toBe("error");
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+});
+
+/* --------------------- Resolver un reporte (H-2, 0135) -------------------- */
+
+/**
+ * Un reporte sobre un MENSAJE DE GRUPO no tenía ninguna acción posible: el
+ * `if` de `resolveScamReport` sólo actuaba sobre `listing`, así que "Confirmar"
+ * cerraba la fila del reporte y el mensaje seguía ahí. El botón promete
+ * «Confirmar baja el contenido reportado» y para el contenido más difícil de
+ * moderar era mentira.
+ *
+ * Estos tests fijan las dos mitades: que se baje cuando corresponde, y que
+ * NO se toque nada cuando el reporte se descarta.
+ */
+type ReporteStub = {
+  target_kind: string;
+  target_id: string;
+};
+
+interface Escrito {
+  tabla: string;
+  payload: Record<string, unknown>;
+}
+
+/** Cliente del staff: resuelve el reporte y anota todo lo que se escribe. */
+function staffSupabase(report: ReporteStub) {
+  const escrituras: Escrito[] = [];
+  const from = vi.fn((tabla: string) => {
+    const builder: Record<string, unknown> = {};
+    builder.update = vi.fn((payload: Record<string, unknown>) => {
+      escrituras.push({ tabla, payload });
+      return builder;
+    });
+    builder.eq = vi.fn(() => builder);
+    builder.in = vi.fn(() => builder);
+    builder.select = vi.fn(() => builder);
+    builder.maybeSingle = vi.fn(async () => ({
+      data:
+        tabla === "scam_reports"
+          ? { id: REPORT_ID, tenant_id: TENANT_ID, ...report }
+          : null,
+      error: null,
+    }));
+    // El `update(...).eq(...)` de las tablas objetivo se resuelve con el await.
+    (builder as { then?: unknown }).then = (
+      resolve: (v: { error: null }) => unknown,
+      reject: (e: unknown) => unknown,
+    ) => Promise.resolve({ error: null }).then(resolve, reject);
+    return builder;
+  });
+  return { client: { from }, escrituras };
+}
+
+function reportForm(decision: "upheld" | "dismissed"): FormData {
+  const fd = new FormData();
+  fd.set("reportId", REPORT_ID);
+  fd.set("decision", decision);
+  return fd;
+}
+
+describe("resolveScamReport sobre un mensaje de grupo", () => {
+  beforeEach(() => {
+    useStaff("domain_admin");
+  });
+
+  it("confirmar el reporte BAJA el mensaje, en suave", async () => {
+    const staff = staffSupabase({
+      target_kind: "group_message",
+      target_id: MESSAGE_ID,
+    });
+    mocks.getStaffContext.mockResolvedValue({
+      supabase: staff.client,
+      user: { id: USER_ID },
+      role: "domain_admin",
+      tenantId: TENANT_ID,
+    });
+
+    const state = await resolveScamReport(IDLE, reportForm("upheld"));
+    expect(state.status).toBe("success");
+
+    const bajada = staff.escrituras.find((e) => e.tabla === "chat_group_messages");
+    expect(bajada).toBeDefined();
+    // Borrado SUAVE: la fila sobrevive hasta la purga de 90 días, que es lo que
+    // le permite a la moderación ver después qué se bajó. El DELETE físico que
+    // la 0133 también le da al staff queda como opción nuclear.
+    expect(Object.keys(bajada?.payload ?? {})).toEqual(["deleted_at"]);
+    expect(typeof bajada?.payload.deleted_at).toBe("string");
+  });
+
+  it("descartar el reporte no toca el mensaje", async () => {
+    const staff = staffSupabase({
+      target_kind: "group_message",
+      target_id: MESSAGE_ID,
+    });
+    mocks.getStaffContext.mockResolvedValue({
+      supabase: staff.client,
+      user: { id: USER_ID },
+      role: "domain_admin",
+      tenantId: TENANT_ID,
+    });
+
+    const state = await resolveScamReport(IDLE, reportForm("dismissed"));
+    expect(state.status).toBe("success");
+    expect(staff.escrituras.some((e) => e.tabla === "chat_group_messages")).toBe(false);
+  });
+
+  it("un reporte sobre un aviso sigue bajando el aviso y nada más", async () => {
+    const staff = staffSupabase({ target_kind: "listing", target_id: LISTING_ID });
+    mocks.getStaffContext.mockResolvedValue({
+      supabase: staff.client,
+      user: { id: USER_ID },
+      role: "domain_admin",
+      tenantId: TENANT_ID,
+    });
+
+    await resolveScamReport(IDLE, reportForm("upheld"));
+
+    expect(staff.escrituras.some((e) => e.tabla === "listings")).toBe(true);
+    expect(staff.escrituras.some((e) => e.tabla === "chat_group_messages")).toBe(false);
+  });
+
+  it("un reporte de mensaje DIRECTO no se toca: esos no los lee nadie (§5.4)", async () => {
+    const staff = staffSupabase({ target_kind: "message", target_id: MESSAGE_ID });
+    mocks.getStaffContext.mockResolvedValue({
+      supabase: staff.client,
+      user: { id: USER_ID },
+      role: "domain_admin",
+      tenantId: TENANT_ID,
+    });
+
+    await resolveScamReport(IDLE, reportForm("upheld"));
+
+    expect(staff.escrituras.some((e) => e.tabla === "chat_group_messages")).toBe(false);
+    expect(staff.escrituras.some((e) => e.tabla === "messages")).toBe(false);
   });
 });

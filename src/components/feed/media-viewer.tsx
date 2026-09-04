@@ -12,9 +12,11 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { Play, SpeakerHigh, SpeakerSlash, X } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
+import { FEED_PREVIEW_MAX_SECONDS } from "@/lib/media/video-policy";
 import {
   useBodyScrollLock,
   useCloseOnBack,
@@ -25,6 +27,13 @@ import { recordPostViewAction } from "@/app/(app)/feed/engagement-actions";
 import { MuxVideoSurface } from "@/components/video/mux-player";
 import type { PlayableMedia } from "@/components/video/playable-media";
 import type { PostMediaKind } from "./helpers";
+/**
+ * El copy del botón "Ver video completo" vive en `./copy` y no en
+ * `viewer-copy.ts` a propósito: el MISMO botón lo pintan la tarjeta del feed,
+ * este visor y el reel, y tres archivos de copy serían tres textos que se
+ * separan. Lo demás del visor sigue saliendo de `VIEWER_COPY`.
+ */
+import { COPY } from "./copy";
 import { VIEWER_COPY } from "./viewer-copy";
 
 /**
@@ -117,6 +126,20 @@ export interface OpenMediaViewerArgs {
    * del video ya es del visor y no de la tarjeta.
    */
   startSeconds?: number;
+  /**
+   * ESTE VIDEO ES LARGO Y SE VE ENTERO EN `/videos/largos/<id>` (2026-09-03).
+   *
+   * Lo calcula quien abre, porque es quien conoce la publicación: el visor sólo
+   * recibe medios y no puede saber si la fila declaró ser un video publicitario
+   * (ver `isLongVideo` en video-policy). Presente, el video se frena a los 59 s
+   * y aparece "Ver video completo" — ver `ViewerVideo.fullVideoHref`, que es
+   * donde está escrito por qué el tope y el botón son la misma decisión.
+   *
+   * Aplica al video de ENTRADA y a cualquier otro medio del mismo post: el
+   * carrusel es de una sola publicación, así que si esa publicación es un video
+   * largo, lo es en todas sus diapositivas.
+   */
+  fullVideoHref?: string | null;
   /**
    * Aviso de CIERRE, por el camino que sea (la X, Escape, el "atrás" del
    * teléfono o el arrastre hacia abajo). No es un detalle de ciclo de vida: la
@@ -367,6 +390,7 @@ function ViewerPanel({
                 onMutedChange={setMuted}
                 authorLabel={authorLabel}
                 maxPlaybackSeconds={args.maxPlaybackSeconds}
+                fullVideoHref={args.fullVideoHref}
                 startSeconds={
                   itemIndex === entryIndex ? args.startSeconds : undefined
                 }
@@ -513,6 +537,27 @@ export interface ViewerVideoProps {
    * buffer de HLS y no expone esta palanca (ni la necesita).
    */
   preload?: "none" | "metadata" | "auto";
+  /**
+   * ---- ESTE VIDEO ES LARGO Y SE VE ENTERO EN OTRA PARTE (2026-09-03) -------
+   *
+   * URL de `/videos/largos/<id>`. Presente = lo que esta superficie muestra es
+   * una VISTA PREVIA de un video largo, y su presencia cambia dos cosas a la
+   * vez, a propósito:
+   *
+   *  · el tope pasa a ser el de la vista previa (59 s), pise lo que pise
+   *    `maxPlaybackSeconds`. Es el pedido textual del cliente: «en el feed y en
+   *    Videos Cortos solamente sale los 59 segundos». Que la decisión viva en
+   *    un solo lugar es lo que evita el bug obvio — un llamador que pone el
+   *    botón y se olvida del tope, o al revés;
+   *  · al llegar al tope el video NO vuelve a empezar: se FRENA y aparece "Ver
+   *    video completo" («se para en cierta cantidad de segundos y dice ver
+   *    video completo»). Un loop acá escondería el corte y el botón parecería
+   *    decorativo.
+   *
+   * Ausente —el caso de todos los cortos— nada de esto pasa: el video se
+   * reproduce y vuelve a empezar como siempre.
+   */
+  fullVideoHref?: string | null;
   className?: string;
 }
 
@@ -531,6 +576,7 @@ export function ViewerVideo({
   startSeconds,
   posterUrl,
   preload = "metadata",
+  fullVideoHref = null,
   className,
 }: ViewerVideoProps) {
   /**
@@ -554,6 +600,13 @@ export function ViewerVideo({
   const seeded = useRef(false);
   const [paused, setPaused] = useState(!active);
   const [isLandscape, setIsLandscape] = useState(false);
+  /**
+   * ¿Se frenó en el tope de la vista previa de un video largo? Sólo puede
+   * ponerse en true cuando hay `fullVideoHref`: es el estado en el que se pinta
+   * el botón, y sin destino a dónde ir el video nunca se frena.
+   */
+  const [frenadoEnTope, setFrenadoEnTope] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   // Reproducir/pausar según visibilidad del slide. Con sonido primero (hubo
   // gesto del usuario); si el navegador lo rechaza, mudo y reintento.
@@ -611,12 +664,28 @@ export function ViewerVideo({
     const bar = progressRef.current;
     if (!video || !Number.isFinite(video.duration) || video.duration === 0) return;
 
-    const cap =
-      typeof maxPlaybackSeconds === "number" && maxPlaybackSeconds > 0
-        ? Math.min(maxPlaybackSeconds, video.duration)
-        : video.duration;
+    /**
+     * EL TOPE DE UN VIDEO LARGO NO ES EL DE LA SUPERFICIE: es el de la vista
+     * previa, y manda sobre lo que haya pedido quien montó el reproductor. Ver
+     * el docblock de `fullVideoHref` — el botón y el corte son la misma
+     * decisión, así que se toman en la misma línea.
+     */
+    const superficie = fullVideoHref
+      ? FEED_PREVIEW_MAX_SECONDS
+      : typeof maxPlaybackSeconds === "number" && maxPlaybackSeconds > 0
+        ? maxPlaybackSeconds
+        : null;
+    const cap = superficie === null ? video.duration : Math.min(superficie, video.duration);
 
     if (video.currentTime >= cap) {
+      if (fullVideoHref) {
+        // SE FRENA, no vuelve a empezar: el corte tiene que verse, porque es lo
+        // que explica el botón que aparece encima.
+        video.pause();
+        setFrenadoEnTope(true);
+        if (bar) bar.style.width = "100%";
+        return;
+      }
       // `loop` ya está puesto: volver a 0 continúa reproduciendo sin cortes.
       video.currentTime = 0;
       if (bar) bar.style.width = "0%";
@@ -626,7 +695,7 @@ export function ViewerVideo({
     // corta a los 59 s, llenarla hasta el final del archivo mentiría dos veces
     // (parecería que falta mucho, y saltaría antes de llegar).
     if (bar) bar.style.width = `${(video.currentTime / cap) * 100}%`;
-  }, [maxPlaybackSeconds]);
+  }, [maxPlaybackSeconds, fullVideoHref]);
 
   // Un toque en vuelo cuando el slide se desmonta (scroll rápido del reel) no
   // puede pausar un video que ya no está.
@@ -640,6 +709,22 @@ export function ViewerVideo({
   function togglePlay() {
     const video = videoRef.current;
     if (!video) return;
+    /**
+     * VOLVER A TOCAR DESPUÉS DEL CORTE VUELVE A EMPEZAR LA VISTA PREVIA. Sin
+     * esto el `play()` retomaría en el segundo del tope y frenaría de nuevo al
+     * instante: un botón que "no hace nada". El botón para ver el video entero
+     * sigue ahí, que es la otra salida.
+     */
+    if (frenadoEnTope) {
+      setFrenadoEnTope(false);
+      try {
+        video.currentTime = 0;
+      } catch {
+        // Sin reloj disponible: arranca donde pueda.
+      }
+      safePlay(video);
+      return;
+    }
     if (video.paused) {
       safePlay(video);
     } else {
@@ -733,8 +818,10 @@ export function ViewerVideo({
         aria-label={paused ? VIEWER_COPY.play : VIEWER_COPY.pause}
         className="absolute inset-0 z-[1] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-on-media/60"
       >
-        {/* Ícono central solo en pausa: en reproducción la imagen manda. */}
-        {paused && (
+        {/* Ícono central solo en pausa: en reproducción la imagen manda. Y
+            nunca junto al botón de "Ver video completo": ahí el centro de la
+            pantalla es del botón, y dos círculos encimados no se leen. */}
+        {paused && !frenadoEnTope && (
           <span
             aria-hidden="true"
             className="absolute left-1/2 top-1/2 flex size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-media-scrim text-on-media"
@@ -743,6 +830,50 @@ export function ViewerVideo({
           </span>
         )}
       </button>
+
+      {/**
+       * "VER VIDEO COMPLETO" — aparece SÓLO cuando el video largo se frenó en
+       * su vista previa (cliente 2026-09-03: «se para en cierta cantidad de
+       * segundos y dice ver video completo, le das click y empieza a ver el
+       * video completo»).
+       *
+       * DÓNDE VA Y POR QUÉ: en el CENTRO, no abajo. La barra inferior tiene el
+       * progreso y el altavoz, y en el reel además carga los desplazamientos
+       * del bottom nav (`controlsClassName`): cualquier botón ahí abajo taparía
+       * un control o quedaría flotando en un lugar distinto según la superficie.
+       * En el centro no pisa nada —el glifo de pausa se apaga mientras esto
+       * está— y es donde el ojo ya estaba mirando cuando el video se detuvo.
+       *
+       * La animación es corta y de una sola dirección (sube 8 px y aparece):
+       * el video acaba de frenarse, así que el movimiento tiene que leerse como
+       * "esto reemplaza a lo que estabas viendo", no como un cartel que baila.
+       * Con `prefers-reduced-motion` sólo aparece.
+       */}
+      {frenadoEnTope && fullVideoHref && (
+        <m.div
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: reduceMotion ? 0.15 : 0.26, ease: [0.32, 0.72, 0, 1] }}
+          // La franja NO intercepta toques: sólo el botón. Debajo está la capa
+            // que abre el video, y un contenedor a todo el ancho se comería los
+            // toques a los costados del botón.
+            className="pointer-events-none absolute inset-x-0 top-1/2 z-[3] flex -translate-y-1/2 justify-center px-6"
+        >
+          <Link
+            href={fullVideoHref}
+            aria-label={COPY.post.watchFullVideoLabel}
+            className={cn(
+              "pointer-events-auto inline-flex min-h-11 items-center gap-2 rounded-full bg-on-media px-5",
+              "font-display text-sm font-bold text-media-shade shadow-lg",
+              "transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.96]",
+              "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60",
+            )}
+          >
+            <Play size={16} weight="fill" aria-hidden="true" />
+            {COPY.post.watchFullVideo}
+          </Link>
+        </m.div>
+      )}
 
       {/* Controles inferiores: progreso (+ sonido en el visor) */}
       <div

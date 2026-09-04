@@ -34,7 +34,7 @@ export type MiembroDeGrupo = {
 
 export type GrupoConMiRol = GrupoRow & { miRol: RolEnGrupo | null };
 
-/** Los grupos donde estoy adentro, del más recientemente creado al más viejo. */
+/** Los grupos donde estoy adentro, del que me sumé más recientemente al más antiguo (orden por `joined_at`). */
 export async function listarMisGrupos(profileId: string): Promise<GrupoConMiRol[]> {
   const supabase = supabaseSinTiparGrupos(await createClient());
   const { data, error } = await supabase
@@ -73,6 +73,11 @@ export async function listarGruposPublicos(options: {
     .limit(40);
 
   if (options.categoria) query = query.eq("category", options.categoria);
+  // La exclusión va EN la consulta, no sólo en memoria: con `limit(40)` y una
+  // persona adentro de los 40 grupos más grandes, filtrar después dejaba
+  // "Para sumarte" vacío aunque hubiera otros (revisión del 2026-09-04).
+  const excluir = options.excluir ?? [];
+  if (excluir.length > 0) query = query.not("id", "in", `(${excluir.join(",")})`);
 
   const { data, error } = await query;
   if (error) {
@@ -164,6 +169,18 @@ export async function listarMiembros(groupId: string): Promise<MiembroDeGrupo[]>
  * Se piden los 100 MÁS NUEVOS con `descending` y se dan vuelta en memoria: con
  * `ascending` el LIMIT devolvería los cien PRIMEROS del grupo, o sea la
  * conversación de hace tres meses.
+ *
+ * EL FILTRO DE BORRADOS ES DE ACÁ, NO DE LA POLICY (0135). La 0133 lo tenía en
+ * `chat_group_messages_select`, y eso hacía imposible bajar un mensaje: el
+ * USING de un SELECT se aplica también a la fila nueva de un UPDATE, así que la
+ * fila con `deleted_at` puesto no podía existir y el borrado devolvía 42501
+ * siempre. La 0135 abrió la policy —su autor y quien administra siguen viendo
+ * lo borrado— y el filtro bajó a esta consulta.
+ *
+ * Se filtra y no se pinta lápida ("Mensaje eliminado") a propósito: en el chat
+ * 1-a-1 borrar un mensaje lo hace DELETE físico y desaparece sin dejar rastro
+ * (`messages_delete`, 0006). Dos chats de la misma app no pueden borrar de dos
+ * maneras distintas; el día que uno estrene lápida, la estrenan los dos.
  */
 export async function listarMensajesDelGrupo(
   groupId: string,
@@ -173,6 +190,7 @@ export async function listarMensajesDelGrupo(
     .from("chat_group_messages")
     .select(MENSAJE_DE_GRUPO_COLUMNS)
     .eq("group_id", groupId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(100);

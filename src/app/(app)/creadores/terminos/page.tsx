@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, SignIn } from "@phosphor-icons/react/dist/ssr";
+import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { Badge, BezelCard, EmptyState, buttonVariants } from "@/components/ui";
 import { CreatorTermsAccept } from "@/components/creators/creator-terms-accept";
 import { COPY as CREATORS_COPY } from "@/components/creators";
@@ -77,14 +77,6 @@ export default async function TerminosCreadorPage() {
 
   return (
     <>
-      <Link
-        href="/creadores/solicitud"
-        className="mb-3 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors duration-(--duration-fast) hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        {COPY.back}
-      </Link>
-
       <header className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">

@@ -64,6 +64,7 @@ import {
   type WorkDay,
 } from "@/lib/empleos/detalles";
 import { createJobDraft, finalizeJob } from "./actions";
+import type { WizardHandleRef } from "./wizard-handle";
 
 /**
  * Wizard de /empleos/publicar — 4 pasos, mobile-first.
@@ -414,6 +415,7 @@ export function JobPublishForm({
   tenantId,
   currency,
   businesses = [],
+  wizardRef,
 }: {
   tenantId: string;
   /** Moneda del tenant — solo para la vista previa del salario. */
@@ -425,6 +427,8 @@ export function JobPublishForm({
    * pregunta sin respuestas posibles.
    */
   businesses?: readonly BusinessOption[];
+  /** Ver `wizard-handle.ts`: por acá el wizard le presta su "un paso atrás". */
+  wizardRef?: WizardHandleRef;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -646,6 +650,39 @@ export function JobPublishForm({
     setError(null);
     setStep((value) => Math.max(0, value - 1));
   }
+
+  /**
+   * El puente con el "Volver" de la barra de arriba: le presta el MISMO
+   * `goBack` que usa el "Atrás" del pie, así el control que la app enseñó en
+   * todas las demás pantallas retrocede un paso en vez de tirar los cuatro
+   * pasos escritos. Es el defecto que filmó Nacho el 2026-09-03.
+   *
+   * Sin `deps` a propósito: las dos funciones leen el paso y los campos de este
+   * render, y una lista de dependencias acá sería una copia del formulario
+   * entero que se va a desactualizar el día que alguien agregue un campo.
+   */
+  useEffect(() => {
+    if (!wizardRef) return;
+    wizardRef.current = {
+      retroceder: () => {
+        if (done || step === 0) return false;
+        goBack();
+        return true;
+      },
+      hayDatos: () =>
+        Boolean(
+          !done &&
+            (title.trim() ||
+              description.trim() ||
+              salary.trim() ||
+              photos.length > 0 ||
+              questions.length > 0),
+        ),
+    };
+    return () => {
+      wizardRef.current = null;
+    };
+  });
 
   // ------------------------------------------------------------------ fotos
   function addPhotos(fileList: FileList | null) {

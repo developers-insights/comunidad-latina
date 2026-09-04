@@ -41,14 +41,39 @@ import { summarizeActors } from "@/lib/notifications/group";
  * =============================================================================
  */
 
-/** El extracto se recorta corto: la notificación invita a abrir, no reemplaza. */
-const EXCERPT_MAX = 120;
+/**
+ * ── EL AVISO NO LLEVA EL TEXTO DE LA RESPUESTA ──────────────────────────────
+ *
+ * Llevaba 120 caracteres del cuerpo, y era el único aviso de la app que lo
+ * hacía. Los otros dos que existen dicen lo contrario con todas las letras: el
+ * chat 1-a-1 y `avisarAlGrupo` (`mensajes/grupos/actions.ts`) mandan sólo
+ * "abrí para leerlo", con el motivo escrito al lado — «la bandeja se lee de
+ * costado en pantallas compartidas».
+ *
+ * Acá pesa MÁS que allá, no menos. El tablón de pedidos es la superficie donde
+ * el producto invita explícitamente a dejar un teléfono o una dirección para
+ * que te contacten: un extracto de 120 caracteres de "te paso mi número, es el
+ * 917…" viaja al centro de notificaciones, a la lista del sistema operativo y a
+ * la pantalla de bloqueo, donde lo lee cualquiera que esté al lado.
+ *
+ * El título alcanza para lo que el aviso tiene que lograr: que la persona sepa
+ * que le contestaron y entre a leerlo. Es la misma decisión, con el mismo
+ * criterio, en las tres superficies de mensajería de la app.
+ */
 
 export async function notifyHelpReply(input: {
   tenantId: string;
   noticeId: string;
   noticeAuthorId: string;
   actorId: string;
+  /**
+   * El texto de la respuesta. YA NO ARMA EL AVISO (ver el bloque de arriba):
+   * sigue en la firma porque es lo que habría que mirar el día que este aviso
+   * quiera decidir algo con el contenido —no avisar de una respuesta que la
+   * moderación ocultó, por ejemplo— y porque sacarlo obliga a tocar la action
+   * que llama, que no entra en esta tanda. Si en la próxima revisión sigue sin
+   * usarse, se va.
+   */
   body: string;
   /** Respuestas visibles del pedido DESPUÉS de esta. Arma el "y 3 más". */
   replyCount: number;
@@ -72,7 +97,6 @@ export async function notifyHelpReply(input: {
     const total = input.replyCount > 0 ? input.replyCount : 1;
     const actors = summarizeActors([name], { total });
     const verb = total > 1 ? "respondieron" : "respondió";
-    const excerpt = input.body.trim().slice(0, EXCERPT_MAX);
 
     // `emit_social_notification` llegó con la 0070 y `database.types.ts` se
     // regenera aparte: el cast es por el TIPO generado, no por el contrato.
@@ -85,7 +109,8 @@ export async function notifyHelpReply(input: {
       p_subject_kind: "help_notice",
       p_subject_id: input.noticeId,
       p_title: `${actors} ${verb} tu pedido`,
-      p_body: excerpt.length > 0 ? excerpt : null,
+      // Ver el bloque de arriba: el cuerpo va vacío a propósito.
+      p_body: null,
       p_href: `/comunidad/pedir-ayuda/${input.noticeId}`,
     });
 

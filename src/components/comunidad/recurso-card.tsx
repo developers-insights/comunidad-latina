@@ -86,20 +86,13 @@ function Meta({
  * El cliente lo sacó el 2026-09-03: ofrecer manos es responsabilidad legal de
  * Comunidad Latina si alguien se lastima. La ficha vuelve a ser lo que era
  * —información de contacto de un lugar— y la puerta al tablón quedó en la
- * cabecera de cada tema (`<OfrecerEnTema>`), donde no depende de un lugar
+ * cabecera de cada tema (`<PreguntarleALaComunidad>`), donde no depende de un lugar
  * puntual.
  */
 export function RecursoCard({
   recurso,
 }: {
   recurso: CommunityResource;
-  /**
-   * LEGADO: cuántas personas se habían ofrecido en esta ficha. Ya no se dibuja
-   * —los ofrecimientos se archivaron con la 0130— pero la prop sigue declarada
-   * porque `comunidad/recursos/page.tsx` la pasa, y esa pantalla es de otro
-   * frente. Se va cuando ese frente saque la llamada a `countOffersByResource`.
-   */
-  ofrecimientos?: number;
 }) {
   const tel = telHref(recurso.phone);
   const maps = mapsHref(recurso.address);

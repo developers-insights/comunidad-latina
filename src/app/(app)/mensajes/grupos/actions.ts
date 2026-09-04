@@ -11,6 +11,8 @@ import {
   CATEGORIAS_DE_GRUPO,
   LIMITES,
   VISIBILIDADES,
+  esFotoDeGrupoValida,
+  esUrlDeAvatarsPublico,
   supabaseSinTiparGrupos,
 } from "@/lib/messaging/grupos";
 
@@ -43,6 +45,13 @@ export type GrupoActionResult =
         | "flagged"
         | "rate-limited"
         | "forbidden"
+        /**
+         * Quien administra el grupo lo sacó (0135). Es una rama propia de
+         * `forbidden` porque es el único "no" del módulo que la persona no
+         * puede resolver reintentando: sin un código aparte la pantalla la
+         * mandaría a tocar "Unirme" para siempre.
+         */
+        | "banned"
         | "error";
       /** Copy ya listo para pantalla cuando el caso lo necesita. */
       message?: string;
@@ -64,14 +73,37 @@ const fichaSchema = z.object({
   category: z.enum(CATEGORIAS_DE_GRUPO),
   visibility: z.enum(VISIBILIDADES),
   /**
-   * URL pública del bucket `avatars`. Se valida que sea una URL http(s) y nada
-   * más: la ruta la entregó `prepareAvatarUploadAction` con el prefijo del
-   * propio usuario y la policy `avatars_insert` (0012) ya la verificó contra el
-   * JWT en el momento de subir. Un `avatar_url` apuntando a otro lado sería,
-   * como mucho, una imagen rota en la tarjeta del grupo.
+   * URL pública del bucket `avatars` de ESTE proyecto, y de ningún otro lado.
+   *
+   * Estuvo como `z.url()` a secas, con el argumento de que un avatar_url
+   * apuntando a otra parte sería "como mucho una imagen rota". No lo es: esa
+   * URL se pinta en la tarjeta del grupo que ve toda la comunidad en Descubrir,
+   * así que un host de terceros ahí adentro recolecta la IP de cada persona que
+   * abre la lista, y puede cambiar la imagen DESPUÉS de que la moderación
+   * aprobó el grupo. El porqué largo está en `esUrlDeAvatarsPublico`.
+   *
+   * Acá se chequea el host y el bucket, que es lo que se puede saber sin
+   * sesión; que además caiga bajo el prefijo de la comunidad se verifica abajo,
+   * con el tenant del guard — nunca con uno que mande el cliente.
    */
-  avatarUrl: z.url().max(500).nullable().optional(),
+  avatarUrl: z
+    .url()
+    .max(500)
+    .refine(esUrlDeAvatarsPublico, {
+      message: "La foto tiene que estar subida en la app.",
+    })
+    .nullable()
+    .optional(),
 });
+
+/**
+ * El segundo tramo de la validación de la foto: el prefijo de la comunidad.
+ * Vive fuera del schema porque necesita el tenant del guard, y el guard corre
+ * DESPUÉS del parseo a propósito (zod tiene que poder cortar sin tocar la base).
+ */
+function fotoAjenaAlTenant(avatarUrl: string | null | undefined, tenantId: string): boolean {
+  return Boolean(avatarUrl) && !esFotoDeGrupoValida(avatarUrl as string, tenantId);
+}
 
 // ---------------------------------------------------------------------------
 // Foto del grupo
@@ -118,6 +150,10 @@ export async function crearGrupoAction(input: {
     };
   }
   const { tenant, supabase, user } = guard;
+
+  if (fotoAjenaAlTenant(parsed.data.avatarUrl, tenant.id)) {
+    return { ok: false, code: "invalid" };
+  }
 
   // Techo de altas. Un grupo es una entidad que aparece en el descubrimiento
   // de toda la comunidad: sin tope, una cuenta sola llena la pantalla de
@@ -185,6 +221,10 @@ export async function editarGrupoAction(input: {
       ok: false,
       code: guard.reason === "unauthenticated" ? "unauthenticated" : "error",
     };
+  }
+
+  if (fotoAjenaAlTenant(ficha.data.avatarUrl, guard.tenant.id)) {
+    return { ok: false, code: "invalid" };
   }
 
   const moderacion = await moderateText(
@@ -289,7 +329,26 @@ export async function unirmeAlGrupoAction(groupId: string): Promise<GrupoActionR
   if (error && error.code !== "23505") {
     console.warn("[grupos] no se pudo unir al grupo", { code: error.code });
     // 42501 = la policy dijo que no (privado, cerrado, u otra comunidad).
-    return { ok: false, code: error.code === "42501" ? "forbidden" : "error" };
+    if (error.code !== "42501") return { ok: false, code: "error" };
+
+    /**
+     * DESDE LA 0135 ESE 42501 TAPA UN CUARTO "NO": me vetaron. Los otros tres
+     * se destraban solos —el grupo se abre, alguien me invita— y este no:
+     * reintentar no lo va a cambiar nunca, así que decir "probá de nuevo"
+     * manda a la persona a un botón que no funciona más.
+     *
+     * Se pregunta SÓLO después de que la policy ya dijo que no, y la consulta
+     * devuelve como mucho la propia fila: `chat_group_bans_select` deja ver el
+     * veto propio justamente para esto, sin darle a nadie la lista de vetados.
+     */
+    const { data: veto } = await supabaseSinTiparGrupos(supabase)
+      .from("chat_group_bans")
+      .select("profile_id")
+      .eq("group_id", id.data)
+      .eq("profile_id", user.id)
+      .maybeSingle();
+
+    return { ok: false, code: veto ? "banned" : "forbidden" };
   }
 
   revalidatePath("/mensajes/grupos");
@@ -350,14 +409,56 @@ export async function invitarAlGrupoAction(input: {
     return { ok: false, code: "rate-limited" };
   }
 
-  const { error } = await supabaseSinTiparGrupos(supabase)
-    .from("chat_group_members")
-    .insert({
-      group_id: id.data,
-      profile_id: perfil.data,
-      tenant_id: tenant.id,
-      role: "member",
+  const sinTiparInvitacion = supabaseSinTiparGrupos(supabase);
+
+  /**
+   * INVITAR ES LA FORMA DE LEVANTAR UN VETO (0135).
+   *
+   * Un veto (`chat_group_bans`) bloquea que la persona se auto-agregue, no que
+   * la inviten: la rama (b) de `chat_group_members_insert` quedó intacta a
+   * propósito. Pero dejar la fila del veto puesta después de traerla de vuelta
+   * la deja adentro y vetada a la vez — si más tarde se va sola, no puede
+   * volver a entrar y nadie entiende por qué.
+   *
+   * VA ANTES DEL ALTA, y el orden importa por cómo falla cada mitad:
+   *
+   *   · veto → alta, y falla el alta: queda alguien sin veto y sin membresía.
+   *     Si el grupo es público puede entrar sola, que es de todos modos lo que
+   *     quien administra estaba por hacer.
+   *   · alta → veto, y falla el veto: queda alguien ADENTRO Y VETADA. Nadie ve
+   *     esa fila desde ninguna pantalla, y el día que se vaya sola no puede
+   *     volver a entrar sin que nadie entienda por qué.
+   *
+   * El primero es un no-op molesto; el segundo es un estado que sólo se
+   * arregla desde el SQL Editor. Por eso este orden y no el otro.
+   *
+   * `count` no se mira: que no hubiera veto es el caso normal, no un problema.
+   */
+  const { error: vetoError } = await sinTiparInvitacion
+    .from("chat_group_bans")
+    .delete()
+    .eq("group_id", id.data)
+    .eq("profile_id", perfil.data);
+
+  if (vetoError) {
+    /**
+     * No corta la invitación. Un DELETE que no encuentra filas NO es un error
+     * en PostgREST —y no haber veto es el caso normal—, así que llegar acá es
+     * una anomalía de verdad: se anota y se sigue. Si además el alta falla, la
+     * persona se entera por el resultado de la action; si el alta pasa, quedó
+     * adentro, que es lo que se pidió.
+     */
+    console.warn("[grupos] no se pudo levantar el veto al invitar", {
+      code: vetoError.code,
     });
+  }
+
+  const { error } = await sinTiparInvitacion.from("chat_group_members").insert({
+    group_id: id.data,
+    profile_id: perfil.data,
+    tenant_id: tenant.id,
+    role: "member",
+  });
 
   if (error) {
     if (error.code === "23505") return { ok: false, code: "duplicate" };
@@ -369,7 +470,7 @@ export async function invitarAlGrupoAction(input: {
   // Avisar a quien fue sumado. Sin esto, alguien aparece adentro de un grupo y
   // se entera la próxima vez que abre Mensajes de casualidad.
   try {
-    const { data: grupo } = await supabaseSinTiparGrupos(supabase)
+    const { data: grupo } = await sinTiparInvitacion
       .from("chat_groups")
       .select("name")
       .eq("id", id.data)
@@ -412,17 +513,35 @@ export async function expulsarDelGrupoAction(input: {
     };
   }
 
-  const { error, count } = await supabaseSinTiparGrupos(guard.supabase)
-    .from("chat_group_members")
-    .delete({ count: "exact" })
-    .eq("group_id", id.data)
-    .eq("profile_id", perfil.data);
+  /**
+   * EXPULSAR ES UNA SOLA OPERACIÓN, Y POR ESO ES UNA RPC (0135).
+   *
+   * Hasta la 0135 esto era un DELETE sobre `chat_group_members` y nada más, con
+   * el resultado de que expulsar de un grupo PÚBLICO no expulsaba: la persona
+   * volvía a entrar con el mismo toque de siempre. Ahora expulsar deja veto, y
+   * las dos escrituras tienen que ser atómicas — hacerlas desde acá, una
+   * después de la otra, deja dos estados que ninguna pantalla puede arreglar:
+   * afuera sin veto (vuelve a entrar) o vetado pero adentro.
+   *
+   * La función es SECURITY DEFINER y vuelve a verificar el rol adentro, así que
+   * esto sigue sin autorizar nada: traduce.
+   */
+  const { data, error } = await supabaseSinTiparGrupos(guard.supabase).rpc(
+    "expulsar_de_grupo",
+    { p_group: id.data, p_profile: perfil.data },
+  );
 
   if (error) {
     console.warn("[grupos] no se pudo expulsar", { code: error.code });
     return { ok: false, code: "error" };
   }
-  if (count === 0) return { ok: false, code: "forbidden" };
+
+  // `no_estaba` es éxito: alguien ya la sacó y el resultado que se quería —que
+  // no esté— ya es cierto. Mismo criterio que el 23505 de unirse.
+  const resultado = data as string | null;
+  if (resultado !== "ok" && resultado !== "no_estaba") {
+    return { ok: false, code: "forbidden" };
+  }
 
   revalidatePath(`/mensajes/grupos/${id.data}/info`);
   return { ok: true, groupId: id.data };

@@ -9,6 +9,7 @@ import { AdChip } from "./card-ad-chip";
 import { BoostCta } from "./boost-cta";
 import { useCardLike } from "./card-like-context";
 import { useCardMedia } from "./card-media-context";
+import { isLongVideo } from "@/lib/media/video-policy";
 import { MediaCarousel } from "./media-carousel";
 import { useMediaViewer } from "./media-viewer";
 import { MusicBadge } from "./music-badge";
@@ -173,6 +174,13 @@ function PostMediaLayers({
       postId,
       authorName,
       maxPlaybackSeconds: viewerPlaybackCapFor(paidAd),
+      /**
+       * VIDEO LARGO: 59 s también a pantalla completa, y el botón que lleva a
+       * la sección donde se ve entero (cliente 2026-09-03, 21:00). Presente,
+       * pisa el tope de arriba — el tope y el botón son la misma decisión y
+       * viven juntos en `ViewerVideo.fullVideoHref`.
+       */
+      fullVideoHref: isLongVideo({ videoType }) ? `/videos/largos/${postId}` : null,
       onClose: postMusic ? () => postMusic.resume() : undefined,
     });
   };
@@ -200,6 +208,9 @@ function PostMediaLayers({
         index={index}
         onIndexChange={setIndex}
         postId={postId}
+        // Baja hasta `CardVideo`: un `advertising_video` se ve 59 s en la
+        // tarjeta y ofrece "Ver video completo" (ver `isLongVideo`).
+        videoType={videoType}
         authorName={authorName}
         videoScope={videoScope}
         viewCount={viewCount}

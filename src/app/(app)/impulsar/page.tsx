@@ -16,6 +16,7 @@ import { AdChip } from "@/components/feed/card-ad-chip";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
+import { SectionTopBar } from "@/components/shell";
 import {
   toListingImpulsarItem,
   toPostImpulsarItem,
@@ -162,6 +163,8 @@ export default async function ImpulsarIndexPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
+      {/* Salida de la pantalla (feedback 2026-09-03, punto 3): la ruta tiene hijos, así que la barra va en la página y no en un layout. */}
+      <SectionTopBar fallbackHref="/buscar" />
       <header>
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           {COPY.title}

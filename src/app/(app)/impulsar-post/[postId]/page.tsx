@@ -10,7 +10,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { listarZonasDelTenant } from "@/lib/zona/server";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
+import { ADVERTISING_VIDEO_MAX_SECONDS } from "@/lib/media/video-policy";
 import { OpcionesCampana } from "./opciones-campana";
+import { VideoDeCampana } from "./video-de-campana";
 
 export const metadata = { title: "Promocionar tu publicación" };
 
@@ -26,6 +28,21 @@ const COPY = {
   // FTC §255: transparencia total — la promoción es publicidad y se dice.
   comoFunciona:
     "Promocionar es publicidad: tu publicación llega al feed de más gente con la etiqueta \"Patrocinado\", para que siempre se sepa que es un espacio pago. Sin trucos.",
+  /**
+   * LA PROMESA DEL VIDEO LARGO, DICHA ANTES DE COBRAR.
+   *
+   * El cliente lo describió así: «tú ves cuando van a hacer un boost, una
+   * campaña, que dice que puede subir cierta cantidad de fotos y un video de 5
+   * minutos» (2026-09-03, 19:40). La frase dice DOS cosas y las dos importan:
+   * cuánto dura el video, y CUÁNDO se sube — con la campaña ya activa, que es
+   * el único momento en que la base deja marcar una publicación como
+   * publicitaria (`app.posts_validate_video`, 0046/0048). Prometer que se sube
+   * "al pagar" sería prometer un paso que no existe.
+   *
+   * Los minutos salen del tope real del tipo, nunca escritos a mano.
+   */
+  videoLargo: (minutos: number) =>
+    `Con tu campaña activa vas a poder sumarle a esta publicación un video de hasta ${minutos} minutos — el que la comunidad ve completo en la sección de Videos largos.`,
   notaHonesta:
     "Promocionar no cambia tu Trust Score ni el de nadie, no altera el verificador del centro de seguridad y no garantiza nada: solo amplía el alcance de tu publicación mientras dura. Es un pago único, sin renovación automática.",
   exito:
@@ -67,7 +84,9 @@ export default async function ImpulsarPostPage({
   // Gate de ownership con RLS del usuario: si no es suyo, la página no existe.
   const { data: post } = await supabase
     .from("posts")
-    .select("id, tenant_id, author_id, status, body")
+    // Las columnas de video (0046 + 0132) las necesita el panel del video de la
+    // campaña para saber si ya hay uno y cuánto dura.
+    .select("id, tenant_id, author_id, status, body, video_type, duration_seconds")
     .eq("id", postId)
     .maybeSingle();
 
@@ -163,25 +182,46 @@ export default async function ImpulsarPostPage({
           </p>
         </BezelCard>
       ) : campanaActiva?.ends_at ? (
-        <BezelCard
-          variant="featured"
-          coreClassName="flex flex-col items-center gap-2 px-6 py-8 text-center"
-          role="status"
-        >
-          <SealCheck size={40} weight="fill" aria-hidden="true" className="text-brand" />
-          <p className="font-display text-lg font-semibold text-foreground">
-            {COPY.yaActivaTitulo}
-          </p>
-          <p className="max-w-[42ch] text-sm text-foreground-secondary">
-            {COPY.yaActivaCuerpo(
-              formatDate(campanaActiva.ends_at, { locale: tenant.locale, style: "long" }),
-            )}
-          </p>
-        </BezelCard>
+        <>
+          <BezelCard
+            variant="featured"
+            coreClassName="flex flex-col items-center gap-2 px-6 py-8 text-center"
+            role="status"
+          >
+            <SealCheck size={40} weight="fill" aria-hidden="true" className="text-brand" />
+            <p className="font-display text-lg font-semibold text-foreground">
+              {COPY.yaActivaTitulo}
+            </p>
+            <p className="max-w-[42ch] text-sm text-foreground-secondary">
+              {COPY.yaActivaCuerpo(
+                formatDate(campanaActiva.ends_at, { locale: tenant.locale, style: "long" }),
+              )}
+            </p>
+          </BezelCard>
+
+          {/*
+            EL VIDEO LARGO VIVE ACÁ, Y SÓLO ACÁ.
+            No es una decisión de layout: con la campaña activa es el ÚNICO
+            momento en que una publicación puede pasar a `advertising_video`
+            (`app.posts_validate_video`, 0046/0048) y, por lo tanto, el único en
+            que la base deja que un video pase de 90 s. El detalle completo está
+            en el docblock de `video-publicitario.ts`.
+          */}
+          <VideoDeCampana
+            postId={post.id}
+            actual={{
+              durationSeconds: post.duration_seconds,
+              esPublicitario: post.video_type === "advertising_video",
+            }}
+          />
+        </>
       ) : (
         <>
           <p className="text-sm leading-relaxed text-foreground-secondary">
             {COPY.comoFunciona}
+          </p>
+          <p className="text-sm leading-relaxed text-foreground-secondary">
+            {COPY.videoLargo(Math.floor(ADVERTISING_VIDEO_MAX_SECONDS / 60))}
           </p>
 
           <OpcionesCampana

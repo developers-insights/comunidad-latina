@@ -19,11 +19,9 @@ import {
   MAX_VIDEOS,
   checkPhotoPayload,
 } from "@/lib/media/post-media-limits";
-import {
-  VIDEO_FILENAME_PATTERN,
-  VIDEO_POSTER_FILENAME_PATTERN,
-} from "@/lib/media/video-upload-limits";
+import { isOwnPosterPath, isOwnVideoPath } from "@/lib/media/own-media-path";
 import { parseMediaFilterRef, type MediaFilterRef } from "@/lib/media/photo-filters";
+import { TEXT_BACKGROUND_IDS } from "@/lib/feed/text-backgrounds";
 import {
   TIER_HUMAN,
   TIER_REVIEW,
@@ -100,6 +98,19 @@ const postSchema = z.object({
   /** Publicar COMO esta entidad (listing propio published) — RLS lo valida. */
   entityId: z.uuid().optional(),
   /**
+   * FONDO DE UNA PUBLICACIÓN DE TEXTO (0128). Viaja el ID del catálogo, nunca
+   * el CSS: el degradado lo arma el navegador desde `text-backgrounds.ts` al
+   * pintar, así que este campo no puede terminar dentro de un `style`. Ausente
+   * = modo Automático (la columna queda NULL y el fondo se sortea por el id del
+   * post), que es lo que hacían todas las publicaciones antes de la migración.
+   *
+   * El `z.enum` es la MISMA lista que el CHECK de la 0128. Están los dos a
+   * propósito: sin el enum, un id desconocido llega hasta la base y vuelve como
+   * un 23514 opaco; sin el CHECK, cualquier otra escritura sobre `posts` puede
+   * meter basura en la columna.
+   */
+  textBackground: z.enum(TEXT_BACKGROUND_IDS).optional(),
+  /**
    * DECLARACIÓN DE VIDEO (contrato 0046). Todo post con media de video tiene
    * que declarar QUÉ es y CUÁNTO dura o el INSERT rebota contra el CHECK
    * `posts_video_declaration`. Los tres campos son opcionales en el borde
@@ -143,58 +154,15 @@ const PHOTO_TYPES: Record<string, string> = {
  */
 
 /**
- * Path de video en post-media que este server ACEPTA en posts.media:
- * exactamente {tenant}/{user}/{archivo}.{extensión}, sin traversal posible.
- * El prefijo se valida contra el tenant del guard y el user del JWT — el
- * cliente no puede colar un path ajeno (y la policy 0025 ya lo habría
- * rechazado al subir; esto es defensa en profundidad al PERSISTIR).
+ * LA COMPROBACIÓN DE "ESTA RUTA ES MÍA" VIVE EN `@/lib/media/own-media-path`.
  *
- * Las extensiones válidas salen de `VIDEO_FILENAME_PATTERN`
- * (`@/lib/media/video-upload-limits`) — el MISMO catálogo que decide qué
- * deja elegir el `accept` del composer. Estuvo hardcodeado acá como
- * `(mp4|webm)` mientras el composer ya aceptaba más formatos (.mov de
- * iPhone, entre otros): el picker dejaba elegir el archivo y esta regex lo
- * rechazaba en silencio recién al publicar, con un `code: "photo"` genérico
- * que no explicaba nada.
+ * Estuvo acá adentro mientras el feed era el ÚNICO camino que persistía rutas de
+ * video. Desde que el video publicitario entra también por
+ * `/impulsar-post/[postId]` (video-publicitario.ts) hay dos, y una regla de
+ * seguridad copiada en dos archivos es una regla que mañana se separa. El
+ * porqué completo —y por qué esto no reemplaza a la policy 0025 ni al CHECK de
+ * la 0132— está en el docblock de ese módulo.
  */
-function isOwnVideoPath(path: string, tenantId: string, userId: string): boolean {
-  const segments = path.split("/");
-  if (segments.length !== 3) return false;
-  const [tenantSegment, userSegment, filename] = segments;
-  return (
-    tenantSegment === tenantId &&
-    userSegment === userId &&
-    VIDEO_FILENAME_PATTERN.test(filename) &&
-    !filename.includes("..")
-  );
-}
-
-/**
- * LA MISMA REGLA PARA EL POSTER DEL VIDEO (0132). Cambia una sola cosa: la
- * extensión válida es `.jpg` y no la lista de contenedores de video.
- *
- * Existe por lo mismo que su hermana: `videoPosterPath` llega por el body, y un
- * campo que dice "esto es mío" hay que comprobarlo contra el tenant del guard y
- * el usuario del JWT. Sin esto, cualquiera con un token del tenant podría
- * apuntar el poster de su publicación a un archivo del prefijo de otra persona
- * —el bucket es público de lectura— y hacerlo aparecer sobre su video.
- *
- * La forma se repite además en el CHECK `posts_video_poster_path_shape` de la
- * 0132. Las dos vallas dicen lo mismo a propósito: ésta da un error de producto
- * y aquélla es la última que sigue valiendo si alguien escribe en la tabla por
- * fuera de esta action.
- */
-function isOwnPosterPath(path: string, tenantId: string, userId: string): boolean {
-  const segments = path.split("/");
-  if (segments.length !== 3) return false;
-  const [tenantSegment, userSegment, filename] = segments;
-  return (
-    tenantSegment === tenantId &&
-    userSegment === userId &&
-    VIDEO_POSTER_FILENAME_PATTERN.test(filename) &&
-    !filename.includes("..")
-  );
-}
 
 /**
  * ¿ESTE CUERPO SE PUEDE PUBLICAR? La frontera real de la regla "el texto es
@@ -317,6 +285,7 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     kind: formData.get("kind"),
     pollKind: formData.get("pollKind") || undefined,
     entityId: formData.get("entityId") || undefined,
+    textBackground: formData.get("textBackground") || undefined,
     videoType: formData.get("videoType") || undefined,
     durationSeconds: formData.get("durationSeconds") || undefined,
     videoCategory: formData.get("videoCategory") || undefined,
@@ -328,6 +297,13 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // Solo una PREGUNTA puede llevar encuesta: en cualquier otro kind el campo se
   // ignora (no se confía en el cliente ni para esto).
   const pollKind = kind === "question" ? (parsed.data.pollKind ?? null) : null;
+  /**
+   * Sólo un TEXTO puede elegir fondo: en una foto o en una pregunta no hay
+   * ningún campo de color que pintar, así que el campo se ignora. Mismo
+   * criterio que `pollKind` —no se confía en el cliente ni para esto—, y el
+   * mismo que aplica el CHECK `posts_text_background_only_on_text` de la 0128.
+   */
+  const textBackground = kind === "text" ? (parsed.data.textBackground ?? null) : null;
 
   // Fotos: hasta `MAX_PHOTOS` por publicación (2026-08-11, antes 4). Se acepta
   // el campo legado `photo` (singular) por si un cliente viejo sigue en vuelo.
@@ -805,6 +781,16 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
      * campo ausente dejaría el valor viejo en vez de decir la verdad.
      */
     video_poster_path: videoPosterPath,
+    /**
+     * Fondo elegido de una publicación de texto (0128). Mismo desfase de tipos
+     * que las dos de arriba: la columna existe desde su migración y
+     * `database.types.ts` se regenera aparte.
+     *
+     * Va explícito incluso en NULL —que es el modo Automático— por el mismo
+     * motivo que `video_poster_path`: publicar un borrador de Mux es un UPDATE,
+     * y un campo ausente dejaría el valor viejo en vez de decir la verdad.
+     */
+    text_background: textBackground,
   } as PostInsert;
 
   /**

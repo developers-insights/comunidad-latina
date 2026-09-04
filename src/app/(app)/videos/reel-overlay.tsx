@@ -103,14 +103,38 @@ export function ReelOverlay({ postId, scope, onClose, onUnavailable }: ReelOverl
    * `cancelado` evita el setState sobre un overlay que la persona ya cerró: la
    * consulta puede tardar más que el gesto de cerrar.
    */
+  // `onUnavailable` por ref: la card lo recrea en cada render y en las deps del
+  // efecto de abajo volvía a pedir la tanda (y podía cerrar el reel a mitad del
+  // scroll). Va declarada ANTES del efecto que la lee (react-hooks/immutability).
+  const onUnavailableRef = useRef(onUnavailable);
+  useEffect(() => {
+    onUnavailableRef.current = onUnavailable;
+  }, [onUnavailable]);
+
   useEffect(() => {
     let cancelado = false;
     void (async () => {
       try {
         const result = await openReelAtPostAction({ scope, startId: postId });
         if (cancelado) return;
-        if (result.items.length === 0) {
-          onUnavailable();
+        /**
+         * EL REEL TIENE QUE EMPEZAR EN EL VIDEO QUE SE TOCÓ, y por eso no
+         * alcanza con preguntar si vino algo.
+         *
+         * `fetchVideoReelsPage` intenta poner el post de `startId` a la cabeza,
+         * pero si ese post NO es elegible para Videos Cortos —un video de más de
+         * 90 s de una publicación premium, o uno de los 7 anteriores a la 0046
+         * que no declaran tipo— lo SALTEA en silencio y devuelve la tanda igual,
+         * empezando por otro. Sin este chequeo, tocar ese video abriría el reel
+         * en el video de otra persona: lo peor de los dos mundos.
+         *
+         * La regla que gobierna el toque (`videoOpensReel`) sólo descarta los
+         * anuncios y las pantallas de una sola publicación, así que este caso
+         * llega hasta acá de verdad. Cuando pasa, el respaldo es el correcto: el
+         * visor de la propia publicación, que reproduce ESE video completo.
+         */
+        if (result.items[0]?.id !== postId) {
+          onUnavailableRef.current();
           return;
         }
         setPage(result);
@@ -121,13 +145,17 @@ export function ReelOverlay({ postId, scope, onClose, onUnavailable }: ReelOverl
         console.warn("[videos] no se pudo abrir el reel desde el feed", {
           message: error instanceof Error ? error.message : String(error),
         });
-        onUnavailable();
+        onUnavailableRef.current();
       }
     })();
     return () => {
       cancelado = true;
     };
-  }, [postId, scope, onUnavailable]);
+    // Sólo el post y el scope: la tanda se pide UNA vez al montar. `onUnavailable`
+    // va por ref (arriba) porque la card la recrea en cada render y, con ella en
+    // las deps, cada re-render del feed volvía a pedir la tanda y podía cerrar
+    // el reel a mitad del scroll (revisión de código del 2026-09-04).
+  }, [postId, scope]);
 
   /**
    * ---- ARRASTRAR HACIA ABAJO PARA VOLVER AL FEED -------------------------

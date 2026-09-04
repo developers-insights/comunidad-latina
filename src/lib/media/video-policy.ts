@@ -237,6 +237,78 @@ export function isEligibleForShortFeed(candidate: ShortFeedCandidate): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Videos LARGOS — la sección donde se ven enteros (cliente 2026-09-03, 19:40)
+// ---------------------------------------------------------------------------
+
+/**
+ * Margen para comparar contra el tope de los 90 s.
+ *
+ * Existe por la MISMA razón que la tolerancia de `isPreviewTruncated`: la
+ * duración declarada es un entero (la redondea `normalizeDeclaredDuration`),
+ * pero la MEDIDA por el navegador es un float, y un archivo de 90,2 s no es un
+ * video largo — es un corto de 90 s que el contenedor cuenta con decimales.
+ * Sin este medio segundo, cada corto al límite ofrecería "Ver video completo"
+ * hacia una sección donde no está.
+ */
+const LONG_VIDEO_TOLERANCE_SECONDS = 0.5;
+
+export interface LongVideoCandidate {
+  /** posts.video_type. Sólo `advertising_video` puede pasar de los 90 s. */
+  videoType?: string | null;
+  /**
+   * Duración en segundos. Sirven las DOS: la declarada de la fila
+   * (`posts.duration_seconds`) cuando se está eligiendo qué entra a la sección,
+   * y la medida por el navegador cuando quien pregunta es una superficie que ya
+   * tiene el archivo cargado. null = DESCONOCIDA, que no es "larga".
+   */
+  durationSeconds?: number | null;
+}
+
+/**
+ * ¿ESTE VIDEO ES LARGO? La definición vive acá y en ningún otro lado, porque de
+ * ella dependen tres cosas que tienen que estar de acuerdo o el botón miente:
+ * qué se lista en `/videos/largos`, qué se puede reproducir entero ahí adentro,
+ * y dónde aparece "Ver video completo".
+ *
+ * DOS CAMINOS, Y LOS DOS HACEN FALTA:
+ *
+ *  · `advertising_video` es largo por CONTRATO, mida lo que mida el archivo: es
+ *    el único tipo que la base deja pasar de 90 s (constraint
+ *    `posts_short_video_duration`), y es el que el cliente describió — "quien
+ *    paga publicidad puede subir hasta 5 minutos para recorrer una propiedad".
+ *  · Una duración mayor al tope de los cortos es largo por EVIDENCIA. Cubre la
+ *    fila que declara 300 s sin haber declarado su tipo, y cubre a la tarjeta
+ *    del feed, que no conoce la fila pero sí midió el archivo.
+ *
+ * NO es lo contrario de `isEligibleForShortFeed`: un corto de 90 s vetado del
+ * scroll por su autor (`eligible_for_short_feed = false`) no es elegible Y
+ * TAMPOCO es largo. El veto habla del scroll; esto habla de la duración.
+ */
+export function isLongVideo(candidate: LongVideoCandidate): boolean {
+  if (candidate.videoType === "advertising_video") return true;
+  const seconds = candidate.durationSeconds;
+  if (typeof seconds !== "number" || !Number.isFinite(seconds)) return false;
+  return seconds > SHORT_VIDEO_MAX_SECONDS + LONG_VIDEO_TOLERANCE_SECONDS;
+}
+
+/**
+ * Segundos que la sección de largos reproduce de este video: los 600 s del
+ * publicitario o los 300 s de una publicación premium. Es el MISMO reparto que
+ * hace `viewerPlaybackCapFor` en el feed, escrito acá porque la sección de
+ * videos largos no tiene a mano un post del feed —trabaja con la fila— y porque
+ * los números tienen que seguir saliendo de un solo archivo.
+ *
+ * Que haya tope y no "el archivo entero" importa por los videos anteriores a la
+ * 0046: su duración es desconocida, así que el archivo puede durar cualquier
+ * cosa y la promesa de la pantalla no puede depender de un dato que no tenemos.
+ */
+export function longVideoCapSeconds(videoType?: string | null): number {
+  return playbackCapSeconds(
+    videoType === "advertising_video" ? "advertising" : "detail",
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Formato
 // ---------------------------------------------------------------------------
 

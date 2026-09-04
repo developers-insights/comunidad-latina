@@ -333,6 +333,20 @@ export interface PostCardModel {
   /** posts.video_category — catálogo cerrado del menú de Videos Cortos. */
   videoCategory?: string | null;
   /**
+   * FONDO ELEGIDO DE UNA PUBLICACIÓN DE TEXTO (`posts.text_background`, 0128).
+   *
+   * Es un id del catálogo de `@/lib/feed/text-backgrounds`, no CSS: el string
+   * que sale de la base nunca se escribe en un `style`, lo resuelve
+   * `textBackgroundOf` contra el catálogo cerrado.
+   *
+   * `null` = modo Automático (el fondo se sortea por el id del post), que es lo
+   * que hacían TODAS las publicaciones antes de la 0128. Opcional —y no
+   * `string | null` a secas— por el mismo motivo que las columnas de video:
+   * ausente significa "esta consulta no preguntó", y en las dos situaciones la
+   * tarjeta cae al sorteo, que es exactamente lo que se veía ayer.
+   */
+  textBackground?: string | null;
+  /**
    * Teléfono del botón de WhatsApp que la campaña activa ofrece
    * (post_promotions.cta_whatsapp, 0038). null cuando el anunciante no cargó
    * ninguno o cuando el post no está promocionado.

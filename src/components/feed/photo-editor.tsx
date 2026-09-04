@@ -890,7 +890,7 @@ export function PhotoEditor({
       )}
 
       {/* ── PANEL DE LA HERRAMIENTA ────────────────────────────────────────
-          Toma el alto de SU CONTENIDO, topado en 38dvh, y cede desde ahí. Las
+          Toma el alto de SU CONTENIDO, topado en 30dvh (era 38: en un iPhone la foto quedaba de 162 px de ancho, medido el 4/9; la foto manda), y cede desde ahí. Las
           dos cosas importan y en ese orden:
 
            · el tope evita que el catálogo de emojis —que es alto— se quede con
@@ -902,7 +902,7 @@ export function PhotoEditor({
           que toda la cadena de contenedores tenga un alto definido, y si en
           algún navegador no lo tiene se lee como "sin tope" — justo el caso que
           este número viene a evitar. */}
-      <div className="flex min-h-0 max-h-[38dvh] flex-col overflow-y-auto px-5 pb-4 pt-3">
+      <div className="flex min-h-0 max-h-[30dvh] flex-col overflow-y-auto px-5 pb-4 pt-3">
         {tab === "crop" && !isVideo && (
           <div className="flex flex-col gap-3">
             <fieldset>

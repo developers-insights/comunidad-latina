@@ -3,7 +3,14 @@ import type {
   HelpTopic,
   LostFoundCategory,
   LostFoundType,
+  PlaceType,
+  RegistrationKind,
+  RegistrationStatus,
+  RequesterType,
   ResourceTopic,
+  SpaceActivity,
+  VolunteerAvailability,
+  VolunteerSkill,
 } from "./types";
 
 /**
@@ -87,6 +94,16 @@ export const COMUNIDAD_COPY = {
         title: "Centro de acopio",
         hint: "Dejá tu donación de ropa, comida o insumos de emergencia: no es para recibir comida, es para darla.",
       },
+      /**
+       * Séptima tarjeta (0131). El cliente la pidió el 2026-09-03 sabiendo que
+       * arranca vacía: «al principio no se van a registrar, pero por lo menos ya
+       * tenemos el botón». Por eso NO lleva a un listado —no habría nada— sino a
+       * una pantalla que explica de qué se trata y ofrece el formulario.
+       */
+      espacio: {
+        title: "Espacio comunitario",
+        hint: "Negocios que prestan una parte de su local para clases, talleres o charlas del barrio.",
+      },
     },
   },
 
@@ -139,20 +156,28 @@ export const COMUNIDAD_COPY = {
      * `emptyTitle`/`emptyMessage`.
      */
     emptyTopic: {
+      /**
+       * Reescritos con la 0131. Antes los tres decían «estamos armando el
+       * directorio» y ahí terminaba: un cartel de obra sin nada para hacer. Ya
+       * existen los formularios, así que el vacío invita a llenarlo — y sin
+       * prometer nada, porque quien registra un lugar no queda publicado por
+       * registrarse: lo revisa el equipo (por eso «lo revisamos» y nunca «lo
+       * publicamos»).
+       */
       comida: {
         title: "Todavía no hay bancos de comida cargados",
         message:
-          "Estamos sumando comedores y despensas de tu comunidad. Mientras tanto, mirá el resto de la ayuda disponible.",
+          "Estamos sumando comedores y despensas del barrio. Si tenés uno o sabés de alguno, registralo y lo revisamos.",
       },
       voluntariado: {
         title: "Todavía no hay grupos de voluntarios cargados",
         message:
-          "Estamos armando este directorio. Mientras tanto, mirá el resto de la ayuda disponible.",
+          "Podés anotarte como voluntario o pedir voluntarios para algo de la comunidad. Las dos cosas las mira el equipo, no se publican.",
       },
       acopio: {
         title: "Todavía no hay centros de acopio cargados",
         message:
-          "Estamos sumando puntos de acopio de tu comunidad. Mientras tanto, mirá el resto de la ayuda disponible.",
+          "Si tu negocio recibe donaciones —ropa, comida, insumos—, registralo y lo revisamos para sumarlo acá.",
       },
     },
     /** Vuelve a la lista completa — visible con y sin resultados en el tema. */
@@ -375,8 +400,6 @@ export const COMUNIDAD_COPY = {
       zonaHelp: "Escribí el barrio o la parada más cercana.",
       buscarLabel: "Buscar",
       buscarPlaceholder: "Ej.: silla de ruedas, turno, clases de inglés",
-      buscarHelp: "Busca en el título y en el texto de los pedidos.",
-      limpiar: "Limpiar filtros",
     },
 
     card: {
@@ -384,7 +407,6 @@ export const COMUNIDAD_COPY = {
       respuestas: (cantidad: number) =>
         cantidad === 1 ? "1 respuesta" : `${cantidad} respuestas`,
       sinRespuestas: "Todavía nadie contestó",
-      verPedido: "Ver el pedido",
       resuelto: "Resuelto",
       escribir: "Escribirle",
       escribirHint: "Se abre un mensaje privado. Tus datos no se publican.",
@@ -397,9 +419,6 @@ export const COMUNIDAD_COPY = {
     },
 
     detalle: {
-      volver: "Pedir ayuda",
-      zona: "Zona",
-      tema: "Tema",
       noEncontrado: {
         title: "Ese pedido ya no está",
         message:
@@ -464,7 +483,7 @@ export const COMUNIDAD_COPY = {
     publicarCta: "Escribir un pedido",
     misPedidosCta: "Mis pedidos",
     verTodos: "Ver todos los pedidos",
-    /** El puente desde el directorio de recursos hacia el tablón (`<OfrecerEnTema>`). */
+    /** El puente desde el directorio de recursos hacia el tablón (`<PreguntarleALaComunidad>`). */
     desdeRecursos: "Preguntarle a la comunidad",
 
     vacio: {
@@ -564,7 +583,6 @@ export const COMUNIDAD_COPY = {
       title: "Resumilo en una línea (al menos 6 letras).",
       body: "Contá un poco más: con 20 letras alcanza para arrancar.",
       area: "Necesitamos la zona, aunque sea el barrio.",
-      topic: "Elegí de qué se trata.",
       resource: "Ese lugar ya no está disponible en este tema. Elegí otro o dejalo en blanco.",
       /**
        * Los tres del detector de contacto. Cada uno dice QUÉ sacar y —lo
@@ -589,6 +607,236 @@ export const COMUNIDAD_COPY = {
       estado: "Ese pedido ya no está en ese estado. Recargá la página y fijate cómo quedó.",
       suspendida: "Tu cuenta está pausada y por ahora no puede publicar.",
       auth: "Se cerró tu sesión. Entrá de nuevo y no perdés lo que escribiste.",
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // Registros privados (0131) — los cuatro formularios que NO publican nada
+  //
+  // Todo el copy de esta sección tiene que hacer una sola cosa bien: que quien
+  // deja su teléfono entienda ANTES de dejarlo qué va a pasar con él. El
+  // cliente lo dijo de la lista de voluntarios («esa lista no la ve nadie») y
+  // vale para los cuatro. Por eso la promesa aparece tres veces —arriba, al
+  // lado del campo de contacto y en la confirmación— y las tres veces dice lo
+  // mismo con las mismas palabras.
+  // -------------------------------------------------------------------------
+  registros: {
+    /**
+     * La frase que se repite. Está escrita una sola vez a propósito: si
+     * cambiara en un lugar y no en los otros dos, la promesa dejaría de ser una
+     * promesa y pasaría a ser tres frases parecidas.
+     */
+    noSePublica: "Esto no se publica. Lo ve el equipo de Comunidad Latina y te contactamos.",
+
+    campos: {
+      contactoTitulo: "¿Cómo te contactamos?",
+      contactoAyuda: "Con uno alcanza. Elegí el que uses.",
+      telefonoLabel: "Teléfono",
+      telefonoPlaceholder: "(917) 555-0134",
+      emailLabel: "Correo",
+      emailPlaceholder: "nombre@correo.com",
+      zonaLabel: "Zona",
+      zonaHelp: "El barrio, para saber qué te queda cerca.",
+      zonaPlaceholder: "Corona, Queens",
+    },
+
+    errores: {
+      nombre: "Escribí un nombre, aunque sea corto.",
+      zona: "Decinos en qué barrio o zona, así sabemos qué te queda cerca.",
+      detalle: "Contanos un poco más: con una línea alcanza.",
+      contacto: "Dejá un teléfono o un correo para que te podamos contestar.",
+      email: "Ese correo no parece completo. Fijate que tenga arroba y punto.",
+      reglas: "Marcá que leíste las reglas para poder anotarte.",
+      chips: "Elegí al menos una opción.",
+      direccion: "Escribí la dirección completa, con calle y número.",
+      horarios: "Decinos los días y horarios, aunque sea aproximados.",
+      cuando: "Decinos cuándo lo necesitás.",
+      personas: "Escribí cuántas personas necesitás, aunque sea un número aproximado.",
+      capacidad: "Escribí cuánta gente entra, aunque sea a ojo.",
+      abierto:
+        "Ya tenemos un registro tuyo esperando respuesta. Te vamos a escribir; si te equivocaste en algo, retiralo y mandalo de nuevo.",
+      generic: "No pudimos guardarlo — no es tu culpa. Probá de nuevo en un momento.",
+      suspendida: "Tu cuenta está pausada y por ahora no puede registrarse.",
+      auth: "Se cerró tu sesión. Entrá de nuevo y no perdés lo que escribiste.",
+      retirar: "No pudimos retirar tus datos. Probá de nuevo en un momento.",
+    },
+
+    /** El estado "ya te registraste", compartido por los cuatro formularios. */
+    abierto: {
+      title: "Ya tenemos tus datos",
+      body: "Te vamos a escribir. Mientras tanto no tenés que hacer nada.",
+      retirar: "Retirar mis datos",
+      retirando: "Retirando…",
+      retirado: "Listo, borramos lo que habías dejado. Si querés, podés volver a anotarte cuando quieras.",
+    },
+
+    needLogin: "Entrá para registrarte",
+    needLoginHint:
+      "Pedimos cuenta por una sola razón: para poder escribirte después, y para que nadie deje los datos de otra persona.",
+
+    // ---- 1 · Me anoto de voluntario ---------------------------------------
+    voluntario: {
+      title: "Anotarme como voluntario",
+      subtitle: "Dejanos tus datos y te avisamos cuando haga falta una mano cerca tuyo.",
+      /**
+       * Los tres pasos ANTES del formulario. La estructura sale de una
+       * referencia real: la pantalla "Steps to enroll" de Visible
+       * (https://mobbin.com/screens/2159d2bd-343b-46d2-9668-648ae3f5a453), que
+       * antes de pedir un solo dato dice en tres líneas con ícono qué va a
+       * pasar. Es la respuesta exacta a la duda del cliente («esa lista no la ve
+       * nadie»): en vez de prometerlo en letra chica, se cuenta el flujo.
+       */
+      pasos: [
+        "Tus datos no se publican. Los ve el equipo de Comunidad Latina y nadie más.",
+        "Cuando alguien de tu zona necesita voluntarios, revisamos que sea voluntariado de verdad y recién ahí te escribimos.",
+        "Vos decidís cada vez. Anotarte no te compromete a nada.",
+      ],
+      nombreLabel: "Tu nombre",
+      nombrePlaceholder: "Como querés que te llamemos",
+      habilidadesLabel: "¿En qué podés dar una mano?",
+      habilidadesHelp: "Elegí lo que te salga bien. Podés marcar varias.",
+      disponibilidadLabel: "¿Cuándo podés?",
+      disponibilidadHelp: "Sin compromiso: es para no escribirte a cualquier hora.",
+      detalleLabel: "Contanos algo más",
+      detalleHelp: "Un oficio, un idioma, si tenés auto. Lo que creas que suma.",
+      detallePlaceholder:
+        "Hablo español e inglés y tengo auto. Los sábados a la mañana estoy libre.",
+      /**
+       * Las reglas VISIBLES arriba del checkbox, no detrás de un enlace.
+       * Referencia: la pantalla de comunidad de Lex
+       * (https://mobbin.com/screens/64fda9f4-e87b-4d27-b2a9-006414b4759c), que
+       * lista las reglas en la página y pone UNA sola casilla debajo. Es lo que
+       * pidió el cliente («el voluntario acepta una regla corta para que no haya
+       * compromiso con Comunidad Latina») y es la misma doctrina que
+       * `<ReglasDeAyuda>`: un descargo que hay que ir a buscar es un descargo
+       * que nadie leyó.
+       */
+      reglasTitle: "Antes de anotarte",
+      reglas: [
+        "Ser voluntario es dar una mano: sin cobrar y sin obligación.",
+        "Comunidad Latina te pone en contacto. No es tu empleador ni te representa.",
+        "Si algo no te cierra, decís que no y listo.",
+      ],
+      reglasCheck: "Leí estas tres cosas y estoy de acuerdo.",
+      submit: "Anotarme",
+      submitting: "Anotándote…",
+      done: {
+        title: "Listo, quedaste anotado",
+        body: "Te vamos a escribir cuando haya algo cerca tuyo. Tus datos no se publican en ningún lado.",
+      },
+      abiertoBody:
+        "Ya estás anotado como voluntario. Te escribimos cuando aparezca algo en tu zona.",
+    },
+
+    // ---- 2 · Necesito voluntarios ------------------------------------------
+    pedirVoluntarios: {
+      title: "Necesito voluntarios",
+      subtitle: "Contanos qué necesitás y buscamos gente de la zona.",
+      /**
+       * La línea que el cliente pidió con todas las letras (45:40–47:50): «no va
+       * a pedir voluntarios para poner el sheetrock del baño». Va ARRIBA y sin
+       * rodeos — quien viene a pedir mano de obra gratis tiene que enterarse
+       * antes de escribir, no después de que no le contestemos.
+       */
+      aviso:
+        "Antes de avisarle a nadie revisamos de qué se trata. Voluntariado es dar una mano a la comunidad: si es un trabajo, va en Empleos.",
+      quienLabel: "¿Quién lo pide?",
+      quienHelp: "No hace falta ser una organización.",
+      nombreLabel: "Tu nombre",
+      nombrePlaceholder: "Quién organiza esto",
+      orgLabel: "Nombre del grupo u organización",
+      orgPlaceholder: "Parroquia San Juan, Club de madres de Corona…",
+      paraQueLabel: "¿Para qué los necesitás?",
+      paraQueHelp: "Contá qué se va a hacer y quién se beneficia.",
+      paraQuePlaceholder:
+        "Estamos armando bolsones de comida para las familias del barrio y necesitamos manos para separarlos.",
+      cuandoLabel: "¿Cuándo?",
+      cuandoPlaceholder: "El sábado 12, de 9 a 12",
+      cuantosLabel: "¿Cuántas personas?",
+      cuantosHelp: "Un número aproximado alcanza.",
+      submit: "Enviar el pedido",
+      submitting: "Enviando…",
+      done: {
+        title: "Lo recibimos",
+        body: "Lo miramos y te escribimos. Si es voluntariado, les avisamos a los voluntarios de tu zona.",
+      },
+      abiertoBody: "Ya tenemos tu pedido de voluntarios. Te escribimos apenas lo miremos.",
+    },
+
+    // ---- 3 · Registrar mi lugar --------------------------------------------
+    lugar: {
+      title: "Registrar mi lugar",
+      subtitle: "Centros de acopio, bancos de comida y comedores del barrio.",
+      /**
+       * Acá la promesa es AL REVÉS que en los otros tres, y por eso se dice
+       * aparte: el lugar SÍ se publica si el equipo lo aprueba, con su
+       * dirección, sus horarios y su teléfono. Callarlo y publicarlo después
+       * sería lo peor que se puede hacer con un dato que alguien dejó creyendo
+       * otra cosa.
+       */
+      aviso:
+        "Si lo aprobamos, el lugar aparece en el listado de la comunidad con su dirección, sus horarios y el teléfono que dejes acá.",
+      tipoLabel: "¿Qué es?",
+      tipoHelp: "En el centro de acopio la gente deja donaciones; en el banco de comida las recibe.",
+      nombreLabel: "Nombre del lugar",
+      nombrePlaceholder: "Despensa Comunitaria San Rafael",
+      direccionLabel: "Dirección",
+      direccionPlaceholder: "103-25 Roosevelt Ave, Corona, NY 11368",
+      horariosLabel: "Días y horarios",
+      horariosPlaceholder: "Martes y jueves de 10 a 14",
+      queLabel: "¿Qué reciben o qué entregan?",
+      queHelp: "Lo que la gente necesita saber antes de ir hasta ahí.",
+      quePlaceholder:
+        "Entregamos bolsones de comida seca. No hace falta traer papeles ni sacar turno.",
+      contactoTitulo: "Teléfono del lugar",
+      contactoAyuda: "Es el que va a ver la gente si publicamos la ficha.",
+      submit: "Registrar el lugar",
+      submitting: "Registrando…",
+      done: {
+        title: "Recibimos tu lugar",
+        body: "Lo vamos a revisar y confirmar los datos. Si está todo bien, lo sumamos al listado de la comunidad.",
+      },
+      abiertoBody: "Ya tenemos tu lugar. Lo estamos revisando y te escribimos.",
+    },
+
+    // ---- 4 · Espacio comunitario -------------------------------------------
+    espacio: {
+      /** La pantalla de destino de la tarjeta: explica qué es y ofrece el formulario. */
+      portada: {
+        title: "Espacio comunitario",
+        subtitle: "Un local vacío un rato a la semana puede ser un aula.",
+        body: "¿Tenés un salón, un local o un depósito que no usás los sábados a la mañana o los domingos? Se puede prestar para clases de música para los chicos, inglés para las madres o charlas informativas. Vos ponés el día, el horario y hasta dónde llega tu compromiso.",
+        /**
+         * El cliente ya sabe que esto arranca vacío. Decirlo es mejor que
+         * simular movimiento: nadie se siente el único, y nadie espera un
+         * listado que todavía no existe.
+         */
+        nota: "Recién arranca: por ahora estamos juntando los primeros espacios. Nada de lo que dejes acá se publica.",
+        cta: "Ofrecer mi espacio",
+      },
+      title: "Ofrecer mi espacio",
+      subtitle: "Contanos qué tenés y cuándo está libre.",
+      nombreLabel: "Nombre del negocio o del lugar",
+      nombrePlaceholder: "Panadería La Esperanza",
+      direccionLabel: "Dirección",
+      direccionPlaceholder: "82-14 Northern Blvd, Jackson Heights, NY",
+      descripcionLabel: "¿Cómo es el espacio?",
+      descripcionHelp: "El tamaño, si hay mesas, si hay baño, si se entra con cochecito.",
+      descripcionPlaceholder:
+        "El salón del fondo, con diez mesas largas y baño. Se entra por la puerta de al lado.",
+      capacidadLabel: "¿Cuánta gente entra?",
+      capacidadHelp: "A ojo está bien.",
+      diasLabel: "¿Qué días y horarios está libre?",
+      diasPlaceholder: "Sábados de 9 a 13",
+      actividadesLabel: "¿Para qué lo prestarías?",
+      actividadesHelp: "Marcá lo que te parezca bien. Podés elegir varias.",
+      submit: "Ofrecer el espacio",
+      submitting: "Enviando…",
+      done: {
+        title: "Gracias, lo recibimos",
+        body: "Te vamos a llamar para conocernos y ver cómo organizarlo. No publicamos nada sin hablar con vos.",
+      },
+      abiertoBody: "Ya tenemos tu espacio anotado. Te escribimos para coordinar.",
     },
   },
 
@@ -729,3 +977,107 @@ export const LOST_FOUND_CATEGORY_LABEL: Record<LostFoundCategory, string> = {
   mascota: "Mascota",
   otro: "Otra cosa",
 };
+
+// ---------------------------------------------------------------------------
+// Registros privados (0131) — etiquetas de los catálogos cerrados
+//
+// Viven acá y no junto a los ids (types.ts) por la misma razón que
+// RESOURCE_TOPIC_LABEL: el id es contrato con la base y no se toca; la etiqueta
+// es copy y se reescribe cuando hace falta. Los usan LOS DOS lados: el
+// formulario que dibuja los chips y la ficha del panel que los vuelve a leer —
+// si estuvieran duplicados, el equipo terminaría viendo un nombre distinto del
+// que eligió la persona.
+// ---------------------------------------------------------------------------
+
+export const VOLUNTEER_SKILL_LABEL: Record<VolunteerSkill, string> = {
+  comida: "Repartir comida",
+  acompanar: "Acompañar a alguien",
+  traducir: "Traducir o interpretar",
+  ensenar: "Enseñar o dar clases",
+  transporte: "Llevar y traer cosas",
+  eventos: "Ayudar en eventos",
+  formularios: "Ayudar a llenar formularios",
+  cuidado: "Cuidar chicos o acompañar mayores",
+};
+
+export const VOLUNTEER_AVAILABILITY_LABEL: Record<VolunteerAvailability, string> = {
+  mananas: "Mañanas",
+  tardes: "Tardes",
+  noches: "Noches",
+  finde: "Fines de semana",
+  entre_semana: "Entre semana",
+  cuando_haga_falta: "Cuando haga falta",
+};
+
+export const SPACE_ACTIVITY_LABEL: Record<SpaceActivity, string> = {
+  clases_chicos: "Clases para los chicos",
+  idiomas: "Clases de idiomas",
+  charlas: "Charlas informativas",
+  talleres: "Talleres y oficios",
+  reuniones: "Reuniones del barrio",
+  donaciones: "Juntar donaciones",
+};
+
+export const PLACE_TYPE_LABEL: Record<PlaceType, string> = {
+  acopio: "Centro de acopio",
+  comida: "Banco de comida o comedor",
+};
+
+export const PLACE_TYPE_HINT: Record<PlaceType, string> = {
+  acopio: "La gente deja donaciones: ropa, alimentos, insumos.",
+  comida: "La gente recibe comida: despensa, bolsones, plato caliente.",
+};
+
+export const REQUESTER_TYPE_LABEL: Record<RequesterType, string> = {
+  persona: "Una persona o un grupo de vecinos",
+  organizacion: "Una organización, iglesia o negocio",
+};
+
+/**
+ * Etiqueta de cada campo del `details`, para la ficha del panel. Las claves son
+ * las MISMAS que escribe `registros.ts` en la base: si alguna se renombra allá
+ * y no acá, la ficha muestra la clave cruda — que es feo pero honesto, y mejor
+ * que esconder un dato.
+ */
+export const REGISTRATION_FIELD_LABEL: Record<string, string> = {
+  skills: "Puede ayudar con",
+  availability: "Disponible",
+  requester_type: "Quién pide",
+  org_name: "Organización",
+  when_label: "Cuándo",
+  people_needed: "Cuántas personas",
+  place_type: "Tipo de lugar",
+  address: "Dirección",
+  hours_label: "Días y horarios",
+  capacity: "Capacidad",
+  days_label: "Días libres",
+  activities: "Para qué lo presta",
+};
+
+export const REGISTRATION_KIND_LABEL: Record<RegistrationKind, string> = {
+  volunteer: "Voluntarios",
+  volunteer_request: "Piden voluntarios",
+  place: "Lugares",
+  space: "Espacios",
+};
+
+export const REGISTRATION_STATUS_LABEL: Record<RegistrationStatus, string> = {
+  new: "Sin mirar",
+  contacted: "Contactado",
+  approved: "Aprobado",
+  discarded: "Descartado",
+};
+
+/**
+ * Los diccionarios que necesita `detallesDeRegistro`, ya armados. Se exporta el
+ * objeto entero y no cada pieza suelta para que ninguna pantalla arme el suyo a
+ * mano y se olvide de una tabla.
+ */
+export const REGISTRATION_DICCIONARIOS = {
+  skill: VOLUNTEER_SKILL_LABEL,
+  availability: VOLUNTEER_AVAILABILITY_LABEL,
+  activity: SPACE_ACTIVITY_LABEL,
+  placeType: PLACE_TYPE_LABEL,
+  requesterType: REQUESTER_TYPE_LABEL,
+  campo: REGISTRATION_FIELD_LABEL,
+} as const;

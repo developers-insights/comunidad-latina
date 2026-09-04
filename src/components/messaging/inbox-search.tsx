@@ -13,9 +13,10 @@ import { PeopleSearch, type PersonaEncontrada } from "./people-search";
  * Elegir a alguien abre el chat directo y navega al hilo. Si la conversación
  * nace pendiente —el contacto protegido §9.2 no cambia por venir de un
  * buscador— igual se navega al hilo: ahí adentro la pantalla ya explica que la
- * solicitud salió y que hay que esperar la respuesta. Se muestra además un
- * toast, porque llegar a un hilo donde no se puede escribir todavía necesita
- * una explicación en el momento, no dos pantallas después.
+ * solicitud salió y que hay que esperar la respuesta (la pantalla del hilo lo
+ * dice arriba de la caja de escribir). No hay toast a propósito: la action no
+ * distingue un hilo nuevo pendiente de uno existente ya aceptado, y un toast
+ * de "solicitud enviada" sobre un chat viejo sería mentir.
  */
 export function InboxSearch() {
   const router = useRouter();

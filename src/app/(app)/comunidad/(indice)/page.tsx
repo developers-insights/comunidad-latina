@@ -3,7 +3,7 @@ import {
   BookOpenText,
   ForkKnife,
   HandHeart,
-  HandsClapping,
+  HouseLine,
   Lifebuoy,
   MagnifyingGlass,
   Package,
@@ -23,7 +23,7 @@ import {
 } from "@/components/comunidad";
 import { COMUNIDAD_COPY } from "@/lib/comunidad";
 import { getTenant } from "@/lib/tenant/resolve";
-import { countOpenCases, countOpenHelpNeeds } from "../queries";
+import { countOpenCases, countPedidosAbiertos } from "../queries";
 
 export const metadata = { title: "Comunidad" };
 
@@ -87,23 +87,46 @@ const C = COMUNIDAD_COPY.index;
  * `style` inline: es un fucsia 700, el matiz que más se separa de los otros
  * cinco acentos que conviven en ESTA grilla.
  *
- * ── SÉPTIMA CATEGORÍA: AYUDA MUTUA (0120) ────────────────────────────────────
- * Y acá el criterio SE ROMPE, a propósito. Las seis anteriores llevan a
- * contenido curado o a Perdido y encontrado; ésta lleva al único tablón del
- * módulo donde publica la gente en las DOS direcciones — se ofrece o pide
- * manos—. Es el pedido textual del cliente: «falta un botón en la parte de
- * comunidad, en casi todas las opciones… tanto de parte de la persona que
- * quiere prestar sus servicios o el lugar donde necesita prestar los
- * servicios», y «todo esto se verifica vía geovanny con la cuenta de admin».
+ * ── "PEDIR AYUDA" YA NO ES EL DIRECTORIO, Y "AYUDA MUTUA" SE FUE (0130) ──────
+ * Hasta el 2026-09-03 esta grilla tenía SIETE tarjetas y dos de ellas hablaban
+ * de lo mismo con nombres distintos: "Pedir ayuda", que llevaba al directorio
+ * curado (`/comunidad/recursos`), y "Ayuda mutua", que llevaba al tablón donde
+ * la gente se ofrecía a dar una mano.
  *
- * NO reemplaza a "Voluntarios" ni a "Centro de acopio": aquéllas siguen siendo
- * el DIRECTORIO de organizaciones (fichas con fuente citada) y ésta es la capa
- * de POSTULACIÓN que va encima. Desde cada ficha y desde cada tema se llega
- * igual, con el tema y el lugar ya puestos — ver `<OfrecerEnFicha>`.
+ * El cliente reencuadró las dos de un saque:
+ *   · «Tiene que ser como un blog: la gente pone lo que necesita y la gente le
+ *     contesta.» → "Pedir ayuda" ahora lleva al TABLÓN, que es lo que ese
+ *     nombre siempre prometió. Es la única tarjeta de la grilla que lleva a
+ *     algo que escribe la gente.
+ *   · «Necesito manos» para una mudanza es responsabilidad legal de Comunidad
+ *     Latina si alguien se lastima → la tarjeta "Ayuda mutua" desaparece.
  *
- * Lleva contador de "piden manos" y no de avisos totales: un pedido tiene
- * urgencia y cupo, un ofrecimiento sigue disponible mañana. El número que hace
- * que alguien entre hoy es el primero.
+ * El directorio NO se fue con ella: sigue siendo el destino de "Bancos de
+ * comida", "Voluntarios" y "Centro de acopio" (`/comunidad/recursos?tema=`); a
+ * los temas sin tarjeta propia (migración, salud, consulados, legal…) se llega
+ * desde el link "todos los temas" del propio directorio. Lo que dejó de tener es una puerta propia en
+ * esta grilla, porque su nombre lo usaba otra cosa.
+ *
+ * El contador de la tarjeta pasó a ser "pedidos abiertos": es el número que
+ * hace que alguien entre hoy, y ahora además es el único que hay.
+ *
+ * ── SÉPTIMA TARJETA: ESPACIO COMUNITARIO (0131) ─────────────────────────────
+ * Negocios que prestan una parte de su local un rato a la semana —«un sábado a
+ * la mañana, un warehouse vacío el domingo»— para clases para los chicos,
+ * inglés para las madres o charlas informativas. El cliente la pidió sabiendo
+ * que arranca vacía: «al principio no se van a registrar, pero por lo menos ya
+ * tenemos el botón» (1:00:45–1:06:00).
+ *
+ * Es la ÚNICA tarjeta que no lleva a un listado, y por eso mismo: un listado
+ * vacío detrás de un cuadrado se lee como una sección rota. Lleva a
+ * `/comunidad/espacio`, que explica de qué se trata y ofrece el formulario.
+ *
+ * Su acento REUSA `--accent-comunidad-manos` (verde 700, 0120) en vez de sumar
+ * un octavo color. Dos razones: ese token no lo estaba usando ninguna tarjeta
+ * de esta grilla —vivía en las reglas del tablón—, así que no hay dos cuadrados
+ * del mismo color; y su significado («dar y pedir una mano») es exactamente lo
+ * que hace un negocio que presta su salón. Sumar un color nuevo habría exigido
+ * tocar `globals.css`, que en esta tanda lo está editando otro frente.
  */
 export default async function ComunidadPage() {
   return (
@@ -124,11 +147,16 @@ export default async function ComunidadPage() {
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <li>
             <SquareTile
-              href="/comunidad/recursos"
-              label={C.cards.recursos.title}
-              hint={C.cards.recursos.hint}
+              href="/comunidad/pedir-ayuda"
+              label={C.cards.pedirAyuda.title}
+              hint={C.cards.pedirAyuda.hint}
               icon={<Lifebuoy size={28} weight="fill" aria-hidden="true" />}
               accent={COMUNIDAD_ACCENT}
+              badge={
+                <Suspense fallback={<Skeleton className="h-5 w-24 rounded-full" />}>
+                  <PedidosAbiertos />
+                </Suspense>
+              }
             />
           </li>
           <li>
@@ -183,16 +211,11 @@ export default async function ComunidadPage() {
           </li>
           <li>
             <SquareTile
-              href="/comunidad/ayuda-mutua"
-              label={C.cards.manos.title}
-              hint={C.cards.manos.hint}
-              icon={<HandsClapping size={28} weight="fill" aria-hidden="true" />}
+              href="/comunidad/espacio"
+              label={C.cards.espacio.title}
+              hint={C.cards.espacio.hint}
+              icon={<HouseLine size={28} weight="fill" aria-hidden="true" />}
               accent={COMUNIDAD_ACCENT_MANOS}
-              badge={
-                <Suspense fallback={<Skeleton className="h-5 w-24 rounded-full" />}>
-                  <PidenManos />
-                </Suspense>
-              }
             />
           </li>
         </ul>
@@ -220,19 +243,19 @@ async function CasosAbiertos() {
 }
 
 /**
- * Contador de lugares que están pidiendo manos hoy. Igual que `CasosAbiertos`:
- * su propio Suspense —es lo único de la tarjeta que consulta la base— y si la
- * consulta falla, o si quien mira no tiene sesión (el tablón pide cuenta), no
- * aparece nada. Nunca un cero que diga que nadie necesita ayuda.
+ * Cuántos pedidos hay abiertos hoy. Igual que `CasosAbiertos`: su propio
+ * Suspense —es lo único de la tarjeta que consulta la base— y si la consulta
+ * falla, o si quien mira no tiene sesión (el tablón pide cuenta), no aparece
+ * nada. Nunca un cero que diga que nadie necesita ayuda.
  */
-async function PidenManos() {
+async function PedidosAbiertos() {
   const tenant = await getTenant();
-  const pedidos = await countOpenHelpNeeds(tenant.id);
+  const pedidos = await countPedidosAbiertos(tenant.id);
   if (pedidos === 0) return null;
 
   return (
     <span className="inline-flex items-center rounded-full bg-[color-mix(in_oklab,var(--accent-comunidad-manos)_18%,var(--color-surface))] px-2.5 py-0.5 text-xs font-semibold tabular-nums text-foreground">
-      {pedidos === 1 ? "1 pide manos" : `${pedidos} piden manos`}
+      {pedidos === 1 ? "1 pedido abierto" : `${pedidos} pedidos abiertos`}
     </span>
   );
 }

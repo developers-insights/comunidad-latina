@@ -1,5 +1,7 @@
 # Feedback del cliente 2026-09-03 — call de 78 min + WhatsApp de Nacho
 
+> **Estado 2026-09-04:** implementado y desplegado en una sola tanda (12 frentes en paralelo). El detalle de qué quedó cómo, las decisiones que cambiaron sobre la marcha y lo pendiente están en `docs/PROGRESS.md`, sección "El feedback del cliente del 3/9".
+
 **Fuentes:** (a) transcript de la call "Comunidad Latina - Insights" del 3/9
 (78 min; el cliente aparece como "CL COM" y "Henry Sarmiento" — es Geovanny);
 (b) 20 capturas del WhatsApp de Nacho a Manuel, 15:14–16:47, con el resumen

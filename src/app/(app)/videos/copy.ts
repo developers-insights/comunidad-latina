@@ -124,6 +124,54 @@ export const VIDEOS_COPY = {
     close: "Volver al feed",
   },
 
+  /**
+   * VIDEOS LARGOS (cliente 2026-09-03, 19:40–23:44 y 1:09–1:11, pedido dos veces
+   * en la misma call): "una sección de los videos largos donde la gente vaya a
+   * ver su video de 5 minutos".
+   *
+   * El tono es el mismo del resto del módulo —cálido y directo— con una regla
+   * propia: acá NO se vende. La sección va a estar vacía hasta que existan
+   * publicaciones pagas con video largo, y un vacío que aproveche para ofrecer
+   * un plan convierte una pantalla honesta en un aviso. Se explica quién puede
+   * subirlos, y se ofrece la salida obvia: los videos cortos.
+   */
+  largos: {
+    title: "Videos largos",
+    /** Dice el límite sin sonar a advertencia: es lo que los hace distintos. */
+    subtitle: "Los videos que no entran en 90 segundos",
+    /** Tarjeta de entrada en el menú de Videos Cortos. */
+    menuLabel: "Videos largos",
+    menuHint: "Recorridas y presentaciones de más de 5 minutos",
+    openSection: "Ver los videos largos",
+    /** Etiqueta accesible de cada tarjeta de la lista. */
+    openVideo: (title: string) => `Ver ${title}`,
+    /** Fila de temas arriba de la lista. */
+    filterLabel: "Temas de videos largos",
+    allLabel: "Todos",
+    loadMore: "Ver más videos",
+    loadingMore: "Cargando más videos…",
+    endOfList: "Llegaste al final de los videos largos.",
+    /** Debajo del reproductor. */
+    moreTitle: "Más videos largos",
+    backToSection: "Volver a Videos largos",
+    /** El video, ya completo: lo contrario de la vista previa del feed. */
+    fullVideoLabel: (author: string) => `Video completo de ${author}`,
+
+    emptyTitle: "Todavía no hay videos largos",
+    /**
+     * Quién puede subirlos, contado como una regla del producto y no como una
+     * oferta. Es literal lo que dijo el cliente (21:00): los cinco minutos son
+     * de una publicación paga, para recorrer una propiedad.
+     */
+    emptyMessage:
+      "Los videos de más de 90 segundos son parte de una publicación paga: la recorrida de una casa, la presentación de un negocio. Cuando alguien publique el primero, lo vas a ver acá.",
+    emptyCta: "Ver Videos Cortos",
+    emptyCategoryTitle: (label: string) => `Todavía no hay videos largos de ${label}`,
+    emptyCategoryMessage:
+      "Probá con otro tema, o mirá todos los videos largos que hay hasta ahora.",
+    emptyCategoryCta: "Ver todos los videos largos",
+  },
+
   /** Vacío de una categoría concreta: no es "no hay videos", es "acá todavía". */
   emptyCategoryTitle: (label: string) => `Todavía no hay videos de ${label}`,
   emptyCategoryMessage:

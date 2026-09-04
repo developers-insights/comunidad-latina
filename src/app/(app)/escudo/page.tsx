@@ -10,6 +10,7 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 import { BezelCard, Emblem } from "@/components/ui";
 import { ESCUDO_ENABLED } from "./feature-flag";
+import { SectionTopBar } from "@/components/shell";
 
 /**
  * Hub del Escudo Anti-Estafa (moat §3): verificación DETERMINÍSTICA contra
@@ -98,6 +99,8 @@ export default function EscudoPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <SectionTopBar fallbackHref="/buscar" />
+
       {/* Hero compacto */}
       <header className="flex flex-col items-center gap-3 pt-2 text-center">
         {/* El emblema del moat, en su casa. Sin el círculo verde de antes: un

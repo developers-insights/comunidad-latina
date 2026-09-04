@@ -51,6 +51,24 @@ vi.mock("./media-viewer", () => ({
   useMediaViewer: () => ({ open: viewerOpen, available: true }),
 }));
 
+/**
+ * El reel que abre el toque sobre un video entra por `next/dynamic` (chunk
+ * aparte, ver `card-video.tsx`). Acá se reemplaza por un stub sincrónico: lo
+ * que este archivo testea es A DÓNDE manda cada tipo de post, no el reel.
+ */
+vi.mock("next/dynamic", async () => {
+  const React = await import("react");
+  return {
+    default: () =>
+      function ReelOverlayStub({ postId }: { postId: string }) {
+        return React.createElement("div", {
+          "data-testid": "reel-overlay",
+          "data-post": postId,
+        });
+      },
+  };
+});
+
 const PHOTO = (n: number): PostMediaView => ({
   kind: "image",
   url: `https://cdn.example.com/foto-${n}.webp`,
@@ -253,11 +271,12 @@ describe("CardPostMedia: el visor abre en el medio que se estaba viendo", () => 
 });
 
 describe("CardPostMedia: el reel infinito sólo donde corresponde", () => {
-  it("en el feed, tocar el video lo abre ACÁ MISMO y no te manda a /videos", () => {
-    // Pedido del cliente 2026-08-20: "no te tiene que mover a otra publicación;
-    // ahí nomás dentro de pantalla se tiene que fluir sin sacarte del feed". El
-    // scroll vertical entre publicaciones sigue existiendo en Videos Cortos,
-    // que es donde se va a buscarlo a propósito.
+  it("en el feed, tocar el video abre el REEL encima y no te manda a /videos", () => {
+    // Dos pedidos que parecían opuestos y no lo eran (ver el docblock de
+    // `openVideo` en card-video.tsx): 2026-08-20, "no te tiene que mover a otra
+    // publicación… sin sacarte del feed"; 2026-09-03, "ahí no te sale la
+    // música… debería hacer scrolling los videos". El reel montado ENCIMA del
+    // feed cumple los dos: hay scroll y música, y no hubo navegación.
     renderMedia([VIDEO(1)], "eventos");
     fireEvent.click(screen.getByRole("button", { name: /ver el video/i }));
     act(() => {
@@ -265,9 +284,9 @@ describe("CardPostMedia: el reel infinito sólo donde corresponde", () => {
     });
 
     expect(nav.push).not.toHaveBeenCalled();
-    expect(viewerOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ startIndex: 0, postId: POST_ID }),
-    );
+    expect(screen.getByTestId("reel-overlay").getAttribute("data-post")).toBe(POST_ID);
+    // Y NO el visor de una sola publicación, que es donde no había música.
+    expect(viewerOpen).not.toHaveBeenCalled();
   });
 
   it("fuera del feed (detalle de una publicación) el video abre el visor y NO el reel", () => {
@@ -278,8 +297,15 @@ describe("CardPostMedia: el reel infinito sólo donde corresponde", () => {
     });
 
     expect(nav.push).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("reel-overlay")).toBeNull();
     expect(viewerOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ startIndex: 0, postId: POST_ID }),
+      // Y con el tope de una PUBLICACIÓN (5 min): lo que el toque abre en el
+      // detalle es el video completo, no otra vista previa de 59 s.
+      expect.objectContaining({
+        startIndex: 0,
+        postId: POST_ID,
+        maxPlaybackSeconds: PREMIUM_DETAIL_MAX_SECONDS,
+      }),
     );
   });
 
@@ -316,7 +342,14 @@ describe("CardPostMedia: un anuncio nunca te tira al reel", () => {
   for (const testCase of AD_CASES) {
     it(`no navega al reel — ${testCase.name}`, () => {
       renderMedia([VIDEO(1)], "para-ti", { ...testCase.ad });
-      fireEvent.click(screen.getByRole("button", { name: /ver el video/i }));
+      // Dos etiquetas posibles y las dos correctas: sobre un `advertising_video`
+      // —que desde el 2026-09-03 es un VIDEO LARGO— la capa de toque abre la
+      // vista previa de 59 s, no el video entero (para eso está "Ver video
+      // completo", que lleva a /videos/largos). Lo que este test mira es otra
+      // cosa: que no navegue al reel.
+      fireEvent.click(
+        screen.getByRole("button", { name: /ver (el video|la vista previa)/i }),
+      );
       act(() => {
         vi.advanceTimersByTime(300);
       });
@@ -350,10 +383,12 @@ describe("CardPostMedia: un anuncio nunca te tira al reel", () => {
     );
   });
 
-  it("un post orgánico tampoco navega, pero se mira con el tope de publicación", () => {
-    // Lo que distingue al orgánico del anuncio ya no es a DÓNDE va el toque
-    // —los dos abren el visor sobre el feed— sino cuánto video se reproduce:
-    // 5 minutos la publicación, 10 el anuncio.
+  it("un post orgánico SÍ abre el reel; el anuncio se queda en su propio visor", () => {
+    // Ésta es la diferencia que importa desde el 2026-09-03, y por eso los dos
+    // casos van en el mismo test: mandar a quien tocó un anuncio al scroll
+    // infinito lo lleva lejos de lo que el anunciante pagó por mostrar, y encima
+    // el video publicitario NO está en el reel (contrato 0046) — sería un scroll
+    // donde ese video, por definición, no existe.
     renderMedia([VIDEO(1)], "para-ti", { videoType: "short_video" });
     fireEvent.click(screen.getByRole("button", { name: /ver el video/i }));
     act(() => {
@@ -361,10 +396,23 @@ describe("CardPostMedia: un anuncio nunca te tira al reel", () => {
     });
 
     expect(nav.push).not.toHaveBeenCalled();
-    expect(viewerOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ maxPlaybackSeconds: PREMIUM_DETAIL_MAX_SECONDS }),
-    );
+    expect(screen.getByTestId("reel-overlay")).toBeTruthy();
+    expect(viewerOpen).not.toHaveBeenCalled();
     expect(screen.queryByText("Patrocinado")).toBeNull();
+
+    cleanup();
+    viewerOpen.mockClear();
+
+    renderMedia([VIDEO(1)], "para-ti", { isPaidAd: true });
+    fireEvent.click(screen.getByRole("button", { name: /ver el video/i }));
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(screen.queryByTestId("reel-overlay")).toBeNull();
+    expect(viewerOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ maxPlaybackSeconds: ADVERTISING_VIDEO_MAX_SECONDS }),
+    );
   });
 });
 

@@ -114,3 +114,89 @@ export const MENSAJE_DE_GRUPO_COLUMNS = "id, sender_id, body, created_at";
 export function miembrosLabel(count: number): string {
   return count === 1 ? "1 miembro" : `${count} miembros`;
 }
+
+/**
+ * =============================================================================
+ * LA FOTO DEL GRUPO TIENE QUE SER UNA FOTO DE ESTA COMUNIDAD (0135)
+ * =============================================================================
+ *
+ * `chat_groups.avatar_url` guarda una URL pública y no una ruta de Storage (§1
+ * de la 0133): es lo que consume `<Avatar src>` en toda la app. El costado
+ * incómodo de esa decisión es que la base no puede validarla —una URL no tiene
+ * prefijo de tenant que una policy pueda comparar— así que el único lugar donde
+ * se puede exigir que apunte a donde decimos es la server action.
+ *
+ * Sin esto, `z.url()` aceptaba CUALQUIER http(s). Consecuencias reales, ninguna
+ * hipotética:
+ *
+ *   · Un `<img src>` a un servidor de terceros dentro de una tarjeta que ve
+ *     toda la comunidad en Descubrir. Cada persona que abre la lista le deja su
+ *     IP y su user-agent a ese servidor, sin haber elegido nada.
+ *   · La foto puede cambiar DESPUÉS de la moderación: se aprueba un grupo con
+ *     una imagen inocente y se sirve otra cosa al día siguiente, sin tocar la
+ *     base.
+ *   · La URL de una foto de OTRA comunidad del mismo proyecto: contenido
+ *     cruzado de tenants entrando por una columna de texto.
+ *
+ * Se valida contra la ruta canónica que arma `group-form.tsx` al subir, que es
+ * la MISMA que la policy `avatars_insert` (0012) verifica contra el JWT:
+ * `{NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/avatars/{tenant}/{uid}/…`
+ *
+ * Módulo PURO: sin Supabase y sin DOM, para que el test lo pueda correr solo.
+ */
+const AVATARS_PUBLIC_PREFIX = "/storage/v1/object/public/avatars/";
+
+/**
+ * ¿La URL sale del Storage público de ESTE proyecto, bucket `avatars`?
+ *
+ * Se compara el HOST, no el string entero: `new URL()` normaliza el puerto por
+ * defecto, el `//` de más y el `%2e` — comparar con `startsWith` sobre el texto
+ * crudo se esquiva con cualquiera de las tres.
+ */
+export function esUrlDeAvatarsPublico(url: string): boolean {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return false;
+  try {
+    const candidata = new URL(url);
+    const propia = new URL(base);
+    return (
+      candidata.protocol === propia.protocol &&
+      candidata.host === propia.host &&
+      candidata.pathname.startsWith(AVATARS_PUBLIC_PREFIX)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Lo anterior MÁS que el archivo viva bajo el prefijo de la comunidad. El
+ * tenant sale del guard del servidor, nunca del cliente.
+ */
+export function esFotoDeGrupoValida(url: string, tenantId: string): boolean {
+  if (!esUrlDeAvatarsPublico(url)) return false;
+  try {
+    return new URL(url).pathname.startsWith(`${AVATARS_PUBLIC_PREFIX}${tenantId}/`);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * COPY DE LOS VETOS (0135).
+ *
+ * Estas tres frases son de pantalla y su lugar natural es
+ * `src/components/messaging/copy.ts`, con el resto de `COPY.groups`. Viven acá
+ * porque la tanda que las estrena no tiene ese archivo entre los suyos, y
+ * porque `removeConfirmBody` no es una frase nueva sino una que quedó MINTIENDO
+ * ("puede volver a entrar" dejó de ser cierto cuando expulsar empezó a vetar).
+ * Dejar la vieja hasta poder tocar el archivo compartido habría sido peor.
+ * Cuando ese archivo se toque de nuevo, las tres se mudan.
+ */
+export const COPY_VETO = {
+  /** Alguien vetado toca "Unirme". No lo culpa y no lo manda a reintentar. */
+  joinBanned: "Quien administra este grupo te sacó, así que no podés volver a entrar solo.",
+  /** Reemplaza a COPY.groups.removeConfirmBody, que prometía lo contrario. */
+  removeConfirmBody:
+    "No va a poder leer ni escribir más, ni volver a entrar por su cuenta. Si más adelante querés, podés invitarlo de nuevo.",
+} as const;

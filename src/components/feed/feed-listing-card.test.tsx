@@ -359,6 +359,7 @@ const PRODUCT_ID = "cccccccc-3333-4333-8333-333333333333";
 const GIG_ID = "dddddddd-4444-4444-8444-444444444444";
 const EVENT_ID = "eeeeeeee-5555-4555-8555-555555555555";
 const PRO_ID = "ffffffff-6666-4666-8666-666666666666";
+const SERVICE_ID = "aaaaaaaa-7777-4777-8777-777777777777";
 
 /** Publica alguien CON cuenta: es la condición para que haya chat del otro lado. */
 const MIEMBRO: NonNullable<FeedListingModel["publisherTrust"]> = {
@@ -436,7 +437,7 @@ describe("colaboración de creadores: la propuesta se manda desde la ficha", () 
   });
 });
 
-describe("los cuatro verticales que se contactan por chat", () => {
+describe("los cinco verticales que se contactan por chat", () => {
   const casos = [
     {
       kind: "product",
@@ -461,6 +462,18 @@ describe("los cuatro verticales que se contactan por chat", () => {
       id: EVENT_ID,
       title: "Feria de la plaza",
       trigger: "Consultar por el evento",
+    },
+    /**
+     * SERVICIO (0129) — el kind nuevo de /empleos: alguien que OFRECE lo que
+     * sabe hacer. Es el único que llega al feed sin camino propio de conversión
+     * (no se postula: se escribe), así que si algún día se cae del mapa de
+     * contacto la tarjeta lo dibujaría sin ninguna acción y nadie se enteraría.
+     */
+    {
+      kind: "service",
+      id: SERVICE_ID,
+      title: "Jardinería y corte de pasto",
+      trigger: "Escribirle a quien lo ofrece",
     },
   ] as const;
 

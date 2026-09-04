@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { CheckCircle, Info } from "@phosphor-icons/react/dist/ssr";
 import { Badge, BezelCard } from "@/components/ui";
-import { BackLink } from "@/components/escudo/back-link";
 import {
   LIVE_DISPUTE_STATUSES,
   RECLAMO_COPY,
@@ -91,8 +90,6 @@ export default async function ReclamarContenidoPage({ params }: { params: Params
 
   return (
     <div className="flex flex-col gap-6">
-      <BackLink href="/feed" label={RECLAMO_COPY.back} />
-
       <header className="flex flex-col gap-2">
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           {RECLAMO_COPY.title}

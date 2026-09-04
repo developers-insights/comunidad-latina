@@ -5,7 +5,6 @@ import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/server";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { Banner } from "@/components/ui";
-import { BackLink } from "@/components/escudo/back-link";
 import {
   ReporteForm,
   type ConversationOption,
@@ -121,8 +120,6 @@ export default async function ReportarPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <BackLink href="/escudo" label={COPY.back} />
-
       <header className="flex flex-col gap-2">
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           {COPY.title}

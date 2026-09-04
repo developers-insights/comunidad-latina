@@ -1,7 +1,5 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
-  ArrowLeft,
   Check,
   SealCheck,
   Sparkle,
@@ -80,14 +78,6 @@ export default async function PremiumAvisoPage({
 
   return (
     <div className="flex flex-col gap-5 pb-8">
-      <Link
-        href={`/impulsar/${listing.id}`}
-        className="flex min-h-11 w-fit items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        Volver a promocionar
-      </Link>
-
       {estado === "exito" && (
         <Banner
           variant="info"

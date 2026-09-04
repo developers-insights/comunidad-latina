@@ -64,7 +64,7 @@ export const isPagosDemoPermitido =
  *
  * ── QUÉ PASA SIN ESTO, QUE ES LA PARTE QUE IMPORTA ──────────────────────────
  * NADA distinto. Sin claves, `/api/mux/subida` devuelve 503 y el composer sigue
- * subiendo al bucket `post-media` con sus límites de siempre (60 MB,
+ * subiendo al bucket `post-media` con sus límites de siempre (200 MB — parche del 2026-09-03 hasta Mux,
  * mp4/webm/quicktime). Es un camino que se ENCIENDE, no un reemplazo.
  *
  * Y por eso este flag NO tiene un hermano tipo `isVideoDemoPermitido`. Mirá

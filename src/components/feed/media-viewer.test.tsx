@@ -314,3 +314,90 @@ describe("MediaViewer: se puede saber si hay provider", () => {
     expect(screen.getByTestId("probe").textContent).toBe("no");
   });
 });
+
+// ---------------------------------------------------------------------------
+// VIDEO LARGO: 59 s y "Ver video completo" (cliente 2026-09-03, 21:00)
+// ---------------------------------------------------------------------------
+//
+// «En el feed y en Videos Cortos solamente sale los 59 segundos y ahí va a
+// estar un botón que dice ver video completo… se para en cierta cantidad de
+// segundos y dice ver video completo, le das click y empieza a ver el video
+// completo.»
+//
+// El detalle que estos tests protegen: `fullVideoHref` PISA el tope que traía
+// la superficie. Un anuncio abre el visor con 600 s (así lo calcula la card,
+// ver `viewerPlaybackCapFor`), y si el botón apareciera sin acortar el tope, la
+// persona vería el video entero acá y el botón sería un adorno — o peor, el
+// tope se acortaría sin botón y el video se cortaría sin explicación.
+
+describe("MediaViewer: un video largo se ve 59 s y ofrece la sección", () => {
+  const CTA = "Ver el video completo en Videos largos";
+
+  /** jsdom no implementa el reloj de un `<video>`: se define a mano. */
+  function stubMediaClock(node: HTMLMediaElement, duration: number) {
+    let time = 0;
+    Object.defineProperty(node, "duration", { configurable: true, value: duration });
+    Object.defineProperty(node, "currentTime", {
+      configurable: true,
+      get: () => time,
+      set: (next: number) => {
+        time = next;
+      },
+    });
+    return { seek: (seconds: number) => (time = seconds), now: () => time };
+  }
+
+  function abrir(args: OpenMediaViewerArgs) {
+    render(
+      <MediaViewerProvider>
+        <Trigger args={args} />
+      </MediaViewerProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "abrir visor" }));
+    const node = document.querySelector("video");
+    if (!node) throw new Error("el visor no renderizó un <video>");
+    return node as HTMLVideoElement;
+  }
+
+  const LARGO: OpenMediaViewerArgs = {
+    items: [{ kind: "video", url: "https://cdn.example.com/recorrida.mp4" }],
+    authorName: "Doña Rosa",
+    postId: "post-largo",
+    // La superficie pedía 600 s; el destino de video largo lo acorta a 59.
+    maxPlaybackSeconds: 600,
+    fullVideoHref: "/videos/largos/post-largo",
+  };
+
+  it("se frena a los 59 s aunque la superficie pidiera 600, y muestra el botón", () => {
+    const node = abrir(LARGO);
+    const clock = stubMediaClock(node, 300);
+    fireEvent.loadedMetadata(node);
+
+    clock.seek(58);
+    fireEvent.timeUpdate(node);
+    expect(screen.queryByRole("link", { name: CTA })).toBeNull();
+
+    clock.seek(59);
+    fireEvent.timeUpdate(node);
+
+    // No rebobina: el corte se ve, y por eso el botón tiene de qué hablar.
+    expect(clock.now()).toBe(59);
+    const cta = screen.getByRole("link", { name: CTA });
+    expect(cta.getAttribute("href")).toBe("/videos/largos/post-largo");
+  });
+
+  it("sin destino de video largo el tope de la superficie manda y el video vuelve a empezar", () => {
+    const node = abrir({ ...LARGO, fullVideoHref: null });
+    const clock = stubMediaClock(node, 300);
+    fireEvent.loadedMetadata(node);
+
+    clock.seek(59);
+    fireEvent.timeUpdate(node);
+    expect(clock.now()).toBe(59); // 600 s de tope: 59 no es nada
+    expect(screen.queryByRole("link", { name: CTA })).toBeNull();
+
+    clock.seek(300);
+    fireEvent.timeUpdate(node);
+    expect(clock.now()).toBe(0);
+  });
+});

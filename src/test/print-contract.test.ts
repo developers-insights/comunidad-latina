@@ -410,8 +410,11 @@ const INVENTARIO: Record<string, Entrada> = {
   // pie). Otro overlay modal, y encima uno donde se ESCRIBE una publicación: en
   // papel no existe. cl-print-hide en el panel, mismo criterio que la hoja de
   // comentarios y el visor.
+  // La quinta es el tilde del fondo elegido en el selector de fondos de una
+  // publicación de texto (0128): va sobre el degradado del propio fondo, que es
+  // media por definición. Mismo hook de siempre — el panel entero se esconde.
   "src/components/feed/composer-sheet.tsx": {
-    inks: Array<string>(4).fill("text-on-media"),
+    inks: Array<string>(5).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
   // Insignia de negocio de la tarjeta "¿Qué querés publicar?" (0116): el mismo
@@ -582,7 +585,35 @@ const INVENTARIO: Record<string, Entrada> = {
   // docblock de `EntityHeader` en post-card.tsx): un video publicado como
   // negocio delataba el nombre y apellido de quien está detrás.
   "src/app/(app)/videos/video-reels.tsx": {
-    inks: Array<string>(11).fill("text-on-media"),
+    inks: Array<string>(14).fill("text-on-media"),
+    cobertura: "cl-print-hide",
+  },
+  // Ronda del 2026-09-03 (feedback del cliente), tres portadores nuevos de video:
+  //  · reel-overlay.tsx: el reel que se abre ENCIMA del feed al tocar un video.
+  //    Es la misma pantalla que video-reels.tsx en otro marco, y como ella se
+  //    esconde entera en papel (cl-print-hide en la raíz del overlay).
+  //  · largos/long-video-card.tsx: la píldora de duración y los rótulos sobre
+  //    la miniatura del video largo, sobre un velo bg-media-scrim que se imprime
+  //    con cl-print-fill, igual que el contador de gallery y posts-grid.
+  //  · largos/page.tsx: el chip de tema seleccionado (bg-brand + tinta clara).
+  //    Un filtro no significa nada en papel: la fila de chips lleva cl-print-hide.
+  "src/app/(app)/videos/reel-overlay.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-hide",
+  },
+  "src/app/(app)/videos/largos/long-video-card.tsx": {
+    inks: Array<string>(3).fill("text-on-media"),
+    cobertura: "cl-print-fill",
+  },
+  "src/app/(app)/videos/largos/page.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
+  // Grupos de chat (0133): el botón redondo de enviar del composer de grupo,
+  // bg-brand con tinta clara. Es chrome de conversación —nadie imprime un chat
+  // para mandar un mensaje— y lleva cl-print-hide en el propio botón.
+  "src/components/messaging/group-composer.tsx": {
+    inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",
   },
   // Dos tintas, mismo patrón: el glifo Play sobre el thumbnail de video y el

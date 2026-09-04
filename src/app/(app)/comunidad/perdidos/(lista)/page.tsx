@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeft, CaretDown, MagnifyingGlass, Plus } from "@phosphor-icons/react/dist/ssr";
+import { CaretDown, MagnifyingGlass, Plus } from "@phosphor-icons/react/dist/ssr";
 import { Bubble, EmptyState, SectionCta, buttonVariants } from "@/components/ui";
 import { ModuleFilterChips, type FilterOption } from "@/components/search";
 import {
@@ -87,14 +87,6 @@ export default async function PerdidosPage({ searchParams }: { searchParams: Sea
 
   return (
     <>
-      <Link
-        href="/comunidad"
-        className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        {COMUNIDAD_COPY.index.title}
-      </Link>
-
       <ComunidadHeading
         className="mt-2"
         icon={<MagnifyingGlass size={30} weight="bold" aria-hidden="true" />}
