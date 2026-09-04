@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { ComponentProps, ComponentType } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { BottomSheet } from "./bottom-sheet";
 
 /**
@@ -164,5 +164,89 @@ describe("BottomSheet: lo que ya funcionaba no cambia", () => {
   it("cerrada no monta nada", () => {
     abrir({ open: false });
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+/**
+ * =============================================================================
+ * EL PINCH-ZOOM NO ES EL TECLADO
+ * =============================================================================
+ *
+ * Segunda mitad del punto 1 del feedback del 2026-09-03, la que el bloqueo del
+ * arrastre no cubre: "el recorte con los dedos tampoco anda... ni con los
+ * dedos", y el editor que "se cierra todo".
+ *
+ * `keyboardAware` mide cuánto del layout viewport tapa el teclado restando el
+ * visual viewport. El problema es que un PELLIZCO encoge el visual viewport
+ * exactamente igual que el teclado, y recortar una foto con dos dedos es,
+ * literalmente, un pellizco. El segundo dedo cae casi siempre fuera del stage
+ * —que mide ~360x280 en un iPhone—, o sea sobre panel sin `touch-action`, y ahí
+ * iOS hace zoom de página. Medido en vivo a 375px: con el visual viewport a la
+ * mitad la hoja saltaba a `bottom: 406px` y su alto caía de 714 a 398 px.
+ *
+ * Se distinguen por `scale`: el teclado nunca cambia el zoom, el pellizco sí.
+ * Es la única señal que separa los dos casos — `height` y `offsetTop` se mueven
+ * igual en ambos.
+ */
+describe("BottomSheet: teclado sí, zoom no", () => {
+  function conVisualViewport(height: number, scale = 1) {
+    const vv = new EventTarget() as EventTarget & {
+      height: number;
+      offsetTop: number;
+      scale: number;
+    };
+    vv.height = height;
+    vv.offsetTop = 0;
+    vv.scale = scale;
+    Object.defineProperty(window, "visualViewport", { configurable: true, value: vv });
+    return vv;
+  }
+
+  const panel = () => document.querySelector<HTMLElement>('[role="dialog"]');
+
+  async function asentar(vv: EventTarget) {
+    await act(async () => {
+      vv.dispatchEvent(new Event("resize"));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(window, "visualViewport");
+  });
+
+  it("el teclado sigue levantando la hoja", async () => {
+    // Guarda: sin esto, "no levanta" con el zoom no probaría nada.
+    window.innerHeight = 812;
+    const vv = conVisualViewport(812);
+    abrir({ keyboardAware: true });
+    vv.height = 480;
+    await asentar(vv);
+    expect(panel()?.style.bottom).toBe("332px");
+  });
+
+  it("un pellizco encoge el visual viewport y la hoja NO se mueve", async () => {
+    window.innerHeight = 812;
+    const vv = conVisualViewport(812);
+    abrir({ keyboardAware: true, gesturesLocked: true });
+    // Recortar con dos dedos: mismo encogimiento que el teclado, pero con zoom.
+    vv.height = 406;
+    vv.scale = 2;
+    await asentar(vv);
+    expect(panel()?.style.bottom).toBe("");
+    expect(panel()?.style.maxHeight).toBe("");
+  });
+
+  it("al soltar el pellizco y volver el zoom a 1, la hoja sigue entera", async () => {
+    window.innerHeight = 812;
+    const vv = conVisualViewport(812);
+    abrir({ keyboardAware: true, gesturesLocked: true });
+    vv.height = 406;
+    vv.scale = 2;
+    await asentar(vv);
+    vv.height = 812;
+    vv.scale = 1;
+    await asentar(vv);
+    expect(panel()?.style.bottom).toBe("");
   });
 });
