@@ -3,8 +3,14 @@ import { CaretLeft } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 
 /**
- * Volver dentro del Escudo — target ≥44px, siempre arriba a la izquierda
- * en las subpáginas del módulo.
+ * Volver con un `href` fijo, en línea con el contenido.
+ *
+ * QUEDA SÓLO PARA EL PANEL DE ADMIN (`/admin/empleos/[id]`). En la app lo
+ * reemplazó `SectionTopBar` el 2026-09-04: las subpáginas del Escudo —de donde
+ * salió este componente— ahora usan la misma barra pegajosa que el resto de la
+ * app, con `router.back()` primero y el href como red de seguridad. Acá no
+ * sirve esa barra: el admin tiene su propio header, de otra altura, y esta
+ * barra se posiciona contra el del shell (59px).
  */
 export function BackLink({
   href,

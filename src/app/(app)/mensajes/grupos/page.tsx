@@ -15,6 +15,7 @@ import {
   esCategoriaDeGrupo,
 } from "@/lib/messaging/grupos";
 import { listarGruposPublicos, listarMisGrupos } from "./queries";
+import { SectionTopBar } from "@/components/shell";
 
 export const metadata: Metadata = { title: COPY.groups.title };
 
@@ -52,6 +53,8 @@ export default async function GruposPage({
 
   return (
     <>
+      <SectionTopBar fallbackHref="/mensajes" />
+
       <div className="mb-5 flex items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           {COPY.inbox.title}

@@ -10,6 +10,7 @@ import { COPY } from "@/components/messaging/copy";
 import { GroupComposer } from "@/components/messaging/group-composer";
 import { GroupJoinButton } from "@/components/messaging/group-join-button";
 import { GroupLive } from "@/components/messaging/group-live";
+import { GroupMessageActions } from "@/components/messaging/group-message-actions";
 import { GroupMessageBubble } from "@/components/messaging/group-message-bubble";
 import { ScrollAnchor } from "@/components/messaging/scroll-anchor";
 import { miembrosLabel } from "@/lib/messaging/grupos";
@@ -18,6 +19,7 @@ import {
   obtenerGrupo,
   perfilesDeAutores,
 } from "../queries";
+import { SectionTopBar } from "@/components/shell";
 
 export const metadata: Metadata = { title: COPY.groups.title };
 
@@ -54,28 +56,36 @@ export default async function GrupoPage({
 
   const soyMiembro = grupo.miRol !== null;
   const cerrado = grupo.status === "closed";
+  const administro = grupo.miRol === "owner" || grupo.miRol === "admin";
 
   const encabezado = (
-    <div className="flex items-center gap-3 border-b border-border-subtle pb-4">
-      <Avatar src={grupo.avatar_url} name={grupo.name} size="lg" />
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate font-display text-lg font-bold tracking-tight text-foreground">
-          {grupo.name}
-        </h1>
-        <p className="truncate text-sm text-foreground-muted">
-          {miembrosLabel(grupo.member_count)}
-        </p>
+    <>
+      {/* La salida del grupo, igual que en el resto de la app. Va adentro del
+          encabezado porque las dos ramas de esta pantalla —miembro y no
+          miembro— lo montan, y así ninguna queda sin salida. */}
+      <SectionTopBar fallbackHref="/mensajes/grupos" />
+
+      <div className="flex items-center gap-3 border-b border-border-subtle pb-4">
+        <Avatar src={grupo.avatar_url} name={grupo.name} size="lg" />
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate font-display text-lg font-bold tracking-tight text-foreground">
+            {grupo.name}
+          </h1>
+          <p className="truncate text-sm text-foreground-muted">
+            {miembrosLabel(grupo.member_count)}
+          </p>
+        </div>
+        {soyMiembro && (
+          <Link
+            href={`/mensajes/grupos/${grupo.id}/info`}
+            className="flex min-h-11 shrink-0 items-center gap-1 rounded-md px-2 text-sm font-medium text-brand-ink transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+          >
+            {COPY.groups.infoTitle}
+            <CaretRight size={14} aria-hidden="true" />
+          </Link>
+        )}
       </div>
-      {soyMiembro && (
-        <Link
-          href={`/mensajes/grupos/${grupo.id}/info`}
-          className="flex min-h-11 shrink-0 items-center gap-1 rounded-md px-2 text-sm font-medium text-brand-ink transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-        >
-          {COPY.groups.infoTitle}
-          <CaretRight size={14} aria-hidden="true" />
-        </Link>
-      )}
-    </div>
+    </>
   );
 
   // ── No soy miembro: la ficha y la puerta, no la conversación ──────────────
@@ -158,6 +168,16 @@ export default async function GrupoPage({
                 autorNombre={autor?.displayName ?? "Miembro de la comunidad"}
                 autorAvatar={autor?.avatarUrl ?? null}
                 mostrarAutor={mostrarAutor}
+                acciones={
+                  <GroupMessageActions
+                    groupId={grupo.id}
+                    messageId={mensaje.id}
+                    // Borra su autor; y quien administra, cualquiera. Es lo
+                    // mismo que deja hacer la policy de la 0133: la pantalla
+                    // no ofrece un botón que la base va a rechazar.
+                    puedoBorrar={mensaje.sender_id === user.id || administro}
+                  />
+                }
               />
             </div>
           );

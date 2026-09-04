@@ -11,7 +11,7 @@ import {
   invitarAlGrupoAction,
   salirDelGrupoAction,
 } from "@/app/(app)/mensajes/grupos/actions";
-import { administra, type RolEnGrupo } from "@/lib/messaging/grupos";
+import { COPY_VETO, administra, type RolEnGrupo } from "@/lib/messaging/grupos";
 import { COPY } from "./copy";
 import { PeopleSearch, type PersonaEncontrada } from "./people-search";
 
@@ -126,7 +126,14 @@ export function GroupMemberList({
         onClose={() => setASacar(null)}
         highRisk
         title={aSacar ? COPY.groups.removeConfirmTitle(aSacar.displayName) : ""}
-        description={COPY.groups.removeConfirmBody}
+        /**
+         * NO es `COPY.groups.removeConfirmBody` (0135). Esa frase termina en
+         * "Si el grupo es público, puede volver a entrar", que era cierto
+         * mientras expulsar sólo borraba la membresía. Desde que además veta,
+         * la confirmación estaría prometiendo lo contrario de lo que hace el
+         * botón — y esta es justo la pantalla donde alguien decide en serio.
+         */
+        description={COPY_VETO.removeConfirmBody}
         footer={
           <>
             <Button variant="outline" onClick={() => setASacar(null)} disabled={enviando}>

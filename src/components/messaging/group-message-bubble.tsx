@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui";
 
@@ -25,6 +26,7 @@ export function GroupMessageBubble({
   autorNombre,
   autorAvatar,
   mostrarAutor,
+  acciones,
 }: {
   body: string;
   isOwn: boolean;
@@ -32,9 +34,17 @@ export function GroupMessageBubble({
   autorNombre: string;
   autorAvatar: string | null;
   mostrarAutor: boolean;
+  /**
+   * Menú del mensaje (borrar / reportar). Va del lado de AFUERA de la burbuja
+   * —a la derecha de los mensajes ajenos, a la izquierda de los propios— para
+   * que quede siempre contra el borde de la pantalla y nunca entre la foto de
+   * quien escribió y lo que escribió.
+   */
+  acciones?: ReactNode;
 }) {
   return (
-    <div className={cn("flex items-end gap-2", isOwn ? "justify-end" : "justify-start")}>
+    <div className={cn("flex items-end gap-1.5", isOwn ? "justify-end" : "justify-start")}>
+      {isOwn && acciones}
       {!isOwn &&
         (mostrarAutor ? (
           <Avatar src={autorAvatar} name={autorNombre} size="sm" />
@@ -67,6 +77,7 @@ export function GroupMessageBubble({
           {timeLabel}
         </p>
       </div>
+      {!isOwn && acciones}
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  ArrowLeft,
   ClockCountdown,
   Lightning,
   MapPin,
@@ -117,14 +116,6 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="flex flex-col gap-5 pb-4">
-      <Link
-        href="/creadores"
-        className="flex min-h-11 w-fit items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        {COPY.gig.backToFeed}
-      </Link>
-
       {/* Hero */}
       <div className="overflow-hidden rounded-xl">
         {gig.photos && gig.photos.length > 0 ? (

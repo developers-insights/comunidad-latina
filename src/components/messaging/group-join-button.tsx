@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus } from "@phosphor-icons/react/dist/ssr";
 import { Button, Spinner, useToast } from "@/components/ui";
 import { unirmeAlGrupoAction } from "@/app/(app)/mensajes/grupos/actions";
+import { COPY_VETO } from "@/lib/messaging/grupos";
 import { COPY } from "./copy";
 
 /**
@@ -39,6 +40,19 @@ export function GroupJoinButton({
       }
 
       setEnviando(false);
+
+      /**
+       * "Te sacaron" NO comparte copy con "no pudimos sumarte" (0135). Los dos
+       * son el mismo 42501 para la base, pero para la persona son opuestos:
+       * uno invita a reintentar y el otro tiene que decir, sin vueltas, que
+       * reintentar no va a servir. Un "probá de nuevo" acá sería un botón que
+       * no funciona más y nadie que lo explique.
+       */
+      if (resultado.code === "banned") {
+        toast({ title: COPY_VETO.joinBanned, variant: "warning" });
+        return;
+      }
+
       toast({
         title:
           resultado.code === "rate-limited"

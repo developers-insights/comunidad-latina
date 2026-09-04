@@ -420,6 +420,193 @@ export interface HelpReply {
 }
 
 // ===========================================================================
+// Registros privados de Comunidad (0131)
+//
+// Los cuatro formularios cuyas respuestas NO se publican: me anoto de
+// voluntario, necesito voluntarios, registro mi lugar, presto mi espacio. Una
+// sola tabla para los cuatro (el por qué está en la cabecera de la migración);
+// lo propio de cada uno vive en `details`, con su forma validada por
+// `registros.ts`.
+// ===========================================================================
+
+/**
+ * Los cuatro formularios. El ORDEN es el de las pestañas del panel, y no es
+ * casual: arriba los dos de voluntariado, que son los que el cliente pidió
+ * primero y los que van a tener movimiento; abajo los dos de lugares, que
+ * arrancan vacíos («al principio no se van a registrar, pero por lo menos ya
+ * tenemos el botón»).
+ */
+export const REGISTRATION_KINDS = [
+  "volunteer",
+  "volunteer_request",
+  "place",
+  "space",
+] as const;
+export type RegistrationKind = (typeof REGISTRATION_KINDS)[number];
+
+/**
+ * Estados. `new` significa «nadie del equipo lo miró todavía», y por eso no se
+ * vuelve a él (lo hace cumplir el trigger de la 0131).
+ */
+export const REGISTRATION_STATUSES = [
+  "new",
+  "contacted",
+  "approved",
+  "discarded",
+] as const;
+export type RegistrationStatus = (typeof REGISTRATION_STATUSES)[number];
+
+/** Estados en los que el registro sigue esperando algo del equipo. Son los que ocupan cupo. */
+export const REGISTRATION_OPEN_STATUSES = ["new", "contacted"] as const;
+
+/** Qué clase de lugar es un registro `place`. Espeja los temas del directorio. */
+export const PLACE_TYPES = ["acopio", "comida"] as const;
+export type PlaceType = (typeof PLACE_TYPES)[number];
+
+/** Quién pide voluntarios. No hace falta ser empresa: lo dijo el cliente. */
+export const REQUESTER_TYPES = ["persona", "organizacion"] as const;
+export type RequesterType = (typeof REQUESTER_TYPES)[number];
+
+// Largos, espejo exacto de los CHECK de la 0131.
+export const REGISTRATION_NAME_MIN = 2;
+export const REGISTRATION_NAME_MAX = 140;
+export const REGISTRATION_AREA_MIN = 2;
+export const REGISTRATION_AREA_MAX = 80;
+export const REGISTRATION_BODY_MIN = 10;
+export const REGISTRATION_BODY_MAX = 1000;
+export const REGISTRATION_PHONE_MIN = 5;
+export const REGISTRATION_PHONE_MAX = 40;
+export const REGISTRATION_EMAIL_MAX = 160;
+export const REGISTRATION_NOTES_MIN = 2;
+export const REGISTRATION_NOTES_MAX = 2000;
+/** Techo de un texto suelto dentro de `details` (el trigger corta en 400). */
+export const REGISTRATION_DETAIL_MAX = 400;
+/** Cuántos chips se pueden elegir de un catálogo (el trigger corta en 12). */
+export const REGISTRATION_CHIPS_MAX = 6;
+/** Cuántos registros abiertos del MISMO formulario puede tener una persona. */
+export const REGISTRATION_MAX_OPEN_POR_KIND = 1;
+
+/**
+ * Versión de las reglas que aceptó el voluntario. Queda guardada en
+ * `details.rules_version` junto al registro.
+ *
+ * No es burocracia: la regla existe «para que no haya compromiso con Comunidad
+ * Latina» (cliente, 45:40). El día que ese texto cambie, saber cuál aceptó cada
+ * persona es la diferencia entre tener una aceptación y tener una casilla
+ * tildada. La fecha no hace falta guardarla aparte: es `created_at`.
+ */
+export const REGISTRATION_RULES_VERSION = "2026-09";
+
+/**
+ * En qué puede ayudar un voluntario. Catálogo CERRADO y corto, por lo mismo que
+ * `RESOURCE_TOPICS`: una lista libre se convierte en veinte sinónimos y el
+ * equipo deja de poder filtrar «quién puede repartir comida en Corona», que es
+ * exactamente la consulta para la que existe la lista. Igual hay campo de texto
+ * libre al lado (`body`) para lo que no entre acá.
+ */
+export const VOLUNTEER_SKILLS = [
+  "comida",
+  "acompanar",
+  "traducir",
+  "ensenar",
+  "transporte",
+  "eventos",
+  "formularios",
+  "cuidado",
+] as const;
+export type VolunteerSkill = (typeof VOLUNTEER_SKILLS)[number];
+
+/** Cuándo puede. Los mismos bloques con los que la gente habla de su semana. */
+export const VOLUNTEER_AVAILABILITY = [
+  "mananas",
+  "tardes",
+  "noches",
+  "finde",
+  "entre_semana",
+  "cuando_haga_falta",
+] as const;
+export type VolunteerAvailability = (typeof VOLUNTEER_AVAILABILITY)[number];
+
+/**
+ * Para qué sirve un espacio prestado. Sale de los ejemplos que dio el cliente
+ * (1:00:45–1:06:00): clases de música para los chicos, inglés para las madres,
+ * charlas de inmigración.
+ *
+ * «Charlas de inmigración» se guarda como `charlas` y se muestra como «Charlas
+ * informativas»: el negocio presta el local, y quién da la charla y qué dice no
+ * lo decide ni lo garantiza la plataforma (§11).
+ */
+export const SPACE_ACTIVITIES = [
+  "clases_chicos",
+  "idiomas",
+  "charlas",
+  "talleres",
+  "reuniones",
+  "donaciones",
+] as const;
+export type SpaceActivity = (typeof SPACE_ACTIVITIES)[number];
+
+/** Fila de `public.community_registrations`, tal cual la 0131. */
+export interface RegistrationRow {
+  id: string;
+  tenant_id: string;
+  created_by: string;
+  kind: string;
+  name: string;
+  contact_phone: string | null;
+  contact_email: string | null;
+  area_label: string;
+  body: string;
+  details: Record<string, unknown> | null;
+  status: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  admin_notes: string | null;
+  resource_id: string | null;
+  created_at: string;
+}
+
+/**
+ * Columnas que pide la app. Se traen TODAS porque la única pantalla que lee
+ * esta tabla entera es la ficha del panel, que las muestra todas: quien tiene
+ * que llamar a alguien necesita el teléfono, el correo, la zona y el detalle en
+ * la misma pantalla.
+ */
+export const REGISTRATION_COLUMNS =
+  "id, tenant_id, created_by, kind, name, contact_phone, contact_email, area_label, " +
+  "body, details, status, reviewed_by, reviewed_at, admin_notes, resource_id, created_at";
+
+/**
+ * Un registro listo para la ficha del panel.
+ *
+ * `authorName` es el nombre PÚBLICO de la cuenta que lo mandó, que puede no ser
+ * el mismo que `name` (una persona se anota con su nombre; un negocio pone el
+ * nombre del local). Se muestran los dos: la diferencia entre ellos es
+ * información, no ruido.
+ */
+export interface RegistrationView {
+  id: string;
+  kind: RegistrationKind;
+  status: RegistrationStatus;
+  name: string;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  areaLabel: string;
+  body: string;
+  /** Pares etiqueta → valor, ya legibles, en el orden en que se preguntaron. */
+  detalles: { label: string; value: string }[];
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  /** Días desde que llegó, calculados en el servidor (nunca contra Date.now() en el cliente). */
+  agedDays: number;
+  reviewedAt: string | null;
+  reviewerName: string | null;
+  adminNotes: string | null;
+  resourceId: string | null;
+}
+
+// ===========================================================================
 // El escape de tipado
 // ===========================================================================
 

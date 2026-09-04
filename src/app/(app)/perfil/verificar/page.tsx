@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
-  ArrowLeft,
   IdentificationCard,
   LockKey,
   SealCheck,
@@ -16,6 +15,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { formatDate } from "@/lib/utils";
 import { PerfilesVerificacion } from "./perfiles";
 import { VerificarCta } from "./verificar-cta";
+import { SectionTopBar } from "@/components/shell";
 
 export const metadata = { title: "Verificá tu identidad" };
 
@@ -96,13 +96,7 @@ export default async function VerificarIdentidadPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <Link
-        href="/perfil"
-        className="flex min-h-11 w-fit items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        {COPY.volver}
-      </Link>
+      <SectionTopBar fallbackHref="/perfil" />
 
       <header>
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, ArrowRight, Star } from "@phosphor-icons/react/dist/ssr";
+import { ArrowRight, Star } from "@phosphor-icons/react/dist/ssr";
 import { z } from "zod";
 import { Avatar } from "@/components/ui";
 import {
@@ -96,14 +96,6 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="flex flex-col gap-5 pb-4">
-      <Link
-        href="/creadores/colaboraciones"
-        className="flex min-h-11 w-fit items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        {COPY.contract.detailBack}
-      </Link>
-
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
           {/* Con el código anterior al lado: es el que figura en los

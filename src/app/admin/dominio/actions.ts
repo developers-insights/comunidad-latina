@@ -3,6 +3,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
 import { getStaffContext, logAdminAction } from "../guard";
 import { canWriteTenant } from "../scope";
 // Helpers puros en su propio módulo: un archivo "use server" solo puede
@@ -140,6 +141,41 @@ export async function resolveScamReport(
       .eq("id", report.target_id);
     if (removeError) {
       console.error("[admin] no se pudo remover el listing reportado:", removeError.message);
+    }
+  }
+
+  /**
+   * Reporte confirmado sobre un MENSAJE DE GRUPO → el mensaje se baja.
+   *
+   * Hasta la 0135 este `if` no existía y `target_kind = 'group_message'` —que
+   * la 0133 estrenó junto con la RPC para reportarlo— era la única clase de
+   * reporte sin ninguna acción posible: se podía cerrar la fila del reporte y
+   * el mensaje seguía ahí. "Confirmar baja el contenido reportado", que es lo
+   * que promete el botón, era falso justo para el contenido más difícil de
+   * moderar.
+   *
+   * BORRADO SUAVE y no el DELETE físico que la 0133 también le da al staff: la
+   * fila sobrevive hasta que la purga de 90 días se la lleve, que es
+   * literalmente lo que pide el comentario de `chat_group_messages.deleted_at`
+   * ("para que la moderación pueda ver qué se bajó"). El DELETE queda como la
+   * opción nuclear, para cuando haga falta borrar de verdad.
+   *
+   * Va con el cliente del staff: la rama de `chat_group_messages_update` que lo
+   * permite (0135) exige el tenant del JWT y que el mensaje TENGA un reporte, o
+   * sea que la base vuelve a comprobar todo lo que se comprobó acá arriba. Un
+   * mensaje ya bajado devuelve 0 filas y no es un error: el `using` pide la
+   * fila viva, y que ya esté bajada es el resultado que se quería.
+   */
+  if (decision === "upheld" && report.target_kind === "group_message") {
+    const { error: bajarError } = await supabaseSinTiparGrupos(supabase)
+      .from("chat_group_messages")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", report.target_id);
+    if (bajarError) {
+      console.error(
+        "[admin] no se pudo bajar el mensaje de grupo reportado:",
+        bajarError.message,
+      );
     }
   }
 

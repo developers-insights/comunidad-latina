@@ -16,8 +16,18 @@ export { MiPedidoCard } from "./mi-pedido-card";
 export { RespuestaItem } from "./respuesta-item";
 export { ResponderForm } from "./responder-form";
 export { EscribirBoton } from "./escribir-boton";
-export { OfrecerEnTema } from "./ofrecer-cta";
+export { PreguntarleALaComunidad } from "./preguntar-cta";
+export { AccionesDeTema, accionPillClass, accionPillStyle } from "./acciones-de-tema";
 export { ReglasDeAyuda } from "./reglas-de-ayuda";
+export {
+  AceptarReglas,
+  CampoContacto,
+  ChipsDeOpciones,
+  ErrorDelRegistro,
+  PasosDelRegistro,
+  RegistroAbierto,
+  RegistroHecho,
+} from "./registro-piezas";
 export { CasoCard } from "./caso-card";
 export { ZonaBuscador } from "./zona-buscador";
 export { ResolverBoton } from "./resolver-boton";

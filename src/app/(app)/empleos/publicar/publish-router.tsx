@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowUUpLeft, SealCheck } from "@phosphor-icons/react/dist/ssr";
-import { EmptyState, buttonVariants } from "@/components/ui";
+import { SealCheck } from "@phosphor-icons/react/dist/ssr";
+import { Button, Dialog, EmptyState, buttonVariants } from "@/components/ui";
+import { SectionTopBar, SHELL_COPY } from "@/components/shell";
 import { COPY } from "@/components/empleos/copy";
 import type { EmpleosKind } from "@/components/empleos/helpers";
-import { cn } from "@/lib/utils";
 import { KindPicker } from "./kind-picker";
+import type { WizardHandle } from "./wizard-handle";
 import { JobPublishForm, type BusinessOption } from "./publish-form";
 import { ServicePublishForm } from "./service-form";
 
@@ -50,31 +51,59 @@ export function PublishRouter({
   identidadVerificada: boolean;
 }) {
   const [kind, setKind] = useState<EmpleosKind | null>(null);
+  const [confirmarVuelta, setConfirmarVuelta] = useState(false);
+  /**
+   * Lo llena el formulario que esté montado (ver `wizard-handle.ts`). Con
+   * `kind === null` no hay ninguno y queda en null, que es exactamente lo que
+   * hace que Volver salga del flujo desde el selector.
+   */
+  const wizard = useRef<WizardHandle | null>(null);
 
-  if (!kind) return <KindPicker onSelect={setKind} />;
+  /**
+   * El "Volver" de arriba, de adentro hacia afuera — un paso por toque, nunca
+   * un salto al vacío:
+   *   1. si el formulario puede retroceder un paso, retrocede (es el MISMO
+   *      `goBack` que el "Atrás" del pie: un solo camino, dos disparadores);
+   *   2. si ya está en el primer paso, vuelve al selector de Empleo/Servicio,
+   *      preguntando antes si hay algo escrito;
+   *   3. y recién desde el selector se devuelve `false`, que es como se le
+   *      dice a la barra "esto ya es tuyo": ahí sale de /empleos/publicar.
+   */
+  function alVolver(): boolean {
+    if (wizard.current?.retroceder()) return true;
+    if (kind) {
+      if (wizard.current?.hayDatos()) {
+        setConfirmarVuelta(true);
+        return true;
+      }
+      setKind(null);
+      return true;
+    }
+    return false;
+  }
+
+  const barra = <SectionTopBar fallbackHref="/empleos" onBack={alVolver} />;
+
+  if (!kind) {
+    return (
+      <>
+        {barra}
+        <KindPicker onSelect={setKind} />
+      </>
+    );
+  }
 
   const C = kind === "service" ? COPY.servicePublish : COPY.publish;
 
   return (
     <div className="flex flex-col gap-6">
+      {barra}
+
       <header className="flex flex-col gap-2">
-        {/* "Cambiar" es del SELECTOR, no el "volver atrás" general de la app:
-            deshace la única decisión que este wizard toma antes de empezar.
-            Va arriba del título porque ahí es donde se busca al darse cuenta de
-            que se eligió mal. */}
-        <button
-          type="button"
-          onClick={() => setKind(null)}
-          className={cn(
-            "-ml-1 flex w-max min-h-11 items-center gap-1.5 rounded-full px-2.5",
-            "text-sm font-semibold text-foreground-secondary",
-            "transition-colors duration-(--duration-fast) hover:text-foreground",
-            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-          )}
-        >
-          <ArrowUUpLeft size={16} weight="bold" aria-hidden="true" />
-          {COPY.kindPicker.change}
-        </button>
+        {/* Acá vivía un botón "Cambiar" que deshacía la elección de
+            Empleo/Servicio. Se fue el 2026-09-04: la barra de arriba hace
+            exactamente eso desde el primer paso, y dos controles que hacen lo
+            mismo obligan a elegir entre ellos antes de tocar cualquiera. */}
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           {C.title}
         </h1>
@@ -82,9 +111,14 @@ export function PublishRouter({
       </header>
 
       {kind === "service" ? (
-        <ServicePublishForm currency={currency} />
+        <ServicePublishForm currency={currency} wizardRef={wizard} />
       ) : identidadVerificada ? (
-        <JobPublishForm tenantId={tenantId} currency={currency} businesses={businesses} />
+        <JobPublishForm
+          tenantId={tenantId}
+          currency={currency}
+          businesses={businesses}
+          wizardRef={wizard}
+        />
       ) : (
         <EmptyState
           icon={<SealCheck />}
@@ -101,6 +135,31 @@ export function PublishRouter({
           className="py-14"
         />
       )}
+
+      {/* Volver al selector descarta el borrador (el formulario se desmonta), y
+          eso hay que preguntarlo — pero SÓLO cuando hay algo escrito. */}
+      <Dialog
+        open={confirmarVuelta}
+        onClose={() => setConfirmarVuelta(false)}
+        title={SHELL_COPY.leaveFormTitle}
+        description={SHELL_COPY.leaveFormBody}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmarVuelta(false)}>
+              {SHELL_COPY.leaveFormCancel}
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setConfirmarVuelta(false);
+                setKind(null);
+              }}
+            >
+              {SHELL_COPY.leaveFormConfirm}
+            </Button>
+          </>
+        }
+      />
     </div>
   );
 }

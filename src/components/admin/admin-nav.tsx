@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { m } from "motion/react";
 import {
+  BookBookmark,
   Briefcase,
   ChartLineUp,
+  ClipboardText,
   GlobeHemisphereWest,
   HandsClapping,
   ShieldCheck,
@@ -69,15 +71,39 @@ const ITEMS: NavItem[] = [
     minRank: 2,
   },
   {
-    href: "/admin/comunidad/ayuda-mutua",
-    label: "Ayuda mutua",
-    // moderator+: es moderación de CONTENIDO —decidir si un texto se publica—,
-    // que es lo que hace un moderador. La base pide lo mismo (app.is_staff()
-    // en el trigger de la 0120), así que acá el nav no es ni más ni menos
-    // estricto que el SQL. Pedir domain_admin sólo lograría que la cola dependa
-    // de una sola persona.
+    href: "/admin/comunidad/pedir-ayuda",
+    label: "Pedir ayuda",
+    // moderator+: es moderación de CONTENIDO —decidir si un texto sigue
+    // publicado—, que es lo que hace un moderador. La base pide lo mismo
+    // (app.is_staff() en los triggers de 0120 y 0130), así que acá el nav no es
+    // ni más ni menos estricto que el SQL. Pedir domain_admin sólo lograría que
+    // la moderación dependa de una sola persona.
+    //
+    // Se llamaba "Ayuda mutua" hasta el 2026-09-03, cuando el cliente sacó los
+    // ofrecimientos y el tablón pasó a ser de pedidos con respuestas.
     icon: <HandsClapping size={18} aria-hidden="true" />,
     minRank: 1,
+  },
+  {
+    href: "/admin/comunidad/registros",
+    label: "Registros",
+    // domain_admin+ y NO moderator, al revés que "Pedir ayuda" que está justo
+    // arriba: esta pantalla no decide sobre un texto público, muestra el
+    // teléfono y el correo de vecinos que se anotaron de voluntarios o
+    // registraron su lugar (0131). Es el mismo criterio que /admin/empleos con
+    // los currículums, y el mismo rol que exige la policy de la tabla — el nav,
+    // la pantalla, las actions y el SQL piden todos lo mismo.
+    icon: <ClipboardText size={18} aria-hidden="true" />,
+    minRank: 2,
+  },
+  {
+    href: "/admin/comunidad/recursos",
+    label: "Directorio",
+    // domain_admin+: es curaduría, no moderación. Lo pide la policy de
+    // community_resources desde la 0096; lo que faltaba era la pantalla, que
+    // llegó con la 0131 para poder cargar los bancos de comida de la ciudad.
+    icon: <BookBookmark size={18} aria-hidden="true" />,
+    minRank: 2,
   },
   {
     href: "/admin/dominio",

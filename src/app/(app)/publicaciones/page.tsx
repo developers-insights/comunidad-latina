@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { CaretLeft, Megaphone } from "@phosphor-icons/react/dist/ssr";
+import { Megaphone } from "@phosphor-icons/react/dist/ssr";
 import {
   Badge,
   CardMedia,
@@ -104,13 +104,6 @@ async function Contenido() {
 function Encabezado() {
   return (
     <div className="mb-4 space-y-3">
-      <Link
-        href="/feed"
-        className="inline-flex min-h-11 items-center gap-1 text-sm text-foreground-secondary"
-      >
-        <CaretLeft size={16} aria-hidden="true" />
-        {C.pagina.volver}
-      </Link>
       <SectionHeading
         accent={SECCION.accent}
         image={SECCION.image}

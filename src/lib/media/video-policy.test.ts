@@ -10,7 +10,9 @@ import {
   checkVideoDuration,
   formatDuration,
   isEligibleForShortFeed,
+  isLongVideo,
   isPreviewTruncated,
+  longVideoCapSeconds,
   maxDurationFor,
   normalizeDeclaredDuration,
   parseVideoCategory,
@@ -273,5 +275,64 @@ describe("formatDuration", () => {
     expect(formatDuration(null)).toBeNull();
     expect(formatDuration(0)).toBeNull();
     expect(formatDuration(Infinity)).toBeNull();
+  });
+});
+
+/**
+ * VIDEOS LARGOS (cliente 2026-09-03, 19:40–23:44): "quien paga publicidad puede
+ * subir hasta 5 minutos… en el feed y en Videos Cortos solamente sale los 59
+ * segundos y ahí va a estar un botón que dice ver video completo".
+ *
+ * De esta función cuelgan tres cosas que tienen que decir lo mismo: qué se
+ * lista en `/videos/largos`, qué se puede reproducir entero ahí, y dónde
+ * aparece el botón. Si se separan, el botón lleva a una página que no existe.
+ */
+describe("isLongVideo", () => {
+  it("un video publicitario es largo por contrato, dure lo que dure", () => {
+    expect(isLongVideo({ videoType: "advertising_video" })).toBe(true);
+    expect(
+      isLongVideo({ videoType: "advertising_video", durationSeconds: 45 }),
+    ).toBe(true);
+  });
+
+  it("pasar el tope de los cortos es largo aunque no se declare el tipo", () => {
+    expect(isLongVideo({ durationSeconds: PREMIUM_DETAIL_MAX_SECONDS })).toBe(true);
+    expect(isLongVideo({ durationSeconds: SHORT_VIDEO_MAX_SECONDS + 1 })).toBe(true);
+  });
+
+  it("un corto NO es largo — ni el que llega justo al tope", () => {
+    expect(isLongVideo({ videoType: "short_video", durationSeconds: 45 })).toBe(false);
+    expect(
+      isLongVideo({ videoType: "short_video", durationSeconds: SHORT_VIDEO_MAX_SECONDS }),
+    ).toBe(false);
+    // Medio segundo de tolerancia: la duración MEDIDA por el navegador es un
+    // float, y un archivo de 90,2 s sigue siendo el corto de 90 s que declaró.
+    expect(isLongVideo({ durationSeconds: 90.2 })).toBe(false);
+  });
+
+  it("sin duración conocida no se inventa que sea largo", () => {
+    expect(isLongVideo({})).toBe(false);
+    expect(isLongVideo({ videoType: "short_video", durationSeconds: null })).toBe(false);
+    expect(isLongVideo({ durationSeconds: NaN })).toBe(false);
+  });
+
+  it("el veto del scroll no convierte un corto en largo", () => {
+    // `eligible_for_short_feed = false` habla del SCROLL, no de la duración: un
+    // corto que su autor sacó de Videos Cortos no se muda a Videos largos.
+    expect(isLongVideo({ videoType: "short_video", durationSeconds: 60 })).toBe(false);
+  });
+});
+
+describe("longVideoCapSeconds", () => {
+  it("el publicitario se ve hasta sus 10 minutos; el resto, hasta los 5", () => {
+    expect(longVideoCapSeconds("advertising_video")).toBe(ADVERTISING_VIDEO_MAX_SECONDS);
+    expect(longVideoCapSeconds("short_video")).toBe(PREMIUM_DETAIL_MAX_SECONDS);
+    expect(longVideoCapSeconds(null)).toBe(PREMIUM_DETAIL_MAX_SECONDS);
+  });
+
+  it("nunca deja al archivo sin tope: la vista previa del feed es más corta", () => {
+    expect(longVideoCapSeconds("advertising_video")).toBeGreaterThan(
+      FEED_PREVIEW_MAX_SECONDS,
+    );
   });
 });

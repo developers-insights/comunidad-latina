@@ -7,6 +7,7 @@ import {
   fetchFollowedProfileIds,
   fetchPostMusic,
   toPostCardModel,
+  POST_COLUMNS,
   type PostRow,
 } from "./queries";
 import type { AuthorView, PostMusicView } from "@/components/feed";
@@ -61,6 +62,16 @@ function makeRow(overrides: Partial<PostRow> = {}): PostRow {
 
 const authors = new Map<string, AuthorView>([["u1", AUTHOR]]);
 
+describe("POST_COLUMNS", () => {
+  it("pide el fondo del texto (0128): sin la columna en el select, no lo lee nadie", () => {
+    // El select es uno solo para las cinco superficies. Mapear la columna y no
+    // pedirla deja el modelo diciendo "Automático" para TODAS las
+    // publicaciones, sin un solo error: exactamente la clase de bug que ya
+    // costó caro en este repo.
+    expect(String(POST_COLUMNS)).toContain("text_background");
+  });
+});
+
 describe("toPostCardModel", () => {
   it("mapea vistas, guardado y WhatsApp de la campaña", () => {
     const model = toPostCardModel(makeRow(), authors, new Set(["post-1"]), NOW, {
@@ -85,6 +96,32 @@ describe("toPostCardModel", () => {
     expect(model.entity).toBeNull();
   });
 
+  /**
+   * FONDO DE UNA PUBLICACIÓN DE TEXTO (0128). `toPostCardModel` es el ÚNICO
+   * mapper del repo —lo llaman el feed, el detalle, el reel, el perfil y las
+   * fichas de negocio—, así que si el fondo se mapea acá se ve en las cinco
+   * superficies y si no, en ninguna.
+   */
+  it("mapea el fondo elegido de una publicación de texto", () => {
+    const model = toPostCardModel(
+      makeRow({ kind: "text", text_background: "fiesta" }),
+      authors,
+      new Set(),
+      NOW,
+    );
+    expect(model.textBackground).toBe("fiesta");
+  });
+
+  it("sin fondo elegido (o fila anterior a la 0128) el modelo dice null, no undefined", () => {
+    // `null` es el modo Automático y la tarjeta lo consume sin defensas: un
+    // `undefined` acá sería lo mismo por casualidad, no por contrato.
+    expect(toPostCardModel(makeRow(), authors, new Set(), NOW).textBackground).toBeNull();
+    expect(
+      toPostCardModel(makeRow({ text_background: null }), authors, new Set(), NOW)
+        .textBackground,
+    ).toBeNull();
+  });
+
   it("view_count nulo (fila anterior al backfill de 0038) cae a 0", () => {
     const model = toPostCardModel(makeRow({ view_count: null }), authors, new Set(), NOW);
     expect(model.viewCount).toBe(0);
@@ -103,6 +140,43 @@ describe("toPostCardModel", () => {
     expect(model.commentCount).toBe(2);
     expect(model.media.map((item) => item.kind)).toEqual(["image", "video"]);
     expect(model.photoUrl).toContain("foto.jpg");
+  });
+
+  /**
+   * EL POSTER (0132) — la mitad que hace que el video no salga en blanco.
+   *
+   * El `.mp4` se sirve crudo desde el bucket: hasta que baja la metadata, el
+   * `<video>` no tiene NADA que pintar. La columna guarda la RUTA del fotograma;
+   * acá es donde se convierte en la URL pública que consumen la tarjeta, el
+   * visor y el reel — un solo lugar, para las cuatro superficies.
+   */
+  it("el poster viaja en la diapositiva del VIDEO, ya como URL pública", () => {
+    const model = toPostCardModel(
+      makeRow({
+        media: ["t/u/foto.jpg", "t/u/clip.mp4"],
+        video_poster_path: "t/u/poster-abc.jpg",
+      }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    const [foto, video] = model.media;
+    expect(video.posterUrl).toContain("post-media/t/u/poster-abc.jpg");
+    // Y NO en la foto: una imagen no espera metadata para pintarse, así que un
+    // poster ahí sería un campo que no significa nada.
+    expect(foto.posterUrl).toBeUndefined();
+  });
+
+  it("sin poster el campo no existe: los videos anteriores a la 0132", () => {
+    const model = toPostCardModel(
+      makeRow({ media: ["t/u/clip.mp4"] }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    expect(model.media[0].posterUrl).toBeUndefined();
   });
 
   it("sin extras.music: la publicación no tiene música (null, no undefined)", () => {

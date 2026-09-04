@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  ArrowLeft,
   CalendarBlank,
   CheckCircle,
   HandHeart,
@@ -61,14 +59,6 @@ export default async function CasoPage({ params }: Props) {
 
   return (
     <article className="pb-4">
-      <Link
-        href="/comunidad/perdidos"
-        className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        {C.title}
-      </Link>
-
       {caso.photos.length > 0 && (
         <ListingGallery photos={caso.photos} title={caso.title} className="mt-3" />
       )}

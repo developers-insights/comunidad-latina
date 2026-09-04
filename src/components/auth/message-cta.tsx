@@ -32,11 +32,11 @@ const COPY = {
  * `solicitar_contacto_directo` y navega al hilo — es la otra mitad del pedido
  * del cliente del 3/9 («busco Manuel Navarro y te mando un mensaje directo»).
  *
- * `profileId` es OPCIONAL a propósito y no un descuido: hay otra pantalla que
- * todavía monta este componente sin pasarlo (el perfil de creador). Sin id no
- * se puede abrir nada, así que ahí se conserva el comportamiento viejo —un
- * mensaje honesto— en vez de un botón que falla. Cuando esa pantalla pase el
- * id, esta rama se borra.
+ * `profileId` sigue siendo OPCIONAL como red de seguridad, no porque falte
+ * alguna pantalla: el perfil de creador (la última que lo montaba sin id) lo
+ * pasa desde el 2026-09-03. Si mañana alguien vuelve a montarlo sin id, el
+ * botón dice la verdad —no hay a quién escribirle— en vez de fallar. Cuando
+ * el tipo pueda exigirlo sin romper a nadie, esta rama se borra.
  */
 export function MessageCta({
   firstName,

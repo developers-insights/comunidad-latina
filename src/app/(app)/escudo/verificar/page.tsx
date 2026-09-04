@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArrowSquareOut } from "@phosphor-icons/react/dist/ssr";
-import { BackLink } from "@/components/escudo/back-link";
 import { VerificadorForm } from "@/components/escudo/verificador-form";
 import { ESCUDO_ENABLED } from "../feature-flag";
 
@@ -48,8 +47,6 @@ export default function VerificarPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <BackLink href="/escudo" label={COPY.back} />
-
       <header className="flex flex-col gap-2">
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           {COPY.title}

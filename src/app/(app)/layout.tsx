@@ -17,6 +17,7 @@ import { ViewerTimeZoneProvider } from "@/components/time/viewer-time-zone";
 import { getViewerAccount } from "@/lib/time/viewer-zone";
 import { OfflineBanner } from "@/components/shell/offline-banner";
 import { AccountGate } from "@/components/shell/account-gate";
+import { InternalHistoryTracker } from "@/components/shell/internal-history-tracker";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { isMuxConfigured } from "@/lib/config/services";
 
@@ -134,6 +135,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       }}
     >
     <div className="flex min-h-dvh flex-col">
+      {/* Sella cada pantalla en el historial del navegador para que el "Volver"
+          de SectionTopBar sepa si retroceder de verdad o caer al fallback de la
+          pantalla. Va acá y no adentro de la barra porque el feed —de donde
+          viene casi todo el mundo— no tiene barra: sin este sello, salir de
+          Empleos hacia atrás no encontraría el feed y mandaría a /buscar. No
+          renderiza nada. Ver components/shell/internal-history.ts. */}
+      <InternalHistoryTracker />
       <a
         href="#contenido"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground focus:shadow-lg focus:ring-[3px] focus:ring-focus-ring"

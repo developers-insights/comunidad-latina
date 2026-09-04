@@ -4,7 +4,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClipboardText } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, EmptyState, buttonVariants } from "@/components/ui";
-import { BackLink } from "@/components/escudo/back-link";
 import { CasoCard } from "@/components/escudo/caso-card";
 import { CifraFila } from "@/components/escudo/cifra-fila";
 import {
@@ -259,8 +258,6 @@ export default function TransparenciaPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <BackLink href="/feed" label={COPY.back} />
-
       <header className="flex flex-col items-center gap-3 text-center">
         {/* Ícono de línea y NO el emblema del escudo verde: en este producto el
             escudo verde significa "protegido", y ésta es justamente la pantalla

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   CalendarDots,
@@ -38,6 +38,7 @@ import { etiquetaDeDias, etiquetaDePrecioDesde } from "@/lib/empleos/servicios";
 import { cn } from "@/lib/utils";
 import { ToggleChips, toggleInList } from "./publish-form";
 import { createServiceDraft, finalizeService } from "./actions";
+import type { WizardHandleRef } from "./wizard-handle";
 
 /**
  * Wizard de SERVICIO — 3 pasos, contra los 4 del empleo.
@@ -116,7 +117,14 @@ function ReviewRow({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-export function ServicePublishForm({ currency }: { currency: string }) {
+export function ServicePublishForm({
+  currency,
+  wizardRef,
+}: {
+  currency: string;
+  /** Ver `wizard-handle.ts`: por acá el wizard le presta su "un paso atrás". */
+  wizardRef?: WizardHandleRef;
+}) {
   const { celebrating, celebrate } = useCelebration();
 
   const [step, setStep] = useState(0);
@@ -174,6 +182,30 @@ export function ServicePublishForm({ currency }: { currency: string }) {
     setError(null);
     setStep((value) => Math.max(0, value - 1));
   }
+
+  /**
+   * El puente con el "Volver" de la barra de arriba: le presta el MISMO
+   * `goBack` que usa el "Atrás" del pie, así el control que la app enseñó en
+   * todas las demás pantallas retrocede un paso en vez de tirar el borrador.
+   *
+   * Sin `deps` a propósito: las dos funciones leen el paso y los campos de este
+   * render, y una lista de dependencias acá sería una copia del formulario
+   * entero que se va a desactualizar el día que alguien agregue un campo.
+   */
+  useEffect(() => {
+    if (!wizardRef) return;
+    wizardRef.current = {
+      retroceder: () => {
+        if (done || step === 0) return false;
+        goBack();
+        return true;
+      },
+      hayDatos: () => Boolean(!done && (title.trim() || description.trim() || price.trim())),
+    };
+    return () => {
+      wizardRef.current = null;
+    };
+  });
 
   async function handleSubmit() {
     // Revalidamos TODO: se puede volver atrás y vaciar un campo ya aprobado.

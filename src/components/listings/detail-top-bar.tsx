@@ -2,13 +2,9 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  BookmarkSimple,
-  DotsThree,
-  ShareNetwork,
-} from "@phosphor-icons/react/dist/ssr";
+import { BookmarkSimple, DotsThree, ShareNetwork } from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, useToast } from "@/components/ui";
+import { SectionTopBar } from "@/components/shell";
 import { ReportScamButton, ReportSheet } from "@/components/trust";
 import { cn } from "@/lib/utils";
 import {
@@ -37,6 +33,24 @@ export interface DetailTopBarProps {
    * habilita cuando pasa este dato.
    */
   initialSaved?: boolean;
+  /**
+   * A dónde volver cuando NO hay historial de la app detrás (link compartido,
+   * PWA recién abierta). Por defecto, la ruta padre: `/propiedades/abc` vuelve
+   * a `/propiedades`, `/negocios/abc/editar` a `/negocios/abc`. Es el default
+   * correcto para los ocho detalles que montan esta barra, y queda el prop por
+   * si algún día uno necesita otra salida.
+   */
+  fallbackHref?: string;
+}
+
+/**
+ * Ruta padre de un pathname. `/empleos/123` → `/empleos`. Sin padre (una ruta
+ * de un solo segmento, que hoy ningún detalle es) cae a /buscar, que es el mapa
+ * de la app y nunca un callejón.
+ */
+function parentPath(pathname: string): string {
+  const parent = pathname.replace(/\/+$/, "").split("/").slice(0, -1).join("/");
+  return parent.length > 1 ? parent : "/buscar";
 }
 
 /**
@@ -55,7 +69,12 @@ export interface DetailTopBarProps {
  * acuerde de agregársela. Un tracker suelto que hay que recordar poner en cada
  * página es un contador que en algún momento va a estar mintiendo por omisión.
  */
-export function DetailTopBar({ title, listingId, initialSaved }: DetailTopBarProps) {
+export function DetailTopBar({
+  title,
+  listingId,
+  initialSaved,
+  fallbackHref,
+}: DetailTopBarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
@@ -141,49 +160,50 @@ export function DetailTopBar({ title, listingId, initialSaved }: DetailTopBarPro
   }
 
   return (
-    <div className="mb-3 flex items-center justify-between">
-      <button
-        type="button"
-        aria-label={COPY.detail.back}
-        onClick={() => router.back()}
-        className={iconButtonClass}
-      >
-        <ArrowLeft size={22} aria-hidden="true" />
-      </button>
-      <div className="flex items-center gap-1">
-        {initialSaved !== undefined && (
-          <button
-            type="button"
-            aria-label={saved ? COPY.detail.unsave : COPY.detail.save}
-            aria-pressed={saved}
-            onClick={toggleSave}
-            className={cn(iconButtonClass, saved && "text-brand")}
-          >
-            <BookmarkSimple
-              size={22}
-              weight={saved ? "fill" : "regular"}
-              aria-hidden="true"
-            />
-          </button>
-        )}
-        <button
-          type="button"
-          aria-label={COPY.detail.share}
-          onClick={handleShare}
-          className={iconButtonClass}
-        >
-          <ShareNetwork size={22} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          aria-label={COPY.detail.moreActions}
-          aria-haspopup="dialog"
-          onClick={() => setMenuOpen(true)}
-          className={iconButtonClass}
-        >
-          <DotsThree size={26} weight="bold" aria-hidden="true" />
-        </button>
-      </div>
+    <>
+      {/* El "Volver" es el MISMO control que en las portadas de sección y en los
+          formularios (`SectionTopBar`): mismo lugar, misma palabra, y con
+          fallback cuando alguien abrió este aviso desde un link compartido y
+          atrás no hay app sino el chat de donde vino. */}
+      <SectionTopBar
+        fallbackHref={fallbackHref ?? parentPath(pathname || "/")}
+        actions={
+          <>
+            {initialSaved !== undefined && (
+              <button
+                type="button"
+                aria-label={saved ? COPY.detail.unsave : COPY.detail.save}
+                aria-pressed={saved}
+                onClick={toggleSave}
+                className={cn(iconButtonClass, saved && "text-brand")}
+              >
+                <BookmarkSimple
+                  size={22}
+                  weight={saved ? "fill" : "regular"}
+                  aria-hidden="true"
+                />
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label={COPY.detail.share}
+              onClick={handleShare}
+              className={iconButtonClass}
+            >
+              <ShareNetwork size={22} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label={COPY.detail.moreActions}
+              aria-haspopup="dialog"
+              onClick={() => setMenuOpen(true)}
+              className={iconButtonClass}
+            >
+              <DotsThree size={26} weight="bold" aria-hidden="true" />
+            </button>
+          </>
+        }
+      />
 
       {/* Menú "⋯" — Reportar SIEMPRE primera opción (§3.3) */}
       <BottomSheet
@@ -209,6 +229,6 @@ export function DetailTopBar({ title, listingId, initialSaved }: DetailTopBarPro
         targetId={listingId}
         contextLabel={title}
       />
-    </div>
+    </>
   );
 }

@@ -34,7 +34,7 @@ vi.mock("@/lib/verificacion/gate", () => ({
   requireIdentidadVerificada: mocks.requireIdentidadVerificada,
 }));
 
-import { createJobDraft } from "./actions";
+import { createJobDraft, createServiceDraft } from "./actions";
 
 /* -------------------------------- Fixtures -------------------------------- */
 
@@ -608,5 +608,148 @@ describe("createJobDraft — negocio vinculado (columna business_listing_id, 010
     expect(result.ok).toBe(false);
     expect(!result.ok && result.error).toMatch(/negocio/i);
     expect(!result.ok && result.error).not.toMatch(/en un ratito/i);
+  });
+});
+
+/* ========================================================================== */
+/* createServiceDraft — el OTRO lado del mostrador (kind='service', 0129)      */
+/* ========================================================================== */
+
+/**
+ * Un servicio lo publica quien OFRECE lo que sabe hacer ("soy jardinero,
+ * disponible sábados y domingos" — cliente, 2026-09-03). Comparte guard, cuota
+ * y motor de cierre con el empleo, pero su contrato es OTRO, y estos tests
+ * fijan las tres diferencias que se pierden solas en una refactorización:
+ *
+ *  1. el precio es OPCIONAL y su ausencia significa "a convenir" (no un cero,
+ *     ni un error de validación);
+ *  2. sin monto tampoco se guarda período — "por hora" de cuánto no dice nada;
+ *  3. NO pasa por el gate de identidad, porque `service` no está en
+ *     `app.vertical_exige_identidad` y este código no puede exigir lo que la
+ *     base no respalda. El porqué completo está en el docblock de la action.
+ */
+
+function validService(overrides: Record<string, unknown> = {}) {
+  return {
+    title: "Jardinería y corte de pasto",
+    description:
+      "Corto el pasto, podo y limpio patios. Llevo mi propia máquina y bolsas. Trabajo en Corona y alrededores.",
+    payPeriod: "hour" as const,
+    workMode: "presencial" as const,
+    areaLabel: "Corona, Queens",
+    days: ["sat", "sun"],
+    ...overrides,
+  };
+}
+
+function insertPayload(calls: RecordedCall[]): Record<string, unknown> {
+  const insert = calls.find((call) => call.method === "insert");
+  return (insert?.args[0] ?? {}) as Record<string, unknown>;
+}
+
+describe("createServiceDraft", () => {
+  it("inserta kind='service' en borrador, con la disponibilidad en las mismas claves que un empleo", async () => {
+    const stub = useGuardOk();
+
+    const result = await createServiceDraft(validService({ priceAmount: 25 }));
+
+    expect(result.ok).toBe(true);
+    const payload = insertPayload(stub.calls);
+    expect(payload.kind).toBe("service");
+    expect(payload.status).toBe("draft");
+    expect(payload.price_amount).toBe(25);
+    expect(payload.price_period).toBe("hour");
+    expect(payload.area_label).toBe("Corona, Queens");
+    expect(payload.attrs).toEqual({ work_days: ["sat", "sun"] });
+  });
+
+  it("sin monto guarda 'a convenir': price_amount null Y price_period null", async () => {
+    const stub = useGuardOk();
+
+    const result = await createServiceDraft(validService());
+
+    expect(result.ok).toBe(true);
+    const payload = insertPayload(stub.calls);
+    expect(payload.price_amount).toBeNull();
+    // Un período sin monto dejaría a `formatListingPrice` con medio dato.
+    expect(payload.price_period).toBeNull();
+  });
+
+  it("NO escribe employment_type ni questions: un servicio no tiene jornada ni postulación", async () => {
+    const stub = useGuardOk();
+
+    await createServiceDraft(validService());
+
+    const attrs = insertPayload(stub.calls).attrs as Record<string, unknown>;
+    expect(attrs.employment_type).toBeUndefined();
+    expect(attrs.questions).toBeUndefined();
+  });
+
+  it("no escribe una clave de attrs por un dato que nadie declaró", async () => {
+    const stub = useGuardOk();
+
+    await createServiceDraft(validService({ days: [], schedule: "   " }));
+
+    // Ausencia ≠ arreglo vacío: `readServiceDetails` lee la ausencia como "no lo
+    // dijo", y un [] la convertiría en la afirmación "no trabaja ningún día".
+    expect(insertPayload(stub.calls).attrs).toEqual({});
+  });
+
+  it("a distancia no pide zona y guarda NULL en vez de un texto inventado", async () => {
+    const stub = useGuardOk();
+
+    const result = await createServiceDraft(
+      validService({ workMode: "remoto", areaLabel: "" }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(insertPayload(stub.calls).area_label).toBeNull();
+  });
+
+  it("presencial sin zona se rechaza con un mensaje que se entiende, y ANTES del guard", async () => {
+    const result = await createServiceDraft(validService({ areaLabel: "" }));
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toBe(
+      "Decinos la zona (al menos 3 caracteres).",
+    );
+    // zod puro primero: un payload roto no consume guard ni cuota.
+    expect(mocks.requireTenantMatch).not.toHaveBeenCalled();
+    expect(mocks.limit).not.toHaveBeenCalled();
+  });
+
+  it("un título o una descripción demasiado cortos ni llegan al guard", async () => {
+    expect((await createServiceDraft(validService({ title: "Corto" }))).ok).toBe(false);
+    expect((await createServiceDraft(validService({ description: "Corto pasto" }))).ok).toBe(
+      false,
+    );
+    expect(mocks.requireTenantMatch).not.toHaveBeenCalled();
+  });
+
+  it("un día fuera del catálogo se descarta en el SERVIDOR, no sólo en el formulario", async () => {
+    const stub = useGuardOk();
+
+    await createServiceDraft(validService({ days: ["sat", "caturday"] }));
+
+    expect(insertPayload(stub.calls).attrs).toEqual({ work_days: ["sat"] });
+  });
+
+  it("con la cuota del día agotada no inserta nada", async () => {
+    const stub = useGuardOk();
+    mocks.limit.mockReturnValue({ ok: false, remaining: 0, retryAfterMs: 1000 });
+
+    const result = await createServiceDraft(validService());
+
+    expect(result.ok).toBe(false);
+    expect(stub.calls.some((call) => call.method === "insert")).toBe(false);
+  });
+
+  it("no pasa por el gate de identidad — `service` no lo exige (ver el docblock de la action)", async () => {
+    useGuardOk();
+
+    const result = await createServiceDraft(validService());
+
+    expect(result.ok).toBe(true);
+    expect(mocks.requireIdentidadVerificada).not.toHaveBeenCalled();
   });
 });

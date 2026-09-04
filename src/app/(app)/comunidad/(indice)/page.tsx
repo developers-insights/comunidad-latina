@@ -3,13 +3,15 @@ import {
   BookOpenText,
   ForkKnife,
   HandHeart,
-  HandsClapping,
+  HouseLine,
+  Lifebuoy,
   MagnifyingGlass,
   Package,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
 import { Skeleton, SquareTile } from "@/components/ui";
 import {
+  COMUNIDAD_ACCENT,
   COMUNIDAD_ACCENT_ACOPIO,
   COMUNIDAD_ACCENT_COMIDA,
   COMUNIDAD_ACCENT_GUIAS,
@@ -85,29 +87,46 @@ const C = COMUNIDAD_COPY.index;
  * `style` inline: es un fucsia 700, el matiz que más se separa de los otros
  * cinco acentos que conviven en ESTA grilla.
  *
- * ── LA PRIMERA TARJETA: PEDIR AYUDA (0120 → 0130) ───────────────────────────
- * Y acá el criterio SE ROMPE, a propósito. Las otras cinco llevan a contenido
- * curado o a Perdido y encontrado; ésta lleva al único tablón del módulo donde
- * publica la gente. Por eso va primera: es lo que cambia todos los días.
+ * ── "PEDIR AYUDA" YA NO ES EL DIRECTORIO, Y "AYUDA MUTUA" SE FUE (0130) ──────
+ * Hasta el 2026-09-03 esta grilla tenía SIETE tarjetas y dos de ellas hablaban
+ * de lo mismo con nombres distintos: "Pedir ayuda", que llevaba al directorio
+ * curado (`/comunidad/recursos`), y "Ayuda mutua", que llevaba al tablón donde
+ * la gente se ofrecía a dar una mano.
  *
- * Antes eran DOS tarjetas y hoy es una sola, y el cambio no fue de diseño:
+ * El cliente reencuadró las dos de un saque:
+ *   · «Tiene que ser como un blog: la gente pone lo que necesita y la gente le
+ *     contesta.» → "Pedir ayuda" ahora lleva al TABLÓN, que es lo que ese
+ *     nombre siempre prometió. Es la única tarjeta de la grilla que lleva a
+ *     algo que escribe la gente.
+ *   · «Necesito manos» para una mudanza es responsabilidad legal de Comunidad
+ *     Latina si alguien se lastima → la tarjeta "Ayuda mutua" desaparece.
  *
- *   · "Pedir ayuda" nombraba al DIRECTORIO (`/comunidad/recursos`, fichas
- *     curadas con fuente). Sigue existiendo y se sigue llegando a él por las
- *     tres tarjetas de tema (Bancos de comida, Voluntarios, Centro de acopio)
- *     y desde Guías — no se perdió ninguna puerta, se perdió la duplicada.
- *   · "Ayuda mutua" era el tablón de dos direcciones. El cliente sacó los
- *     ofrecimientos el 2026-09-03 (responsabilidad legal si alguien se lastima
- *     dando una mano, y la bifurcación «Quiero ayudar / Necesito manos» lo
- *     confundía). Lo que queda son los pedidos con respuestas públicas, y ese
- *     tablón se llama "Pedir ayuda" — que es lo que la gente va a hacer ahí.
+ * El directorio NO se fue con ella: sigue siendo el destino de "Bancos de
+ * comida", "Voluntarios" y "Centro de acopio" (`/comunidad/recursos?tema=`); a
+ * los temas sin tarjeta propia (migración, salud, consulados, legal…) se llega
+ * desde el link "todos los temas" del propio directorio. Lo que dejó de tener es una puerta propia en
+ * esta grilla, porque su nombre lo usaba otra cosa.
  *
- * Tener las dos habría dejado dos tarjetas con el mismo título llevando a
- * pantallas distintas: el peor resultado posible en una grilla que se escanea.
+ * El contador de la tarjeta pasó a ser "pedidos abiertos": es el número que
+ * hace que alguien entre hoy, y ahora además es el único que hay.
  *
- * El contador cuenta PEDIDOS ABIERTOS: es el número que hace que alguien entre
- * hoy. Si quien mira no tiene sesión el tablón no devuelve nada, y entonces no
- * aparece ningún número — nunca un cero que diga que nadie necesita nada.
+ * ── SÉPTIMA TARJETA: ESPACIO COMUNITARIO (0131) ─────────────────────────────
+ * Negocios que prestan una parte de su local un rato a la semana —«un sábado a
+ * la mañana, un warehouse vacío el domingo»— para clases para los chicos,
+ * inglés para las madres o charlas informativas. El cliente la pidió sabiendo
+ * que arranca vacía: «al principio no se van a registrar, pero por lo menos ya
+ * tenemos el botón» (1:00:45–1:06:00).
+ *
+ * Es la ÚNICA tarjeta que no lleva a un listado, y por eso mismo: un listado
+ * vacío detrás de un cuadrado se lee como una sección rota. Lleva a
+ * `/comunidad/espacio`, que explica de qué se trata y ofrece el formulario.
+ *
+ * Su acento REUSA `--accent-comunidad-manos` (verde 700, 0120) en vez de sumar
+ * un octavo color. Dos razones: ese token no lo estaba usando ninguna tarjeta
+ * de esta grilla —vivía en las reglas del tablón—, así que no hay dos cuadrados
+ * del mismo color; y su significado («dar y pedir una mano») es exactamente lo
+ * que hace un negocio que presta su salón. Sumar un color nuevo habría exigido
+ * tocar `globals.css`, que en esta tanda lo está editando otro frente.
  */
 export default async function ComunidadPage() {
   return (
@@ -131,11 +150,11 @@ export default async function ComunidadPage() {
               href="/comunidad/pedir-ayuda"
               label={C.cards.pedirAyuda.title}
               hint={C.cards.pedirAyuda.hint}
-              icon={<HandsClapping size={28} weight="fill" aria-hidden="true" />}
-              accent={COMUNIDAD_ACCENT_MANOS}
+              icon={<Lifebuoy size={28} weight="fill" aria-hidden="true" />}
+              accent={COMUNIDAD_ACCENT}
               badge={
                 <Suspense fallback={<Skeleton className="h-5 w-24 rounded-full" />}>
-                  <PidenAyuda />
+                  <PedidosAbiertos />
                 </Suspense>
               }
             />
@@ -190,6 +209,15 @@ export default async function ComunidadPage() {
               accent={COMUNIDAD_ACCENT_ACOPIO}
             />
           </li>
+          <li>
+            <SquareTile
+              href="/comunidad/espacio"
+              label={C.cards.espacio.title}
+              hint={C.cards.espacio.hint}
+              icon={<HouseLine size={28} weight="fill" aria-hidden="true" />}
+              accent={COMUNIDAD_ACCENT_MANOS}
+            />
+          </li>
         </ul>
       </nav>
     </>
@@ -215,12 +243,12 @@ async function CasosAbiertos() {
 }
 
 /**
- * Contador de pedidos abiertos en el tablón. Igual que `CasosAbiertos`: su
- * propio Suspense —es lo único de la tarjeta que consulta la base— y si la
- * consulta falla, o si quien mira no tiene sesión (el tablón pide cuenta), no
- * aparece nada. Nunca un cero que diga que nadie necesita ayuda.
+ * Cuántos pedidos hay abiertos hoy. Igual que `CasosAbiertos`: su propio
+ * Suspense —es lo único de la tarjeta que consulta la base— y si la consulta
+ * falla, o si quien mira no tiene sesión (el tablón pide cuenta), no aparece
+ * nada. Nunca un cero que diga que nadie necesita ayuda.
  */
-async function PidenAyuda() {
+async function PedidosAbiertos() {
   const tenant = await getTenant();
   const pedidos = await countPedidosAbiertos(tenant.id);
   if (pedidos === 0) return null;

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { CaretLeft, Megaphone, UsersThree } from "@phosphor-icons/react/dist/ssr";
+import { Megaphone, UsersThree } from "@phosphor-icons/react/dist/ssr";
 import { Banner, EmptyState, SectionHeading, buttonVariants } from "@/components/ui";
 import { buildTrustSignals } from "@/components/listings";
 import { COPY } from "@/components/empleos/copy";
@@ -81,7 +81,6 @@ export default async function CandidatosPage({
   if (!user || listing.created_by !== user.id) {
     return (
       <>
-        <BackLink jobId={id} />
         <EmptyState
           icon={<UsersThree />}
           title={C.notOwnerTitle}
@@ -132,7 +131,6 @@ export default async function CandidatosPage({
 
   return (
     <>
-      <BackLink jobId={id} />
       <SectionHeading
         accent="var(--accent-empleos)"
         image="/icons/menu/empleos.webp"
@@ -248,20 +246,5 @@ export default async function CandidatosPage({
         </>
       )}
     </>
-  );
-}
-
-function BackLink({ jobId }: { jobId: string }) {
-  return (
-    <Link
-      href={`/empleos/${jobId}`}
-      className={cn(
-        "mb-2 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-foreground-secondary",
-        "hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-      )}
-    >
-      <CaretLeft size={16} weight="bold" aria-hidden="true" />
-      {C.backToJob}
-    </Link>
   );
 }

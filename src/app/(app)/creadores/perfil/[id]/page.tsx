@@ -249,10 +249,11 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
 
             Va DESPUÉS del CTA primario y con variant `outline`: una pantalla
             tiene un solo CTA primario (el de contratar), y este es el camino
-            suave. Cuando no hay hilo se usa `MessageCta`, que hoy responde con
-            el estado honesto del contacto perfil→perfil — el mismo que ve
-            cualquiera en /perfil/[id]. Es deliberado: prometer un chat que
-            todavía no existe sería peor que decirlo.
+            suave. Cuando no hay hilo se usa `MessageCta` con el id del perfil
+            (el `id` de la ruta ES el profile_id: así se consulta `creators` y
+            `conversations` arriba), que desde la 0134 abre el contacto directo
+            — el mismo camino que /perfil/[id]. Hasta el 2026-09-03 se montaba
+            sin id y mostraba un «muy pronto»; era la última pantalla sin chat.
           */}
           {existingConversation ? (
             <Link
@@ -264,7 +265,7 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
             </Link>
           ) : (
             <div className="mt-1.5">
-              <MessageCta firstName={firstNameOf(displayName)} />
+              <MessageCta firstName={firstNameOf(displayName)} profileId={id} />
             </div>
           )}
         </div>

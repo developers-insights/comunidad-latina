@@ -10,6 +10,7 @@ import {
 } from "@/components/admin/scam-report-item";
 import { ModuleToggles } from "@/components/admin/module-toggles";
 import { CommunitySwitcher } from "@/components/admin/community-switcher";
+import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
 import { getTenant } from "@/lib/tenant/resolve";
 import { formatMoney } from "@/lib/utils";
 import { requireStaff } from "../guard";
@@ -75,10 +76,24 @@ const COPY = {
     listing: "Aviso reportado",
     profile: "Perfil reportado",
     message: "Mensaje reportado (contenido privado — §5.4)",
+    /**
+     * Sólo se usa si el mensaje ya no está (lo purgó el TTL de 90 días o lo
+     * borró alguien). Cuando está, abajo se pinta EL TEXTO: a diferencia de un
+     * mensaje directo, uno de grupo se puede leer para resolver el reporte —
+     * ver §4 de la 0135 y §1 de la 0133 sobre por qué un grupo es semipúblico.
+     */
+    group_message: "Mensaje de grupo (ya no está)",
   } as Record<string, string>,
 } as const;
 
-const LISTING_KINDS = ["property", "business", "professional", "event", "job"] as const;
+/**
+ * El texto del mensaje reportado, recortado. Entero no aporta —la decisión se
+ * toma con las primeras líneas— y una pared de texto en una tarjeta de la cola
+ * hace que el resto de los reportes no se vean.
+ */
+const EXCERPT_MENSAJE_MAX = 200;
+
+const LISTING_KINDS = ["property", "business", "professional", "event", "job", "service"] as const;
 
 export default async function DominioPage({
   searchParams,
@@ -199,18 +214,52 @@ export default async function DominioPage({
   const reportedProfiles = (reports ?? [])
     .filter((r) => r.target_kind === "profile")
     .map((r) => r.target_id);
+  const reportedGroupMessages = (reports ?? [])
+    .filter((r) => r.target_kind === "group_message")
+    .map((r) => r.target_id);
 
-  const [listingTargets, profileTargets] = await Promise.all([
+  const [listingTargets, profileTargets, groupMessageTargets] = await Promise.all([
     reportedListings.length
       ? supabase.from("listings").select("id, title").in("id", reportedListings)
       : Promise.resolve({ data: [] as { id: string; title: string }[] }),
     reportedProfiles.length
       ? supabase.from("profiles").select("id, display_name").in("id", reportedProfiles)
       : Promise.resolve({ data: [] as { id: string; display_name: string }[] }),
+    /**
+     * EL TEXTO DEL MENSAJE DE GRUPO REPORTADO (0135).
+     *
+     * La 0133 estrenó este `target_kind` pero la policy de SELECT era sólo para
+     * miembros del grupo, así que esta pantalla mostraba la cadena cruda
+     * "group_message" y nadie podía saber qué se había reportado — una cola que
+     * sólo se puede descartar.
+     *
+     * Va con el cliente del staff, como todo lo demás de acá: la rama de
+     * `chat_group_messages_select` que lo permite llega SÓLO a mensajes que
+     * tienen un reporte, así que esta consulta no puede leer un grupo entero
+     * aunque quisiera. El equipo lee lo que la comunidad le puso arriba del
+     * escritorio, no la conversación.
+     *
+     * `supabaseSinTiparGrupos` porque `database.types.ts` se regenera aparte y
+     * todavía no conoce las tablas de la 0133.
+     */
+    reportedGroupMessages.length
+      ? supabaseSinTiparGrupos(supabase)
+          .from("chat_group_messages")
+          .select("id, body")
+          .in("id", reportedGroupMessages)
+      : Promise.resolve({ data: [] as { id: string; body: string }[] }),
   ]);
   for (const row of listingTargets.data ?? []) targetLabels.set(`listing:${row.id}`, row.title);
   for (const row of profileTargets.data ?? [])
     targetLabels.set(`profile:${row.id}`, row.display_name);
+  for (const row of (groupMessageTargets.data ?? []) as { id: string; body: string }[]) {
+    targetLabels.set(
+      `group_message:${row.id}`,
+      row.body.length > EXCERPT_MENSAJE_MAX
+        ? `“${row.body.slice(0, EXCERPT_MENSAJE_MAX)}…”`
+        : `“${row.body}”`,
+    );
+  }
 
   const stats: { label: string; value: number; alert?: boolean }[] = [
     { label: COPY.stats.members, value: members },

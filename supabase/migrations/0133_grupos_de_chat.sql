@@ -667,6 +667,15 @@ using (
 with check (
   tenant_id = (select app.current_tenant_id())
   and deleted_at is not null
+  -- El predicado de autoría se REPITE en el with check y no sólo en el using.
+  -- El `using` dice qué filas puedo tocar; el `with check`, cómo pueden quedar.
+  -- Sin esta línea, el mismo UPDATE que baja un mensaje podría además moverlo
+  -- a otro grupo o ponerle otro autor. La fila quedaría escondida igual, pero
+  -- la cola de moderación leería una historia falsa sobre quién dijo qué.
+  and (
+    sender_id = (select auth.uid())
+    or app.rol_en_grupo(group_id) in ('owner', 'admin')
+  )
 );
 
 -- Sin DELETE físico para usuarios: el borrado suave de arriba ya esconde la

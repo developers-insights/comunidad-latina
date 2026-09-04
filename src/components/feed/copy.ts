@@ -314,6 +314,24 @@ export const COPY = {
       /** Encabeza la vista previa del banner de la pregunta o del texto. */
       previewLabel: "Así se va a ver",
       /**
+       * SELECTOR DE FONDO de una publicación de texto (0128, call 3/9 punto 15:
+       * el cliente pidió fondos «más llamativos, más bonitos, o que la gente
+       * los pueda cambiar»).
+       *
+       * "Elegí el fondo" y no "Fondo": el título tiene que decir qué hacer con
+       * la tira de círculos que viene abajo, que por sí sola no se explica. La
+       * ayuda no describe los colores —se ven— sino dónde mirar el resultado,
+       * que es la pregunta real de quien está por publicar.
+       */
+      backgroundLabel: "Elegí el fondo",
+      backgroundHint: "Arriba lo ves tal cual va a salir.",
+      /**
+       * La primera opción, y la que viene puesta. NO dice "Ninguno" ni "Por
+       * defecto": no elegir igual da un fondo, y prometer lo contrario haría
+       * que la vista previa parezca un error.
+       */
+      backgroundAuto: "Automático",
+      /**
        * CATEGORÍA DEL VIDEO (0046) — opcional, con default. La pregunta es "de
        * qué se trata" y no "elegí una categoría" porque lo primero es lo que la
        * persona sabe responder; y el beneficio se dice al lado (que lo
@@ -605,6 +623,30 @@ export const COPY = {
     previewChip: "Vista previa",
     /** Nombre accesible del toque cuando lo que se ve es sólo un anticipo. */
     playFullVideo: "Ver el video completo",
+    /**
+     * ---- VIDEOS LARGOS (cliente 2026-09-03, 19:40–23:44) -------------------
+     *
+     * «En el feed y en Videos Cortos solamente sale los 59 segundos y ahí va a
+     * estar un botón que dice ver video completo… como Instagram: ves el video,
+     * se para en cierta cantidad de segundos y dice ver video completo.»
+     *
+     * Estas tres cadenas viven acá —y no en el copy del visor o en el de
+     * Videos— porque el MISMO botón aparece en la tarjeta del feed, en el visor
+     * a pantalla completa y en el reel. Tres superficies con tres textos serían
+     * tres botones distintos para la misma promesa.
+     *
+     * `watchFullVideo` son las palabras del cliente, tal cual las dijo (y así
+     * suena natural). El nombre accesible dice además ADÓNDE lleva el toque:
+     * "completo" a secas no distingue este botón —que navega a otra sección— de
+     * `playFullVideo`, que abre el mismo video a pantalla completa acá nomás.
+     */
+    watchFullVideo: "Ver video completo",
+    watchFullVideoLabel: "Ver el video completo en Videos largos",
+    /**
+     * Nombre accesible del toque sobre un video LARGO: lo que abre es la misma
+     * vista previa en grande, no el video entero — para eso está el botón.
+     */
+    playLongVideoPreview: "Ver la vista previa en grande",
     /** "· por {nombre}" bajo el nombre de la entidad. */
     byAuthor: (name: string) => `por ${name}`,
     /** Badge que solo ve el autor en el detalle de un post promocionado. */

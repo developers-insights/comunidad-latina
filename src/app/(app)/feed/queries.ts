@@ -145,6 +145,18 @@ export interface PostRow {
    */
   video_poster_path?: string | null;
   /**
+   * posts.text_background (0128) — el fondo que eligió quien publicó un texto.
+   * Un id del catálogo cerrado de `@/lib/feed/text-backgrounds`, nunca CSS.
+   *
+   * Viaja con toda fila de post por el mismo motivo que las de video: la
+   * decisión que habilita (¿con qué campo de color pinto este texto?) la toma
+   * la tarjeta, que se monta en el feed, en el detalle, en el perfil y en las
+   * fichas de negocio. Opcional porque una fila anterior a la 0128 —o una
+   * consulta que no la pida— significa "modo Automático", que es exactamente lo
+   * que se veía antes: el sorteo por id.
+   */
+  text_background?: string | null;
+  /**
    * LAS TRES MARCAS DEL MENÚ ⋯ (0097). Viajan con toda fila de post por el mismo
    * motivo que las de video: la decisión que habilitan —qué ofrece el menú y qué
    * rótulo lleva cada fila— la toma un componente que se monta en varias
@@ -229,7 +241,7 @@ type ParsablePostColumns =
  * escalares: el costo es nulo al lado de la clase de bug que evitan.
  */
 export const POST_COLUMNS =
-  "id, body, kind, media, status, like_count, comment_count, view_count, created_at, author_id, entity_listing_id, video_type, duration_seconds, is_paid_ad, eligible_for_short_feed, video_category, video_poster_path, pinned_at, hidden_at, comments_locked_at, media_filters, mux_playback_id, mux_status" as ParsablePostColumns;
+  "id, body, kind, media, status, like_count, comment_count, view_count, created_at, author_id, entity_listing_id, video_type, duration_seconds, is_paid_ad, eligible_for_short_feed, video_category, video_poster_path, text_background, pinned_at, hidden_at, comments_locked_at, media_filters, mux_playback_id, mux_status" as ParsablePostColumns;
 
 const FALLBACK_AUTHOR: AuthorView = {
   profileId: null,
@@ -1136,6 +1148,9 @@ export function toPostCardModel(
     isPaidAd: row.is_paid_ad ?? false,
     eligibleForShortFeed: row.eligible_for_short_feed ?? true,
     videoCategory: row.video_category,
+    // Fondo elegido de una publicación de texto (0128). `?? null` es el modo
+    // Automático: una fila anterior a la migración, o alguien que no eligió.
+    textBackground: row.text_background ?? null,
     ctaWhatsapp: extras?.ctaWhatsapp ?? null,
   };
 }

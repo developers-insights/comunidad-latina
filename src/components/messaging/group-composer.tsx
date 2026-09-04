@@ -126,7 +126,7 @@ export function GroupComposer({ groupId }: { groupId: string }) {
         aria-label={COPY.composer.send}
         disabled={enviando || valor.trim().length === 0}
         className={cn(
-          "flex size-11 shrink-0 select-none items-center justify-center rounded-full bg-brand text-brand-foreground shadow-xs",
+          "flex size-11 shrink-0 select-none items-center justify-center rounded-full bg-brand text-brand-foreground shadow-xs cl-print-hide",
           "transition-[transform,background-color,opacity] duration-(--duration-fast) ease-(--ease-spring)",
           "hover:bg-brand-hover active:scale-[0.94]",
           "disabled:pointer-events-none disabled:opacity-45",

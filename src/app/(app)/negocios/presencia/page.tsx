@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { PlanesPresencia } from "./planes-presencia";
 import { leerPreciosPresencia } from "./precios";
+import { SectionTopBar } from "@/components/shell";
 
 export const metadata = { title: "Presencia Verificada" };
 
@@ -36,6 +37,8 @@ export default async function PresenciaPage({
 
   return (
     <>
+      <SectionTopBar fallbackHref="/negocios" />
+
       {estado === "exito" && (
         <Banner
           variant="info"

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ChatCircleDots, MapPin } from "@phosphor-icons/react/dist/ssr";
-import { BezelCard, Chip } from "@/components/ui";
+import { Chip } from "@/components/ui";
 import { COMUNIDAD_COPY, HELP_TOPIC_LABEL, type HelpNotice } from "@/lib/comunidad";
+import { cn } from "@/lib/utils";
 
 const C = COMUNIDAD_COPY.pedirAyuda.card;
 
@@ -25,42 +26,49 @@ const C = COMUNIDAD_COPY.pedirAyuda.card;
  *    trámites saltea las diez tarjetas de comida sin procesarlas.
  *  · EL CONTADOR DE RESPUESTAS AL PIE, alineado a la derecha, sale de QUITTR
  *    "Community" (https://mobbin.com/screens/ba6982fb-4f59-48e4-85a0-c7cd623502b6),
- *    que pone el número grande en el borde derecho de cada tarjeta. Acá va más
- *    chico —no es un puntaje, es una invitación— pero en el mismo lugar, que es
- *    donde el ojo ya lo busca.
+ *    que pone el número en el borde derecho de cada tarjeta. Acá va más chico
+ *    —no es un puntaje, es una invitación— pero en el mismo lugar, que es donde
+ *    el ojo ya lo busca.
  *
  * Lo que NO viene de ninguna referencia y es criterio propio: que el texto se
  * recorte a tres líneas (un pedido de 1000 caracteres aplastaría a los cinco
  * que tiene abajo), que la zona vaya ARRIBA del cuerpo (es el segundo filtro
- * real después del tema: un dato de otro condado no sirve), y el aviso de
- * "todavía nadie contestó", que es lo contrario de esconder el cero — acá el
- * cero es la mejor razón para entrar.
+ * real después del tema: un dato de otro condado no sirve), y el "todavía nadie
+ * contestó", que es lo contrario de esconder el cero — acá el cero es la mejor
+ * razón para entrar.
+ *
+ * ── LA TARJETA ENTERA ES EL ENLACE ──────────────────────────────────────────
+ * Mismo patrón que `<CasoCard>` de Perdido y encontrado, y por el mismo motivo:
+ * dos destinos táctiles superpuestos en una tarjeta de 375 px son una mis-tap
+ * garantizada. Un solo `<Link>` que envuelve todo, con su propio anillo de foco
+ * — nada de "stretched link" con pseudo-elementos, que acá no compraría nada y
+ * es un patrón que este repo no usa en ningún lado.
  *
  * ── LO QUE ESTA TARJETA NO MUESTRA ──────────────────────────────────────────
  * Ningún dato de contacto (no existe en la base), ningún puntaje de confianza y
  * ninguna foto:
  *
- *  · SIN TRUST SCORE. La `CasoCard` de Perdido y encontrado sí lo muestra
- *    porque ahí alguien dice tener TUS documentos y la estafa clásica tiene
- *    plata adentro. Acá alguien pregunta algo. Ponerle nota a la necesidad es
- *    lo último que tiene que hacer esta pantalla.
+ *  · SIN TRUST SCORE. La `CasoCard` sí lo muestra, porque ahí alguien dice
+ *    tener TUS documentos y la estafa clásica tiene plata adentro. Acá alguien
+ *    pregunta algo. Ponerle nota a la necesidad es lo último que tiene que
+ *    hacer esta pantalla.
  *  · SIN FOTO. Una cara identificable de una persona de esta población, al lado
  *    de su barrio y de lo que le falta, es exactamente el cruce que §5.4 pide
  *    no construir.
- *
- * ── TODA LA TARJETA ES EL ENLACE, PERO EL LINK ES EL TÍTULO ─────────────────
- * El `<Link>` envuelve sólo al título y se estira con `after:absolute` sobre la
- * tarjeta entera: el área táctil es la tarjeta completa (mobile-first) y el
- * lector de pantalla anuncia UN enlace con el texto del pedido, no una tarjeta
- * anónima. Es el patrón de "stretched link", y es la razón por la que el
- * contenedor lleva `relative` e `isolate`.
  */
 export function PedidoCard({ pedido }: { pedido: HelpNotice }) {
   const resuelto = pedido.status === "archived";
 
   return (
-    <BezelCard
-      coreClassName="relative isolate flex h-full flex-col gap-3 p-5 transition-[transform,box-shadow] duration-(--duration-fast) ease-(--ease-spring) hover:-translate-y-0.5 focus-within:-translate-y-0.5"
+    <Link
+      href={`/comunidad/pedir-ayuda/${pedido.id}`}
+      className={cn(
+        "flex h-full flex-col gap-3 rounded-lg border border-border-subtle bg-surface p-5 shadow-sm",
+        "transition-[box-shadow,transform,opacity] duration-(--duration-base) ease-(--ease-out-premium)",
+        "hover:-translate-y-0.5 hover:shadow-md motion-reduce:hover:translate-y-0",
+        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+        resuelto && "opacity-70 hover:opacity-100",
+      )}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Chip size="sm" variant={resuelto ? "neutral" : "brand"}>
@@ -71,12 +79,7 @@ export function PedidoCard({ pedido }: { pedido: HelpNotice }) {
 
       <div className="space-y-1.5">
         <h3 className="font-display text-base font-semibold leading-snug text-foreground">
-          <Link
-            href={`/comunidad/pedir-ayuda/${pedido.id}`}
-            className="after:absolute after:inset-0 after:rounded-[inherit] after:content-[''] focus-visible:outline-none focus-visible:after:ring-[3px] focus-visible:after:ring-focus-ring"
-          >
-            {pedido.title}
-          </Link>
+          {pedido.title}
         </h3>
 
         <p className="flex items-center gap-1.5 text-sm text-foreground-muted">
@@ -91,9 +94,9 @@ export function PedidoCard({ pedido }: { pedido: HelpNotice }) {
       </p>
 
       <footer className="mt-auto flex items-center justify-between gap-3 border-t border-border-subtle pt-3">
-        <p className="min-w-0 truncate text-sm text-foreground-muted">
-          <span className="font-medium text-foreground-secondary">{pedido.publisherName}</span>
-        </p>
+        <span className="min-w-0 truncate text-sm font-medium text-foreground-secondary">
+          {pedido.publisherName}
+        </span>
 
         {pedido.replyCount > 0 ? (
           <span className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-brand-ink">
@@ -104,6 +107,6 @@ export function PedidoCard({ pedido }: { pedido: HelpNotice }) {
           <span className="shrink-0 text-xs text-foreground-muted">{C.sinRespuestas}</span>
         )}
       </footer>
-    </BezelCard>
+    </Link>
   );
 }

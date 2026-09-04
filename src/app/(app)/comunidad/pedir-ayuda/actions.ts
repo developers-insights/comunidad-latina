@@ -442,6 +442,9 @@ export async function responderPedido(rawInput: {
 
   revalidatePath(`${RUTA}/${pedidoId}`);
   revalidatePath(RUTA);
+  // "Mis pedidos" pinta el contador ("Ver 1 respuesta") y quien más lo mira es
+  // justamente el autor que espera respuestas.
+  revalidatePath(`${RUTA}/mios`);
   return { ok: true, respuestaId: (data as { id: string }).id };
 }
 
@@ -489,6 +492,10 @@ export async function borrarRespuesta(rawInput: {
   }
 
   revalidatePath(`${RUTA}/${(data as { notice_id: string }).notice_id}`);
+  // El trigger baja reply_count y ese número se pinta en el tablón y en "Mis
+  // pedidos": mismas rutas que revalidan las otras acciones del módulo.
+  revalidatePath(RUTA);
+  revalidatePath(`${RUTA}/mios`);
   return { ok: true };
 }
 

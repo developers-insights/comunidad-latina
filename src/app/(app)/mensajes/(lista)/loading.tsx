@@ -4,7 +4,13 @@ import { Skeleton } from "@/components/ui";
 export default function MensajesLoading() {
   return (
     <>
-      <Skeleton className="mb-6 h-8 w-36" />
+      <Skeleton className="mb-5 h-8 w-36" />
+      {/* Las pestañas (Personas · Grupos) y el buscador van en la silueta, no
+          sólo la lista: si aparecieran recién con el contenido, la lista real
+          nacería 100px más abajo de donde se dibujó el skeleton y toda la
+          pantalla saltaría al cargar. */}
+      <Skeleton className="mb-5 h-11 w-full" />
+      <Skeleton className="mb-5 h-12 w-full rounded-full" />
       <div className="flex flex-col gap-3">
         {Array.from({ length: 4 }, (_, index) => (
           <div

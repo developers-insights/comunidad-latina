@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { Flag, Scales, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard } from "@/components/ui";
 import { ScamShieldNotice } from "@/components/trust";
-import { BackLink } from "@/components/escudo/back-link";
 import { ESCUDO_ENABLED } from "../feature-flag";
 
 /**
@@ -133,8 +132,6 @@ export default function AprenderPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <BackLink href="/escudo" label={COPY.back} />
-
       <header className="flex flex-col gap-2">
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           {COPY.title}

@@ -489,6 +489,8 @@ export const COPY = {
      * el que falta es el jardinero, no el filtro.
      */
     emptyFilteredTitle: (tab: string) => `Nada en ${tab} por ahora`,
+    /** Buscó texto sin elegir pestaña: lo que falló es la búsqueda, no el tipo. */
+    emptySearchTitle: "No encontramos nada con esa búsqueda",
     emptyFilteredMessage: "Probá con otra pestaña o mirá todos los avisos.",
     emptyPublishCta: "Publicar el primero",
     /** Publicador sin cuenta (seed/API) — mismo texto que /propiedades y /profesionales. */

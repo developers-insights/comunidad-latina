@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, BookOpenText, Clock } from "@phosphor-icons/react/dist/ssr";
+import { ArrowRight, BookOpenText, Clock } from "@phosphor-icons/react/dist/ssr";
 import { Chip, EmptyState } from "@/components/ui";
 import { ComunidadHeading, GuiaListSkeleton, OrigenNota } from "@/components/comunidad";
 import { GUIDE_COVERS } from "@/components/marketing/copy";
@@ -33,14 +33,6 @@ const C = COMUNIDAD_COPY.guias;
 export default function ComunidadGuiasPage() {
   return (
     <>
-      <Link
-        href="/comunidad"
-        className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-      >
-        <ArrowLeft size={16} aria-hidden="true" />
-        {COMUNIDAD_COPY.index.title}
-      </Link>
-
       <ComunidadHeading
         className="mt-2"
         icon={<BookOpenText size={30} weight="fill" aria-hidden="true" />}
