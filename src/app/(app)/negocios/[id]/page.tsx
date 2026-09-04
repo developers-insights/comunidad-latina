@@ -19,7 +19,10 @@ import {
   EMPLEOS_DEL_NEGOCIO_TITULO,
   EmpleosDelNegocio,
   HorarioSeccion,
+  SERVICIOS_TITULO,
+  ServiciosSeccion,
 } from "@/components/negocios";
+import { fetchPaginaDeNegocio } from "@/lib/negocios/pagina-query";
 import { PostSheetTrigger } from "@/components/feed";
 import { ResenaForm, ResenasLista, ResumenPuntajeCard } from "@/components/resenas";
 // Import DIRECTO: el barril no puede reexportar esto sin arrastrar

@@ -306,6 +306,40 @@ export function clampStickerSize(size: number): number {
 }
 
 /**
+ * Lo mínimo que puede medir en PANTALLA un emoji recién puesto, en píxeles.
+ *
+ * 44 px es el target táctil que respeta el resto de la interfaz (`min-h-11`);
+ * acá van 48 porque lo que se agarra no es una caja sino un glifo con los
+ * bordes redondeados, y el ancho útil de un emoji es menor que su cuerpo.
+ */
+export const MIN_STICKER_TOUCH_PX = 48;
+
+/**
+ * TAMAÑO DEL EMOJI QUE SE ACABA DE PONER, para un recuadro de este tamaño.
+ *
+ * `DEFAULT_STICKER_SIZE` es una fracción pensada para la FOTO —cuánto del
+ * cuadro ocupa el dibujo, y ese 18% se ve igual de bien en una miniatura que en
+ * el archivo de 1600 px—. Pero el emoji recién puesto también tiene que poder
+ * AGARRARSE con el dedo, y eso no es una fracción: son píxeles de pantalla.
+ * En un recuadro angosto (un 16:9 en un teléfono, ~335×188) el 18% del lado
+ * corto da 34 px, y "arrastralo a donde quieras" pasa a ser una instrucción
+ * imposible de cumplir — que es exactamente lo que reportó el cliente el
+ * 2026-09-03 ("aparece un emoji chico… si lo mueves un poquitico").
+ *
+ * Por eso el piso es el más grande de los dos criterios: la fracción de siempre
+ * cuando el recuadro es holgado, y el mínimo táctil cuando no lo es. Nunca al
+ * revés, y nunca por encima de `MAX_STICKER_SIZE`.
+ *
+ * Con el recuadro sin medir todavía (0) devuelve la fracción de siempre: no hay
+ * píxeles contra los que comparar, y dividir por cero daría un tamaño infinito.
+ */
+export function initialStickerSize(box: { width: number; height: number }): number {
+  const shortSide = Math.min(box.width, box.height);
+  if (!Number.isFinite(shortSide) || shortSide <= 0) return DEFAULT_STICKER_SIZE;
+  return clampStickerSize(Math.max(DEFAULT_STICKER_SIZE, MIN_STICKER_TOUCH_PX / shortSide));
+}
+
+/**
  * El CENTRO del emoji nunca sale del recuadro. Se recorta el centro y no la
  * caja entera a propósito: dejar que un emoji asome por el borde es un recurso
  * legítimo (queda "pegado" al filo, como en cualquier app de historias); lo que

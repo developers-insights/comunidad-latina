@@ -74,6 +74,22 @@ export interface PostMediaView {
    */
   muxPlaybackId?: string | null;
   muxStatus?: string | null;
+  /**
+   * ---- EL PRIMER CUADRO, PARA QUE EL VIDEO NO SALGA EN BLANCO (0132) -----
+   *
+   * URL pública del fotograma que el navegador capturó al subir
+   * (`posts.video_poster_path`). Sólo lo traen los VIDEOS del bucket.
+   *
+   * Existe porque el `.mp4` se sirve CRUDO: hasta que llega la metadata, el
+   * `<video>` no tiene NADA que pintar, y eso es el rectángulo en blanco que
+   * reportó el cliente al scrollear Videos Cortos (2026-09-03, 1:07:00). Con
+   * `poster` esa espera muestra el primer cuadro del propio video.
+   *
+   * AUSENTE ES NORMAL y no significa "roto": los videos anteriores a la 0132 no
+   * tienen ninguno, y los de Mux tampoco lo necesitan —su `url` YA es la
+   * miniatura que genera Mux—. Quien pinta cae a su respaldo (nunca a blanco).
+   */
+  posterUrl?: string | null;
 }
 
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|m4v)(\?.*)?$/i;

@@ -1,5 +1,6 @@
 import { SHORT_VIDEO_LIMIT_MESSAGE } from "@/lib/media/video-policy";
 import { MAX_PHOTOS } from "@/lib/media/post-media-limits";
+import { MAX_VIDEO_BYTES } from "@/lib/media/video-upload-limits";
 
 /**
  * Copy del módulo FEED SOCIAL — español cálido, directo, sin jerga (§5 del
@@ -107,7 +108,11 @@ export const COPY = {
     photoLimit: `Podés subir hasta ${MAX_PHOTOS} fotos por publicación.`,
     /** Contador discreto bajo la grilla: "3 de 10 fotos". */
     photoCount: (count: number, max: number): string => `${count} de ${max} fotos`,
-    // Video (sprint reels): 1 por publicación, MP4/WebM, hasta 60 MB.
+    // Video (sprint reels): 1 por publicación, MP4/MOV/WebM. El TOPE DE PESO
+    // (200 MB desde el 2026-09-03) no se escribe acá: sale de `MAX_VIDEO_BYTES`
+    // en `@/lib/media/video-upload-limits`, que es el mismo módulo que rechaza
+    // el archivo. Un número suelto en el copy es cómo se llega a un aviso que
+    // promete un tope y a una validación que aplica otro.
     addVideo: "Agregar video",
     removeVideo: "Quitar video",
     videoChip: "Video",
@@ -478,7 +483,15 @@ export const COPY = {
         },
         video: {
           title: "Video",
-          description: "Subí un video corto, hasta 60 MB.",
+          /**
+           * EL NÚMERO SALE DE `MAX_VIDEO_BYTES`, no de la mano: el tile promete
+           * un tope y `checkVideoFile` aplica otro exactamente igual, o vuelve a
+           * pasar lo del 2026-09-03 — el cliente eligió un video de 1:29 (que la
+           * política de duración permite) y rebotó por peso.
+           */
+          description: `Subí un video corto, hasta ${Math.round(
+            MAX_VIDEO_BYTES / (1024 * 1024),
+          )} MB.`,
         },
         text: {
           title: "Texto",

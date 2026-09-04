@@ -81,6 +81,13 @@ export interface ViewerMediaItem {
    * se reproduce con el `<video>` de toda la vida.
    */
   muxPlaybackId?: string | null;
+  /**
+   * Primer cuadro del video capturado al subir (0132), ya como URL pública. El
+   * visor lo usa de `poster`: abrir a pantalla completa un `.mp4` crudo sin
+   * poster deja un rectángulo negro hasta que baja la metadata, justo en el
+   * momento en que la persona acaba de tocar y está mirando.
+   */
+  posterUrl?: string | null;
 }
 
 export interface OpenMediaViewerArgs {
@@ -363,6 +370,11 @@ function ViewerPanel({
                 startSeconds={
                   itemIndex === entryIndex ? args.startSeconds : undefined
                 }
+                posterUrl={item.posterUrl}
+                // El visor abre porque alguien tocó: este video SE VA A VER.
+                // `metadata` acá sería pedirle a la persona que espere dos veces
+                // (una para saber que hay video, otra para verlo).
+                preload={itemIndex === index ? "auto" : "metadata"}
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element -- visor fullscreen: URL pública del bucket, sin optimizador
@@ -474,6 +486,33 @@ export interface ViewerVideoProps {
    * al primer play de este elemento.
    */
   startSeconds?: number;
+  /**
+   * PRIMER CUADRO DEL VIDEO, capturado al subir (0132). Lo que se pinta mientras
+   * el archivo del bucket todavía no llegó.
+   *
+   * Es la mitad visible del arreglo del "sale en blanco" (cliente 2026-09-03,
+   * 1:07:00): sin poster, un `.mp4` crudo no tiene NADA que mostrar hasta que
+   * baja su metadata, y eso en 4G son segundos de rectángulo vacío. La otra
+   * mitad es `preload`, acá abajo.
+   *
+   * Ausente = el video no tiene poster (los anteriores a la 0132, o un archivo
+   * que el navegador no pudo decodificar al subir). Ahí manda el respaldo de la
+   * superficie, que nunca es blanco.
+   */
+  posterUrl?: string | null;
+  /**
+   * CUÁNTO SE BAJA ANTES DE QUE ALGUIEN TOQUE PLAY. Default `"metadata"`: sólo
+   * la cabecera, que es lo correcto para un video que quizá nadie mire.
+   *
+   * El reel pasa `"auto"` al video ACTIVO y al SIGUIENTE —los dos que se van a
+   * ver seguro— y deja el resto en `"metadata"`. Es el otro lado del pedido del
+   * cliente: el poster tapa la espera del video que ya estás viendo; la precarga
+   * hace que el de abajo no tenga espera cuando llegues.
+   *
+   * Sólo aplica al `<video>` del bucket: el reproductor de Mux maneja su propio
+   * buffer de HLS y no expone esta palanca (ni la necesita).
+   */
+  preload?: "none" | "metadata" | "auto";
   className?: string;
 }
 
@@ -490,6 +529,8 @@ export function ViewerVideo({
   controlsClassName,
   maxPlaybackSeconds,
   startSeconds,
+  posterUrl,
+  preload = "metadata",
   className,
 }: ViewerVideoProps) {
   /**
@@ -667,7 +708,10 @@ export function ViewerVideo({
           src={url}
           playsInline
           loop
-          preload="metadata"
+          preload={preload}
+          // Cadena vacía → sin atributo: un `poster=""` es una imagen rota, y el
+          // navegador se queda con ella en vez de mostrar el primer cuadro.
+          poster={posterUrl || undefined}
           aria-label={
             authorLabel ? VIEWER_COPY.videoLabel(authorLabel) : undefined
           }

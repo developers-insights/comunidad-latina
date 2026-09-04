@@ -10,6 +10,7 @@ import {
   fetchBlockedIds,
   fetchEntityViews,
   fetchFollowedListingIds,
+  fetchPostMusic,
   fetchViewerLikes,
   toPostCardModel,
   type PostRow,
@@ -374,7 +375,7 @@ export async function fetchVideoReelsPage({
 
   const pageIds = pageRows.map((row) => row.id);
 
-  const [authors, likedIds, entityById, savedIds] = await Promise.all([
+  const [authors, likedIds, entityById, savedIds, musicByPost] = await Promise.all([
     fetchAuthorViews(
       supabase,
       pageRows.map((row) => row.author_id).filter((id): id is string => Boolean(id)),
@@ -382,6 +383,20 @@ export async function fetchVideoReelsPage({
     fetchViewerLikes(supabase, viewerId, pageIds),
     fetchEntityViews(supabase, entityListingIds),
     fetchViewerSaves(supabase, viewerId, pageIds),
+    /**
+     * ---- LA MÚSICA DE CADA PUBLICACIÓN (0090) --------------------------
+     *
+     * FALTABA, y es el bug que reportó el cliente el 2026-09-03 (17:23):
+     * «ahí no te sale la música». No era un problema del reproductor —era que
+     * el dato nunca llegaba: esta página armaba el modelo sin `music`, así que
+     * el reel montaba publicaciones que en el feed sí suenan y acá salían
+     * mudas. La insignia de la canción tampoco aparecía, porque tampoco había
+     * de dónde sacar el título.
+     *
+     * Es UNA consulta por página (batch por ids), el mismo helper que usa el
+     * feed: el costo es el mismo que ya paga cada tanda del feed.
+     */
+    fetchPostMusic(supabase, pageIds),
   ]);
 
   // Las columnas de video viajan con el modelo (las mapea `toPostCardModel`,
@@ -397,6 +412,8 @@ export async function fetchVideoReelsPage({
       isPromoted: promotedPostIds.has(row.id),
       // El botón GUARDAR del riel arranca en su estado real (no siempre vacío).
       savedByViewer: savedIds.has(row.id),
+      // Y la publicación llega con su canción, igual que en el feed.
+      music: musicByPost.get(row.id) ?? null,
     }),
   );
 

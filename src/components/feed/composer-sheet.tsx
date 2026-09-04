@@ -525,6 +525,14 @@ export function ComposerSheet({
       onClose={handleSheetClose}
       size="tall"
       keyboardAware
+      // CON EL EDITOR ABIERTO, LA HOJA NO SE ARRASTRA (feedback cliente
+      // 2026-09-03: "si lo mueves un poquitico, boom, se regresa al paso uno").
+      // Adentro del editor cada gesto es una edición —correr un emoji, panear
+      // el recorte, pellizcar para el zoom— y todos caían también sobre el
+      // arrastre del panel, que al soltar cerraba y devolvía al composer. Sigue
+      // habiendo tres formas de salir del editor, y las tres pasan por
+      // `handleSheetClose`, que retrocede UN paso: Escape, el velo y "Cancelar".
+      gesturesLocked={Boolean(editingItem)}
       title={
         editingItem
           ? editingItem.kind === "video"

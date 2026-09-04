@@ -10,7 +10,7 @@ import { VIDEO_COPY, formatBytesPair } from "./copy";
  * LA PANTALLA QUE MÁS SE MIRA DE TODO ESTE FLUJO
  * =============================================================================
  *
- * Con el camino viejo —60 MB por WiFi— la barra de subida era un detalle: pasaba
+ * Con el camino viejo —un archivo chico por WiFi— la barra de subida era un detalle: pasaba
  * en dos segundos y nadie la leía. Con Mux se puede subir un video de cientos de
  * megas, y buena parte de la comunidad está en 4G y en teléfonos de gama media.
  * Eso convierte esta caja en una pantalla donde alguien se va a quedar parado

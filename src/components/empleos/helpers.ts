@@ -57,6 +57,108 @@ export const EMPLOYMENT_TYPE_LABEL: Record<EmploymentType, string> = {
 export const JOB_PAY_PERIODS = ["hour", "day", "week", "month", "one_time"] as const;
 export type JobPayPeriod = (typeof JOB_PAY_PERIODS)[number];
 
+// ---------------------------------------------------------------------------
+// Los DOS tipos de aviso que viven en /empleos
+// ---------------------------------------------------------------------------
+
+/**
+ * `listings.kind` de esta sección. Un EMPLEO lo publica quien busca gente; un
+ * SERVICIO lo publica quien ofrece lo que sabe hacer (feedback 2026-09-03,
+ * punto 12). El contrato completo del servicio —qué columna guarda qué y por
+ * qué no hay tabla nueva— está en `lib/empleos/servicios.ts`.
+ */
+export const EMPLEOS_KINDS = ["job", "service"] as const;
+export type EmpleosKind = (typeof EMPLEOS_KINDS)[number];
+
+export function isEmpleosKind(value: unknown): value is EmpleosKind {
+  return typeof value === "string" && (EMPLEOS_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * LAS TRES PESTAÑAS DE /empleos, y por qué reemplazan a los chips de jornada.
+ *
+ * Los chips eran "Tiempo completo · Medio tiempo · Ocasional": tres jornadas de
+ * un mismo objeto. El cliente (2026-09-03, 48:42–57:00) pidió otra división,
+ * que no es de jornada sino de QUÉ ES el aviso:
+ *
+ *   · Empleos    — "un empleo es full-time, part-time, todo eso". Un restaurante
+ *                  que busca cocinero y meseros. La tarjeta CONSERVA su etiqueta
+ *                  de jornada: la distinción no se pierde, deja de ser el filtro.
+ *   · Ocasional  — trabajos de uno o dos días, estilo Craigslist ("necesito un
+ *                  carpintero sábado y domingo"). Sigue siendo `one_off`.
+ *   · Servicios  — la gente OFRECE ("soy jardinero, disponible sábados y
+ *                  domingos"). Distinto de Profesionales, que son —palabras del
+ *                  cliente— "gente con licencia".
+ *
+ * El valor viaja en `?tipo=` y es en español porque el parámetro también lo es;
+ * `filters.ts` traduce los valores VIEJOS (`full_time`, `part_time`, `one_off`)
+ * para que un link compartido antes de este cambio siga abriendo la pestaña
+ * correcta.
+ */
+export const EMPLEOS_TABS = ["empleos", "ocasional", "servicios"] as const;
+export type EmpleosTab = (typeof EMPLEOS_TABS)[number];
+
+/**
+ * Junto al enum y no en `copy.ts`, siguiendo el precedente de
+ * `EMPLOYMENT_TYPE_LABEL` (arriba): son tres palabras que sólo tienen sentido
+ * pegadas a los valores que nombran, y separarlas invita a que se desincronicen.
+ */
+export const EMPLEOS_TAB_LABEL: Record<EmpleosTab, string> = {
+  empleos: "Empleos",
+  ocasional: "Ocasional",
+  servicios: "Servicios",
+};
+
+/**
+ * Las jornadas que agrupa la pestaña "Empleos". Se declara acá —y no como un
+ * `!== "one_off"` suelto en la consulta— para que sumar una jornada nueva sea
+ * una sola línea y no una cacería por el módulo.
+ */
+export const TAB_EMPLEOS_EMPLOYMENT_TYPES: readonly EmploymentType[] = [
+  "full_time",
+  "part_time",
+];
+
+/**
+ * LOS LINKS VIEJOS NO SE ROMPEN.
+ *
+ * Hasta el 2026-09-03 `?tipo=` llevaba una JORNADA (`full_time`, `part_time`,
+ * `one_off`). Esos links ya están compartidos por WhatsApp, guardados en
+ * favoritos y —lo que más pesa— indexados. Cada valor viejo tiene una
+ * traducción EXACTA a una pestaña nueva, así que se traduce en vez de
+ * degradarlo a "Todos": quien abre "empleos de medio tiempo" tiene que seguir
+ * aterrizando en Empleos.
+ *
+ * Vive en helpers (y no en el `filters.ts` de la ruta) porque lo necesitan los
+ * DOS lados: el servidor, para armar la consulta, y los chips en el cliente,
+ * para saber qué pestaña marcar. Con la tabla de un solo lado, un link viejo
+ * filtraba bien y no pintaba ninguna pestaña.
+ */
+const TIPO_LEGADO: Record<EmploymentType, EmpleosTab> = {
+  full_time: "empleos",
+  part_time: "empleos",
+  one_off: "ocasional",
+};
+
+export function isEmpleosTab(value: string): value is EmpleosTab {
+  return (EMPLEOS_TABS as readonly string[]).includes(value);
+}
+
+/** `true` sólo para las jornadas viejas que `?tipo=` aceptaba antes. */
+export function isLegacyEmploymentTipo(value: string): value is EmploymentType {
+  return (EMPLOYMENT_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * `?tipo=` → pestaña. Acepta los tres valores nuevos, traduce los tres viejos y
+ * degrada CUALQUIER otra cosa a "Todos" (`""`) en vez de romper la consulta.
+ */
+export function toEmpleosTab(value: string): EmpleosTab | "" {
+  if (isEmpleosTab(value)) return value;
+  if (isLegacyEmploymentTipo(value)) return TIPO_LEGADO[value];
+  return "";
+}
+
 export const jobQuestionSchema = z
   .object({
     id: z.string().min(1).max(40),

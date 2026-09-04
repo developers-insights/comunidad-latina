@@ -15,11 +15,14 @@ import {
 } from "@/components/ui";
 import { ModuleSearchBar } from "@/components/search";
 import { COPY } from "@/components/empleos/copy";
-import { EmploymentTypeChips } from "@/components/empleos/employment-type-chips";
+import { EMPLEOS_TAB_LABEL } from "@/components/empleos/helpers";
+import { EmpleosTipoChips } from "@/components/empleos/tipo-chips";
 import { JobCard } from "@/components/empleos/job-card";
+import { ServiceCard } from "@/components/empleos/service-card";
 import { JobListSkeleton } from "@/components/empleos/job-skeletons";
 import { t } from "@/lib/i18n";
 import { getTenant } from "@/lib/tenant/resolve";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { ZonaVacia } from "@/components/zona";
 import { resolverVistaZona } from "@/lib/zona/server";
 import { cn } from "@/lib/utils";
@@ -64,14 +67,21 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
   // la preferencia (cookie › perfil).
   const vistaZona = await resolverVistaZona(tenant.id, null);
 
-  const { items, nextCursor } = await fetchJobsPage({
-    tenantId: tenant.id,
-    employmentType: filters.tipo || null,
-    q: filters.q || null,
-    cursor: filters.cursor || null,
-    areaLabels: vistaZona.areaLabels,
-    zoneFilter: vistaZona.zona.label,
-  });
+  // Sesión sí/no para el CTA "Escribirle" de los SERVICIOS: `InlineMessageCta`
+  // pide un booleano (sin sesión abre la hoja de ingreso encima del listado y
+  // vuelve solo). Es una lectura barata y ya resuelta por el cliente de Supabase
+  // que la página usa igual para todo lo demás.
+  const [viewerId, { items, nextCursor }] = await Promise.all([
+    getAuthUserId(),
+    fetchJobsPage({
+      tenantId: tenant.id,
+      tab: filters.tipo || null,
+      q: filters.q || null,
+      cursor: filters.cursor || null,
+      areaLabels: vistaZona.areaLabels,
+      zoneFilter: vistaZona.zona.label,
+    }),
+  ]);
 
   const nextParams = new URLSearchParams();
   if (filters.tipo) nextParams.set("tipo", filters.tipo);
@@ -81,7 +91,7 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
   if (filters.q) nextParams.set("q", filters.q);
   if (nextCursor) nextParams.set("cursor", nextCursor);
 
-  /** Hay filtro activo si se buscó texto O se eligió una jornada. */
+  /** Hay filtro activo si se buscó texto O se eligió una pestaña. */
   const hayFiltro = Boolean(filters.q || filters.tipo);
   /** "Tu zona" también recorta, aunque no se vea en la URL. */
   const sinRecorte = !hayFiltro && !vistaZona.filtraPorPreferencia;
@@ -101,8 +111,8 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
       <SectionCta
         accent={SECCION.accent}
         href={SECCION.publicarHref}
-        title={t("sections", "publishJobTitle")}
-        hint={t("sections", "publishJobHint")}
+        title={C.publishCtaTitle}
+        hint={C.publishCtaHint}
         className="mb-3 mt-3"
       />
 
@@ -137,7 +147,7 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
         className="mb-3"
       />
 
-      <EmploymentTypeChips className="mb-5" />
+      <EmpleosTipoChips className="mb-5" />
 
       {/* Impulsos con alcance nacional/global comprados en OTRAS comunidades
           (0092). Sólo en la primera página y sin filtros: la publicidad no
@@ -154,7 +164,13 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
         ) : (
           <EmptyState
             illustration="/images/empty-state-search.png"
-            title={hayFiltro ? C.emptyFilteredTitle : C.emptyTitle}
+            title={
+              filters.tipo
+                ? C.emptyFilteredTitle(EMPLEOS_TAB_LABEL[filters.tipo])
+                : hayFiltro
+                  ? C.emptyFilteredTitle(C.filterAll.toLowerCase())
+                  : C.emptyTitle
+            }
             message={hayFiltro ? C.emptyFilteredMessage : C.emptyMessage}
             action={
               <Link
@@ -173,9 +189,21 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
               columna nunca entraría: una card ancha por fila en el celular
               (misma lectura de red social que /eventos) y dos desde sm. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {items.map((job) => (
-              <JobCard key={job.id} job={job} />
-            ))}
+            {/* DOS TARJETAS, UNA GRILLA. El kind decide cuál se dibuja: un
+                empleo es un afiche con el pago adelante, un servicio es una
+                persona con su disponibilidad. Ver `service-card.tsx` para por
+                qué no es la misma tarjeta con otro color. */}
+            {items.map((item) =>
+              item.kind === "service" ? (
+                <ServiceCard
+                  key={item.id}
+                  service={item}
+                  isLoggedIn={Boolean(viewerId)}
+                />
+              ) : (
+                <JobCard key={item.id} job={item} />
+              ),
+            )}
           </div>
 
           {nextCursor && (
@@ -209,8 +237,8 @@ function PageSkeleton() {
       <SectionCta
         accent={SECCION.accent}
         href={SECCION.publicarHref}
-        title={t("sections", "publishJobTitle")}
-        hint={t("sections", "publishJobHint")}
+        title={C.publishCtaTitle}
+        hint={C.publishCtaHint}
         className="mb-4 mt-3"
       />
       <div className="mb-5 flex gap-2">

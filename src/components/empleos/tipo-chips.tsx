@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { EMPLOYMENT_TYPES, EMPLOYMENT_TYPE_LABEL } from "./helpers";
+import { EMPLEOS_TABS, EMPLEOS_TAB_LABEL, toEmpleosTab } from "./helpers";
 import { COPY } from "./copy";
 
 /** Selected: tinte suave del acento del módulo (--accent-empleos, decorativo). */
@@ -13,18 +13,36 @@ const SELECTED_STYLE: React.CSSProperties = {
 };
 
 /**
- * Chips de jornada de /empleos — mismo patrón que marketplace/category-chips:
- * el estado canónico vive en la URL (?tipo=), así el filtro es compartible,
- * sobrevive al back del navegador y lo resuelve el server (fetchJobsPage), no
- * un useState. Cambiar de chip resetea el cursor: criterio nuevo, primera página.
+ * PESTAÑAS de /empleos: Todos · Empleos · Ocasional · Servicios.
+ *
+ * Reemplaza a los chips de JORNADA (`employment-type-chips`, borrado en esta
+ * misma tanda). El cambio no es de etiquetas: antes las tres opciones eran tres
+ * jornadas del mismo objeto, y ahora las últimas tres nombran QUÉ ES el aviso
+ * — un empleo, una changa de uno o dos días, o un servicio que alguien ofrece
+ * (feedback cliente 2026-09-03, punto 12). La jornada no se pierde: sigue en la
+ * etiqueta de la tarjeta de empleo.
+ *
+ * Mismo patrón que marketplace/category-chips y que los chips que reemplaza: el
+ * estado canónico vive en la URL (?tipo=), así el filtro es compartible,
+ * sobrevive al back del navegador y lo resuelve el server (fetchJobsPage), no un
+ * useState. Cambiar de pestaña resetea el cursor: criterio nuevo, primera página.
+ *
+ * Sigue siendo un grupo de botones `aria-pressed` y NO un `role="tablist"`: no
+ * hay paneles que mostrar y ocultar en el cliente — cada pestaña es una consulta
+ * distinta al servidor. Fingir la semántica de tabs le prometería a un lector de
+ * pantalla flechas de navegación que acá no existen.
  */
-export function EmploymentTypeChips({ className }: { className?: string }) {
+export function EmpleosTipoChips({ className }: { className?: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
-  const active = searchParams.get("tipo") ?? "";
+  // Se NORMALIZA el crudo de la URL con la misma tabla que usa el servidor: un
+  // link viejo (`?tipo=part_time`) filtra por Empleos, así que la pestaña
+  // Empleos también tiene que verse marcada. Comparar contra el crudo dejaba la
+  // lista filtrada y las cuatro pestañas apagadas.
+  const active = toEmpleosTab(searchParams.get("tipo") ?? "");
 
   function apply(value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -39,7 +57,7 @@ export function EmploymentTypeChips({ className }: { className?: string }) {
 
   const options = [
     { value: "", label: COPY.list.filterAll },
-    ...EMPLOYMENT_TYPES.map((type) => ({ value: type, label: EMPLOYMENT_TYPE_LABEL[type] })),
+    ...EMPLEOS_TABS.map((tab) => ({ value: tab, label: EMPLEOS_TAB_LABEL[tab] })),
   ];
 
   return (

@@ -18,3 +18,14 @@ export {
   EmpleosDelNegocio,
   type EmpleosDelNegocioProps,
 } from "./empleos-del-negocio";
+/** La página del negocio: sus servicios, y el formulario que los carga (0127). */
+export {
+  SERVICIOS_TITULO,
+  ServiciosSeccion,
+  type ServiciosSeccionProps,
+} from "./servicios-seccion";
+export { EditarPaginaForm, type EditarPaginaFormProps } from "./editar-pagina-form";
+export {
+  FotoDeNegocioField,
+  type FotoDeNegocioFieldProps,
+} from "./foto-de-negocio-field";

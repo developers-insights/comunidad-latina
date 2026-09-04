@@ -1,5 +1,4 @@
 import type {
-  HelpDirection,
   HelpStatus,
   HelpTopic,
   LostFoundCategory,
@@ -41,7 +40,7 @@ export const COMUNIDAD_COPY = {
     title: "Comunidad",
     subtitle: "Información útil y una mano cuando hace falta.",
     intro:
-      "Acá reunimos lo que la comunidad necesita tener a mano: adónde pedir ayuda, comida o trámites, quién perdió o encontró algo cerca tuyo, y dónde sumarte si te sobra una mano para dar.",
+      "Acá reunimos lo que la comunidad necesita tener a mano: pedirle un dato a los vecinos, dónde conseguir comida, quién perdió o encontró algo cerca tuyo, y los lugares que ayudan en el barrio.",
     /**
      * Grilla de categorías (rediseño 2026-08-13, pedido textual del cliente:
      * «mantener los cuadrados iguales en la parte de búsqueda, pero en la
@@ -57,9 +56,16 @@ export const COMUNIDAD_COPY = {
      * lectura visual, que tiene que quedar igual de limpia que la de /buscar.
      */
     cards: {
-      recursos: {
+      /**
+       * "Pedir ayuda" ahora es el TABLÓN, no el directorio. El cliente lo pidió
+       * el 2026-09-03 con esa frase: «la gente pone lo que necesita y la gente
+       * le contesta». El directorio («Dónde pedir ayuda», fichas curadas con
+       * fuente) sigue existiendo y se sigue llegando a él desde las tarjetas de
+       * tema (Bancos de comida, Voluntarios, Centro de acopio) y desde Guías.
+       */
+      pedirAyuda: {
         title: "Pedir ayuda",
-        hint: "Clínicas sin seguro, consulados y oficinas de ayuda, con teléfono y dirección.",
+        hint: "Contá lo que necesitás y la comunidad te responde: un dato, un contacto, una mano.",
       },
       guias: {
         title: "Guías",
@@ -80,19 +86,6 @@ export const COMUNIDAD_COPY = {
       acopio: {
         title: "Centro de acopio",
         hint: "Dejá tu donación de ropa, comida o insumos de emergencia: no es para recibir comida, es para darla.",
-      },
-      /**
-       * Ayuda mutua (0120). Es la única tarjeta de la grilla que lleva a algo
-       * que ESCRIBE la gente: las otras seis llevan a contenido curado o a
-       * Perdido y encontrado. El `title` no dice "Ofrecerme" ni "Pedir manos"
-       * porque la pantalla tiene las dos caras y elegir una dejaría afuera a
-       * la mitad —justo la mitad que el cliente nombró aparte: «o el lugar
-       * donde necesita prestar los servicios»—. "Ayuda mutua" es además el
-       * término que la comunidad ya usa para esto.
-       */
-      manos: {
-        title: "Ayuda mutua",
-        hint: "Ofrecete para dar una mano, o pedí manos para tu comedor, tu parroquia o tu punto de acopio.",
       },
     },
   },
@@ -323,195 +316,231 @@ export const COMUNIDAD_COPY = {
   // uno que da miedo es uno que espanta a quien venía a ayudar. La vara es que
   // se entienda de una lectura y que suene a cuidado, no a advertencia.
   // -------------------------------------------------------------------------
-  ayudaMutua: {
-    title: "Dar y pedir una mano",
-    subtitle: "Quién se ofrece y qué lugares necesitan manos, cerca tuyo.",
+  /**
+   * -------------------------------------------------------------------------
+   * PEDIR AYUDA — el tablón donde la gente pide y la comunidad contesta
+   * -------------------------------------------------------------------------
+   *
+   * Antes esta clave se llamaba `ayudaMutua` y el módulo era otra cosa: gente
+   * ofreciéndose a dar una mano. El 2026-09-03 el cliente lo reencuadró con una
+   * frase: «tiene que ser como un blog: la gente pone lo que necesita y la
+   * gente le contesta; hay mucha gente que tiene información y mucha que no».
+   *
+   * El tono de esta sección es el más delicado del módulo. Quien escribe un
+   * pedido está admitiendo en público que le falta algo —un turno, una silla de
+   * ruedas, una computadora para sus hijos— y eso cuesta. Nada de lo que se lee
+   * acá puede sonar a formulario ni a trámite: se escribe como se le habla a un
+   * vecino que se acercó a preguntar.
+   */
+  pedirAyuda: {
+    title: "Pedir ayuda",
+    subtitle: "Contá lo que necesitás y la comunidad te responde.",
     intro:
-      "Hay dos maneras de estar acá: ofrecer un rato de tu tiempo, o pedir manos para el lugar donde ayudás. Las dos se ven en esta misma lista.",
-
-    /** Las dos reglas duras. Ver el comentario de arriba. */
-    reglas: {
-      plata: {
-        title: "Acá no se mueve plata",
-        body:
-          "Lo que se ofrece y se pide es tiempo, manos y cosas. Nunca dinero: no pidas ni mandes plata por esta sección, aunque la causa sea buena. Si alguien te la pide, reportalo y lo miramos.",
-      },
-      contacto: {
-        title: "No dejes tus datos en el texto",
-        body:
-          "Nada de teléfono, correo ni dirección. Quien quiera sumarse te escribe por mensaje privado desde la app, así tu número no queda publicado para cualquiera.",
-      },
-      revision: {
-        title: "Lo mira una persona antes de publicarse",
-        body:
-          "Cada aviso pasa por el equipo antes de aparecer en la lista. Es un paso corto y es lo que hace que esta sección se pueda usar tranquilo.",
-      },
-    },
+      "Acá se pregunta y se contesta. Alguien sabe dónde dan turnos, quién presta una silla de ruedas o dónde hay una clase gratis, y esa información no está en ningún lado: la tiene una persona del barrio. Escribí lo tuyo y fijate lo que están pidiendo los demás.",
 
     /**
-     * Las dos direcciones. Cada una se nombra de tres formas distintas y no es
-     * redundancia: `badge` es la etiqueta de la tarjeta (tercera persona, se
-     * lee de un vistazo), `elegir` es lo que se toca en el formulario (primera
-     * persona, es una decisión propia) y `filtro` es cómo se busca (plural, es
-     * una categoría). Usar el mismo texto en los tres lugares haría que el
-     * formulario suene a formulario.
+     * Las tres cosas que hay que saber antes de usar la sección. Van ARRIBA y
+     * en el tamaño del resto del texto: un descargo que hay que ir a buscar es
+     * un descargo que nadie leyó, y uno que aparece después de mandar el
+     * formulario llega tarde para lo único que importa.
+     *
+     * La tercera es la que el producto necesita que se lea de verdad: quien
+     * contesta es un vecino y la plataforma no verifica lo que dice. Está
+     * escrita sin asustar y sin desalentar la respuesta, porque el valor de
+     * toda la sección es que la gente conteste.
      */
-    direccion: {
-      offer: {
-        badge: "Se ofrece",
-        elegir: "Quiero ayudar",
-        elegirHint: "Tenés un rato, un oficio o ganas de dar una mano.",
-        filtro: "Quién se ofrece",
+    reglas: {
+      informacion: {
+        title: "Acá se comparte información",
+        body:
+          "Un dato, un contacto, una orientación: dónde preguntar, qué papeles llevar, quién puede dar una mano. No es para pedir gente que trabaje ni para mover plata.",
       },
-      need: {
-        badge: "Piden manos",
-        elegir: "Necesito manos",
-        elegirHint: "Sos parte de un comedor, una parroquia o un punto de acopio y te falta gente.",
-        filtro: "Dónde hacen falta manos",
+      datos: {
+        title: "No dejes tus datos en el pedido",
+        body:
+          "Ni teléfono, ni correo, ni tu dirección. Si alguien tiene que pasarte algo privado, te escribe por mensaje desde la app.",
+      },
+      responden: {
+        title: "Quien te contesta es un vecino",
+        body:
+          "Las respuestas las escribe gente de la comunidad, no Comunidad Latina. Antes de moverte, confirmá el dato con la oficina o el lugar: los horarios y los requisitos cambian.",
       },
     },
 
     filtros: {
-      todo: "Todo",
       temaLabel: "Tema",
-      todosLosTemas: "Todos los temas",
-      direccionLabel: "Qué estás mirando",
+      todosLosTemas: "Todos",
       zonaLabel: "Zona",
       zonaPlaceholder: "Ej.: Jackson Heights, Queens",
       zonaHelp: "Escribí el barrio o la parada más cercana.",
-      buscar: "Buscar",
+      buscarLabel: "Buscar",
+      buscarPlaceholder: "Ej.: silla de ruedas, turno, clases de inglés",
+      buscarHelp: "Busca en el título y en el texto de los pedidos.",
       limpiar: "Limpiar filtros",
     },
 
     card: {
-      enLugar: (lugar: string) => `En ${lugar}`,
-      disponibilidad: "Cuándo puede",
-      disponibilidadNeed: "Cuándo hacen falta",
-      idiomas: "Habla",
+      /** Nunca "0 respuestas": si no hay ninguna, la tarjeta invita en vez de contar. */
+      respuestas: (cantidad: number) =>
+        cantidad === 1 ? "1 respuesta" : `${cantidad} respuestas`,
+      sinRespuestas: "Todavía nadie contestó",
+      verPedido: "Ver el pedido",
+      resuelto: "Resuelto",
       escribir: "Escribirle",
-      escribirNeed: "Escribir al lugar",
       escribirHint: "Se abre un mensaje privado. Tus datos no se publican.",
-      verFicha: "Ver el lugar en el directorio",
       escribirErrores: {
         generic: "No pudimos abrir el mensaje. Probá de nuevo en un momento.",
-        noDisponible: "Ese aviso ya no está disponible.",
-        propio: "Este aviso es tuyo.",
+        noDisponible: "Ese pedido ya no está disponible.",
+        propio: "Este pedido es tuyo.",
         bloqueado: "No podés escribirle a esta persona.",
       },
     },
 
-    /** CTA que aparece en las fichas del directorio y en cada tema del tablón. */
-    ficha: {
-      cta: "Quiero ayudar acá",
-      ctaHint: "Contale al equipo que querés dar una mano en este lugar.",
-      contador: (cantidad: number) =>
-        cantidad === 1 ? "1 persona ya se ofreció" : `${cantidad} personas ya se ofrecieron`,
-    },
-
-    publicarCta: "Publicar un aviso",
-    misAvisosCta: "Mis avisos",
-    verTodos: "Ver todos los avisos",
-
-    vacio: {
-      title: "Todavía no hay avisos por acá",
-      message:
-        "Nadie publicó nada en esta comunidad. Si te sobra un rato o si tu lugar necesita manos, empezá vos: el primer aviso es el que arranca todo.",
-      filtradoTitle: "No encontramos avisos con esos filtros",
-      filtradoMessage:
-        "Probá con una zona más amplia o mirá todos los temas. A veces el aviso está publicado con el nombre del barrio de al lado.",
-    },
-
-    /** "Mis avisos": la única pantalla donde alguien ve sus borradores y rechazos. */
-    mios: {
-      title: "Mis avisos de ayuda",
-      subtitle: "En qué anda cada uno de los que publicaste.",
-      vacioTitle: "Todavía no publicaste ninguno",
-      vacioMessage:
-        "Cuando ofrezcas una mano o pidas manos para tu lugar, vas a poder seguirlo desde acá.",
-      rechazoTitle: "Por qué no se publicó",
-      corregir: "Corregir y volver a enviar",
-      retirar: "Retirar de la cola",
-      retirarHint: "Vuelve a ser un borrador y lo podés cambiar.",
-      darDeBaja: "Dar de baja",
-      darDeBajaHint: "Se saca de la lista. Sirve cuando ya conseguiste lo que buscabas.",
-      confirmarBaja: "¿Damos de baja este aviso?",
-      hecho: {
-        retirado: "Listo, lo sacamos de la cola. Ya lo podés cambiar.",
-        dadoDeBaja: "Listo, lo dimos de baja.",
+    detalle: {
+      volver: "Pedir ayuda",
+      zona: "Zona",
+      tema: "Tema",
+      noEncontrado: {
+        title: "Ese pedido ya no está",
+        message:
+          "Puede que su autor lo haya dado de baja porque ya resolvió lo que necesitaba. Mirá los que están abiertos ahora.",
+        cta: "Ver los pedidos",
       },
     },
 
-    /** Los cinco estados, en voz de quien publicó. */
+    /** Lo nuevo de la 0130: la conversación pública abajo del pedido. */
+    respuestas: {
+      title: "Respuestas",
+      vacioTitle: "Todavía nadie contestó",
+      vacioMessage:
+        "Si sabés algo que sirva —un lugar, un horario, a quién preguntarle— contalo acá abajo. Un dato tuyo le puede ahorrar semanas a alguien.",
+      escribirLabel: "Tu respuesta",
+      escribirPlaceholder: "Contá lo que sepas: dónde, cuándo, a quién preguntar.",
+      escribirHelp:
+        "Podés pasar el teléfono o la dirección de una oficina o de un lugar. Tus datos personales, no.",
+      enviar: "Responder",
+      enviando: "Publicando…",
+      borrar: "Borrar",
+      borrada: "Borraste esta respuesta.",
+      oculta: "El equipo ocultó esta respuesta.",
+      autorDelPedido: "Escribió el pedido",
+      confirmarBorrado: "¿La borramos?",
+      hecho: {
+        publicada: "Listo, ya está publicada.",
+        borrada: "Listo, la borramos.",
+      },
+      sinSesion: {
+        title: "Entrá para responder",
+        message:
+          "Con tu cuenta podés contestar y también escribir tus propios pedidos.",
+        cta: "Entrar a mi cuenta",
+      },
+      errors: {
+        generic: "No pudimos publicar tu respuesta. Probá de nuevo en un momento.",
+        vacia: "Escribí algo, aunque sea corto.",
+        larga: "Es muy largo para una respuesta. Contalo en menos palabras.",
+        noDisponible: "Ese pedido ya no está abierto, así que no se puede responder.",
+        bloqueado: "No podés responder a esta persona.",
+        moderacion:
+          "Eso no lo podemos publicar tal como está. Contalo con otras palabras — lo que escribiste no se perdió.",
+        cupo: "Respondiste bastante por hoy. Mañana seguís.",
+        suspendida: "Tu cuenta está pausada y por ahora no puede responder.",
+        borrar: "No pudimos borrarla. Recargá la página e intentá de nuevo.",
+      },
+      reportar: {
+        cta: "Reportar",
+        /** Motivos propios: los genéricos hablan de estafas y acá el problema suele ser otro. */
+        motivos: [
+          "Está pidiendo plata",
+          "El dato es falso o engañoso",
+          "Está ofreciendo un servicio, no ayudando",
+          "Trata mal a la persona que pidió",
+          "Otra cosa",
+        ],
+        contexto: (titulo: string) => `Respuesta en el pedido: ${titulo}`,
+      },
+    },
+
+    publicarCta: "Escribir un pedido",
+    misPedidosCta: "Mis pedidos",
+    verTodos: "Ver todos los pedidos",
+
+    vacio: {
+      title: "Todavía no hay pedidos por acá",
+      message:
+        "Nadie escribió nada en esta comunidad. Si te falta un dato o una mano, empezá vos: el primer pedido es el que arranca todo.",
+      filtradoTitle: "No encontramos pedidos con esa búsqueda",
+      filtradoMessage:
+        "Probá con otras palabras, con una zona más amplia o mirá todos los temas.",
+    },
+
+    /** "Mis pedidos": el estado de cada uno y el botón de marcarlo resuelto. */
+    mios: {
+      title: "Mis pedidos",
+      subtitle: "En qué anda cada uno de los que escribiste.",
+      vacioTitle: "Todavía no escribiste ninguno",
+      vacioMessage:
+        "Cuando pidas algo, vas a poder seguirlo desde acá y ver quién te respondió.",
+      rechazoTitle: "Por qué lo ocultamos",
+      verRespuestas: (cantidad: number) =>
+        cantidad === 1 ? "Ver 1 respuesta" : `Ver ${cantidad} respuestas`,
+      verPedido: "Ver el pedido",
+      resolver: "Ya lo resolví",
+      resolverHint: "Se saca de la lista. Usalo cuando ya conseguiste lo que necesitabas.",
+      confirmarResuelto: "¿Lo damos por resuelto?",
+      hecho: {
+        resuelto: "Listo. Nos alegra que lo hayas resuelto.",
+      },
+    },
+
+    /** Los cinco estados, en voz de quien escribió el pedido. */
     estado: {
-      draft: "Borrador",
+      draft: "Sin publicar",
       pending: "Lo estamos revisando",
       approved: "Publicado",
-      rejected: "No se publicó",
-      archived: "Dado de baja",
+      rejected: "Oculto por el equipo",
+      archived: "Resuelto",
     },
     estadoHint: {
-      draft: "Todavía no lo mandaste. Cuando quieras, lo enviás.",
-      pending: "Está en la cola del equipo. Suele ser rápido.",
-      approved: "Ya se ve en la lista de tu comunidad.",
-      rejected: "Leé el motivo, corregilo y mandalo de nuevo.",
-      archived: "Lo sacaste de la lista. Podés publicar uno nuevo cuando quieras.",
+      draft: "Quedó de antes y nunca se publicó. Podés darlo de baja y escribir uno nuevo.",
+      pending: "Quedó de antes, en la cola del equipo. En breve lo resolvemos.",
+      approved: "Se ve en el tablón de tu comunidad y te pueden responder.",
+      rejected: "Leé el motivo. Si querés, escribí uno nuevo con eso corregido.",
+      archived: "Ya no se ve en el tablón.",
     },
   },
 
   // -------------------------------------------------------------------------
-  // Publicar un aviso de ayuda mutua
+  // Escribir un pedido
   // -------------------------------------------------------------------------
-  ofrecerse: {
-    title: "Publicar un aviso",
-    subtitle: "Son dos pasos y toma un minuto.",
-    steps: {
-      lado: {
-        title: "¿Qué venís a hacer?",
-        temaLabel: "¿Sobre qué tema?",
-        temaHelp: "Elegí el que más se parezca. Después lo contás con tus palabras.",
-        lugarLabel: "¿Es para un lugar en particular?",
-        lugarHelp: "Si no ves el tuyo, dejalo en blanco y contalo abajo.",
-        lugarNinguno: "No es para un lugar en particular",
-        lugarVacio: "Todavía no hay lugares cargados en este tema.",
-      },
-      contar: {
-        title: "Contalo en tus palabras",
-        tituloLabel: "Resumilo en una línea",
-        tituloPlaceholderOffer: "Ej.: Puedo ayudar a servir los sábados",
-        tituloPlaceholderNeed: "Ej.: Necesitamos 4 personas para armar bolsones",
-        tituloHelp: "Es lo que se lee primero en la lista.",
-        detalleLabel: "Los detalles",
-        detallePlaceholderOffer:
-          "¿Qué sabés hacer? ¿Cuánto tiempo tenés? ¿Hay algo que no puedas hacer? Contalo simple.",
-        detallePlaceholderNeed:
-          "¿Para qué son las manos? ¿Cuántas hacen falta? ¿Qué tiene que saber quien se sume?",
-        detalleHelp: "Sin teléfono ni dirección: te escriben por mensaje privado desde acá.",
-        zonaLabel: "Zona",
-        zonaPlaceholder: "Ej.: Corona, Queens",
-        zonaHelp: "Un barrio o una parada alcanza. Nunca pongas tu dirección.",
-        cuandoLabel: "¿Cuándo podés?",
-        cuandoLabelNeed: "¿Cuándo hacen falta?",
-        cuandoPlaceholder: "Ej.: sábados de mañana",
-        lugarNombreLabel: "¿Cómo se llama el lugar?",
-        lugarNombreHelp: "El nombre con el que lo conoce la gente del barrio.",
-        idiomasLabel: "¿En qué idiomas podés ayudar?",
-        idiomasLabelNeed: "¿En qué idiomas se necesita?",
-      },
+  escribirPedido: {
+    title: "Escribir un pedido",
+    subtitle: "Cuatro campos y listo. Se publica al toque.",
+    campos: {
+      temaLabel: "¿De qué se trata?",
+      temaHelp: "Elegí el que más se parezca. Después lo contás con tus palabras.",
+      tituloLabel: "Resumilo en una línea",
+      tituloPlaceholder: "Ej.: ¿Alguien sabe dónde dan turnos para el pasaporte?",
+      tituloHelp: "Es lo que se lee primero en la lista.",
+      detalleLabel: "Contalo un poco más",
+      detallePlaceholder:
+        "¿Qué necesitás exactamente? ¿Ya probaste algo? Todo lo que cuentes ayuda a que te respondan bien.",
+      detalleHelp: "Sin teléfono ni dirección: si hace falta, te escriben por mensaje.",
+      zonaLabel: "Zona",
+      zonaPlaceholder: "Ej.: Corona, Queens",
+      zonaHelp: "Un barrio o una parada alcanza. Nunca pongas tu dirección.",
     },
-    submit: "Enviar para revisión",
-    submitting: "Enviando…",
-    back: "Atrás",
-    next: "Seguir",
-    needLogin: "Entrá a tu cuenta para publicar",
+    submit: "Publicar el pedido",
+    submitting: "Publicando…",
+    needLogin: "Entrá a tu cuenta para pedir",
     needLoginHint:
-      "Publicar un aviso necesita tu cuenta: así quien quiera sumarse te escribe sin que tengas que dejar tu teléfono a la vista.",
+      "Pedir ayuda necesita tu cuenta: así quien tenga el dato te puede escribir sin que dejes tu teléfono a la vista.",
     done: {
-      title: "Lo estamos revisando",
+      title: "Listo, ya está publicado",
       body:
-        "Nos llega primero a nosotros. Apenas le demos el visto bueno, tu aviso aparece en la lista de tu comunidad. Suele ser rápido.",
-      verTablon: "Ir a Ayuda mutua",
-      verMios: "Ver mis avisos",
-      otro: "Publicar otro",
+        "Tu pedido se ve en el tablón de tu comunidad. Cuando alguien te responda, te avisamos.",
+      verPedido: "Ver mi pedido",
+      verTablon: "Ver todos los pedidos",
     },
     /**
      * Mirar el tablón pide cuenta, y no por capricho: la 0120 no le da SELECT a
@@ -519,47 +548,43 @@ export const COMUNIDAD_COPY = {
      * X" es un padrón de gente vulnerable. Pero eso hay que DECIRLO — antes,
      * quien entraba sin sesión veía un cartel rojo de error y se iba pensando
      * que la sección estaba rota.
-     *
-     * El copy no pide disculpas ni explica la RLS: dice qué hay del otro lado y
-     * por qué conviene que sea así, que es lo que hace que valga la pena entrar.
      */
     sinSesion: {
-      title: "Entrá para ver quién está dando una mano",
+      title: "Entrá para ver los pedidos",
       message:
-        "Los avisos de ayuda no son públicos: se ven con tu cuenta. Así, quien pide o se ofrece no queda listado en internet para cualquiera.",
+        "Los pedidos no son públicos: se ven con tu cuenta. Así, quien pide algo no queda listado en internet para cualquiera.",
       cta: "Entrar a mi cuenta",
     },
     errors: {
-      /**
-       * Falla de LECTURA, no de envío. Decía "No pudimos enviarlo" en la
-       * pantalla donde no se envía nada — el copy había viajado desde el
-       * formulario sin que nadie lo releyera en su nuevo lugar.
-       */
-      leer: "No pudimos cargar los avisos. No es algo que hayas hecho vos: probá recargar en un momento.",
-      generic: "No pudimos enviarlo. Revisá los datos y probá de nuevo.",
+      /** Falla de LECTURA, no de envío: esta pantalla no envía nada. */
+      leer: "No pudimos cargar los pedidos. No es algo que hayas hecho vos: probá recargar en un momento.",
+      generic: "No pudimos publicarlo. Revisá los datos y probá de nuevo.",
       title: "Resumilo en una línea (al menos 6 letras).",
       body: "Contá un poco más: con 20 letras alcanza para arrancar.",
       area: "Necesitamos la zona, aunque sea el barrio.",
-      orgName: "Poné el nombre del lugar para el que pedís manos.",
-      topic: "Elegí un tema para tu aviso.",
+      topic: "Elegí de qué se trata.",
       resource: "Ese lugar ya no está disponible en este tema. Elegí otro o dejalo en blanco.",
       /**
-       * Los tres del detector de contacto (`detectarDatoDeContacto`). Cada uno
-       * dice QUÉ sacar y —lo importante— POR QUÉ conviene sacarlo: sin el
-       * motivo se lee como una traba caprichosa y la persona lo intenta otra
-       * vez con el número escrito distinto.
+       * Los tres del detector de contacto. Cada uno dice QUÉ sacar y —lo
+       * importante— POR QUÉ conviene sacarlo: sin el motivo se lee como una
+       * traba caprichosa y la persona lo intenta otra vez con el número escrito
+       * distinto.
+       *
+       * Ojo: este detector corre sobre el PEDIDO, nunca sobre las respuestas.
+       * Ahí el teléfono suele ser el de una oficina, y publicarlo es justamente
+       * el producto.
        */
       telefono:
-        "Sacá el teléfono del texto. No hace falta: quien quiera sumarse te escribe por mensaje privado desde la app, y así tu número no queda publicado.",
+        "Sacá el teléfono del texto. No hace falta: quien tenga el dato te escribe por mensaje privado desde la app, y así tu número no queda publicado.",
       email:
         "Sacá el correo del texto. Te van a escribir por mensaje privado desde acá, sin que tengas que dejar tus datos.",
       enlace:
         "Sacá el enlace. Los grupos y las páginas de afuera no se publican en esta sección: la conversación arranca por mensaje privado, donde podés reportar si algo no cierra.",
       cupo:
-        "Ya tenés 5 avisos esperando respuesta. Cuando resolvamos alguno vas a poder publicar otro.",
+        "Ya tenés 5 pedidos abiertos. Marcá como resuelto alguno de los que ya conseguiste y vas a poder escribir otro.",
       moderacion:
         "Ese texto no lo podemos publicar tal como está. Contalo con otras palabras y volvé a intentar — lo que escribiste no se perdió.",
-      estado: "Ese aviso ya no está en ese estado. Recargá la página y fijate cómo quedó.",
+      estado: "Ese pedido ya no está en ese estado. Recargá la página y fijate cómo quedó.",
       suspendida: "Tu cuenta está pausada y por ahora no puede publicar.",
       auth: "Se cerró tu sesión. Entrá de nuevo y no perdés lo que escribiste.",
     },
@@ -616,31 +641,59 @@ export const RESOURCE_TOPIC_HINT: Record<ResourceTopic, string> = {
 };
 
 /**
- * ── ETIQUETAS DEL TABLÓN DE AYUDA MUTUA (0120) ─────────────────────────────
+ * ── ETIQUETAS DEL TABLÓN "PEDIR AYUDA" (0120 + 0130) ───────────────────────
  *
- * Las tres se DERIVAN del objeto de copy en vez de repetirlo, y la anotación
- * de tipo es lo que hace el trabajo: `Record<HelpStatus, string>` obliga a que
- * estén los cinco estados y `Record<HelpDirection, …>` a que estén las dos
- * caras. El día que la migración sume un estado, TypeScript rompe acá y no en
- * una pantalla que dibuja una etiqueta vacía.
+ * Los estados se DERIVAN del objeto de copy en vez de repetirlo, y la
+ * anotación de tipo es lo que hace el trabajo: `Record<HelpStatus, string>`
+ * obliga a que estén los cinco. El día que la migración sume uno, TypeScript
+ * rompe acá y no en una pantalla que dibuja una etiqueta vacía.
  *
- * `HELP_TOPIC_LABEL` reusa el mapa del directorio a propósito: el tablón y las
- * fichas hablan del MISMO tema y tienen que llamarlo igual. Que los seis temas
- * del tablón sean un subconjunto de los catorce del directorio es lo que hace
- * que la asignación compile — si alguien sumara al CHECK de la 0120 un tema que
- * no existe en el directorio, esta línea deja de compilar, que es exactamente
- * el aviso que hace falta.
+ * ── POR QUÉ LOS TEMAS YA NO REUSAN EL MAPA DEL DIRECTORIO ──────────────────
+ * Hasta la 0120, `HELP_TOPIC_LABEL` era literalmente `RESOURCE_TOPIC_LABEL`:
+ * los seis temas del tablón eran un subconjunto de los catorce del directorio
+ * y compartir el mapa garantizaba que se llamaran igual en los dos lados.
+ *
+ * La 0130 rompe ese subconjunto —`tramites` y `otro` no existen en el
+ * directorio— y, sobre todo, rompe la premisa: una ficha del directorio se
+ * rotula desde la información («Salud sin seguro», «Migración y trámites»),
+ * y un tema de pedido se rotula desde la persona que pregunta. Quien escribe
+ * «¿alguien sabe dónde dan turnos?» no está buscando la categoría "Migración y
+ * trámites": está haciendo un trámite. Las etiquetas de acá son más cortas y
+ * más llanas por eso, no por descuido.
  */
-export const HELP_TOPIC_LABEL: Record<HelpTopic, string> = RESOURCE_TOPIC_LABEL;
-export const HELP_TOPIC_HINT: Record<HelpTopic, string> = RESOURCE_TOPIC_HINT;
+export const HELP_TOPIC_LABEL: Record<HelpTopic, string> = {
+  tramites: "Trámites y papeles",
+  salud: "Salud",
+  trabajo: "Trabajo",
+  educacion: "Estudio e idioma",
+  vivienda: "Vivienda",
+  comida: "Comida",
+  fe: "Iglesia y comunidad",
+  voluntariado: "Voluntariado",
+  acopio: "Donaciones",
+  otro: "Otra cosa",
+};
 
-export const HELP_DIRECTION_COPY: Record<
-  HelpDirection,
-  { badge: string; elegir: string; elegirHint: string; filtro: string }
-> = COMUNIDAD_COPY.ayudaMutua.direccion;
+/**
+ * Una línea por tema: qué clase de pedido va ahí. Cada frase describe QUÉ SE
+ * PIDE, nunca qué hacer — la línea del §11 vale en esta sección igual que en
+ * el resto del módulo.
+ */
+export const HELP_TOPIC_HINT: Record<HelpTopic, string> = {
+  tramites: "Turnos, papeles, consulados, licencias: a quién preguntarle y qué llevar.",
+  salud: "Dónde atienden, cómo conseguir un remedio o un equipo que hace falta.",
+  trabajo: "Dónde buscar, qué se necesita para un oficio, quién enseña.",
+  educacion: "Clases de inglés, terminar la secundaria, cursos y capacitaciones.",
+  vivienda: "Dónde preguntar por un lugar, a quién acudir si hay un problema con el alquiler.",
+  comida: "Dónde hay comida gratis o barata cerca.",
+  fe: "Parroquias y grupos que acompañan y dan una mano.",
+  voluntariado: "Buscás gente que quiera colaborar con algo de la comunidad.",
+  acopio: "Necesitás ropa, muebles o insumos, o buscás dónde llevarlos.",
+  otro: "Lo que no entra en ninguno de los anteriores.",
+};
 
-export const HELP_STATUS_LABEL: Record<HelpStatus, string> = COMUNIDAD_COPY.ayudaMutua.estado;
-export const HELP_STATUS_HINT: Record<HelpStatus, string> = COMUNIDAD_COPY.ayudaMutua.estadoHint;
+export const HELP_STATUS_LABEL: Record<HelpStatus, string> = COMUNIDAD_COPY.pedirAyuda.estado;
+export const HELP_STATUS_HINT: Record<HelpStatus, string> = COMUNIDAD_COPY.pedirAyuda.estadoHint;
 
 /**
  * Idiomas ofrecidos como opción cerrada y no como texto libre.

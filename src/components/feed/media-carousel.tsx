@@ -262,6 +262,10 @@ export function MediaCarousel({
                   // reproduce el archivo de `src` como toda la vida.
                   muxPlaybackId={item.muxPlaybackId}
                   muxStatus={item.muxStatus}
+                  // El primer cuadro capturado al subir (0132): lo que el
+                  // `<video>` pinta mientras el archivo del bucket todavía no
+                  // llegó, en vez del rectángulo en blanco de siempre.
+                  posterUrl={item.posterUrl}
                 />
               ) : (
                 <>

@@ -90,15 +90,38 @@ export const BUCKET_ALLOWED_VIDEO_MIME_TYPES: readonly string[] = [
   "video/quicktime",
 ];
 
-/** Mismo origen y mismo ⚠️ que `BUCKET_ALLOWED_VIDEO_MIME_TYPES`. 80 MB. */
-export const BUCKET_FILE_SIZE_LIMIT_BYTES = 80 * 1024 * 1024;
+/**
+ * Mismo origen que `BUCKET_ALLOWED_VIDEO_MIME_TYPES` para la lista de MIMEs,
+ * pero el NÚMERO ya no depende del ⚠️ de arriba: desde la 0132 el
+ * `file_size_limit` de `post-media` lo escribe una migración de este repo
+ * (`update storage.buckets set file_size_limit = 250 * 1024 * 1024`), así que
+ * esta constante y el bucket tienen por fin una sola fuente que se puede leer
+ * en el árbol. 250 MB.
+ */
+export const BUCKET_FILE_SIZE_LIMIT_BYTES = 250 * 1024 * 1024;
 
 /**
- * Peso máximo de un video tal como se elige del disco. 60 MB — el mismo
- * número que ya promete `copy.ts` ("Subí un video corto, hasta 60 MB.") — con
- * margen cómodo debajo de `BUCKET_FILE_SIZE_LIMIT_BYTES`.
+ * Peso máximo de un video tal como se elige del disco. 200 MB, con margen
+ * debajo de `BUCKET_FILE_SIZE_LIMIT_BYTES` para que un archivo apenas pasado de
+ * la raya lo rechace ESTE módulo con su mensaje, y no Storage con un error HTTP.
+ *
+ * ---- POR QUÉ SUBIÓ DE 60 A 200, Y POR QUÉ ES UN PARCHE -------------------
+ *
+ * El tope de 60 MB CONTRADECÍA en la práctica al de duración. `video-policy.ts`
+ * permite 90 s en el feed, y 90 s de un iPhone en 1080p pesan 90–110 MB: el
+ * cliente eligió un video de 1:29 —perfectamente legal por duración— y le
+ * salió «Este video pesa 101 MB y el máximo son 60 MB» (2026-09-03, 21:20).
+ * Dos reglas que se contradicen no son dos reglas: son un bug con dos números.
+ *
+ * ES UN PARCHE HASTA MUX, y hay que decirlo entero: el archivo se sirve CRUDO
+ * desde el bucket, así que un video de 200 MB en el reel carga peor que uno de
+ * 60. Subir el techo hace que el video del cliente ENTRE; no hace que se vea
+ * rápido. Lo que arregla la carga es Mux (0116, `services.ts`), que
+ * transcodifica a HLS adaptativo y ahí el tope real pasa a ser
+ * `MAX_MUX_VIDEO_BYTES` (5 GB) — código listo, faltan las credenciales.
+ * Mientras tanto el poster capturado al subir (0132) tapa la espera.
  */
-export const MAX_VIDEO_BYTES = 60 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 
 export const VIDEO_MIME_TYPES: readonly string[] = VIDEO_FORMATS.flatMap(
   (format) => format.mimeTypes,
@@ -130,6 +153,34 @@ export const VIDEO_FILENAME_PATTERN = new RegExp(
   `^[A-Za-z0-9._-]+\\.(${VIDEO_FILE_EXTENSIONS.join("|")})$`,
   "i",
 );
+
+// ---------------------------------------------------------------------------
+// EL POSTER DEL VIDEO (0132)
+// ---------------------------------------------------------------------------
+
+/**
+ * El fotograma que el navegador captura al elegir el archivo viaja al MISMO
+ * bucket, al MISMO prefijo `{tenant}/{user}/` y por la misma policy (0025, que
+ * autoriza por prefijo y no por extensión). Lo único propio es el nombre.
+ *
+ * JPEG y no WebP aunque pese un poco más: el poster se pinta en el instante en
+ * que el `<video>` todavía no tiene nada, o sea en el peor momento posible para
+ * descubrir que un navegador viejo no decodifica el formato. JPEG lo abre todo.
+ */
+export const VIDEO_POSTER_EXTENSION = "jpg";
+export const VIDEO_POSTER_CONTENT_TYPE = "image/jpeg";
+
+/**
+ * Nombre de archivo válido para un poster ya subido — lo usa la server action
+ * antes de guardar la ruta en `posts.video_poster_path`.
+ *
+ * SIN la bandera `i`, a diferencia de `VIDEO_FILENAME_PATTERN`: el CHECK de la
+ * 0132 es un `~` de Postgres (sensible a mayúsculas) sobre `\.jpg$`, y este
+ * nombre nunca lo escribe una persona sino el composer, que siempre pone
+ * minúsculas. Que las dos vallas acepten exactamente lo mismo es lo que evita
+ * que la action deje pasar algo que la base después rechaza con un error crudo.
+ */
+export const VIDEO_POSTER_FILENAME_PATTERN = /^[A-Za-z0-9._-]+\.jpg$/;
 
 interface ResolvedVideoFormat {
   /** Extensión CANÓNICA (la que se usa para nombrar el archivo en el bucket). */

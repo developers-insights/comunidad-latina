@@ -6,6 +6,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { decodeCursor } from "@/components/listings";
 import {
   categoryFilterValue,
+  parseStartId,
   parseVideoCategoryParam,
   parseVideosScope,
 } from "./helpers";
@@ -51,5 +52,81 @@ export async function loadMoreVideosAction(input: {
     scope,
     category,
     cursor,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// El reel que se abre ENCIMA del feed (2026-09-03)
+// ---------------------------------------------------------------------------
+
+/**
+ * Cuántos videos trae la primera tanda del reel que abre un toque en el feed.
+ *
+ * Los mismos 8 que la página `/videos`, y por la misma razón: alcanzan para que
+ * el scroll infinito nunca se vea venir (el prefetch se dispara a 3 del final) y
+ * no tantos como para que la apertura tenga que esperar una consulta larga
+ * mientras la persona ya está mirando el overlay.
+ */
+const OVERLAY_PAGE_SIZE = 8;
+
+/**
+ * LA PRIMERA TANDA DEL REEL, EMPEZANDO POR UN POST CONCRETO.
+ *
+ * Existe por el pedido del cliente del 2026-09-03 (17:23–18:20): al tocar un
+ * video del feed tiene que sonar la música y poder scrollear a los otros videos
+ * cortos. Hasta ese día el toque abría un visor en el lugar —sin música y sin
+ * scroll— porque la alternativa era navegar a `/videos` y perder la posición del
+ * feed. Ahora el reel se abre ENCIMA, así que necesita del servidor exactamente
+ * lo mismo que la página: una página armada alrededor de ese post.
+ *
+ * ES LA MISMA FUNCIÓN QUE USA `/videos` (`fetchVideoReelsPage` con `startId`),
+ * no una consulta paralela. Eso es lo que garantiza que el reel del feed y el de
+ * la sección muestren el mismo contenido con las mismas reglas: sólo cortos
+ * elegibles, sin publicidad, con la visibilidad del viewer y su RLS.
+ *
+ * SOLO LECTURA, igual que `loadMoreVideosAction`: no hace falta el tenant guard
+ * de escritura — quién puede ver qué lo gobierna la RLS del cliente del usuario.
+ *
+ * Una lista vacía es una respuesta VÁLIDA y quien llama tiene que saber
+ * manejarla: el post pudo dejar de ser elegible para el reel entre que el feed
+ * se pintó y el dedo tocó (se despublicó, entró a revisión, lo bloquearon). El
+ * overlay cae ahí a mostrar el video solo, sin scroll, en vez de un reel vacío.
+ */
+const openReelSchema = z.object({
+  scope: z.string().max(30),
+  startId: z.string().max(64),
+});
+
+export async function openReelAtPostAction(input: {
+  scope: string;
+  startId: string;
+}): Promise<VideoReelsPage> {
+  const parsed = openReelSchema.safeParse(input);
+  if (!parsed.success) return { items: [], nextCursor: null };
+
+  // El id se valida con la MISMA función que valida `?start=` en la URL: un post
+  // que llega por acá no puede ser más laxo que uno que llega por un link.
+  const startId = parseStartId(parsed.data.startId);
+  if (!startId) return { items: [], nextCursor: null };
+
+  const scope = parseVideosScope(parsed.data.scope);
+
+  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return fetchVideoReelsPage({
+    supabase,
+    tenantId: tenant.id,
+    viewerId: user?.id ?? null,
+    scope,
+    // SIN filtro de tema: el reel que abre el feed sigue "los otros videos
+    // cortos", que es lo que pidió el cliente — no los de la categoría del
+    // primero. El menú de temas es una decisión de la sección `/videos`.
+    category: null,
+    cursor: null,
+    startId,
+    pageSize: OVERLAY_PAGE_SIZE,
   });
 }

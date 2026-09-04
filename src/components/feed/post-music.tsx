@@ -101,6 +101,24 @@ export interface PostMusicProviderProps {
   hasVideo: boolean;
   /** Clases de la caja de medios — este provider ES ese contenedor. */
   className?: string;
+  /**
+   * ---- EL GESTO DE SONIDO, CUANDO NO ES DE ESTA PUBLICACIÓN (2026-09-03) --
+   *
+   * Sin estos dos, el altavoz es de la card: cada publicación tiene el suyo y
+   * arranca en silencio. Es lo correcto en el FEED, donde una publicación no
+   * puede decidir por la de al lado.
+   *
+   * En el REEL no: ahí el sonido es del reel entero (silenciar un video silencia
+   * los que siguen, como Instagram y TikTok), así que el estado vive arriba y
+   * este provider lo consume. Sin esto, deslizar al siguiente video volvía al
+   * silencio: cada slide montaba un provider nuevo con su `useState(false)`, y
+   * el gesto que la persona ya había hecho se perdía en cada deslizada.
+   *
+   * CONTROLADO SÓLO SI VIENEN LOS DOS. Ausentes —el caso normal, el feed— el
+   * provider sigue siendo dueño de su estado, exactamente como antes.
+   */
+  soundOn?: boolean;
+  onSoundOnChange?: (soundOn: boolean) => void;
   children: ReactNode;
 }
 
@@ -115,6 +133,8 @@ export function PostMusicProvider({
   music,
   hasVideo,
   className,
+  soundOn: soundOnProp,
+  onSoundOnChange,
   children,
 }: PostMusicProviderProps) {
   const reduce = usePrefersReducedMotion();
@@ -122,7 +142,14 @@ export function PostMusicProvider({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   /** Segundo del ARCHIVO donde arranca el recorte publicado (post_music.start_seconds). */
   const clipStartRef = useRef(0);
-  const [soundOn, setSoundOn] = useState(false);
+  /**
+   * El estado PROPIO. Se sigue declarando aunque venga controlado —los hooks no
+   * se pueden saltear— pero en ese caso no lo lee nadie: manda el prop.
+   */
+  const [ownSoundOn, setOwnSoundOn] = useState(false);
+  const controlled = soundOnProp !== undefined && onSoundOnChange !== undefined;
+  const soundOn = controlled ? soundOnProp : ownSoundOn;
+  const setSoundOn = controlled ? onSoundOnChange : setOwnSoundOn;
 
   const mix = resolveAudioMix({
     hasMusic: Boolean(music),
@@ -209,11 +236,13 @@ export function PostMusicProvider({
     () => ({
       mix,
       soundOn,
-      toggleSound: () => setSoundOn((current) => !current),
+      // Con el valor ya resuelto y no con un updater: el dueño del estado puede
+      // ser de afuera (el reel), y un `setState(prev => …)` no viaja por un prop.
+      toggleSound: () => setSoundOn(!soundOn),
       pause,
       resume,
     }),
-    [mix, soundOn, pause, resume],
+    [mix, soundOn, setSoundOn, pause, resume],
   );
 
   return (

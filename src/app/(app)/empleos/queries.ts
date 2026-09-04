@@ -20,11 +20,20 @@ import { COPY } from "@/components/empleos/copy";
 import { readJobDetails } from "@/lib/empleos/detalles";
 import { etiquetaDeSalario } from "@/lib/empleos/salario";
 import {
+  EMPLEOS_KINDS,
+  TAB_EMPLEOS_EMPLOYMENT_TYPES,
   labelJobAnswers,
   parseJobAttrs,
+  type EmpleosKind,
+  type EmpleosTab,
   type EmploymentType,
   type JobQuestion,
 } from "@/components/empleos/helpers";
+import {
+  etiquetaDeDisponibilidad,
+  etiquetaDePrecioDesde,
+  readServiceDetails,
+} from "@/lib/empleos/servicios";
 import {
   isVisibleToEmployer,
   toJobApplicationStatus,
@@ -60,7 +69,19 @@ const PAGE_SIZE = 12;
 
 export type JobCardModel = {
   id: string;
+  /**
+   * `job` (alguien BUSCA gente) o `service` (alguien OFRECE lo que hace). Las
+   * dos viven en la misma lista y en la misma consulta, pero NO comparten
+   * tarjeta: ver `service-card.tsx`.
+   */
+  kind: EmpleosKind;
   title: string;
+  /**
+   * Primeras líneas del aviso. La tarjeta de EMPLEO no la usa (su gancho es el
+   * pago); la de SERVICIO sí, porque "Jardinería" a secas no dice si poda, si
+   * limpia el patio ni si lleva su máquina.
+   */
+  description: string | null;
   /** Ej.: "US$ 18/hora" — armado con formatListingPrice (PERIOD_SUFFIX ya sabe /hora). */
   salaryLabel: string | null;
   /**
@@ -72,6 +93,18 @@ export type JobCardModel = {
   /** `listings.work_mode` cruda (0087). La etiqueta la resuelve `workModeLabel`. */
   workMode: string | null;
   employmentType: EmploymentType | null;
+  /**
+   * SOLO servicios: "Sábados y domingos · de 8 a 14", ya armado por
+   * `etiquetaDeDisponibilidad`. `null` cuando el aviso no declaró ni días ni
+   * horario — la tarjeta lo dibuja como ausencia, no como "consultar".
+   */
+  availabilityLabel: string | null;
+  /**
+   * SOLO servicios: "Desde US$ 25/hora". `null` = a convenir, que en un servicio
+   * es una respuesta legítima y no un dato faltante (el copy de pantalla lo dice
+   * con todas las letras).
+   */
+  fromPriceLabel: string | null;
   areaLabel: string | null;
   photoUrl: string | null;
   /**
@@ -102,7 +135,9 @@ export type JobsPage = {
 type JobListingRow = Pick<
   Tables<"listings">,
   | "id"
+  | "kind"
   | "title"
+  | "description"
   | "price_amount"
   | "price_currency"
   | "price_period"
@@ -123,7 +158,7 @@ type PublisherProfileRow = Pick<
 type PublisherTrustRow = Pick<Tables<"trust_scores">, "profile_id" | "score" | "level" | "signals">;
 
 const JOB_LISTING_COLUMNS =
-  "id, title, price_amount, price_currency, price_period, area_label, attrs, photos, created_at, created_by, publisher_name, work_mode";
+  "id, kind, title, description, price_amount, price_currency, price_period, area_label, attrs, photos, created_at, created_by, publisher_name, work_mode";
 
 /**
  * Mapeo puro fila → card. Publicador: perfil + Trust Score si el aviso es de
@@ -153,9 +188,19 @@ export function toJobCardModel(
     publisher = { type: "external", name: row.publisher_name };
   }
 
+  // El kind viene de la base y la lista sólo pide dos, pero se angosta acá y no
+  // se castea: una fila con un kind inesperado se dibuja como empleo (la
+  // tarjeta que existía antes) en vez de romper el render de toda la página.
+  const kind: EmpleosKind = (EMPLEOS_KINDS as readonly string[]).includes(row.kind)
+    ? (row.kind as EmpleosKind)
+    : "job";
+  const serviceDetails = kind === "service" ? readServiceDetails(row.attrs) : null;
+
   return {
     id: row.id,
+    kind,
     title: row.title,
+    description: row.description,
     salaryLabel: formatListingPrice(row.price_amount, row.price_currency, row.price_period),
     // El PISO vive en `price_amount` (es lo que ordena y filtra toda la app) y
     // sólo el TECHO en `attrs.salary_max` — ver `lib/empleos/salario.ts`.
@@ -168,7 +213,14 @@ export function toJobCardModel(
       readJobDetails(row.attrs).salaryMax,
     ),
     workMode: row.work_mode,
+    // Un servicio no declara jornada: `parseJobAttrs` ya devuelve null cuando la
+    // clave no está, así que no hace falta ramificar.
     employmentType: parseJobAttrs(row.attrs).employmentType,
+    availabilityLabel: serviceDetails ? etiquetaDeDisponibilidad(serviceDetails) : null,
+    fromPriceLabel:
+      kind === "service"
+        ? etiquetaDePrecioDesde(row.price_amount, row.price_currency, row.price_period)
+        : null,
     areaLabel: row.area_label,
     photoUrl: firstPhotoUrl(row.photos),
     photos: allPhotoUrls(row.photos),
@@ -177,9 +229,44 @@ export function toJobCardModel(
   };
 }
 
+/**
+ * Traduce la pestaña activa a las condiciones de la consulta.
+ *
+ * Vive en su propia función y no inline en `fetchJobsPage` porque es la ÚNICA
+ * regla de negocio de la pantalla: qué cae en cada pestaña. Con las condiciones
+ * desparramadas dentro del builder, "¿un aviso sin jornada aparece en Empleos?"
+ * se responde leyendo cuarenta líneas de encadenado.
+ *
+ * · Todos      → los dos kinds, sin mirar la jornada.
+ * · Empleos    → kind='job' con jornada full_time o part_time.
+ * · Ocasional  → kind='job' con jornada one_off.
+ * · Servicios  → kind='service' (no tiene jornada que mirar).
+ *
+ * UN AVISO `job` SIN `employment_type` sólo aparece en "Todos", y es a
+ * propósito: hoy no se puede crear uno así (el wizard exige la jornada, y la
+ * action la valida con `z.enum`), y si mañana entrara uno importado, ponerlo en
+ * "Empleos" sería adivinar que no es ocasional.
+ */
+function condicionesDePestania(tab: EmpleosTab | null): {
+  kinds: readonly EmpleosKind[];
+  employmentTypes: readonly EmploymentType[] | null;
+} {
+  switch (tab) {
+    case "empleos":
+      return { kinds: ["job"], employmentTypes: TAB_EMPLEOS_EMPLOYMENT_TYPES };
+    case "ocasional":
+      return { kinds: ["job"], employmentTypes: ["one_off"] };
+    case "servicios":
+      return { kinds: ["service"], employmentTypes: null };
+    default:
+      return { kinds: EMPLEOS_KINDS, employmentTypes: null };
+  }
+}
+
 export async function fetchJobsPage(input: {
   tenantId: string;
-  employmentType?: EmploymentType | null;
+  /** Pestaña activa. `null` o ausente = "Todos". */
+  tab?: EmpleosTab | null;
   /** Término de búsqueda (?q=) ya sanitizado por el caller (sanitizeSearchQuery). */
   q?: string | null;
   cursor?: string | null;
@@ -199,20 +286,24 @@ export async function fetchJobsPage(input: {
   zoneFilter?: string | null;
 }): Promise<JobsPage> {
   const supabase = await createClient();
+  const { kinds, employmentTypes } = condicionesDePestania(input.tab ?? null);
 
   // Keyset pagination (created_at, id) — mismo patrón que /marketplace.
   let query = supabase
     .from("listings")
     .select(JOB_LISTING_COLUMNS)
     .eq("tenant_id", input.tenantId)
-    .eq("kind", "job")
+    .in("kind", [...kinds])
     .eq("status", "published")
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(PAGE_SIZE + 1);
 
-  if (input.employmentType) {
-    query = query.eq("attrs->>employment_type", input.employmentType);
+  if (employmentTypes) {
+    // `attrs->>employment_type` es el MISMO accesor que esta consulta ya usaba
+    // con `.eq()` desde que existen los chips; lo único que cambia es que ahora
+    // la pestaña "Empleos" agrupa dos jornadas y por eso va con `.in()`.
+    query = query.in("attrs->>employment_type", [...employmentTypes]);
   }
   if (input.q) {
     // Mismo índice FTS que /propiedades y /negocios (listings.search, 0004) —
@@ -254,7 +345,7 @@ export async function fetchJobsPage(input: {
   let boostedExtra: JobListingRow[] = [];
   // "Tu zona" cuenta como filtro para la inyección de impulsados: un aviso
   // patrocinado de otro barrio no se cuela en una pantalla recortada a un barrio.
-  const sinFiltros = !input.employmentType && !input.q && zonaLabels.length === 0;
+  const sinFiltros = !input.tab && !input.q && zonaLabels.length === 0;
   if (!cursor) {
     const viewer = await resolveViewerGeo(supabase, {
       tenantId: input.tenantId,
@@ -277,7 +368,9 @@ export async function fetchJobsPage(input: {
         .from("listings")
         .select(JOB_LISTING_COLUMNS)
         .eq("tenant_id", input.tenantId)
-        .eq("kind", "job")
+        // Los dos kinds: un impulso comprado sobre un SERVICIO también tiene
+        // que poder subir a la primera página de la vista sin filtros.
+        .in("kind", [...EMPLEOS_KINDS])
         .eq("status", "published")
         .in("id", missingIds);
       boostedExtra = (extra ?? []) as JobListingRow[];

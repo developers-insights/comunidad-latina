@@ -215,56 +215,72 @@ export interface ResourceGroup {
 }
 
 // ===========================================================================
-// Ayuda mutua — `public.community_help_notices` (0120)
+// Pedir ayuda — `public.community_help_notices` (0120) + `..._replies` (0130)
 // ===========================================================================
 
 /**
- * Las dos caras del tablón, tal cual el CHECK de `direction`.
+ * Las dos caras que tuvo el tablón. Hoy sólo se usa una.
  *
- *   offer → una persona OFRECE tiempo, manos o cosas.
- *   need  → un lugar PIDE manos.
+ *   need  → alguien PIDE (información, orientación, una ayuda puntual).
+ *   offer → LEGADO. Alguien se ofrecía a dar una mano.
  *
- * El pedido del cliente las nombró juntas y en la misma frase («tanto de parte
- * de la persona que quiere prestar sus servicios o el lugar donde necesita
- * prestar los servicios»), y por eso comparten tabla, pantalla y búsqueda: ver
- * §2 de `0120_ayuda_mutua.sql`.
+ * El cliente sacó los ofrecimientos el 2026-09-03: «necesito manos» para una
+ * mudanza es responsabilidad legal de Comunidad Latina si alguien se lastima.
+ * La 0130 archivó los `offer` vivos y sacó el camino para crear nuevos; el
+ * valor sobrevive porque es lo que explica por qué esas filas están archivadas
+ * y porque el CHECK de los temas nuevos se apoya en él.
  */
 export const HELP_DIRECTIONS = ["offer", "need"] as const;
 export type HelpDirection = (typeof HELP_DIRECTIONS)[number];
 
+/** La única dirección que se puede publicar hoy. Se escribe una sola vez. */
+export const HELP_DIRECTION_DEFAULT: HelpDirection = "need";
+
 /**
- * Los estados de un aviso, en el orden en que los recorre.
+ * Los estados de un pedido.
  *
- *   draft → pending → approved | rejected → (archived)
- *
- * `approved` NO lo puede escribir su autor: lo bloquean la policy de UPDATE y
- * el trigger de la 0120. Es la regla que puso el cliente («todo esto se
- * verifica vía geovanny con la cuenta de admin») escrita dos veces en la base,
- * y una tercera acá arriba para que nadie tenga que ir a buscarla.
+ *   approved → donde NACE. El tablón es vivo: se publica al toque (§4 de la
+ *              0130). Lo que reemplaza a la revisión previa es el detector de
+ *              datos de contacto, la moderación automática del texto, el cupo
+ *              de 5 abiertos y la moderación POSTERIOR del equipo.
+ *   archived → resuelto o dado de baja por su autor. No sale de acá.
+ *   rejected → oculto por el equipo, con motivo que su autor lee. El equipo lo
+ *              puede restaurar.
+ *   draft / pending → LEGADO de la cola previa (0120). Ya no se crean.
  */
 export const HELP_STATUSES = ["draft", "pending", "approved", "rejected", "archived"] as const;
 export type HelpStatus = (typeof HELP_STATUSES)[number];
 
 /**
- * Los SEIS temas que aceptan avisos, contra los catorce que tiene el
- * directorio. La regla, transcripta del CHECK de la migración: el tablón
- * acepta lo que se da con el cuerpo —tiempo, manos, cosas— y NUNCA criterio
- * profesional.
+ * Los DIEZ temas de un pedido, transcriptos del CHECK de la 0130.
  *
- * Quedan afuera `migracion`, `legal`, `salud`, `medicinas`, `adicciones`,
- * `emergencias`, `consulados` y `vivienda`. No es una lista de pendientes: cada
- * exclusión tiene su motivo escrito en §5 de `0120_ayuda_mutua.sql`, y las tres
- * primeras son literalmente la línea del §11 que el módulo entero existe para
- * no cruzar. Si algún día se suma uno, se suma ACÁ y en el CHECK de la base —
- * los dos, o la app deja pasar algo que la base rechaza con un error crudo.
+ * Los seis primeros venían de la 0120, cuando el tablón era de ofrecimientos y
+ * la regla era «lo que se da con el cuerpo, nunca criterio profesional». Los
+ * cuatro últimos son los que la 0130 habilita al pasar a pedidos: el argumento
+ * de aquella exclusión era sobre OFRECER («te presto un cuarto» es el escenario
+ * de trata, textual), y preguntar dónde consiguen sillas de ruedas no es eso.
+ *
+ * `migracion` y `legal` siguen afuera incluso como pedido, y no es una lista de
+ * pendientes: un tema con ese nombre invita a que un desconocido conteste qué
+ * hacer con un caso, y eso es la línea del §11 que el módulo existe para no
+ * cruzar. El caso que contó el cliente —el turno en el consulado— entra por
+ * `tramites`, que es papeles y turnos; el abogado barato, por `otro`.
+ *
+ * El ORDEN es el de pantalla, no alfabético: primero lo que más se pide.
+ * Si algún día se suma uno, se suma ACÁ y en el CHECK de la base — los dos, o
+ * la app deja pasar algo que la base rechaza con un error crudo.
  */
 export const HELP_TOPICS = [
+  "tramites",
+  "salud",
+  "trabajo",
+  "educacion",
+  "vivienda",
   "comida",
+  "fe",
   "voluntariado",
   "acopio",
-  "educacion",
-  "fe",
-  "trabajo",
+  "otro",
 ] as const;
 export type HelpTopic = (typeof HELP_TOPICS)[number];
 
@@ -279,8 +295,17 @@ export const HELP_AVAILABILITY_MAX = 160;
 export const HELP_ORG_MAX = 140;
 export const HELP_REVIEW_NOTE_MIN = 10;
 export const HELP_REVIEW_NOTE_MAX = 400;
-/** Tope de avisos sin resolver por persona. Lo exige el trigger, no la app. */
+/** Tope de pedidos abiertos por persona. Lo exige el trigger, no la app. */
 export const HELP_MAX_OPEN = 5;
+
+/**
+ * Largo de una respuesta. El piso es 2 y no 20 como el cuerpo de un pedido, y
+ * es la decisión que hace útil a esta sección: la respuesta más valiosa que
+ * describió el cliente es un número de teléfono o el nombre de una oficina.
+ * Un piso alto obliga a rellenar con palabras que nadie necesita leer.
+ */
+export const HELP_REPLY_MIN = 2;
+export const HELP_REPLY_MAX = 1000;
 
 /** Fila de `public.community_help_notices`, tal cual la 0120. */
 export interface HelpNoticeRow {
@@ -299,13 +324,14 @@ export interface HelpNoticeRow {
   status: string;
   reviewed_at: string | null;
   review_note: string | null;
+  reply_count: number | null;
   created_at: string;
 }
 
 /** Columnas que pide la app. Escrito una vez para no over-fetchear por página. */
 export const HELP_NOTICE_COLUMNS =
   "id, tenant_id, created_by, direction, topic, resource_id, title, body, area_label, " +
-  "availability, org_name, languages, status, reviewed_at, review_note, created_at";
+  "availability, org_name, languages, status, reviewed_at, review_note, reply_count, created_at";
 
 /**
  * Un aviso listo para render.
@@ -335,9 +361,61 @@ export interface HelpNotice {
   publisherId: string;
   publisherName: string;
   publishedAtLabel: string;
-  /** Motivo del rechazo. Sólo llega cuando lo mira su autor. */
+  /** Motivo por el que el equipo lo ocultó. Sólo llega cuando lo mira su autor. */
   reviewNote: string | null;
-  /** true sólo para quien lo escribió: habilita retirar y archivar. */
+  /** Respuestas visibles. Sale del contador de la 0130, no de un count por fila. */
+  replyCount: number;
+  /** true sólo para quien lo escribió: habilita marcarlo resuelto. */
+  isOwner: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Respuestas — `public.community_help_replies` (0130)
+// ---------------------------------------------------------------------------
+
+/**
+ * Los tres estados de una respuesta. Las tres conservan la fila: una respuesta
+ * que desaparece de la base es una respuesta que no se puede auditar después de
+ * un reporte.
+ *
+ *   visible → la ve la comunidad.
+ *   hidden  → la ocultó el equipo (con firma y motivo interno).
+ *   deleted → la borró su autor.
+ */
+export const HELP_REPLY_STATUSES = ["visible", "hidden", "deleted"] as const;
+export type HelpReplyStatus = (typeof HELP_REPLY_STATUSES)[number];
+
+/** Fila de `public.community_help_replies`, tal cual la 0130. */
+export interface HelpReplyRow {
+  id: string;
+  tenant_id: string;
+  notice_id: string;
+  created_by: string;
+  body: string;
+  status: string;
+  created_at: string;
+}
+
+export const HELP_REPLY_COLUMNS =
+  "id, tenant_id, notice_id, created_by, body, status, created_at";
+
+/**
+ * Una respuesta lista para render.
+ *
+ * `authorName` es el `display_name` público que ya se muestra en toda la app —
+ * ningún dato nuevo. No viaja avatar ni Trust Score: quien contesta con el
+ * teléfono de una oficina no está compitiendo por reputación, y un puntaje al
+ * lado de una respuesta útil convertiría la ayuda en un ranking.
+ */
+export interface HelpReply {
+  id: string;
+  noticeId: string;
+  body: string;
+  status: HelpReplyStatus;
+  authorId: string;
+  authorName: string;
+  createdAtLabel: string;
+  /** true sólo para quien la escribió: habilita borrarla. */
   isOwner: boolean;
 }
 

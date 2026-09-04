@@ -202,25 +202,48 @@ describe("VIDEO_FILENAME_PATTERN — el mismo patrón que usa la server action",
 });
 
 describe("MAX_VIDEO_BYTES", () => {
-  it("sigue siendo 60 MB — el número que ya promete el copy del composer", () => {
-    expect(MAX_VIDEO_BYTES).toBe(60 * 1024 * 1024);
+  it("son 200 MB — el número que promete el copy del composer", () => {
+    expect(MAX_VIDEO_BYTES).toBe(200 * 1024 * 1024);
   });
+
+  /**
+   * EL ANCLA DEL BUG QUE ESTO VINO A CERRAR (cliente 2026-09-03, 21:20).
+   *
+   * El tope de peso y el de DURACIÓN son dos reglas sobre el mismo archivo, y
+   * mientras el primero fueron 60 MB se contradecían: `video-policy.ts` deja
+   * publicar 90 s en el feed, y 90 s de un iPhone en 1080p pesan 90–110 MB. O
+   * sea que la app ofrecía una duración que su propio tope de peso no dejaba
+   * usar — el cliente eligió un video de 1:29 y le salió "pesa 101 MB y el
+   * máximo son 60".
+   *
+   * El número exacto de referencia (101 MB) es el del video real que rebotó.
+   * Que ESE archivo entre es la definición de "arreglado" para este punto.
+   */
+  it("acepta el video de 1:29 y 101 MB que el cliente no pudo publicar", () => {
+    const video = { type: "video/quicktime", name: "IMG_4821.MOV", size: 101 * 1024 * 1024 };
+    expect(checkVideoFile(video)).toEqual({
+      ok: true,
+      extension: "mov",
+      mimeType: "video/quicktime",
+    });
+  });
+
 });
 
 describe("formatVideoTooBigMessage — el texto exacto que ve la persona", () => {
   it("un archivo bien por encima del techo", () => {
-    expect(formatVideoTooBigMessage(82 * 1024 * 1024)).toBe(
-      "Este video pesa 82 MB y el máximo son 60 MB. Probá con uno más corto.",
+    expect(formatVideoTooBigMessage(320 * 1024 * 1024)).toBe(
+      "Este video pesa 320 MB y el máximo son 200 MB. Probá con uno más corto.",
     );
   });
 
   it("redondea el peso HACIA ARRIBA: nunca declara el archivo más liviano de lo que es", () => {
-    // 60 MB + 1 byte no puede leerse como "60 MB" al lado de un máximo de
-    // "60 MB" — sería decirle a la persona que su archivo pesa lo mismo que el
+    // 200 MB + 1 byte no puede leerse como "200 MB" al lado de un máximo de
+    // "200 MB" — sería decirle a la persona que su archivo pesa lo mismo que el
     // máximo permitido, cuando en realidad se pasó. Mismo criterio que
     // `normalizeDeclaredDuration` en video-policy.ts.
     expect(formatVideoTooBigMessage(MAX_VIDEO_BYTES + 1)).toBe(
-      "Este video pesa 61 MB y el máximo son 60 MB. Probá con uno más corto.",
+      "Este video pesa 201 MB y el máximo son 200 MB. Probá con uno más corto.",
     );
   });
 });
@@ -240,11 +263,14 @@ describe("VIDEO_WRONG_TYPE_MESSAGE", () => {
  * el bucket rechaza. Esta relación (código ⊆ bucket) es justo lo que hay que
  * anclar para que no se vuelva a separar en silencio.
  *
- * `BUCKET_ALLOWED_VIDEO_MIME_TYPES`/`BUCKET_FILE_SIZE_LIMIT_BYTES` son un dato
- * escrito a mano (no hay forma de leer Supabase Storage desde un test sin
- * red) — ver el ⚠️ de provenencia en `video-upload-limits.ts` sobre CUÁL
- * proyecto se consultó. Este test protege la relación entre el código y esa
- * constante, no la relación entre la constante y Supabase.
+ * `BUCKET_ALLOWED_VIDEO_MIME_TYPES` sigue siendo un dato escrito a mano (no hay
+ * forma de leer Supabase Storage desde un test sin red) — ver el ⚠️ de
+ * provenencia en `video-upload-limits.ts` sobre CUÁL proyecto se consultó.
+ *
+ * `BUCKET_FILE_SIZE_LIMIT_BYTES` ya NO: desde la 0132 el `file_size_limit` de
+ * `post-media` lo escribe una migración de este repo, así que el número del
+ * código y el del bucket tienen por fin una sola fuente verificable en el
+ * árbol. Si alguien cambia uno de los dos sin el otro, este test lo frena.
  */
 describe("el catálogo del código es subconjunto de lo que el bucket post-media acepta", () => {
   it("todo MIME que VIDEO_MIME_TYPES aprueba está en BUCKET_ALLOWED_VIDEO_MIME_TYPES", () => {
@@ -254,7 +280,8 @@ describe("el catálogo del código es subconjunto de lo que el bucket post-media
   });
 
   it("MAX_VIDEO_BYTES entra debajo del techo real del bucket, con margen", () => {
-    expect(BUCKET_FILE_SIZE_LIMIT_BYTES).toBe(80 * 1024 * 1024);
+    // El mismo número que escribe `0132_posters_de_video.sql`.
+    expect(BUCKET_FILE_SIZE_LIMIT_BYTES).toBe(250 * 1024 * 1024);
     expect(MAX_VIDEO_BYTES).toBeLessThan(BUCKET_FILE_SIZE_LIMIT_BYTES);
   });
 });

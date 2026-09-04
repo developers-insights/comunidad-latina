@@ -16,7 +16,7 @@ import { createClient } from "@/lib/supabase/client";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { CreateMenu, type QuickPostKind } from "@/components/shell/create-menu";
 import { ComposerMenuProvider } from "./composer-context";
-import { readVideoDurationSeconds } from "@/lib/media/measure-video";
+import { readVideoIntro } from "@/lib/media/measure-video";
 import { encodeAudioPcm16, sampleAudioPcm } from "@/lib/media/audio-samples";
 import { sampleVideoLumaFrames } from "@/lib/media/video-frames";
 import {
@@ -25,6 +25,8 @@ import {
   type VideoCategory,
 } from "@/lib/media/video-policy";
 import {
+  VIDEO_POSTER_CONTENT_TYPE,
+  VIDEO_POSTER_EXTENSION,
   checkVideoFile,
   formatVideoTooBigMessage,
   videoAcceptFor,
@@ -157,6 +159,17 @@ interface PickedMedia {
   videoExtension?: string;
   videoContentType?: string;
   /**
+   * PRIMER CUADRO DEL VIDEO como JPEG (0132), capturado en `selectVideo` en la
+   * MISMA apertura del archivo que midió la duración. `null` = el navegador no
+   * pudo decodificarlo, y no pasa nada: la publicación sigue igual y el video se
+   * pinta con el respaldo de siempre.
+   *
+   * Se guarda acá y no se recalcula al publicar porque abrir el archivo es lo
+   * caro: son hasta 200 MB decodificándose en un teléfono, y hacerlo dos veces
+   * para preguntarle dos cosas al mismo archivo sería pagar ese precio al pepe.
+   */
+  posterBlob?: Blob | null;
+  /**
    * Filtro (+ texto, sólo en foto) elegidos en el editor. Arranca en
    * `DEFAULT_PHOTO_EDIT` (sin filtro, sin texto) apenas se elige el archivo —
    * así el horneado al publicar siempre tiene algo que leer, se haya abierto el
@@ -191,7 +204,7 @@ export interface PostComposerHostProps {
    *
    * DEFAULT `false` A PROPÓSITO. Mientras nadie pase la prop, el composer se
    * comporta EXACTAMENTE como el día anterior a esta feature: mismo `accept`,
-   * mismo tope de 60 MB, misma subida al bucket. La bandera no es la única
+   * mismo tope del bucket (`MAX_VIDEO_BYTES`), misma subida al bucket. La bandera no es la única
    * defensa igual — aunque llegue en `true`, si `/api/mux/subida` contesta 503
    * la subida cae al bucket en silencio (ver `selectVideo`).
    */
@@ -695,7 +708,7 @@ export function PostComposerHost({
      * PASO 1 — ¿es un video, y entra por peso?
      *
      * Con Mux prendido la pregunta es la permisiva ("¿esto es un video?", techo
-     * de 5 GB); sin Mux es la de siempre (mp4/mov/webm, 60 MB) y este chequeo ya
+     * de 5 GB); sin Mux es la de siempre (mp4/mov/webm, `MAX_VIDEO_BYTES`) y este chequeo ya
      * es el definitivo. Es la MISMA función en los dos casos — la que también
      * corre el servidor cuando el archivo va al bucket (`isOwnVideoPath` en
      * `feed/actions.ts` valida contra el mismo catálogo de extensiones).
@@ -714,10 +727,24 @@ export function PostComposerHost({
       return;
     }
 
-    // PASO 2 — cuánto dura. Local: el navegador abre la cabecera del archivo.
+    /**
+     * PASO 2 — cuánto dura Y cómo se ve el primer cuadro. Local: el navegador
+     * abre la cabecera del archivo.
+     *
+     * Las dos preguntas van en UNA sola apertura (`readVideoIntro`, 0132): abrir
+     * el archivo es lo caro, y el poster es exactamente lo que hace que el video
+     * no salga en blanco mientras carga en el reel.
+     *
+     * El fotograma se captura SIEMPRE, incluso con Mux prendido, y es a
+     * propósito: la ruta definitiva recién se sabe en el paso 4, y si Mux
+     * contesta 503 el archivo termina en el bucket — que es justamente el caso
+     * que necesita poster. Cuesta un seek sobre un decodificador ya abierto;
+     * descubrir tarde que hacía falta costaría abrirlo de nuevo.
+     */
     setMeasuringVideo(true);
-    const measured = await readVideoDurationSeconds(file);
+    const intro = await readVideoIntro(file);
     setMeasuringVideo(false);
+    const measured = intro.durationSeconds;
     const duration = checkVideoDuration("short_video", measured);
 
     /**
@@ -805,6 +832,9 @@ export function PostComposerHost({
         durationSeconds: duration.ok ? duration.seconds : undefined,
         videoExtension: fileCheck.extension,
         videoContentType: fileCheck.mimeType,
+        // Puede ser null (códec que el navegador no abre): el video se publica
+        // igual, sin poster, y la superficie cae a su respaldo.
+        posterBlob: intro.poster,
         // Igual que la foto: el borrador arranca en "sin filtro" apenas se
         // elige el archivo, así el editor y el envío siempre tienen algo que
         // leer, se haya abierto el editor o no.
@@ -816,8 +846,8 @@ export function PostComposerHost({
     /**
      * ---- LA SUBIDA ARRANCA ACÁ, NO AL PUBLICAR ---------------------------
      *
-     * Por la ruta del bucket el video se sube dentro de `submit()`, y con 60 MB
-     * eso son un par de segundos. Con Mux pueden ser cientos de megas en 4G:
+     * Por la ruta del bucket el video se sube dentro de `submit()`, y con un
+     * archivo chico eso son un par de segundos. Con Mux pueden ser cientos de megas en 4G:
      * dejarlo para el final significaría que la persona escribe el pie, toca
      * Publicar, y RECIÉN AHÍ empieza a esperar tres minutos mirando una barra.
      *
@@ -994,6 +1024,13 @@ export function PostComposerHost({
       // ---- 1) Video primero: subida directa al bucket con progreso ---------
       let videoPath: string | null = null;
       /**
+       * Ruta del POSTER ya subido (0132), o null si no hubo fotograma o su
+       * subida falló. Se declara al lado del video porque comparten destino,
+       * prefijo y limpieza: si la publicación se cae más abajo, los dos se
+       * borran juntos — un poster huérfano en el bucket no lo referencia nadie.
+       */
+      let videoPosterPath: string | null = null;
+      /**
        * Fotogramas para la huella perceptual del video (Content Integrity).
        *
        * Se muestrean ACÁ y no en el servidor porque el video se sube DIRECTO al
@@ -1084,6 +1121,38 @@ export function PostComposerHost({
         videoFrames = frames;
         videoAudioPcm = audioPcm ? encodeAudioPcm16(audioPcm) : null;
         setVideoUpload(null);
+
+        /**
+         * EL POSTER, DESPUÉS DEL VIDEO Y SIN BARRA PROPIA (0132).
+         *
+         * Después: si el video no llegó a subir, subir su poster sería dejar un
+         * archivo que no ilustra nada. Y sin barra porque son decenas de
+         * kilobytes al lado de cientos de megas — un segundo indicador de
+         * progreso para algo que tarda menos que el parpadeo sería ruido.
+         *
+         * NUNCA FRENA LA PUBLICACIÓN. Un poster que no se pudo subir devuelve
+         * `videoPosterPath` en null y el video se pinta como se pintaba antes de
+         * esta feature: con el respaldo de la superficie. Perder el poster es
+         * perder una mejora de carga; abortar la publicación por eso sería
+         * perder la publicación.
+         */
+        if (uploaded && video.posterBlob) {
+          const posterPath = `${prepared.tenantId}/${prepared.userId}/poster-${crypto.randomUUID()}.${VIDEO_POSTER_EXTENSION}`;
+          const { error: posterError } = await createClient()
+            .storage.from("post-media")
+            .upload(posterPath, video.posterBlob, {
+              contentType: VIDEO_POSTER_CONTENT_TYPE,
+              upsert: false,
+            });
+          if (posterError) {
+            console.warn("[feed] no se pudo subir el poster del video", {
+              message: posterError.message,
+            });
+          } else {
+            videoPosterPath = posterPath;
+          }
+        }
+
         if (!uploaded) {
           toast({
             title: COPY.composer.videoUploadErrorTitle,
@@ -1226,10 +1295,14 @@ export function PostComposerHost({
                 },
         );
         // El video ya subido queda huérfano si lo había: se limpia igual que en
-        // cualquier otro corte (best-effort, la policy delete lo permite).
+        // cualquier otro corte (best-effort, la policy delete lo permite). El
+        // POSTER va en la misma barrida: solo existe para ese video, así que
+        // dejarlo sería basura que no ilustra nada.
         if (videoPath) {
           try {
-            await createClient().storage.from("post-media").remove([videoPath]);
+            await createClient()
+              .storage.from("post-media")
+              .remove(videoPosterPath ? [videoPath, videoPosterPath] : [videoPath]);
           } catch {
             // sin drama: el archivo queda en el prefijo propio, no es visible
           }
@@ -1329,6 +1402,20 @@ export function PostComposerHost({
         }
       } else if (videoPath) {
         formData.set("videoPaths", JSON.stringify([videoPath]));
+        /**
+         * El poster (0132) viaja SÓLO cuando existe. Ausente significa "este
+         * video no tiene fotograma capturado", que es exactamente lo que la
+         * columna guarda en NULL — y lo que ya pasa con los 36 videos que
+         * estaban en el bucket antes de esta feature.
+         *
+         * La ruta la valida el servidor con la misma forma que la del video
+         * (`isOwnPosterPath` en feed/actions.ts): tenant y usuario propios, tres
+         * segmentos, sin traversal. Nunca se confía en que este campo diga la
+         * verdad sólo porque lo escribió el composer.
+         */
+        if (videoPosterPath) {
+          formData.set("videoPosterPath", videoPosterPath);
+        }
         /**
          * FILTRO DEL VIDEO (0104) — arreglo PARALELO a `videoPaths`, no un
          * objeto ya indexado por ruta: la clave la escribe el servidor con los
@@ -1519,7 +1606,9 @@ export function PostComposerHost({
       // del usuario — lo limpiamos best-effort (la policy delete lo permite).
       if (videoPath) {
         try {
-          await createClient().storage.from("post-media").remove([videoPath]);
+          await createClient()
+            .storage.from("post-media")
+            .remove(videoPosterPath ? [videoPath, videoPosterPath] : [videoPath]);
         } catch {
           // sin drama: el archivo queda en el prefijo propio, no es visible
         }

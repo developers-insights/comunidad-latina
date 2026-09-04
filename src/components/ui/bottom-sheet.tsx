@@ -46,6 +46,29 @@ export interface BottomSheetProps {
    * tocar el resto de las hojas.
    */
   keyboardAware?: boolean;
+  /**
+   * APAGA EL ARRASTRE DEL PANEL mientras dure algo que se toca adentro. Todas
+   * las demás salidas siguen igual: Escape, el velo y el botón que la hoja
+   * tenga (Cancelar, la X). Lo único que deja de existir es deslizar el panel.
+   *
+   * Existe por el editor de fotos (feedback cliente 2026-09-03: "si lo mueves
+   * un poquitico, boom, se regresa al paso uno"). El editor vive DENTRO de esta
+   * hoja y sus gestos —arrastrar un emoji, panear el recorte, pellizcar— caen
+   * sobre el mismo panel: framer-motion escucha el `pointerdown` acá y arranca
+   * su arrastre igual, porque el `touch-action: none` del editor frena el
+   * scroll del navegador pero no un gesto de JS. Al soltar, la hoja se cerraba.
+   *
+   * ── POR QUÉ ACÁ Y NO UN `stopPropagation` EN EL HIJO ────────────────────────
+   * Motion documenta `onPointerDownCapture` + `stopPropagation()` en el hijo, y
+   * funciona: React escucha en el contenedor del portal, así que su fase de
+   * captura corre ANTES de que el evento baje hasta este panel. Pero hay que
+   * acordarse de ponerlo en cada superficie que se arrastre (el stage, cada
+   * emoji, lo que venga después), y olvidarse en una sola devuelve el bug
+   * entero. Apagar la feature de arrastre es UN interruptor, en la fuente, y no
+   * depende del orden de delegación de eventos ni de qué navegador sea: con
+   * `drag={false}` framer-motion ni monta el gesto.
+   */
+  gesturesLocked?: boolean;
 }
 
 /**
@@ -97,6 +120,7 @@ export function BottomSheet({
   bodyClassName,
   scrimClassName,
   keyboardAware = false,
+  gesturesLocked = false,
 }: BottomSheetProps) {
   const mounted = useMounted();
   const reduceMotion = useReducedMotion();
@@ -113,6 +137,10 @@ export function BottomSheet({
   // max-h histórico. Con el teclado abierto, un tope inline recorta el panel al
   // espacio visible para que nunca se meta debajo del teclado.
   const heightClass = size === "tall" ? "h-[88dvh]" : "max-h-[85dvh]";
+
+  // Un solo lugar decide si el gesto existe, y de ahí salen las dos cosas que
+  // dependen de él: la feature de motion y el cursor del asa.
+  const dragEnabled = !reduceMotion && !gesturesLocked;
 
   return createPortal(
     <AnimatePresence>
@@ -162,17 +190,23 @@ export function BottomSheet({
                   }
             }
             transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
-            drag={reduceMotion ? false : "y"}
+            drag={dragEnabled ? "y" : false}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.5 }}
             onDragEnd={(_, info) => {
               if (info.offset.y > 80 || info.velocity.y > 500) onClose();
             }}
           >
-            {/* Handle de arrastre — indica "deslizable" (§4.c) */}
+            {/* Handle de arrastre — indica "deslizable" (§4.c). Sigue estando
+                con el gesto apagado (es la marca visual de "esto es una hoja"),
+                pero sin cursor de agarre: un asa que promete un gesto que no
+                existe es peor que no tenerla. */}
             <div
               aria-hidden="true"
-              className="mx-auto mt-3 h-1.5 w-10 shrink-0 cursor-grab rounded-full bg-border"
+              className={cn(
+                "mx-auto mt-3 h-1.5 w-10 shrink-0 rounded-full bg-border",
+                dragEnabled && "cursor-grab",
+              )}
             />
             {title && (
               <h2

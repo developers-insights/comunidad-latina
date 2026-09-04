@@ -214,6 +214,16 @@ export const KIND_CATEGORY: Record<string, NotificationCategory> = {
   // Emisores existentes (0045)
   message: "mensajes",
   contact_request: "mensajes",
+  /**
+   * Mensaje nuevo en un GRUPO de chat (0133). Kind propio y no `message`:
+   * `kind` es la etiqueta FINA del evento y "alguien escribió en Ciclistas de
+   * Corona" no es lo mismo que "alguien te escribió a vos" — el día que haya
+   * un ícono, un texto o una preferencia distinta para cada uno, el dato ya
+   * está separado en las filas viejas. La CATEGORÍA sí es la misma: un mensaje
+   * de grupo es un mensaje, y partirlo en dos pestañas rompería la única
+   * bandeja que la persona mira.
+   */
+  group_message: "mensajes",
   job_application: "trabajos",
   job_application_update: "trabajos",
   job_application_sent: "trabajos",

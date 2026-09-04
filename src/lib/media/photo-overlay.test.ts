@@ -9,6 +9,7 @@ import {
   MAX_STICKERS,
   MAX_STICKER_SIZE,
   MIN_STICKER_SIZE,
+  MIN_STICKER_TOUCH_PX,
   STICKER_GROUPS,
   captionBarFill,
   captionFontCss,
@@ -17,6 +18,7 @@ import {
   captionHaloColor,
   clampStickerPosition,
   clampStickerSize,
+  initialStickerSize,
   normalizeStickers,
   resolveCaptionColor,
   resolveCaptionFont,
@@ -194,6 +196,53 @@ describe("stickerBox — la MISMA cuenta para la pantalla y para el canvas", () 
     const grande = stickerBox(sticker({ x: 0.3, y: 0.6 }), { width: 1600, height: 2000 });
     expect(chico.centerX / 375).toBeCloseTo(grande.centerX / 1600, 6);
     expect(chico.centerY / 469).toBeCloseTo(grande.centerY / 2000, 6);
+  });
+});
+
+describe("initialStickerSize — el emoji recién puesto se tiene que poder agarrar", () => {
+  /**
+   * Origen (feedback cliente 2026-09-03): en el teléfono, el emoji que aparecía
+   * al tocarlo era "chico" y no había forma de moverlo con el dedo. La fracción
+   * por defecto está pensada para la FOTO —cuánto del cuadro ocupa el dibujo—,
+   * y en un recuadro angosto esa misma fracción da un blanco de 30 px, por
+   * debajo del mínimo táctil que respeta todo el resto de la interfaz.
+   */
+  it("en un recuadro grande manda la fracción de siempre: el emoji no se agranda de más", () => {
+    expect(initialStickerSize({ width: 800, height: 1000 })).toBe(DEFAULT_STICKER_SIZE);
+  });
+
+  it("en un recuadro chico crece hasta el mínimo táctil", () => {
+    const box = { width: 320, height: 180 };
+    const size = initialStickerSize(box);
+    expect(size).toBeGreaterThan(DEFAULT_STICKER_SIZE);
+    expect(stickerBox(sticker({ size }), box).fontSize).toBeGreaterThanOrEqual(
+      MIN_STICKER_TOUCH_PX,
+    );
+  });
+
+  it("el blanco nunca baja de 44 px, cualquiera sea la forma del recuadro", () => {
+    // 44 px es el target táctil del sistema (`min-h-11`). Si el emoji queda más
+    // chico que eso, "arrastralo" es una instrucción que no se puede cumplir.
+    const formas = [
+      { width: 320, height: 400 },
+      { width: 335, height: 188 },
+      { width: 240, height: 240 },
+      { width: 150, height: 84 },
+    ];
+    for (const box of formas) {
+      const size = initialStickerSize(box);
+      expect(stickerBox(sticker({ size }), box).fontSize).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  it("nunca pasa el tope: un emoji no puede nacer tapando media foto", () => {
+    expect(initialStickerSize({ width: 40, height: 20 })).toBeLessThanOrEqual(MAX_STICKER_SIZE);
+  });
+
+  it("sin recuadro medido todavía, la fracción de siempre", () => {
+    // Pasa cuando el emoji se pone antes de que el layout mida: inventar un
+    // tamaño con un 0 daría un `size` infinito.
+    expect(initialStickerSize({ width: 0, height: 0 })).toBe(DEFAULT_STICKER_SIZE);
   });
 });
 

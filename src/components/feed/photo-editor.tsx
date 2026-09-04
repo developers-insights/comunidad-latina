@@ -32,6 +32,8 @@ import {
 } from "@/lib/media/photo-filters";
 import {
   CAPTION_MAX_LENGTH,
+  MAX_LONG_SIDE,
+  captionFontSizeFor,
   type CaptionBackground,
   type CaptionPosition,
 } from "@/lib/media/bake-photo";
@@ -44,6 +46,7 @@ import {
   clampCropOffset,
   clampCropScale,
   coverScaleFor,
+  cropOutputSize,
   cropRectFrom,
   cropStageStateFrom,
   initialCropState,
@@ -58,7 +61,6 @@ import {
   CAPTION_FONT_LIST,
   DEFAULT_CAPTION_COLOR,
   DEFAULT_CAPTION_FONT,
-  DEFAULT_STICKER_SIZE,
   MAX_STICKERS,
   MAX_STICKER_SIZE,
   MIN_STICKER_SIZE,
@@ -68,6 +70,7 @@ import {
   captionFontCss,
   captionHaloColor,
   clampStickerSize,
+  initialStickerSize,
   normalizeStickers,
   resolveCaptionColor,
   stickerBox,
@@ -248,6 +251,96 @@ const ASPECT_LABELS: Record<CropAspectId, string> = {
   "16:9": COPY.composer.photoEditor.cropWide,
 };
 
+/**
+ * Ancho máximo del recuadro de la foto, en px.
+ *
+ * En un teléfono nunca llega a tocar (manda el alto disponible); existe para
+ * las pantallas grandes, donde una foto de 500 px de ancho deja de ser "lo que
+ * estoy editando" y pasa a ser un póster con los controles perdidos abajo.
+ */
+const MAX_STAGE_WIDTH = 384;
+
+/**
+ * EL RECUADRO MÁS GRANDE CON ESTA FORMA QUE ENTRA EN EL HUECO.
+ *
+ * Ésta es la cuenta que antes hacía el CSS con un `min()` de `vh`, y por eso el
+ * editor quedaba chico en un teléfono (feedback cliente 2026-09-03: "el espacio
+ * es muy chico"): `42vh` no sabe cuánto alto ya se llevaron el título, las
+ * pestañas, la herramienta y el pie, ni que el teclado acaba de comerse media
+ * pantalla. El hueco medido sí.
+ *
+ * Se recorta SIEMPRE por el ancho —nunca se topa el alto— porque una caja con
+ * `aspect-ratio` a la que se le clava también el alto deja de cumplir la
+ * relación, y una relación rota acá significa publicar un encuadre distinto del
+ * que se vio.
+ */
+function fitInside(frame: Size, ratio: number): Size | null {
+  if (frame.width <= 0 || frame.height <= 0) return null;
+  if (!Number.isFinite(ratio) || ratio <= 0) return null;
+  const width = Math.min(frame.width, frame.height * ratio, MAX_STAGE_WIDTH);
+  return { width, height: width / ratio };
+}
+
+/**
+ * CUERPO DEL TEXTO EN PANTALLA: el mismo que va a quemar `bake-photo.ts`,
+ * traído a la escala del recuadro que se está mirando.
+ *
+ * Un tamaño fijo en la vista previa miente en las dos direcciones —enorme sobre
+ * un recuadro chico, minúsculo sobre uno grande— y lo que se quema no se
+ * deshace. El horneado elige el cuerpo con `captionFontSizeFor(anchoDelCanvas)`;
+ * acá se le pregunta a ÉL y se divide por la escala, así que la única fórmula
+ * sigue viviendo en un solo lado.
+ *
+ * Sin foto cargada o sin recuadro medido devuelve null: no se puede escalar
+ * contra un canvas cuyo tamaño todavía no se conoce.
+ */
+function captionPreviewFontSize(
+  natural: Size | null,
+  stage: Size,
+  stageState: { scale: number; offset: CropOffset } | null,
+): number | null {
+  if (!natural || !stageState || stage.width <= 0) return null;
+  const crop = cropRectFrom({
+    natural,
+    stage,
+    scale: stageState.scale,
+    offset: stageState.offset,
+  });
+  const output = cropOutputSize(natural, crop, MAX_LONG_SIDE);
+  if (output.width <= 0) return null;
+  return Math.round((captionFontSizeFor(output.width) * stage.width) / output.width);
+}
+
+/**
+ * CUÁNTO MIDE UN NODO, en píxeles y al día.
+ *
+ * Tres lugares de este archivo lo necesitan —el hueco donde entra la foto, el
+ * recuadro del editor y el de la miniatura— y los tres por el mismo motivo: las
+ * cuentas de `photo-crop.ts` y `photo-overlay.ts` trabajan en píxeles del
+ * recuadro, así que un número inventado publica un encuadre que no es el que se
+ * vio en pantalla.
+ *
+ * Devuelve {0,0} hasta la primera medición, y para siempre donde no haya
+ * `ResizeObserver`: quien lo usa tiene que saber qué hacer sin medida.
+ */
+function useMeasuredSize<T extends HTMLElement>(): [React.RefObject<T | null>, Size] {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState<Size>({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const rect = node.getBoundingClientRect();
+      setSize({ width: rect.width, height: rect.height });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, size];
+}
+
 /** Cuánto mueve una flecha del teclado, en px de stage / fracción del recuadro. */
 const KEYBOARD_STEP_PX = 12;
 const KEYBOARD_STEP_FRACTION = 0.02;
@@ -325,8 +418,14 @@ export function PhotoEditor({
   /** Tamaño real de la foto. Sin esto no hay recorte posible: todas las cuentas
    *  de `photo-crop.ts` se apoyan en él. */
   const [natural, setNatural] = useState<Size | null>(null);
-  const [stage, setStage] = useState<Size>({ width: 0, height: 0 });
-  const stageRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * El HUECO donde entra la foto y el RECUADRO que ocupa adentro. Son dos
+   * medidas y no una: el hueco lo reparte el layout (crece con la hoja, se
+   * encoge cuando aparece el teclado) y el recuadro es la caja con la forma
+   * elegida que entra ahí — la que después miden `photo-crop` y `photo-overlay`.
+   */
+  const [frameRef, frame] = useMeasuredSize<HTMLDivElement>();
+  const [stageRef, stage] = useMeasuredSize<HTMLDivElement>();
 
   /**
    * Un fotograma del video como imagen, para que las 16 miniaturas del carrusel
@@ -346,27 +445,10 @@ export function PhotoEditor({
     };
   }, [isVideo, preview]);
 
-  /**
-   * El stage se MIDE, no se fija en un número. El recorte del avatar puede
-   * permitirse `STAGE_SIZE = 256` porque es un círculo chico; acá la foto ocupa
-   * el ancho de la hoja, que en un teléfono angosto y en una tablet no es el
-   * mismo. Y las cuentas de `photo-crop.ts` piden el tamaño del stage: con un
-   * número inventado, el encuadre que se ve no sería el que se guarda.
-   */
-  useLayoutEffect(() => {
-    const node = stageRef.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const measure = () => {
-      const rect = node.getBoundingClientRect();
-      setStage({ width: rect.width, height: rect.height });
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
   const ratio = natural ? aspectRatioOf(draft.cropAspect, natural) : 4 / 5;
+  /** La forma del recuadro. Un video no se recorta: siempre 4:5. */
+  const boxRatio = isVideo ? 4 / 5 : ratio;
+  const box = fitInside(frame, boxRatio);
 
   /**
    * ─── EL ENCUADRE SE DERIVA, NO SE GUARDA EN UN EFECTO ────────────────────
@@ -538,7 +620,11 @@ export function PhotoEditor({
       // recorte. Después se arrastra a donde vaya.
       x: 0.5,
       y: 0.5,
-      size: DEFAULT_STICKER_SIZE,
+      // El tamaño se decide CONTRA EL RECUADRO REAL: la fracción de siempre
+      // cuando la foto es holgada, y algo más grande cuando el recuadro es bajo
+      // —un 16:9 en un teléfono— para que el emoji siga siendo agarrable con el
+      // dedo. Ver `initialStickerSize`.
+      size: initialStickerSize(stage),
       ...parte,
     };
     setStickerNotice(false);
@@ -608,6 +694,11 @@ export function PhotoEditor({
 
   const filterCss = photoEditFilterCss(draft);
   const captionLength = draft.captionText.length;
+  /** ¿Hay texto que pintar sobre la foto, y estamos en una pestaña que lo muestra? */
+  const showCaption = !isVideo && !cropping && draft.captionText.trim().length > 0;
+  const captionFontPx = showCaption
+    ? captionPreviewFontSize(natural, stage, stageState)
+    : null;
   const zoomPercent =
     natural && stageState && stage.width > 0
       ? Math.round((stageState.scale / coverScaleFor(natural, stage)) * 100)
@@ -617,25 +708,35 @@ export function PhotoEditor({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* ── LA FOTO, ARRIBA Y FIJA ──────────────────────────────────────────
+      {/* ── LA FOTO, ARRIBA Y TAN GRANDE COMO SE PUEDA ──────────────────────
           Nunca scrollea: es la referencia contra la que se toma cada decisión
           de abajo, y perderla de vista mientras se elige un filtro convierte
-          "elegir" en "probar y volver a subir". El alto está topado en vh para
-          que en un teléfono chico las pestañas y el pie sigan alcanzándose con
-          el pulgar. */}
-      <div className="shrink-0 px-5 pt-3">
-        {/* ANCHO POR `min()`, no alto por `max-height`. Con el ancho al 100% y
-            un `aspect-ratio`, un `max-h` recorta el alto y DEFORMA la caja: la
-            relación deja de cumplirse justo en la pantalla más chica, que es
-            donde el encuadre importa. Con el ancho atado a los tres topes a la
-            vez —el contenedor, la medida de lectura y el alto disponible— la
-            relación se cumple siempre y la foto nunca se come la pantalla. */}
+          "elegir" en "probar y volver a subir".
+
+          SE LLEVA TODO EL HUECO QUE SOBRE (`flex-1`), y lo CEDE cuando hace
+          falta. Antes era `shrink-0` con un alto en `vh`, y eso producía los dos
+          defectos que reportó el cliente el 2026-09-03: con el teclado abierto
+          la foto se quedaba con su alto entero y el campo de texto quedaba
+          aplastado contra el pie —"no sé ni lo que escribes"—, y en una pantalla
+          chica la cuenta en `vh` daba una foto de estampilla, "el espacio es muy
+          chico para agregar cosas". Ahora el orden de prioridades es el
+          correcto: primero la herramienta con la que se está trabajando,
+          después todo lo que sobra para la foto. */}
+      <div
+        ref={frameRef}
+        className="flex min-h-0 flex-1 items-center justify-center px-2 pt-3 sm:px-5"
+      >
+        {/* EL RECUADRO SE MIDE, NO SE DEDUCE DE UNA FÓRMULA DE `vh` (ver
+            `fitInside`). Mientras no haya medida —primer pintado, o un navegador
+            sin `ResizeObserver`— vale la forma con el ancho topado: es el
+            camino de antes, y se reemplaza en el mismo frame. */}
         <div
-          className="relative mx-auto overflow-hidden rounded-xl bg-surface-subtle"
-          style={{
-            aspectRatio: isVideo ? "4 / 5" : `${ratio}`,
-            width: `min(100%, 24rem, calc(42vh * ${isVideo ? 0.8 : ratio}))`,
-          }}
+          className="relative overflow-hidden rounded-xl bg-surface-subtle"
+          style={
+            box
+              ? { width: box.width, height: box.height }
+              : { aspectRatio: `${boxRatio}`, width: `min(100%, ${MAX_STAGE_WIDTH}px)` }
+          }
         >
           <div
             ref={stageRef}
@@ -719,13 +820,17 @@ export function PhotoEditor({
           {/* Texto y emojis van FUERA del stage que se arrastra: se posicionan
               contra el recuadro publicado, no contra la foto cruda. Es la misma
               regla que aplica `bake-photo.ts` al hornear. */}
-          {!isVideo && !cropping && draft.captionText.trim() && (
+          {showCaption && (
             <PhotoCaptionOverlay
               text={draft.captionText}
               position={draft.captionPosition}
               background={draft.captionBackground}
               color={draft.captionColor}
               font={draft.captionFont}
+              // El cuerpo EXACTO del horneado, a escala de esta pantalla (ver
+              // `captionPreviewFontSize`). Sin medida todavía, la clase de
+              // siempre: un texto sin tamaño no se vería en absoluto.
+              fontSize={captionFontPx ?? undefined}
               textClassName="text-lg"
             />
           )}
@@ -784,8 +889,20 @@ export function PhotoEditor({
         </div>
       )}
 
-      {/* ── PANEL DE LA HERRAMIENTA ──────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-4 pt-3">
+      {/* ── PANEL DE LA HERRAMIENTA ────────────────────────────────────────
+          Toma el alto de SU CONTENIDO, topado en 38dvh, y cede desde ahí. Las
+          dos cosas importan y en ese orden:
+
+           · el tope evita que el catálogo de emojis —que es alto— se quede con
+             la pantalla entera y deje la foto en cero;
+           · que ceda es lo que hace que, con el teclado abierto, lo que se
+             achique sea la foto y no el campo donde se está escribiendo.
+
+          El tope va en `dvh` y no en `%` a propósito: un porcentaje depende de
+          que toda la cadena de contenedores tenga un alto definido, y si en
+          algún navegador no lo tiene se lee como "sin tope" — justo el caso que
+          este número viene a evitar. */}
+      <div className="flex min-h-0 max-h-[38dvh] flex-col overflow-y-auto px-5 pb-4 pt-3">
         {tab === "crop" && !isVideo && (
           <div className="flex flex-col gap-3">
             <fieldset>
@@ -1197,24 +1314,10 @@ export function PhotoEditPreview({
   textClassName?: string;
   className?: string;
 }) {
-  const boxRef = useRef<HTMLDivElement | null>(null);
-  const [box, setBox] = useState({ width: 0, height: 0 });
-
   // Los emojis se colocan en píxeles del recuadro (misma cuenta que el
   // horneado): hay que saber cuánto mide esta caja, y en la tira mide distinto
   // que en el editor.
-  useLayoutEffect(() => {
-    const node = boxRef.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const measure = () => {
-      const rect = node.getBoundingClientRect();
-      setBox({ width: rect.width, height: rect.height });
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+  const [boxRef, box] = useMeasuredSize<HTMLDivElement>();
 
   const crop = photoEditCrop(edit);
   const cropped = !isFullCrop(crop) && (edit?.cropRatio ?? 0) > 0;
@@ -1462,6 +1565,7 @@ export function PhotoCaptionOverlay({
   font = DEFAULT_CAPTION_FONT,
   className,
   textClassName,
+  fontSize,
 }: {
   text: string;
   position: CaptionPosition;
@@ -1470,6 +1574,13 @@ export function PhotoCaptionOverlay({
   font?: CaptionFontId;
   className?: string;
   textClassName?: string;
+  /**
+   * Cuerpo en px, cuando quien llama SABE cuánto mide el recuadro y puede pedir
+   * el mismo tamaño que va a quemar el canvas (ver `captionPreviewFontSize`).
+   * Sin esto manda `textClassName`, que es lo que necesita una miniatura: ahí
+   * no hay recuadro publicado contra el cual escalar nada.
+   */
+  fontSize?: number;
 }) {
   const trimmed = text.trim();
   if (!trimmed) return null;
@@ -1498,10 +1609,14 @@ export function PhotoCaptionOverlay({
             background === "none"
               ? `0 1px 6px ${captionHaloColor(tint)}, 0 0 2px ${captionHaloColor(tint)}`
               : undefined,
+          // 1.3 es la MISMA interlínea que usa `drawCaption` en el canvas: con
+          // el cuerpo exacto y otra interlínea, un texto de tres renglones
+          // seguiría cayendo en otro lado del que se vio.
+          ...(fontSize ? { fontSize, lineHeight: 1.3 } : null),
         }}
         className={cn(
           "line-clamp-4 max-w-full break-words text-center font-bold",
-          textClassName ?? "text-sm",
+          fontSize ? undefined : (textClassName ?? "text-sm"),
         )}
       >
         {trimmed}

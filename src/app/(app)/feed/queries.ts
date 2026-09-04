@@ -136,6 +136,15 @@ export interface PostRow {
   /** posts.video_category — catálogo cerrado del menú de Videos Cortos. */
   video_category: string | null;
   /**
+   * posts.video_poster_path (0132) — el fotograma que el navegador capturó al
+   * subir. Viaja con toda fila de post por el mismo motivo que las columnas de
+   * video: la decisión que habilita (¿con qué pinto este video mientras carga?)
+   * la toma la tarjeta, que se monta en las cuatro superficies. Opcional porque
+   * una fila anterior a la 0132 —o una consulta que no la pida— significa "sin
+   * poster", que es la verdad y no un error.
+   */
+  video_poster_path?: string | null;
+  /**
    * LAS TRES MARCAS DEL MENÚ ⋯ (0097). Viajan con toda fila de post por el mismo
    * motivo que las de video: la decisión que habilitan —qué ofrece el menú y qué
    * rótulo lleva cada fila— la toma un componente que se monta en varias
@@ -220,7 +229,7 @@ type ParsablePostColumns =
  * escalares: el costo es nulo al lado de la clase de bug que evitan.
  */
 export const POST_COLUMNS =
-  "id, body, kind, media, status, like_count, comment_count, view_count, created_at, author_id, entity_listing_id, video_type, duration_seconds, is_paid_ad, eligible_for_short_feed, video_category, pinned_at, hidden_at, comments_locked_at, media_filters, mux_playback_id, mux_status" as ParsablePostColumns;
+  "id, body, kind, media, status, like_count, comment_count, view_count, created_at, author_id, entity_listing_id, video_type, duration_seconds, is_paid_ad, eligible_for_short_feed, video_category, video_poster_path, pinned_at, hidden_at, comments_locked_at, media_filters, mux_playback_id, mux_status" as ParsablePostColumns;
 
 const FALLBACK_AUTHOR: AuthorView = {
   profileId: null,
@@ -1015,6 +1024,12 @@ export function toPostCardModel(
   // el kind se infiere por extensión (mediaKindOf). photoUrl queda como la
   // primera FOTO para los consumidores viejos que renderizan <img>.
   const filterCssByPath = mediaFilterCssByPath(row.media_filters);
+  /**
+   * Poster del video (0132), ya como URL pública. Una sola por publicación —el
+   * composer acepta un video por post— así que se resuelve una vez y se le
+   * cuelga a la diapositiva de video, sea la del bucket o la de Mux.
+   */
+  const posterUrl = row.video_poster_path ? postMediaUrl(row.video_poster_path) : null;
   const media: PostMediaView[] = row.media
     .filter((path) => path && path.trim().length > 0)
     .map((path) => ({
@@ -1023,6 +1038,9 @@ export function toPostCardModel(
       // Se busca por la RUTA guardada, no por posición: quitar una foto de una
       // publicación ya publicada (0097) no puede correrle el filtro al video.
       filterCss: filterCssByPath.get(path),
+      // Sólo al video: una FOTO no espera metadata para pintarse, así que un
+      // poster ahí sería un campo que no significa nada.
+      ...(mediaKindOf(path) === "video" && posterUrl ? { posterUrl } : {}),
     }));
 
   /**

@@ -19,7 +19,10 @@ import {
   MAX_VIDEOS,
   checkPhotoPayload,
 } from "@/lib/media/post-media-limits";
-import { VIDEO_FILENAME_PATTERN } from "@/lib/media/video-upload-limits";
+import {
+  VIDEO_FILENAME_PATTERN,
+  VIDEO_POSTER_FILENAME_PATTERN,
+} from "@/lib/media/video-upload-limits";
 import { parseMediaFilterRef, type MediaFilterRef } from "@/lib/media/photo-filters";
 import {
   TIER_HUMAN,
@@ -162,6 +165,33 @@ function isOwnVideoPath(path: string, tenantId: string, userId: string): boolean
     tenantSegment === tenantId &&
     userSegment === userId &&
     VIDEO_FILENAME_PATTERN.test(filename) &&
+    !filename.includes("..")
+  );
+}
+
+/**
+ * LA MISMA REGLA PARA EL POSTER DEL VIDEO (0132). Cambia una sola cosa: la
+ * extensión válida es `.jpg` y no la lista de contenedores de video.
+ *
+ * Existe por lo mismo que su hermana: `videoPosterPath` llega por el body, y un
+ * campo que dice "esto es mío" hay que comprobarlo contra el tenant del guard y
+ * el usuario del JWT. Sin esto, cualquiera con un token del tenant podría
+ * apuntar el poster de su publicación a un archivo del prefijo de otra persona
+ * —el bucket es público de lectura— y hacerlo aparecer sobre su video.
+ *
+ * La forma se repite además en el CHECK `posts_video_poster_path_shape` de la
+ * 0132. Las dos vallas dicen lo mismo a propósito: ésta da un error de producto
+ * y aquélla es la última que sigue valiendo si alguien escribe en la tabla por
+ * fuera de esta action.
+ */
+function isOwnPosterPath(path: string, tenantId: string, userId: string): boolean {
+  const segments = path.split("/");
+  if (segments.length !== 3) return false;
+  const [tenantSegment, userSegment, filename] = segments;
+  return (
+    tenantSegment === tenantId &&
+    userSegment === userId &&
+    VIDEO_POSTER_FILENAME_PATTERN.test(filename) &&
     !filename.includes("..")
   );
 }
@@ -334,6 +364,25 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   }
 
   /**
+   * POSTER DEL VIDEO (0132) — la ruta del fotograma que el navegador capturó al
+   * elegir el archivo y subió al mismo prefijo del bucket.
+   *
+   * OPCIONAL SIEMPRE, y las tres razones por las que puede faltar son legítimas:
+   * el navegador no pudo decodificar el archivo, su subida falló (nunca frena la
+   * publicación), o el video viaja por Mux —que trae su propia miniatura—. Un
+   * post sin poster se pinta como se pintaba antes de esta feature.
+   *
+   * Ausente ≠ inválido: si viene, tiene que ser una ruta PROPIA (se comprueba
+   * después del guard, con `isOwnPosterPath`); si no viene, la columna queda en
+   * NULL, que es lo que la columna significa.
+   */
+  const rawPosterPath = formData.get("videoPosterPath");
+  const videoPosterPath =
+    typeof rawPosterPath === "string" && rawPosterPath.length > 0
+      ? rawPosterPath.slice(0, 300)
+      : null;
+
+  /**
    * FILTRO DEL VIDEO (0104) — un arreglo PARALELO a `videoPaths`, cada entrada
    * `null` o `{ id, intensity }`.
    *
@@ -494,6 +543,19 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // que firma el request. Un path ajeno no se persiste jamás (la policy 0025
   // ya lo habría rechazado al subir; esto es la misma regla al guardar).
   if (videoPaths.some((path) => !isOwnVideoPath(path, tenant.id, user.id))) {
+    return { ok: false, code: "photo" };
+  }
+
+  /**
+   * Y el poster (0132), con la misma vara. Un poster SIN video no se guarda: la
+   * columna describe cómo se pinta el video de la publicación, así que sin video
+   * no describe nada — y aceptarlo sería dejar entrar una ruta arbitraria a una
+   * fila que nadie va a mirar nunca.
+   */
+  if (
+    videoPosterPath &&
+    (videoPaths.length === 0 || !isOwnPosterPath(videoPosterPath, tenant.id, user.id))
+  ) {
     return { ok: false, code: "photo" };
   }
 
@@ -731,6 +793,18 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     ...basePayload,
     media_filters: mediaFilters,
     ...(pollKind ? { poll_kind: pollKind } : {}),
+    /**
+     * Poster del video (0132). Viaja acá adentro y no en `basePayload` por el
+     * mismo motivo que `media_filters`: la columna existe en la base desde su
+     * migración, pero `database.types.ts` se regenera aparte y todavía no la
+     * conoce — el `as PostInsert` de abajo es el que sostiene ese desfase.
+     *
+     * NULL cuando no hay video, cuando el navegador no pudo sacar el fotograma,
+     * o cuando el video va por Mux (que trae su propia miniatura). Va explícito
+     * incluso en null: al publicar un borrador de Mux esto es un UPDATE, y un
+     * campo ausente dejaría el valor viejo en vez de decir la verdad.
+     */
+    video_poster_path: videoPosterPath,
   } as PostInsert;
 
   /**

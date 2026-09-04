@@ -254,13 +254,215 @@ export const COPY = {
   },
 
   // ===========================================================================
-  // REGIÓN list — /empleos (lista + filtro de jornada)
+  // REGIÓN kindPicker — el primer paso de /empleos/publicar
+  //
+  // Lo propuso Nacho en la call del 3/9 y el cliente lo aprobó con una palabra
+  // ("excelente"): antes de cualquier campo, elegir si lo que se publica es un
+  // EMPLEO o un SERVICIO, y que el formulario cambie.
+  //
+  // La pantalla tiene que resolver una confusión real y no sólo bifurcar: en
+  // esta comunidad "trabajo" nombra las dos cosas. Por eso cada opción se
+  // explica desde QUIÉN SOS, no desde qué es el aviso — "busco gente" y "ofrezco
+  // lo que sé hacer" se responden sin pensar; "aviso de demanda" y "aviso de
+  // oferta", no.
+  // ===========================================================================
+  kindPicker: {
+    title: "¿Qué querés publicar?",
+    intro: "Elegí una y te preguntamos sólo lo que hace falta.",
+    job: {
+      title: "Un empleo",
+      body: "Busco gente para trabajar",
+      hint: "Tiempo completo, medio tiempo o un trabajo de uno o dos días.",
+      example: "Ej.: “Busco cocinero y dos meseros para el restaurante”.",
+    },
+    service: {
+      title: "Un servicio",
+      body: "Ofrezco lo que sé hacer",
+      hint: "Contás qué hacés, cuándo estás disponible y te escriben por Mensajes.",
+      example: "Ej.: “Soy jardinero, disponible sábados y domingos”.",
+    },
+    /**
+     * La tercera puerta, y por eso NO es un tercer botón: quien tiene licencia
+     * profesional publica en otro módulo, con verificación de matrícula. Va como
+     * una línea al pie —no como opción— para no invitar a que cualquiera se
+     * anote ahí; el cliente fue explícito: Profesionales es "gente con
+     * licencia".
+     */
+    professionalNote: "¿Tenés licencia o matrícula (plomería, contaduría, salud)?",
+    professionalLink: "Publicá en Profesionales",
+    change: "Cambiar",
+  },
+
+  // ===========================================================================
+  // REGIÓN servicePublish — wizard corto de /empleos/publicar (camino servicio)
+  //
+  // TRES pasos contra los cuatro del empleo, y la diferencia no es cosmética:
+  // un servicio no tiene salario obligatorio, ni jornada, ni preguntas al
+  // postulante, ni fotos del lugar. Pedir esos campos "por simetría" sería
+  // hacerle llenar una búsqueda de empleo a alguien que sólo quiere decir que
+  // corta el pasto.
+  // ===========================================================================
+  servicePublish: {
+    title: "Publicar un servicio",
+    subtitle:
+      "Contá qué hacés, cuándo podés y cuánto cobrás. Son tres pasos cortos y no hace falta más.",
+    stepEyebrow: (current: number, total: number) => `Paso ${current} de ${total}`,
+
+    steps: {
+      // ---------------------------------------------------------------- 1/3
+      what: {
+        title: "¿Qué sabés hacer?",
+        intro: "Decilo como se lo contarías a un vecino.",
+        titleLabel: "Tu servicio",
+        titlePlaceholder: "Ej.: Jardinería y corte de pasto",
+        titleHelp: "Una línea con lo que hacés. Sin títulos rimbombantes.",
+        descriptionLabel: "Contá un poco más",
+        descriptionPlaceholder:
+          "Ej.: Corto el pasto, podo y limpio patios. Llevo mi propia máquina y bolsas. Trabajo en Corona y alrededores, y puedo pasar a ver el patio antes de arreglar el precio.",
+        descriptionHelp:
+          "Qué incluye, si llevás tus herramientas y hasta dónde vas. Mientras más claro, menos preguntas después.",
+      },
+
+      // ---------------------------------------------------------------- 2/3
+      when: {
+        title: "Dónde y cuándo",
+        intro: "Con esto la gente sabe si puede contar con vos.",
+        modeLegend: "Dónde lo hacés",
+        modeHelp: "Si se resuelve a distancia, después no hace falta poner una zona.",
+        areaLabel: "Zona",
+        areaPlaceholder: "Ej.: Corona, Queens",
+        areaHelp: "El barrio o la ciudad donde trabajás.",
+        areaRemoteTitle: "Tu servicio es a distancia",
+        areaRemoteBody:
+          "Como lo hacés desde donde estés, no hace falta poner una zona.",
+        daysLabel: "Días que estás disponible",
+        daysHelp: "Tocá los días que podés trabajar.",
+        scheduleLabel: "Horario",
+        schedulePlaceholder: "Ej.: de 8 de la mañana a 2 de la tarde",
+        scheduleHelp: "Opcional. Si es a coordinar, dejalo vacío.",
+
+        // ---- Precio de referencia ---------------------------------------
+        priceTitle: "Precio de referencia",
+        priceHelp:
+          "Opcional, pero ayuda muchísimo: quien te escribe ya sabe más o menos en qué números se mueve.",
+        amountLabel: "Desde",
+        amountPlaceholder: "25",
+        amountHelp: "Solo el número. Dejalo vacío si preferís cotizar cada trabajo.",
+        periodLabel: "Cada cuánto",
+        previewLabel: "Así se va a ver en tu aviso",
+        /** Vista previa cuando no puso monto: es una opción válida, no un hueco. */
+        previewToAgree: "A convenir",
+      },
+
+      // ---------------------------------------------------------------- 3/3
+      review: {
+        title: "Revisá y publicá",
+        intro: "Así lo va a ver la comunidad. Si algo no te cierra, volvé y cambialo.",
+        whatTitle: "Tu servicio",
+        whereTitle: "Dónde",
+        whenTitle: "Cuándo",
+        priceTitle: "Precio",
+        emptyValue: "No lo pusiste",
+        /** Lo que la gente NO tiene que descubrir después de publicar. */
+        contactNote:
+          "Quien te quiera contratar te escribe por Mensajes. No mostramos tu teléfono ni tu correo.",
+      },
+    },
+
+    nav: {
+      back: "Atrás",
+      next: "Siguiente",
+      submit: "Publicar mi servicio",
+      submitting: "Publicando…",
+    },
+
+    successPublishedTitle: "¡Tu servicio ya está publicado!",
+    successPublishedBody:
+      "Aparece en Empleos, en la pestaña Servicios, y te avisamos apenas alguien te escriba.",
+    successReviewTitle: "Tu servicio está en revisión",
+    successReviewBody:
+      "El equipo de tu comunidad lo mira para cuidar la calidad. Apenas se apruebe aparece en Servicios.",
+    goToServices: "Ver los servicios",
+    publishAnother: "Publicar otro",
+
+    needLoginTitle: "Entrá para publicar tu servicio",
+    needLoginBody:
+      "Con tu cuenta publicás el aviso y recibís los mensajes de quien te quiera contratar.",
+
+    errors: {
+      titleShort: "Escribí qué hacés con un poco más de detalle (al menos 8 caracteres).",
+      descriptionShort: "Contanos un poco más de tu servicio — al menos 30 caracteres.",
+      areaShort: "Decinos la zona (al menos 3 caracteres).",
+      priceInvalid: "Ese monto no nos cierra. Poné sólo el número, sin signos.",
+      generic:
+        "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo en un ratito.",
+    },
+  },
+
+  // ===========================================================================
+  // REGIÓN service — tarjeta y detalle de un aviso kind='service'
+  // ===========================================================================
+  service: {
+    /** Rótulo del tipo de aviso, en la tarjeta y en el detalle. */
+    badge: "Servicio",
+    /** Encabezado de la tarjeta: quién ofrece, no qué se busca. */
+    offeredBy: (name: string) => `${name} lo ofrece`,
+    offeredByUnknown: "Servicio de la comunidad",
+    availabilityLabel: "Disponible",
+    zoneLabel: "Zona",
+    availabilityUnknown: "Horarios a coordinar",
+    zoneUnknown: "Zona a coordinar",
+    priceToAgree: "A convenir",
+    priceToAgreeHint: "Prefiere ver el trabajo antes de dar un precio.",
+    /** CTA principal. "Escribirle" y no "Contactar": del otro lado hay alguien. */
+    contact: "Escribirle",
+    contactPlaceholder: "Hola, vi tu servicio. ¿Estás disponible?",
+    viewService: "Ver el servicio",
+    openPhotos: (title: string) => `Ver fotos de ${title}`,
+    detailMetadataFallback: "Servicio",
+    aboutTitle: "Lo que hace",
+    detailsTitle: "Cuándo y dónde",
+    detailsFootnote: "Lo declara quien ofrece el servicio.",
+    publishedBy: "Quién ofrece el servicio",
+    pendingBanner:
+      "Tu servicio está en revisión — lo publicamos apenas pase el control de seguridad.",
+    /**
+     * Por qué un servicio no tiene "Postularme". Se dice UNA vez, en el detalle
+     * y sólo a quien lo publicó: es la pregunta que va a hacerse al no ver una
+     * bandeja de candidatos.
+     */
+    ownerNoApplications:
+      "Un servicio no recibe postulaciones: quien te quiera contratar te escribe por Mensajes.",
+  },
+
+  // ===========================================================================
+  // REGIÓN list — /empleos (lista + pestañas Empleos · Ocasional · Servicios)
   // ===========================================================================
   list: {
     title: "Empleos en tu comunidad",
-    subtitle: "Trabajos que ofrece gente de acá",
-    /** Chips de jornada — la etiqueta de cada tipo sale de EMPLOYMENT_TYPE_LABEL. */
-    filterLabel: "Filtrar por jornada",
+    /**
+     * Ya no dice sólo "trabajos": desde el 2026-09-03 esta pantalla también
+     * lista SERVICIOS, que son el otro lado del mostrador (quien ofrece lo que
+     * sabe hacer). El subtítulo lo tiene que decir antes de que alguien scrollee
+     * y se pregunte qué hace un jardinero entre los avisos de empleo.
+     */
+    subtitle: "Trabajo y servicios de gente de acá",
+
+    /**
+     * CTA de la portada de la sección.
+     *
+     * Vive acá y ya no en `i18n/es/sections.ts` (`publishJobTitle`), que decía
+     * "Publicá tu empleo": con el selector de Empleo/Servicio arriba del wizard,
+     * ese título prometía la mitad de lo que hay del otro lado. El copy del
+     * módulo es de este archivo (ver el encabezado), así que se mudó a su casa
+     * en vez de dejar la sección hablando por dos lugares. Las claves de i18n
+     * quedan en pie porque las usa el test del primitivo `SectionCta`.
+     */
+    publishCtaTitle: "Publicá un empleo o un servicio",
+    publishCtaHint: "Buscá gente para tu equipo, u ofrecé lo que sabés hacer.",
+
+    /** Pestañas — la etiqueta de cada una sale de EMPLEOS_TAB_LABEL. */
+    filterLabel: "Filtrar por tipo de aviso",
     filterAll: "Todos",
     /** Sin monto cargado: lo decimos de frente en vez de dejar el hueco. */
     salaryToAgree: "Pago a convenir",
@@ -273,14 +475,21 @@ export const COPY = {
      * siempre y con un solo nombre, en el feed y en cada listado.
      */
     adChip: "Patrocinado",
-    loadMore: "Ver más empleos",
+    /** "Avisos" y no "empleos": abajo del botón puede haber de los dos tipos. */
+    loadMore: "Ver más avisos",
     loadingLabel: "Cargando empleos…",
-    emptyTitle: "Todavía no hay empleos publicados",
+    emptyTitle: "Todavía no hay nada publicado",
     emptyMessage:
-      "Acá vas a ver el trabajo que ofrece la comunidad. Si estás buscando gente, podés publicar el primero.",
-    emptyFilteredTitle: "Nada con esa jornada por ahora",
-    emptyFilteredMessage: "Probá con la otra opción o mirá todos los empleos disponibles.",
-    emptyPublishCta: "Publicar el primer empleo",
+      "Acá vas a ver el trabajo y los servicios que ofrece la comunidad. Podés publicar el primero.",
+    /**
+     * El vacío NOMBRA la pestaña: "nada con esa jornada" era cierto cuando el
+     * filtro era una jornada, pero en Servicios diría una cosa que no existe.
+     * Con la pestaña adentro, quien busca un jardinero entiende en el acto que
+     * el que falta es el jardinero, no el filtro.
+     */
+    emptyFilteredTitle: (tab: string) => `Nada en ${tab} por ahora`,
+    emptyFilteredMessage: "Probá con otra pestaña o mirá todos los avisos.",
+    emptyPublishCta: "Publicar el primero",
     /** Publicador sin cuenta (seed/API) — mismo texto que /propiedades y /profesionales. */
     externalPublisher: (name: string) => `Publicado por ${name}`,
     /** Miembro con cuenta pero sin perfil resuelto en el batch (caso borde). */
