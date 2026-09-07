@@ -15,11 +15,23 @@ export {
   type MiembroVisible,
 } from "./group-manage";
 export { GroupMessageBubble } from "./group-message-bubble";
-export { InboxFiltros } from "./inbox-filtros";
-export { InboxRow, type EstadoDePresencia } from "./inbox-row";
 export { InboxRowLink } from "./inbox-row-link";
 export { InboxSearch } from "./inbox-search";
-export { InboxTabs } from "./inbox-tabs";
+/**
+ * ⚠️ `InboxTabs`, `InboxRow` y `InboxFiltros` NO se exportan desde acá, y sacarlos
+ * costó un build roto: este barril no lleva directiva, pero lo importan client
+ * components (`listings/contact-cta.tsx` → `feed/post-card.tsx` → el layout), así
+ * que TODO lo que se re-exporte entra al grafo del cliente. `InboxTabs` consulta
+ * la base, y con esa línea acá el bundle del navegador terminaba pidiendo
+ * `next/headers`:
+ *
+ *   You're importing a module that depends on "next/headers". This API is only
+ *   available in Server Components in the App Router…
+ *
+ * Se importan por ruta directa desde las páginas, que son Server Components. La
+ * regla para lo que venga: si el módulo toca Supabase, `server-only` o
+ * `next/headers`, no entra a este archivo.
+ */
 export { PeopleSearch, type PersonaEncontrada } from "./people-search";
 export {
   ContactDone,

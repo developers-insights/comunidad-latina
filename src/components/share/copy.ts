@@ -17,7 +17,9 @@ export const SHARE_COPY = {
   dentroHint: "Le llega al chat como una tarjeta, lista para abrir.",
 
   buscarLabel: "Buscar una persona o un grupo",
-  buscarPlaceholder: "Buscá una persona o un grupo",
+  // Sin el segundo "un": con él se corta en 375px, que es el ancho donde vive
+  // la mitad de la comunidad.
+  buscarPlaceholder: "Buscá una persona o grupo",
   buscarLimpiar: "Borrar la búsqueda",
   buscando: "Buscando…",
   buscarVacio: (termino: string) => `No encontramos a nadie con “${termino}”.`,
@@ -46,7 +48,15 @@ export const SHARE_COPY = {
   // ── Bloque 2: afuera ──────────────────────────────────────────────────────
   afueraTitle: "Compartir afuera",
   afueraHint: "Por WhatsApp, redes o copiando el enlace.",
-  compartirNativo: "Compartir en otras apps",
+  /**
+   * Corto a propósito: los dos botones van a mitad de ancho y a 375px
+   * "Compartir en otras apps" se corta en "Compartir en …", que no dice nada.
+   * El encabezado de la sección ya puso el contexto ("Compartir afuera"), así
+   * que acá alcanza con nombrar el destino. La etiqueta larga sobrevive en el
+   * `aria-label`, que no tiene ancho.
+   */
+  compartirNativo: "Otras apps",
+  compartirNativoLabel: "Compartir en otras apps",
   copiarEnlace: "Copiar enlace",
 
   // ── Resultados ────────────────────────────────────────────────────────────

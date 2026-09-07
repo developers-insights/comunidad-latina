@@ -13,6 +13,7 @@
  */
 
 import { COPY } from "@/components/messaging/copy";
+import type { HiloDePersona } from "./agrupar-por-persona";
 
 /* ========================================================================== */
 /* Filtros de la pestaña Personas — el estado vive en la URL                  */
@@ -163,6 +164,27 @@ export function resumirMensaje(mensaje: MensajeDeBandeja): ResumenDeActividad {
       return { icono: null, texto: (mensaje.body ?? "").trim() };
   }
 }
+
+/**
+ * Una fila de la bandeja, ya resuelta.
+ *
+ * VIVE ACÁ Y NO AL LADO DE LA CONSULTA QUE LA ARMA, y no es cosmético: el
+ * módulo de consultas abre con `import "server-only"`, y `inbox-row.tsx` —que
+ * es quien pinta esto— entra al grafo del cliente a través del barril de
+ * `components/messaging`. Con el tipo declarado allá, un `import type` que
+ * debería evaporarse alcanzaba para arrastrar el módulo entero y romper el
+ * build con "'server-only' cannot be imported from a Client Component".
+ */
+export type FilaDeBandeja = HiloDePersona & {
+  /** Lo que dice la última línea, con su ícono. */
+  resumen: ResumenDeActividad | null;
+  /** Mensajes de la otra persona que llegaron después de mi última lectura. */
+  noLeidos: number;
+  /** El último mensaje es mío y la otra persona ya lo abrió. */
+  leidoPorElOtro: boolean;
+  /** Sumado sólo cuando el filtro lo necesita; `null` significa "no se preguntó". */
+  esAmigo: boolean | null;
+};
 
 /* ========================================================================== */
 /* Llamadas                                                                   */

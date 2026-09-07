@@ -11,6 +11,95 @@ import { firstPhotoUrl } from "@/components/listings";
 
 export type ImpulsarItemKind = "listing" | "post";
 
+/**
+ * En qué punto está algo propio RESPECTO DE PODER PROMOCIONARSE.
+ *
+ * No es `listings.status` renombrado: junta el estado de la fila con el de su
+ * promoción vigente, que viven en dos tablas y contestan una sola pregunta —
+ * "¿puedo ponerle plata a esto ahora?".
+ *
+ * Los estados no promocionables van SEPARADOS porque cada uno se resuelve de
+ * una forma distinta: un borrador se termina, un vencido se renueva, uno en
+ * revisión sólo se espera. Hasta el 2026-09-07 los seis se pintaban como
+ * "Todavía en revisión" y encima con el botón "Promocionar" en primario, que
+ * llevaba a `/impulsar/[listingId]` sólo para leer que no se podía (las dos
+ * pantallas de destino exigen `status = 'published'`). De los seis, el texto
+ * era cierto en uno.
+ *
+ * El catálogo de `listings.status` es el CHECK de la migración 0117
+ * (draft · pending_review · published · paused · removed · expired · closed);
+ * `posts.status` (0007) sólo tiene published · removed · pending_review, así
+ * que un post nunca alcanza los estados de aviso. `removed` no llega acá: lo
+ * descarta la query del índice.
+ */
+export type EstadoPromocion =
+  | "activa"
+  | "lista"
+  | "en_revision"
+  | "sin_terminar"
+  | "pausada"
+  | "vencida"
+  | "cerrada"
+  | "no_disponible";
+
+/**
+ * Un `status` que no conocemos NUNCA cae en "lista": el destino lo iba a
+ * rechazar igual, y un botón que promete lo que el servidor niega es
+ * exactamente el bug que esta función existe para cerrar.
+ */
+export function estadoDePromocion(
+  status: string,
+  promocionVigente: boolean,
+): EstadoPromocion {
+  if (status === "published") return promocionVigente ? "activa" : "lista";
+
+  switch (status) {
+    case "pending_review":
+      return "en_revision";
+    case "draft":
+      return "sin_terminar";
+    case "paused":
+      return "pausada";
+    case "expired":
+      return "vencida";
+    case "closed":
+      return "cerrada";
+    default:
+      return "no_disponible";
+  }
+}
+
+/** Los dos únicos estados en los que "Promocionar" lleva a algún lado. */
+export function puedePromocionarse(estado: EstadoPromocion): boolean {
+  return estado === "lista" || estado === "activa";
+}
+
+/** Ventana de "recién creado" — ver `esReciente`. */
+export const RECIENTE_MS = 30 * 60 * 1000;
+
+/**
+ * ¿Esto se creó hace un rato?
+ *
+ * Es lo que cierra el círculo del botón "Crear" del índice cuando el creador
+ * de destino NO devuelve a Boost por su cuenta. Sólo el wizard de /publicar
+ * ofrece "Impulsar este anuncio" al terminar; empleos, marketplace, creadores
+ * y el feed cierran en su propia pantalla de éxito, y ninguna de esas es de
+ * este módulo. La persona vuelve a /impulsar por donde sea (atrás, el nav, el
+ * "+") y lo recién hecho ya está primero —la query ordena por created_at—:
+ * esto es lo único que faltaba para DECIRLO en vez de dejarlo adivinar.
+ *
+ * `ahoraMs` entra por parámetro y no se lee acá: así todas las filas de una
+ * misma pantalla miden contra el mismo instante (y la función se testea sin
+ * tocar el reloj). El `delta >= 0` descarta fechas futuras — un reloj torcido
+ * no debería encender la etiqueta para siempre.
+ */
+export function esReciente(createdAt: string, ahoraMs: number): boolean {
+  const creado = Date.parse(createdAt);
+  if (Number.isNaN(creado)) return false;
+  const delta = ahoraMs - creado;
+  return delta >= 0 && delta <= RECIENTE_MS;
+}
+
 export interface ImpulsarItem {
   id: string;
   kind: ImpulsarItemKind;
@@ -22,8 +111,8 @@ export interface ImpulsarItem {
   thumbnailUrl: string | null;
   /** true si el thumbnail es un video (posts.media puede traer video primero). */
   thumbnailIsVideo: boolean;
-  /** status !== 'published': la página de destino explica por qué todavía no se puede promocionar. */
-  isPublished: boolean;
+  /** Estado combinado fila + promoción: decide el chip, la nota y si hay botón. */
+  estado: EstadoPromocion;
   /** ends_at de un boost/campaña de post VIGENTE (activo AHORA), o null. */
   activePromotionEndsAt: string | null;
   /** /impulsar/[listingId] o /impulsar-post/[postId]. */
@@ -61,7 +150,7 @@ export function toListingImpulsarItem(
     title: row.title,
     thumbnailUrl: firstPhotoUrl(row.photos),
     thumbnailIsVideo: false,
-    isPublished: row.status === "published",
+    estado: estadoDePromocion(row.status, activeBoostEndsAt !== null),
     activePromotionEndsAt: activeBoostEndsAt,
     href: `/impulsar/${row.id}`,
     createdAt: row.created_at,
@@ -96,7 +185,7 @@ export function toPostImpulsarItem(
     title: excerptOf(row.body) || NO_BODY_FALLBACK,
     thumbnailUrl: first ? postMediaUrl(first) : null,
     thumbnailIsVideo: first ? mediaKindOf(first) === "video" : false,
-    isPublished: row.status === "published",
+    estado: estadoDePromocion(row.status, activePromoEndsAt !== null),
     activePromotionEndsAt: activePromoEndsAt,
     href: `/impulsar-post/${row.id}`,
     createdAt: row.created_at,

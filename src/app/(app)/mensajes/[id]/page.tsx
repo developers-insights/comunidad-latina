@@ -144,10 +144,17 @@ export default async function HiloPage({
    * tarjeta cuestan cuatro consultas y no doscientas. Se pide una sola vez, acá,
    * y las burbujas leen del mapa.
    */
-  const origenesPropios = [
-    process.env.NEXT_PUBLIC_SITE_URL ?? "",
-    `https://${tenant.slug}.com`,
-  ].filter(Boolean);
+  /**
+   * Qué contamos como "un enlace nuestro": SÓLO el origin canónico.
+   *
+   * `Tenant` no tiene un campo de dominio propio, así que el dominio con el que
+   * cada comunidad se sirve no se puede saber desde acá sin inventarlo — y un
+   * origin inventado en esta lista es una puerta abierta, no una comodidad. El
+   * costo de quedarse corto es chico y visible: un link copiado desde el dominio
+   * de la comunidad se ve como texto en vez de como tarjeta. El costo de pasarse
+   * es pintar contenido ajeno con nuestra marca alrededor.
+   */
+  const origenesPropios = [process.env.NEXT_PUBLIC_SITE_URL ?? ""].filter(Boolean);
 
   const compartidoDelMensaje = (message: MessageRow): EnlaceInterno | null => {
     if (esCompartidoKind(message.compartido_kind) && message.compartido_id) {

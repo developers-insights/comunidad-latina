@@ -6,7 +6,9 @@ import type { CompartidoKind } from "./enlace-interno";
 export interface ContenidoCompartible {
   kind: CompartidoKind;
   id: string;
-  titulo: string;
+  /** Encabezado del panel. `null` cuando la pantalla no tiene el dato: ahí el
+   *  panel no pinta cabecera en vez de pintar una vacía. */
+  titulo?: string | null;
   imagenUrl?: string | null;
   detalle?: string | null;
   /**

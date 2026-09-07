@@ -8,7 +8,7 @@ import {
   Megaphone,
   ShareNetwork,
 } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, Chip, useToast } from "@/components/ui";
+import { Avatar, Chip } from "@/components/ui";
 import { CompartirSheet, urlAbsoluta, useCompartir } from "@/components/share";
 import { LikeBurst } from "@/components/motion";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
@@ -71,7 +71,6 @@ export interface LongVideoPlayerProps {
 }
 
 export function LongVideoPlayer({ post, tenantId, viewerId }: LongVideoPlayerProps) {
-  const { toast } = useToast();
   const commentsSheet = useCommentsSheet();
   const like = useReelLike({ post, tenantId, viewerId });
   const save = useReelSave({ post, viewerId });

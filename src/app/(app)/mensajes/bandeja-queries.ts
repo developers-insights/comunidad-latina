@@ -5,7 +5,6 @@ import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
 import {
   agruparPorPersona,
   type ConversacionLite,
-  type HiloDePersona,
   type UltimoMensaje,
 } from "@/lib/messaging/agrupar-por-persona";
 import {
@@ -14,9 +13,9 @@ import {
   fueLeidoPorElOtro,
   noLeidosDelHilo,
   resumirMensaje,
+  type FilaDeBandeja,
   type FiltroDePersonas,
   type MensajeDeBandeja,
-  type ResumenDeActividad,
 } from "@/lib/messaging/bandeja";
 
 /**
@@ -57,17 +56,6 @@ const CONVERSACION_COLUMNS = `id, status, created_at, created_by, counterpart_id
 
 const MENSAJE_COLUMNS_RICAS = "conversation_id, sender_id, body, created_at, kind, adjunto";
 const MENSAJE_COLUMNS_BASE = "conversation_id, sender_id, body, created_at";
-
-export type FilaDeBandeja = HiloDePersona & {
-  /** Lo que dice la última línea, con su ícono. */
-  resumen: ResumenDeActividad | null;
-  /** Mensajes de la otra persona que llegaron después de mi última lectura. */
-  noLeidos: number;
-  /** El último mensaje es mío y la otra persona ya lo abrió. */
-  leidoPorElOtro: boolean;
-  /** Sumado sólo cuando el filtro lo necesita; `null` significa "no se preguntó". */
-  esAmigo: boolean | null;
-};
 
 export type Bandeja = {
   /** Ya filtradas por el chip activo. */

@@ -10,8 +10,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Badge } from "@/components/ui";
 import { cn, timeAgo } from "@/lib/utils";
-import type { IconoDeResumen } from "@/lib/messaging/bandeja";
-import type { FilaDeBandeja } from "@/app/(app)/mensajes/bandeja-queries";
+import type { FilaDeBandeja, IconoDeResumen } from "@/lib/messaging/bandeja";
 import { COPY } from "./copy";
 import { InboxRowLink } from "./inbox-row-link";
 
@@ -91,9 +90,13 @@ export function InboxRow({
 
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-2">
+            {/* `min-w-0` NO es decoración: `truncate` pone `white-space:nowrap`,
+                y un ítem flex con nowrap tiene tamaño mínimo automático igual a
+                su contenido. Sin esto, un nombre largo no se corta — empuja la
+                hora fuera de la pantalla y la fila entera desborda a 375px. */}
             <span
               className={cn(
-                "truncate text-foreground",
+                "min-w-0 truncate text-foreground",
                 sinLeer ? "font-bold" : "font-semibold",
               )}
             >
@@ -126,7 +129,7 @@ export function InboxRow({
             )}
 
             {presencia?.tipo === "escribiendo" ? (
-              <span className="truncate text-sm font-medium text-brand-ink">
+              <span className="min-w-0 truncate text-sm font-medium text-brand-ink">
                 {COPY.inbox.resumen.escribiendo}
               </span>
             ) : fila.resumen ? (
@@ -143,7 +146,7 @@ export function InboxRow({
                 )}
                 <span
                   className={cn(
-                    "truncate text-sm",
+                    "min-w-0 truncate text-sm",
                     sinLeer ? "font-medium text-foreground" : "text-foreground-secondary",
                   )}
                 >
@@ -151,7 +154,7 @@ export function InboxRow({
                 </span>
               </>
             ) : (
-              <span className="truncate text-sm text-foreground-muted">
+              <span className="min-w-0 truncate text-sm text-foreground-muted">
                 {COPY.inbox.noMessagesYet}
               </span>
             )}
@@ -182,7 +185,7 @@ export function InboxRow({
                 nombra la más reciente y se cuenta el resto: tres títulos
                 completos no entran en 375px. */}
             {fila.avisos.length > 0 && (
-              <span className="truncate text-xs text-foreground-muted">
+              <span className="min-w-0 truncate text-xs text-foreground-muted">
                 {COPY.inbox.aboutListing(
                   COPY.inbox.alsoAbout(fila.avisos[0], fila.avisos.length - 1),
                 )}

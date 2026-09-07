@@ -58,10 +58,13 @@ export interface PostActionsProps {
   immersiveBackground?: boolean;
   /**
    * Qué se ve en la cabecera del panel de compartir: el texto del post y su
-   * primera foto. Los dos son OPCIONALES porque el panel funciona igual sin
-   * ellos —muestra el ícono genérico— y `post-card.tsx`, que es quien tiene el
-   * dato, es de otro agente. En cuanto pase `shareTitle`/`shareImageUrl`, la
-   * hoja abre mostrando la publicación en vez de un cuadro vacío.
+   * primera foto. Los dos son OPCIONALES y sin ellos el panel NO pinta cabecera
+   * —un recuadro con un ícono genérico no informa nada—, así que hoy la hoja
+   * abre directo en "enviar a alguien de la comunidad".
+   *
+   * WIRING PENDIENTE: `post-card.tsx` es quien tiene el texto y la primera foto,
+   * y es de otro agente. En cuanto mande `shareTitle`/`shareImageUrl`, la hoja
+   * abre mostrando la publicación arriba, sin tocar nada más de acá.
    */
   shareTitle?: string;
   shareImageUrl?: string | null;
@@ -234,7 +237,7 @@ export function PostActions({
     abrirCompartir({
       kind: "post",
       id: postId,
-      titulo: shareTitle ?? COPY.post.share,
+      titulo: shareTitle ?? null,
       imagenUrl: shareImageUrl ?? null,
       url: urlAbsoluta(`/feed/${postId}`),
     });

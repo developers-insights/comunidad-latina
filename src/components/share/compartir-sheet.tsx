@@ -52,7 +52,14 @@ export interface CompartirSheetProps {
   id: string;
   /** URL absoluta para el mundo de afuera. */
   url: string;
-  titulo: string;
+  /**
+   * Qué se está compartiendo, para la cabecera del panel. OPCIONAL: cuando
+   * quien abre el panel no tiene el dato a mano (hoy el feed, porque
+   * `post-card.tsx` es de otro agente), la cabecera NO se pinta. Un recuadro con
+   * un ícono genérico y la palabra "Compartir" adentro no informa nada y encima
+   * repite el título de la hoja.
+   */
+  titulo?: string | null;
   imagenUrl?: string | null;
   detalle?: string | null;
   /**
@@ -241,7 +248,7 @@ export function CompartirSheet({
   async function compartirAfuera() {
     try {
       if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-        await navigator.share({ title: titulo, url });
+        await navigator.share({ ...(titulo ? { title: titulo } : {}), url });
         onCompartidoAfuera?.();
         onClose();
         return;
@@ -289,29 +296,32 @@ export function CompartirSheet({
       bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
     >
       {/* Lo que se está compartiendo, arriba de todo: quien abre el panel tiene
-          que ver qué está por mandar antes de elegir a quién. */}
-      <div className="flex items-center gap-3 border-b border-border-subtle px-6 pb-4">
-        <span className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-surface-subtle">
-          {imagenUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- miniatura de 48px ya cargada en la pantalla de atrás
-            <img src={imagenUrl} alt="" className="size-full object-cover" />
-          ) : (
-            <span className="flex size-full items-center justify-center text-foreground-muted">
-              <ShareNetwork size={20} aria-hidden="true" />
-            </span>
-          )}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-foreground">
-            {titulo}
+          que ver qué está por mandar antes de elegir a quién. Sin título no se
+          pinta nada — ver el doc de `titulo`. */}
+      {titulo && (
+        <div className="flex items-center gap-3 border-b border-border-subtle px-6 pb-4">
+          <span className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-surface-subtle">
+            {imagenUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- miniatura de 48px ya cargada en la pantalla de atrás
+              <img src={imagenUrl} alt="" className="size-full object-cover" />
+            ) : (
+              <span className="flex size-full items-center justify-center text-foreground-muted">
+                <ShareNetwork size={20} aria-hidden="true" />
+              </span>
+            )}
           </span>
-          {detalle && (
-            <span className="numeric block truncate text-sm font-bold text-brand-ink">
-              {detalle}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-foreground">
+              {titulo}
             </span>
-          )}
-        </span>
-      </div>
+            {detalle && (
+              <span className="numeric block truncate text-sm font-bold text-brand-ink">
+                {detalle}
+              </span>
+            )}
+          </span>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pt-4">
         {/* ── Bloque 1: adentro ────────────────────────────────────────────── */}
@@ -456,6 +466,7 @@ export function CompartirSheet({
               onClick={compartirAfuera}
               icon={<ShareNetwork size={20} aria-hidden="true" />}
               label={SHARE_COPY.compartirNativo}
+              ariaLabel={SHARE_COPY.compartirNativoLabel}
             />
             <BotonAfuera
               onClick={copiarEnlace}
@@ -603,15 +614,19 @@ function BotonAfuera({
   onClick,
   icon,
   label,
+  ariaLabel,
 }: {
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
+  /** El texto completo cuando la etiqueta visible se acortó para que entre. */
+  ariaLabel?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
       className={cn(
         "flex h-12 items-center justify-center gap-2 rounded-xl border border-border px-3",
         "text-sm font-semibold text-foreground",
