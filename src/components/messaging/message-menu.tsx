@@ -47,7 +47,8 @@ import {
 import { COPY } from "./copy";
 import { ACCIONES_COPY } from "./copy-acciones";
 import { ReactionBar } from "./reaction-bar";
-import { resumenDeMensaje, useResponder } from "./reply-quote";
+import { useResponder } from "./reply-quote";
+import { resumenDeMensaje } from "./helpers-de-mensaje";
 
 /**
  * =============================================================================

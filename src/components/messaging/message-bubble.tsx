@@ -5,7 +5,8 @@ import type { ReaccionAgrupada } from "@/lib/messaging/reacciones";
 import { ACCIONES_COPY } from "./copy-acciones";
 import { MessageActions } from "./message-menu";
 import { MessageReactions, ReaccionesProvider } from "./message-reactions";
-import { ReplyQuote, anclaDeMensaje, type MensajeCitado } from "./reply-quote";
+import { ReplyQuote, type MensajeCitado } from "./reply-quote";
+import { anclaDeMensaje } from "./helpers-de-mensaje";
 
 /**
  * Burbuja de mensaje del chat de dos: propias a la derecha con marca suave,

@@ -25,12 +25,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  */
 
 /**
- * `escribiendo` sigue sin tener fuente: no hay Supabase Realtime en el repo y
- * un "está escribiendo" derivado del refresco de 15 s miente. Vive en el tipo
- * porque la fila de la bandeja ya sabe pintarlo — ver `inbox-row.tsx`.
+ * ⚠️ "ESTÁ ESCRIBIENDO…" NO ES UN ESTADO DE PRESENCIA, Y POR ESO NO ESTÁ ACÁ.
+ *
+ * Vivió en esta unión mientras no tuvo fuente. Ahora la tiene —Realtime
+ * broadcast, `components/messaging/escribiendo-live.tsx` con la 0148— y es un
+ * camino distinto de punta a punta: la presencia la resuelve el SERVIDOR con
+ * `presencia_de` y baja pintada en las props; el tecleo llega por websocket al
+ * NAVEGADOR y vive segundos. Dejar la variante acá invitaba a que alguna
+ * pantalla la pintara desde el servidor y hubiera dos fuentes para lo mismo.
  */
 export type EstadoDePresencia =
-  | { tipo: "escribiendo" }
   | { tipo: "en-linea" }
   | { tipo: "ultima-vez"; cuando: string };
 

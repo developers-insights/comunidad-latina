@@ -1,5 +1,124 @@
 # PROGRESS — Comunidad Latina
 
+## Segunda tanda del 7/9: lo que faltaba del pliego, y tres bugs que nadie veía (✅ 2026-09-07)
+
+Continuación directa de la sección de abajo. Cuatro frentes en paralelo más una
+ronda de integración. **Estado del árbol al cerrar:** `typecheck` 0 · `lint` 0 ·
+**6290/6290 tests** (362 archivos) · `build` exit 0.
+
+### Los tres bugs latentes que se encontraron sin buscarlos
+
+Los tres tenían la misma forma: **no explotaban todavía, y el motivo por el que
+no explotaban era un accidente**.
+
+1. **Crear un grupo privado fallaba siempre** — lo que el cliente reportó como
+   "crear un grupo no funciona". Postgres exige permiso de SELECT sobre la fila
+   que devuelve un `INSERT ... RETURNING` y evalúa esa policy **antes** de correr
+   los triggers AFTER INSERT; la membresía que hace dueño al creador la pone
+   justamente un trigger AFTER. Los grupos públicos entraban bien porque su rama
+   del OR no depende de ninguna fila nueva, y por eso ningún test lo vio nunca.
+   Reproducido contra la base real con rollback, arreglado en la `0147`.
+   El bloque 6 de `scripts/tenant-isolation-check.sql` busca ahora esta **clase**
+   de bug en toda la base.
+
+2. **`resumenDeMensaje()` y `anclaDeMensaje()` se llamaban desde el servidor** y
+   vivían en `reply-quote.tsx`, que es `"use client"`. `Attempted to call
+   resumenDeMensaje() from the server`. No explotaba porque `citaDe()` sale antes
+   por `if (!mensaje.reply_to)` y esa columna la agrega la `0136`, sin aplicar:
+   **la primera respuesta citada rompía las dos pantallas de chat**. Los helpers
+   puros se mudaron a `components/messaging/helpers-de-mensaje.ts`, un módulo sin
+   directiva.
+
+3. **El sello de la pantalla de llamada prometía cifrado de extremo a extremo**
+   ("el audio y el video viajan cifrados entre vos y quien te escucha") y no lo
+   hay: no se usa `setEncryptionConfig`, así que Agora cifra el tránsito pero el
+   media pasa descifrado por sus servidores. El copy dice ahora lo que es cierto.
+
+El test que ancla el punto 2 pasó de `components/notifications/client-boundary.test.ts`
+a **`src/test/client-boundary.test.ts`** y cubre las dos zonas: al extenderle el
+alcance a mensajería aparecieron dos violaciones más que nadie había visto. La
+regla nunca fue de una pantalla.
+
+### Migraciones 0144–0148 — ⚠️ ESCRITAS Y VALIDADAS, **NO APLICADAS**
+
+Junto con las 0136–0143 de la tanda anterior son **trece**. Las doce que existían
+al momento de escribir esto corren **en cadena** contra la base real con
+`node scripts/dryrun-migraciones.mjs`, que garantiza el rollback.
+
+| | |
+|---|---|
+| `0144` | la lápida del mensaje de grupo — gemelo de la 0142 para `chat_group_messages` |
+| `0145` | presencia: `last_seen_at`, `tocar_presencia()`, `presencia_de()` |
+| `0146` | derechos y fuente de la foto en `posts` |
+| `0147` | el arreglo de crear grupo privado |
+| `0148` | policies de `realtime.messages` para el "Está escribiendo…" |
+
+**La 0144 reescribió los cuatro CHECK, no sólo el de `body`.** El trigger pone
+`adjunto = null` dejando `kind = 'imagen'`, y el CHECK como quedó en la 0136
+aborta ese UPDATE: sin los otros tres, borrar una imagen en un grupo fallaba.
+
+**`last_seen_at` NO fue a `public.profiles`.** `profiles_select` (0091) le
+entrega todas las filas a un visitante sin sesión y `authenticated` tiene grant
+sobre la tabla entera: una columna de presencia ahí nacía siendo un rastreador
+público. Fue a `profiles_private` (0003), donde la RLS es solo-dueño y el
+invariante es **estructural** en vez de una lista de columnas que alguien tiene
+que acordarse de mantener. La única puerta al dato ajeno es `presencia_de()`.
+
+**La preferencia de presencia es recíproca.** Quien apaga `mostrar_ultima_vez`
+tampoco ve la ajena: lo contrario deja mirar sin ser visto, que es exactamente lo
+que el interruptor promete evitar. Verificado con cuatro aserciones contra la
+base, con rollback.
+
+### Lo que se construyó
+
+- **Archivos, enlaces y documentos compartidos del grupo** — ruta propia
+  (`/mensajes/grupos/[id]/multimedia`), tres solapas, paginación keyset por
+  `(created_at, id)`. El desempate por `id` no es adorno: una tanda de fotos
+  entra con el mismo `created_at` y un `lt` sobre el empate saltea filas.
+- **"Está escribiendo…" en vivo** — Realtime broadcast, no una tabla: que alguien
+  teclee es un dato de segundos. **El nombre no viaja en el payload**; va el id
+  pelado y el nombre lo pone el mapa que ya bajó el servidor. Si el nombre
+  viniera del aviso, cualquier miembro del grupo podría hacer aparecer
+  "Ana está escribiendo…".
+- **Presencia** (En línea / Última vez) con el latido montado en el shell de la
+  app, no en las pantallas de mensajería: alguien que pasa media hora en el feed
+  figuraba desconectado para quien le quisiera escribir.
+- **Derechos y fuente de la foto.** El pliego decía que el campo no existía y era
+  falso: la pregunta está desde la 0061, lo que faltaba era **que la respuesta se
+  viera** — iba sólo a `content_assets`, que lee moderación y nadie más. El
+  crédito **nunca es un link**, aunque la persona escriba una URL: texto del
+  usuario que se vuelve clickeable en el feed de todos es phishing con la
+  credibilidad de la plataforma detrás.
+- **`GroupMessageActions` se eliminó.** No era una pieza sin montar: era un shim
+  muerto y peor que el camino que ya andaba (sin toque largo, `createdAt =
+  Date(0)` que dejaba la ventana de edición siempre cerrada, `body = ""` que
+  dejaba copiar siempre deshabilitado).
+
+### Dos pendientes que no son técnicos
+
+- **El teléfono lo frena la política de privacidad, no el código.** La página
+  publicada dice textualmente *"No pedimos teléfono"* y declara CCPA/CPRA:
+  encender `PHONE_VERIFICATION_ENABLED` la vuelve falsa. El texto está redactado
+  y esperando aprobación en `docs/legal/borrador-privacidad-telefono.md`.
+  **Twilio Verify no hace falta** — duplicaría el ciclo de vida del código que ya
+  está resuelto y cuesta unas seis veces más por verificación.
+- **Deuda con fecha de vencimiento:** `createPostAction` reintenta sin las
+  columnas nuevas ante un `42703`, para que publicar funcione mientras la 0146 no
+  esté aplicada. Se borra el día que se apliquen las migraciones.
+
+### Lo que NO se pudo verificar
+
+- **Nada corrió contra la base con las migraciones aplicadas.** Todo es dry-run
+  con rollback.
+- **Ninguna pantalla se miró con sesión.** El dev server redirige a `/entrar` y
+  la sesión la tiene que abrir una persona.
+- **El typing no se probó contra un websocket real**, ni las policies de la 0148
+  se ejercieron en vivo.
+- **Ninguna llamada de Agora se hizo entre dos teléfonos.** Lo que sí se
+  verificó contra la documentación es que `join()` con `uid` de texto y un token
+  firmado con `buildTokenWithUserAccount` es la combinación correcta.
+
+
 ## Mensajería completa + el feedback del 7/9 (✅ 2026-09-07)
 
 Fuente: `docs/feedback/2026-09-07-mensajeria-y-compartir.md` (cinco láminas de

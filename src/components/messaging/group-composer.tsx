@@ -12,6 +12,7 @@ import { enviarMensajeAlGrupoAction } from "@/app/(app)/mensajes/grupos/actions"
 import { LIMITES } from "@/lib/messaging/grupos";
 import { COPY } from "./copy";
 import { COPY_COMPOSER } from "./copy-composer";
+import { useAvisoDeEscritura } from "./escribiendo-live";
 import {
   AttachMenu,
   ColaDeAdjuntos,
@@ -56,6 +57,9 @@ export function GroupComposer({ groupId }: { groupId: string }) {
 
   /** `null` fuera del `ResponderProvider`, que monta la página del grupo. */
   const responder = useResponder();
+
+  /** El throttle vive adentro: llamarlo en cada tecla no cuesta nada. */
+  const avisarQueEscribo = useAvisoDeEscritura();
 
   useEffect(() => {
     const posicion = caretPendiente.current;
@@ -118,6 +122,9 @@ export function GroupComposer({ groupId }: { groupId: string }) {
 
       if (resultado.ok) {
         setValor("");
+        // El mensaje ya salió: el cartel del otro lado se apaga ahora y no
+        // cinco segundos más tarde, al lado de la burbuja recién llegada.
+        avisarQueEscribo(false);
         responder?.cancelar();
         if (textareaRef.current) {
           textareaRef.current.style.height = "auto";
@@ -237,6 +244,7 @@ export function GroupComposer({ groupId }: { groupId: string }) {
               onChange={(event) => {
                 setValor(event.target.value);
                 autosize(event.target);
+                avisarQueEscribo(event.target.value.trim().length > 0);
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {

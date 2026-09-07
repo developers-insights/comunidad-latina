@@ -11,6 +11,7 @@ import { CLASSIC_EMOJI_GROUPS, emojiShortcode } from "@/lib/emojis/catalog";
 import { sendMessageAction } from "@/app/(app)/mensajes/actions";
 import { COPY } from "./copy";
 import { COPY_COMPOSER } from "./copy-composer";
+import { useAvisoDeEscritura } from "./escribiendo-live";
 import {
   AttachMenu,
   ColaDeAdjuntos,
@@ -60,6 +61,13 @@ export function Composer({ conversationId }: { conversationId: string }) {
    * como siempre: la página del hilo es la que lo monta.
    */
   const responder = useResponder();
+
+  /**
+   * El aviso de "estoy escribiendo". Trae su propio throttle adentro, así que
+   * llamarlo en cada tecla no cuesta nada — que es justo lo que hace un
+   * `onChange`. Fuera del provider no hace nada.
+   */
+  const avisarQueEscribo = useAvisoDeEscritura();
 
   /**
    * Devolver el cursor DESPUÉS de insertar un emoji o un enlace. Va en un
@@ -130,6 +138,10 @@ export function Composer({ conversationId }: { conversationId: string }) {
       const result = await sendMessageAction({ conversationId, body, replyTo });
       if (result.ok) {
         setValue("");
+        // El mensaje ya salió: apagar el cartel del otro lado ahora es mejor
+        // que dejarlo vencer solo cinco segundos más tarde, al lado de la
+        // burbuja que acaba de llegar.
+        avisarQueEscribo(false);
         responder?.cancelar();
         if (textareaRef.current) {
           textareaRef.current.style.height = "auto";
@@ -235,6 +247,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
               onChange={(event) => {
                 setValue(event.target.value);
                 autosize(event.target);
+                avisarQueEscribo(event.target.value.trim().length > 0);
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {

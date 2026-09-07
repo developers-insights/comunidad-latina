@@ -10,7 +10,9 @@ import type { Adjunto } from "@/lib/messaging/adjuntos";
 import { supabaseSinTiparMensajes } from "@/lib/messaging/adjuntos";
 import { leerReaccionesDeMensajes } from "@/lib/messaging/reacciones";
 import { leerPresencia, presenciaVisible } from "@/lib/messaging/presencia";
+import { topicoDeDirecto } from "@/lib/messaging/escribiendo";
 import { AcceptBanner } from "@/components/messaging/accept-banner";
+import { EscribiendoProvider } from "@/components/messaging/escribiendo-live";
 import { Composer } from "@/components/messaging/composer";
 import { COPY } from "@/components/messaging/copy";
 import {
@@ -21,11 +23,8 @@ import {
   MessageBubble,
   type MessageBubbleAcciones,
 } from "@/components/messaging/message-bubble";
-import {
-  ResponderProvider,
-  resumenDeMensaje,
-  type MensajeCitado,
-} from "@/components/messaging/reply-quote";
+import { ResponderProvider, type MensajeCitado } from "@/components/messaging/reply-quote";
+import { resumenDeMensaje } from "@/components/messaging/helpers-de-mensaje";
 import { ScrollAnchor } from "@/components/messaging/scroll-anchor";
 import { ThreadHeader } from "@/components/messaging/thread-header";
 import { ThreadListingCard } from "@/components/messaging/thread-listing-card";
@@ -278,6 +277,19 @@ export default async function HiloPage({
   const isBlocked = conversation.status === "blocked";
 
   return (
+    /**
+     * El canal de "está escribiendo…" envuelve la pantalla entera porque sus
+     * dos puntas están lejos: el composer, abajo de todo, es quien emite; el
+     * encabezado, arriba, es quien lo muestra.
+     *
+     * Con la conversación sin aceptar la lista va VACÍA y no se abre ningún
+     * canal. La policy de la 0148 exige `status = 'accepted'`, así que montarlo
+     * igual sería pedir una autorización que la base va a negar.
+     */
+    <EscribiendoProvider
+      miId={user.id}
+      topicos={isAccepted ? [topicoDeDirecto(conversation.id)] : []}
+    >
     <div className="flex min-h-[calc(100dvh-10rem)] flex-col">
       <ThreadRefresh />
 
@@ -457,5 +469,6 @@ export default async function HiloPage({
         </Banner>
       )}
     </div>
+    </EscribiendoProvider>
   );
 }

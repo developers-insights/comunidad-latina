@@ -12,6 +12,7 @@ import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { X } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { ACCIONES_COPY } from "./copy-acciones";
+import { anclaDeMensaje } from "./helpers-de-mensaje";
 
 /**
  * =============================================================================
@@ -96,47 +97,6 @@ export function useResponder(): ResponderState | null {
 // ---------------------------------------------------------------------------
 
 /** Cuántos caracteres del original entran en la cita. */
-export const MAX_RESUMEN = 120;
-
-/**
- * QUÉ SE LEE EN LA CITA cuando el mensaje no es texto. Un mensaje de foto tiene
- * `body` vacío por contrato (0136 §2), así que sin esto la cita de una foto
- * sería una tira en blanco.
- */
-export function resumenDeMensaje(kind: string, body: string, bajado = false): string {
-  if (bajado) return ACCIONES_COPY.responder.resumenBajado;
-
-  const texto = body.trim().replace(/\s+/g, " ");
-  if (texto) {
-    return texto.length > MAX_RESUMEN ? `${texto.slice(0, MAX_RESUMEN - 1)}…` : texto;
-  }
-
-  switch (kind) {
-    case "imagen":
-      return ACCIONES_COPY.responder.resumenFoto;
-    case "video":
-      return ACCIONES_COPY.responder.resumenVideo;
-    case "audio":
-      return ACCIONES_COPY.responder.resumenAudio;
-    case "archivo":
-      return ACCIONES_COPY.responder.resumenArchivo;
-    case "ubicacion":
-      return ACCIONES_COPY.responder.resumenUbicacion;
-    case "perfil":
-      return ACCIONES_COPY.responder.resumenPerfil;
-    default:
-      return ACCIONES_COPY.responder.resumenContenido;
-  }
-}
-
-/**
- * El `id` del DOM de una burbuja. Lo pone la burbuja y lo busca la cita: es el
- * único acuerdo entre las dos, y por eso vive en una función y no escrito a
- * mano en los dos lados.
- */
-export function anclaDeMensaje(mensajeId: string): string {
-  return `mensaje-${mensajeId}`;
-}
 
 /**
  * Lleva al mensaje original y lo marca un momento.

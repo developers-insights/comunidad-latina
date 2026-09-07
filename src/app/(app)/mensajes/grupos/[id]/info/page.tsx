@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Lock, PencilSimple, UsersThree } from "@phosphor-icons/react/dist/ssr";
+import {
+  CaretRight,
+  Images,
+  Lock,
+  PencilSimple,
+  UsersThree,
+} from "@phosphor-icons/react/dist/ssr";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { Avatar, Banner, Chip, buttonVariants } from "@/components/ui";
@@ -111,6 +117,37 @@ export default async function InfoDelGrupoPage({
           {grupo.description}
         </p>
       )}
+
+      {/* Lo que se compartió en el grupo (punto 8 del pliego). Va ARRIBA de la
+          administración y de la lista de gente porque es lo que se viene a
+          buscar —"¿dónde quedó ese PDF?"— y porque empuja hacia abajo las
+          acciones de riesgo, que es donde tienen que estar. */}
+      <Link
+        href={`/mensajes/grupos/${grupo.id}/multimedia`}
+        className={cn(
+          "flex items-center gap-3 rounded-xl border border-border-subtle bg-surface px-3 py-3 shadow-xs",
+          "transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring)",
+          "hover:bg-surface-subtle active:scale-[0.985]",
+          "motion-reduce:transition-none motion-reduce:active:scale-100",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-subtle text-brand-ink"
+        >
+          <Images size={20} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-foreground">
+            {COPY.galeria.entrada}
+          </span>
+          <span className="block truncate text-xs text-foreground-secondary">
+            {COPY.galeria.entradaAyuda}
+          </span>
+        </span>
+        <CaretRight size={16} aria-hidden="true" className="shrink-0 text-foreground-muted" />
+      </Link>
 
       {puedoAdministrar && grupo.status === "active" && (
         <Link

@@ -18,6 +18,7 @@ import { blockUserAction } from "@/app/(app)/perfil/actions";
 import { BotonesDeLlamada } from "@/components/calls/botones-de-llamada";
 import { iniciarLlamadaAction } from "@/app/(app)/llamadas/actions";
 import type { EstadoDePresencia } from "@/lib/messaging/presencia";
+import { QuienEscribe, useQuienEscribe } from "./escribiendo-live";
 import { COPY } from "./copy";
 
 /**
@@ -81,6 +82,15 @@ export function ThreadHeader({
   const [reason, setReason] = useState<string | null>(null);
   const [details, setDetails] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  /**
+   * "Está escribiendo…" GANA sobre la presencia mientras dura. Los dos hablan
+   * del mismo instante y compiten por el mismo renglón: mostrar "Última vez
+   * hace 2 horas" al lado de alguien que está tecleando ahora mismo es una
+   * contradicción en tres centímetros. Fuera del provider la lista viene vacía
+   * y el encabezado se comporta como siempre.
+   */
+  const escribiendo = useQuienEscribe().length > 0;
 
   const firstName = otherProfile.displayName.split(/\s+/)[0] ?? otherProfile.displayName;
 
@@ -184,15 +194,21 @@ export function ThreadHeader({
           {/* `shrink-0`: es corto y es lo que cambia solo. Si lo truncara el
               Trust Score, el renglón diría "Última vez hace 3…" — una frase a
               medias sobre una persona, que es peor que no decir nada. */}
-          {presencia?.tipo === "en-linea" && (
-            <span className="shrink-0 text-xs font-medium text-success">
-              {COPY.inbox.resumen.enLinea}
-            </span>
-          )}
-          {presencia?.tipo === "ultima-vez" && (
-            <span className="shrink-0 text-xs text-foreground-muted">
-              {COPY.inbox.resumen.ultimaVez(presencia.cuando)}
-            </span>
+          {escribiendo ? (
+            <QuienEscribe className="shrink-0 text-xs font-medium" />
+          ) : (
+            <>
+              {presencia?.tipo === "en-linea" && (
+                <span className="shrink-0 text-xs font-medium text-success">
+                  {COPY.inbox.resumen.enLinea}
+                </span>
+              )}
+              {presencia?.tipo === "ultima-vez" && (
+                <span className="shrink-0 text-xs text-foreground-muted">
+                  {COPY.inbox.resumen.ultimaVez(presencia.cuando)}
+                </span>
+              )}
+            </>
           )}
 
           {listing &&

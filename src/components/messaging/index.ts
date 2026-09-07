@@ -86,12 +86,13 @@ export {
   ComposerReplyBar,
   ReplyQuote,
   ResponderProvider,
-  anclaDeMensaje,
   irAlMensaje,
-  resumenDeMensaje,
   useResponder,
   type MensajeCitado,
 } from "./reply-quote";
+// Módulo neutro a propósito: lo llaman los Server Components de las dos
+// pantallas de chat. No lo muevas a reply-quote.tsx — ver su docblock.
+export { MAX_RESUMEN, anclaDeMensaje, resumenDeMensaje } from "./helpers-de-mensaje";
 export { ScrollAnchor } from "./scroll-anchor";
 export { ThreadHeader, type ThreadHeaderProps } from "./thread-header";
 export {

@@ -100,12 +100,11 @@ export const COPY = {
       perfil: "Perfil compartido",
       contenido: "Publicación compartida",
       /**
-       * Los dos estados EN VIVO. Hoy no se muestran: sin Supabase Realtime,
-       * lo único que podríamos hacer es adivinarlos con el refresco de 15 s, y
-       * un "Está escribiendo…" que aparece cuando la persona ya dejó de
-       * escribir miente. Los textos viven acá porque la fila ya sabe pintarlos.
+       * Los dos estados de PRESENCIA. "Está escribiendo…" no está acá: llega
+       * por Realtime y vive en `COPY.escribiendo`, con sus variantes por
+       * nombre. Escrito en los dos lugares, un cambio de redacción arreglaba
+       * la mitad de las pantallas.
        */
-      escribiendo: "Está escribiendo…",
       enLinea: "En línea",
       ultimaVez: (cuando: string) => `Última vez ${cuando}`,
     },
@@ -261,6 +260,61 @@ export const COPY = {
     notFoundMessage: "Puede que lo hayan cerrado o que sea privado.",
     rateLimited: "Mandaste varios mensajes seguidos. Probá de nuevo en un rato.",
   },
+  /**
+   * "Está escribiendo…" cuando hace falta nombrar a alguien.
+   *
+   * En un 1-a-1 el nombre ya está arriba, en el encabezado, así que repetirlo
+   * en el renglón de abajo es ruido: ahí va `solo`. En un grupo el nombre ES la
+   * información, porque son veinte personas y sólo una está tecleando.
+   *
+   * Con tres o más se deja de nombrar en vez de encadenar nombres: "Ana, Beto y
+   * 4 más están escribiendo…" no entra en 375 px y tampoco dice nada útil.
+   */
+  escribiendo: {
+    solo: "Está escribiendo…",
+    una: (nombre: string) => `${nombre} está escribiendo…`,
+    dos: (uno: string, otro: string) => `${uno} y ${otro} están escribiendo…`,
+    varias: "Varias personas están escribiendo…",
+    /** Alguien del grupo que todavía no habló, así que no está en el mapa de nombres. */
+    generico: "Alguien",
+  },
+
+  /** Lo que se compartió en un grupo: fotos, videos, archivos y enlaces. */
+  galeria: {
+    title: "Archivos y enlaces",
+    /** Palabras del cliente, tal cual las pidió. */
+    entrada: "Archivos, enlaces y documentos",
+    entradaAyuda: "Todo lo que se compartió en el grupo",
+    solapas: {
+      multimedia: "Multimedia",
+      archivos: "Archivos",
+      enlaces: "Enlaces",
+    },
+    solapasLabel: "Qué se compartió",
+    verMas: "Ver más",
+    cargando: "Buscando…",
+    errorMas: "No pudimos traer más. Probá de nuevo.",
+    /** Nombre accesible de cada ítem: dice a dónde lleva y de quién es. */
+    abrirEnConversacion: (quien: string, cuando: string) =>
+      `Ver en la conversación — lo compartió ${quien}, ${cuando}`,
+    noDisponible: "Ya no está disponible",
+    video: "Video",
+    vacio: {
+      multimedia: {
+        title: "Todavía no hay fotos ni videos",
+        message: "Lo que se comparta en el grupo se va a juntar acá.",
+      },
+      archivos: {
+        title: "Todavía no hay archivos",
+        message: "Los PDF y documentos que se manden al grupo quedan acá a mano.",
+      },
+      enlaces: {
+        title: "Todavía no hay enlaces",
+        message: "Los links que alguien comparta en el grupo se guardan acá.",
+      },
+    },
+  },
+
   thread: {
     safetyBanner:
       "Por tu seguridad, mantené la conversación acá adentro. Nunca envíes dinero por adelantado.",

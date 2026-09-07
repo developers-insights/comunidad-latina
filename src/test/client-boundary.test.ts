@@ -42,16 +42,33 @@ import { describe, expect, it } from "vitest";
  * se persigue a través de los `export { ... } from "..."` hasta el archivo que
  * lo declara.
  *
- * ALCANCE: los archivos de la bandeja. Las importaciones se resuelven a donde
- * sea que vivan (incluido `@/components/ui`), así que si mañana alguien vuelve
- * client un módulo del que esta pantalla toma un helper, también se cae acá.
+ * ALCANCE: la bandeja de notificaciones y toda la mensajería. Las importaciones
+ * se resuelven a donde sea que vivan (incluido `@/components/ui`), así que si
+ * mañana alguien vuelve client un módulo del que estas pantallas toman un
+ * helper, también se cae acá.
+ *
+ * SEGUNDO BUG QUE ANCLA (2026-09-07, encontrado ANTES de que explotara). Las dos
+ * pantallas de chat llamaban `resumenDeMensaje()` desde el servidor, y esa
+ * función vivía en `reply-quote.tsx`, que es `"use client"`:
+ *
+ *     Attempted to call resumenDeMensaje() from the server but
+ *     resumenDeMensaje is on the client.
+ *
+ * No explotaba por un accidente: `citaDe()` sale antes por
+ * `if (!mensaje.reply_to)`, y la columna `reply_to` la agrega la migración
+ * 0136, que todavía no estaba aplicada. La primera respuesta citada que
+ * existiera en la base rompía las dos pantallas. La función se mudó a
+ * `resumen-de-mensaje.ts`, un módulo sin directiva, y por eso este test dejó de
+ * ser "de la bandeja" y pasó a `src/test/`: la regla nunca fue de una pantalla.
  */
 
-const SRC = fileURLToPath(new URL("../../", import.meta.url));
+const SRC = fileURLToPath(new URL("../", import.meta.url));
 
 const ROOTS = [
   path.join(SRC, "app", "(app)", "notificaciones"),
   path.join(SRC, "components", "notifications"),
+  path.join(SRC, "app", "(app)", "mensajes"),
+  path.join(SRC, "components", "messaging"),
 ];
 
 const EXTENSIONS = [".ts", ".tsx"];
@@ -197,10 +214,10 @@ function isComponentName(name: string): boolean {
   return /^[A-Z]/.test(name) && /[a-z]/.test(name);
 }
 
-describe("límite servidor/cliente de la bandeja de notificaciones", () => {
+describe("límite servidor/cliente de notificaciones y mensajería", () => {
   const serverModules = ROOTS.flatMap(walk).filter((file) => !isClientModule(file));
 
-  it("encuentra los archivos de la bandeja", () => {
+  it("encuentra los archivos de las dos zonas", () => {
     expect(serverModules.length).toBeGreaterThan(0);
     expect(serverModules).toContain(path.join(ROOTS[0], "page.tsx"));
   });

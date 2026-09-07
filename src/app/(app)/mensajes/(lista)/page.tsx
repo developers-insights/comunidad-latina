@@ -10,6 +10,8 @@ import { InboxSearch } from "@/components/messaging/inbox-search";
 import { InboxTabs } from "@/components/messaging/inbox-tabs";
 import { parseFiltroDePersonas, type FiltroDePersonas } from "@/lib/messaging/bandeja";
 import { leerPresencia, presenciaVisible } from "@/lib/messaging/presencia";
+import { topicoDeDirecto } from "@/lib/messaging/escribiendo";
+import { EscribiendoProvider } from "@/components/messaging/escribiendo-live";
 import { leerBandejaDePersonas } from "../bandeja-queries";
 
 export const metadata: Metadata = { title: COPY.inbox.title };
@@ -66,8 +68,17 @@ export default async function MensajesPage({
   const vacio = VACIOS[hayLecturas ? filtro : "todos"];
 
   return (
-    <>
-
+    /**
+     * "Está escribiendo…" en la bandeja: un canal por conversación, y el
+     * provider corta en `MAX_HILOS_ESCUCHADOS`. Se escuchan las de arriba
+     * —las más recientes— porque cada tópico es una autorización contra
+     * `realtime.messages` y abrir una por fila convierte una pantalla de
+     * lectura en decenas de chequeos. El resto de las filas se lee igual.
+     */
+    <EscribiendoProvider
+      miId={userId}
+      topicos={filas.map((fila) => topicoDeDirecto(fila.conversacionPrincipalId))}
+    >
       <h1 className="mb-5 font-display text-2xl font-bold tracking-tight text-foreground">
         {COPY.inbox.title}
       </h1>
@@ -120,7 +131,7 @@ export default async function MensajesPage({
           ))}
         </ul>
       )}
-    </>
+    </EscribiendoProvider>
   );
 }
 

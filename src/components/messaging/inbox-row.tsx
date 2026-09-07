@@ -12,7 +12,9 @@ import { Avatar, Badge } from "@/components/ui";
 import { cn, timeAgo } from "@/lib/utils";
 import type { FilaDeBandeja, IconoDeResumen } from "@/lib/messaging/bandeja";
 import type { EstadoDePresencia } from "@/lib/messaging/presencia";
+import { topicoDeDirecto } from "@/lib/messaging/escribiendo";
 import { COPY } from "./copy";
+import { RenglonEnVivo } from "./escribiendo-live";
 import { InboxRowLink } from "./inbox-row-link";
 
 /**
@@ -22,18 +24,20 @@ import { InboxRowLink } from "./inbox-row-link";
  * llegó ("Nota de voz · 0:24", "Foto"), cuándo, cuánto falta por leer, y —si el
  * último mensaje es mío— si ya lo abrieron.
  *
- * ── DE LOS DOS ESTADOS EN VIVO, HOY SE PRENDE UNO ───────────────────────────
- * `en-linea` y `ultima-vez` ya tienen fuente: la RPC `presencia_de` (0145), que
- * la página lee en el servidor y baja resuelta. `escribiendo` NO, y sigue sin
- * pasarse a propósito: este proyecto no tiene Supabase Realtime (cero
- * `.channel()` en el repo) y las pantallas se refrescan cada 15 s. Un "Está
- * escribiendo…" derivado de un sondeo aparece cuando la persona ya dejó de
- * escribir — no es una versión pobre del dato, es un dato falso. La presencia
- * aguanta ese retraso porque habla de MINUTOS; el "escribiendo" habla de
- * segundos y por eso no entra.
+ * ── LOS TRES ESTADOS EN VIVO, Y POR DÓNDE LLEGA CADA UNO ────────────────────
+ * `en-linea` y `ultima-vez` los resuelve el SERVIDOR con la RPC `presencia_de`
+ * (0145) y bajan pintados en las props. `escribiendo` llega por otro lado —
+ * Realtime broadcast (0148), directo al navegador— y por eso no viaja en
+ * `presencia`: son dos relojes distintos, uno de minutos y otro de segundos.
  *
- * Server Component: lo único cliente es el enlace, que además deja anotada la
- * lectura. Ver `inbox-row-link.tsx`.
+ * La objeción que lo tuvo apagado hasta hoy era correcta: derivado del refresco
+ * de 15 s, el cartel aparecía cuando la persona ya había dejado de escribir, y
+ * eso no es una versión pobre del dato sino un dato falso. Con la 0143 el
+ * proyecto tiene Realtime y el aviso llega en el momento o no llega.
+ *
+ * Server Component: lo único cliente es el enlace —que además deja anotada la
+ * lectura, ver `inbox-row-link.tsx`— y `RenglonEnVivo`, que tapa el resumen
+ * mientras alguien teclea del otro lado.
  */
 
 const ICONO: Record<IconoDeResumen, React.ComponentType<{ size?: number; weight?: "fill" | "bold" | "regular" }>> = {
@@ -125,11 +129,11 @@ export function InboxRow({
               </>
             )}
 
-            {presencia?.tipo === "escribiendo" ? (
-              <span className="min-w-0 truncate text-sm font-medium text-brand-ink">
-                {COPY.inbox.resumen.escribiendo}
-              </span>
-            ) : fila.resumen ? (
+            <RenglonEnVivo
+              topico={topicoDeDirecto(fila.conversacionPrincipalId)}
+              className="min-w-0 text-sm font-medium"
+            >
+            {fila.resumen ? (
               <>
                 {Icono && (
                   <span aria-hidden="true" className="shrink-0 text-foreground-muted">
@@ -155,6 +159,7 @@ export function InboxRow({
                 {COPY.inbox.noMessagesYet}
               </span>
             )}
+            </RenglonEnVivo>
 
             {sinLeer && (
               <span

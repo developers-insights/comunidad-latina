@@ -9,6 +9,10 @@ import { DEFAULT_LOCALE, DEFAULT_TIME_ZONE } from "@/lib/utils";
 import { Avatar, Banner, EmptyState } from "@/components/ui";
 import { leerReaccionesDeMensajes } from "@/lib/messaging/reacciones";
 import { COPY } from "@/components/messaging/copy";
+import {
+  EscribiendoProvider,
+  RenglonEnVivo,
+} from "@/components/messaging/escribiendo-live";
 import { GroupComposer } from "@/components/messaging/group-composer";
 import { GroupJoinButton } from "@/components/messaging/group-join-button";
 import { GroupLive } from "@/components/messaging/group-live";
@@ -20,11 +24,8 @@ import {
   MessageAttachment,
   firmarAdjuntosDelHilo,
 } from "@/components/messaging/message-attachment";
-import {
-  ResponderProvider,
-  resumenDeMensaje,
-  type MensajeCitado,
-} from "@/components/messaging/reply-quote";
+import { ResponderProvider, type MensajeCitado } from "@/components/messaging/reply-quote";
+import { resumenDeMensaje } from "@/components/messaging/helpers-de-mensaje";
 import { ScrollAnchor } from "@/components/messaging/scroll-anchor";
 import {
   SharedCard,
@@ -36,6 +37,7 @@ import {
   esCompartidoKind,
   type EnlaceInterno,
 } from "@/components/share/enlace-interno";
+import { topicoDeGrupo } from "@/lib/messaging/escribiendo";
 import { miembrosLabel, type MensajeDeGrupoRow } from "@/lib/messaging/grupos";
 import {
   listarMensajesDelGrupo,
@@ -84,7 +86,12 @@ export default async function GrupoPage({
   const cerrado = grupo.status === "closed";
   const administro = grupo.miRol === "owner" || grupo.miRol === "admin";
 
-  const encabezado = (
+  /**
+   * FUNCIÓN Y NO CONSTANTE: las dos ramas de la pantalla lo montan, pero sólo
+   * la de miembro tiene el mapa de nombres —se arma más abajo, después de leer
+   * los mensajes— y sólo ella está adentro del canal de escritura.
+   */
+  const encabezado = (nombres?: Record<string, string>) => (
     <>
       {/* La salida del grupo, igual que en el resto de la app. Va adentro del
           encabezado porque las dos ramas de esta pantalla —miembro y no
@@ -98,7 +105,20 @@ export default async function GrupoPage({
             {grupo.name}
           </h1>
           <p className="truncate text-sm text-foreground-muted">
-            {miembrosLabel(grupo.member_count)}
+            {nombres ? (
+              /* Quién teclea reemplaza al "N miembros" mientras dura: los dos
+                 ocupan el mismo renglón y el conteo no cambia nunca, así que
+                 taparlo dos segundos no le saca información a nadie. */
+              <RenglonEnVivo
+                topico={topicoDeGrupo(grupo.id)}
+                nombres={nombres}
+                className="text-sm"
+              >
+                {miembrosLabel(grupo.member_count)}
+              </RenglonEnVivo>
+            ) : (
+              miembrosLabel(grupo.member_count)
+            )}
           </p>
         </div>
         {soyMiembro && (
@@ -118,7 +138,7 @@ export default async function GrupoPage({
   if (!soyMiembro) {
     return (
       <div className="flex flex-col gap-5">
-        {encabezado}
+        {encabezado()}
         {grupo.description && (
           <p className="text-sm leading-relaxed text-foreground-secondary">
             {grupo.description}
@@ -220,11 +240,25 @@ export default async function GrupoPage({
     };
   };
 
+  /**
+   * `id → nombre` para el cartel de "está escribiendo…".
+   *
+   * Sale de `autores`, que es el mapa que YA se leyó para las burbujas: no
+   * cuesta una consulta más. Quien todavía no habló en el grupo no está en la
+   * lista y su cartel dice "Alguien", que es la respuesta honesta — el nombre
+   * NUNCA se toma del aviso, porque lo escribe el navegador de otra persona y
+   * sería la forma de hacer aparecer un nombre ajeno. Ver `escribiendo-live`.
+   */
+  const nombresDeAutores = Object.fromEntries(
+    [...autores].map(([id, autor]) => [id, autor.displayName]),
+  );
+
   return (
+    <EscribiendoProvider miId={user.id} topicos={cerrado ? [] : [topicoDeGrupo(grupo.id)]}>
     <div className="flex min-h-[calc(100dvh-10rem)] flex-col">
       <GroupLive />
 
-      {encabezado}
+      {encabezado(nombresDeAutores)}
 
       {/* Nota TTL: minimización §5.4 comunicada como lo que es, una promesa. */}
       <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-foreground-muted">
@@ -345,5 +379,6 @@ export default async function GrupoPage({
         )}
       </ResponderProvider>
     </div>
+    </EscribiendoProvider>
   );
 }
