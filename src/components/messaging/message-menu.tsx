@@ -284,21 +284,40 @@ export function MessageActions({
    */
   useLayoutEffect(() => {
     if (!enMenu || !caja) return;
-    const alto = panelRef.current?.offsetHeight ?? 0;
-    const vh = window.innerHeight;
-    const espacioAbajo = vh - caja.bottom - MARGEN_VIEWPORT_PX;
-    const espacioArriba = caja.top - MARGEN_VIEWPORT_PX;
+    const nodo = panelRef.current;
+    if (!nodo) return;
 
-    if (espacioArriba >= alto) {
-      setTop(caja.top - alto - 8);
-    } else if (espacioAbajo >= alto) {
-      setTop(caja.bottom + 8);
-    } else {
-      // No entra ni arriba ni abajo (mensaje largo en pantalla chica): se
-      // apoya contra el borde superior y el panel scrollea por dentro.
-      setTop(Math.max(MARGEN_VIEWPORT_PX, vh - alto - MARGEN_VIEWPORT_PX));
+    function reubicar() {
+      if (!caja || !nodo) return;
+      const alto = nodo.offsetHeight;
+      const vh = window.innerHeight;
+      const espacioArriba = caja.top - MARGEN_VIEWPORT_PX;
+      const espacioAbajo = vh - caja.bottom - MARGEN_VIEWPORT_PX;
+
+      if (espacioArriba >= alto) {
+        setTop(caja.top - alto - 8);
+      } else if (espacioAbajo >= alto) {
+        setTop(caja.bottom + 8);
+      } else {
+        // No entra ni arriba ni abajo (mensaje largo en pantalla chica): se
+        // apoya contra el borde y el panel scrollea por dentro (`max-h`).
+        setTop(Math.max(MARGEN_VIEWPORT_PX, vh - alto - MARGEN_VIEWPORT_PX));
+      }
     }
-  }, [caja, enMenu, permitido.editar, permitido.eliminar, permitido.reportar]);
+
+    reubicar();
+
+    /**
+     * EL PANEL CAMBIA DE ALTO MIENTRAS ESTÁ ABIERTO: tocar "Más emojis" lo
+     * convierte de una fila de 56 px en el catálogo entero. Medir una sola vez
+     * al abrir dejaba el catálogo colgando fuera de la pantalla justo en el
+     * caso donde más se necesita ver — que es el pedido del cliente, reaccionar
+     * con los emojis de la comunidad.
+     */
+    const observador = new ResizeObserver(reubicar);
+    observador.observe(nodo);
+    return () => observador.disconnect();
+  }, [caja, enMenu]);
 
   function accion(siguiente: typeof modo) {
     setModo(siguiente);

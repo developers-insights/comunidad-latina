@@ -169,7 +169,15 @@ export function VoicePlayer({
   const razonActual = duracionS > 0 ? Math.min(1, transcurrido / duracionS) : 0;
 
   return (
-    <div className={cn("flex w-full max-w-xs items-center gap-2.5", className)}>
+    // `cl-print-hide`: un reproductor de audio impreso no es nada — y el
+    // tiempo y el aviso de error viven fuera de un <button>, así que el
+    // @media print no los alcanza solo (contrato de `print-contract.test.ts`).
+    <div
+      className={cn(
+        "cl-print-hide flex w-full max-w-xs items-center gap-2.5",
+        className,
+      )}
+    >
       {src && (
         <audio
           ref={audioRef}

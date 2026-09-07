@@ -44,11 +44,15 @@ export function LocationPicker({ open, onClose, onEnviar }: LocationPickerProps)
   const [estado, setEstado] = useState<Estado>({ fase: "listo" });
   const [etiqueta, setEtiqueta] = useState("");
 
+  // Diferido un frame: un `setState` sincrónico dentro de un efecto encadena
+  // renders (react-hooks/set-state-in-effect).
   useEffect(() => {
-    if (!open) {
+    if (open) return;
+    const cuadro = requestAnimationFrame(() => {
       setEstado({ fase: "listo" });
       setEtiqueta("");
-    }
+    });
+    return () => cancelAnimationFrame(cuadro);
   }, [open]);
 
   function ubicar() {
@@ -100,7 +104,9 @@ export function LocationPicker({ open, onClose, onEnviar }: LocationPickerProps)
 
       <div
         className={cn(
-          "mt-4 flex items-center gap-3 rounded-2xl px-4 py-3.5",
+          // `cl-print-hide`: el azulejo verde lleva `text-on-success`, que sin
+          // su relleno es invisible en papel, y no es un <button>.
+          "cl-print-hide mt-4 flex items-center gap-3 rounded-2xl px-4 py-3.5",
           "ring-1 ring-inset ring-border-subtle",
           estado.fase === "encontrado" ? "bg-success-bg" : "bg-surface-subtle",
         )}

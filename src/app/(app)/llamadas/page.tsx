@@ -50,8 +50,9 @@ export default async function LlamadasPage() {
 
       {historial.length === 0 ? (
         <EmptyState
+          icon={<Phone size={34} aria-hidden="true" />}
           title={COPY.seccion.emptyTitle}
-          description={COPY.seccion.emptyBody}
+          message={COPY.seccion.emptyBody}
           action={
             <Link href="/mensajes" className={cn(buttonVariants({ variant: "primary" }))}>
               {COPY.seccion.emptyCta}

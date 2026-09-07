@@ -65,7 +65,9 @@ interface Suscripcion {
 function useSeñal(suscripciones: Suscripcion[], alAvisar: () => void): ViaDeSeñalizacion {
   const [via, setVia] = useState<ViaDeSeñalizacion>("conectando");
   const alAvisarRef = useRef(alAvisar);
-  alAvisarRef.current = alAvisar;
+  useEffect(() => {
+    alAvisarRef.current = alAvisar;
+  }, [alAvisar]);
 
   // Las suscripciones se identifican por su contenido y no por identidad de
   // objeto: sin esto, un array literal en el caller reconstruiría el canal en

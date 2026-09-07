@@ -20,18 +20,11 @@ export const COPY = {
     tabPersonas: "Personas",
     tabGrupos: "Grupos",
     tabLlamadas: "Llamadas",
-    historialTitle: "Tus llamadas",
-    /** Aviso honesto cuando el servicio todavía no está configurado. */
-    apagadaTitle: "Las llamadas están por llegar",
-    apagadaBody:
-      "Estamos terminando de dejarlas listas. En cuanto estén, vas a poder llamar desde cualquier chat.",
   },
 
   iniciar: {
     audioLabel: "Llamar por audio",
     videoLabel: "Llamar por video",
-    /** El aviso corto de la cabecera de un grupo. */
-    grupoHint: "Suena en el teléfono de todo el grupo",
   },
 
   pantalla: {
@@ -42,7 +35,6 @@ export const COPY = {
     conectando: "Conectando…",
     reconectando: "Se cortó un momento, ya volvemos",
     terminada: "Llamada terminada",
-    esperandoTitle: "Esperando que atiendan",
     volver: "Volver",
     entrar: "Entrar a la llamada",
     entrarHint: "Vamos a pedirte permiso para usar el micrófono.",
@@ -87,7 +79,6 @@ export const COPY = {
     vacio: "No encontramos a nadie con ese nombre en tu comunidad.",
     vacioSinBusqueda: "Todavía no tenés con quién hablar acá. Buscá a alguien por su nombre.",
     yaEsta: "Ya está en la llamada",
-    invitando: "Sumando…",
     boton: (n: number) => (n === 1 ? "Añadir 1" : `Añadir ${n}`),
     okTitle: (n: number) =>
       n === 1 ? "Le está sonando" : `Les está sonando a ${n} personas`,
@@ -149,8 +140,6 @@ export const COPY = {
     sinRespuesta: "No atendieron",
     saliente: "Llamaste",
     entrante: "Te llamaron",
-    enCurso: "En curso",
-    volverALlamar: "Volver a llamar",
     kindAudio: "Audio",
     kindVideo: "Video",
   },

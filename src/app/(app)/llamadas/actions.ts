@@ -55,7 +55,7 @@ const INVITACIONES_POR_HORA = 60;
 
 async function guard() {
   const resultado = await requireTenantMatch();
-  if (resultado.ok) return { ok: true as const, ...resultado };
+  if (resultado.ok) return { ...resultado, ok: true as const };
   if (resultado.reason === "unauthenticated") {
     return { ok: false as const, code: "unauthenticated" as CodigoDeLlamada };
   }
@@ -188,7 +188,7 @@ export async function rechazarLlamadaAction(input: {
 
   const g = await guard();
   if (!g.ok) return { ok: false, code: g.code };
-  const { supabase, user } = g;
+  const { supabase } = g;
   const db = supabaseSinTiparLlamadas(supabase);
   const ahora = new Date().toISOString();
 

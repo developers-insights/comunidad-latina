@@ -471,7 +471,9 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
 
   if (estado.fase === "previa") {
     return (
-      <div className="flex flex-1 items-center gap-2 rounded-xl bg-surface-subtle px-2 py-1.5">
+      // `cl-print-hide`: grabar no significa nada en papel, y el medidor y el
+      // micrófono del gesto no son <button> (contrato de print-contract).
+      <div className="cl-print-hide flex flex-1 items-center gap-2 rounded-xl bg-surface-subtle px-2 py-1.5">
         <button
           type="button"
           onClick={descartarPrevia}
@@ -506,7 +508,7 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
   return (
     <div
       className={cn(
-        "relative flex flex-1 items-center gap-2 rounded-xl px-2.5 py-1.5 transition-colors duration-(--duration-fast)",
+        "cl-print-hide relative flex flex-1 items-center gap-2 rounded-xl px-2.5 py-1.5 transition-colors duration-(--duration-fast)",
         cancelando ? "bg-danger-bg" : "bg-surface-subtle",
       )}
     >

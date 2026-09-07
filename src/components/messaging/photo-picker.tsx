@@ -92,29 +92,38 @@ export function PhotoPicker({
   const camaraRef = useRef<HTMLInputElement>(null);
   const abiertoAntesRef = useRef(false);
 
-  // Los object URL se crean al abrir y se sueltan al cerrar. El `Map` guarda
-  // los `File`, no las URL: una URL viva por cada foto que alguien miró alguna
-  // vez es una fuga que sólo se nota después de una hora de chat.
+  /**
+   * Los object URL se crean al abrir y se sueltan al cerrar. El `Map` guarda
+   * los `File`, no las URL: una URL viva por cada foto que alguien miró alguna
+   * vez es una fuga que sólo se nota después de una hora de chat.
+   *
+   * Todo se difiere un frame porque un `setState` sincrónico dentro de un
+   * efecto encadena renders (react-hooks/set-state-in-effect) — mismo remedio
+   * que usa `ui/bottom-sheet.tsx` para medir el teclado.
+   */
   useEffect(() => {
-    if (!open) {
-      setElegidos((previos) => {
-        previos.forEach((item) => URL.revokeObjectURL(item.url));
-        return [];
-      });
-      setSeleccion([]);
-      setPie("");
-      abiertoAntesRef.current = false;
-      return;
-    }
-    const guardados = recientesPorChat.get(chatId) ?? [];
-    setElegidos(
-      guardados.map((archivo) => ({
-        archivo,
-        url: URL.createObjectURL(archivo),
-        problema: revisar(archivo),
-      })),
-    );
-    setPestana(guardados.length > 0 ? "recientes" : "albumes");
+    const cuadro = requestAnimationFrame(() => {
+      if (!open) {
+        setElegidos((previos) => {
+          previos.forEach((item) => URL.revokeObjectURL(item.url));
+          return [];
+        });
+        setSeleccion([]);
+        setPie("");
+        abiertoAntesRef.current = false;
+        return;
+      }
+      const guardados = recientesPorChat.get(chatId) ?? [];
+      setElegidos(
+        guardados.map((archivo) => ({
+          archivo,
+          url: URL.createObjectURL(archivo),
+          problema: revisar(archivo),
+        })),
+      );
+      setPestana(guardados.length > 0 ? "recientes" : "albumes");
+    });
+    return () => cancelAnimationFrame(cuadro);
   }, [open, chatId]);
 
   // La cámara se abre desde el gesto que abrió la hoja, no desde un botón más:

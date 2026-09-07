@@ -20,7 +20,7 @@ import { useVigilanciaDeLlamada } from "@/lib/calls/vigilancia";
 import { Controles } from "./controles";
 import { COPY } from "./copy";
 import { FondoDeLlamada } from "./fondo";
-import { HojaAgregar, mensajeDeFallo, type CandidatoUI } from "./hoja-agregar";
+import { HojaAgregar, type CandidatoUI } from "./hoja-agregar";
 import { Mosaico } from "./mosaico";
 import styles from "./llamada.module.css";
 
@@ -276,7 +276,7 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
         <SelloSeguro />
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4">
         {enGrilla ? (
           <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             <li className="aspect-[3/4] sm:aspect-square">
@@ -360,14 +360,33 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
 /* ------------------------------ piezas chicas ----------------------------- */
 
 /**
- * `caret-color: transparent` acá adentro: no hay ni un campo de texto en la
- * pantalla de llamada, y una barrita parpadeando sobre un video es la marca más
- * barata de "esto es una página web". En la hoja de Añadir, que sí tiene
- * buscador, el cursor vuelve solo porque la hoja se dibuja en su propio portal.
+ * El marco de la llamada.
+ *
+ * ── POR QUÉ SE SALE DEL SHELL ───────────────────────────────────────────────
+ * El `<main>` de `(app)/layout.tsx` es una columna de 512px con padding y 7rem
+ * de aire abajo para la barra de navegación. Una llamada adentro de esa columna
+ * sería una llamada con bordes crema a los costados y la barra de "Inicio ·
+ * Buscar · Perfil" tapando los controles: el peor lugar posible para poner
+ * "Finalizar". Así que se dibuja fija sobre todo el shell, como ya hace el visor
+ * de reels.
+ *
+ * El z-index NO es arbitrario y por eso no es `z-50`: la barra y el header viven
+ * en 40, las hojas (`BottomSheet`) en 50 y los toasts en 70. 45 es exactamente
+ * "arriba del shell, debajo de la hoja de Añadir" — con `z-50` la hoja quedaría
+ * empatada con la pantalla y quién gana pasaría a depender del orden del DOM.
+ *
+ * `h-[100dvh]` y no `inset-0`: en iOS la barra del navegador se esconde al
+ * hacer scroll y el viewport fijo queda más alto que lo que se ve, así que los
+ * controles terminarían debajo del borde inferior de la pantalla.
+ *
+ * `caret-color: transparent`: acá no hay ni un campo de texto, y una barrita
+ * parpadeando sobre un video es la marca más barata de "esto es una página web".
+ * En la hoja de Añadir, que sí tiene buscador, el cursor vuelve solo porque la
+ * hoja se dibuja en su propio portal, fuera de este árbol.
  */
 function Marco({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative flex min-h-[100dvh] flex-col overflow-hidden text-on-media [caret-color:transparent]">
+    <div className="fixed inset-x-0 top-0 z-45 flex h-[100dvh] flex-col overflow-hidden text-on-media [caret-color:transparent]">
       <FondoDeLlamada />
       {children}
     </div>

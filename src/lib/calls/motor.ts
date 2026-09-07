@@ -121,7 +121,9 @@ export function useMotorDeLlamada(opciones: {
   const cerradoRef = useRef(false);
   const arrancadoRef = useRef(false);
   const alCerrarRef = useRef(alCerrar);
-  alCerrarRef.current = alCerrar;
+  useEffect(() => {
+    alCerrarRef.current = alCerrar;
+  }, [alCerrar]);
 
   /**
    * Un solo cierre, pase lo que pase.
@@ -162,7 +164,9 @@ export function useMotorDeLlamada(opciones: {
   // El handler de `user-published` se registra UNA vez y necesita leer el valor
   // VIGENTE del sonido, no el que había cuando se registró.
   const sonidoApagadoRef = useRef(sonidoApagado);
-  sonidoApagadoRef.current = sonidoApagado;
+  useEffect(() => {
+    sonidoApagadoRef.current = sonidoApagado;
+  }, [sonidoApagado]);
 
   const arrancar = useCallback(() => {
     if (arrancadoRef.current) return;

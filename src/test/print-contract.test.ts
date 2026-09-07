@@ -618,6 +618,44 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",
   },
+  // ── La barra de mensaje deja de ser sólo texto (0136 + 0140) ──────────────
+  // Botón "Enviar enlace" de la hoja + la X que descarta un adjunto en camino.
+  // Los dos son <button>: el @media print ya los esconde.
+  "src/components/messaging/attach-menu.tsx": {
+    inks: ["text-brand-foreground", "text-on-media"],
+    cobertura: "control",
+  },
+  // Elegir fotos y videos: los dos CTA ("Elegir del teléfono" y "Enviar"), el
+  // número de selección y el glifo de video, todos adentro de un <button>.
+  "src/components/messaging/photo-picker.tsx": {
+    inks: [
+      "text-brand-foreground",
+      "text-brand-foreground",
+      "text-brand-foreground",
+      "text-on-media",
+      "text-on-media",
+    ],
+    cobertura: "control",
+  },
+  // Grabador de notas de voz. Va con el hook y no con "control" porque el
+  // micrófono que sigue al dedo mientras se arrastra es un <span> aria-hidden,
+  // no un botón — y grabar no significa nada en una hoja impresa.
+  "src/components/messaging/voice-recorder.tsx": {
+    inks: ["text-brand-foreground", "text-brand-foreground", "text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
+  // Reproductor de una nota de voz. Mismo motivo: el tiempo restante y el aviso
+  // de "audio no disponible" son texto suelto sobre la burbuja de marca, y un
+  // reproductor de audio en papel no es nada.
+  "src/components/messaging/voice-player.tsx": {
+    inks: Array<string>(5).fill("text-brand-foreground"),
+    cobertura: "cl-print-hide",
+  },
+  // Mandar la ubicación: el azulejo verde con `text-on-success` es un <span>.
+  "src/components/messaging/location-picker.tsx": {
+    inks: ["text-brand-foreground", "text-brand-foreground", "text-on-success"],
+    cobertura: "cl-print-hide",
+  },
   // Dos tintas, mismo patrón: el glifo Play sobre el thumbnail de video y el
   // rótulo "Fijada" de la publicación fijada (0097). Las dos se apoyan en un
   // velo bg-media-scrim y las dos lo imprimen con cl-print-fill, como el
@@ -803,7 +841,13 @@ function soloCodigo(src: string): string {
   let out = "";
   let i = 0;
   while (i < src.length) {
-    if (src.startsWith("/*", i)) {
+    // El `/` de un comentario nunca viene pegado a una letra o a un dígito. El
+    // de un comodín MIME sí: `accept="image/*,video/*"` abría un bloque que no
+    // cerraba nunca y BLANQUEABA EL RESTO DEL ARCHIVO — el escáner lo daba por
+    // limpio y el inventario se quedaba sin sus tintas, en silencio. Es el
+    // gemelo del guard de `https://` de acá abajo, y apareció con el input de
+    // cámara de `messaging/photo-picker.tsx`.
+    if (src.startsWith("/*", i) && !/[\w$]/.test(src[i - 1] ?? "")) {
       const fin = src.indexOf("*/", i + 2);
       const hasta = fin < 0 ? src.length : fin + 2;
       out += src.slice(i, hasta).replace(/[^\n]/g, " ");

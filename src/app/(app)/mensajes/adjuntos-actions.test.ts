@@ -97,7 +97,13 @@ function crearStub(
     return builder;
   });
 
-  const createSignedUrls = vi.fn(async () => config.firmas ?? { data: [], error: null });
+  // Los parámetros van declarados aunque el cuerpo los ignore: sin ellos vitest
+  // infiere `calls: []` y leer `calls[0][0]` deja de compilar — que es justo lo
+  // que hacen los tests de firma acá abajo. Mismo apunte que en
+  // `grupos/actions.test.ts`.
+  const createSignedUrls = vi.fn(
+    async (_paths: string[], _vigencia: number) => config.firmas ?? { data: [], error: null },
+  );
   const storageFrom = vi.fn(() => ({ createSignedUrls }));
 
   return {
