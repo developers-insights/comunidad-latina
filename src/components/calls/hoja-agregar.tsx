@@ -175,7 +175,11 @@ export function HojaAgregar({
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "flex size-6 shrink-0 items-center justify-center rounded-full border",
+                    // `cl-print-hide`: la tilde es tinta clara sobre relleno de
+                    // marca, y el relleno no se imprime — en papel quedaría en
+                    // 1.00:1. Una hoja de "elegir a quién llamar" no tiene nada
+                    // que hacer impresa igual.
+                    "cl-print-hide flex size-6 shrink-0 items-center justify-center rounded-full border",
                     "transition-[background-color,border-color,transform] duration-(--duration-fast) ease-(--ease-spring)",
                     elegido
                       ? "scale-100 border-brand bg-brand text-brand-foreground"

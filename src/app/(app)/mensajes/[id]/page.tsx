@@ -4,12 +4,27 @@ import { LockKey } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate, getViewerTimeZone } from "@/lib/time/viewer-zone";
-import { DEFAULT_LOCALE, DEFAULT_TIME_ZONE, cn } from "@/lib/utils";
+import { DEFAULT_LOCALE, DEFAULT_TIME_ZONE } from "@/lib/utils";
 import { Banner } from "@/components/ui";
+import type { Adjunto } from "@/lib/messaging/adjuntos";
+import { supabaseSinTiparMensajes } from "@/lib/messaging/adjuntos";
+import { leerReaccionesDeMensajes } from "@/lib/messaging/reacciones";
 import { AcceptBanner } from "@/components/messaging/accept-banner";
 import { Composer } from "@/components/messaging/composer";
 import { COPY } from "@/components/messaging/copy";
-import { MessageBubble } from "@/components/messaging/message-bubble";
+import {
+  MessageAttachment,
+  firmarAdjuntosDelHilo,
+} from "@/components/messaging/message-attachment";
+import {
+  MessageBubble,
+  type MessageBubbleAcciones,
+} from "@/components/messaging/message-bubble";
+import {
+  ResponderProvider,
+  resumenDeMensaje,
+  type MensajeCitado,
+} from "@/components/messaging/reply-quote";
 import { ScrollAnchor } from "@/components/messaging/scroll-anchor";
 import { ThreadHeader } from "@/components/messaging/thread-header";
 import { ThreadListingCard } from "@/components/messaging/thread-listing-card";
@@ -57,15 +72,28 @@ type ConversationRow = {
   counterpart: ProfileLite | null;
 };
 
+/**
+ * La fila tal como la devuelve la consulta de abajo. Las columnas de la 0136
+ * son OPCIONALES en el tipo a propósito: mientras esa migración no esté
+ * aplicada en un entorno, no vienen y el hilo se sigue leyendo como texto.
+ */
 type MessageRow = {
   id: string;
   sender_id: string;
   body: string;
   created_at: string;
-  /** 0136. Ausentes en un entorno sin la migración: la fila sigue siendo texto. */
+  kind?: string | null;
+  reply_to?: string | null;
+  editado_at?: string | null;
+  deleted_at?: string | null;
   compartido_kind?: string | null;
   compartido_id?: string | null;
+  adjunto?: Adjunto | null;
+  ubicacion?: { lat: number; lng: number; etiqueta?: string } | null;
 };
+
+/** Los `kind` que traen algo para pintar además del texto (0136 §2.2). */
+const KINDS_CON_MEDIA = new Set(["imagen", "video", "audio", "archivo", "ubicacion"]);
 
 /**
  * /mensajes/[id] — hilo del contacto protegido (§9.2): el cierre ocurre
@@ -103,6 +131,10 @@ export default async function HiloPage({
   const other = iAmCreator ? conversation.counterpart : conversation.creator;
   const otherName = other?.display_name ?? "Miembro de la comunidad";
   const otherFirstName = otherName.split(/\s+/)[0] ?? otherName;
+  const yo = iAmCreator ? conversation.creator : conversation.counterpart;
+  // Cómo me llamo YO, para el "quién reaccionó" optimista. Sale de la misma
+  // consulta que ya trae los dos perfiles: no cuesta un viaje extra.
+  const nombrePropio = yo?.display_name ?? COPY.acciones.vos;
 
   const [{ data: trustRow }, { data: messagesData }] = await Promise.all([
     other
@@ -112,14 +144,13 @@ export default async function HiloPage({
           .eq("profile_id", other.id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
-    supabase
+    // `supabaseSinTiparMensajes` porque `database.types.ts` se regenera a mano
+    // y todavía no conoce las columnas de la 0136. La forma real de la fila la
+    // fija `MessageRow`; cuando los tipos se regeneren, este escape se borra.
+    supabaseSinTiparMensajes(supabase)
       .from("messages")
-      // El VALOR pide las columnas de la 0136 y el TIPO se queda en las que
-      // `database.types.ts` ya conoce — mismo `as` que `POST_COLUMNS` en
-      // feed/queries.ts, y por el mismo motivo: los tipos se regeneran a mano.
-      // La forma real de la fila la fija `MessageRow`.
       .select(
-        "id, sender_id, body, created_at, compartido_kind, compartido_id" as "id, sender_id, body, created_at",
+        "id, sender_id, body, created_at, kind, reply_to, editado_at, deleted_at, compartido_kind, compartido_id, adjunto, ubicacion",
       )
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true })
@@ -154,20 +185,47 @@ export default async function HiloPage({
    * de la comunidad se ve como texto en vez de como tarjeta. El costo de pasarse
    * es pintar contenido ajeno con nuestra marca alrededor.
    */
-  const origenesPropios = [process.env.NEXT_PUBLIC_SITE_URL ?? ""].filter(Boolean);
+  const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  const origenesPropios = [sitio].filter(Boolean);
 
   const compartidoDelMensaje = (message: MessageRow): EnlaceInterno | null => {
+    // Un mensaje bajado no conserva payload (0142): no hay tarjeta que resolver.
+    if (message.deleted_at) return null;
     if (esCompartidoKind(message.compartido_kind) && message.compartido_id) {
       return { kind: message.compartido_kind, id: message.compartido_id };
     }
     return enlaceInternoDelCuerpo(message.body, { origenesPropios });
   };
 
-  const compartidos = await resolverCompartidos(
-    supabase,
-    messages.map(compartidoDelMensaje).filter((item): item is EnlaceInterno => item !== null),
-    { locale: tenant.locale },
-  );
+  /**
+   * LAS TRES LECTURAS QUE FALTAN, EN PARALELO.
+   *
+   * Ninguna depende del resultado de otra: encadenarlas sería sumar tres
+   * viajes de latencia a la pantalla que más se abre del módulo.
+   */
+  const [compartidos, reaccionesPorMensaje, firmas, viewerZone, formatDate] =
+    await Promise.all([
+      resolverCompartidos(
+        supabase,
+        messages
+          .map(compartidoDelMensaje)
+          .filter((item): item is EnlaceInterno => item !== null),
+        { locale: tenant.locale },
+      ),
+      leerReaccionesDeMensajes(
+        supabase,
+        "directo",
+        messages.map((message) => message.id),
+        user.id,
+      ),
+      firmarAdjuntosDelHilo(
+        messages
+          .map((message) => message.adjunto?.path)
+          .filter((path): path is string => typeof path === "string" && path.length > 0),
+      ),
+      getViewerTimeZone(),
+      getViewerFormatDate(),
+    ]);
 
   /**
    * LA HORA DE UN MENSAJE ES LA HORA DE QUIEN LO LEE.
@@ -179,14 +237,37 @@ export default async function HiloPage({
    * un mensaje de las 22:30 en Los Ángeles podía aparecer bajo el día siguiente.
    * Un solo huso para las dos cosas y el hilo vuelve a ser coherente.
    */
-  const [viewerZone, formatDate] = await Promise.all([
-    getViewerTimeZone(),
-    getViewerFormatDate(),
-  ]);
   const timeFormat = new Intl.DateTimeFormat(DEFAULT_LOCALE, {
     timeStyle: "short",
     timeZone: viewerZone ?? DEFAULT_TIME_ZONE,
   });
+
+  const nombreDe = (senderId: string) =>
+    senderId === user.id ? nombrePropio : otherName;
+
+  /**
+   * LA CITA SE RESUELVE CONTRA LO QUE YA SE CARGÓ, sin una consulta más.
+   *
+   * Si el original quedó fuera de los últimos 200 mensajes, la respuesta se
+   * pinta sin cita en vez de disparar un viaje por burbuja: perder la tirita es
+   * mucho más barato que convertir el hilo en un N+1.
+   */
+  const porId = new Map(messages.map((message) => [message.id, message]));
+  const citaDe = (message: MessageRow): MensajeCitado | null => {
+    if (!message.reply_to) return null;
+    const original = porId.get(message.reply_to);
+    if (!original) return null;
+    return {
+      id: original.id,
+      autorNombre: nombreDe(original.sender_id),
+      esPropio: original.sender_id === user.id,
+      resumen: resumenDeMensaje(
+        original.kind ?? "texto",
+        original.body,
+        Boolean(original.deleted_at),
+      ),
+    };
+  };
 
   const isAccepted = conversation.status === "accepted";
   const isPending = conversation.status === "pending";
@@ -239,82 +320,104 @@ export default async function HiloPage({
         {COPY.thread.ttlNote}
       </p>
 
-      <div className="flex flex-1 flex-col gap-2.5 py-5">
-        {messages.length === 0 && isAccepted && (
-          <p className="py-8 text-center text-sm text-foreground-muted">
-            {COPY.thread.emptyThread}
-          </p>
-        )}
+      {/* El provider envuelve la LISTA y el COMPOSER: quien elige "Responder"
+          está en el medio del hilo y quien lo usa está abajo de todo. */}
+      <ResponderProvider>
+        <div className="flex flex-1 flex-col gap-2.5 py-5">
+          {messages.length === 0 && isAccepted && (
+            <p className="py-8 text-center text-sm text-foreground-muted">
+              {COPY.thread.emptyThread}
+            </p>
+          )}
 
-        {messages.map((message, index) => {
-          const previous = messages[index - 1];
-          const dayLabel = formatDate(message.created_at);
-          const showDay = !previous || formatDate(previous.created_at) !== dayLabel;
-          return (
-            <div key={message.id} className="flex flex-col gap-2.5">
-              {showDay && (
-                <p className="py-2 text-center text-xs font-medium text-foreground-muted">
-                  {dayLabel}
-                </p>
-              )}
-              {(() => {
-                const isOwn = message.sender_id === user.id;
-                const compartido = compartidoDelMensaje(message);
-                const timeLabel = timeFormat.format(new Date(message.created_at));
-                if (!compartido) {
-                  return (
-                    <MessageBubble body={message.body} isOwn={isOwn} timeLabel={timeLabel} />
-                  );
+          {messages.map((message, index) => {
+            const previous = messages[index - 1];
+            const dayLabel = formatDate(message.created_at);
+            const showDay = !previous || formatDate(previous.created_at) !== dayLabel;
+
+            const isOwn = message.sender_id === user.id;
+            const kind = message.kind ?? "texto";
+            const timeLabel = timeFormat.format(new Date(message.created_at));
+            const compartido = compartidoDelMensaje(message);
+            const resuelto = compartido
+              ? (compartidos.get(claveCompartido(compartido)) ?? null)
+              : null;
+
+            const acciones: MessageBubbleAcciones = {
+              mensajeId: message.id,
+              hiloId: conversation.id,
+              createdAt: message.created_at,
+              kind,
+              autorNombre: nombreDe(message.sender_id),
+              nombrePropio,
+              reacciones: reaccionesPorMensaje.get(message.id) ?? [],
+              compartido:
+                compartido && resuelto
+                  ? {
+                      kind: compartido.kind,
+                      id: compartido.id,
+                      titulo: resuelto.titulo,
+                      url: `${sitio}${resuelto.href}`,
+                    }
+                  : null,
+            };
+
+            /**
+             * Lo que el mensaje ES cuando no es texto. Va adentro de la burbuja
+             * (prop `media`) y no al costado: así el menú, las reacciones y la
+             * cita siguen siendo los de ESTE mensaje. Una foto pintada afuera
+             * se quedaba sin las tres cosas.
+             */
+            const media = compartido ? (
+              <SharedCard compartido={resuelto} kind={compartido.kind} isOwn={isOwn} />
+            ) : KINDS_CON_MEDIA.has(kind) ? (
+              <MessageAttachment
+                kind={kind}
+                adjunto={message.adjunto ?? null}
+                ubicacion={message.ubicacion ?? null}
+                src={
+                  message.adjunto?.path
+                    ? (firmas.get(message.adjunto.path) ?? null)
+                    : null
                 }
-                // La tarjeta va FUERA de la burbuja y no adentro: el ancho de una
-                // burbuja está pensado para texto (80% de la columna) y la
-                // tarjeta necesita el suyo. Cuando además hay una nota, el texto
-                // sigue siendo una burbuja normal arriba — que es como se lee:
-                // primero lo que la persona dijo, después lo que mandó.
-                return (
-                  <div
-                    className={cn(
-                      "flex flex-col gap-1.5",
-                      isOwn ? "items-end" : "items-start",
-                    )}
-                  >
-                    {message.body.trim().length > 0 &&
-                      !enlaceInternoDelCuerpo(message.body, { origenesPropios }) && (
-                        <MessageBubble body={message.body} isOwn={isOwn} timeLabel="" />
-                      )}
-                    <div className="w-full max-w-[85%]">
-                      <SharedCard
-                        compartido={compartidos.get(claveCompartido(compartido)) ?? null}
-                        kind={compartido.kind}
-                        isOwn={isOwn}
-                      />
-                      <p
-                        className={cn(
-                          "mt-1 text-[10px] text-foreground-secondary",
-                          isOwn ? "text-right" : "text-left",
-                        )}
-                      >
-                        {timeLabel}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          );
-        })}
+                isOwn={isOwn}
+                autorNombre={nombreDe(message.sender_id)}
+              />
+            ) : null;
 
-        {messages.length > 0 && (
-          <ScrollAnchor signature={messages[messages.length - 1].id} />
-        )}
-      </div>
+            return (
+              <div key={message.id} className="flex flex-col gap-2.5">
+                {showDay && (
+                  <p className="py-2 text-center text-xs font-medium text-foreground-muted">
+                    {dayLabel}
+                  </p>
+                )}
+                <MessageBubble
+                  body={message.body}
+                  isOwn={isOwn}
+                  timeLabel={timeLabel}
+                  acciones={acciones}
+                  editadoAt={message.editado_at ?? null}
+                  deletedAt={message.deleted_at ?? null}
+                  respuesta={citaDe(message)}
+                  media={media}
+                />
+              </div>
+            );
+          })}
 
-      {/* Pie según estado: solo accepted escribe (§9.2) */}
-      {isAccepted && (
-        <div className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 -mx-1 bg-canvas/95 px-1 pb-2 pt-1 backdrop-blur-sm">
-          <Composer conversationId={conversation.id} />
+          {messages.length > 0 && (
+            <ScrollAnchor signature={messages[messages.length - 1].id} />
+          )}
         </div>
-      )}
+
+        {/* Pie según estado: solo accepted escribe (§9.2) */}
+        {isAccepted && (
+          <div className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 -mx-1 bg-canvas/95 px-1 pb-2 pt-1 backdrop-blur-sm">
+            <Composer conversationId={conversation.id} />
+          </div>
+        )}
+      </ResponderProvider>
 
       {isPending && !iAmCreator && (
         <div className="pb-2">

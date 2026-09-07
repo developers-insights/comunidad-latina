@@ -66,7 +66,7 @@ export function Mosaico({
       className={cn(
         styles.mosaico,
         "group relative isolate flex min-h-0 items-center justify-center overflow-hidden",
-        "rounded-[calc(var(--radius-xl)-0.375rem)] bg-white/[0.06] ring-1 ring-inset ring-white/10",
+        "rounded-[calc(var(--radius-xl)-0.375rem)] bg-on-media/[0.06] ring-1 ring-inset ring-on-media/10",
         "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.10)]",
         esperando && "opacity-60",
         className,
@@ -93,7 +93,7 @@ export function Mosaico({
         </div>
       )}
 
-      <figcaption className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/65 to-transparent px-2.5 pb-2 pt-6">
+      <figcaption className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-media-shade/65 to-transparent px-2.5 pb-2 pt-6">
         {micApagado && (
           <span
             className="flex size-5 shrink-0 items-center justify-center rounded-full bg-danger/85 text-on-danger"
@@ -104,7 +104,7 @@ export function Mosaico({
           </span>
         )}
         {camaraApagada && !micApagado && (
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white/15 text-on-media">
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-on-media/15 text-on-media">
             <VideoCameraSlash size={12} aria-hidden="true" />
             <span className="sr-only">{COPY.pantalla.sinCamara}</span>
           </span>

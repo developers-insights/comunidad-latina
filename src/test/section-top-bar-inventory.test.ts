@@ -68,6 +68,15 @@ const EXCEPCIONES: Record<string, string> = {
   "feed/[id]":
     "vive dentro del feed, que resuelve su propia navegación; además es territorio de otra rama",
 
+  // ── Llamada en curso (0139) ──────────────────────────────────────────────
+  // Se dibuja fija sobre todo el shell y su salida NO es una flecha: es
+  // "Finalizar", que además cuelga el canal de Agora y escribe `ended_at`. Una
+  // barra de volver arriba sería una segunda salida que se va de la pantalla
+  // dejando la llamada viva y facturándose. Los estados que no son una llamada
+  // en curso (error, terminada, "entrar") sí tienen un botón "Salir" propio.
+  "llamadas/[id]":
+    "llamada a pantalla completa: la salida es Finalizar, que además corta el canal y escribe ended_at",
+
   // ── Páginas que no dibujan nada: sólo redirigen ──────────────────────────
   "comunidad/ayuda-mutua": "redirect 308 a /comunidad/pedir-ayuda: no renderiza pantalla",
   "comunidad/ayuda-mutua/mios": "redirect 308: no renderiza pantalla",

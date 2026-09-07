@@ -266,7 +266,7 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
       </p>
 
       <header className="flex items-start gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-white/10 px-2.5 text-xs font-medium text-on-media/85 ring-1 ring-inset ring-white/10">
+        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-on-media/10 px-2.5 text-xs font-medium text-on-media/85 ring-1 ring-inset ring-on-media/10">
           <Users size={13} aria-hidden="true" />
           {COPY.pantalla.participantes(conectados.length + 1)}
         </span>
@@ -384,6 +384,11 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
  * hacer scroll y el viewport fijo queda más alto que lo que se ve, así que los
  * controles terminarían debajo del borde inferior de la pantalla.
  *
+ * `cl-print-hide`: una llamada en curso no existe en papel, y sus tintas claras
+ * (`text-on-media`) sobre un fondo que el navegador NO imprime quedarían en
+ * 1.00:1 — texto blanco sobre hoja blanca. El hook cubre a los mosaicos y a la
+ * bandeja de controles por herencia, que es donde vive el resto de esa tinta.
+ *
  * `caret-color: transparent`: acá no hay ni un campo de texto, y una barrita
  * parpadeando sobre un video es la marca más barata de "esto es una página web".
  * En la hoja de Añadir, que sí tiene buscador, el cursor vuelve solo porque la
@@ -391,7 +396,7 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
  */
 function Marco({ children }: { children: React.ReactNode }) {
   return (
-    <div className="fixed inset-x-0 top-0 z-[45] flex h-[100dvh] flex-col overflow-hidden text-on-media [caret-color:transparent]">
+    <div className="cl-print-hide fixed inset-x-0 top-0 z-[45] flex h-[100dvh] flex-col overflow-hidden text-on-media [caret-color:transparent]">
       <FondoDeLlamada />
       {children}
     </div>
@@ -422,9 +427,9 @@ function TarjetaDeAviso({
 }) {
   return (
     <div className="flex flex-1 items-center justify-center px-5 py-10">
-      <div className="w-full max-w-sm rounded-[2rem] bg-white/[0.07] p-1.5 ring-1 ring-inset ring-white/12 backdrop-blur-xl">
-        <div className="rounded-[calc(2rem-0.375rem)] bg-black/25 px-6 py-7 text-center shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
-          <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-white/10 text-on-media">
+      <div className="w-full max-w-sm rounded-[2rem] bg-on-media/[0.07] p-1.5 ring-1 ring-inset ring-on-media/12 backdrop-blur-xl">
+        <div className="rounded-[calc(2rem-0.375rem)] bg-media-shade/25 px-6 py-7 text-center shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+          <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-on-media/10 text-on-media">
             <PhoneDisconnect size={22} aria-hidden="true" />
           </span>
           <h1 className="mt-4 font-display text-lg font-semibold text-on-media">{title}</h1>
@@ -490,7 +495,7 @@ function Dueto(props: {
                 />
               </>
             )}
-            <span className="relative rounded-full p-1 ring-1 ring-inset ring-white/15">
+            <span className="relative rounded-full p-1 ring-1 ring-inset ring-on-media/15">
               <Avatar src={props.avatarUrl} name={props.titulo} size="xl" />
             </span>
           </span>

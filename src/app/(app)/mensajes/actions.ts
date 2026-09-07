@@ -11,6 +11,7 @@ import { sendEmailInBackground } from "@/lib/email";
 import { getRecipientEmail } from "@/lib/email/recipients";
 import { newMessageEmail } from "@/lib/email/templates";
 import { isOpenAIConfigured } from "@/lib/config/services";
+import { supabaseSinTiparMensajes } from "@/lib/messaging/adjuntos";
 
 /**
  * Server actions del módulo MENSAJES — contacto protegido (§9.2).
@@ -33,6 +34,12 @@ const sendMessageSchema = z.object({
     .string()
     .transform((value) => value.trim())
     .pipe(z.string().min(1).max(2000)),
+  /**
+   * El mensaje que se está respondiendo (0136). Que sea del MISMO hilo lo
+   * verifica el trigger `app.validar_respuesta_de_mensaje_directo`: acá no se
+   * puede comprobar sin una consulta extra que la base ya hace.
+   */
+  replyTo: z.string().uuid().nullish(),
 });
 
 const reportScamSchema = z.object({
@@ -82,10 +89,11 @@ async function moderateText(
 export async function sendMessageAction(input: {
   conversationId: string;
   body: string;
+  replyTo?: string | null;
 }): Promise<ActionResult> {
   const parsed = sendMessageSchema.safeParse(input);
   if (!parsed.success) return { ok: false, code: "invalid" };
-  const { conversationId, body } = parsed.data;
+  const { conversationId, body, replyTo } = parsed.data;
 
   const supabase = await createClient();
   const {
@@ -143,12 +151,22 @@ export async function sendMessageAction(input: {
     return { ok: false, code: "flagged" };
   }
 
-  const { error: insertError } = await supabase.from("messages").insert({
-    tenant_id: conversation.tenant_id,
-    conversation_id: conversationId,
-    sender_id: user.id,
-    body,
-  });
+  /**
+   * `reply_to` viaja SÓLO cuando hay una cita, y no como `null` constante: la
+   * columna llega con la 0136 y mientras esa migración no esté aplicada, un
+   * insert que la nombre falla con 42703 y se lleva puesto el envío de
+   * cualquier mensaje de texto. Así, sin la migración se pierde responder y no
+   * el chat entero.
+   */
+  const { error: insertError } = await supabaseSinTiparMensajes(supabase)
+    .from("messages")
+    .insert({
+      tenant_id: conversation.tenant_id,
+      conversation_id: conversationId,
+      sender_id: user.id,
+      body,
+      ...(replyTo ? { reply_to: replyTo } : {}),
+    });
   if (insertError) return { ok: false, code: "error" };
 
   // Aviso a la contraparte (best-effort, §12): la conversación ya está

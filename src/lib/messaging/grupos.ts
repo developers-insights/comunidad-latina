@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Adjunto as AdjuntoDeMensaje } from "./adjuntos";
 
 /**
  * =============================================================================
@@ -98,14 +99,34 @@ export type GrupoRow = {
 export const GRUPO_COLUMNS =
   "id, name, description, category, visibility, avatar_url, status, member_count, created_by, created_at";
 
+/**
+ * Las columnas de la 0136 (`kind`, `adjunto`, `ubicacion`, `compartido_*`,
+ * `reply_to`, `editado_at`) son OPCIONALES en el tipo a propósito: mientras esa
+ * migración no esté aplicada en un entorno, no vuelven y el grupo se sigue
+ * leyendo como texto en vez de quedar en blanco.
+ */
 export type MensajeDeGrupoRow = {
   id: string;
   sender_id: string;
   body: string;
   created_at: string;
+  kind?: string | null;
+  reply_to?: string | null;
+  editado_at?: string | null;
+  deleted_at?: string | null;
+  compartido_kind?: string | null;
+  compartido_id?: string | null;
+  adjunto?: AdjuntoDeMensaje | null;
+  ubicacion?: { lat: number; lng: number; etiqueta?: string } | null;
 };
 
-export const MENSAJE_DE_GRUPO_COLUMNS = "id, sender_id, body, created_at";
+/**
+ * Nunca `select('*')`: la pantalla pide lo que pinta. `adjunto` y `ubicacion`
+ * son jsonb chicos; el que pesa es `onda` (48 enteros) y viaja igual porque es
+ * lo que deja dibujar un audio sin bajarlo.
+ */
+export const MENSAJE_DE_GRUPO_COLUMNS =
+  "id, sender_id, body, created_at, kind, reply_to, editado_at, deleted_at, compartido_kind, compartido_id, adjunto, ubicacion";
 
 /**
  * Cuántos miembros, dicho como se dice. "1 miembro" y no "1 miembros": el

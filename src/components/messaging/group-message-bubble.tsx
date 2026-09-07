@@ -59,6 +59,7 @@ export function GroupMessageBubble({
   editadoAt = null,
   deletedAt = null,
   respuesta = null,
+  media = null,
 }: {
   body: string;
   isOwn: boolean;
@@ -77,6 +78,8 @@ export function GroupMessageBubble({
   editadoAt?: string | null;
   deletedAt?: string | null;
   respuesta?: MensajeCitado | null;
+  /** Gemelo del `media` de `message-bubble.tsx`, y por el mismo motivo. */
+  media?: ReactNode;
 }) {
   const ancla = mensaje ? anclaDeMensaje(mensaje.mensajeId) : undefined;
 
@@ -123,7 +126,11 @@ export function GroupMessageBubble({
 
       {respuesta && <ReplyQuote citado={respuesta} isOwn={isOwn} />}
 
-      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{body}</p>
+      {media && <div className="-mx-2 mb-1.5 first:mt-0">{media}</div>}
+
+      {(body.trim().length > 0 || !media) && (
+        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{body}</p>
+      )}
 
       <p
         className={cn(

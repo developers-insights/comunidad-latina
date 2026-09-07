@@ -19,6 +19,7 @@ import {
   useAdjuntos,
   type OpcionDeAdjunto,
 } from "./attach-menu";
+import { ComposerReplyBar, useResponder } from "./reply-quote";
 import { PhotoPicker } from "./photo-picker";
 import { LocationPicker } from "./location-picker";
 import { VoiceRecorder } from "./voice-recorder";
@@ -52,6 +53,9 @@ export function GroupComposer({ groupId }: { groupId: string }) {
   const destino = useMemo(() => ({ tipo: "grupo" as const, groupId }), [groupId]);
   const { cola, enviarArchivos, enviarAudio, enviarSinArchivo, procesar, descartar } =
     useAdjuntos(destino);
+
+  /** `null` fuera del `ResponderProvider`, que monta la página del grupo. */
+  const responder = useResponder();
 
   useEffect(() => {
     const posicion = caretPendiente.current;
@@ -107,11 +111,14 @@ export function GroupComposer({ groupId }: { groupId: string }) {
     const body = valor.trim();
     if (!body || enviando) return;
 
+    const replyTo = responder?.citado?.id ?? null;
+
     startTransition(async () => {
-      const resultado = await enviarMensajeAlGrupoAction({ groupId, body });
+      const resultado = await enviarMensajeAlGrupoAction({ groupId, body, replyTo });
 
       if (resultado.ok) {
         setValor("");
+        responder?.cancelar();
         if (textareaRef.current) {
           textareaRef.current.style.height = "auto";
           textareaRef.current.focus();
@@ -163,6 +170,8 @@ export function GroupComposer({ groupId }: { groupId: string }) {
   return (
     <div>
       <ColaDeAdjuntos cola={cola} onReintentar={procesar} onDescartar={descartar} />
+
+      <ComposerReplyBar />
 
       <input
         ref={archivoRef}
@@ -219,6 +228,7 @@ export function GroupComposer({ groupId }: { groupId: string }) {
             <textarea
               id="group-composer-body"
               ref={textareaRef}
+              data-composer-input
               rows={1}
               maxLength={LIMITES.mensajeMax}
               value={valor}

@@ -65,10 +65,10 @@ function Control({
           "flex size-11 items-center justify-center rounded-full ring-1 ring-inset",
           "transition-[background-color,color,box-shadow] duration-(--duration-fast)",
           destructivo
-            ? "bg-danger text-on-danger ring-white/20 shadow-[0_6px_18px_-6px_var(--color-danger)]"
+            ? "bg-danger text-on-danger ring-on-media/20 shadow-[0_6px_18px_-6px_var(--color-danger)]"
             : activo
-              ? "bg-on-media text-media-backdrop ring-white/40"
-              : "bg-white/10 text-on-media ring-white/15 group-hover:bg-white/[0.18]",
+              ? "bg-on-media text-media-backdrop ring-on-media/40"
+              : "bg-on-media/10 text-on-media ring-on-media/15 group-hover:bg-on-media/[0.18]",
         )}
       >
         {icono}
@@ -125,8 +125,8 @@ export function Controles(props: ControlesProps) {
         "sticky bottom-0 mx-auto w-full max-w-lg px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3",
       )}
     >
-      <div className="rounded-[2rem] bg-white/[0.07] p-1.5 ring-1 ring-inset ring-white/12 backdrop-blur-xl">
-        <div className="grid grid-cols-6 gap-0.5 rounded-[calc(2rem-0.375rem)] bg-black/25 px-1 py-1.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
+      <div className="rounded-[2rem] bg-on-media/[0.07] p-1.5 ring-1 ring-inset ring-on-media/12 backdrop-blur-xl">
+        <div className="grid grid-cols-6 gap-0.5 rounded-[calc(2rem-0.375rem)] bg-media-shade/25 px-1 py-1.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
           <Control
             etiqueta={micApagado ? COPY.controles.activarMic : COPY.controles.silenciar}
             ariaLabel={micApagado ? COPY.controles.activarMicAria : COPY.controles.silenciarAria}

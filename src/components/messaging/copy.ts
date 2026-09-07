@@ -278,6 +278,25 @@ export const COPY = {
     emptyThread: "Cuando empiecen a hablar, los mensajes aparecen acá.",
     accept: "Aceptar",
     accepted: "Listo, ya pueden hablar",
+
+    /** Lo que se manda que no es texto, ya en el hilo (0136 + 0140). */
+    adjunto: {
+      /**
+       * `alt` de una foto que mandó otra persona. No se inventa qué se ve: la
+       * app no sabe. Se dice de quién es y que hay que abrirla.
+       */
+      fotoDe: (nombre: string) => `Foto que mandó ${nombre}`,
+      fotoPropia: "Foto que mandaste",
+      abrirFoto: "Abrir la foto en grande",
+      video: "Video del mensaje",
+      /** El archivo se cayó, venció la firma o quien mira ya no puede verlo. */
+      noDisponible: "Este archivo ya no está disponible.",
+      archivoSinNombre: "Archivo",
+      descargar: "Descargar",
+      peso: (mb: string) => `${mb} MB`,
+      ubicacionTitulo: "Ubicación",
+      ubicacionAbrir: "Ver en el mapa",
+    },
   },
   composer: {
     placeholder: "Escribí tu mensaje…",
@@ -292,6 +311,164 @@ export const COPY = {
     // y damos la única acción que sirve.
     rateLimitedTitle: "Esperá un momento",
     rateLimitedBody: "Mandaste varios mensajes seguidos. Probá de nuevo en un rato.",
+
+    // ── El botón +, los adjuntos y las notas de voz ─────────────────────
+    /** El botón + y la hoja que abre. */
+    adjuntar: {
+      abrir: "Adjuntar algo",
+      cerrar: "Cerrar",
+      titulo: "¿Qué querés mandar?",
+      opciones: {
+        camara: {
+          etiqueta: "Cámara",
+          detalle: "Sacá una foto o grabá un video ahora",
+        },
+        galeria: {
+          etiqueta: "Fotos y videos",
+          detalle: "Elegí de tu galería",
+        },
+        archivo: {
+          etiqueta: "Archivo",
+          detalle: "Un PDF que tengas guardado",
+        },
+        enlace: {
+          etiqueta: "Enlace",
+          detalle: "Compartí una página",
+        },
+        ubicacion: {
+          etiqueta: "Ubicación",
+          detalle: "Mandá dónde estás",
+        },
+        perfil: {
+          etiqueta: "Mi perfil",
+          detalle: "Para que sepa quién sos",
+        },
+      },
+    },
+
+    /** Elegir fotos y videos. */
+    galeria: {
+      titulo: "Fotos y videos",
+      tabRecientes: "Recientes",
+      tabAlbumes: "Álbumes",
+      vacioRecientes: "Todavía no elegiste nada en esta charla.",
+      elegirDelTelefono: "Elegir del teléfono",
+      soloFotos: "Solo fotos",
+      soloVideos: "Solo videos",
+      sacarFoto: "Sacar una foto",
+      grabarVideo: "Grabar un video",
+      ayudaAlbumes:
+        "Tu teléfono abre su propia galería, así elegís del álbum que quieras.",
+      seleccion: (cantidad: number) =>
+        cantidad === 1 ? "1 archivo seleccionado" : `${cantidad} archivos seleccionados`,
+      seleccionFotos: (cantidad: number) =>
+        cantidad === 1 ? "1 foto seleccionada" : `${cantidad} fotos seleccionadas`,
+      quitar: "Quitar",
+      enviar: "Enviar",
+      pie: "Escribí algo (opcional)",
+      tope: (maximo: number) => `Podés mandar hasta ${maximo} por vez.`,
+    },
+
+    /** Compartir un enlace. */
+    enlace: {
+      titulo: "Compartir un enlace",
+      ayuda: "Pegá la dirección de la página que querés mandar.",
+      campo: "Dirección",
+      placeholder: "ejemplo.com/lo-que-quieras",
+      invalido: "Esa dirección no se entiende. Revisala y probá de nuevo.",
+      enviar: "Enviar enlace",
+    },
+
+    /** Ubicación. */
+    ubicacion: {
+      titulo: "Mandar tu ubicación",
+      ayuda:
+        "Se manda el punto donde estás ahora. No queda un rastro tuyo: es un mensaje, no un seguimiento.",
+      pedir: "Usar mi ubicación",
+      buscando: "Buscando dónde estás…",
+      listo: "Listo, encontramos dónde estás.",
+      etiqueta: "Ponele un nombre (opcional)",
+      etiquetaPlaceholder: "Ej.: la plaza de la esquina",
+      enviar: "Mandar ubicación",
+      denegado:
+        "Tu navegador no nos dejó ver dónde estás. Activá la ubicación para este sitio y volvé a intentar.",
+      sinSoporte: "Este navegador no puede darnos tu ubicación.",
+      demoro: "Tardó demasiado. Probá de nuevo en un momento.",
+      noDisponible: "No pudimos saber dónde estás. Probá de nuevo en un rato.",
+    },
+
+    /** Compartir el perfil propio. */
+    perfil: {
+      enviando: "Mandando tu perfil…",
+      error: "No pudimos mandar tu perfil. Probá de nuevo.",
+    },
+
+    /** Notas de voz. */
+    voz: {
+      grabar: "Grabar una nota de voz",
+      mantener: "Mantené presionado para grabar",
+      tocar: "Tocá para grabar",
+      detener: "Terminar la grabación",
+      grabando: "Grabando",
+      deslizarCancelar: "Deslizá a la izquierda para cancelar",
+      soltarCancelar: "Soltá para cancelar",
+      deslizarBloquear: "Subí el dedo para seguir sin sostener",
+      bloqueada: "Manos libres",
+      pausar: "Pausar",
+      seguir: "Seguir grabando",
+      eliminar: "Eliminar la grabación",
+      vistaPrevia: "Escuchala antes de mandarla",
+      enviar: "Enviar la nota de voz",
+      cancelada: "Grabación cancelada",
+      /** El grabador se corta solo al llegar al tope. */
+      topeAlcanzado: "Llegaste a 5 minutos, así que cortamos ahí.",
+      /**
+       * Los permisos se piden EN EL GESTO, nunca al abrir la pantalla. Cuando la
+       * respuesta es que no, el texto dice qué pasó y qué se puede hacer — un
+       * botón que no responde es peor que un aviso.
+       */
+      sinPermisoTitulo: "No pudimos usar el micrófono",
+      sinPermisoCuerpo:
+        "Tu navegador lo tiene bloqueado para este sitio. Activalo en los permisos y probá otra vez.",
+      sinSoporteTitulo: "Este navegador no graba audio",
+      sinSoporteCuerpo: "Podés escribir el mensaje o mandar un archivo de audio.",
+      sinMicrofono: "No encontramos ningún micrófono conectado.",
+      errorTitulo: "Se cortó la grabación",
+      errorCuerpo: "No pudimos guardar el audio. Probá de nuevo.",
+    },
+
+    /** Reproductor de una nota de voz. */
+    reproductor: {
+      reproducir: "Escuchar",
+      pausar: "Pausar",
+      velocidad: (etiqueta: string) => `Velocidad ${etiqueta}. Tocá para cambiarla.`,
+      noDisponible: "Este audio ya no está disponible.",
+    },
+
+    /** Estados del envío: lo optimista y su vuelta atrás. */
+    envio: {
+      enviando: "Enviando…",
+      subiendo: (pct: number) => `Subiendo ${pct}%`,
+      falloTitulo: "No se pudo enviar",
+      reintentar: "Reintentar",
+      descartar: "Descartar",
+      cancelar: "Cancelar el envío",
+    },
+
+    /** Rechazos de la puerta del navegador y de la del servidor. */
+    rechazo: {
+      tipo: "Ese tipo de archivo no se puede mandar por acá.",
+      peso: "El archivo pesa demasiado para mandarlo por chat.",
+      vacio: "Ese archivo está vacío.",
+      demasiados: (maximo: number) => `Podés mandar hasta ${maximo} archivos por vez.`,
+      genericoTitulo: "No pudimos mandarlo",
+      genericoCuerpo: "Probá de nuevo en un momento.",
+    },
+
+    /** Emojis en la barra. */
+    emoji: {
+      insertado: "Emoji agregado",
+    },
   },
   report: {
     sheetTitle: "Reportar un problema",
@@ -318,5 +495,135 @@ export const COPY = {
   },
   errors: {
     generic: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
+  },
+  /**
+   * Acciones sobre UN mensaje: reaccionar, responder, copiar, reenviar,
+   * editar, eliminar y reportar.
+   */
+  acciones: {
+    /** Cómo se nombra a quien está mirando. Se usa en la cita y en las reacciones. */
+    vos: "Vos",
+
+    menu: {
+      /** El botón de tres puntos y el gesto de mantener presionado. */
+      trigger: "Opciones del mensaje",
+      title: "Este mensaje",
+      cancel: "Cancelar",
+
+      responder: "Responder",
+      copiar: "Copiar",
+      reenviar: "Reenviar",
+      editar: "Editar",
+      eliminar: "Eliminar",
+      reportar: "Reportar",
+
+      /**
+       * Las razones por las que una acción no está. Se dicen en la fila, en
+       * chico: un botón apagado sin explicación se lee como una falla de la app.
+       */
+      editarVencido: "Se puede editar hasta 15 minutos después de enviarlo",
+      copiarSinTexto: "Este mensaje no tiene texto",
+    },
+
+    copiar: {
+      listo: "Texto copiado",
+      error: "No pudimos copiar el texto. Probá seleccionarlo y copiarlo a mano.",
+    },
+
+    reacciones: {
+      /** Nombre accesible de la fila de emojis. */
+      barLabel: "Reaccionar",
+      poner: (emoji: string) => `Reaccionar con ${emoji}`,
+      quitar: (emoji: string) => `Sacar tu reacción ${emoji}`,
+      verTodos: "Más emojis",
+      /** Debajo de la burbuja, para un lector de pantalla. */
+      resumen: (total: number) =>
+        total === 1 ? "1 reacción" : `${total} reacciones`,
+      quienes: (nombres: string[], total: number) => {
+        if (nombres.length === 0) {
+          return total === 1 ? "1 persona reaccionó" : `${total} personas reaccionaron`;
+        }
+        if (total <= nombres.length) return nombres.join(", ");
+        return `${nombres.join(", ")} y ${total - nombres.length} más`;
+      },
+      error: "No pudimos guardar tu reacción. Probá de nuevo.",
+      /**
+       * Reaccionar tiene su propio techo. "Probá de nuevo" sería un mal consejo:
+       * hasta que baje el contador va a fallar igual.
+       */
+      rateLimitedTitle: "Esperá un momento",
+      rateLimitedBody: "Pusiste muchas reacciones seguidas. Seguí en un rato.",
+    },
+
+    responder: {
+      /** Encabezado de la cita, arriba del composer. */
+      respondiendoA: (nombre: string) => `Respondiendo a ${nombre}`,
+      aVosMismo: "Respondiendo a tu mensaje",
+      cancelar: "Cancelar la respuesta",
+      /** Cuando el mensaje citado no es texto. */
+      resumenFoto: "Foto",
+      resumenVideo: "Video",
+      resumenAudio: "Nota de voz",
+      resumenArchivo: "Archivo",
+      resumenUbicacion: "Ubicación",
+      resumenPerfil: "Perfil",
+      resumenContenido: "Publicación",
+      resumenBajado: "Mensaje eliminado",
+      /** La cita adentro de la burbuja enviada, para teclado y lector. */
+      irAlOriginal: (nombre: string) => `Ir al mensaje de ${nombre}`,
+      noEncontrado: "Ese mensaje ya no está en la conversación",
+    },
+
+    editar: {
+      title: "Editar el mensaje",
+      intro: "Tu corrección se ve al instante y queda marcada como editada.",
+      label: "Tu mensaje",
+      guardar: "Guardar",
+      guardado: "Mensaje corregido",
+      /** La marca discreta al lado de la hora. */
+      marca: "editado",
+      marcaAria: "Este mensaje fue editado",
+      vacio: "Escribí algo para poder guardar.",
+      vencidoTitle: "Ya pasaron los 15 minutos",
+      vencidoBody:
+        "Los mensajes se pueden corregir hasta 15 minutos después de enviarlos. Este ya no.",
+      noAutorTitle: "Este mensaje no es tuyo",
+      noAutorBody: "Sólo quien lo escribió puede corregirlo.",
+      flaggedTitle: "Esa corrección no se guardó",
+      flaggedBody:
+        "Detectamos algo que puede lastimar a otra persona. Probá decirlo de otra forma.",
+      errorTitle: "No se pudo guardar",
+      errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
+    },
+
+    eliminar: {
+      title: "¿Eliminar este mensaje?",
+      body: "Va a desaparecer para todos y no se puede recuperar. En su lugar queda un aviso de que lo eliminaste.",
+      confirmar: "Sí, eliminar",
+      listo: "Mensaje eliminado",
+      errorTitle: "No se pudo eliminar",
+      errorBody: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
+      /** La lápida que queda en el hilo. */
+      lapida: "Se eliminó este mensaje",
+      lapidaPropia: "Eliminaste este mensaje",
+    },
+
+    reenviar: {
+      /**
+       * Reenviar un mensaje que NO es una tarjeta compartible todavía no está
+       * enchufado: `compartirEnChatAction` manda una publicación, no un texto
+       * suelto (ver el informe de entrega). Se dice en la fila apagada en vez de
+       * esconder el botón sin motivo. El resto del copy del panel de destinos es
+       * el de `SHARE_COPY`, que ya existe.
+       */
+      soloContenido: "Por ahora se pueden reenviar las publicaciones compartidas",
+    },
+
+    errores: {
+      generic: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
+      forbidden: "Esta acción ya no está disponible para este mensaje.",
+      /** El mensaje se bajó mientras el menú estaba abierto. */
+      yaNoEsta: "Ese mensaje ya no está en la conversación.",
+    },
   },
 } as const;

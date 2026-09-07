@@ -556,11 +556,17 @@ const mensajeSchema = z.object({
     .string()
     .transform((v) => v.trim())
     .pipe(z.string().min(1).max(LIMITES.mensajeMax)),
+  /**
+   * El mensaje que se responde (0136). Que sea del MISMO grupo lo verifica el
+   * trigger `app.validar_respuesta_de_mensaje_de_grupo`, no esta action.
+   */
+  replyTo: z.uuid().nullish(),
 });
 
 export async function enviarMensajeAlGrupoAction(input: {
   groupId: string;
   body: string;
+  replyTo?: string | null;
 }): Promise<GrupoActionResult> {
   const parsed = mensajeSchema.safeParse(input);
   if (!parsed.success) return { ok: false, code: "invalid" };
@@ -589,11 +595,14 @@ export async function enviarMensajeAlGrupoAction(input: {
   if (moderacion.flagged) return { ok: false, code: "flagged" };
 
   const sinTipar = supabaseSinTiparGrupos(supabase);
+  // `reply_to` va sólo cuando hay cita: la columna llega con la 0136 y, sin esa
+  // migración aplicada, nombrarla siempre haría fallar TODO envío con 42703.
   const { error } = await sinTipar.from("chat_group_messages").insert({
     tenant_id: tenant.id,
     group_id: parsed.data.groupId,
     sender_id: user.id,
     body: parsed.data.body,
+    ...(parsed.data.replyTo ? { reply_to: parsed.data.replyTo } : {}),
   });
 
   if (error) {

@@ -806,6 +806,41 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-on-surface-inverse"],
     cobertura: "cl-print-hide",
   },
+  // ── Llamadas de audio y video (0139) ────────────────────────────────────
+  // La pantalla de llamada es una superficie oscura a pantalla completa: casi
+  // toda su tinta es `on-media` sobre un fondo que el navegador NO imprime, o
+  // sea 1.00:1 en papel. No se resuelve con relleno: una llamada EN CURSO no
+  // existe en una hoja impresa. Por eso el hook va en la raíz (`Marco`) y todo
+  // lo de adentro lo hereda.
+  "src/components/calls/pantalla-de-llamada.tsx": {
+    inks: Array<string>(11).fill("text-on-media"),
+    cobertura: "cl-print-hide",
+  },
+  // Los mosaicos y la bandeja de controles se dibujan SIEMPRE dentro de esa
+  // raíz; por eso la prueba apunta allá y no a estos archivos.
+  "src/components/calls/mosaico.tsx": {
+    inks: ["text-on-danger", ...Array<string>(3).fill("text-on-media")],
+    cobertura: "cl-print-hide",
+    prueba: { archivo: "src/components/calls/pantalla-de-llamada.tsx", contiene: ["cl-print-hide"] },
+  },
+  // Además de heredar el hook, los seis controles son <button>: doble cobertura.
+  "src/components/calls/controles.tsx": {
+    inks: ["text-on-danger", "text-on-media", "text-on-media"],
+    cobertura: "control",
+  },
+  // La tilde de "elegido" en la hoja de Añadir: tinta de marca sobre relleno de
+  // marca, con su propio hook (el <label> que la envuelve no es un <button>).
+  "src/components/calls/hoja-agregar.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
+  // El botón verde "Atender" del timbre: es un <Button>, así que hereda el hook
+  // de la base del cva. La prueba apunta al cva, que es donde se emite.
+  "src/components/calls/timbre.tsx": {
+    inks: ["text-on-success"],
+    cobertura: "buttonVariants",
+    prueba: { archivo: "src/components/ui/button.tsx", contiene: ["cl-print-hide"] },
+  },
   "src/components/ui/button.tsx": {
     inks: ["text-brand-foreground", "text-on-danger"],
     cobertura: "buttonVariants",

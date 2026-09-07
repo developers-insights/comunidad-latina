@@ -18,6 +18,7 @@ import {
   useAdjuntos,
   type OpcionDeAdjunto,
 } from "./attach-menu";
+import { ComposerReplyBar, useResponder } from "./reply-quote";
 import { PhotoPicker } from "./photo-picker";
 import { LocationPicker } from "./location-picker";
 import { VoiceRecorder } from "./voice-recorder";
@@ -53,6 +54,12 @@ export function Composer({ conversationId }: { conversationId: string }) {
   );
   const { cola, enviarArchivos, enviarAudio, enviarSinArchivo, procesar, descartar } =
     useAdjuntos(destino);
+
+  /**
+   * Fuera del `ResponderProvider` esto es `null` y el composer se comporta
+   * como siempre: la página del hilo es la que lo monta.
+   */
+  const responder = useResponder();
 
   /**
    * Devolver el cursor DESPUÉS de insertar un emoji o un enlace. Va en un
@@ -117,10 +124,13 @@ export function Composer({ conversationId }: { conversationId: string }) {
     const body = value.trim();
     if (!body || isPending) return;
 
+    const replyTo = responder?.citado?.id ?? null;
+
     startTransition(async () => {
-      const result = await sendMessageAction({ conversationId, body });
+      const result = await sendMessageAction({ conversationId, body, replyTo });
       if (result.ok) {
         setValue("");
+        responder?.cancelar();
         if (textareaRef.current) {
           textareaRef.current.style.height = "auto";
           textareaRef.current.focus();
@@ -159,6 +169,8 @@ export function Composer({ conversationId }: { conversationId: string }) {
   return (
     <div>
       <ColaDeAdjuntos cola={cola} onReintentar={procesar} onDescartar={descartar} />
+
+      <ComposerReplyBar />
 
       <input
         ref={archivoRef}
@@ -214,6 +226,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
             <textarea
               id="composer-body"
               ref={textareaRef}
+              data-composer-input
               rows={1}
               maxLength={MAX_LENGTH}
               value={value}

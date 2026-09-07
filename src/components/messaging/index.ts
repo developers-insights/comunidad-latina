@@ -1,7 +1,23 @@
 export { AcceptBanner } from "./accept-banner";
+/**
+ * La barra de mensaje y sus hojas (0136 + 0140). Todas son `"use client"` y ya
+ * viajaban al navegador dentro de `Composer`: salir por acá no agrega nada al
+ * bundle, sólo les da un nombre público. `adjuntos-actions` entra como
+ * referencia de server action, que es lo único que cruza la frontera.
+ */
+export {
+  AttachMenu,
+  ColaDeAdjuntos,
+  EnlaceSheet,
+  useAdjuntos,
+  type AttachMenuProps,
+  type OpcionDeAdjunto,
+  type PendienteDeEnvio,
+} from "./attach-menu";
 export { Composer } from "./composer";
 export { ConversationActions } from "./conversation-actions";
 export { COPY } from "./copy";
+export { COPY_COMPOSER } from "./copy-composer";
 // Grupos de chat (0133) + bandeja por persona (0134).
 export { GroupCard } from "./group-card";
 export { GroupComposer } from "./group-composer";
@@ -17,6 +33,7 @@ export {
 export { GroupMessageBubble, type GroupMessageMensaje } from "./group-message-bubble";
 export { InboxRowLink } from "./inbox-row-link";
 export { InboxSearch } from "./inbox-search";
+export { LocationPicker } from "./location-picker";
 /**
  * ⚠️ `InboxTabs`, `InboxRow` y `InboxFiltros` NO se exportan desde acá, y sacarlos
  * costó un build roto: este barril no lleva directiva, pero lo importan client
@@ -57,6 +74,7 @@ export {
   useReaccionesDelMensaje,
   type ReaccionesProviderProps,
 } from "./message-reactions";
+export { PhotoPicker } from "./photo-picker";
 export { ReactionBar } from "./reaction-bar";
 export {
   ComposerReplyBar,
@@ -76,3 +94,5 @@ export {
 } from "./thread-listing-card";
 export { ThreadRefresh } from "./thread-refresh";
 export { toTrustLevel, toTrustProps, buildTrustSignals } from "./trust";
+export { VoicePlayer, type VoicePlayerProps } from "./voice-player";
+export { VoiceRecorder, type GrabacionLista } from "./voice-recorder";

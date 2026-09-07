@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Prohibit } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import type { ReaccionAgrupada } from "@/lib/messaging/reacciones";
@@ -48,6 +49,7 @@ export function MessageBubble({
   editadoAt = null,
   deletedAt = null,
   respuesta = null,
+  media = null,
 }: {
   body: string;
   isOwn: boolean;
@@ -57,6 +59,14 @@ export function MessageBubble({
   /** Un mensaje bajado deja lápida: no desaparece dejando un hueco. */
   deletedAt?: string | null;
   respuesta?: MensajeCitado | null;
+  /**
+   * Lo que el mensaje ES cuando no es texto: la foto, el audio, el archivo, el
+   * punto en el mapa o la tarjeta de algo compartido. Va ADENTRO de la burbuja
+   * y no al costado para que el menú, las reacciones y la cita sigan siendo los
+   * de ESTE mensaje — un mensaje de una sola foto, pintado afuera, se quedaba
+   * sin las tres cosas.
+   */
+  media?: ReactNode;
 }) {
   if (deletedAt) {
     return (
@@ -84,7 +94,14 @@ export function MessageBubble({
     >
       {respuesta && <ReplyQuote citado={respuesta} isOwn={isOwn} />}
 
-      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{body}</p>
+      {/* El aire lateral de la burbuja es para el texto: la foto lo recupera. */}
+      {media && <div className="-mx-2 mb-1.5 first:mt-0">{media}</div>}
+
+      {/* Un mensaje de foto llega con `body` vacío por contrato (0136 §2): sin
+          esta condición dejaría un renglón en blanco arriba de la hora. */}
+      {(body.trim().length > 0 || !media) && (
+        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{body}</p>
+      )}
 
       {/* `foreground-secondary`, no `-muted`: las dos burbujas se pintan sobre
           superficies tintadas (brand-tint / surface-subtle) y ahí `-muted` da
