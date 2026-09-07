@@ -618,6 +618,29 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",
   },
+  // ── La bandeja con filtros y no leídos (0137) ─────────────────────────────
+  // El globito de "No leídos" vive DENTRO del chip, y el chip es un <Link> —
+  // pero los tres chips cuelgan de un <nav aria-label>, así que se van enteros
+  // con la regla `nav` del bloque print. No hace falta hook propio.
+  "src/components/messaging/inbox-filtros.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "nav",
+  },
+  // El contador de no leídos de cada fila. Este NO tiene quién lo cubra: la
+  // fila es un <li> con un <Link> adentro, y el bloque print sólo alcanza
+  // header/nav/dialog/button. Lleva `cl-print-hide` explícito.
+  "src/components/messaging/inbox-row.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
+  // ── El panel de compartir (0136) ──────────────────────────────────────────
+  // Dos usos, los dos dentro de un <button>: el "Enviar" del pie y el tilde de
+  // seleccionado de cada destinatario (que es un <button role="checkbox">, no
+  // un div con onClick). El @media print los esconde por elemento.
+  "src/components/share/compartir-sheet.tsx": {
+    inks: ["text-brand-foreground", "text-brand-foreground"],
+    cobertura: "control",
+  },
   // ── La barra de mensaje deja de ser sólo texto (0136 + 0140) ──────────────
   // Botón "Enviar enlace" de la hoja + la X que descarta un adjunto en camino.
   // Los dos son <button>: el @media print ya los esconde.
@@ -780,15 +803,19 @@ const INVENTARIO: Record<string, Entrada> = {
   //
   // El PANEL que cuelga de esa campana se portala a `document.body`, así que en
   // papel no lo cubriría ese selector — pero tampoco hace falta: sólo existe
-  // mientras está abierto, y nadie imprime con la gaveta abierta. Adentro del
-  // panel no se escribe ninguna tinta `on-*`.
+  // mientras está abierto, y nadie imprime con la gaveta abierta.
+  //
+  // ACTUALIZADO (0137): antes acá decía que adentro del panel no se escribía
+  // ninguna tinta `on-*`, y dejó de ser cierto cuando las categorías bajaron de
+  // /notificaciones a la gaveta: cada pestaña trae su contador. La cobertura
+  // pasa de `header` a `control` porque ahora es la que vale para las DOS
+  // tintas — el badge de la campana es un adorno dentro del <button> que abre
+  // la gaveta, y el contador de cada pestaña vive dentro de un
+  // <button role="tab">. El panel además es `role="dialog"`, así que el bloque
+  // print lo tapa por partida doble.
   "src/components/notifications/notification-panel.tsx": {
-    inks: ["text-on-danger"],
-    cobertura: "header",
-    prueba: {
-      archivo: "src/components/shell/header.tsx",
-      contiene: ["<header"],
-    },
+    inks: ["text-brand-foreground", "text-on-danger"],
+    cobertura: "control",
   },
   "src/components/onboarding/onboarding-wizard.tsx": {
     inks: ["text-brand-foreground"],

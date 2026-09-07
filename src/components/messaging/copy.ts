@@ -287,12 +287,16 @@ export const COPY = {
        */
       fotoDe: (nombre: string) => `Foto que mandó ${nombre}`,
       fotoPropia: "Foto que mandaste",
-      abrirFoto: "Abrir la foto en grande",
       video: "Video del mensaje",
       /** El archivo se cayó, venció la firma o quien mira ya no puede verlo. */
       noDisponible: "Este archivo ya no está disponible.",
       archivoSinNombre: "Archivo",
-      descargar: "Descargar",
+      /**
+       * Dice ABRIR y no "descargar" porque es lo que pasa: el archivo vive en
+       * otro origen (el bucket), y ahí el atributo `download` de un enlace no
+       * hace nada — el navegador lo muestra en una pestaña nueva.
+       */
+      abrirArchivo: "Abrir",
       peso: (mb: string) => `${mb} MB`,
       ubicacionTitulo: "Ubicación",
       ubicacionAbrir: "Ver en el mapa",

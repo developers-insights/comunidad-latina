@@ -95,7 +95,7 @@ export function MessageBubble({
       {respuesta && <ReplyQuote citado={respuesta} isOwn={isOwn} />}
 
       {/* El aire lateral de la burbuja es para el texto: la foto lo recupera. */}
-      {media && <div className="-mx-2 mb-1.5 first:mt-0">{media}</div>}
+      {media && <div className="-mx-2 mb-1.5">{media}</div>}
 
       {/* Un mensaje de foto llega con `body` vacío por contrato (0136 §2): sin
           esta condición dejaría un renglón en blanco arriba de la hora. */}

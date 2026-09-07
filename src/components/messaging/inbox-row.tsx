@@ -164,6 +164,12 @@ export function InboxRow({
                 className={cn(
                   "ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5",
                   "bg-brand text-[11px] font-bold leading-none tabular-nums text-brand-foreground",
+                  // La fila es un <li> con un <Link>, no un <button> ni un <nav>:
+                  // nada del bloque @media print la alcanza. Sin este hook, el
+                  // globito sale en papel como un número suelto sobre un relleno
+                  // que la impresora no imprime — ilegible y sin sentido fuera
+                  // de la pantalla.
+                  "cl-print-hide",
                 )}
               >
                 {fila.noLeidos > 99 ? "99+" : fila.noLeidos}

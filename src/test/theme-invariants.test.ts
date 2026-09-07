@@ -329,6 +329,15 @@ function reporte(hallazgos: Hallazgo[], conSugerencia = false): string[] {
  */
 const HEX_PERMITIDO = new Map<string, string>([
   [
+    "src/app/(app)/feed/[id]/opengraph-image.tsx",
+    "No es una pantalla: es una IMAGEN que arma Satori en el servidor para el " +
+      "preview de WhatsApp y las redes. Ahí no hay documento, ni :root, ni " +
+      "hoja de estilos — una var(--cl-*) llega sin valor y el texto sale " +
+      "invisible. Tampoco hay tema del lector: la miniatura se ve igual para " +
+      "todo el mundo, así que el hex no le está pisando la preferencia a nadie. " +
+      "Los valores son los mismos que los tokens claros.",
+  ],
+  [
     "src/app/global-error.tsx",
     "Reemplaza el <html> entero cuando el root layout ya explotó: no hay Tailwind " +
       "ni globals.css que valgan. Declara su propia paleta light/dark en un <style> " +

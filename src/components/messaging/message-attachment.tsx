@@ -10,10 +10,11 @@ import { VoicePlayer } from "./voice-player";
  * LO QUE MANDÓ ALGUIEN CUANDO NO ES TEXTO
  * =============================================================================
  *
- * Va FUERA de la burbuja, igual que `SharedCard` y por el mismo motivo: el ancho
- * de una burbuja está pensado para texto (80% de la columna) y una foto necesita
- * el suyo. Cuando además hay un pie, el pie sigue siendo una burbuja normal
- * arriba — primero lo que la persona dijo, después lo que mandó.
+ * Se pinta ADENTRO de la burbuja, por el prop `media`, y arriba del pie: primero
+ * lo que se mandó, después lo que la persona escribió sobre eso. Adentro y no al
+ * costado porque el menú, las reacciones y la cita son los de ESTE mensaje —
+ * pintada afuera, una foto sola se quedaba sin las tres. El aire lateral de la
+ * burbuja se recupera con un margen negativo del lado de quien la monta.
  *
  * ⚠️ `<img>` Y `<video>` PELADOS, NUNCA `next/image` — dos motivos, y los dos
  * bastan solos:
@@ -114,7 +115,8 @@ export function MessageAttachment({
         href={src}
         target="_blank"
         rel="noopener noreferrer"
-        aria-label={A.abrirFoto}
+        // Sin `aria-label`: el nombre accesible del enlace es el `alt` de la
+        // foto, que dice de quién es. Un rótulo acá lo taparía.
         className={cn(
           "block overflow-hidden rounded-2xl border border-border-subtle",
           "transition-transform duration-(--duration-fast) ease-(--ease-spring)",
@@ -198,7 +200,6 @@ function Archivo({
       href={src}
       target="_blank"
       rel="noopener noreferrer"
-      download={nombre}
       className={cn(
         "flex items-center gap-3 rounded-xl border border-border-subtle px-3 py-2.5",
         "transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring)",
@@ -213,7 +214,7 @@ function Archivo({
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-foreground">{nombre}</span>
         <span className="block text-xs text-foreground-secondary">
-          {A.peso(megas(adjunto.bytes))} · {A.descargar}
+          {A.peso(megas(adjunto.bytes))} · {A.abrirArchivo}
         </span>
       </span>
     </a>

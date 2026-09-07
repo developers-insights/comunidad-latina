@@ -342,6 +342,15 @@ export default async function HiloPage({
             const resuelto = compartido
               ? (compartidos.get(claveCompartido(compartido)) ?? null)
               : null;
+            /**
+             * Cuando el cuerpo ES el enlace y nada más, la tarjeta lo dice
+             * todo: repetir la URL abajo es la misma información dos veces, y
+             * la segunda sin formato.
+             */
+            const cuerpo =
+              enlaceInternoDelCuerpo(message.body, { origenesPropios }) !== null
+                ? ""
+                : message.body;
 
             const acciones: MessageBubbleAcciones = {
               mensajeId: message.id,
@@ -393,7 +402,7 @@ export default async function HiloPage({
                   </p>
                 )}
                 <MessageBubble
-                  body={message.body}
+                  body={cuerpo}
                   isOwn={isOwn}
                   timeLabel={timeLabel}
                   acciones={acciones}

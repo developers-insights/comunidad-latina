@@ -126,7 +126,7 @@ export function GroupMessageBubble({
 
       {respuesta && <ReplyQuote citado={respuesta} isOwn={isOwn} />}
 
-      {media && <div className="-mx-2 mb-1.5 first:mt-0">{media}</div>}
+      {media && <div className="-mx-2 mb-1.5">{media}</div>}
 
       {(body.trim().length > 0 || !media) && (
         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{body}</p>
