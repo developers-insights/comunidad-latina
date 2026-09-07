@@ -18,6 +18,7 @@ import { CardLikeProvider } from "./card-like-context";
 import { CardMediaProvider } from "./card-media-context";
 import { CardPostMedia } from "./card-post-media";
 import { PollYesNo } from "./poll-yes-no";
+import { PhotoCredit } from "./photo-credit";
 import { PostCaption } from "./post-caption";
 import { PostActions } from "./post-actions";
 import { QuestionBanner } from "./question-banner";
@@ -390,6 +391,15 @@ export function PostCard({
               ctaWhatsapp={post.ctaWhatsapp}
               music={post.music}
             />
+          )}
+
+          {/* Derechos y fuente de la foto (0146). Va PEGADO a la media y no bajo
+              el cuerpo porque habla del archivo, no de lo que la persona
+              escribió. Sin declaración no pinta nada: una publicación sobre la
+              que nadie declaró nada no lleva línea de crédito, que es
+              exactamente lo que significa. */}
+          {hasMedia && post.photoCredit && (
+            <PhotoCredit credito={post.photoCredit} />
           )}
 
           {/* Pregunta CON foto o video: la encuesta va acá, ya en tinta de card. */}

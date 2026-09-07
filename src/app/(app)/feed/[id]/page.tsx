@@ -39,6 +39,7 @@ import {
   type PostRow,
 } from "../queries";
 import { fetchTagsForPost } from "@/lib/social/post-tags";
+import { fetchPhotoCredits } from "@/lib/feed/creditos-de-foto";
 import { recortar } from "@/components/share/metadata";
 
 /**
@@ -259,6 +260,7 @@ export default async function PostDetailPage({
     promotions,
     tagged,
     musicByPostId,
+    creditByPostId,
   ] =
     await Promise.all([
       fetchAuthorViews(supabase, authorIds),
@@ -299,6 +301,9 @@ export default async function PostDetailPage({
       // Música de ESTA publicación (0090). Batch de un solo id, mismo helper
       // que usa el feed — una sola fuente de verdad para el mapeo.
       fetchPostMusic(supabase, [post.id]),
+      // Derechos y fuente de la foto (0146). Mismo helper que el feed, batch de
+      // un solo id — una sola fuente de verdad para el mapeo.
+      fetchPhotoCredits(supabase, [post.id]),
     ]);
 
   const entity = post.entity_listing_id
@@ -322,6 +327,7 @@ export default async function PostDetailPage({
       : null,
     taggedPeople: tagged,
     music: musicByPostId.get(post.id) ?? null,
+    photoCredit: creditByPostId.get(post.id) ?? null,
   });
   const isPublished = post.status === "published";
   /** Comentarios cerrados por su autor (0097). Vale también para él. */

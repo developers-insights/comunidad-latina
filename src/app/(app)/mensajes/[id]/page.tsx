@@ -9,6 +9,8 @@ import { Banner } from "@/components/ui";
 import type { Adjunto } from "@/lib/messaging/adjuntos";
 import { supabaseSinTiparMensajes } from "@/lib/messaging/adjuntos";
 import { leerReaccionesDeMensajes } from "@/lib/messaging/reacciones";
+import { leerPresencia, presenciaVisible } from "@/lib/messaging/presencia";
+import { PresenceBeat } from "@/components/messaging/presence-beat";
 import { AcceptBanner } from "@/components/messaging/accept-banner";
 import { Composer } from "@/components/messaging/composer";
 import { COPY } from "@/components/messaging/copy";
@@ -198,12 +200,14 @@ export default async function HiloPage({
   };
 
   /**
-   * LAS TRES LECTURAS QUE FALTAN, EN PARALELO.
+   * LAS LECTURAS QUE FALTAN, EN PARALELO.
    *
-   * Ninguna depende del resultado de otra: encadenarlas sería sumar tres
-   * viajes de latencia a la pantalla que más se abre del módulo.
+   * Ninguna depende del resultado de otra: encadenarlas sería sumar un viaje de
+   * latencia por cada una a la pantalla que más se abre del módulo. La presencia
+   * entra a esta misma tanda —y no a un efecto del cliente— para que el
+   * encabezado se pinte completo de una, sin un "En línea" que aparece tarde.
    */
-  const [compartidos, reaccionesPorMensaje, firmas, viewerZone, formatDate] =
+  const [compartidos, reaccionesPorMensaje, firmas, viewerZone, formatDate, presencias] =
     await Promise.all([
       resolverCompartidos(
         supabase,
@@ -225,6 +229,7 @@ export default async function HiloPage({
       ),
       getViewerTimeZone(),
       getViewerFormatDate(),
+      leerPresencia(supabase, other ? [other.id] : []),
     ]);
 
   /**
@@ -276,6 +281,7 @@ export default async function HiloPage({
   return (
     <div className="flex min-h-[calc(100dvh-10rem)] flex-col">
       <ThreadRefresh />
+      <PresenceBeat />
 
       <ThreadHeader
         otherProfile={{
@@ -284,6 +290,9 @@ export default async function HiloPage({
           avatarUrl: other?.avatar_url ?? null,
         }}
         trust={trust}
+        presencia={
+          other ? (presenciaVisible(presencias.get(other.id)) ?? undefined) : undefined
+        }
         // El aviso ya no viaja en el header: ahora es la tarjeta de abajo, que
         // se lee de un vistazo. Repetir el título en 12 px al lado del Trust
         // Score era competir por el mismo renglón y quedaba truncado casi

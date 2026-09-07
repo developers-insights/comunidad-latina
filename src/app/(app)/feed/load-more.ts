@@ -42,6 +42,7 @@ import {
   type PostRow,
 } from "./queries";
 import { fetchPostTags } from "@/lib/social/post-tags";
+import { fetchPhotoCredits } from "@/lib/feed/creditos-de-foto";
 import {
   fetchFeedListingsPageViaRpc,
   fetchFeedPostsPageViaRpc,
@@ -470,6 +471,7 @@ async function assembleFeedPage({
     entityById,
     tagsByPostId,
     musicByPostId,
+    creditByPostId,
     promotions,
   ] = await Promise.all([
     fetchAuthorViews(
@@ -510,6 +512,13 @@ async function assembleFeedPage({
       supabase,
       visiblePosts.map((entry) => entry.id),
     ),
+    // Derechos y fuente de la foto (0146), TODA la página en UNA query. Entra
+    // al mismo Promise.all que el resto: es un viaje que corre en paralelo, no
+    // uno más en fila.
+    fetchPhotoCredits(
+      supabase,
+      visiblePosts.map((entry) => entry.id),
+    ),
     // El chip "Publicidad" y el WhatsApp de la campaña se resuelven sobre los
     // posts QUE SE VAN A PINTAR, no sobre las 150 campañas del tenant: la
     // decisión de alcance ya la tomó la query (o el RPC) más arriba.
@@ -538,6 +547,7 @@ async function assembleFeedPage({
           ctaWhatsapp: promotions.whatsappByPostId.get(postRow.id) ?? null,
           taggedPeople: tagsByPostId.get(postRow.id) ?? [],
           music: musicByPostId.get(postRow.id) ?? null,
+          photoCredit: creditByPostId.get(postRow.id) ?? null,
         }),
       };
     }

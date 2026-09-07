@@ -17,6 +17,7 @@ import { reportScamAction } from "@/app/(app)/mensajes/actions";
 import { blockUserAction } from "@/app/(app)/perfil/actions";
 import { BotonesDeLlamada } from "@/components/calls/botones-de-llamada";
 import { iniciarLlamadaAction } from "@/app/(app)/llamadas/actions";
+import type { EstadoDePresencia } from "@/lib/messaging/presencia";
 import { COPY } from "./copy";
 
 /**
@@ -52,6 +53,13 @@ export interface ThreadHeaderProps {
     title: string;
     href: string | null;
   } | null;
+  /**
+   * "En línea" o "Última vez hace…" (0145). Llega YA resuelto desde el
+   * servidor: `undefined` significa que no hay nada que decir —la persona apagó
+   * que se vea, o la RPC no contestó— y entonces no se dibuja el renglón. Un
+   * "desconocido" en su lugar delataría la misma decisión que se está ocultando.
+   */
+  presencia?: EstadoDePresencia;
 }
 
 /**
@@ -59,7 +67,12 @@ export interface ThreadHeaderProps {
  * el aviso que originó la conversación y el menú "⋯" con Reportar estafa
  * SIEMPRE como primera opción (§3.3 — consistencia posicional).
  */
-export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps) {
+export function ThreadHeader({
+  otherProfile,
+  trust,
+  listing,
+  presencia,
+}: ThreadHeaderProps) {
   const { toast } = useToast();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -137,7 +150,15 @@ export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps
         <ArrowLeft size={22} aria-hidden="true" />
       </Link>
 
-      <Avatar src={otherProfile.avatarUrl} name={otherProfile.displayName} size="md" />
+      <span className="relative shrink-0">
+        <Avatar src={otherProfile.avatarUrl} name={otherProfile.displayName} size="md" />
+        {presencia?.tipo === "en-linea" && (
+          <span
+            aria-hidden="true"
+            className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full bg-success ring-2 ring-canvas"
+          />
+        )}
+      </span>
 
       <div className="min-w-0 flex-1">
         <p className="truncate font-display text-base font-semibold text-foreground">
@@ -160,6 +181,20 @@ export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps
               size="inline"
             />
           )}
+          {/* `shrink-0`: es corto y es lo que cambia solo. Si lo truncara el
+              Trust Score, el renglón diría "Última vez hace 3…" — una frase a
+              medias sobre una persona, que es peor que no decir nada. */}
+          {presencia?.tipo === "en-linea" && (
+            <span className="shrink-0 text-xs font-medium text-success">
+              {COPY.inbox.resumen.enLinea}
+            </span>
+          )}
+          {presencia?.tipo === "ultima-vez" && (
+            <span className="shrink-0 text-xs text-foreground-muted">
+              {COPY.inbox.resumen.ultimaVez(presencia.cuando)}
+            </span>
+          )}
+
           {listing &&
             (listing.href ? (
               <Link

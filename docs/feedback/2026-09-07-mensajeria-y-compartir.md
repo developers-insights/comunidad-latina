@@ -189,9 +189,9 @@ Esta tabla la mantiene la sesión que implementa. Los tres estados son los del c
 | 5 | Mensajes de voz | escrito; falta probarlo en un teléfono real |
 | 6 | Responder, reaccionar, reenviar, editar, eliminar | escrito y con tests |
 | 7 | Solicitudes con categorías | escrito — las 14 categorías ya existían, faltaba llevarlas a la campanita |
-| 8 | Grupos completos | ya existía casi todo; falta reproducir el "no funciona" que reportó el cliente |
+| 8 | Grupos completos | **reproducido y arreglado** — ver abajo: todo grupo **privado** fallaba siempre |
 | 9 | Llamadas Agora | en curso |
-| 10 | Verificación telefónica Twilio | escrito; **apagado por gate legal**, es decisión del cliente |
+| 10 | Verificación telefónica Twilio | escrito; **apagado por gate legal** — el bloqueo exacto está identificado, ver `docs/legal/borrador-privacidad-telefono.md` |
 | 11 | Editor de fotos | **ya estaba completo** — las cuatro formas, filtros, texto y emoji |
 | 12 | Botón de crear en Boost | escrito; de paso se arregló el estado de los avisos no promocionables |
 
@@ -200,3 +200,50 @@ Esta tabla la mantiene la sesión que implementa. Los tres estados son los del c
 El campo **“Derechos y fuente de la foto”** de la pantalla de publicación. Aparece en
 la captura del cliente marcado como *Opcional* y no existe en el código. Es chico, pero
 toca Content Integrity, así que merece su propio frente en vez de colarse acá.
+
+---
+
+## El "crear un grupo no funciona" del cliente: qué era
+
+El cliente lo reportó así, sin más detalle, y era cierto. **Todo grupo privado fallaba,
+siempre.** Los públicos se creaban bien, y por eso ningún test lo vio.
+
+Tres piezas correctas por separado que juntas se rompen:
+
+1. La policy `chat_groups_select` dejaba ver un grupo si es público **o** si quien mira
+   ya es miembro.
+2. La membresía que hace dueño al creador la pone un trigger **AFTER INSERT** — y tiene
+   que ser AFTER, porque `chat_group_members` referencia `chat_groups(id)` por clave
+   foránea y en un BEFORE el grupo todavía no existe.
+3. `crearGrupoAction` hace `.insert(...).select("id")`, que PostgREST traduce a un
+   `INSERT ... RETURNING`.
+
+Postgres exige permiso de SELECT sobre la fila que devuelve un RETURNING, y evalúa esa
+policy **antes** de correr los triggers AFTER. En ese instante el creador de un grupo
+privado todavía no es miembro de nada: el statement muere con `42501` y la transacción
+se revierte. El grupo ni siquiera queda creado, y la pantalla muestra un error genérico.
+
+Verificado contra la base de producción antes de escribir el arreglo, en una transacción
+con rollback y con el JWT de un usuario real:
+
+| Caso | Resultado |
+|---|---|
+| público con `RETURNING` | OK |
+| privado con `RETURNING` | **FALLA** `42501 :: new row violates row-level security policy` |
+| privado sin `RETURNING` | OK — la fila entra sola |
+
+La tercera fila es la que cierra el diagnóstico: no era el INSERT, era leer de vuelta lo
+recién insertado.
+
+**El arreglo** es la migración `0147`: se agrega al `chat_groups_select` la rama que
+faltaba —*quien creó un grupo puede verlo*—, excluyendo a quien fue expulsado de él. Se
+verificó, también con rollback, que el grupo privado ahora se crea, que el público no
+sufrió regresión, y que un tercero del mismo tenant **no** ve ni el grupo ni sus
+mensajes.
+
+Se arregló en la policy y no en la action a propósito: sacar el `.select("id")` habría
+escondido el problema dejando en pie una regla falsa —"el dueño de un grupo privado no
+puede ver su propio grupo"— que volvería a morder en el próximo `insert().select()`.
+
+El bloque 6 de `scripts/tenant-isolation-check.sql` busca ahora esta **clase** de bug en
+toda la base, no este caso puntual.

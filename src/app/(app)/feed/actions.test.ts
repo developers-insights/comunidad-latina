@@ -89,6 +89,7 @@ import {
   PREMIUM_DETAIL_MAX_SECONDS,
   SHORT_VIDEO_MAX_SECONDS,
 } from "@/lib/media/video-policy";
+import { MAX_PHOTO_CREDIT } from "@/lib/feed/creditos-de-foto";
 
 /* -------------------------------- Fixtures -------------------------------- */
 
@@ -117,6 +118,15 @@ function createSupabaseStub(
 ) {
   const calls: RecordedCall[] = [];
   const uploads: Array<{ path: string; contentType?: string }> = [];
+
+  /**
+   * `insertError` puede ser una FUNCIÓN: se evalúa una vez por resolución, así
+   * un test puede hacer fallar el primer INSERT y dejar pasar el segundo. Lo
+   * necesita el reintento sin la 0146 (42703), que es la única parte de la
+   * action donde el mismo payload se escribe dos veces.
+   */
+  const nextInsertError = () =>
+    typeof insertError === "function" ? (insertError as () => unknown)() : insertError;
 
   const from = vi.fn((table: string) => {
     /**
@@ -148,22 +158,22 @@ function createSupabaseStub(
         raiz ??= "select";
         return builder;
       }),
-      single: vi.fn(() =>
-        Promise.resolve(
-          insertError
-            ? { data: null, error: insertError }
-            : { data: { id: NEW_POST_ID }, error: null },
-        ),
-      ),
+      single: vi.fn(() => {
+        const error = nextInsertError();
+        return Promise.resolve(
+          error ? { data: null, error } : { data: { id: NEW_POST_ID }, error: null },
+        );
+      }),
       maybeSingle: vi.fn(() => {
         // El SELECT de verificación contesta con el borrador (o con nada).
         if (raiz === "select") {
           return Promise.resolve({ data: borradorDeMux, error: null });
         }
         // El UPDATE que publica devuelve la fila tocada, o el error simulado.
+        const error = nextInsertError();
         return Promise.resolve(
-          insertError
-            ? { data: null, error: insertError }
+          error
+            ? { data: null, error }
             : { data: { id: borradorDeMux?.id ?? NEW_POST_ID }, error: null },
         );
       }),
@@ -231,6 +241,14 @@ function postForm(input: {
    * pruebas manda un id que no existe, que es justo lo que la action frena.
    */
   textBackground?: string;
+  /**
+   * `posts.photo_rights` / `posts.photo_credit` (0146) — derechos y fuente de
+   * la foto. `string` y no el tipo del catálogo a propósito: varias de estas
+   * pruebas mandan un origen que no existe, que es el caso que la action tiene
+   * que degradar sin tumbar la publicación.
+   */
+  photoRights?: string;
+  photoCredit?: string;
 }): FormData {
   const data = new FormData();
   data.set("body", input.body);
@@ -251,6 +269,8 @@ function postForm(input: {
   if (input.videoPosterPath !== undefined) {
     data.set("videoPosterPath", input.videoPosterPath);
   }
+  if (input.photoRights !== undefined) data.set("photoRights", input.photoRights);
+  if (input.photoCredit !== undefined) data.set("photoCredit", input.photoCredit);
   return data;
 }
 
@@ -1163,5 +1183,130 @@ describe("createPostAction — el video orgánico sigue clavado en 90 s", () => 
 
     expect(result).toEqual({ ok: false, code: "video", reason: "unknown" });
     expect(insertedPost(stub)).toBeUndefined();
+  });
+});
+
+/* ---------- Derechos y fuente de la foto (0146, punto 11 del pliego) ------- */
+
+describe("createPostAction — derechos y fuente de la foto", () => {
+  it("guarda el origen y la fuente que declaró quien publica", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({
+        body: "",
+        photos: [photo()],
+        photoRights: "de_otra_fuente",
+        photoCredit: "El Tiempo",
+      }),
+    );
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)).toMatchObject({
+      photo_rights: "de_otra_fuente",
+      photo_credit: "El Tiempo",
+    });
+  });
+
+  it("un origen sin fuente se guarda igual: declarar 'es mía' es una respuesta completa", async () => {
+    const stub = useGuardOk();
+
+    await createPostAction(
+      postForm({ body: "", photos: [photo()], photoRights: "propia" }),
+    );
+
+    expect(insertedPost(stub)).toMatchObject({ photo_rights: "propia", photo_credit: null });
+  });
+
+  it("sin declaración las columnas NI VIAJAN — ausente no es 'no declaró'", async () => {
+    // Que no viajen es lo que deja publicar en un entorno sin la 0146: el
+    // payload no menciona una columna que todavía no existe.
+    const stub = useGuardOk();
+
+    await createPostAction(postForm({ body: "", photos: [photo()] }));
+
+    const insertado = insertedPost(stub)!;
+    expect(insertado).not.toHaveProperty("photo_rights");
+    expect(insertado).not.toHaveProperty("photo_credit");
+  });
+
+  it("un origen inventado NO tumba la publicación: se publica sin crédito", async () => {
+    // EL punto del diseño. Un cliente modificado —o un bug nuestro— no puede
+    // costarle a nadie el post con sus fotos por un campo opcional.
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      postForm({
+        body: "",
+        photos: [photo()],
+        photoRights: "es_mia_lo_juro",
+        photoCredit: "x",
+      }),
+    );
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)).not.toHaveProperty("photo_rights");
+  });
+
+  it("una fuente sin origen no se sostiene sola", async () => {
+    // Espeja el CHECK `posts_photo_credit_needs_rights` de la 0146: sin el
+    // origen, la línea de crédito no tiene por dónde empezar.
+    const stub = useGuardOk();
+
+    await createPostAction(
+      postForm({ body: "", photos: [photo()], photoCredit: "El Tiempo" }),
+    );
+
+    expect(insertedPost(stub)).not.toHaveProperty("photo_credit");
+  });
+
+  it("recorta la fuente al tope del CHECK en vez de que la base rebote el insert", async () => {
+    const stub = useGuardOk();
+
+    await createPostAction(
+      postForm({
+        body: "",
+        photos: [photo()],
+        photoRights: "libre",
+        photoCredit: "a".repeat(MAX_PHOTO_CREDIT + 100),
+      }),
+    );
+
+    expect(insertedPost(stub)?.photo_credit).toHaveLength(MAX_PHOTO_CREDIT);
+  });
+
+  it("en un entorno SIN la 0146 la publicación sale igual, sin la línea de crédito", async () => {
+    // 42703 = la columna no existe. La sentencia nunca corrió, así que
+    // reintentar sin las dos columnas no puede duplicar nada.
+    let intentos = 0;
+    const stub = useGuardOk(() => (++intentos === 1 ? { code: "42703" } : null));
+
+    const result = await createPostAction(
+      postForm({ body: "", photos: [photo()], photoRights: "propia" }),
+    );
+
+    expect(result).toMatchObject({ ok: true });
+
+    const inserts = stub.calls.filter(
+      (call) => call.table === "posts" && call.method === "insert",
+    );
+    expect(inserts).toHaveLength(2);
+    expect(inserts[0].args[0]).toHaveProperty("photo_rights", "propia");
+    expect(inserts[1].args[0]).not.toHaveProperty("photo_rights");
+  });
+
+  it("un error que NO es 42703 no se reintenta", async () => {
+    // El reintento existe para una causa concreta. Reintentar cualquier fallo
+    // convertiría un rechazo de RLS en dos escrituras.
+    const stub = useGuardOk({ code: "23505" });
+
+    const result = await createPostAction(
+      postForm({ body: "", photos: [photo()], photoRights: "propia" }),
+    );
+
+    expect(result).toMatchObject({ ok: false, code: "error" });
+    expect(
+      stub.calls.filter((call) => call.table === "posts" && call.method === "insert"),
+    ).toHaveLength(1);
   });
 });

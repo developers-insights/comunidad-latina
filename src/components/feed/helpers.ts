@@ -2,6 +2,7 @@ import type { TrustLevel, TrustSignal } from "@/components/trust";
 import type { ListingCardModel } from "@/components/listings";
 import type { TaggedProfile } from "@/lib/social/post-tags";
 import type { MusicTrackView } from "@/lib/media/audio-track";
+import type { CreditoDeFoto } from "@/lib/feed/creditos-de-foto";
 import { playbackCapSeconds } from "@/lib/media/video-policy";
 
 /**
@@ -374,6 +375,20 @@ export interface PostCardModel {
    * post — igual que las encuestas y los etiquetados.
    */
   music: PostMusicView | null;
+  /**
+   * Derechos y fuente de la foto declarados por quien publicó (0146).
+   *
+   * OPCIONAL —y no `CreditoDeFoto | null` a secas— por el mismo motivo que las
+   * columnas de video: ausente significa "esta consulta no preguntó", que no es
+   * lo mismo que "no declaró nada". Las dos se pintan igual (sin línea de
+   * crédito), pero la distinción evita que una superficie que todavía no
+   * resuelve el crédito parezca estar afirmando que nadie lo declaró.
+   *
+   * Se resuelve en batch con `fetchPhotoCredits`, aparte de `POST_COLUMNS`:
+   * mismo reparto que las encuestas y la música, y por el mismo motivo — una
+   * columna que el entorno no tenga no puede tumbar el select del feed.
+   */
+  photoCredit?: CreditoDeFoto | null;
   /**
    * Insumos del menú ⋯ (0097). SIEMPRE presente —mismo criterio que
    * `taggedPeople`—: la tarjeta lo consume sin defensas y un opcional acá se

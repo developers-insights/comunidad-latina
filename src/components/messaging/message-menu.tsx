@@ -55,10 +55,10 @@ import { resumenDeMensaje, useResponder } from "./reply-quote";
  * =============================================================================
  *
  * ─── DOS PUERTAS, NO UNA ────────────────────────────────────────────────────
- * El cliente pidió el toque largo, y la versión anterior de este menú
- * (`group-message-actions.tsx`) había elegido a propósito un botón visible, con
- * un argumento que sigue siendo cierto: «un gesto que no se ve es un gesto que
- * no existe», y un lector de pantalla no puede anunciar un toque largo.
+ * El cliente pidió el toque largo, y la versión anterior de este menú había
+ * elegido a propósito un botón visible, con un argumento que sigue siendo
+ * cierto: «un gesto que no se ve es un gesto que no existe», y un lector de
+ * pantalla no puede anunciar un toque largo.
  *
  * No se pisa esa decisión: se le SUMA la otra. El botón de tres puntos sigue
  * ahí —visible, tabulable, con `aria-label`— y además mantener presionada la
@@ -203,12 +203,14 @@ export interface MessageActionsProps {
   /** Si el mensaje ES una tarjeta compartida, se puede reenviar tal cual. */
   compartido?: { kind: string; id: string; titulo: string; url: string } | null;
   /**
-   * La burbuja, ya renderizada en el servidor. Es OPCIONAL: sin ella este
-   * componente es sólo el botón, que es como lo monta `GroupMessageActions`
-   * mientras la página de grupos siga pasándolo al costado de la burbuja. Con
-   * ella se envuelve el mensaje y aparece la segunda puerta, el toque largo.
+   * La burbuja, ya renderizada en el servidor. Es OBLIGATORIA: es lo que este
+   * componente envuelve para que el toque largo tenga sobre qué dispararse.
+   * Existió una variante sin ella —sólo el botón, al costado de la burbuja—
+   * para que la página de grupos migrara en dos pasos; se eliminó con el
+   * segundo paso. Un menú sin su mensaje es el menú a medias que este archivo
+   * existe para no tener.
    */
-  children?: ReactNode;
+  children: ReactNode;
   className?: string;
 }
 
@@ -238,7 +240,6 @@ export function MessageActions({
     "menu",
   );
   const anclaRef = useRef<HTMLDivElement>(null);
-  const botonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [caja, setCaja] = useState<{ top: number; bottom: number } | null>(null);
   const [top, setTop] = useState<number | null>(null);
@@ -253,9 +254,7 @@ export function MessageActions({
   });
 
   const abrir = useCallback(() => {
-    // Cuando el menú va SIN burbuja (sólo el botón), el ancla es el propio
-    // botón: es lo único que existe en pantalla para orientar el panel.
-    const rect = (anclaRef.current ?? botonRef.current)?.getBoundingClientRect();
+    const rect = anclaRef.current?.getBoundingClientRect();
     if (rect) setCaja({ top: rect.top, bottom: rect.bottom });
     setModo("menu");
     setTop(null);
@@ -411,23 +410,19 @@ export function MessageActions({
 
   return (
     <>
-      {children ? (
-        <div
-          ref={anclaRef}
-          className={cn("flex min-w-0 items-end gap-1", className)}
-          {...gestos}
-          // Sin esto, en iOS el toque largo levanta el menú nativo de selección
-          // ANTES que el nuestro. El texto se sigue pudiendo seleccionar con un
-          // arrastre; lo que se apaga es el globo de "Copiar / Buscar".
-          style={{ WebkitTouchCallout: "none", touchAction: "pan-y pinch-zoom" }}
-        >
-          {isOwn && !deletedAt && <BotonDeMenu ref={botonRef} onClick={abrir} />}
-          {children}
-          {!isOwn && !deletedAt && <BotonDeMenu ref={botonRef} onClick={abrir} />}
-        </div>
-      ) : (
-        !deletedAt && <BotonDeMenu ref={botonRef} onClick={abrir} className={className} />
-      )}
+      <div
+        ref={anclaRef}
+        className={cn("flex min-w-0 items-end gap-1", className)}
+        {...gestos}
+        // Sin esto, en iOS el toque largo levanta el menú nativo de selección
+        // ANTES que el nuestro. El texto se sigue pudiendo seleccionar con un
+        // arrastre; lo que se apaga es el globo de "Copiar / Buscar".
+        style={{ WebkitTouchCallout: "none", touchAction: "pan-y pinch-zoom" }}
+      >
+        {isOwn && !deletedAt && <BotonDeMenu onClick={abrir} />}
+        {children}
+        {!isOwn && !deletedAt && <BotonDeMenu onClick={abrir} />}
+      </div>
 
       {mounted && createPortal(<AnimatePresence>{panel}</AnimatePresence>, document.body)}
 
@@ -475,16 +470,13 @@ export function MessageActions({
 
 function BotonDeMenu({
   onClick,
-  ref,
   className,
 }: {
   onClick: () => void;
-  ref?: React.Ref<HTMLButtonElement>;
   className?: string;
 }) {
   return (
     <button
-      ref={ref}
       type="button"
       aria-label={ACCIONES_COPY.menu.trigger}
       onClick={onClick}

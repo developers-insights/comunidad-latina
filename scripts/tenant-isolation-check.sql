@@ -215,3 +215,53 @@ order by p.table_name;
 -- signals")` en páginas que abre un anónimo. Se cierra cuando la app deje de
 -- pedir `signals` donde sólo pinta score y level — ahí este bloque tiene que
 -- pasar a listar trust_scores sin `signals`.
+
+
+-- ===========================================================================
+-- 6. El RETURNING que la propia policy de SELECT rechaza  (bug de la 0147)
+-- ===========================================================================
+-- Postgres exige permiso de SELECT sobre la fila que devuelve un
+-- `INSERT ... RETURNING`, y evalúa esa policy ANTES de correr los triggers
+-- AFTER INSERT. Si la policy de SELECT depende de una fila que justamente crea
+-- uno de esos triggers —el caso clásico: «sos miembro del grupo», y la
+-- membresía del creador la pone un trigger AFTER— entonces todo
+-- `.insert(...).select(...)` de PostgREST contra esa tabla muere con 42501 y
+-- la transacción se revierte. La fila ni siquiera queda creada.
+--
+-- Así se rompió crear grupos privados durante semanas, sin que ningún test lo
+-- viera: los grupos públicos entraban bien porque su rama del OR no depende de
+-- ninguna fila nueva.
+--
+-- Esta consulta lista las tablas donde el patrón es POSIBLE. No todas están
+-- rotas: una policy con una rama que se satisface sola —`author_id =
+-- auth.uid()`, `profile_id = auth.uid()`— ya cubre el insert propio y está
+-- bien. Lo que hay que mirar de cada fila que salga es si existe alguna rama
+-- verdadera en el instante del INSERT, cuando los triggers AFTER todavía no
+-- corrieron.
+--
+-- Resultado al día de la 0147: chat_groups (arreglada), chat_group_members y
+-- listing_reviews (las dos tienen su rama propia, están bien).
+
+with sel as (
+  select polrelid::regclass::text as tabla,
+         polname                  as policy_select,
+         pg_get_expr(polqual, polrelid) as expresion
+    from pg_policy
+   where polcmd = 'r'
+),
+con_trigger_after_insert as (
+  select distinct tgrelid::regclass::text as tabla,
+         string_agg(tgname, ', ') over (partition by tgrelid) as triggers
+    from pg_trigger
+   where not tgisinternal
+     and (tgtype & 4) > 0      -- INSERT
+     and (tgtype & 66) = 0     -- ni BEFORE ni INSTEAD OF  →  AFTER
+)
+select sel.tabla,
+       sel.policy_select,
+       t.triggers as triggers_after_insert,
+       sel.expresion
+  from sel
+  join con_trigger_after_insert t on t.tabla = sel.tabla
+ where sel.expresion ~ 'es_miembro|rol_en_|participa|EXISTS'
+ order by sel.tabla;

@@ -44,6 +44,7 @@ import {
   EMPTY_DECLARATION_VALUE,
   type DeclarationValue,
 } from "@/components/integrity/originality-fields";
+import { creditoDesdeDeclaracion } from "@/lib/feed/creditos-de-foto";
 import {
   createPostAction,
   prepareMediaUploadAction,
@@ -1500,6 +1501,28 @@ export function PostComposerHost({
         formData.set("licenseKind", declaration.licenseKind);
         formData.set("licenseStatement", declaration.licenseStatement);
         formData.set("licenseUrl", declaration.licenseUrl);
+
+        /**
+         * DERECHOS Y FUENTE DE LA FOTO (0146) — la MISMA respuesta de arriba,
+         * traducida al vocabulario que se lee debajo de la publicación.
+         *
+         * No hay un segundo formulario a propósito: preguntar dos veces lo
+         * mismo deja dos declaraciones sobre una foto que pueden contradecirse,
+         * y "¿cuál gana?" no tiene respuesta buena. El porqué completo, y por
+         * qué la traducción va sólo del vocabulario grande al chico, están en
+         * el encabezado de `creditos-de-foto.ts`.
+         *
+         * Los campos NO viajan cuando no hay nada que declarar. Es la
+         * diferencia entre los cuatro de arriba y estos dos: aquéllos van
+         * incluso vacíos porque su destino es el registro de moderación, y
+         * dejar constancia de que se preguntó vale. Éstos se PINTAN, así que
+         * mandarlos vacíos sería escribir una línea de crédito que nadie firmó.
+         */
+        const credito = creditoDesdeDeclaracion(declaration);
+        if (credito) {
+          formData.set("photoRights", credito.rights);
+          if (credito.credit) formData.set("photoCredit", credito.credit);
+        }
       }
 
       const result = await createPostAction(formData);

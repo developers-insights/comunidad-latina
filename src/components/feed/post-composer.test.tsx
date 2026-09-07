@@ -1137,3 +1137,125 @@ describe("PostComposer — con qué perfil se publica", () => {
     expect(sent.get("entityId")).toBeNull();
   });
 });
+
+/* ---------- Derechos y fuente de la foto (0146, punto 11 del pliego) ------- */
+
+describe("PostComposer — derechos y fuente de la foto", () => {
+  /**
+   * NO HAY UN SEGUNDO FORMULARIO, y eso es lo que este bloque ancla.
+   *
+   * El composer ya preguntaba de dónde salió la foto (bloque "Sobre esta foto",
+   * 0061) pero la respuesta moría en `content_assets`, que sólo lee moderación.
+   * La 0146 la lleva a la publicación. Si algún día alguien agrega un campo
+   * aparte para lo mismo, estos tests van a seguir pasando y el bug —dos
+   * declaraciones sobre la misma foto que pueden contradecirse— va a entrar sin
+   * que nadie lo note. Queda dicho acá.
+   */
+  async function pickPhoto() {
+    const input = document.getElementById("post-composer-photos") as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], "feria.jpg", { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [file] } });
+    await act(async () => {});
+  }
+
+  async function abrirHojaConFoto() {
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    await openMenu();
+    fireEvent.click(screen.getByText(COPY.composer.createMenu.tiles.photo.title));
+    await pickPhoto();
+  }
+
+  function publicar() {
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(COPY.composer.publish) }));
+  }
+
+  async function enviado(): Promise<FormData> {
+    await waitFor(() => expect(createPostAction).toHaveBeenCalledTimes(1));
+    return createPostAction.mock.calls[0]?.[0] as FormData;
+  }
+
+  it("declarar el origen viaja como derechos de la publicación", async () => {
+    await abrirHojaConFoto();
+
+    const licencia = document.getElementById("composer-declaracion-licencia")!;
+    fireEvent.change(licencia, { target: { value: "con_permiso" } });
+    const aclaracion = document.getElementById("composer-declaracion-aclaracion")!;
+    fireEvent.change(aclaracion, { target: { value: "me la pasó el fotógrafo del local" } });
+
+    publicar();
+
+    const sent = await enviado();
+    expect(sent.get("photoRights")).toBe("con_permiso");
+    expect(sent.get("photoCredit")).toBe("me la pasó el fotógrafo del local");
+  });
+
+  it("las tres licencias 'puedo usarla' se leen como uso libre", async () => {
+    await abrirHojaConFoto();
+
+    fireEvent.change(document.getElementById("composer-declaracion-licencia")!, {
+      target: { value: "creative_commons" },
+    });
+
+    publicar();
+
+    expect((await enviado()).get("photoRights")).toBe("libre");
+  });
+
+  it("sin declarar nada, los campos NI VIAJAN", async () => {
+    // No declarar es una opción legítima. Mandar un origen por defecto sería
+    // firmar una afirmación que la persona no hizo.
+    await abrirHojaConFoto();
+
+    publicar();
+
+    const sent = await enviado();
+    expect(sent.get("photoRights")).toBeNull();
+    expect(sent.get("photoCredit")).toBeNull();
+  });
+
+  it("citar una fuente sin elegir licencia se declara 'de otra fuente'", async () => {
+    await abrirHojaConFoto();
+
+    fireEvent.change(document.getElementById("composer-declaracion-aclaracion")!, {
+      target: { value: "El Tiempo" },
+    });
+
+    publicar();
+
+    const sent = await enviado();
+    expect(sent.get("photoRights")).toBe("de_otra_fuente");
+    expect(sent.get("photoCredit")).toBe("El Tiempo");
+  });
+
+  it("la declaración sigue viajando a Content Integrity, no la reemplaza", async () => {
+    // Las dos proyecciones salen de la MISMA respuesta y viajan juntas: si un
+    // día una se queda sin la otra, la tarjeta y el panel de moderación pasan a
+    // decir cosas distintas sobre la misma foto.
+    await abrirHojaConFoto();
+
+    fireEvent.change(document.getElementById("composer-declaracion-licencia")!, {
+      target: { value: "dominio_publico" },
+    });
+
+    publicar();
+
+    const sent = await enviado();
+    expect(sent.get("licenseKind")).toBe("dominio_publico");
+    expect(sent.get("photoRights")).toBe("libre");
+  });
+
+  it("una publicación de texto no declara derechos de foto", async () => {
+    // No hay archivo del que declarar nada: mandar los campos sería adjuntar
+    // una afirmación sobre algo que no existe.
+    createPostAction.mockResolvedValue({ ok: true, status: "published" });
+    mount();
+    const body = await abrirHojaDeTexto();
+    fireEvent.change(body, { target: { value: "Hoy hay feria en la plaza." } });
+
+    publicar();
+
+    const sent = await enviado();
+    expect(sent.get("photoRights")).toBeNull();
+  });
+});

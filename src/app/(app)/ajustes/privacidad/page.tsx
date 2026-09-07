@@ -9,6 +9,8 @@ import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { TagPolicyRow } from "./tag-policy-row";
 import { readTagPolicy } from "./tag-policy";
+import { UltimaVezRow } from "./ultima-vez-row";
+import { readMostrarUltimaVez } from "./ultima-vez";
 
 export const metadata = { title: COPY.settings.title };
 
@@ -61,7 +63,14 @@ export default async function PrivacidadAjustesPage() {
 
   // Sin sesión no hay a quién etiquetar ni preferencia que leer — la fila no
   // se dibuja en vez de ofrecer un control que rebota a /entrar al tocarlo.
-  const tagPolicy = user ? await readTagPolicy(supabase, user.id) : null;
+  // Las dos lecturas van juntas: son dos filas de la misma pantalla y ninguna
+  // depende de la otra, así que encadenarlas sería un viaje de más.
+  const [tagPolicy, mostrarUltimaVez] = user
+    ? await Promise.all([
+        readTagPolicy(supabase, user.id),
+        readMostrarUltimaVez(supabase, user.id),
+      ])
+    : [null, null];
 
   return (
     <div className="flex flex-col gap-6">
@@ -81,6 +90,8 @@ export default async function PrivacidadAjustesPage() {
       <PrivacyControls />
 
       {tagPolicy && <TagPolicyRow initialPolicy={tagPolicy} />}
+
+      {mostrarUltimaVez !== null && <UltimaVezRow initialMostrar={mostrarUltimaVez} />}
 
       <section className="rounded-xl border border-border-subtle bg-surface p-4">
         <h2 className="font-display text-base font-bold text-foreground">

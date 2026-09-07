@@ -29,7 +29,13 @@ export const COPY = {
 
   pantalla: {
     sello: "Conexión segura",
-    selloDetalle: "El audio y el video viajan cifrados entre vos y quien te escucha.",
+    // No decir "entre vos y quien te escucha": suena a cifrado de extremo a
+    // extremo y no lo es. Agora cifra el tránsito, pero el audio y el video
+    // pasan descifrados por sus servidores mientras no se active
+    // `setEncryptionConfig`, que hoy no se usa. El día que se active, esta
+    // frase puede volver a prometer extremo a extremo.
+    selloDetalle:
+      "El audio y el video viajan cifrados, y la llamada es solo entre miembros de la comunidad.",
     llamando: "Llamando…",
     sonando: "Te está llamando",
     conectando: "Conectando…",

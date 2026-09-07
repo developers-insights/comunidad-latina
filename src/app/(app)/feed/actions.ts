@@ -36,6 +36,7 @@ import {
   type MediaItem,
 } from "@/lib/integrity";
 import { currentSourceHost } from "@/lib/integrity/source-host";
+import { normalizarCredito } from "@/lib/feed/creditos-de-foto";
 import { MUX_FILTER_KEY } from "@/lib/media/mux-video";
 import { puedeFirmarComo } from "@/lib/feed/autoria";
 import { notifyPostComment, notifyPostReaction } from "./social-notifications";
@@ -446,6 +447,22 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     licenseUrl: formData.get("licenseUrl"),
   });
 
+  /**
+   * DERECHOS Y FUENTE DE LA FOTO (0146) — la proyección PÚBLICA de la misma
+   * declaración de arriba, la que se pinta debajo de la publicación.
+   *
+   * NO va en `postSchema` a propósito, y es la misma razón por la que
+   * `normalizeDeclaration` tampoco: un crédito malformado no puede tumbar la
+   * publicación entera. Con el enum en el schema, un `safeParse` en rojo
+   * devuelve GENERIC_INVALID y la persona pierde el post con sus fotos por un
+   * campo opcional. Acá lo peor que pasa es que la línea de crédito no exista,
+   * que es exactamente lo que significa "no declaró".
+   */
+  const credito = normalizarCredito(
+    formData.get("photoRights"),
+    formData.get("photoCredit"),
+  );
+
   // ---- DECLARACIÓN Y TOPE DEL VIDEO (contrato 0046 + spec nº4) ------------
   //
   // Se resuelve ACÁ, antes del guard, de la moderación y de tocar storage: si
@@ -791,6 +808,17 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
      * y un campo ausente dejaría el valor viejo en vez de decir la verdad.
      */
     text_background: textBackground,
+    /**
+     * Derechos y fuente de la foto (0146). A diferencia de las tres de arriba,
+     * estas dos viajan SÓLO cuando hay algo que declarar: son las únicas cuya
+     * columna puede no existir todavía en el entorno, y un campo ausente vale
+     * lo mismo que el NULL que ya tiene la fila. El UPDATE del borrador de Mux
+     * tampoco pierde nada — un post que llega a este punto sin crédito nunca
+     * tuvo uno que pisar.
+     */
+    ...(credito
+      ? { photo_rights: credito.rights, photo_credit: credito.credit }
+      : {}),
   } as PostInsert;
 
   /**
@@ -812,17 +840,45 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
    * Con el predicado en el WHERE, "cero filas" es la respuesta correcta y no
    * una publicación pisada.
    */
-  const persistencia = muxPostDraftId
-    ? await supabase
-        .from("posts")
-        .update(insertPayload)
-        .eq("id", muxPostDraftId)
-        .eq("tenant_id", tenant.id)
-        .eq("author_id", user.id)
-        .eq("status", "draft")
-        .select("id")
-        .maybeSingle()
-    : await supabase.from("posts").insert(insertPayload).select("id").single();
+  const persistir = (payload: PostInsert) =>
+    muxPostDraftId
+      ? supabase
+          .from("posts")
+          .update(payload)
+          .eq("id", muxPostDraftId)
+          .eq("tenant_id", tenant.id)
+          .eq("author_id", user.id)
+          .eq("status", "draft")
+          .select("id")
+          .maybeSingle()
+      : supabase.from("posts").insert(payload).select("id").single();
+
+  let persistencia = await persistir(insertPayload);
+
+  /**
+   * ENTORNO SIN LA 0146: se publica igual, sin la línea de crédito.
+   *
+   * `photo_rights` / `photo_credit` son las únicas columnas de este payload que
+   * pueden no existir todavía, y una columna ausente hace fallar el INSERT
+   * ENTERO con 42703 (`undefined_column`). Perder una línea de atribución es
+   * molesto; que nadie pueda publicar una foto hasta que alguien corra una
+   * migración, no.
+   *
+   * REINTENTAR ES SEGURO Y NO ES UN PARCHE A CIEGAS: con 42703 la sentencia no
+   * llegó a ejecutarse, así que no hay fila a medio escribir que duplicar. Y el
+   * reintento sólo existe cuando fuimos NOSOTROS los que mandamos esas dos
+   * columnas — cualquier otro 42703 sigue siendo un error de verdad y sale por
+   * el camino de siempre.
+   *
+   * Se borra el día que la 0146 esté en todos los entornos, junto con este
+   * comentario.
+   */
+  if (credito && persistencia.error?.code === "42703") {
+    console.warn("[feed] publicando sin derechos de foto: falta la 0146");
+    const { photo_rights: _r, photo_credit: _c, ...sinCredito } =
+      insertPayload as PostInsert & { photo_rights?: string; photo_credit?: string };
+    persistencia = await persistir(sinCredito as PostInsert);
+  }
 
   const { data: created, error: insertError } = persistencia;
 

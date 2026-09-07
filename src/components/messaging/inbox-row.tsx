@@ -11,6 +11,7 @@ import {
 import { Avatar, Badge } from "@/components/ui";
 import { cn, timeAgo } from "@/lib/utils";
 import type { FilaDeBandeja, IconoDeResumen } from "@/lib/messaging/bandeja";
+import type { EstadoDePresencia } from "@/lib/messaging/presencia";
 import { COPY } from "./copy";
 import { InboxRowLink } from "./inbox-row-link";
 
@@ -21,14 +22,15 @@ import { InboxRowLink } from "./inbox-row-link";
  * llegó ("Nota de voz · 0:24", "Foto"), cuándo, cuánto falta por leer, y —si el
  * último mensaje es mío— si ya lo abrieron.
  *
- * ── LO QUE ESTÁ Y NO SE PRENDE ──────────────────────────────────────────────
- * `presencia` y `escribiendo` están implementados y hoy nadie los pasa. No es
- * un olvido: este proyecto NO tiene Supabase Realtime (cero `.channel()` en el
- * repo) y las pantallas se refrescan con `router.refresh()` cada 15 s. Un "Está
- * escribiendo…" o un "En línea" derivados de un sondeo de 15 segundos aparecen
- * cuando la persona ya cerró la app: no es una versión pobre del dato, es un
- * dato falso, y en una bandeja de mensajes eso se paga caro. La fila queda
- * lista para el día que exista un canal de presencia (Broadcast).
+ * ── DE LOS DOS ESTADOS EN VIVO, HOY SE PRENDE UNO ───────────────────────────
+ * `en-linea` y `ultima-vez` ya tienen fuente: la RPC `presencia_de` (0145), que
+ * la página lee en el servidor y baja resuelta. `escribiendo` NO, y sigue sin
+ * pasarse a propósito: este proyecto no tiene Supabase Realtime (cero
+ * `.channel()` en el repo) y las pantallas se refrescan cada 15 s. Un "Está
+ * escribiendo…" derivado de un sondeo aparece cuando la persona ya dejó de
+ * escribir — no es una versión pobre del dato, es un dato falso. La presencia
+ * aguanta ese retraso porque habla de MINUTOS; el "escribiendo" habla de
+ * segundos y por eso no entra.
  *
  * Server Component: lo único cliente es el enlace, que además deja anotada la
  * lectura. Ver `inbox-row-link.tsx`.
@@ -43,11 +45,6 @@ const ICONO: Record<IconoDeResumen, React.ComponentType<{ size?: number; weight?
   perfil: UserCircle,
   contenido: Article,
 };
-
-export type EstadoDePresencia =
-  | { tipo: "escribiendo" }
-  | { tipo: "en-linea" }
-  | { tipo: "ultima-vez"; cuando: string };
 
 export function InboxRow({
   fila,
@@ -181,6 +178,13 @@ export function InboxRow({
           <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {fila.esperandoRespuesta && (
               <Badge variant="neutral">{COPY.inbox.waitingReply}</Badge>
+            )}
+            {/* El punto verde del avatar es `aria-hidden`, así que sin este
+                renglón "en línea" existiría sólo para quien puede verlo. */}
+            {presencia?.tipo === "en-linea" && (
+              <span className="text-xs font-medium text-success">
+                {COPY.inbox.resumen.enLinea}
+              </span>
             )}
             {presencia?.tipo === "ultima-vez" && (
               <span className="text-xs text-foreground-muted">

@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getAuthUserId } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/messaging/copy";
 import { InboxFiltros } from "@/components/messaging/inbox-filtros";
 import { InboxRow } from "@/components/messaging/inbox-row";
 import { InboxSearch } from "@/components/messaging/inbox-search";
 import { InboxTabs } from "@/components/messaging/inbox-tabs";
+import { PresenceBeat } from "@/components/messaging/presence-beat";
 import { parseFiltroDePersonas, type FiltroDePersonas } from "@/lib/messaging/bandeja";
+import { leerPresencia, presenciaVisible } from "@/lib/messaging/presencia";
 import { leerBandejaDePersonas } from "../bandeja-queries";
 
 export const metadata: Metadata = { title: COPY.inbox.title };
@@ -43,16 +45,31 @@ export default async function MensajesPage({
   if (!userId) redirect("/entrar?next=/mensajes");
 
   const filtro = parseFiltroDePersonas(sp.filtro);
-  const { filas, totalNoLeidos, hayLecturas } = await leerBandejaDePersonas({
-    miId: userId,
-    filtro,
-  });
+  const [{ filas, totalNoLeidos, hayLecturas }, supabase] = await Promise.all([
+    leerBandejaDePersonas({ miId: userId, filtro }),
+    createClient(),
+  ]);
+
+  /**
+   * LA PRESENCIA VIAJA CON LA BANDEJA, NO DESPUÉS.
+   *
+   * Se resuelve en el servidor y baja pintada: la fila no monta un efecto para
+   * ir a buscar quién está en línea, así que la lista no aparece primero muda y
+   * se completa un segundo más tarde. La reconciliación la hace el refresco que
+   * la pantalla ya tenía, no un viaje propio.
+   */
+  const presencias = await leerPresencia(
+    supabase,
+    filas.map((fila) => fila.personaId),
+  );
 
   const ahora = new Date();
   const vacio = VACIOS[hayLecturas ? filtro : "todos"];
 
   return (
     <>
+      <PresenceBeat />
+
       <h1 className="mb-5 font-display text-2xl font-bold tracking-tight text-foreground">
         {COPY.inbox.title}
       </h1>
@@ -93,7 +110,15 @@ export default async function MensajesPage({
       ) : (
         <ul className="flex flex-col gap-3">
           {filas.map((fila) => (
-            <InboxRow key={fila.personaId} fila={fila} miId={userId} ahora={ahora} />
+            <InboxRow
+              key={fila.personaId}
+              fila={fila}
+              miId={userId}
+              ahora={ahora}
+              presencia={
+                presenciaVisible(presencias.get(fila.personaId), ahora) ?? undefined
+              }
+            />
           ))}
         </ul>
       )}

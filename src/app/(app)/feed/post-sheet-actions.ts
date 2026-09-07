@@ -6,6 +6,7 @@ import type {
   PostPollView,
 } from "@/components/feed";
 import { fetchTagsForPost } from "@/lib/social/post-tags";
+import { fetchPhotoCredits } from "@/lib/feed/creditos-de-foto";
 import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import {
@@ -108,6 +109,7 @@ export async function fetchPostForSheetAction(input: {
     promotions,
     tagged,
     musicByPostId,
+    creditByPostId,
   ] = await Promise.all([
     fetchAuthorViews(
       supabase,
@@ -136,6 +138,9 @@ export async function fetchPostForSheetAction(input: {
     fetchActivePromotions(supabase, tenant.id),
     fetchTagsForPost(supabase, post.id),
     fetchPostMusic(supabase, [post.id]),
+    // Derechos y fuente de la foto (0146). Mismo helper que el feed: una sola
+    // fuente de verdad para el mapeo, en un batch de un solo id.
+    fetchPhotoCredits(supabase, [post.id]),
   ]);
 
   const isPromoted = Boolean(promoResult.data?.ends_at);
@@ -155,6 +160,7 @@ export async function fetchPostForSheetAction(input: {
           : null,
         taggedPeople: tagged,
         music: musicByPostId.get(post.id) ?? null,
+        photoCredit: creditByPostId.get(post.id) ?? null,
       }),
       tenantId: tenant.id,
       viewerId,

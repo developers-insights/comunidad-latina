@@ -25,13 +25,14 @@ import { ReplyQuote, anclaDeMensaje, type MensajeCitado } from "./reply-quote";
  * El hueco del avatar se reserva igual en las burbujas que no lo muestran
  * (`size-8` vacío) para que la columna del texto no baile de a 40px.
  *
- * ── DOS FORMAS DE MONTAR EL MENÚ, Y CONVIVEN ────────────────────────────────
- * · `acciones` (la de siempre) recibe el menú YA armado y lo pone al costado.
- *   Es lo que hace hoy la página de grupos y sigue funcionando igual.
- * · `mensaje` (nuevo) es el camino completo: envuelve la burbuja para que el
- *   TOQUE LARGO también abra el menú, y enciende reacciones, cita de respuesta
- *   y lápida. Cuando está, `acciones` se ignora — dos menús para el mismo
- *   mensaje serían dos formas de hacer lo mismo, una al lado de la otra.
+ * ── UNA SOLA FORMA DE MONTAR EL MENÚ ────────────────────────────────────────
+ * `mensaje` es el camino completo y el único: envuelve la burbuja para que el
+ * TOQUE LARGO abra el menú, y enciende reacciones, cita de respuesta y lápida.
+ * Antes convivía con un prop `acciones` que recibía el menú ya armado y lo
+ * ponía al costado —sin toque largo y sin reacciones—; se eliminó junto con
+ * `GroupMessageActions`, que era quien lo llenaba. Dos maneras de abrir el
+ * mismo menú, una peor que la otra, sólo garantizaban que alguna pantalla
+ * quedara con la peor.
  */
 export interface GroupMessageMensaje {
   mensajeId: string;
@@ -54,7 +55,6 @@ export function GroupMessageBubble({
   autorNombre,
   autorAvatar,
   mostrarAutor,
-  acciones,
   mensaje,
   editadoAt = null,
   deletedAt = null,
@@ -67,21 +67,14 @@ export function GroupMessageBubble({
   autorNombre: string;
   autorAvatar: string | null;
   mostrarAutor: boolean;
-  /**
-   * Menú del mensaje (borrar / reportar). Va del lado de AFUERA de la burbuja
-   * —a la derecha de los mensajes ajenos, a la izquierda de los propios— para
-   * que quede siempre contra el borde de la pantalla y nunca entre la foto de
-   * quien escribió y lo que escribió.
-   */
-  acciones?: ReactNode;
-  mensaje?: GroupMessageMensaje;
+  mensaje: GroupMessageMensaje;
   editadoAt?: string | null;
   deletedAt?: string | null;
   respuesta?: MensajeCitado | null;
   /** Gemelo del `media` de `message-bubble.tsx`, y por el mismo motivo. */
   media?: ReactNode;
 }) {
-  const ancla = mensaje ? anclaDeMensaje(mensaje.mensajeId) : undefined;
+  const ancla = anclaDeMensaje(mensaje.mensajeId);
 
   if (deletedAt) {
     return (
@@ -156,17 +149,6 @@ export function GroupMessageBubble({
       <span aria-hidden="true" className="size-8 shrink-0" />
     )
   );
-
-  if (!mensaje) {
-    return (
-      <div className={cn("flex items-end gap-1.5", isOwn ? "justify-end" : "justify-start")}>
-        {isOwn && acciones}
-        {avatar}
-        {burbuja}
-        {!isOwn && acciones}
-      </div>
-    );
-  }
 
   return (
     <ReaccionesProvider

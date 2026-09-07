@@ -26,6 +26,7 @@ import {
   type PostMusicView,
   type PostPollView,
 } from "@/components/feed";
+import type { CreditoDeFoto } from "@/lib/feed/creditos-de-foto";
 import { mediaFilterCssByPath } from "@/lib/media/photo-filters";
 import { MUX_FILTER_KEY, muxThumbnailUrl, parseMuxStatus } from "@/lib/media/mux-video";
 import { zonasDeCampana, type ZonasDeCampana } from "@/lib/zona/campanas";
@@ -1030,6 +1031,11 @@ export function toPostCardModel(
     taggedPeople?: TaggedProfile[];
     /** Música de ESTE post (fetchPostMusic, en batch). Ausente → sin música. */
     music?: PostMusicView | null;
+    /**
+     * Derechos y fuente de la foto (fetchPhotoCredits, en batch). Ausente →
+     * esta superficie no lo resolvió; `null` → la persona no declaró nada.
+     */
+    photoCredit?: CreditoDeFoto | null;
   },
 ): PostCardModel {
   // Bucket post-media (0025): fotos y videos conviven en el array `media`;
@@ -1125,6 +1131,11 @@ export function toPostCardModel(
     // que todavía no consulta `post_music` muestra un post sin música, que es
     // la verdad hasta que lo pida.
     music: extras?.music ?? null,
+    // Derechos y fuente de la foto (0146). Se propaga TAL CUAL, sin `?? null`:
+    // acá `undefined` significa "esta superficie no preguntó" y `null` "no
+    // declaró nada". Las dos se pintan igual, pero colapsarlas haría que una
+    // superficie que todavía no resuelve el crédito afirme que nadie declaró.
+    photoCredit: extras?.photoCredit,
     // Insumos del menú ⋯ (0097). Se mapean SIEMPRE y por el MISMO motivo que
     // las columnas de video: el menú se monta en el feed y en el detalle, y una
     // superficie que no los tuviera ofrecería "Fijar" sobre algo ya fijado.

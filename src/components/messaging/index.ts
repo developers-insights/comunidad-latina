@@ -75,6 +75,12 @@ export {
   type ReaccionesProviderProps,
 } from "./message-reactions";
 export { PhotoPicker } from "./photo-picker";
+/**
+ * El latido de presencia (0145). Es `"use client"` y sólo importa la referencia
+ * de una server action, que es lo único que cruza la frontera — no arrastra
+ * `next/headers` a este barril. Ver la advertencia de `InboxTabs` más arriba.
+ */
+export { PresenceBeat } from "./presence-beat";
 export { ReactionBar } from "./reaction-bar";
 export {
   ComposerReplyBar,
