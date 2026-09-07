@@ -136,11 +136,16 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
    * seguridad tiene la pestaña abierta. Al colgar sin `started_at`, la acción de
    * cierre la marca `perdida` — y de ahí sale el "Llamada perdida" de la bandeja.
    */
+  // `colgar` y no `motor`: el hook devuelve un objeto NUEVO en cada render, así
+  // que depender de él reiniciaba este temporizador sesenta veces por minuto (el
+  // cronómetro re-renderiza cada segundo) y los 45 segundos no llegaban nunca.
+  // `colgar` es un `useCallback` sin dependencias: estable de verdad.
+  const colgar = motor.colgar;
   useEffect(() => {
     if (!soyQuienLlama || estado !== "sonando") return;
-    const id = window.setTimeout(() => motor.colgar("colgue"), TIMBRE_MAXIMO_MS);
+    const id = window.setTimeout(() => colgar("colgue"), TIMBRE_MAXIMO_MS);
     return () => window.clearTimeout(id);
-  }, [soyQuienLlama, estado, motor]);
+  }, [soyQuienLlama, estado, colgar]);
 
   const yoEnLista = useMemo(
     () => personas.find((p) => p.id === yo.id) ?? null,
@@ -386,7 +391,7 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
  */
 function Marco({ children }: { children: React.ReactNode }) {
   return (
-    <div className="fixed inset-x-0 top-0 z-45 flex h-[100dvh] flex-col overflow-hidden text-on-media [caret-color:transparent]">
+    <div className="fixed inset-x-0 top-0 z-[45] flex h-[100dvh] flex-col overflow-hidden text-on-media [caret-color:transparent]">
       <FondoDeLlamada />
       {children}
     </div>

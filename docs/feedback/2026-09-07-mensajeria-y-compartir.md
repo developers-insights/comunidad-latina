@@ -182,14 +182,21 @@ Esta tabla la mantiene la sesión que implementa. Los tres estados son los del c
 
 | # | Punto | Estado |
 |---|---|---|
-| 1 | Compartir publicación (dentro y fuera) | pendiente |
-| 2 | Compartir negocios, trabajos y anuncios | pendiente |
-| 3 | Bandeja: pestañas y filtros | pendiente |
-| 4 | Menú + en lista vertical | pendiente |
-| 5 | Mensajes de voz | pendiente |
-| 6 | Responder, reaccionar, reenviar, editar, eliminar | pendiente |
-| 7 | Solicitudes con categorías | pendiente |
-| 8 | Grupos completos | pendiente |
-| 9 | Llamadas Agora | pendiente |
-| 10 | Verificación telefónica Twilio | pendiente |
-| 11 | Editor de fotos | pendiente |
+| 1 | Compartir publicación (dentro y fuera) | escrito y con tests; espera migraciones |
+| 2 | Compartir negocios, trabajos y anuncios | escrito — un solo panel para las ocho entidades |
+| 3 | Bandeja: pestañas y filtros | escrito y verificado en navegador |
+| 4 | Menú + en lista vertical | escrito (se eligió la opción B del cliente) |
+| 5 | Mensajes de voz | escrito; falta probarlo en un teléfono real |
+| 6 | Responder, reaccionar, reenviar, editar, eliminar | escrito y con tests |
+| 7 | Solicitudes con categorías | escrito — las 14 categorías ya existían, faltaba llevarlas a la campanita |
+| 8 | Grupos completos | ya existía casi todo; falta reproducir el "no funciona" que reportó el cliente |
+| 9 | Llamadas Agora | en curso |
+| 10 | Verificación telefónica Twilio | escrito; **apagado por gate legal**, es decisión del cliente |
+| 11 | Editor de fotos | **ya estaba completo** — las cuatro formas, filtros, texto y emoji |
+| 12 | Botón de crear en Boost | escrito; de paso se arregló el estado de los avisos no promocionables |
+
+### Lo único del pliego que quedó sin escribir
+
+El campo **“Derechos y fuente de la foto”** de la pantalla de publicación. Aparece en
+la captura del cliente marcado como *Opcional* y no existe en el código. Es chico, pero
+toca Content Integrity, así que merece su propio frente en vez de colarse acá.

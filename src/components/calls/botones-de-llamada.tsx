@@ -36,6 +36,13 @@ export interface BotonesDeLlamadaProps {
  * se puede ni consultar desde acá, y por eso la comprobación completa la hace el
  * endpoint del token: si falta esa mitad, el botón existe y la pantalla dice
  * "estamos terminando de configurar las llamadas" en vez de romperse.
+ *
+ * ⚠️ TRAMPA DE DEPLOY: en el bundle del navegador un `NEXT_PUBLIC_*` no se lee
+ * en runtime — se REEMPLAZA por su valor durante `next build`. O sea que
+ * agregar `NEXT_PUBLIC_AGORA_APP_ID` en Vercel no hace aparecer estos botones:
+ * hay que volver a construir. (Del lado del servidor sí se lee en runtime, y
+ * por eso `/api/llamadas/token` puede pasar de 503 a 401 sin rebuild — se
+ * verificó con dos `next start`, uno con la variable y otro sin ella.)
  */
 export function BotonesDeLlamada({
   profileId,
