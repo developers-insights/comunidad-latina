@@ -1,5 +1,86 @@
 # PROGRESS — Comunidad Latina
 
+## Mensajería completa + el feedback del 7/9 (✅ 2026-09-07)
+
+Fuente: `docs/feedback/2026-09-07-mensajeria-y-compartir.md` (cinco láminas de
+user flow del cliente + capturas + WhatsApp de Nacho). Ocho frentes en paralelo
+sobre este worktree, con fronteras de archivo, más una ronda de integración.
+
+**Estado del árbol al cerrar:** `typecheck` 0 · **6158/6158 tests** · `build`
+verde. Commit `7c6415d`, pusheado a `main`.
+
+### Lo que había que saber antes de empezar
+
+Tres de los pedidos del cliente **ya estaban construidos** y nadie lo sabía. Vale
+dejarlo escrito porque cambió el tamaño real del trabajo:
+
+- El **editor de fotos** está completo desde antes (las cuatro formas, filtros,
+  texto, emoji, vista previa).
+- Las **14 categorías de notificación** existen desde la 0045, con sus pestañas
+  — pero solo en `/notificaciones`. El pedido de "categorías en la campanita"
+  era mudanza, no construcción.
+- La **verificación telefónica** está entera (códigos, TTL, rate limit, tope de
+  intentos, UI y tests) desde la 0066. Solo faltaba el proveedor.
+
+El hueco real era otro: `messages.body` era texto y nada más. Sin adjuntos, sin
+audio, sin responder, sin reenviar, sin reacciones, sin leído/no leído.
+
+### Migraciones 0136–0143 — ⚠️ ESCRITAS Y VALIDADAS, **NO APLICADAS**
+
+Validadas con `node scripts/dryrun-migraciones.mjs` (que garantiza rollback) y
+además con aserciones bajo **RLS activa y JWT simulado**: un tercero no ve el
+mensaje ni el adjunto, el canal de Agora no lo puede elegir el cliente, el
+participante 11 rebota con `CALL_FULL`.
+
+| Migración | Qué trae |
+|---|---|
+| 0136 | `kind`, `adjunto`, `ubicacion`, `compartido_kind/id`, `reply_to`, `editado_at`, `deleted_at` — simétrico en 1:1 y grupos. Ventana de edición de 15 min |
+| 0137 | `conversation_reads` y `chat_group_reads` + `contar_no_leidos()` |
+| 0138 | `reactions.subject_kind` acepta `message` y `group_message` |
+| 0139 | `calls` y `call_participants`, tope de 10, canal aleatorio por trigger |
+| 0140 | Bucket privado `chat-media`, `buscar_en_mensajeria()`, amigos = seguimiento mutuo |
+| 0141 | `fue_leido_por_el_otro()` — el tilde sin publicar la hora ajena |
+| 0142 | La lápida del mensaje borrado en el chat de dos |
+| 0143 | Realtime para el timbre de las llamadas |
+
+**Aplicarlas es el paso pendiente.** Hasta entonces el código degrada a propósito
+(tipos opcionales, `reply_to` solo cuando hay cita): el chat se lee como texto
+plano en vez de romperse.
+
+### Tres bugs que aparecieron de paso
+
+- **`Permissions-Policy: microphone=()`** en `next.config.ts` hacía que el
+  navegador **ni preguntara** por el micrófono. Las notas de voz eran imposibles
+  y desde el código se veía idéntico a "la persona dijo que no". Es el mismo caso
+  que ya había pasado con `geolocation`.
+- **`/impulsar`** pintaba seis de los siete valores de `listings.status` como
+  "en revisión" y les dejaba un botón *Promocionar* que llevaba a una pantalla
+  que solo podía rebotar.
+- El escáner de `print-contract` trataba el `/*` de `accept="image/*"` como
+  apertura de comentario y **blanqueaba el resto del archivo en silencio**: el
+  inventario perdía sus tintas sin que nada fallara.
+
+### Lo que NO se pudo verificar — decirlo, no taparlo
+
+- **Ninguna llamada real.** No se probó que Agora acepte el token que firmamos,
+  ni el video, ni la renovación a los 4:30, ni el cierre del canal en iOS. Eso
+  necesita dos dispositivos y credenciales vivas.
+- **Las notas de voz en un teléfono real.** La elección de códec (Safari no tiene
+  webm) está cubierta por tests unitarios, no por un iPhone.
+- **La presencia ("En línea / Última vez hace X") no existe y no se inventó.** No
+  hay `last_seen` en toda la base. Pintar un "En línea" falso era la salida fácil;
+  se dejó lo que sí es verdad. Es una diferencia visible contra las capturas del
+  cliente.
+
+### Pendientes que quedaron anotados
+
+1. Aplicar 0136–0143 y correr `get_advisors` + `check:rls` después.
+2. El campo "Derechos y fuente de la foto" — único punto del pliego sin escribir.
+3. La lápida del mensaje borrado **en grupos** (la 0142 solo tocó el 1:1).
+4. `GroupMessageActions` quedó huérfano tras la integración.
+5. Reproducir el "crear grupo no funciona" que reportó el cliente: el código está
+   completo, así que el problema es otro.
+
 ## El feedback del cliente del 3/9 — 15 puntos, implementados en una tanda (✅ 2026-09-04)
 
 Fuente: `docs/feedback/2026-09-03-feedback-cliente.md` (call de 78 min con

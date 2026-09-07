@@ -64,3 +64,12 @@ next-env.d.ts
 # No son del proyecto: los genera cualquiera que corra `supabase` en su máquina.
 supabase/.temp/
 supabase/.branches/
+
+# Las agregó `vercel link` (2026-09-07). El `.env*` de Vercel viene sin
+# excepción y se lleva puesto el .env.example: hoy no se nota porque el archivo
+# ya está trackeado y .gitignore no aplica a lo trackeado, pero el día que
+# alguien lo borre y lo recree, la plantilla de variables desaparece del repo
+# sin que nadie se entere.
+.vercel
+.env*
+!.env.example
