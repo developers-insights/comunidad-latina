@@ -57,9 +57,10 @@ import { describe, expect, it } from "vitest";
  * No explotaba por un accidente: `citaDe()` sale antes por
  * `if (!mensaje.reply_to)`, y la columna `reply_to` la agrega la migración
  * 0136, que todavía no estaba aplicada. La primera respuesta citada que
- * existiera en la base rompía las dos pantallas. La función se mudó a
- * `resumen-de-mensaje.ts`, un módulo sin directiva, y por eso este test dejó de
- * ser "de la bandeja" y pasó a `src/test/`: la regla nunca fue de una pantalla.
+ * existiera en la base rompía las dos pantallas. Se mudó junto con
+ * `anclaDeMensaje()` a `components/messaging/helpers-de-mensaje.ts`, un módulo
+ * sin directiva, y por eso este test dejó de ser "de la bandeja" y pasó a
+ * `src/test/`: la regla nunca fue de una pantalla.
  */
 
 const SRC = fileURLToPath(new URL("../", import.meta.url));
