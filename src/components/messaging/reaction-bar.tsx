@@ -99,14 +99,12 @@ export function ReactionBar({
     );
   }
 
-  const rapidas = [...REACCIONES_RAPIDAS];
+  const rapidas: readonly string[] = REACCIONES_RAPIDAS;
   // Si ya tengo puesto un emoji que no está entre las seis, se suma adelante:
   // sin esto, sacar mi propia reacción exigiría abrir el catálogo a buscarla.
   const propiaFueraDeLista =
-    estado.mia !== null && !rapidas.includes(estado.mia as (typeof REACCIONES_RAPIDAS)[number])
-      ? estado.mia
-      : null;
-  const fila = propiaFueraDeLista ? [propiaFueraDeLista, ...rapidas] : rapidas;
+    estado.mia !== null && !rapidas.includes(estado.mia) ? estado.mia : null;
+  const fila = propiaFueraDeLista ? [propiaFueraDeLista, ...rapidas] : [...rapidas];
 
   return (
     <m.div

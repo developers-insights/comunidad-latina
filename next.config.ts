@@ -209,9 +209,24 @@ const securityHeaders = [
   // Que el navegador PUEDA preguntar no es que nosotros guardemos nada: la
   // coordenada cruda vive lo que dura la server action, se convierte en el
   // barrio más cercano y se descarta. Ver `lib/zona/centroides.ts` y la 0120.
+  //
+  // `microphone=(self)` desde las NOTAS DE VOZ del chat (0136 + 0140). Con la
+  // lista vacía, `getUserMedia({audio:true})` rechaza con NotAllowedError y el
+  // navegador NI SIQUIERA PREGUNTA: desde la app se ve idéntico a que la
+  // persona hubiera dicho que no, así que el micrófono queda muerto sin un solo
+  // síntoma que lleve hasta acá. Mismo caso que ya pasó con `geolocation`.
+  //
+  // `camera` SIGUE EN `()`, y no es un olvido: la opción "Cámara" del menú de
+  // adjuntar usa `<input type="file" capture>`, que delega en la app de cámara
+  // del sistema y no pasa por getUserMedia. Abrirla no haría falta para nada de
+  // lo que hay hoy, y es un permiso más que cualquier script de la página
+  // podría pedir.
+  //
+  // `(self)` habilita SÓLO a este origen; los iframes de terceros (Stripe, Mux)
+  // siguen sin poder pedir ninguno de los dos.
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(self), payment=(self)",
+    value: "camera=(), microphone=(self), geolocation=(self), payment=(self)",
   },
   { key: "Content-Security-Policy", value: csp },
 ];

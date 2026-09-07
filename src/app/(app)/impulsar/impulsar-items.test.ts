@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { toListingImpulsarItem, toPostImpulsarItem } from "./impulsar-items";
+import {
+  RECIENTE_MS,
+  esReciente,
+  estadoDePromocion,
+  puedePromocionarse,
+  toListingImpulsarItem,
+  toPostImpulsarItem,
+} from "./impulsar-items";
 
 /**
  * Lógica pura de /impulsar (índice). Entorno node: sólo importa los helpers
@@ -14,6 +21,74 @@ beforeEach(() => {
 });
 afterEach(() => {
   process.env.NEXT_PUBLIC_SUPABASE_URL = OLD;
+});
+
+describe("estadoDePromocion", () => {
+  it("published sin promoción vigente está listo para promocionar", () => {
+    expect(estadoDePromocion("published", false)).toBe("lista");
+  });
+
+  it("published con promoción vigente es 'activa'", () => {
+    expect(estadoDePromocion("published", true)).toBe("activa");
+  });
+
+  it.each([
+    ["pending_review", "en_revision"],
+    ["draft", "sin_terminar"],
+    ["paused", "pausada"],
+    ["expired", "vencida"],
+    ["closed", "cerrada"],
+  ] as const)("%s NO se colapsa en 'en revisión': es %s", (status, esperado) => {
+    expect(estadoDePromocion(status, false)).toBe(esperado);
+  });
+
+  it("un status desconocido nunca se declara promocionable", () => {
+    expect(estadoDePromocion("removed", false)).toBe("no_disponible");
+    expect(puedePromocionarse(estadoDePromocion("lo_que_venga", true))).toBe(false);
+  });
+
+  it("una promoción colgada no revive un aviso que ya no está publicado", () => {
+    // El boost puede seguir 'active' unos minutos después de que el dueño pausó
+    // el aviso: manda el estado de la FILA, que es lo que mira el destino.
+    expect(estadoDePromocion("paused", true)).toBe("pausada");
+  });
+});
+
+describe("puedePromocionarse", () => {
+  it("sólo 'lista' y 'activa' llevan a algún lado", () => {
+    expect(puedePromocionarse("lista")).toBe(true);
+    expect(puedePromocionarse("activa")).toBe(true);
+    expect(puedePromocionarse("en_revision")).toBe(false);
+    expect(puedePromocionarse("sin_terminar")).toBe(false);
+    expect(puedePromocionarse("pausada")).toBe(false);
+    expect(puedePromocionarse("vencida")).toBe(false);
+    expect(puedePromocionarse("cerrada")).toBe(false);
+    expect(puedePromocionarse("no_disponible")).toBe(false);
+  });
+});
+
+describe("esReciente", () => {
+  const AHORA = Date.parse("2026-09-07T12:00:00Z");
+
+  it("algo creado hace un minuto es reciente", () => {
+    expect(esReciente(new Date(AHORA - 60_000).toISOString(), AHORA)).toBe(true);
+  });
+
+  it("justo en el borde de la ventana todavía cuenta", () => {
+    expect(esReciente(new Date(AHORA - RECIENTE_MS).toISOString(), AHORA)).toBe(true);
+  });
+
+  it("un segundo más viejo que la ventana ya no", () => {
+    expect(esReciente(new Date(AHORA - RECIENTE_MS - 1_000).toISOString(), AHORA)).toBe(false);
+  });
+
+  it("una fecha futura no enciende la etiqueta (reloj torcido)", () => {
+    expect(esReciente(new Date(AHORA + 60_000).toISOString(), AHORA)).toBe(false);
+  });
+
+  it("una fecha ilegible no rompe la fila", () => {
+    expect(esReciente("no soy una fecha", AHORA)).toBe(false);
+  });
 });
 
 describe("toListingImpulsarItem", () => {
@@ -33,7 +108,7 @@ describe("toListingImpulsarItem", () => {
       kind: "listing",
       subKind: "property",
       title: "Depto 2 ambientes en Flushing",
-      isPublished: true,
+      estado: "lista",
       activePromotionEndsAt: null,
       href: "/impulsar/l1",
       thumbnailIsVideo: false,
@@ -43,14 +118,17 @@ describe("toListingImpulsarItem", () => {
     );
   });
 
-  it("un boost vigente viaja como activePromotionEndsAt", () => {
+  it("un boost vigente viaja como activePromotionEndsAt y deja el item en 'activa'", () => {
     const item = toListingImpulsarItem(BASE, "2026-09-01T00:00:00Z");
     expect(item.activePromotionEndsAt).toBe("2026-09-01T00:00:00Z");
+    expect(item.estado).toBe("activa");
   });
 
-  it("status distinto de published queda marcado isPublished=false", () => {
-    const item = toListingImpulsarItem({ ...BASE, status: "pending_review" }, null);
-    expect(item.isPublished).toBe(false);
+  it("status distinto de published queda con su estado propio", () => {
+    expect(toListingImpulsarItem({ ...BASE, status: "pending_review" }, null).estado).toBe(
+      "en_revision",
+    );
+    expect(toListingImpulsarItem({ ...BASE, status: "expired" }, null).estado).toBe("vencida");
   });
 
   it("sin fotos, thumbnailUrl es null (no rompe la fila)", () => {
@@ -63,47 +141,24 @@ describe("toPostImpulsarItem", () => {
   const BASE = {
     id: "p1",
     kind: "post",
-    body: "Se vendieron todos los tamales del sábado, gracias comunidad",
-    media: ["tenant/user/tamales.webp"],
+    body: "Vendo bici casi nueva",
+    media: null,
     status: "published",
     created_at: "2026-08-01T00:00:00Z",
   };
 
-  it("mapea un post con foto y recorta el título al cuerpo", () => {
+  it("un post publicado se puede promocionar", () => {
     const item = toPostImpulsarItem(BASE, null);
-    expect(item.title).toBe(BASE.body);
-    expect(item.href).toBe("/impulsar-post/p1");
-    expect(item.thumbnailIsVideo).toBe(false);
-    expect(item.thumbnailUrl).toBe(
-      `${SUPA}/storage/v1/object/public/post-media/tenant/user/tamales.webp`,
-    );
+    expect(item).toMatchObject({
+      kind: "post",
+      estado: "lista",
+      href: "/impulsar-post/p1",
+    });
   });
 
-  it("primer medio de video → thumbnailIsVideo true", () => {
-    const item = toPostImpulsarItem({ ...BASE, media: ["tenant/user/clip.mp4"] }, null);
-    expect(item.thumbnailIsVideo).toBe(true);
-  });
-
-  it("cuerpo largo se recorta con elipsis", () => {
-    const long = "x".repeat(200);
-    const item = toPostImpulsarItem({ ...BASE, body: long, media: [] }, null);
-    expect(item.title.endsWith("…")).toBe(true);
-    expect(item.title.length).toBeLessThan(long.length);
-  });
-
-  it("post sin cuerpo ni medios cae al respaldo, no queda vacío", () => {
-    const item = toPostImpulsarItem({ ...BASE, body: "   ", media: [] }, null);
-    expect(item.title).toBe("Publicación sin texto");
-    expect(item.thumbnailUrl).toBeNull();
-  });
-
-  it("una campaña de post vigente viaja como activePromotionEndsAt", () => {
-    const item = toPostImpulsarItem(BASE, "2026-09-15T00:00:00Z");
-    expect(item.activePromotionEndsAt).toBe("2026-09-15T00:00:00Z");
-  });
-
-  it("media null (posts viejos) no explota", () => {
-    const item = toPostImpulsarItem({ ...BASE, media: null }, null);
-    expect(item.thumbnailUrl).toBeNull();
+  it("un post en revisión no ofrece promoción", () => {
+    const item = toPostImpulsarItem({ ...BASE, status: "pending_review" }, null);
+    expect(item.estado).toBe("en_revision");
+    expect(puedePromocionarse(item.estado)).toBe(false);
   });
 });

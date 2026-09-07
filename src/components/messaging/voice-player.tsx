@@ -64,53 +64,63 @@ export function VoicePlayer({
   const id = useId();
   const audioRef = useRef<HTMLAudioElement>(null);
   const pintadoRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef<number | null>(null);
 
   const [sonando, setSonando] = useState(false);
   const [velocidad, setVelocidad] = useState<VelocidadDeReproduccion>(1);
   const [transcurrido, setTranscurrido] = useState(0);
+  const [duracionCargada, setDuracionCargada] = useState(0);
   const [fallo, setFallo] = useState(false);
 
   const picos = onda && onda.length > 0 ? onda : ONDA_PLANA;
-  const duracionS =
-    duracionMs && duracionMs > 0 ? duracionMs / 1000 : (audioRef.current?.duration ?? 0);
+  // Del metadato del archivo sólo cuando `adjunto.duracion_ms` no vino: lo que
+  // se guardó al grabar es más fiable que lo que reporta un contenedor webm sin
+  // índice de duración (Chrome devuelve Infinity hasta que se busca al final).
+  const duracionS = duracionMs && duracionMs > 0 ? duracionMs / 1000 : duracionCargada;
+
+  function reiniciarPintado() {
+    if (pintadoRef.current) pintadoRef.current.style.clipPath = "inset(0 100% 0 0)";
+  }
 
   /**
    * El avance se pinta escribiendo `clip-path` DIRECTO sobre el elemento, en un
-   * rAF, sin pasar por el estado de React: son sesenta renders por segundo de
-   * un componente que puede estar veinte veces en el hilo. El texto del tiempo
-   * sí usa estado, pero se actualiza una vez por segundo.
+   * rAF, sin pasar por el estado de React: serían sesenta renders por segundo
+   * de un componente que puede estar veinte veces en el hilo. El texto del
+   * tiempo sí usa estado, pero se actualiza cuatro veces por segundo con
+   * `timeupdate`.
    */
   const pintarAvance = useCallback(() => {
     const audio = audioRef.current;
     const capa = pintadoRef.current;
     if (!audio || !capa) return;
-    const total = Number.isFinite(audio.duration) && audio.duration > 0
-      ? audio.duration
-      : duracionS;
+    const total =
+      Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : duracionS;
     const razon = total > 0 ? Math.min(1, audio.currentTime / total) : 0;
     capa.style.clipPath = `inset(0 ${((1 - razon) * 100).toFixed(2)}% 0 0)`;
   }, [duracionS]);
 
-  const bucle = useCallback(() => {
-    pintarAvance();
-    rafRef.current = requestAnimationFrame(bucle);
-  }, [pintarAvance]);
+  useEffect(() => {
+    if (!sonando) return;
+    let cuadro = 0;
+    function paso() {
+      pintarAvance();
+      cuadro = requestAnimationFrame(paso);
+    }
+    cuadro = requestAnimationFrame(paso);
+    return () => cancelAnimationFrame(cuadro);
+  }, [sonando, pintarAvance]);
 
   useEffect(() => {
+    const registro = enReproduccion;
     return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      enReproduccion.delete(id);
+      registro.delete(id);
     };
   }, [id]);
 
-  // Una `src` nueva (la firma venció y se renovó) reinicia lo pintado: sin
-  // esto, el clip-path del audio anterior queda puesto sobre el nuevo.
-  useEffect(() => {
-    setFallo(false);
-    setTranscurrido(0);
-    if (pintadoRef.current) pintadoRef.current.style.clipPath = "inset(0 100% 0 0)";
-  }, [src]);
+  function duracionEfectiva(): number {
+    const audio = audioRef.current;
+    if (audio && Number.isFinite(audio.duration) && audio.duration > 0) return audio.duration;
+    return duracionS;
+  }
 
   function alternar() {
     const audio = audioRef.current;
@@ -132,11 +142,8 @@ export function VoicePlayer({
 
   function buscarEn(razon: number) {
     const audio = audioRef.current;
-    if (!audio) return;
-    const total = Number.isFinite(audio.duration) && audio.duration > 0
-      ? audio.duration
-      : duracionS;
-    if (total <= 0) return;
+    const total = duracionEfectiva();
+    if (!audio || total <= 0) return;
     audio.currentTime = Math.max(0, Math.min(total, razon * total));
     setTranscurrido(audio.currentTime);
     pintarAvance();
@@ -150,11 +157,8 @@ export function VoicePlayer({
 
   function saltar(segundos: number) {
     const audio = audioRef.current;
-    if (!audio) return;
-    const total = Number.isFinite(audio.duration) && audio.duration > 0
-      ? audio.duration
-      : duracionS;
-    if (total <= 0) return;
+    const total = duracionEfectiva();
+    if (!audio || total <= 0) return;
     buscarEn((audio.currentTime + segundos) / total);
   }
 
@@ -171,22 +175,26 @@ export function VoicePlayer({
           ref={audioRef}
           src={src}
           preload="metadata"
-          onPlay={() => {
-            setSonando(true);
-            if (rafRef.current === null) rafRef.current = requestAnimationFrame(bucle);
+          // Una `src` nueva (la firma venció y se renovó) reinicia lo pintado
+          // acá y no en un efecto: el elemento avisa cuándo empieza a cargar, y
+          // un `setState` sincrónico dentro de un efecto encadena renders.
+          onLoadStart={() => {
+            setFallo(false);
+            setTranscurrido(0);
+            setDuracionCargada(0);
+            reiniciarPintado();
           }}
-          onPause={() => {
-            setSonando(false);
-            if (rafRef.current !== null) {
-              cancelAnimationFrame(rafRef.current);
-              rafRef.current = null;
-            }
+          onLoadedMetadata={(event) => {
+            const duracion = event.currentTarget.duration;
+            if (Number.isFinite(duracion) && duracion > 0) setDuracionCargada(duracion);
           }}
+          onPlay={() => setSonando(true)}
+          onPause={() => setSonando(false)}
           onTimeUpdate={(event) => setTranscurrido(event.currentTarget.currentTime)}
           onEnded={() => {
             setSonando(false);
             setTranscurrido(0);
-            if (pintadoRef.current) pintadoRef.current.style.clipPath = "inset(0 100% 0 0)";
+            reiniciarPintado();
           }}
           onError={() => setFallo(true)}
         />
@@ -196,7 +204,9 @@ export function VoicePlayer({
         type="button"
         onClick={alternar}
         disabled={!src || fallo}
-        aria-label={sonando ? COPY_COMPOSER.reproductor.pausar : COPY_COMPOSER.reproductor.reproducir}
+        aria-label={
+          sonando ? COPY_COMPOSER.reproductor.pausar : COPY_COMPOSER.reproductor.reproducir
+        }
         className={cn(
           "flex size-11 shrink-0 items-center justify-center rounded-full",
           "transition-[transform,background-color,opacity] duration-(--duration-fast) ease-(--ease-spring)",
@@ -261,12 +271,11 @@ export function VoicePlayer({
               }
             }}
             className={cn(
-              "relative h-8 cursor-pointer touch-none select-none",
+              "relative h-8 cursor-pointer touch-none select-none rounded-md",
               "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-offset-2",
               propio
                 ? "focus-visible:ring-brand-foreground/70 focus-visible:ring-offset-brand"
                 : "focus-visible:ring-focus-ring focus-visible:ring-offset-surface-raised",
-              "rounded-md",
             )}
           >
             <Barras
@@ -321,17 +330,11 @@ export function VoicePlayer({
 }
 
 /**
- * Las barras. `min-h` de 3px porque un pico de 0 es silencio real y una barra
- * de alto cero deja un hueco en la onda: el silencio se ve como una línea fina,
- * no como un agujero.
+ * Las barras. El piso del 8% existe porque un pico de 0 es silencio REAL: una
+ * barra de alto cero deja un agujero en la onda, y el silencio de una nota de
+ * voz se lee mejor como una línea fina que como un hueco.
  */
-function Barras({
-  picos,
-  className,
-}: {
-  picos: readonly number[];
-  className: string;
-}) {
+function Barras({ picos, className }: { picos: readonly number[]; className: string }) {
   return (
     <div aria-hidden="true" className="flex h-full w-full items-center gap-[2px]">
       {picos.map((pico, indice) => (

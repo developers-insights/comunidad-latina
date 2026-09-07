@@ -6,7 +6,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useTransition,
   type ReactNode,
@@ -94,13 +93,22 @@ export function ReaccionesProvider({
    * todavía está viajando. Sin este freno, la pastilla se pintaba, el poll la
    * borraba, y la respuesta del servidor la volvía a pintar — un parpadeo que
    * parece un bug de la app y es una carrera.
+   *
+   * Va en ESTADO y no en un ref porque se lee durante el render, y un ref leído
+   * en render no dispara la actualización cuando cambia (`react-hooks/refs`).
    */
-  const enVuelo = useRef(0);
-  const firmaDelServidor = useRef(firmaDe(iniciales));
+  const [enVuelo, setEnVuelo] = useState(0);
+  const [firmaDelServidor, setFirmaDelServidor] = useState(() => firmaDe(iniciales));
 
+  /**
+   * ADOPTAR LO QUE TRAE EL SERVIDOR, ajustando el estado durante el render — el
+   * patrón que React documenta para "un prop cambió y el estado deriva de él".
+   * Hace falta de verdad: sin esto, la reacción que pone OTRA persona nunca
+   * aparecería, porque el estado local se quedó con la foto del primer render.
+   */
   const firmaEntrante = firmaDe(iniciales);
-  if (firmaEntrante !== firmaDelServidor.current && enVuelo.current === 0) {
-    firmaDelServidor.current = firmaEntrante;
+  if (firmaEntrante !== firmaDelServidor && enVuelo === 0) {
+    setFirmaDelServidor(firmaEntrante);
     setReacciones([...iniciales]);
   }
 
@@ -118,7 +126,7 @@ export function ReaccionesProvider({
         // sin soporte háptico: nada que hacer
       }
 
-      enVuelo.current += 1;
+      setEnVuelo((cuantas) => cuantas + 1);
       startTransition(async () => {
         const resultado = await reaccionarAMensajeAction({
           ambito,
@@ -126,7 +134,7 @@ export function ReaccionesProvider({
           hiloId,
           kind: objetivo,
         });
-        enVuelo.current = Math.max(0, enVuelo.current - 1);
+        setEnVuelo((cuantas) => Math.max(0, cuantas - 1));
         if (resultado.ok) return;
 
         setReacciones(previas);
@@ -284,7 +292,7 @@ export function MessageReactions({
                   : ACCIONES_COPY.reacciones.poner(reaccion.kind)
               } · ${ACCIONES_COPY.reacciones.quienes(
                 reaccion.mia
-                  ? [ACCIONES_COPY.reacciones.vos, ...reaccion.nombres.slice(1)]
+                  ? [ACCIONES_COPY.vos, ...reaccion.nombres.slice(1)]
                   : reaccion.nombres,
                 reaccion.total,
               )}`}

@@ -112,7 +112,15 @@ const ESTADO_NO_PROMOCIONABLE = {
     nota: "Ahora mismo no se puede promocionar.",
     tono: "neutral",
   },
-};
+  // `satisfies` y no una anotación: exige que estén los seis (agregar un estado
+  // a `EstadoPromocion` rompe acá hasta que se le escriba el texto) sin
+  // ensanchar las claves, así el acceso de `trabadaDe` se resuelve sin casts.
+} satisfies Record<Exclude<EstadoPromocion, "activa" | "lista">, EstadoTrabado>;
+
+/** El "por qué no" de esta fila, o null si sí se puede promocionar. */
+function trabadaDe(estado: EstadoPromocion): EstadoTrabado | null {
+  return estado === "activa" || estado === "lista" ? null : ESTADO_NO_PROMOCIONABLE[estado];
+}
 
 /** Tope por sección — el índice NUNCA lista sin límite. */
 const LIMIT = 20;
@@ -196,9 +204,12 @@ export default async function ImpulsarIndexPage() {
   const posts = postRows ?? [];
   // Un solo instante para toda la pantalla: el corte de "vigente" de las dos
   // queries y el de "recién creado" de las filas tienen que ser el mismo, o dos
-  // filas iguales se leerían distinto según cuánto tardó el render.
-  const ahoraMs = Date.now();
-  const now = new Date(ahoraMs).toISOString();
+  // filas iguales se leerían distinto según cuánto tardó el render. Se lee con
+  // `new Date()` y no con `Date.now()` porque `react-hooks/purity` prohíbe el
+  // segundo por nombre; es el mismo reloj y es el que esta página ya usaba.
+  const ahora = new Date();
+  const ahoraMs = ahora.getTime();
+  const now = ahora.toISOString();
 
   // Boost/campaña VIGENTE de cada uno, en dos queries batch (no una por fila).
   const [{ data: activeBoosts }, { data: activePromos }] = await Promise.all([
@@ -368,10 +379,7 @@ function ImpulsarRow({
   FallbackIcon: Icon;
   ahoraMs: number;
 }) {
-  const promocionable = puedePromocionarse(item.estado);
-  const trabada = promocionable
-    ? null
-    : ESTADO_NO_PROMOCIONABLE[item.estado as Exclude<EstadoPromocion, "activa" | "lista">];
+  const trabada = trabadaDe(item.estado);
   const esNuevo = esReciente(item.createdAt, ahoraMs);
 
   return (
@@ -429,7 +437,7 @@ function ImpulsarRow({
           )}
         </div>
 
-        {promocionable && (
+        {trabada === null && (
           <Link
             href={item.href}
             aria-label={`${COPY.promoteCta}: ${item.title}`}

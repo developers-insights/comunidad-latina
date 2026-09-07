@@ -67,7 +67,7 @@ export function ResponderProvider({ children }: { children: ReactNode }) {
     setCitado(mensaje);
     /**
      * El foco va al campo de texto en el mismo gesto: elegir "Responder" y
-     * tener que tocar el composat después son dos toques para una intención.
+     * tener que tocar el composer después son dos toques para una intención.
      * Se busca por `data-composer` para no atarse al id que genere el composer,
      * que es de otro dueño.
      */
@@ -192,7 +192,7 @@ export function ReplyQuote({
       type="button"
       onClick={() => irAlMensaje(citado.id)}
       aria-label={ACCIONES_COPY.responder.irAlOriginal(
-        citado.esPropio ? ACCIONES_COPY.reacciones.vos : citado.autorNombre,
+        citado.esPropio ? ACCIONES_COPY.vos : citado.autorNombre,
       )}
       className={cn(
         "mb-1.5 flex w-full items-stretch gap-2 overflow-hidden rounded-lg py-1 pl-0 pr-2 text-left",
@@ -208,7 +208,7 @@ export function ReplyQuote({
       <span aria-hidden="true" className="w-[3px] shrink-0 rounded-full bg-brand" />
       <span className="min-w-0 flex-1 py-0.5">
         <span className="block truncate text-[11px] font-semibold text-brand-ink">
-          {citado.esPropio ? ACCIONES_COPY.reacciones.vos : citado.autorNombre}
+          {citado.esPropio ? ACCIONES_COPY.vos : citado.autorNombre}
         </span>
         <span className="block truncate text-xs text-foreground-secondary">
           {citado.resumen}

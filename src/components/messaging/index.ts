@@ -14,7 +14,7 @@ export {
   GroupMemberList,
   type MiembroVisible,
 } from "./group-manage";
-export { GroupMessageBubble } from "./group-message-bubble";
+export { GroupMessageBubble, type GroupMessageMensaje } from "./group-message-bubble";
 export { InboxRowLink } from "./inbox-row-link";
 export { InboxSearch } from "./inbox-search";
 /**
@@ -43,7 +43,31 @@ export {
   type InlineContactProps,
   type ListingMessageErrorCopy,
 } from "./inline-contact";
-export { MessageBubble } from "./message-bubble";
+export { MessageBubble, type MessageBubbleAcciones } from "./message-bubble";
+/**
+ * Acciones sobre UN mensaje (0136 + 0138): toque largo, barra de reacciones,
+ * menú de seis, cita de respuesta y lápida. `ACCIONES_COPY` se funde adentro de
+ * `COPY` cuando cierre la tanda — ver la cabecera de copy-acciones.ts.
+ */
+export { ACCIONES_COPY } from "./copy-acciones";
+export { MessageActions, MessageMenu, type MessageActionsProps, type MessageMenuProps } from "./message-menu";
+export {
+  MessageReactions,
+  ReaccionesProvider,
+  useReaccionesDelMensaje,
+  type ReaccionesProviderProps,
+} from "./message-reactions";
+export { ReactionBar } from "./reaction-bar";
+export {
+  ComposerReplyBar,
+  ReplyQuote,
+  ResponderProvider,
+  anclaDeMensaje,
+  irAlMensaje,
+  resumenDeMensaje,
+  useResponder,
+  type MensajeCitado,
+} from "./reply-quote";
 export { ScrollAnchor } from "./scroll-anchor";
 export { ThreadHeader, type ThreadHeaderProps } from "./thread-header";
 export {

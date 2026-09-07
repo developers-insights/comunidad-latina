@@ -15,6 +15,8 @@ import {
 import { PublisherTrust } from "@/components/listings";
 import { reportScamAction } from "@/app/(app)/mensajes/actions";
 import { blockUserAction } from "@/app/(app)/perfil/actions";
+import { BotonesDeLlamada } from "@/components/calls/botones-de-llamada";
+import { iniciarLlamadaAction } from "@/app/(app)/llamadas/actions";
 import { COPY } from "./copy";
 
 /**
@@ -173,6 +175,12 @@ export function ThreadHeader({ otherProfile, trust, listing }: ThreadHeaderProps
             ))}
         </div>
       </div>
+
+      {/* Llamar por audio o video (0139). Se dibujan solos si Agora está
+          configurado; si no, no aparecen — un teléfono que no llama es peor que
+          ningún teléfono. Van ANTES del "⋯" para que el menú siga siendo la
+          última cosa de la fila, como en el resto de la app. */}
+      <BotonesDeLlamada profileId={otherProfile.id} onIniciar={iniciarLlamadaAction} />
 
       <button
         type="button"

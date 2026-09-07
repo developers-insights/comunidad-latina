@@ -1,0 +1,94 @@
+/*
+ * Movimiento de la pantalla de llamada.
+ *
+ * Todo anima `transform` y `opacity` y nada más: la grilla puede tener diez
+ * mosaicos y un teléfono de gama baja tiene que sostener eso mientras además
+ * decodifica diez videos. Cualquier propiedad que dispare layout acá se paga
+ * diez veces por frame.
+ *
+ * Los tres bloques tienen su rama de `prefers-reduced-motion`. No es "se apaga
+ * la animación": el estado final tiene que quedar visible igual, porque estas
+ * animaciones son de ENTRADA — si sólo se cancelaran, la grilla quedaría en
+ * opacidad cero y no habría llamada que mirar.
+ */
+
+@keyframes cl-mosaico-entra {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.mosaico {
+  animation: cl-mosaico-entra 420ms var(--ease-out-premium) both;
+  animation-delay: var(--cl-mosaico-retraso, 0ms);
+}
+
+/*
+ * El halo del timbre. Dos anillos desfasados que se expanden y se apagan: es la
+ * traducción visual de "está sonando" y es la única cosa que se mueve en loop en
+ * todo el módulo, así que se apaga apenas la llamada deja de sonar (el
+ * componente lo desmonta) y con reduced-motion.
+ */
+@keyframes cl-halo {
+  from {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.85);
+  }
+}
+
+.halo {
+  animation: cl-halo 2200ms var(--ease-out-premium) infinite;
+}
+
+.haloTardio {
+  animation: cl-halo 2200ms var(--ease-out-premium) infinite;
+  animation-delay: 1100ms;
+}
+
+/*
+ * La bandeja de controles entra desde abajo una sola vez, cuando la llamada se
+ * conecta. Sin esto aparece de golpe en el mismo frame en que se ven las caras,
+ * y la pantalla entera se lee como un salto.
+ */
+@keyframes cl-bandeja-entra {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.bandeja {
+  animation: cl-bandeja-entra 320ms var(--ease-out-premium) both;
+  animation-delay: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mosaico,
+  .bandeja {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .halo,
+  .haloTardio {
+    animation: none;
+    /* El anillo se queda quieto y visible: sigue diciendo "está sonando" sin
+       moverse, que es justo lo que pidió quien activó reduced-motion. */
+    opacity: 0.3;
+    transform: scale(1.25);
+  }
+}

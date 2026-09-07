@@ -11,6 +11,9 @@
  * en la voz de una persona. Nada de "operación exitosa" ni de nombrar la base.
  */
 export const ACCIONES_COPY = {
+  /** Cómo se nombra a quien está mirando. Se usa en la cita y en las reacciones. */
+  vos: "Vos",
+
   menu: {
     /** El botón de tres puntos y el gesto de mantener presionado. */
     trigger: "Opciones del mensaje",
@@ -53,7 +56,6 @@ export const ACCIONES_COPY = {
       if (total <= nombres.length) return nombres.join(", ");
       return `${nombres.join(", ")} y ${total - nombres.length} más`;
     },
-    vos: "Vos",
     error: "No pudimos guardar tu reacción. Probá de nuevo.",
     /**
      * Reaccionar tiene su propio techo. "Probá de nuevo" sería un mal consejo:
@@ -117,13 +119,12 @@ export const ACCIONES_COPY = {
   },
 
   reenviar: {
-    /** Título del panel de destinos, cuando se abre desde un mensaje. */
-    title: "Reenviar el mensaje",
-    listo: "Mensaje reenviado",
-    error: "No pudimos reenviar el mensaje. Probá de nuevo.",
     /**
-     * Reenviar un mensaje que no es una tarjeta compartible todavía no está
-     * enchufado (ver el informe): se dice, no se esconde el botón sin motivo.
+     * Reenviar un mensaje que NO es una tarjeta compartible todavía no está
+     * enchufado: `compartirEnChatAction` manda una publicación, no un texto
+     * suelto (ver el informe de entrega). Se dice en la fila apagada en vez de
+     * esconder el botón sin motivo. El resto del copy del panel de destinos es
+     * el de `SHARE_COPY`, que ya existe.
      */
     soloContenido: "Por ahora se pueden reenviar las publicaciones compartidas",
   },
