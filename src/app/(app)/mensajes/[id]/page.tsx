@@ -10,7 +10,6 @@ import type { Adjunto } from "@/lib/messaging/adjuntos";
 import { supabaseSinTiparMensajes } from "@/lib/messaging/adjuntos";
 import { leerReaccionesDeMensajes } from "@/lib/messaging/reacciones";
 import { leerPresencia, presenciaVisible } from "@/lib/messaging/presencia";
-import { PresenceBeat } from "@/components/messaging/presence-beat";
 import { AcceptBanner } from "@/components/messaging/accept-banner";
 import { Composer } from "@/components/messaging/composer";
 import { COPY } from "@/components/messaging/copy";
@@ -281,7 +280,6 @@ export default async function HiloPage({
   return (
     <div className="flex min-h-[calc(100dvh-10rem)] flex-col">
       <ThreadRefresh />
-      <PresenceBeat />
 
       <ThreadHeader
         otherProfile={{

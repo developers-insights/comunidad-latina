@@ -1517,8 +1517,15 @@ export function PostComposerHost({
          * incluso vacíos porque su destino es el registro de moderación, y
          * dejar constancia de que se preguntó vale. Éstos se PINTAN, así que
          * mandarlos vacíos sería escribir una línea de crédito que nadie firmó.
+         *
+         * SÓLO CON FOTO, y no con cualquier medio. El pliego pide los derechos
+         * de LA FOTO y la línea de la tarjeta está escrita así ("Foto propia"):
+         * en un post sólo de video diría la palabra equivocada debajo de algo
+         * que no es una foto. La declaración del video no se pierde — sigue
+         * viajando a `content_assets` por las cuatro líneas de arriba, que es
+         * donde estaba antes de la 0146 y donde el pliego la deja.
          */
-        const credito = creditoDesdeDeclaracion(declaration);
+        const credito = photoItems.length > 0 ? creditoDesdeDeclaracion(declaration) : null;
         if (credito) {
           formData.set("photoRights", credito.rights);
           if (credito.credit) formData.set("photoCredit", credito.credit);

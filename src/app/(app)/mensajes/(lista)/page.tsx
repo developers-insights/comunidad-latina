@@ -8,7 +8,6 @@ import { InboxFiltros } from "@/components/messaging/inbox-filtros";
 import { InboxRow } from "@/components/messaging/inbox-row";
 import { InboxSearch } from "@/components/messaging/inbox-search";
 import { InboxTabs } from "@/components/messaging/inbox-tabs";
-import { PresenceBeat } from "@/components/messaging/presence-beat";
 import { parseFiltroDePersonas, type FiltroDePersonas } from "@/lib/messaging/bandeja";
 import { leerPresencia, presenciaVisible } from "@/lib/messaging/presencia";
 import { leerBandejaDePersonas } from "../bandeja-queries";
@@ -68,7 +67,6 @@ export default async function MensajesPage({
 
   return (
     <>
-      <PresenceBeat />
 
       <h1 className="mb-5 font-display text-2xl font-bold tracking-tight text-foreground">
         {COPY.inbox.title}

@@ -194,12 +194,39 @@ Esta tabla la mantiene la sesión que implementa. Los tres estados son los del c
 | 10 | Verificación telefónica Twilio | escrito; **apagado por gate legal** — el bloqueo exacto está identificado, ver `docs/legal/borrador-privacidad-telefono.md` |
 | 11 | Editor de fotos | **ya estaba completo** — las cuatro formas, filtros, texto y emoji |
 | 12 | Botón de crear en Boost | escrito; de paso se arregló el estado de los avisos no promocionables |
+| 13 | Derechos y fuente de la foto | escrito — la pregunta ya existía desde 0061; faltaba que la respuesta se viera |
+| 14 | Presencia (En línea / Última vez) | escrito — no estaba en la base; la preferencia es recíproca |
+| 15 | Archivos y enlaces del grupo · "Está escribiendo…" | en curso |
 
-### Lo único del pliego que quedó sin escribir
+### “Derechos y fuente de la foto”: el diagnóstico de este documento estaba mal
 
-El campo **“Derechos y fuente de la foto”** de la pantalla de publicación. Aparece en
-la captura del cliente marcado como *Opcional* y no existe en el código. Es chico, pero
-toca Content Integrity, así que merece su propio frente en vez de colarse acá.
+Acá decía que el campo *“no existe en el código”*. **Es falso, y conviene dejarlo
+escrito porque casi nos lleva a construir el problema en vez de la solución.**
+
+La pregunta existe desde la migración 0061: el composer tiene el bloque colapsable
+“Sobre esta foto” (`DeclarationDisclosure` → `OriginalityFields`), marcado *Opcional*,
+con selector de origen, aclaración libre y link a la fuente.
+
+Lo que no existía era **que la respuesta se viera**. Iba únicamente a `content_assets`,
+una tabla de moderación que lee el panel de integridad y nadie más. Quien podría
+reconocer una foto suya y reclamarla —la persona que mira la publicación— nunca veía
+nada.
+
+Por eso **no se construyó un segundo formulario**: dos campos preguntando lo mismo
+dejan dos declaraciones sobre una foto que pueden contradecirse, y “¿cuál gana?” no
+tiene respuesta buena. La migración `0146` agrega el lugar donde la respuesta que ya
+existe queda atada a la publicación, y la atribución se pinta pegada a la foto.
+
+Tres decisiones que importan más de lo que parecen:
+
+- **El crédito nunca es un link**, aunque la persona haya escrito una URL. Texto que
+  llega del cliente y se vuelve clickeable en el feed de todos es phishing con la
+  credibilidad de la plataforma detrás.
+- **El disclaimer viaja siempre** (“Lo dice quien publicó. Comunidad Latina no lo
+  verificó.”). Sin él, “Foto propia” se lee como un sello que la plataforma no dio.
+- **`NULL` es “no declaró”, no “es propia”.** El vocabulario que se muestra es más
+  chico que el interno y la traducción va en un solo sentido: al revés estaría
+  inventando un detalle que nadie dio.
 
 ---
 

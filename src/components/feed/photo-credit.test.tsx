@@ -1,6 +1,49 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+
+/**
+ * Mismos bordes que `text-banner.test.tsx`: montar la `PostCard` REAL —y no una
+ * copia de su JSX— es lo que hace que este archivo siga valiendo cuando alguien
+ * mueva el crédito de lugar dentro de la tarjeta.
+ */
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => "/feed",
+}));
+
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...props
+  }: {
+    href: unknown;
+    children?: React.ReactNode;
+  }) => (
+    <a href={typeof href === "string" ? href : "#"} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
+vi.mock("motion/react", async () =>
+  (await import("@/test/motion-mock")).motionMock({ reducedMotion: false }),
+);
+
+vi.mock("@/components/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui")>();
+  return { ...actual, useToast: () => ({ toast: vi.fn() }) };
+});
+
+vi.mock("./comments-sheet", () => ({
+  useCommentsSheet: () => ({ open: vi.fn() }),
+}));
+
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({ from: () => ({ insert: vi.fn(async () => ({ error: null })) }) }),
+}));
+
 import { PhotoCredit } from "./photo-credit";
 import { PostCard } from "./post-card";
 import { CardLikeProvider } from "./card-like-context";
@@ -69,8 +112,8 @@ function renderCard(post: PostCardModel) {
       postId={post.id}
       tenantId="11111111-1111-4111-8111-111111111111"
       viewerId={null}
-      likeCount={post.likeCount}
-      likedByViewer={post.likedByViewer}
+      initialCount={post.likeCount}
+      initialLiked={post.likedByViewer}
     >
       <PostCard post={post} tenantId="11111111-1111-4111-8111-111111111111" viewerId={null} />
     </CardLikeProvider>,
@@ -156,5 +199,35 @@ describe("PostCard — cuándo aparece el crédito", () => {
       photoCredit: { rights: "propia", credit: null },
     });
     expect(screen.queryByText(/^Foto propia/)).toBeNull();
+  });
+});
+
+describe("PostCard — el crédito habla de una FOTO", () => {
+  it("un post sólo de video no dice 'Foto propia' debajo de un video", () => {
+    // La línea está escrita en singular y con la palabra "Foto" porque eso es
+    // lo que pidió el pliego. Debajo de un video sería la palabra equivocada, y
+    // el composer ya no la manda — esto lo sostiene también del lado que pinta,
+    // que es el que ve las filas viejas.
+    renderCard({
+      ...BASE_POST,
+      photoUrl: null,
+      media: [{ kind: "video", url: "https://cdn.example.com/clip.mp4" }],
+      photoCredit: { rights: "propia", credit: null },
+    });
+
+    expect(screen.queryByText(/^Foto propia/)).toBeNull();
+  });
+
+  it("un carrusel con foto y video sí lo muestra", () => {
+    renderCard({
+      ...BASE_POST,
+      media: [
+        { kind: "video", url: "https://cdn.example.com/clip.mp4" },
+        { kind: "image", url: "https://cdn.example.com/feria.jpg" },
+      ],
+      photoCredit: { rights: "libre", credit: "Unsplash" },
+    });
+
+    expect(screen.getByText(/Foto de uso libre · Unsplash/)).toBeTruthy();
   });
 });

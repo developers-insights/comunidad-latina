@@ -25,7 +25,6 @@ import {
   resumenDeMensaje,
   type MensajeCitado,
 } from "@/components/messaging/reply-quote";
-import { PresenceBeat } from "@/components/messaging/presence-beat";
 import { ScrollAnchor } from "@/components/messaging/scroll-anchor";
 import {
   SharedCard,
@@ -224,7 +223,6 @@ export default async function GrupoPage({
   return (
     <div className="flex min-h-[calc(100dvh-10rem)] flex-col">
       <GroupLive />
-      <PresenceBeat />
 
       {encabezado}
 

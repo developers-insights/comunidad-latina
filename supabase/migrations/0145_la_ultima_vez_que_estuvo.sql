@@ -212,8 +212,9 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_uid    uuid := auth.uid();
-  v_tenant uuid;
+  v_uid        uuid := auth.uid();
+  v_tenant     uuid;
+  v_yo_muestro boolean;
 begin
   if v_uid is null or ids is null then
     return;
@@ -223,7 +224,10 @@ begin
     raise exception 'TOO_MANY_PROFILES: el máximo por consulta es 100.';
   end if;
 
-  select p.tenant_id into v_tenant
+  -- `mostrar_ultima_vez` de quien PREGUNTA, no sólo de quien es mirado: la
+  -- preferencia es recíproca (ver el comment de la función).
+  select p.tenant_id, p.mostrar_ultima_vez
+    into v_tenant, v_yo_muestro
     from public.profiles p
    where p.id = v_uid;
 
@@ -239,12 +243,12 @@ begin
   )
   select p.id,
          case
-           when p.mostrar_ultima_vez
+           when p.mostrar_ultima_vez and v_yo_muestro
              then coalesce(pp.last_seen_at > now() - interval '2 minutes', false)
            else false
          end,
          case
-           when p.mostrar_ultima_vez then pp.last_seen_at
+           when p.mostrar_ultima_vez and v_yo_muestro then pp.last_seen_at
            else null
          end
     from pedidos q
@@ -257,7 +261,7 @@ end;
 $$;
 
 comment on function public.presencia_de(uuid[]) is
-  'La presencia de hasta 100 personas en UNA consulta (0145): (profile_id, en_linea, ultima_vez). "En línea" es haber tocado presencia en los últimos 2 minutos. Es la ÚNICA puerta al last_seen_at ajeno —la columna vive en profiles_private, cerrada por RLS solo-dueño— y por eso aplica acá los tres filtros: quien tiene mostrar_ultima_vez en false sale con en_linea = false y ultima_vez = null (apagarlo esconde las dos cosas); sólo se devuelven perfiles del MISMO tenant que quien llama, y ese tenant sale de la fila del perfil y no del claim del JWT, porque con SECURITY DEFINER la RLS de profiles no interviene; un id de otra comunidad o inexistente no devuelve fila, así que la ausencia no confirma que exista. El tope de 100 es el mismo de fue_leido_por_el_otro_en_lote() (0141): un array fabricado no puede convertir un RPC liviano en un join sobre una cantidad arbitraria de filas.';
+  'La presencia de hasta 100 personas en UNA consulta (0145): (profile_id, en_linea, ultima_vez). "En línea" es haber tocado presencia en los últimos 2 minutos. Es la ÚNICA puerta al last_seen_at ajeno —la columna vive en profiles_private, cerrada por RLS solo-dueño— y por eso aplica acá los tres filtros: quien tiene mostrar_ultima_vez en false sale con en_linea = false y ultima_vez = null (apagarlo esconde las dos cosas). La preferencia es RECÍPROCA y a propósito: quien la apaga tampoco ve la presencia ajena, porque es lo que la gente ya aprendió de cualquier app de mensajes y porque lo contrario deja mirar sin ser visto, que es exactamente lo que el interruptor promete evitar. Además sólo se devuelven perfiles del MISMO tenant que quien llama, y ese tenant sale de la fila del perfil y no del claim del JWT, porque con SECURITY DEFINER la RLS de profiles no interviene; un id de otra comunidad o inexistente no devuelve fila, así que la ausencia no confirma que exista. El tope de 100 es el mismo de fue_leido_por_el_otro_en_lote() (0141): un array fabricado no puede convertir un RPC liviano en un join sobre una cantidad arbitraria de filas.';
 
 revoke all    on function public.presencia_de(uuid[]) from public, anon;
 grant execute on function public.presencia_de(uuid[]) to authenticated, service_role;

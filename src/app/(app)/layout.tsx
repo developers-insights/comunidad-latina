@@ -18,6 +18,7 @@ import { getViewerAccount } from "@/lib/time/viewer-zone";
 import { OfflineBanner } from "@/components/shell/offline-banner";
 import { AccountGate } from "@/components/shell/account-gate";
 import { InternalHistoryTracker } from "@/components/shell/internal-history-tracker";
+import { PresenceBeat } from "@/components/messaging/presence-beat";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { isMuxConfigured } from "@/lib/config/services";
 
@@ -142,6 +143,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           Empleos hacia atrás no encontraría el feed y mandaría a /buscar. No
           renderiza nada. Ver components/shell/internal-history.ts. */}
       <InternalHistoryTracker />
+      {/* Va en el shell y no en las pantallas de mensajería porque "En línea"
+          significa que la persona está usando la app, no que está mirando la
+          bandeja: montado sólo allá, alguien que pasa media hora en el feed
+          figura desconectado para quien le quiere escribir. No renderiza nada
+          y el techo de un toque por minuto lo pone el reloj del módulo, así
+          que subirlo acá no agrega requests. */}
+      <PresenceBeat />
       <a
         href="#contenido"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground focus:shadow-lg focus:ring-[3px] focus:ring-focus-ring"

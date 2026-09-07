@@ -397,8 +397,14 @@ export function PostCard({
               el cuerpo porque habla del archivo, no de lo que la persona
               escribió. Sin declaración no pinta nada: una publicación sobre la
               que nadie declaró nada no lleva línea de crédito, que es
-              exactamente lo que significa. */}
-          {hasMedia && post.photoCredit && (
+              exactamente lo que significa.
+
+              EXIGE UNA FOTO, no un medio cualquiera: la línea dice "Foto…" y
+              debajo de un post sólo de video sería la palabra equivocada. El
+              composer ya no manda el crédito en ese caso; esto es la misma
+              regla del lado que PINTA, para que una fila vieja —o cualquier
+              otra cosa que escriba en `posts`— no pueda romper la frase. */}
+          {mediaItems.some((item) => item.kind === "image") && post.photoCredit && (
             <PhotoCredit credito={post.photoCredit} />
           )}
 
