@@ -45,6 +45,7 @@ import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
 import { visibleCtasFor } from "@/lib/monetization/tier";
 import { VENCIMIENTO_COPY, isClosedReason } from "@/lib/listings";
 import { createClient } from "@/lib/supabase/server";
+import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 
@@ -83,8 +84,19 @@ const fetchProductById = cache(async (id: string) => {
 export async function generateMetadata({ params }: { params: Params }) {
   const { id } = await params;
   if (!UUID_RE.test(id)) return { title: "Producto" };
+  // Misma fila que el cuerpo de la página: `fetchProductById` está cache()-eada
+  // por request, así que la tarjeta de WhatsApp no cuesta un segundo round-trip.
   const { data } = await fetchProductById(id);
-  return { title: data?.title ?? "Producto" };
+  return metadataDeCompartible({
+    kind: "listing",
+    id,
+    vertical: "product",
+    titulo: data?.title,
+    descripcion: data?.description,
+    imagenUrl: firstPhotoUrl(data?.photos),
+    status: data?.status,
+    fallbackTitle: "Producto",
+  });
 }
 
 export default async function ProductoDetallePage({ params }: { params: Params }) {

@@ -32,6 +32,7 @@ import {
   VerificationBand,
   buildTrustSignals,
   firstNameOf,
+  firstPhotoUrl,
   formatListingPrice,
   listingPhotoUrl,
   parsePropertyAttrs,
@@ -42,6 +43,7 @@ import {
 // dueño: así la query vive una sola vez y no se duplica por vertical.
 import { fetchViewerSavedListingIds } from "@/app/(app)/feed/queries";
 import { createClient } from "@/lib/supabase/server";
+import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { VENCIMIENTO_COPY, isClosedReason } from "@/lib/listings";
 import {
@@ -88,8 +90,19 @@ const fetchListingById = cache(async (id: string) => {
 export async function generateMetadata({ params }: { params: Params }) {
   const { id } = await params;
   if (!UUID_RE.test(id)) return { title: "Propiedad" };
+  // Misma fila que el cuerpo de la página: `fetchListingById` está cache()-eada
+  // por request, así que la tarjeta de WhatsApp no cuesta un segundo round-trip.
   const { data } = await fetchListingById(id);
-  return { title: data?.title ?? "Propiedad" };
+  return metadataDeCompartible({
+    kind: "listing",
+    id,
+    vertical: "property",
+    titulo: data?.title,
+    descripcion: data?.description,
+    imagenUrl: firstPhotoUrl(data?.photos),
+    status: data?.status,
+    fallbackTitle: "Propiedad",
+  });
 }
 
 export default async function PropiedadDetallePage({ params }: { params: Params }) {

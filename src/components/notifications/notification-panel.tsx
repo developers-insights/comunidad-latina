@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,22 +9,27 @@ import {
   ArrowRight,
   Bell,
   BellSimple,
+  CaretDown,
   Checks,
   CloudSlash,
   SlidersHorizontal,
 } from "@phosphor-icons/react/dist/ssr";
-import { Skeleton } from "@/components/ui";
+import { BottomSheet, Skeleton } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
+  CATEGORY_META,
+  MORE_TAB_CATEGORIES,
+  PRIMARY_TAB_CATEGORIES,
   isNotificationCategory,
   type NotificationCategory,
 } from "@/lib/notifications/categories";
+import { inboxHref, type InboxTab } from "@/lib/notifications/href";
 import type { NotificationPanelItem } from "@/lib/notifications/panel";
 import {
-  getNotificationPanelAction,
   markAllNotificationsReadAction,
   markNotificationReadAction,
 } from "@/app/(app)/notificaciones/actions";
+import { getPanelDeCampanaAction } from "@/app/(app)/notificaciones/panel-actions";
 import { useCloseOnBack, useFocusTrap, useMounted } from "@/lib/design/use-overlay";
 import { CategoryIcon } from "./category-icon";
 import { COPY } from "./copy";
@@ -94,11 +99,15 @@ export function NotificationPanel({ initialUnread }: { initialUnread: number }) 
   const reduceMotion = useReducedMotion();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  /** Prefijo de los ids que atan cada pestaña con su panel (patrón WAI-ARIA). */
+  const idBase = useId();
 
   const [open, setOpen] = useState(false);
   const [top, setTop] = useState(0);
   const [estado, setEstado] = useState<Estado>("vacio");
   const [items, setItems] = useState<NotificationPanelItem[]>([]);
+  const [tab, setTab] = useState<InboxTab>("todas");
+  const [counts, setCounts] = useState<Partial<Record<NotificationCategory, number>>>({});
   const [, startTransition] = useTransition();
 
   /**
@@ -117,12 +126,12 @@ export function NotificationPanel({ initialUnread }: { initialUnread: number }) 
   /** Descarta la respuesta de una consulta vieja que llegó tarde. */
   const pedidoRef = useRef(0);
 
-  const cargar = useCallback(async () => {
+  const cargar = useCallback(async (pestana: InboxTab) => {
     const pedido = pedidoRef.current + 1;
     pedidoRef.current = pedido;
     setEstado((previo) => (previo === "listo" ? "listo" : "cargando"));
 
-    const resultado = await getNotificationPanelAction().catch(
+    const resultado = await getPanelDeCampanaAction(pestana).catch(
       () => ({ ok: false }) as const,
     );
     if (pedidoRef.current !== pedido) return;
@@ -132,10 +141,25 @@ export function NotificationPanel({ initialUnread }: { initialUnread: number }) 
       return;
     }
     setItems(resultado.data.items);
+    setCounts(resultado.data.counts);
     setUnread(resultado.data.unread);
     setServerUnread(resultado.data.unread);
     setEstado("listo");
   }, []);
+
+  /**
+   * Cambiar de pestaña vacía la lista ANTES de pedir la nueva. Sin esto se
+   * quedaban en pantalla los avisos de Mensajes mientras cargaba Pagos, con la
+   * pestaña de Pagos ya subrayada: la gaveta afirmaba durante medio segundo que
+   * una alerta de mensajes era un aviso de pagos.
+   */
+  function elegirPestana(pestana: InboxTab) {
+    if (pestana === tab) return;
+    setTab(pestana);
+    setItems([]);
+    setEstado("cargando");
+    void cargar(pestana);
+  }
 
   /** Mide dónde termina el botón: el panel cuelga de ahí, no de un número fijo. */
   const medir = useCallback(() => {
@@ -164,7 +188,11 @@ export function NotificationPanel({ initialUnread }: { initialUnread: number }) 
     }
     medir();
     setOpen(true);
-    void cargar();
+    // Cada apertura arranca en "Todas". La pestaña es un filtro de esta mirada,
+    // no una preferencia: volver a abrir la campana y encontrarla filtrada por
+    // algo que se eligió hace tres pantallas esconde avisos sin avisar.
+    setTab("todas");
+    void cargar("todas");
   }
 
   /**
@@ -185,11 +213,18 @@ export function NotificationPanel({ initialUnread }: { initialUnread: number }) 
     });
   }
 
+  /**
+   * Marcar leídas respeta la pestaña, igual que en la bandeja completa: quien
+   * está parado en "Pagos" y toca el botón no quiere vaciar también las trece
+   * que no está mirando.
+   */
   function marcarTodas() {
+    const enPestana = tab === "todas" ? unread : (counts[tab] ?? 0);
     setItems((previos) => previos.map((item) => ({ ...item, read: true })));
-    setUnread(0);
+    setUnread((previo) => Math.max(0, previo - enPestana));
+    setCounts((previos) => (tab === "todas" ? {} : { ...previos, [tab]: 0 }));
     startTransition(async () => {
-      await markAllNotificationsReadAction().catch(() => undefined);
+      await markAllNotificationsReadAction(tab).catch(() => undefined);
       router.refresh();
     });
   }
@@ -278,11 +313,31 @@ export function NotificationPanel({ initialUnread }: { initialUnread: number }) 
                     }
                     transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
                   >
-                    <PanelHeader unread={unread} onMarkAll={marcarTodas} onClose={cerrar} />
+                    <PanelHeader
+                      unread={unread}
+                      tab={tab}
+                      enPestana={tab === "todas" ? unread : (counts[tab] ?? 0)}
+                      onMarkAll={marcarTodas}
+                      onClose={cerrar}
+                    />
 
-                    <div className="max-h-[min(60dvh,25rem)] overflow-y-auto overscroll-contain px-2 py-2">
+                    <PanelCategoryTabs
+                      idBase={idBase}
+                      active={tab}
+                      counts={counts}
+                      totalUnread={unread}
+                      onElegir={elegirPestana}
+                    />
+
+                    <div
+                      role="tabpanel"
+                      id={`${idBase}-panel`}
+                      aria-labelledby={`${idBase}-tab-${tab}`}
+                      tabIndex={0}
+                      className="max-h-[min(60dvh,25rem)] overflow-y-auto overscroll-contain px-2 py-2 focus-visible:outline-none"
+                    >
                       {estado === "cargando" && items.length === 0 && <PanelSkeleton />}
-                      {estado === "error" && <PanelError onRetry={() => void cargar()} />}
+                      {estado === "error" && <PanelError onRetry={() => void cargar(tab)} />}
                       {estado !== "error" && items.length > 0 && (
                         <ul className="flex flex-col gap-1">
                           {items.map((item) => (
@@ -290,10 +345,10 @@ export function NotificationPanel({ initialUnread }: { initialUnread: number }) 
                           ))}
                         </ul>
                       )}
-                      {estado === "listo" && items.length === 0 && <PanelEmpty />}
+                      {estado === "listo" && items.length === 0 && <PanelEmpty tab={tab} />}
                     </div>
 
-                    <PanelFooter onNavigate={cerrar} />
+                    <PanelFooter tab={tab} onNavigate={cerrar} />
                   </m.div>
                 </div>
               </>
@@ -307,12 +362,238 @@ export function NotificationPanel({ initialUnread }: { initialUnread: number }) 
 
 /* ── Partes ────────────────────────────────────────────────────────────────── */
 
+/**
+ * LAS CATEGORÍAS, ADENTRO DE LA GAVETA.
+ *
+ * Es prima de `CategoryTabs` (la de /notificaciones) y NO la misma, por una
+ * diferencia que cambia el marcado correcto: allá cada pestaña es una URL y por
+ * eso son ENLACES; acá el contenido se reemplaza sin salir del popover, así que
+ * son BOTONES y el patrón WAI-ARIA `tabs` es el que corresponde —`role="tab"`,
+ * `aria-selected` y un `tabpanel` que se actualiza en el lugar—. Reusar la otra
+ * habría sacado a la persona del feed en el primer toque, que es exactamente lo
+ * que esta gaveta vino a evitar.
+ *
+ * ACTIVACIÓN MANUAL: las flechas mueven el FOCO, no cambian de pestaña. La
+ * activación automática es lo correcto cuando cambiar es gratis; acá cada
+ * cambio es una consulta, y recorrer seis pestañas con el teclado dispararía
+ * seis. Enter/Espacio activa (comportamiento nativo del botón).
+ *
+ * "Más" queda FUERA del `tablist` —un tablist sólo contiene tabs— y abre una
+ * hoja con el resto. Cuando la activa es una de esas, se dibuja como pestaña
+ * extra al final: el estado seleccionado siempre tiene dónde vivir.
+ */
+function PanelCategoryTabs({
+  idBase,
+  active,
+  counts,
+  totalUnread,
+  onElegir,
+}: {
+  idBase: string;
+  active: InboxTab;
+  counts: Partial<Record<NotificationCategory, number>>;
+  totalUnread: number;
+  onElegir: (tab: InboxTab) => void;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const activeIsInMore =
+    active !== "todas" && (MORE_TAB_CATEGORIES as readonly string[]).includes(active);
+
+  const tabs: { key: InboxTab; label: string; count: number }[] = [
+    { key: "todas", label: COPY.tabs.all, count: totalUnread },
+    ...PRIMARY_TAB_CATEGORIES.map((category) => ({
+      key: category as InboxTab,
+      label: CATEGORY_META[category].label,
+      count: counts[category] ?? 0,
+    })),
+    ...(activeIsInMore
+      ? [
+          {
+            key: active,
+            label: CATEGORY_META[active as NotificationCategory].label,
+            count: counts[active as NotificationCategory] ?? 0,
+          },
+        ]
+      : []),
+  ];
+
+  const moreUnread = MORE_TAB_CATEGORIES.reduce(
+    (total, category) => total + (counts[category] ?? 0),
+    0,
+  );
+
+  function onKeyDown(event: React.KeyboardEvent) {
+    const keys = ["ArrowRight", "ArrowLeft", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+
+    const els = Array.from(
+      listRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? [],
+    );
+    if (els.length === 0) return;
+    const current = els.indexOf(document.activeElement as HTMLButtonElement);
+    if (current === -1) return;
+
+    event.preventDefault();
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? els.length - 1
+          : (current + (event.key === "ArrowRight" ? 1 : -1) + els.length) % els.length;
+    els[next].focus();
+    // El foco tiene que quedar VISIBLE: la tira scrollea y la pestaña siguiente
+    // puede estar fuera de cuadro. Opcional a propósito: jsdom no implementa
+    // scrollIntoView, y lo que no puede pasar es que una flecha tire una
+    // excepción y deje el teclado muerto.
+    els[next].scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }
+
+  return (
+    <div className="relative flex items-stretch border-b border-border-subtle">
+      <div
+        ref={listRef}
+        role="tablist"
+        aria-label={COPY.tabs.label}
+        onKeyDown={onKeyDown}
+        className="scrollbar-none flex flex-1 gap-0.5 overflow-x-auto"
+      >
+        {tabs.map((tab) => {
+          const selected = tab.key === active;
+          return (
+            <button
+              key={tab.key}
+              id={`${idBase}-tab-${tab.key}`}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              aria-controls={`${idBase}-panel`}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => onElegir(tab.key)}
+              className={cn(
+                "relative flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-xs",
+                "transition-colors duration-(--duration-fast) ease-(--ease-out-premium)",
+                "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring",
+                selected
+                  ? "font-semibold text-foreground"
+                  : "font-medium text-foreground-secondary hover:text-foreground",
+              )}
+            >
+              {tab.label}
+              {tab.count > 0 && <PanelTabCount count={tab.count} muted={!selected} />}
+              {selected && (
+                <m.span
+                  layoutId="campana-tab-underline"
+                  aria-hidden="true"
+                  className="absolute inset-x-1.5 bottom-0 h-0.5 rounded-full bg-brand"
+                  transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* "Más" queda fijo a la derecha; el degradado avisa que la tira sigue por
+          debajo en vez de cortarse de golpe. */}
+      <div className="relative z-1 flex shrink-0 items-stretch bg-surface-raised">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 -left-5 w-5 bg-gradient-to-r from-transparent to-surface-raised"
+        />
+        <button
+          type="button"
+          onClick={() => setMoreOpen(true)}
+          aria-haspopup="dialog"
+          aria-label={COPY.tabs.moreLabel}
+          className={cn(
+            "flex h-10 shrink-0 items-center gap-1 pl-1.5 pr-2 text-xs font-medium",
+            "text-foreground-secondary transition-colors duration-(--duration-fast) hover:text-foreground",
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring",
+          )}
+        >
+          {COPY.tabs.more}
+          {moreUnread > 0 && !activeIsInMore && <PanelTabCount count={moreUnread} muted />}
+          <CaretDown size={12} aria-hidden="true" />
+        </button>
+      </div>
+
+      <BottomSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        title={COPY.tabs.moreSheetTitle}
+      >
+        <ul className="flex flex-col pb-4">
+          {MORE_TAB_CATEGORIES.map((category) => {
+            const count = counts[category] ?? 0;
+            const meta = CATEGORY_META[category];
+            return (
+              <li key={category}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onElegir(category);
+                  }}
+                  aria-current={active === category ? "true" : undefined}
+                  className={cn(
+                    "flex min-h-14 w-full items-center gap-3 rounded-lg px-2 text-left",
+                    "transition-colors duration-(--duration-fast) hover:bg-surface-hover",
+                    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+                    active === category && "bg-surface-subtle",
+                  )}
+                >
+                  <CategoryIcon category={category} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-foreground">
+                      {meta.label}
+                    </span>
+                    <span className="block truncate text-xs text-foreground-secondary">
+                      {meta.description}
+                    </span>
+                  </span>
+                  {count > 0 && <PanelTabCount count={count} />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </BottomSheet>
+    </div>
+  );
+}
+
+/** `tabular-nums` para que 9 y 11 ocupen lo mismo y la tira no salte, y el "sin
+ *  leer" en `sr-only` porque un número suelto no dice nada al lector. */
+function PanelTabCount({ count, muted = false }: { count: number; muted?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex h-4 min-w-4 items-center justify-center rounded-full px-1",
+        "text-[10px] font-bold leading-none tabular-nums",
+        muted
+          ? "bg-surface-subtle text-foreground-secondary"
+          : "bg-brand text-brand-foreground",
+      )}
+    >
+      {count > 99 ? "99+" : count}
+      <span className="sr-only"> {COPY.tabs.unreadSuffix(count)}</span>
+    </span>
+  );
+}
+
 function PanelHeader({
   unread,
+  tab,
+  enPestana,
   onMarkAll,
   onClose,
 }: {
   unread: number;
+  tab: InboxTab;
+  /** Sin leer en la pestaña activa. Es lo que se va a marcar. */
+  enPestana: number;
   onMarkAll: () => void;
   onClose: () => void;
 }) {
@@ -327,10 +608,18 @@ function PanelHeader({
         </p>
       </div>
 
-      {unread > 0 && (
+      {/* El botón mira la PESTAÑA, no el total: parado en "Pagos" sin nada sin
+          leer ahí, ofrecer "marcar leídas" vaciaría trece categorías que no se
+          están mirando. El nombre accesible dice cuál se va a marcar. */}
+      {enPestana > 0 && (
         <button
           type="button"
           onClick={onMarkAll}
+          aria-label={
+            tab === "todas"
+              ? COPY.header.markAll
+              : COPY.header.markAllInCategory(CATEGORY_META[tab].label)
+          }
           className={cn(
             "flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold",
             "text-brand-ink transition-colors duration-(--duration-fast) hover:bg-brand-tint",
@@ -437,11 +726,16 @@ function PanelRow({ item, onOpen }: { item: NotificationPanelItem; onOpen: () =>
   );
 }
 
-function PanelFooter({ onNavigate }: { onNavigate: () => void }) {
+/**
+ * "Ver todas" lleva a la bandeja completa CON LA MISMA PESTAÑA abierta: pasar de
+ * la gaveta filtrada por Pagos a una bandeja en "Todas" es perder el filtro
+ * justo cuando la persona decidió profundizar en él.
+ */
+function PanelFooter({ tab, onNavigate }: { tab: InboxTab; onNavigate: () => void }) {
   return (
     <div className="border-t border-border-subtle p-2">
       <Link
-        href="/notificaciones"
+        href={inboxHref({ tab })}
         onClick={onNavigate}
         className={cn(
           "flex min-h-11 items-center justify-center gap-1.5 rounded-xl text-sm font-semibold",
@@ -477,17 +771,28 @@ function PanelSkeleton() {
  * y los pagos fallidos, así que "no pudimos leer" jamás puede parecerse a "no
  * tenés nada".
  */
-function PanelEmpty() {
+function PanelEmpty({ tab }: { tab: InboxTab }) {
+  const enCategoria = tab !== "todas";
   return (
     <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
       <span
         aria-hidden="true"
         className="flex size-11 items-center justify-center rounded-full bg-surface-subtle text-foreground-muted"
       >
-        <BellSimple size={22} />
+        {enCategoria ? (
+          <CategoryIcon category={tab} className="size-11 bg-transparent" />
+        ) : (
+          <BellSimple size={22} />
+        )}
       </span>
-      <p className="text-sm font-semibold text-foreground">{COPY.panel.emptyTitle}</p>
-      <p className="text-xs leading-relaxed text-foreground-secondary">{COPY.panel.emptyBody}</p>
+      <p className="text-sm font-semibold text-foreground">
+        {enCategoria
+          ? COPY.empty.categoryTitle(CATEGORY_META[tab].label)
+          : COPY.panel.emptyTitle}
+      </p>
+      <p className="text-xs leading-relaxed text-foreground-secondary">
+        {enCategoria ? COPY.empty.categoryMessage : COPY.panel.emptyBody}
+      </p>
     </div>
   );
 }

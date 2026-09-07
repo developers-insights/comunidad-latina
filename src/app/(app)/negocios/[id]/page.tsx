@@ -4,6 +4,7 @@ import { z } from "zod";
 import { MapPin, PencilSimple, SealCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Badge, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui";
 import {
+  firstPhotoUrl,
   DetailTopBar,
   ListingActions,
   PublisherTrust,
@@ -33,6 +34,7 @@ import { fetchEventosDelNegocio } from "@/lib/negocios/eventos";
 import { EventosDelNegocio, EVENTOS_DEL_NEGOCIO_TITULO } from "@/components/negocios/eventos-del-negocio";
 import { puedeOfrecerseElFormulario } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";
+import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { VENCIMIENTO_COPY } from "@/lib/listings";
@@ -86,11 +88,19 @@ export async function generateMetadata({ params }: { params: Params }) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("listings")
-    .select("title")
+    .select("title, description, photos, status")
     .eq("id", id)
     .eq("kind", "business")
     .maybeSingle();
-  return { title: data?.title ?? C.fallbackTitle };
+  return metadataDeCompartible({
+    kind: "business",
+    id,
+    titulo: data?.title,
+    descripcion: data?.description,
+    imagenUrl: firstPhotoUrl(data?.photos),
+    status: data?.status,
+    fallbackTitle: C.fallbackTitle,
+  });
 }
 
 /** Encabezado de sección: la misma tipografía en las seis secciones. */

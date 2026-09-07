@@ -1,6 +1,7 @@
 import "server-only";
 
 import { isSmsConfigured } from "@/lib/config/services";
+import { createTwilioSender } from "./twilio";
 import { CODE_TTL_MINUTES } from "./verification";
 
 /**
@@ -76,13 +77,7 @@ const devSender: SmsSender = {
 export function getSmsSender(): SmsSender {
   if (!isSmsConfigured) return devSender;
 
-  // Punto de reemplazo. Cuando haya proveedor, la implementación va acá y este
-  // archivo sigue siendo el único que sabe de él.
-  console.warn(
-    "[sms] SMS_PROVIDER_API_KEY está configurada pero no hay implementación de proveedor. " +
-      "Se sigue usando el remitente de desarrollo.",
-  );
-  return devSender;
+  return createTwilioSender();
 }
 
 /**

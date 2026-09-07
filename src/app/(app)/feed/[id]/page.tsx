@@ -1,3 +1,5 @@
+import { cache } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Megaphone } from "@phosphor-icons/react/dist/ssr";
@@ -37,8 +39,74 @@ import {
   type PostRow,
 } from "../queries";
 import { fetchTagsForPost } from "@/lib/social/post-tags";
+import { recortar } from "@/components/share/metadata";
 
-export const metadata = { title: "Publicación" };
+/**
+ * Lectura del post para la metadata, cache()-eada por request (mismo patrón que
+ * `propiedades/[id]`): `generateMetadata` y el cuerpo de la página comparten la
+ * fila con un solo round-trip. Selecciona lo justo para la tarjeta.
+ */
+const fetchPostParaMetadata = cache(async (id: string) => {
+  const supabase = await createClient();
+  return supabase
+    .from("posts")
+    .select("id, body, media, status, author_id")
+    .eq("id", id)
+    .maybeSingle();
+});
+
+/**
+ * LA TARJETA DE UNA PUBLICACIÓN COMPARTIDA.
+ *
+ * Antes acá vivía `export const metadata = { title: "Publicación" }`: un título
+ * estático, idéntico para todas las publicaciones de la comunidad, y sin una
+ * sola etiqueta `og:`. Cada link de una publicación pegado en WhatsApp llegaba
+ * pelado — que es el motivo por el que compartir no servía para nada.
+ *
+ * El título sale de las primeras palabras del post; si el post es sólo una foto,
+ * del nombre de quien lo publicó. La imagen la genera `opengraph-image.tsx`, que
+ * Next enlaza solo — por eso acá no se declara `images`.
+ *
+ * PRIVACIDAD: sólo `published`. Un post en revisión lo puede leer su autor (la
+ * RLS se lo permite), pero su metadata la serviría el mismo HTML para
+ * cualquiera; por eso el estado se mira acá y no se delega.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  if (!UUID_RE.test(id)) return { title: "Publicación" };
+
+  const { data } = await fetchPostParaMetadata(id);
+  if (!data || data.status !== "published") return { title: "Publicación" };
+
+  const texto = recortar(data.body, 70);
+  let titulo = texto;
+  if (!titulo && data.author_id) {
+    const supabase = await createClient();
+    const { data: autor } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", data.author_id)
+      .maybeSingle();
+    titulo = autor?.display_name ? `Publicación de ${autor.display_name}` : null;
+  }
+
+  return {
+    title: titulo ?? "Publicación",
+    ...(recortar(data.body) ? { description: recortar(data.body) as string } : {}),
+    openGraph: {
+      type: "article",
+      title: titulo ?? "Publicación",
+      ...(recortar(data.body) ? { description: recortar(data.body) as string } : {}),
+      url: `/feed/${id}`,
+    },
+    twitter: { card: "summary_large_image" },
+    alternates: { canonical: `/feed/${id}` },
+  };
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

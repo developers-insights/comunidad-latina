@@ -21,6 +21,7 @@ import {
   PublisherTrust,
   buildTrustSignals,
   firstNameOf,
+  firstPhotoUrl,
   formatListingPrice,
   listingPhotoUrl,
   toTrustLevel,
@@ -48,6 +49,7 @@ import {
   workDayLabel,
 } from "@/lib/empleos/detalles";
 import { createClient } from "@/lib/supabase/server";
+import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { VENCIMIENTO_COPY, isClosedReason } from "@/lib/listings";
 import { cn, formatDate } from "@/lib/utils";
@@ -73,12 +75,23 @@ export async function generateMetadata({ params }: { params: Params }) {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
   const { data } = await supabase
     .from("listings")
-    .select("title")
+    .select("title, description, photos, status, kind")
     .eq("id", id)
     .eq("tenant_id", tenant.id)
     .in("kind", [...EMPLEOS_KINDS])
     .maybeSingle();
-  return { title: data?.title ?? C.metadataFallback };
+  return metadataDeCompartible({
+    // Los DOS kinds de la sección viven en /empleos/[id], y el `compartido_kind`
+    // de un servicio no es `job`: sale de la fila, no de la ruta.
+    kind: data?.kind === "job" ? "job" : "listing",
+    id,
+    vertical: data?.kind ?? "job",
+    titulo: data?.title,
+    descripcion: data?.description,
+    imagenUrl: firstPhotoUrl(data?.photos),
+    status: data?.status,
+    fallbackTitle: C.metadataFallback,
+  });
 }
 
 export default async function EmpleoDetallePage({ params }: { params: Params }) {

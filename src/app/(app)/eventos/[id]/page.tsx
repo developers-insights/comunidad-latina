@@ -23,6 +23,7 @@ import {
   PublisherTrust,
   buildTrustSignals,
   firstNameOf,
+  firstPhotoUrl,
   isOptimizableSrc,
   listingPhotoUrl,
   toTrustLevel,
@@ -50,6 +51,7 @@ import {
   resolveEventTicketsUrl,
 } from "@/lib/eventos/detalles";
 import { createClient } from "@/lib/supabase/server";
+import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { VENCIMIENTO_COPY } from "@/lib/listings";
@@ -65,8 +67,21 @@ export async function generateMetadata({ params }: { params: Params }) {
   const { id } = await params;
   if (!UUID_RE.test(id)) return { title: "Evento" };
   const supabase = await createClient();
-  const { data } = await supabase.from("listings").select("title").eq("id", id).maybeSingle();
-  return { title: data?.title ?? "Evento" };
+  const { data } = await supabase
+    .from("listings")
+    .select("title, description, photos, status")
+    .eq("id", id)
+    .maybeSingle();
+  return metadataDeCompartible({
+    kind: "listing",
+    id,
+    vertical: "event",
+    titulo: data?.title,
+    descripcion: data?.description,
+    imagenUrl: firstPhotoUrl(data?.photos),
+    status: data?.status,
+    fallbackTitle: "Evento",
+  });
 }
 
 export default async function EventoDetallePage({ params }: { params: Params }) {

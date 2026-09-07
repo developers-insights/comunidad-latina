@@ -4,6 +4,12 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BookmarkSimple, DotsThree, ShareNetwork } from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, useToast } from "@/components/ui";
+import {
+  CompartirSheet,
+  parsearEnlaceInterno,
+  urlAbsoluta,
+  useCompartir,
+} from "@/components/share";
 import { SectionTopBar } from "@/components/shell";
 import { ReportScamButton, ReportSheet } from "@/components/trust";
 import { cn } from "@/lib/utils";
@@ -81,6 +87,11 @@ export function DetailTopBar({
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [saved, setSaved] = useState(initialSaved ?? false);
+  const {
+    contenido: compartiendo,
+    abrir: abrirCompartir,
+    cerrar: cerrarCompartir,
+  } = useCompartir();
   const [, startSaveTransition] = useTransition();
   const viewedRef = useRef<string | null>(null);
 
@@ -133,30 +144,44 @@ export function DetailTopBar({
   }
 
   /**
-   * Compartir. El contador se suma DESPUÉS de que el share nativo o el
-   * copiar-link resolvieron bien, nunca antes: cancelar el diálogo del sistema
-   * lanza, y contarlo igual convertiría cada arrepentimiento en una compartida
-   * que no pasó. La métrica nunca se espera (`void`) — compartir no puede
-   * quedar esperando a un contador.
+   * Compartir: abre el panel único de la app. Adentro está intacto lo que esta
+   * barra hacía sola —hoja del sistema y copiar enlace— más el bloque de
+   * mandárselo a alguien de la comunidad, que va primero.
+   *
+   * QUÉ TIPO SE COMPARTE LO DICE LA RUTA, no un prop nuevo. Los ocho detalles
+   * que montan esta barra ya viven cada uno en su sección (`/empleos/…`,
+   * `/negocios/…`, `/propiedades/…`), y `parsearEnlaceInterno` es exactamente la
+   * función que traduce eso al `compartido_kind` que guarda el mensaje. Pedir el
+   * dato por prop obligaría a tocar los ocho para repetir algo que la URL ya
+   * dice — y a que uno de los ocho se olvide.
    */
-  async function handleShare() {
-    const url = window.location.href;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title, url });
-        void recordListingShareAction({ listingId }).catch(() => undefined);
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      void recordListingShareAction({ listingId }).catch(() => undefined);
-      toast({
-        title: COPY.detail.shareCopiedTitle,
-        description: COPY.detail.shareCopiedBody,
-        variant: "success",
-      });
-    } catch {
-      // El usuario canceló el share nativo — no es un error.
-    }
+  function handleShare() {
+    const url = urlAbsoluta(pathname || "/");
+    const enlace = parsearEnlaceInterno(url, {
+      origenesPropios: [typeof window === "undefined" ? "" : window.location.origin],
+    });
+    abrirCompartir({
+      kind: enlace?.kind ?? "listing",
+      id: listingId,
+      titulo: title,
+      url,
+    });
+  }
+
+  /**
+   * El contador se suma DESPUÉS de que el share nativo o el copiar-link
+   * resolvieron bien, nunca antes: cancelar el diálogo del sistema lanza, y
+   * contarlo igual convertiría cada arrepentimiento en una compartida que no
+   * pasó. La métrica nunca se espera (`void`) — compartir no puede quedar
+   * esperando a un contador.
+   *
+   * Sigue contando SÓLO el camino de afuera, igual que antes. Mandar un aviso
+   * por chat es otra cosa y merece su propia métrica el día que se pida: sumarlo
+   * acá haría que la serie histórica de `listing_shares` cambie de significado a
+   * mitad de camino, sin que nadie pueda ver dónde.
+   */
+  function contarCompartida() {
+    void recordListingShareAction({ listingId }).catch(() => undefined);
   }
 
   return (
@@ -229,6 +254,18 @@ export function DetailTopBar({
         targetId={listingId}
         contextLabel={title}
       />
+
+      {compartiendo && (
+        <CompartirSheet
+          open
+          onClose={cerrarCompartir}
+          kind={compartiendo.kind}
+          id={compartiendo.id}
+          url={compartiendo.url ?? urlAbsoluta(pathname || "/")}
+          titulo={compartiendo.titulo}
+          onCompartidoAfuera={contarCompartida}
+        />
+      )}
     </>
   );
 }

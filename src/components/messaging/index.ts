@@ -15,6 +15,9 @@ export {
   type MiembroVisible,
 } from "./group-manage";
 export { GroupMessageBubble } from "./group-message-bubble";
+export { InboxFiltros } from "./inbox-filtros";
+export { InboxRow, type EstadoDePresencia } from "./inbox-row";
+export { InboxRowLink } from "./inbox-row-link";
 export { InboxSearch } from "./inbox-search";
 export { InboxTabs } from "./inbox-tabs";
 export { PeopleSearch, type PersonaEncontrada } from "./people-search";

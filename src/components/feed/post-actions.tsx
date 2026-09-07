@@ -19,6 +19,7 @@ import {
   ActionToggle,
   actionClass,
 } from "./action-bar";
+import { CompartirSheet, urlAbsoluta, useCompartir } from "@/components/share";
 import { COPY } from "./copy";
 import { useCardLike, useOptimisticLike } from "./card-like-context";
 import { useCardMedia } from "./card-media-context";
@@ -55,6 +56,15 @@ export interface PostActionsProps {
    * siguen con la hoja sólida de siempre (mismo comportamiento que hoy).
    */
   immersiveBackground?: boolean;
+  /**
+   * Qué se ve en la cabecera del panel de compartir: el texto del post y su
+   * primera foto. Los dos son OPCIONALES porque el panel funciona igual sin
+   * ellos —muestra el ícono genérico— y `post-card.tsx`, que es quien tiene el
+   * dato, es de otro agente. En cuanto pase `shareTitle`/`shareImageUrl`, la
+   * hoja abre mostrando la publicación en vez de un cuadro vacío.
+   */
+  shareTitle?: string;
+  shareImageUrl?: string | null;
   className?: string;
 }
 
@@ -109,11 +119,18 @@ export function PostActions({
   savedByViewer = false,
   isDetail = false,
   immersiveBackground = false,
+  shareTitle,
+  shareImageUrl,
   className,
 }: PostActionsProps) {
   const requireAuth = useRequireAuth();
   const { toast } = useToast();
   const commentsSheet = useCommentsSheet();
+  const {
+    contenido: compartiendo,
+    abrir: abrirCompartir,
+    cerrar: cerrarCompartir,
+  } = useCompartir();
   // Sin contexto (acciones montadas fuera de una card con medios) no hay medio
   // que tapar: la hoja de siempre es el default correcto.
   const media = useCardMedia();
@@ -207,22 +224,20 @@ export function PostActions({
     });
   }
 
-  async function share() {
-    const url = `${window.location.origin}/feed/${postId}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      toast({
-        title: COPY.post.shareCopiedTitle,
-        description: COPY.post.shareCopiedBody,
-        variant: "success",
-      });
-    } catch {
-      // El usuario canceló el share nativo — no es un error.
-    }
+  /**
+   * Compartir ya no es "copiar el link": abre el panel, que ofrece PRIMERO
+   * mandárselo a alguien de la comunidad y después las salidas de afuera (hoja
+   * del sistema y copiar enlace, que es lo único que esto hacía antes). El
+   * comportamiento viejo sigue estando entero, un toque más adentro.
+   */
+  function share() {
+    abrirCompartir({
+      kind: "post",
+      id: postId,
+      titulo: shareTitle ?? COPY.post.share,
+      imagenUrl: shareImageUrl ?? null,
+      url: urlAbsoluta(`/feed/${postId}`),
+    });
   }
 
   const commentsContent = (
@@ -236,6 +251,7 @@ export function PostActions({
   );
 
   return (
+    <>
     <ActionRow className={className}>
       <ActionToggle
         tone="like"
@@ -308,5 +324,19 @@ export function PostActions({
         <ActionLabel>{COPY.post.save}</ActionLabel>
       </ActionToggle>
     </ActionRow>
+
+    {compartiendo && (
+      <CompartirSheet
+        open
+        onClose={cerrarCompartir}
+        kind={compartiendo.kind}
+        id={compartiendo.id}
+        url={compartiendo.url ?? urlAbsoluta(`/feed/${postId}`)}
+        titulo={compartiendo.titulo}
+        imagenUrl={compartiendo.imagenUrl}
+        detalle={compartiendo.detalle}
+      />
+    )}
+    </>
   );
 }

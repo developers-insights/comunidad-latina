@@ -21,6 +21,7 @@ import {
   VerificationBand,
   buildTrustSignals,
   firstNameOf,
+  firstPhotoUrl,
   listingPhotoUrl,
   toTrustLevel,
   type VerificationView,
@@ -46,6 +47,7 @@ import { ResenaForm, ResenasLista, ResumenPuntajeCard } from "@/components/resen
 import { fetchResenasDeAviso } from "@/components/resenas/queries";
 import { RESENAS_COPY, puedeOfrecerseElFormulario } from "@/lib/resenas";
 import { createClient } from "@/lib/supabase/server";
+import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { VENCIMIENTO_COPY } from "@/lib/listings";
@@ -61,8 +63,21 @@ export async function generateMetadata({ params }: { params: Params }) {
   const { id } = await params;
   if (!UUID_RE.test(id)) return { title: "Profesional" };
   const supabase = await createClient();
-  const { data } = await supabase.from("listings").select("title").eq("id", id).maybeSingle();
-  return { title: data?.title ?? "Profesional" };
+  const { data } = await supabase
+    .from("listings")
+    .select("title, description, photos, status")
+    .eq("id", id)
+    .maybeSingle();
+  return metadataDeCompartible({
+    kind: "listing",
+    id,
+    vertical: "professional",
+    titulo: data?.title,
+    descripcion: data?.description,
+    imagenUrl: firstPhotoUrl(data?.photos),
+    status: data?.status,
+    fallbackTitle: "Profesional",
+  });
 }
 
 export default async function ProfesionalDetallePage({ params }: { params: Params }) {

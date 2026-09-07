@@ -52,6 +52,93 @@ export const COPY = {
     directPending: "Le mandamos tu solicitud. Cuando acepte, van a poder hablar.",
     directBlocked: "El contacto con esta persona no está disponible.",
     directError: "No pudimos abrir la conversación. Probá de nuevo.",
+
+    // ── Tres pestañas: Personas · Grupos · Solicitudes ──────────────────────
+    tabSolicitudes: "Solicitudes",
+    solicitudesTitle: "Solicitudes",
+    solicitudesIntro:
+      "Gente que quiere empezar a hablar con vos. Recién cuando aceptás pueden escribirte.",
+    solicitudesEmptyTitle: "No tenés solicitudes pendientes",
+    solicitudesEmptyMessage:
+      "Cuando alguien quiera contactarte por un aviso o por tu perfil, su pedido te espera acá.",
+    solicitudesCount: (n: number) =>
+      n === 1 ? "1 solicitud sin responder" : `${n} solicitudes sin responder`,
+    /** Se lee al lado del nombre en la pestaña Solicitudes. */
+    requestedAt: (cuando: string) => `Te escribió ${cuando}`,
+    firstMessage: "Su mensaje:",
+    block: "Bloquear",
+    blockConfirmTitle: (nombre: string) => `¿Bloquear a ${nombre}?`,
+    blockConfirmBody:
+      "No va a poder escribirte ni encontrarte en la comunidad, y las conversaciones que tengan quedan cerradas. Podés desbloquear desde tu perfil.",
+    blockConfirm: "Sí, bloquear",
+    cancel: "Cancelar",
+    blocked: "Listo, esa persona ya no puede contactarte",
+    blockError: "No pudimos bloquear a esa persona. Probá de nuevo.",
+
+    // ── Filtros rápidos de Personas ─────────────────────────────────────────
+    filtersLabel: "Filtrar tus conversaciones",
+    filterAll: "Todos",
+    filterFriends: "Amigos",
+    filterUnread: "No leídos",
+    /** Bajo el chip de Amigos: la definición, dicha en una línea. */
+    friendsHint: "Amigos son las personas que vos seguís y que te siguen.",
+    emptyFriendsTitle: "Todavía no hablás con ningún amigo",
+    emptyFriendsMessage:
+      "Cuando vos y otra persona se sigan mutuamente, sus conversaciones aparecen en este filtro.",
+    emptyUnreadTitle: "Estás al día",
+    emptyUnreadMessage: "No te quedó ningún mensaje sin leer.",
+    resetFilter: "Ver todas",
+
+    // ── Qué pasó en la última línea de cada fila ────────────────────────────
+    resumen: {
+      foto: "Foto",
+      video: "Video",
+      audio: "Nota de voz",
+      audioConDuracion: (duracion: string) => `Nota de voz · ${duracion}`,
+      archivo: "Archivo",
+      ubicacion: "Ubicación",
+      perfil: "Perfil compartido",
+      contenido: "Publicación compartida",
+      /**
+       * Los dos estados EN VIVO. Hoy no se muestran: sin Supabase Realtime,
+       * lo único que podríamos hacer es adivinarlos con el refresco de 15 s, y
+       * un "Está escribiendo…" que aparece cuando la persona ya dejó de
+       * escribir miente. Los textos viven acá porque la fila ya sabe pintarlos.
+       */
+      escribiendo: "Está escribiendo…",
+      enLinea: "En línea",
+      ultimaVez: (cuando: string) => `Última vez ${cuando}`,
+    },
+    unreadCount: (n: number) =>
+      n === 1 ? "1 mensaje sin leer" : `${n} mensajes sin leer`,
+    readByOther: "Leído",
+
+    /**
+     * Cómo se nombra una llamada en una lista. La base guarda `kind` y `status`
+     * en inglés-de-esquema ("video", "perdida"); esto es lo que se lee.
+     */
+    llamada: {
+      audio: "Llamada de voz",
+      video: "Videollamada",
+      perdida: (tipo: string) => `${tipo} perdida`,
+      rechazada: (tipo: string) => `${tipo} rechazada`,
+      enCurso: (tipo: string) => `${tipo} en curso`,
+      sonando: (tipo: string) => `${tipo} sonando`,
+    },
+
+    // ── El buscador de la bandeja ───────────────────────────────────────────
+    findLabel: "Buscar en tus mensajes",
+    findPlaceholder: "Buscá un chat, un grupo o a alguien",
+    findHint: "Escribí para buscar",
+    findEmpty: (termino: string) =>
+      `No encontramos nada con “${termino}” en tus mensajes.`,
+    findError: "No pudimos buscar en este momento. Probá de nuevo en un rato.",
+    findSectionChats: "Tus conversaciones",
+    findSectionGroups: "Tus grupos",
+    findSectionCalls: "Llamadas",
+    findSectionPeople: "Escribirle a alguien",
+    findResults: (n: number) =>
+      n === 1 ? "1 resultado" : `${n} resultados`,
   },
 
   /**

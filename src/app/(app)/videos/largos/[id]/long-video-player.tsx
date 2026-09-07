@@ -9,6 +9,7 @@ import {
   ShareNetwork,
 } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Chip, useToast } from "@/components/ui";
+import { CompartirSheet, urlAbsoluta, useCompartir } from "@/components/share";
 import { LikeBurst } from "@/components/motion";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import { useCommentsSheet, type PostCardModel } from "@/components/feed";
@@ -80,6 +81,11 @@ export function LongVideoPlayer({ post, tenantId, viewerId }: LongVideoPlayerPro
    * audio, `ViewerVideo` cae a mudo solo y el altavoz queda a un toque.
    */
   const [muted, setMuted] = useState(false);
+  const {
+    contenido: compartiendo,
+    abrir: abrirCompartir,
+    cerrar: cerrarCompartir,
+  } = useCompartir();
 
   const videoItem = post.media.find((item) => item.kind === "video");
   const posterUrl =
@@ -100,29 +106,28 @@ export function LongVideoPlayer({ post, tenantId, viewerId }: LongVideoPlayerPro
     void recordPostViewAction({ postId: post.id }).catch(() => undefined);
   }, [post.id]);
 
-  async function share() {
-    // El link que se comparte es el de ESTA pantalla, no el del post en el feed:
-    // quien lo reciba tiene que caer donde el video se ve entero.
-    const url = `${window.location.origin}/videos/largos/${post.id}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      toast({
-        title: VIDEOS_COPY.shareCopiedTitle,
-        description: VIDEOS_COPY.shareCopiedBody,
-        variant: "success",
-      });
-    } catch {
-      // El usuario canceló el share nativo — no es un error.
-    }
+  /**
+   * Compartir el video: abre el panel único de la app, con la hoja del sistema y
+   * el copiar-enlace de siempre adentro.
+   *
+   * El link sigue siendo el de ESTA pantalla y no el del post en el feed: quien
+   * lo reciba tiene que caer donde el video se ve entero. Y el `kind` es
+   * `video` por lo mismo — es lo que hace que la tarjeta del chat abra acá.
+   */
+  function share() {
+    abrirCompartir({
+      kind: "video",
+      id: post.id,
+      titulo: title,
+      imagenUrl: posterUrl,
+      url: urlAbsoluta(`/videos/largos/${post.id}`),
+    });
   }
 
   if (!videoItem) return null;
 
   return (
+    <>
     <article>
       {/* El reproductor sale del padding de la columna para ir a lo ancho: es la
           pieza principal y un margen a los costados lo volvería una miniatura
@@ -280,6 +285,19 @@ export function LongVideoPlayer({ post, tenantId, viewerId }: LongVideoPlayerPro
         </div>
       </div>
     </article>
+
+    {compartiendo && (
+      <CompartirSheet
+        open
+        onClose={cerrarCompartir}
+        kind={compartiendo.kind}
+        id={compartiendo.id}
+        url={compartiendo.url ?? urlAbsoluta(`/videos/largos/${post.id}`)}
+        titulo={compartiendo.titulo}
+        imagenUrl={compartiendo.imagenUrl}
+      />
+    )}
+    </>
   );
 }
 

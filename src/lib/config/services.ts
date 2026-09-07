@@ -154,11 +154,17 @@ export const isPhoneVerificationEnabled =
 /**
  * ¿Hay un proveedor de SMS de verdad detrás?
  *
- * Decisión comercial pendiente: hoy es SIEMPRE false y el código se entrega por
- * el log del servidor (ver lib/phone/sms.ts). El flag existe para que enchufar
- * un proveedor sea agregar una variable, no tocar el flujo.
+ * Las cuatro piezas tienen que existir juntas: una API Key sin secreto no puede
+ * autenticar, y sin remitente Twilio rechazaría el primer mensaje. Degradar al
+ * log de desarrollo ante una configuración a medias permite probar el flujo sin
+ * que un deploy intente enviar con credenciales incompletas.
  */
-export const isSmsConfigured = Boolean(process.env.SMS_PROVIDER_API_KEY);
+export const isSmsConfigured = Boolean(
+  process.env.TWILIO_ACCOUNT_SID &&
+    process.env.TWILIO_API_KEY_SID &&
+    process.env.TWILIO_API_KEY_SECRET &&
+    process.env.TWILIO_PHONE_NUMBER,
+);
 
 /**
  * Sal del servidor para el hash de los códigos: `sha256(código + pepper)`.

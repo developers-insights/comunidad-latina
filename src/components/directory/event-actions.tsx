@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { HandsClapping, ShareNetwork } from "@phosphor-icons/react/dist/ssr";
 import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { Button, useToast } from "@/components/ui";
+import { CompartirSheet, urlAbsoluta, useCompartir } from "@/components/share";
 import { toggleEventInterestAction } from "@/app/(app)/eventos/actions";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
@@ -51,6 +52,11 @@ export function EventActions({
   const [isPending, startTransition] = useTransition();
   const [interested, setInterested] = useState(initialInterested);
   const [count, setCount] = useState(initialCount);
+  const {
+    contenido: compartiendo,
+    abrir: abrirCompartir,
+    cerrar: cerrarCompartir,
+  } = useCompartir();
 
   /**
    * Abre la puerta con la anotación lista para aplicarse al entrar.
@@ -102,21 +108,22 @@ export function EventActions({
     });
   }
 
-  async function handleShare() {
-    const url = window.location.href;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: eventTitle, url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      toast({ title: C.shareCopiedTitle, description: C.shareCopiedBody, variant: "success" });
-    } catch {
-      // La persona canceló el share nativo — no es un error.
-    }
+  /**
+   * Compartir el evento: abre el panel único. Lo que esta barra hacía sola
+   * —hoja del sistema, copiar enlace— sigue estando adentro; lo que se suma es
+   * poder mandárselo directo a quien seguro quiere ir.
+   */
+  function handleShare() {
+    abrirCompartir({
+      kind: "listing",
+      id: eventId,
+      titulo: eventTitle,
+      url: urlAbsoluta(`/eventos/${eventId}`),
+    });
   }
 
   return (
+    <>
     <div
       className={cn(
         "fixed inset-x-0 z-30",
@@ -145,5 +152,17 @@ export function EventActions({
         {C.interestedCount(count)}
       </p>
     </div>
+
+    {compartiendo && (
+      <CompartirSheet
+        open
+        onClose={cerrarCompartir}
+        kind={compartiendo.kind}
+        id={compartiendo.id}
+        url={compartiendo.url ?? urlAbsoluta(`/eventos/${eventId}`)}
+        titulo={compartiendo.titulo}
+      />
+    )}
+    </>
   );
 }
