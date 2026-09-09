@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Prohibit } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui";
+import { ExternalLinkCard, enlaceExternoDelCuerpo } from "@/components/share/enlace-externo";
 import type { ReaccionAgrupada } from "@/lib/messaging/reacciones";
 import { ACCIONES_COPY } from "./copy-acciones";
 import { MessageActions } from "./message-menu";
@@ -99,6 +100,11 @@ export function GroupMessageBubble({
     );
   }
 
+  const enlaceExterno =
+    !media && (mensaje.kind ?? "texto") === "texto"
+      ? enlaceExternoDelCuerpo(body)
+      : null;
+
   const burbuja = (
     <div
       id={ancla}
@@ -122,7 +128,11 @@ export function GroupMessageBubble({
 
       {media && <div className="-mx-2 mb-1.5">{media}</div>}
 
-      {(body.trim().length > 0 || !media) && (
+      {enlaceExterno && (
+        <ExternalLinkCard enlace={enlaceExterno} className="-mx-2 mb-1.5" />
+      )}
+
+      {!enlaceExterno && (body.trim().length > 0 || !media) && (
         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{body}</p>
       )}
 

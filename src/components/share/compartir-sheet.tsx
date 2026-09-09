@@ -5,6 +5,8 @@ import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import {
   ArrowRight,
   Check,
+  FacebookLogo,
+  InstagramLogo,
   Link as LinkIcon,
   MagnifyingGlass,
   ShareNetwork,
@@ -14,6 +16,7 @@ import {
 import { Avatar, BottomSheet, Input, Skeleton, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { compartirEnChatAction } from "@/app/(app)/mensajes/compartir-actions";
+import { reenviarMensajeAction } from "./reenviar-mensaje-action";
 import type { Destino } from "@/app/(app)/mensajes/api/destinos/route";
 import { SHARE_COPY } from "./copy";
 import type { CompartidoKind } from "./enlace-interno";
@@ -44,14 +47,9 @@ import type { CompartidoKind } from "./enlace-interno";
  * buscando departamento" sea un gesto y no tres.
  */
 
-export interface CompartirSheetProps {
+interface CompartirSheetBaseProps {
   open: boolean;
   onClose: () => void;
-  /** Qué se está compartiendo. Va tal cual a `compartido_kind`. */
-  kind: CompartidoKind;
-  id: string;
-  /** URL absoluta para el mundo de afuera. */
-  url: string;
   /**
    * Qué se está compartiendo, para la cabecera del panel. OPCIONAL: cuando
    * quien abre el panel no tiene el dato a mano (hoy el feed, porque
@@ -67,8 +65,29 @@ export interface CompartirSheetProps {
    * aceptada o enlace copiado). Existe para la métrica de avisos
    * (`record_listing_share`), que hoy sólo cuenta ese camino.
    */
+}
+
+interface CompartirContenidoProps extends CompartirSheetBaseProps {
+  mensajeOrigen?: never;
+  kind: CompartidoKind;
+  id: string;
+  url: string;
   onCompartidoAfuera?: () => void;
 }
+
+interface ReenviarMensajeProps extends CompartirSheetBaseProps {
+  mensajeOrigen: {
+    ambito: "directo" | "grupo";
+    mensajeId: string;
+    hiloId: string;
+  };
+  kind?: never;
+  id?: never;
+  url?: never;
+  onCompartidoAfuera?: never;
+}
+
+export type CompartirSheetProps = CompartirContenidoProps | ReenviarMensajeProps;
 
 type Estado =
   | { fase: "cargando" }
@@ -77,17 +96,9 @@ type Estado =
 
 const claveDe = (destino: Destino) => `${destino.tipo}:${destino.id}`;
 
-export function CompartirSheet({
-  open,
-  onClose,
-  kind,
-  id,
-  url,
-  titulo,
-  imagenUrl,
-  detalle,
-  onCompartidoAfuera,
-}: CompartirSheetProps) {
+export function CompartirSheet(props: CompartirSheetProps) {
+  const { open, onClose, titulo, imagenUrl, detalle } = props;
+  const esReenvio = props.mensajeOrigen !== undefined;
   const { toast } = useToast();
   const reduceMotion = useReducedMotion();
   const inputId = useId();
@@ -203,12 +214,17 @@ export function CompartirSheet({
     });
 
     startEnviar(async () => {
-      const resultado = await compartirEnChatAction({
-        destinos: seleccion,
-        compartidoKind: kind,
-        compartidoId: id,
-        ...(notaAEnviar ? { nota: notaAEnviar } : {}),
-      });
+      const resultado = props.mensajeOrigen
+        ? await reenviarMensajeAction({
+            origen: props.mensajeOrigen,
+            destinos: seleccion,
+          })
+        : await compartirEnChatAction({
+            destinos: seleccion,
+            compartidoKind: props.kind,
+            compartidoId: props.id,
+            ...(notaAEnviar ? { nota: notaAEnviar } : {}),
+          });
 
       if (resultado.ok) {
         // Salió todo: el toast optimista ya dijo la verdad, no se repite.
@@ -246,10 +262,11 @@ export function CompartirSheet({
   }
 
   async function compartirAfuera() {
+    if (props.mensajeOrigen) return;
     try {
       if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-        await navigator.share({ ...(titulo ? { title: titulo } : {}), url });
-        onCompartidoAfuera?.();
+        await navigator.share({ ...(titulo ? { title: titulo } : {}), url: props.url });
+        props.onCompartidoAfuera?.();
         onClose();
         return;
       }
@@ -260,9 +277,10 @@ export function CompartirSheet({
   }
 
   async function copiarEnlace() {
+    if (props.mensajeOrigen) return;
     try {
-      await navigator.clipboard.writeText(url);
-      onCompartidoAfuera?.();
+      await navigator.clipboard.writeText(props.url);
+      props.onCompartidoAfuera?.();
       toast({
         title: SHARE_COPY.copiadoTitle,
         description: SHARE_COPY.copiadoBody,
@@ -270,6 +288,40 @@ export function CompartirSheet({
       });
       onClose();
     } catch {
+      toast({
+        title: SHARE_COPY.copiarErrorTitle,
+        description: SHARE_COPY.copiarErrorBody,
+        variant: "danger",
+      });
+    }
+  }
+
+  async function compartirFacebook() {
+    if (props.mensajeOrigen) return;
+    const destino = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(props.url)}`;
+    const pestaña = window.open(destino, "_blank", "noopener,noreferrer");
+    if (!pestaña) {
+      await copiarEnlace();
+      return;
+    }
+    props.onCompartidoAfuera?.();
+    onClose();
+  }
+
+  async function compartirInstagram() {
+    if (props.mensajeOrigen) return;
+    const pestaña = window.open("https://www.instagram.com/", "_blank", "noopener,noreferrer");
+    try {
+      await navigator.clipboard.writeText(props.url);
+      props.onCompartidoAfuera?.();
+      toast({
+        title: SHARE_COPY.copiadoTitle,
+        description: SHARE_COPY.copiadoBody,
+        variant: "success",
+      });
+      onClose();
+    } catch {
+      pestaña?.close();
       toast({
         title: SHARE_COPY.copiarErrorTitle,
         description: SHARE_COPY.copiarErrorBody,
@@ -328,7 +380,9 @@ export function CompartirSheet({
         <h3 className="font-display text-base font-bold text-foreground">
           {SHARE_COPY.dentroTitle}
         </h3>
-        <p className="mt-0.5 text-sm text-foreground-secondary">{SHARE_COPY.dentroHint}</p>
+        <p className="mt-0.5 text-sm text-foreground-secondary">
+          {esReenvio ? SHARE_COPY.reenviarHint : SHARE_COPY.dentroHint}
+        </p>
 
         <div className="relative mt-3">
           <label htmlFor={inputId} className="sr-only">
@@ -429,7 +483,7 @@ export function CompartirSheet({
         {/* La nota aparece SÓLO cuando ya hay a quién mandársela: un campo de
             texto sobre una lista vacía es una pregunta que todavía no toca. */}
         <AnimatePresence initial={false}>
-          {cantidad > 0 && (
+          {cantidad > 0 && !esReenvio && (
             <m.div
               initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -453,7 +507,7 @@ export function CompartirSheet({
         </AnimatePresence>
 
         {/* ── Bloque 2: afuera ─────────────────────────────────────────────── */}
-        <div className="mt-6 border-t border-border-subtle pt-4">
+        {!esReenvio && <div className="mt-6 border-t border-border-subtle pt-4">
           <h3 className="font-display text-base font-bold text-foreground">
             {SHARE_COPY.afueraTitle}
           </h3>
@@ -462,6 +516,18 @@ export function CompartirSheet({
           </p>
 
           <div className="mt-3 grid grid-cols-2 gap-2 pb-4">
+            <BotonAfuera
+              onClick={compartirFacebook}
+              icon={<FacebookLogo size={20} aria-hidden="true" />}
+              label={SHARE_COPY.facebook}
+              ariaLabel={SHARE_COPY.facebookLabel}
+            />
+            <BotonAfuera
+              onClick={() => void compartirInstagram()}
+              icon={<InstagramLogo size={20} aria-hidden="true" />}
+              label={SHARE_COPY.instagram}
+              ariaLabel={SHARE_COPY.instagramLabel}
+            />
             <BotonAfuera
               onClick={compartirAfuera}
               icon={<ShareNetwork size={20} aria-hidden="true" />}
@@ -474,7 +540,7 @@ export function CompartirSheet({
               label={SHARE_COPY.copiarEnlace}
             />
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* BARRA DE ENVÍO ANCLADA. Entra desde abajo cuando hay algo seleccionado

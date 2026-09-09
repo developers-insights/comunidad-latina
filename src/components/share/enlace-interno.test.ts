@@ -42,8 +42,14 @@ describe("parsearEnlaceInterno", () => {
     });
   });
 
-  it("mapea los cuatro verticales de listings al MISMO kind", () => {
-    for (const seccion of ["propiedades", "marketplace", "profesionales", "eventos"]) {
+  it("mapea los verticales de listings al MISMO kind", () => {
+    for (const seccion of [
+      "propiedades",
+      "marketplace",
+      "profesionales",
+      "eventos",
+      "creadores",
+    ]) {
       expect(parse(`https://comunidadlatina.com/${seccion}/${UUID}`)).toEqual({
         kind: "listing",
         id: UUID,
@@ -156,6 +162,9 @@ describe("hrefDeCompartido", () => {
     expect(hrefDeCompartido("listing", UUID, "event")).toBe(`/eventos/${UUID}`);
     expect(hrefDeCompartido("listing", UUID, "professional")).toBe(
       `/profesionales/${UUID}`,
+    );
+    expect(hrefDeCompartido("listing", UUID, "creator_gig")).toBe(
+      `/creadores/${UUID}`,
     );
   });
 

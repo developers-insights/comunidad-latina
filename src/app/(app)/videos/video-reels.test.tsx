@@ -108,6 +108,15 @@ vi.mock("@/components/ui", async (importOriginal) => {
   return { ...actual, useToast: () => ({ toast: state.toast }) };
 });
 
+vi.mock("@/components/share", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/share")>();
+  return {
+    ...actual,
+    CompartirSheet: ({ open, kind, id }: { open: boolean; kind: string; id: string }) =>
+      open ? <section role="dialog" aria-label={`Compartir ${kind} ${id}`} /> : null,
+  };
+});
+
 vi.mock("@/components/auth/auth-sheet-panel", () => ({
   AuthSheetPanel: ({
     onAuthenticated,
@@ -300,6 +309,16 @@ describe("VideoReels — la puerta no saca del video", () => {
       }),
     );
     expect(await screen.findByRole("button", { name: VIDEOS_COPY.unsave })).toBeTruthy();
+  });
+
+  it("comparte el reel dentro o fuera sin sacar a la persona del video", () => {
+    montar("user-9");
+    fireEvent.click(screen.getByRole("button", { name: VIDEOS_COPY.share }));
+
+    expect(
+      screen.getByRole("dialog", { name: `Compartir post ${VIDEO.id}` }),
+    ).toBeTruthy();
+    expect(state.push).not.toHaveBeenCalled();
   });
 });
 

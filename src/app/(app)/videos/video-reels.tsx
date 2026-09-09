@@ -25,6 +25,7 @@ import { LikeBurst, usePrefersReducedMotion } from "@/components/motion";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import { useCommentsSheet, type PostCardModel } from "@/components/feed";
 import { ViewerVideo } from "@/components/feed/media-viewer";
+import { CompartirSheet, urlAbsoluta, useCompartir } from "@/components/share";
 /**
  * De `post-music` se importa por RUTA DIRECTA y no por el barril del feed a
  * propósito: el barril arrastra la hoja de comentarios entera (Supabase + las
@@ -1094,36 +1095,29 @@ function ReelActions({
   onMutedChange: (muted: boolean) => void;
   offsets: ReelOffsets;
 }) {
-  const { toast } = useToast();
   const commentsSheet = useCommentsSheet();
+  const compartir = useCompartir();
   const { liked, count, toggle: toggleLike } = like;
   const { saved, toggle: toggleSave } = useReelSave({ post, viewerId });
 
-  async function share() {
-    const url = `${window.location.origin}/feed/${post.id}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      toast({
-        title: VIDEOS_COPY.shareCopiedTitle,
-        description: VIDEOS_COPY.shareCopiedBody,
-        variant: "success",
-      });
-    } catch {
-      // El usuario canceló el share nativo — no es un error.
-    }
+  function share() {
+    compartir.abrir({
+      kind: "post",
+      id: post.id,
+      titulo: post.body || post.author.displayName,
+      imagenUrl: post.photoUrl,
+      url: urlAbsoluta(`/feed/${post.id}`),
+    });
   }
 
   return (
-    <div
-      className={cn(
-        "pointer-events-none absolute right-2 z-10 flex flex-col items-center gap-3",
-        offsets.rail,
-      )}
-    >
+    <>
+      <div
+        className={cn(
+          "pointer-events-none absolute right-2 z-10 flex flex-col items-center gap-3",
+          offsets.rail,
+        )}
+      >
       <span className={cn("flex", liked && "text-danger")}>
         <LikeBurst
           active={liked}
@@ -1192,7 +1186,21 @@ function ReelActions({
           <SpeakerHigh size={26} aria-hidden="true" />
         )}
       </button>
-    </div>
+      </div>
+
+      {compartir.contenido && (
+        <CompartirSheet
+          open={compartir.abierto}
+          onClose={compartir.cerrar}
+          kind={compartir.contenido.kind}
+          id={compartir.contenido.id}
+          url={compartir.contenido.url ?? urlAbsoluta(`/feed/${post.id}`)}
+          titulo={compartir.contenido.titulo}
+          imagenUrl={compartir.contenido.imagenUrl}
+          detalle={compartir.contenido.detalle}
+        />
+      )}
+    </>
   );
 }
 

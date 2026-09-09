@@ -64,6 +64,31 @@ vi.mock("@/components/ui", async (importOriginal) => {
   return { ...actual, useToast: () => ({ toast: state.toast }) };
 });
 
+vi.mock("@/components/share", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/share")>();
+  return {
+    ...actual,
+    CompartirSheet: ({
+      open,
+      kind,
+      id,
+      onCompartidoAfuera,
+    }: {
+      open: boolean;
+      kind: string;
+      id: string;
+      onCompartidoAfuera?: () => void;
+    }) =>
+      open ? (
+        <section role="dialog" aria-label={`Compartir ${kind} ${id}`}>
+          <button type="button" onClick={onCompartidoAfuera}>
+            Simular salida
+          </button>
+        </section>
+      ) : null,
+  };
+});
+
 // La hoja de comentarios arrastra Supabase y las actions del marketplace: acá
 // interesa CON QUÉ se la llama, no qué dibuja.
 vi.mock("./comments-sheet", () => ({
@@ -78,7 +103,13 @@ const HREF = `/negocios/${LISTING_ID}`;
 
 function barra(props: Partial<React.ComponentProps<typeof ListingActions>> = {}) {
   return (
-    <ListingActions listingId={LISTING_ID} title={TITLE} detailHref={HREF} {...props} />
+    <ListingActions
+      listingId={LISTING_ID}
+      shareKind="business"
+      title={TITLE}
+      detailHref={HREF}
+      {...props}
+    />
   );
 }
 
@@ -212,30 +243,32 @@ describe("comentar — la hoja polimórfica, por listingId", () => {
 });
 
 describe("compartir — el link canónico, y la métrica sólo si salió", () => {
-  it("copia la URL del aviso y recién ahí registra la compartida", async () => {
+  it("abre el panel interno y externo con el tipo real del aviso", () => {
     render(barra());
     fireEvent.click(boton("Compartir"));
 
-    await waitFor(() =>
-      expect(state.clipboard).toHaveBeenCalledWith(`${window.location.origin}${HREF}`),
-    );
+    expect(
+      screen.getByRole("dialog", { name: `Compartir business ${LISTING_ID}` }),
+    ).toBeTruthy();
+    expect(state.recordShare).not.toHaveBeenCalled();
+  });
+
+  it("recién registra la compartida cuando el panel confirma una salida externa", async () => {
+    render(barra());
+    fireEvent.click(boton("Compartir"));
+
+    expect(state.recordShare).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Simular salida" }));
     await waitFor(() =>
       expect(state.recordShare).toHaveBeenCalledWith({ listingId: LISTING_ID }),
     );
-    expect(state.toast).toHaveBeenCalledWith(
-      expect.objectContaining({ variant: "success" }),
-    );
   });
 
-  /** Cancelar el diálogo del sistema no es una compartida. */
-  it("si el share falla o se cancela, NO cuenta la compartida", async () => {
-    state.clipboard.mockRejectedValue(new Error("cancelado"));
+  it("abrir el panel no cuenta una compartida", () => {
     render(barra());
     fireEvent.click(boton("Compartir"));
 
-    await waitFor(() => expect(state.clipboard).toHaveBeenCalled());
     expect(state.recordShare).not.toHaveBeenCalled();
-    expect(state.toast).not.toHaveBeenCalled();
   });
 
   /** Un kind sin página no tiene URL que compartir: mejor sin botón que con link roto. */

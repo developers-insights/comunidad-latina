@@ -91,6 +91,15 @@ vi.mock("@/components/ui", async (importOriginal) => {
   return { ...actual, useToast: () => ({ toast: vi.fn() }) };
 });
 
+vi.mock("@/components/share", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/share")>();
+  return {
+    ...actual,
+    CompartirSheet: ({ open, kind, id }: { open: boolean; kind: string; id: string }) =>
+      open ? <section role="dialog" aria-label={`Compartir ${kind} ${id}`} /> : null,
+  };
+});
+
 // next/link sin router: sólo un <a href>.
 vi.mock("next/link", () => ({
   default: ({
@@ -174,6 +183,15 @@ describe("la tarjeta de ficha ya no es sólo 'Ver detalles'", () => {
     fireEvent.click(boton("Comentarios"));
 
     expect(sheet.openComments).toHaveBeenCalledWith({ listingId: BUSINESS_ID });
+  });
+
+  it("abre el panel con el tipo real del aviso", () => {
+    render(<FeedListingCard listing={negocio()} />);
+    fireEvent.click(boton("Compartir"));
+
+    expect(
+      screen.getByRole("dialog", { name: `Compartir business ${BUSINESS_ID}` }),
+    ).toBeTruthy();
   });
 
   /**

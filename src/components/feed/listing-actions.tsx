@@ -3,6 +3,12 @@
 import { useState, useTransition } from "react";
 import { BookmarkSimple, ChatCircle, Heart, ShareNetwork } from "@phosphor-icons/react/dist/ssr";
 import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
+import {
+  CompartirSheet,
+  urlAbsoluta,
+  useCompartir,
+  type CompartidoKind,
+} from "@/components/share";
 import { useToast } from "@/components/ui";
 import {
   recordListingShareAction,
@@ -40,9 +46,8 @@ import { useCommentsSheet } from "./comments-sheet";
  *   · COMENTAR  → `useCommentsSheet().open({ listingId })`. La hoja es la MISMA
  *                 del feed y ya es polimórfica: la reusa Marketplace desde
  *                 `listing-comments-row.tsx`. Acá no se toca, sólo se la llama.
- *   · COMPARTIR → Web Share / portapapeles, y después
- *                 `recordListingShareAction` (RPC de la 0050), que ya existía y
- *                 no la llamaba nadie desde el feed.
+ *   · COMPARTIR → panel interno/externo compartido, y después
+ *                 `recordListingShareAction` para las salidas externas.
  *
  * ── ME GUSTA NO ESTÁ, Y ES A PROPÓSITO ─────────────────────────────────────
  * `reactions` acepta `subject_kind = 'listing'` desde la 0007 —tabla, unique y
@@ -63,8 +68,8 @@ import { useCommentsSheet } from "./comments-sheet";
  * de firma activa ni de Supabase — sabe dibujar un corazón.
  *
  * ── EL TOQUE NO SACA DEL FEED ──────────────────────────────────────────────
- * Ninguna de las cuatro navega: comentar abre una hoja, guardar y me gusta son
- * optimistas en el lugar, y compartir usa el diálogo del sistema. Es la misma
+ * Ninguna de las cuatro navega: comentar y compartir abren una hoja, y guardar
+ * y me gusta son optimistas en el lugar. Es la misma
  * regla que ya cumplían `PostActions` y el disparador de la ficha
  * (`ListingSheetTrigger`), y la razón por la que esta barra es aditiva: no le
  * saca ningún gesto a la tarjeta.
@@ -124,6 +129,7 @@ export interface ListingEngagement {
 
 export interface ListingActionsProps extends ListingEngagement {
   listingId: string;
+  shareKind: CompartidoKind;
   /** Título del aviso: entra en los nombres accesibles de los cuatro botones. */
   title: string;
   /**
@@ -137,6 +143,7 @@ export interface ListingActionsProps extends ListingEngagement {
 
 export function ListingActions({
   listingId,
+  shareKind,
   title,
   detailHref,
   commentCount,
@@ -147,6 +154,7 @@ export function ListingActions({
   const requireAuth = useRequireAuth();
   const { toast } = useToast();
   const commentsSheet = useCommentsSheet();
+  const compartir = useCompartir();
 
   const [saved, setSaved] = useState(savedByViewer);
   const [, startSaveTransition] = useTransition();
@@ -217,37 +225,20 @@ export function ListingActions({
     });
   }
 
-  /**
-   * Compartir. La métrica se registra DESPUÉS de que el share resolvió bien y
-   * nunca antes: contar la intención convertiría cada cancelación del diálogo
-   * del sistema en una compartida que no ocurrió (es la regla que ya escribió
-   * `recordListingShareAction`, acá se la respeta).
-   */
-  async function share() {
+  /** La métrica se registra sólo cuando el panel confirma una salida externa. */
+  function share() {
     if (!detailHref) return;
-    const url = `${window.location.origin}${detailHref}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ url, title });
-      } else {
-        await navigator.clipboard.writeText(url);
-        toast({
-          title: COPY.shareCopiedTitle,
-          description: COPY.shareCopiedBody,
-          variant: "success",
-        });
-      }
-    } catch {
-      // El usuario canceló el share nativo — no es un error, y no se cuenta.
-      return;
-    }
-    // Fire-and-forget: la action se traga sus propios errores. Compartir tiene
-    // que funcionar aunque la métrica no.
-    void recordListingShareAction({ listingId });
+    compartir.abrir({
+      kind: shareKind,
+      id: listingId,
+      titulo: title,
+      url: urlAbsoluta(detailHref),
+    });
   }
 
   return (
-    <ActionRow className={className}>
+    <>
+      <ActionRow className={className}>
       {like && (
         <ActionToggle
           tone="like"
@@ -308,6 +299,23 @@ export function ListingActions({
         </ActionGlyph>
         <ActionLabel>{COPY.save}</ActionLabel>
       </ActionToggle>
-    </ActionRow>
+      </ActionRow>
+
+      {compartir.contenido && (
+        <CompartirSheet
+          open={compartir.abierto}
+          onClose={compartir.cerrar}
+          kind={compartir.contenido.kind}
+          id={compartir.contenido.id}
+          url={compartir.contenido.url ?? urlAbsoluta(detailHref ?? "")}
+          titulo={compartir.contenido.titulo}
+          imagenUrl={compartir.contenido.imagenUrl}
+          detalle={compartir.contenido.detalle}
+          onCompartidoAfuera={() => {
+            void recordListingShareAction({ listingId });
+          }}
+        />
+      )}
+    </>
   );
 }

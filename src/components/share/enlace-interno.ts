@@ -73,6 +73,7 @@ const KIND_POR_SEGMENTO: Record<string, CompartidoKind> = {
   marketplace: "listing",
   profesionales: "listing",
   eventos: "listing",
+  creadores: "listing",
   empleos: "job",
   negocios: "business",
   perfil: "profile",
@@ -84,6 +85,7 @@ const RUTA_POR_VERTICAL: Record<string, string> = {
   product: "/marketplace",
   professional: "/profesionales",
   event: "/eventos",
+  creator_gig: "/creadores",
   job: "/empleos",
   business: "/negocios",
 };

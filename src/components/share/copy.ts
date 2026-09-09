@@ -58,6 +58,11 @@ export const SHARE_COPY = {
   compartirNativo: "Otras apps",
   compartirNativoLabel: "Compartir en otras apps",
   copiarEnlace: "Copiar enlace",
+  facebook: "Facebook",
+  facebookLabel: "Compartir en Facebook",
+  instagram: "Instagram",
+  instagramLabel: "Compartir en Instagram",
+  reenviarHint: "Le llega al chat tal como lo recibiste.",
 
   // ── Resultados ────────────────────────────────────────────────────────────
   copiadoTitle: "Enlace copiado",

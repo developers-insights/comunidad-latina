@@ -35,6 +35,7 @@ import { ApplySheet } from "@/components/creators/apply-sheet";
 import { sendListingMessageAction } from "@/app/(app)/mensajes/inline-actions";
 import { useCloseOnBack } from "@/lib/design/use-overlay";
 import { cn } from "@/lib/utils";
+import type { CompartidoKind } from "@/components/share";
 import { COPY } from "./copy";
 import { ListingActions, type ListingEngagement } from "./listing-actions";
 import { useMediaViewer } from "./media-viewer";
@@ -89,6 +90,17 @@ const DETAIL_ROUTE: Record<string, (id: string) => string> = {
   product: (id) => `/marketplace/${id}`,
   creator_gig: (id) => `/creadores/${id}`,
   job: (id) => `/empleos/${id}`,
+};
+
+const SHARE_KIND: Record<string, CompartidoKind> = {
+  business: "business",
+  job: "job",
+  service: "job",
+  property: "listing",
+  professional: "listing",
+  event: "listing",
+  product: "listing",
+  creator_gig: "listing",
 };
 
 /** Acento del módulo por vertical (para el CTA). Cubre los kinds de esta card. */
@@ -641,6 +653,7 @@ export function FeedListingCard({
             */}
             <ListingActions
               listingId={listing.id}
+              shareKind={SHARE_KIND[listing.kind] ?? "listing"}
               title={listing.title}
               detailHref={detailHref}
               commentCount={engagement?.commentCount}

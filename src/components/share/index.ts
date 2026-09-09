@@ -1,4 +1,9 @@
 export { CompartirSheet, type CompartirSheetProps } from "./compartir-sheet";
+export {
+  ExternalLinkCard,
+  enlaceExternoDelCuerpo,
+  type EnlaceExterno,
+} from "./enlace-externo";
 export { SHARE_COPY, SHARED_CARD_COPY } from "./copy";
 export {
   COMPARTIDO_KINDS,

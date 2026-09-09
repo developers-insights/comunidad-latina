@@ -34,7 +34,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { useBodyScrollLock, useFocusTrap, useMounted } from "@/lib/design/use-overlay";
-import { CompartirSheet, esCompartidoKind } from "@/components/share";
+import { CompartirSheet } from "@/components/share";
 import {
   accionesDisponibles,
   type AmbitoDeMensaje,
@@ -201,7 +201,7 @@ export interface MessageActionsProps {
   body: string;
   deletedAt?: string | null;
   autorNombre: string;
-  /** Si el mensaje ES una tarjeta compartida, se puede reenviar tal cual. */
+  /** Metadatos de compatibilidad para las tarjetas compartidas. */
   compartido?: { kind: string; id: string; titulo: string; url: string } | null;
   /**
    * La burbuja, ya renderizada en el servidor. Es OBLIGATORIA: es lo que este
@@ -226,7 +226,6 @@ export function MessageActions({
   body,
   deletedAt = null,
   autorNombre,
-  compartido = null,
   children,
   className,
 }: MessageActionsProps) {
@@ -396,7 +395,6 @@ export function MessageActions({
               !permitido.editar && isOwn && !deletedAt && kind === "texto"
             }
             hayResponder={responder !== null}
-            puedeReenviar={compartido !== null}
             onResponder={alResponder}
             onCopiar={() => void alCopiar()}
             onReenviar={() => accion("reenviar")}
@@ -455,16 +453,12 @@ export function MessageActions({
         mensajeId={mensajeId}
       />
 
-      {compartido && esCompartidoKind(compartido.kind) && (
-        <CompartirSheet
-          open={abierto && modo === "reenviar"}
-          onClose={cerrar}
-          kind={compartido.kind}
-          id={compartido.id}
-          url={compartido.url}
-          titulo={compartido.titulo}
-        />
-      )}
+      <CompartirSheet
+        open={abierto && modo === "reenviar"}
+        onClose={cerrar}
+        mensajeOrigen={{ ambito, mensajeId, hiloId }}
+        titulo={resumenDeMensaje(kind, body, Boolean(deletedAt))}
+      />
     </>
   );
 }
@@ -507,7 +501,6 @@ export interface MessageMenuProps {
   editarVencido?: boolean;
   /** El hilo montó `ResponderProvider`. Sin él, responder no lleva a ningún lado. */
   hayResponder: boolean;
-  puedeReenviar: boolean;
   onResponder: () => void;
   onCopiar: () => void;
   onReenviar: () => void;
@@ -529,7 +522,6 @@ export function MessageMenu({
   permitido,
   editarVencido = false,
   hayResponder,
-  puedeReenviar,
   onResponder,
   onCopiar,
   onReenviar,
@@ -562,8 +554,6 @@ export function MessageMenu({
         <FilaDeAccion
           icono={<PaperPlaneTilt size={18} />}
           onClick={onReenviar}
-          disabled={!puedeReenviar}
-          nota={!puedeReenviar ? ACCIONES_COPY.reenviar.soloContenido : undefined}
         >
           {ACCIONES_COPY.menu.reenviar}
         </FilaDeAccion>
