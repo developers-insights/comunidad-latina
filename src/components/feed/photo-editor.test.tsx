@@ -130,6 +130,12 @@ describe("PhotoEditor: recorte", () => {
     expect(screen.getByLabelText(new RegExp(C.cropZoomLabel))).toBeTruthy();
   });
 
+  it("el deslizador de zoom no imprime un porcentaje al lado", () => {
+    mount();
+    fireEvent.click(tab(C.tabCrop));
+    expect(screen.queryByText("100%")).toBeNull();
+  });
+
   it("nombra los dos gestos del stage en vez de dejarlos adivinar", () => {
     mount();
     fireEvent.click(tab(C.tabCrop));
@@ -145,6 +151,61 @@ describe("PhotoEditor: recorte", () => {
     const [edit] = onSave.mock.calls[0];
     expect(edit.crop).toEqual(FULL_CROP);
     expect(edit.cropRatio).toBe(0);
+  });
+});
+
+describe("PhotoEditor: acciones del editor", () => {
+  const EDITADO: React.ComponentProps<typeof PhotoEditor>["edit"] = {
+    ...DEFAULT_PHOTO_EDIT,
+    filterId: "vintage",
+    filterIntensity: 0.42,
+    captionText: "  Fiesta latina  ",
+    captionPosition: "top",
+    captionBackground: "none",
+    captionColor: "amarillo",
+    captionFont: "clasica",
+    cropAspect: "1:1",
+    crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+    cropRatio: 1,
+    stickers: [{ id: "s1", emoji: "🔥", x: 0.4, y: 0.6, size: 0.2 }],
+  };
+
+  it("Restablecer vuelve recorte, zoom, filtro, texto y emojis al origen", () => {
+    const { onSave } = mount({ edit: EDITADO });
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer" }));
+    fireEvent.click(done());
+    expect(onSave.mock.calls[0][0]).toEqual(DEFAULT_PHOTO_EDIT);
+  });
+
+  it("Vista previa usa la misma imagen viva y despeja las herramientas", () => {
+    mount({ edit: EDITADO });
+    const liveImage = document.querySelector('img[src="blob:foto"]');
+    fireEvent.click(screen.getByRole("button", { name: "Vista previa" }));
+
+    expect(screen.queryByRole("tablist", { name: C.tabsLabel })).toBeNull();
+    expect(document.querySelectorAll('img[src="blob:foto"]')).toHaveLength(1);
+    expect(document.querySelector('img[src="blob:foto"]')).toBe(liveImage);
+    expect(screen.getByRole("button", { name: "Seguir editando" })).toBeTruthy();
+  });
+
+  it("Listo conserva los cambios aunque se toque desde Vista previa", () => {
+    const { onSave } = mount({ edit: EDITADO });
+    fireEvent.click(screen.getByRole("button", { name: "Vista previa" }));
+    fireEvent.click(done());
+
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      filterId: "vintage",
+      filterIntensity: 0.42,
+      captionText: "Fiesta latina",
+      captionPosition: "top",
+      captionBackground: "none",
+      captionColor: "amarillo",
+      captionFont: "clasica",
+      cropAspect: "1:1",
+      crop: EDITADO.crop,
+      cropRatio: 1,
+      stickers: EDITADO.stickers,
+    });
   });
 });
 

@@ -468,6 +468,9 @@ export const COPY = {
       /** Rótulo del emoji ya puesto, para quien navega con teclado o lector. */
       stickerOnPhoto: (emoji: string, index: number, total: number) =>
         `Emoji ${emoji}, ${index} de ${total}. Movelo con las flechas.`,
+      reset: "Restablecer",
+      preview: "Vista previa",
+      resumeEditing: "Seguir editando",
       cancel: "Cancelar",
       done: "Listo",
     },

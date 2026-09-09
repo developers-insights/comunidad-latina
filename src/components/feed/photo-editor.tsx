@@ -13,9 +13,12 @@ import {
   AlignBottom,
   AlignCenterVertical,
   AlignTop,
+  ArrowCounterClockwise,
   ArrowsOutCardinal,
   Check,
   Crop,
+  Eye,
+  PencilSimple,
   Smiley,
   Sparkle,
   TextT,
@@ -397,6 +400,7 @@ export function PhotoEditor({
    * En un video es la única pestaña que existe (ver `kind` en los props).
    */
   const [tab, setTab] = useState<EditorTab>("filters");
+  const [previewing, setPreviewing] = useState(false);
   const [selectedSticker, setSelectedSticker] = useState<string | null>(null);
   const [stickerNotice, setStickerNotice] = useState(false);
 
@@ -513,7 +517,7 @@ export function PhotoEditor({
   const pinchStart = useRef<{ distance: number; scale: number } | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  const cropping = tab === "crop" && !isVideo;
+  const cropping = tab === "crop" && !isVideo && !previewing;
 
   function pinchDistance(): number {
     const [a, b] = Array.from(pointers.current.values());
@@ -650,6 +654,18 @@ export function PhotoEditor({
     setStickerNotice(false);
   }
 
+  function resetEdit() {
+    setDraft({ ...DEFAULT_PHOTO_EDIT });
+    setManual(null);
+    setAspectTouched(true);
+    setSelectedSticker(null);
+    setStickerNotice(false);
+    pointers.current.clear();
+    dragStart.current = null;
+    pinchStart.current = null;
+    setDragging(false);
+  }
+
   /* ------------------------------ Guardar ------------------------------ */
 
   function handleSave() {
@@ -687,7 +703,11 @@ export function PhotoEditor({
       crop,
       // La FORMA del recuadro publicado, para que la miniatura del composer
       // pueda pintar el recorte sin volver a cargar la foto para medirla.
-      cropRatio: isFullCrop(crop) || stage.height === 0 ? 0 : stage.width / stage.height,
+      cropRatio: isFullCrop(crop)
+        ? 0
+        : natural && stageState && stage.height > 0
+          ? stage.width / stage.height
+          : draft.cropRatio,
       stickers: normalizeStickers(draft.stickers),
     });
   }
@@ -838,8 +858,8 @@ export function PhotoEditor({
             <StickerLayer
               stickers={draft.stickers}
               box={stage}
-              selectedId={tab === "stickers" ? selectedSticker : null}
-              interactive={tab === "stickers"}
+              selectedId={!previewing && tab === "stickers" ? selectedSticker : null}
+              interactive={!previewing && tab === "stickers"}
               reduce={reduce}
               onSelect={setSelectedSticker}
               onMove={(id, x, y) => updateSticker(id, { x, y })}
@@ -848,8 +868,38 @@ export function PhotoEditor({
         </div>
       </div>
 
+      <div className="flex shrink-0 items-center justify-between gap-2 px-5 pt-3">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="min-h-11 px-3"
+          onClick={resetEdit}
+        >
+          <ArrowCounterClockwise size={16} aria-hidden="true" />
+          {COPY.composer.photoEditor.reset}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="min-h-11 px-3"
+          aria-pressed={previewing}
+          onClick={() => setPreviewing((current) => !current)}
+        >
+          {previewing ? (
+            <PencilSimple size={16} aria-hidden="true" />
+          ) : (
+            <Eye size={16} aria-hidden="true" />
+          )}
+          {previewing
+            ? COPY.composer.photoEditor.resumeEditing
+            : COPY.composer.photoEditor.preview}
+        </Button>
+      </div>
+
       {/* ── PESTAÑAS ─────────────────────────────────────────────────────── */}
-      {!isVideo && (
+      {!isVideo && !previewing && (
         <div
           role="tablist"
           aria-label={COPY.composer.photoEditor.tabsLabel}
@@ -902,6 +952,7 @@ export function PhotoEditor({
           que toda la cadena de contenedores tenga un alto definido, y si en
           algún navegador no lo tiene se lee como "sin tope" — justo el caso que
           este número viene a evitar. */}
+      {!previewing && (
       <div className="flex min-h-0 max-h-[30dvh] flex-col overflow-y-auto px-5 pb-4 pt-3">
         {tab === "crop" && !isVideo && (
           <div className="flex flex-col gap-3">
@@ -930,10 +981,9 @@ export function PhotoEditor({
             <div>
               <label
                 htmlFor="photo-editor-zoom"
-                className="flex items-center justify-between text-xs font-medium uppercase tracking-wider text-foreground-muted"
+                className="text-xs font-medium uppercase tracking-wider text-foreground-muted"
               >
                 {COPY.composer.photoEditor.cropZoomLabel}
-                <span className="tabular-nums normal-case tracking-normal">{zoomPercent}%</span>
               </label>
               {/* El deslizador NO es un extra del pellizco: es el camino que
                   funciona con teclado, con lector de pantalla y con un solo
@@ -1265,6 +1315,7 @@ export function PhotoEditor({
           </div>
         )}
       </div>
+      )}
 
       <div className="flex shrink-0 items-center gap-2 border-t border-border-subtle px-5 pt-3">
         <Button type="button" variant="ghost" size="sm" className="min-h-11" onClick={onCancel}>
