@@ -5,7 +5,11 @@ import { z } from "zod";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
-import { KINDS_DE_MENSAJE } from "@/lib/messaging/adjuntos";
+import {
+  CHAT_MEDIA_BUCKET,
+  KINDS_DE_MENSAJE,
+  rutaDeAdjunto,
+} from "@/lib/messaging/adjuntos";
 import { COMPARTIDO_KINDS } from "./enlace-interno";
 
 export type ReenviarMensajeResult =
@@ -97,7 +101,25 @@ export async function reenviarMensajeAction(
 
   const fuente = MensajeFuenteSchema.safeParse(data);
   if (!fuente.success) return { ok: false, code: data ? "error" : "forbidden" };
-  const mensaje = fuente.data;
+  const mensajeFuente = fuente.data;
+  let adjunto = mensajeFuente.adjunto;
+
+  if (adjunto !== null && typeof adjunto.path === "string") {
+    const pathNuevo =
+      typeof adjunto.mime === "string"
+        ? rutaDeAdjunto(tenant.id, user.id, adjunto.mime, crypto.randomUUID())
+        : null;
+    if (!pathNuevo) return { ok: false, code: "error" };
+
+    const { error: copyError } = await supabase.storage
+      .from(CHAT_MEDIA_BUCKET)
+      .copy(adjunto.path, pathNuevo);
+    if (copyError) return { ok: false, code: "error" };
+
+    adjunto = { ...adjunto, path: pathNuevo };
+  }
+
+  const mensaje = { ...mensajeFuente, adjunto };
 
   const destinos = [
     ...new Map(

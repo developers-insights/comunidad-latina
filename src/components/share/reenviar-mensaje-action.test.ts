@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireTenantMatch: vi.fn(),
@@ -20,6 +20,10 @@ const GRUPO_ID = "22222222-2222-4222-8222-222222222222";
 const PERSONA_ID = "88888888-8888-4888-8888-888888888888";
 const DESTINO_HILO_ID = "77777777-7777-4777-8777-777777777777";
 const COMPARTIDO_ID = "44444444-4444-4444-8444-444444444444";
+const NUEVO_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const NUEVO_PATH_IMAGEN = `${TENANT_ID}/${USER_ID}/chat-${NUEVO_UUID}.jpg`;
+const NUEVO_PATH_WEBM = `${TENANT_ID}/${USER_ID}/chat-${NUEVO_UUID}.webm`;
+const NUEVO_PATH_PDF = `${TENANT_ID}/${USER_ID}/chat-${NUEVO_UUID}.pdf`;
 
 interface SourceRow {
   kind: string;
@@ -31,9 +35,11 @@ interface SourceRow {
   deleted_at: string | null;
 }
 
-function crearStub(source: SourceRow | null) {
+function crearStub(source: SourceRow | null, copyError: { message: string } | null = null) {
   const insertados: { tabla: string; fila: Record<string, unknown> }[] = [];
   const consultas: { tabla: string; filtros: [string, unknown][] }[] = [];
+  const copy = vi.fn(async () => ({ data: copyError ? null : {}, error: copyError }));
+  const storageFrom = vi.fn(() => ({ copy }));
 
   const from = vi.fn((tabla: string) => {
     const filtros: [string, unknown][] = [];
@@ -60,8 +66,8 @@ function crearStub(source: SourceRow | null) {
   });
 
   const rpc = vi.fn(async () => ({ data: DESTINO_HILO_ID, error: null }));
-  const supabase = { from, rpc };
-  return { supabase, insertados, consultas, rpc };
+  const supabase = { from, rpc, storage: { from: storageFrom } };
+  return { supabase, insertados, consultas, rpc, copy, storageFrom };
 }
 
 function guardOk(stub: ReturnType<typeof crearStub>) {
@@ -78,7 +84,7 @@ const base = {
   destinos: [{ tipo: "grupo" as const, id: GRUPO_ID }],
 };
 
-const casos: { nombre: string; source: SourceRow }[] = [
+const casos: { nombre: string; source: SourceRow; pathReenviado?: string }[] = [
   {
     nombre: "texto",
     source: {
@@ -93,6 +99,7 @@ const casos: { nombre: string; source: SourceRow }[] = [
   },
   {
     nombre: "foto",
+    pathReenviado: NUEVO_PATH_IMAGEN,
     source: {
       kind: "imagen",
       body: "Pie",
@@ -105,6 +112,7 @@ const casos: { nombre: string; source: SourceRow }[] = [
   },
   {
     nombre: "audio",
+    pathReenviado: NUEVO_PATH_WEBM,
     source: {
       kind: "audio",
       body: "",
@@ -117,6 +125,7 @@ const casos: { nombre: string; source: SourceRow }[] = [
   },
   {
     nombre: "archivo",
+    pathReenviado: NUEVO_PATH_PDF,
     source: {
       kind: "archivo",
       body: "",
@@ -168,7 +177,10 @@ const casos: { nombre: string; source: SourceRow }[] = [
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.limit.mockReturnValue({ ok: true, remaining: 10, retryAfterMs: 0 });
+  vi.spyOn(crypto, "randomUUID").mockReturnValue(NUEVO_UUID);
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("reenviar un mensaje sin confiar en su contenido del cliente", () => {
   for (const caso of casos) {
@@ -197,7 +209,9 @@ describe("reenviar un mensaje sin confiar en su contenido del cliente", () => {
             group_id: GRUPO_ID,
             kind: caso.source.kind,
             body: caso.source.body,
-            adjunto: caso.source.adjunto,
+            adjunto: caso.pathReenviado
+              ? { ...caso.source.adjunto, path: caso.pathReenviado }
+              : caso.source.adjunto,
             ubicacion: caso.source.ubicacion,
             compartido_kind: caso.source.compartido_kind,
             compartido_id: caso.source.compartido_id,
@@ -234,5 +248,44 @@ describe("reenviar un mensaje sin confiar en su contenido del cliente", () => {
       tabla: "messages",
       fila: { conversation_id: DESTINO_HILO_ID, sender_id: USER_ID },
     });
+  });
+
+  it("copia el adjunto una vez y usa el nuevo path propio en todos los destinos", async () => {
+    const source = casos[1].source;
+    const stub = crearStub(source);
+    guardOk(stub);
+
+    const resultado = await reenviarMensajeAction({
+      ...base,
+      destinos: [
+        { tipo: "grupo", id: GRUPO_ID },
+        { tipo: "persona", id: PERSONA_ID },
+      ],
+    });
+
+    expect(resultado).toEqual({ ok: true, enviados: 2, fallidos: 0 });
+    expect(stub.storageFrom).toHaveBeenCalledWith("chat-media");
+    expect(stub.copy).toHaveBeenCalledOnce();
+    expect(stub.copy).toHaveBeenCalledWith(source.adjunto?.path, NUEVO_PATH_IMAGEN);
+    expect(stub.insertados).toHaveLength(2);
+    for (const { fila } of stub.insertados) {
+      expect(fila.adjunto).toEqual({ ...source.adjunto, path: NUEVO_PATH_IMAGEN });
+    }
+  });
+
+  it("no inserta ningún destino cuando falla la copia del adjunto", async () => {
+    const stub = crearStub(casos[1].source, { message: "storage error" });
+    guardOk(stub);
+
+    const resultado = await reenviarMensajeAction({
+      ...base,
+      destinos: [
+        { tipo: "grupo", id: GRUPO_ID },
+        { tipo: "persona", id: PERSONA_ID },
+      ],
+    });
+
+    expect(resultado).toEqual({ ok: false, code: "error" });
+    expect(stub.insertados).toHaveLength(0);
   });
 });
