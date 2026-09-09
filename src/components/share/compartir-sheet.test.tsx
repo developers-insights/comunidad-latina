@@ -117,10 +117,10 @@ describe("CompartirSheet", () => {
     expect(screen.getByRole("button", { name: "Compartir en Instagram" })).toBeTruthy();
   });
 
-  it("si el navegador bloquea Facebook conserva una salida copiando el enlace", async () => {
+  it("completa la salida a Facebook aunque window.open devuelva null", () => {
     const onClose = vi.fn();
     const onCompartidoAfuera = vi.fn();
-    vi.spyOn(window, "open").mockReturnValue(null);
+    const abrir = vi.spyOn(window, "open").mockReturnValue(null);
 
     render(
       <CompartirSheet
@@ -136,7 +136,12 @@ describe("CompartirSheet", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Compartir en Facebook" }));
 
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(URL));
+    expect(abrir).toHaveBeenCalledWith(
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(URL)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
     expect(onCompartidoAfuera).toHaveBeenCalledOnce();
     expect(onClose).toHaveBeenCalledOnce();
   });

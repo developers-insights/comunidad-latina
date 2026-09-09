@@ -87,6 +87,8 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_llamada_viva boolean;
 begin
   if tg_op = 'INSERT' then
     if auth.uid() is not null and new.profile_id = auth.uid() then
@@ -102,11 +104,32 @@ begin
   new.profile_id := old.profile_id;
   new.tenant_id := old.tenant_id;
 
+  -- REINGRESO: quien ya salió (left_at puesto) puede volver a entrar a una
+  -- llamada de GRUPO que sigue viva — colgar por error, o volver tras salir
+  -- de la videollamada, no debería dejarla afuera para siempre. Se reconoce
+  -- únicamente por left_at yendo de "puesto" a null: NO se exige además que
+  -- joined_at cambie de valor, porque `now()` es estable dentro de una
+  -- misma transacción (dos pasos separados por poco tiempo pueden compartir
+  -- el mismo timestamp y seguir siendo dos eventos distintos). Es la única
+  -- puerta por la que left_at deja de ser inmutable.
+  if old.left_at is not null and new.left_at is null then
+    select c.status in ('sonando', 'en_curso') into v_llamada_viva
+      from public.calls c
+     where c.id = new.call_id;
+
+    if not coalesce(v_llamada_viva, false) then
+      raise exception 'CALL_PARTICIPANT_REJOIN: la llamada ya no está viva.';
+    end if;
+
+    new.joined_at := coalesce(new.joined_at, now());
+    return new;
+  end if;
+
   if old.joined_at is not null and new.joined_at is distinct from old.joined_at then
-    raise exception 'CALL_PARTICIPANT_JOINED: joined_at es inmutable.';
+    raise exception 'CALL_PARTICIPANT_JOINED: joined_at es inmutable mientras sigue adentro.';
   end if;
   if old.left_at is not null and new.left_at is distinct from old.left_at then
-    raise exception 'CALL_PARTICIPANT_LEFT: left_at es inmutable.';
+    raise exception 'CALL_PARTICIPANT_LEFT: left_at es inmutable salvo para reingresar.';
   end if;
 
   if old.joined_at is null and new.joined_at is not null then
@@ -261,11 +284,17 @@ using (
       (storage.foldername(name))[2] = (select auth.uid())::text
       and owner_id = (select auth.uid())::text
     )
+    -- `adjunto is not null` no es redundante con el `= storage.objects.name`
+    -- de abajo: es lo que le permite al planner usar el índice PARCIAL de la
+    -- 0140 (messages_adjunto_path_idx / chat_group_messages_adjunto_path_idx)
+    -- en vez de un seq scan de toda la tabla de mensajes en cada apertura de
+    -- un adjunto.
     or exists (
       select 1
         from public.messages m
        where m.tenant_id::text = (storage.foldername(name))[1]
          and m.sender_id::text = (storage.foldername(name))[2]
+         and m.adjunto is not null
          and m.adjunto ->> 'path' = storage.objects.name
     )
     or exists (
@@ -273,6 +302,7 @@ using (
         from public.chat_group_messages m
        where m.tenant_id::text = (storage.foldername(name))[1]
          and m.sender_id::text = (storage.foldername(name))[2]
+         and m.adjunto is not null
          and m.adjunto ->> 'path' = storage.objects.name
     )
   )

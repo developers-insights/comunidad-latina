@@ -296,14 +296,10 @@ export function CompartirSheet(props: CompartirSheetProps) {
     }
   }
 
-  async function compartirFacebook() {
+  function compartirFacebook() {
     if (props.mensajeOrigen) return;
     const destino = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(props.url)}`;
-    const pestaña = window.open(destino, "_blank", "noopener,noreferrer");
-    if (!pestaña) {
-      await copiarEnlace();
-      return;
-    }
+    window.open(destino, "_blank", "noopener,noreferrer");
     props.onCompartidoAfuera?.();
     onClose();
   }
