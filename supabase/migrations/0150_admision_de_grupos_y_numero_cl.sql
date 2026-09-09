@@ -172,6 +172,15 @@ begin
 exception
   when insufficient_privilege or check_violation or foreign_key_violation then
     return 'sin_permiso';
+  -- app.enforce_account_active() (0021) rechaza con un raise exception
+  -- crudo (P0001, "ACCOUNT_SUSPENDED: ..."), no con un código propio: sin
+  -- este catch, una cuenta suspendida ve el mensaje interno tal cual en
+  -- vez de la respuesta 'sin_permiso' que el cliente ya sabe traducir.
+  when raise_exception then
+    if sqlerrm like 'ACCOUNT_SUSPENDED%' then
+      return 'sin_permiso';
+    end if;
+    raise;
 end;
 $$;
 
