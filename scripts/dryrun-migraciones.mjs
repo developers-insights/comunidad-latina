@@ -16,16 +16,30 @@ import pg from "pg";
 
 const REF = "ktmbtpuhqqofdkisqseq";
 const repo = process.cwd();
-const env = Object.fromEntries(
-  fs.readFileSync(path.join(repo, ".env.local"), "utf8").split(/\r?\n/)
-    .filter((l) => /^[A-Z_]+=/.test(l))
-    .map((l) => { const i = l.indexOf("="); return [l.slice(0, i), l.slice(i + 1).replace(/\s+#.*$/, "").trim()]; }),
-);
 const files = process.argv.slice(2);
 if (files.length === 0) { console.error("Pasá al menos un archivo de supabase/migrations/"); process.exit(2); }
+if (!process.env.DATABASE_URL && !process.env.SUPABASE_DB_PASSWORD) {
+  console.error("Falta SUPABASE_DB_PASSWORD o DATABASE_URL en process.env. Ejecutá este script con envkit run.");
+  process.exit(2);
+}
 const neutralizar = (sql) => sql.replace(/^\s*(begin|commit|start transaction)\s*;\s*$/gim, "-- (begin/commit neutralizado por dryrun)");
 
-const client = new pg.Client({ host: `db.${REF}.supabase.co`, port: 5432, user: "postgres", password: env.SUPABASE_DB_PASSWORD, database: "postgres", ssl: { rejectUnauthorized: false } });
+const caPath = process.env.SUPABASE_DB_CA_CERT_PATH;
+const ssl = caPath
+  ? { rejectUnauthorized: true, ca: fs.readFileSync(caPath, "utf8") }
+  : process.env.DRYRUN_ALLOW_INSECURE_TLS === "1"
+    ? { rejectUnauthorized: false }
+    : { rejectUnauthorized: true };
+const connection = process.env.DATABASE_URL
+  ? { connectionString: process.env.DATABASE_URL }
+  : {
+      host: `db.${REF}.supabase.co`,
+      port: 5432,
+      user: "postgres",
+      password: process.env.SUPABASE_DB_PASSWORD,
+      database: "postgres",
+    };
+const client = new pg.Client({ ...connection, ssl });
 await client.connect();
 let ok = true;
 try {

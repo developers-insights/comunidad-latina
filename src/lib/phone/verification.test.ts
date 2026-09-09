@@ -7,10 +7,13 @@ import {
   MAX_SENDS_PER_DAY,
   MAX_SENDS_PER_HOUR,
   canSend,
+  consumeAndBind,
   consumeCode,
   generateCode,
   hashCode,
   issueCode,
+  removeVerifiedPhone,
+  requestPhoneVerification,
   type CanSendResult,
   type ConsumeResult,
 } from "./verification";
@@ -274,6 +277,68 @@ describe("consumeCode", () => {
 
     const [, args] = rpc.mock.calls[0];
     expect(args.p_code_hash).not.toBe(hashCode("123456", PEPPER));
+  });
+});
+
+describe("flujo atómico 0149", () => {
+  it("reserva el rate limit antes del lookup y devuelve el código sólo si hay que enviarlo", async () => {
+    rpc.mockResolvedValue({ data: "send", error: null });
+
+    const result = await requestPhoneVerification(admin, TENANT, {
+      phone: PHONE,
+      profileId: "u1",
+      pepper: PEPPER,
+    });
+
+    expect(result.status).toBe("send");
+    expect(rpc).toHaveBeenCalledWith("phone_verification_request", {
+      p_tenant: TENANT,
+      p_profile: "u1",
+      p_phone: PHONE,
+      p_code_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("no entrega un código ni distingue un número ocupado", async () => {
+    rpc.mockResolvedValue({ data: "accepted", error: null });
+
+    const result = await requestPhoneVerification(admin, TENANT, {
+      phone: PHONE,
+      profileId: "u1",
+      pepper: PEPPER,
+    });
+
+    expect(result).toEqual({ status: "accepted" });
+  });
+
+  it("canjea y prende la insignia en una sola RPC", async () => {
+    rpc.mockResolvedValue({ data: "ok", error: null });
+
+    await expect(
+      consumeAndBind(admin, TENANT, {
+        phone: PHONE,
+        profileId: "u1",
+        code: "123456",
+        pepper: PEPPER,
+      }),
+    ).resolves.toBe("ok");
+    expect(rpc).toHaveBeenCalledWith("phone_verification_consume_and_bind", {
+      p_tenant: TENANT,
+      p_profile: "u1",
+      p_phone: PHONE,
+      p_code_hash: hashCode("123456", PEPPER),
+    });
+  });
+
+  it("quita teléfono e insignia en una sola RPC", async () => {
+    rpc.mockResolvedValue({ data: true, error: null });
+
+    await expect(removeVerifiedPhone(admin, TENANT, "u1")).resolves.toBe(true);
+    expect(rpc).toHaveBeenCalledWith("phone_verification_remove", {
+      p_tenant: TENANT,
+      p_profile: "u1",
+    });
   });
 });
 

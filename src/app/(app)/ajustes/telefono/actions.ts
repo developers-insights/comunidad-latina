@@ -2,16 +2,19 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getTenant } from "@/lib/tenant/resolve";
-import { isPhoneVerificationEnabled, isPhonePepperConfigured } from "@/lib/config/services";
+import { requireTenantMatch } from "@/lib/tenant/guard";
+import {
+  isPhoneVerificationEnabled,
+  isPhonePepperConfigured,
+  isSmsConfigured,
+} from "@/lib/config/services";
 import { maskPhone, parsePhone } from "@/lib/phone/e164";
 import { getSmsSender, verificationSmsBody } from "@/lib/phone/sms";
 import {
-  canSend,
-  consumeCode,
-  issueCode,
+  consumeAndBind,
+  removeVerifiedPhone,
+  requestPhoneVerification,
   MAX_ATTEMPTS,
 } from "@/lib/phone/verification";
 import type { ActionResult } from "@/components/auth/action-result";
@@ -77,18 +80,25 @@ function blocked(): { ok: false; formError: string } | null {
     console.error("[telefono] PHONE_CODE_PEPPER sin configurar — flujo deshabilitado");
     return { ok: false, formError: COPY.disabled };
   }
+  if ((process.env.NODE_ENV === "production" || process.env.VERCEL_ENV) && !isSmsConfigured) {
+    console.error("[telefono] proveedor SMS incompleto — flujo deshabilitado");
+    return { ok: false, formError: COPY.disabled };
+  }
   return null;
 }
 
 async function sessionContext() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const tenant = await getTenant();
-  return { supabase, user, tenant };
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    return {
+      ok: false as const,
+      error: {
+        ok: false as const,
+        formError: guard.reason === "unauthenticated" ? COPY.noSession : guard.message,
+      },
+    };
+  }
+  return { ok: true as const, user: guard.user, tenant: guard.tenant };
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +133,7 @@ export async function sendPhoneCodeAction(
   }
 
   const context = await sessionContext();
-  if (!context) return { ok: false, formError: COPY.noSession };
+  if (!context.ok) return context.error;
   const { user, tenant } = context;
 
   let admin;
@@ -133,51 +143,26 @@ export async function sendPhoneCodeAction(
     return { ok: false, formError: COPY.genericError };
   }
 
-  /**
-   * "Una cuenta por número DENTRO DEL DOMINIO" (0066): la unicidad de
-   * `user_phones` es por tenant, no global — la misma persona puede pertenecer
-   * legítimamente a dos comunidades.
-   *
-   * Se chequea ANTES de gastar un SMS. No es una sonda de existencia
-   * explotable: sólo responde a alguien con sesión, sobre su propio tenant, y
-   * el mismo tope de 3 códigos por hora limita cuántas veces se puede preguntar.
-   */
-  const { data: taken } = await admin
-    .from("user_phones")
-    .select("profile_id")
-    .eq("tenant_id", tenant.id)
-    .eq("phone_e164", phone.e164)
-    .eq("phone_verified", true)
-    .maybeSingle();
-
-  if (taken && taken.profile_id !== user.id) {
-    return { ok: false, fieldErrors: { phone: COPY.phoneTaken } };
-  }
-
-  // El rate limit lo resuelve Postgres contando filas: sigue valiendo aunque el
-  // proceso se reinicie o haya varias instancias.
-  const allowed = await canSend(admin, tenant.id, phone.e164);
-  if (allowed !== "ok") {
-    return {
-      ok: false,
-      formError:
-        allowed === "rate_limited_hora" ? COPY.rateLimitedHour : COPY.rateLimitedDay,
-    };
-  }
-
   const pepper = process.env.PHONE_CODE_PEPPER ?? "";
-  const issued = await issueCode(admin, tenant.id, {
+  const request = await requestPhoneVerification(admin, tenant.id, {
     phone: phone.e164,
     profileId: user.id,
     pepper,
   });
-  if (!issued.ok) return { ok: false, formError: COPY.genericError };
+  if (request.status === "rate_limited_hora" || request.status === "rate_limited_dia") {
+    return {
+      ok: false,
+      formError:
+        request.status === "rate_limited_hora" ? COPY.rateLimitedHour : COPY.rateLimitedDay,
+    };
+  }
 
   const masked = maskPhone(phone.e164);
+  if (request.status === "accepted") return { ok: true, maskedPhone: masked };
   const sent = await getSmsSender().send({
     to: phone.e164,
     maskedTo: masked,
-    body: verificationSmsBody({ code: issued.code, communityName: tenant.name }),
+    body: verificationSmsBody({ code: request.code, communityName: tenant.name }),
   });
 
   if (!sent.ok) {
@@ -212,7 +197,7 @@ export async function verifyPhoneCodeAction(
   if (!phone.ok) return { ok: false, formError: COPY.genericError };
 
   const context = await sessionContext();
-  if (!context) return { ok: false, formError: COPY.noSession };
+  if (!context.ok) return context.error;
   const { user, tenant } = context;
 
   let admin;
@@ -230,8 +215,9 @@ export async function verifyPhoneCodeAction(
    * hash y sumar el intento fallido. Es lo que hace que dos intentos simultáneos
    * gasten DOS intentos y no uno — o sea, que el tope de 5 sea un tope de verdad.
    */
-  const outcome = await consumeCode(admin, tenant.id, {
+  const outcome = await consumeAndBind(admin, tenant.id, {
     phone: phone.e164,
+    profileId: user.id,
     code: parsed.data.code,
     pepper,
   });
@@ -242,6 +228,7 @@ export async function verifyPhoneCodeAction(
       expirado: COPY.codeExpired,
       agotado: COPY.codeExhausted,
       sin_codigo: COPY.codeMissing,
+      ocupado: COPY.genericError,
     }[outcome];
     // El código va en el campo, el resto en el formulario: "venció" no es un
     // problema de lo que la persona escribió, y marcarle el input en rojo la
@@ -249,52 +236,6 @@ export async function verifyPhoneCodeAction(
     return outcome === "invalido"
       ? { ok: false, fieldErrors: { code: message } }
       : { ok: false, formError: message };
-  }
-
-  /**
-   * PRENDER LA INSIGNIA ES DECISIÓN DEL SERVIDOR, no de la función que canjea.
-   * `app.phone_verification_consume()` (0066) lo dice explícitamente y tiene
-   * razón: canjear un código prueba que alguien tiene el teléfono en la mano,
-   * pero atarlo a una identidad y encender una señal de confianza es otra cosa,
-   * y esa la decide la app.
-   */
-  const verifiedAt = new Date().toISOString();
-
-  const { error: phoneError } = await admin.from("user_phones").upsert(
-    {
-      profile_id: user.id,
-      tenant_id: tenant.id,
-      phone_e164: phone.e164,
-      phone_verified: true,
-      phone_verified_at: verifiedAt,
-      verification_channel: "sms",
-    },
-    { onConflict: "profile_id" },
-  );
-
-  if (phoneError) {
-    // Choque contra `user_phones_tenant_e164_uniq`: alguien verificó ese número
-    // entre el envío y el canje. Es raro pero es exactamente el caso que la
-    // unicidad existe para atajar.
-    if (phoneError.code === "23505") {
-      return { ok: false, fieldErrors: { phone: COPY.phoneTaken } };
-    }
-    console.error("[telefono] upsert de user_phones falló", { code: phoneError.code });
-    return { ok: false, formError: COPY.genericError };
-  }
-
-  const { error: profileError } = await admin
-    .from("profiles")
-    .update({ phone_verified: true })
-    .eq("id", user.id);
-
-  if (profileError) {
-    // El teléfono YA quedó verificado: la insignia del perfil es un reflejo, no
-    // la verdad. Se loguea para reconciliar, no se le devuelve un error a
-    // alguien que completó bien todo el flujo.
-    console.error("[telefono] no se pudo prender profiles.phone_verified", {
-      code: profileError.code,
-    });
   }
 
   revalidatePath("/perfil");
@@ -311,7 +252,7 @@ export async function removePhoneAction(): Promise<ActionResult> {
   if (gate) return gate;
 
   const context = await sessionContext();
-  if (!context) return { ok: false, formError: COPY.noSession };
+  if (!context.ok) return context.error;
   const { user, tenant } = context;
 
   let admin;
@@ -321,21 +262,10 @@ export async function removePhoneAction(): Promise<ActionResult> {
     return { ok: false, formError: COPY.genericError };
   }
 
-  // Minimización (§5.4): quitar el teléfono BORRA la fila, no la marca como
-  // inactiva. Un número guardado "por las dudas" sigue siendo un mapa
-  // teléfono↔identidad, que es justo lo que el gate legal de 0030 protege.
-  const { error } = await admin
-    .from("user_phones")
-    .delete()
-    .eq("profile_id", user.id)
-    .eq("tenant_id", tenant.id);
-
-  if (error) {
-    console.error("[telefono] delete de user_phones falló", { code: error.code });
+  const removed = await removeVerifiedPhone(admin, tenant.id, user.id);
+  if (!removed) {
     return { ok: false, formError: COPY.genericError };
   }
-
-  await admin.from("profiles").update({ phone_verified: false }).eq("id", user.id);
 
   revalidatePath("/perfil");
   revalidatePath("/ajustes/telefono");

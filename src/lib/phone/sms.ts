@@ -66,6 +66,14 @@ const devSender: SmsSender = {
   },
 };
 
+const unavailableSender: SmsSender = {
+  name: "proveedor-no-configurado",
+  async send() {
+    console.error("[sms] proveedor no configurado en producción");
+    return { ok: false, reason: "proveedor" };
+  },
+};
+
 /**
  * El remitente vigente.
  *
@@ -75,7 +83,11 @@ const devSender: SmsSender = {
  * desarrollo, con el gate abierto a mano, no se pudiera probar nada.
  */
 export function getSmsSender(): SmsSender {
-  if (!isSmsConfigured) return devSender;
+  if (!isSmsConfigured) {
+    return process.env.NODE_ENV === "production" || process.env.VERCEL_ENV
+      ? unavailableSender
+      : devSender;
+  }
 
   return createTwilioSender();
 }

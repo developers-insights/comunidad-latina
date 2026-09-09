@@ -60,8 +60,26 @@ export const CODE_TTL_MINUTES = 10;
 
 export type CanSendResult = "ok" | "rate_limited_hora" | "rate_limited_dia";
 export type ConsumeResult = "ok" | "invalido" | "expirado" | "agotado" | "sin_codigo";
+export type AtomicConsumeResult = ConsumeResult | "ocupado";
+export type RequestVerificationResult =
+  | { status: "send"; code: string }
+  | { status: "accepted" }
+  | { status: "rate_limited_hora" }
+  | { status: "rate_limited_dia" };
 
 type AdminClient = ReturnType<typeof createAdminClient>;
+type UntypedRpcResult = { data: unknown; error: { code?: string } | null };
+
+function untypedRpc(
+  admin: AdminClient,
+  name: string,
+  args: Record<string, string>,
+): PromiseLike<UntypedRpcResult> {
+  return (admin.rpc as unknown as (
+    rpcName: string,
+    rpcArgs: Record<string, string>,
+  ) => PromiseLike<UntypedRpcResult>)(name, args);
+}
 
 /**
  * Un código de 6 dígitos con aleatoriedad criptográfica.
@@ -156,6 +174,35 @@ export async function issueCode(
   return { ok: true, code };
 }
 
+export async function requestPhoneVerification(
+  admin: AdminClient,
+  tenantId: string,
+  { phone, profileId, pepper }: { phone: string; profileId: string; pepper: string },
+): Promise<RequestVerificationResult> {
+  const code = generateCode();
+  const { data, error } = await untypedRpc(admin, "phone_verification_request", {
+    p_tenant: tenantId,
+    p_profile: profileId,
+    p_phone: phone,
+    p_code_hash: hashCode(code, pepper),
+  });
+
+  if (
+    error ||
+    typeof data !== "string" ||
+    !["send", "accepted", "rate_limited_hora", "rate_limited_dia"].includes(data)
+  ) {
+    console.error("[telefono] phone_verification_request falló", {
+      code: error?.code,
+      recibido: typeof data,
+    });
+    return { status: "rate_limited_hora" };
+  }
+
+  if (data === "send") return { status: "send", code };
+  return { status: data as Exclude<RequestVerificationResult["status"], "send"> };
+}
+
 /* ───────────────────────────── 3. Canjear ───────────────────────────── */
 
 const CONSUME_VALUES: readonly string[] = [
@@ -205,4 +252,54 @@ export async function consumeCode(
   }
 
   return data as ConsumeResult;
+}
+
+export async function consumeAndBind(
+  admin: AdminClient,
+  tenantId: string,
+  {
+    phone,
+    profileId,
+    code,
+    pepper,
+  }: { phone: string; profileId: string; code: string; pepper: string },
+): Promise<AtomicConsumeResult> {
+  const { data, error } = await untypedRpc(admin, "phone_verification_consume_and_bind", {
+    p_tenant: tenantId,
+    p_profile: profileId,
+    p_phone: phone,
+    p_code_hash: hashCode(code, pepper),
+  });
+  const allowed: readonly string[] = [
+    "ok",
+    "invalido",
+    "expirado",
+    "agotado",
+    "sin_codigo",
+    "ocupado",
+  ];
+  if (error || typeof data !== "string" || !allowed.includes(data)) {
+    console.error("[telefono] phone_verification_consume_and_bind falló", {
+      code: error?.code,
+      recibido: typeof data,
+    });
+    return "sin_codigo";
+  }
+  return data as AtomicConsumeResult;
+}
+
+export async function removeVerifiedPhone(
+  admin: AdminClient,
+  tenantId: string,
+  profileId: string,
+): Promise<boolean> {
+  const { data, error } = await untypedRpc(admin, "phone_verification_remove", {
+    p_tenant: tenantId,
+    p_profile: profileId,
+  });
+  if (error || data !== true) {
+    console.error("[telefono] phone_verification_remove falló", { code: error?.code });
+    return false;
+  }
+  return true;
 }

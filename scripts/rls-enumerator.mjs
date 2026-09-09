@@ -28,14 +28,10 @@
  * para este script.)
  */
 
-import { fileURLToPath } from 'node:url';
 import { readFileSync, existsSync } from 'node:fs';
-import path from 'node:path';
-import dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import pg from 'pg';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, '..', '.env.local') });
 
 const DB_HOST = 'db.ktmbtpuhqqofdkisqseq.supabase.co';
 const DB_PORT = 5432;
@@ -63,7 +59,7 @@ const GLOBAL_TABLES_BY_DESIGN = {
  *    un bucket público la URL sería la autorización. Es el bucket donde una
  *    policy floja duele más de todo el proyecto.
  */
-const STORAGE_BUCKETS = ['avatars', 'listing-photos', 'tenant-assets', 'post-media', 'job-cvs'];
+const STORAGE_BUCKETS = ['avatars', 'listing-photos', 'tenant-assets', 'post-media', 'job-cvs', 'chat-media'];
 
 /**
  * Tablas que NO son de Comunidad Latina.
@@ -91,6 +87,57 @@ function esDeOtroProducto(tableName) {
 }
 const CMDS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'];
 const SUFFIX_BY_CMD = { SELECT: 'select', INSERT: 'insert', UPDATE: 'update', DELETE: 'delete' };
+
+export function auditStorage(bucketIds, policies, expectedBuckets = STORAGE_BUCKETS) {
+  const problems = [];
+  const existingBuckets = new Set(bucketIds);
+  const storagePolicies = policies.filter(
+    (p) => p.schemaname === 'storage' && p.tablename === 'objects'
+  );
+
+  for (const bucket of expectedBuckets) {
+    if (!existingBuckets.has(bucket)) problems.push(`Storage: falta el bucket "${bucket}".`);
+    for (const cmd of CMDS) {
+      const covered = storagePolicies.some((p) => {
+        if (p.cmd !== cmd && p.cmd !== 'ALL') return false;
+        return `${p.qual ?? ''} ${p.with_check ?? ''}`.includes(`'${bucket}'`);
+      });
+      if (!covered) {
+        problems.push(`Storage: sin policy ${cmd} para el bucket "${bucket}" en storage.objects.`);
+      }
+    }
+  }
+  return problems;
+}
+
+const REALTIME_POLICIES = [
+  ['escribiendo_directo_recibir', 'SELECT'],
+  ['escribiendo_directo_emitir', 'INSERT'],
+  ['escribiendo_grupo_recibir', 'SELECT'],
+  ['escribiendo_grupo_emitir', 'INSERT'],
+];
+
+export function auditRealtime(policies) {
+  const problems = [];
+  const realtimePolicies = policies.filter(
+    (p) => p.schemaname === 'realtime' && p.tablename === 'messages'
+  );
+
+  for (const [policyName, cmd] of REALTIME_POLICIES) {
+    const found = realtimePolicies.find((p) => p.policyname === policyName);
+    if (!found) {
+      problems.push(`Realtime: falta ${policyName} (${cmd}) en realtime.messages.`);
+      continue;
+    }
+    const roles = Array.isArray(found.roles) ? found.roles : [];
+    const definition = `${found.qual ?? ''} ${found.with_check ?? ''}`;
+    if (found.cmd !== cmd || !roles.includes('authenticated') || !definition.includes("extension = 'broadcast'")) {
+      problems.push(`Realtime: ${policyName} no está restringida a ${cmd}, authenticated y broadcast.`);
+    }
+  }
+
+  return problems;
+}
 
 function buildConnectionString() {
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
@@ -188,9 +235,9 @@ async function main() {
     const tenantTables = new Set(tenantCols.map((r) => r.table_name));
 
     const { rows: policies } = await client.query(`
-      select schemaname, tablename, policyname, cmd, qual, with_check
+      select schemaname, tablename, policyname, cmd, roles, qual, with_check
         from pg_policies
-       where schemaname in ('public', 'storage')
+       where schemaname in ('public', 'storage', 'realtime')
     `);
 
     const publicPoliciesByTable = new Map();
@@ -264,37 +311,17 @@ async function main() {
     } catch {
       fail('No pude leer storage.buckets: ¿el proyecto tiene Storage habilitado?');
     }
-    const existingBuckets = new Set(bucketRows.map((r) => r.id));
-
-    const storagePolicies = policies.filter((p) => p.schemaname === 'storage' && p.tablename === 'objects');
-
+    const bucketIds = bucketRows.map((r) => r.id);
+    for (const problem of auditStorage(bucketIds, policies)) fail(problem);
     for (const bucket of STORAGE_BUCKETS) {
-      if (!existingBuckets.has(bucket)) {
-        fail(`Storage: falta el bucket "${bucket}" (0012_storage.sql no aplicado).`);
-      }
-
-      for (const cmd of CMDS) {
-        const covering = storagePolicies.filter((p) => {
-          if (p.cmd !== cmd && p.cmd !== 'ALL') return false;
-          const definition = `${p.qual ?? ''} ${p.with_check ?? ''}`;
-          return definition.includes(`'${bucket}'`);
-        });
-        if (covering.length === 0) {
-          fail(`Storage: sin policy ${cmd} para el bucket "${bucket}" en storage.objects.`);
-        }
-      }
-
-      if (
-        existingBuckets.has(bucket) &&
-        CMDS.every((cmd) =>
-          storagePolicies.some((p) => {
-            if (p.cmd !== cmd && p.cmd !== 'ALL') return false;
-            return `${p.qual ?? ''} ${p.with_check ?? ''}`.includes(`'${bucket}'`);
-          })
-        )
-      ) {
+      if (!auditStorage(bucketIds, policies, [bucket]).length) {
         pass(`storage bucket "${bucket}" — 4/4 cmds con policy`);
       }
+    }
+
+    for (const problem of auditRealtime(policies)) fail(problem);
+    if (!auditRealtime(policies).length) {
+      pass('realtime.messages — typing directo/grupo, recibir/emitir');
     }
   } finally {
     await client.end();
@@ -321,7 +348,9 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((err) => {
-  console.error(`✘ Error inesperado del enumerador: ${err.stack || err.message}`);
-  process.exit(1);
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch((err) => {
+    console.error(`✘ Error inesperado del enumerador: ${err.stack || err.message}`);
+    process.exit(1);
+  });
+}
