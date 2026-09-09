@@ -293,6 +293,149 @@ export async function cerrarGrupoAction(groupId: string): Promise<GrupoActionRes
 // Membresía
 // ---------------------------------------------------------------------------
 
+export async function solicitarIngresoAlGrupoAction(
+  groupId: string,
+): Promise<GrupoActionResult> {
+  const id = uuid.safeParse(groupId);
+  if (!id.success) return { ok: false, code: "invalid" };
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    return {
+      ok: false,
+      code: guard.reason === "unauthenticated" ? "unauthenticated" : "error",
+    };
+  }
+
+  if (!limit(`grupo-solicitud:${guard.user.id}`, 30, HOUR_MS).ok) {
+    return { ok: false, code: "rate-limited" };
+  }
+
+  const { data, error } = await supabaseSinTiparGrupos(guard.supabase).rpc(
+    "solicitar_ingreso_a_grupo",
+    { p_group: id.data },
+  );
+
+  if (error) {
+    console.warn("[grupos] no se pudo pedir ingreso", { code: error.code });
+    return { ok: false, code: "error" };
+  }
+  if (data === "sin_permiso" || data === "sin_sesion") {
+    return { ok: false, code: "forbidden" };
+  }
+
+  revalidatePath("/mensajes/grupos");
+  revalidatePath(`/mensajes/grupos/${id.data}`);
+  return { ok: true, groupId: id.data };
+}
+
+export async function resolverSolicitudDeGrupoAction(input: {
+  groupId: string;
+  profileId: string;
+  aprobar: boolean;
+}): Promise<GrupoActionResult> {
+  const grupo = uuid.safeParse(input.groupId);
+  const perfil = uuid.safeParse(input.profileId);
+  if (!grupo.success || !perfil.success || typeof input.aprobar !== "boolean") {
+    return { ok: false, code: "invalid" };
+  }
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    return {
+      ok: false,
+      code: guard.reason === "unauthenticated" ? "unauthenticated" : "error",
+    };
+  }
+
+  const db = supabaseSinTiparGrupos(guard.supabase);
+  const { data, error } = await db.rpc("resolver_solicitud_de_grupo", {
+    p_group: grupo.data,
+    p_profile: perfil.data,
+    p_aprobar: input.aprobar,
+  });
+
+  if (error) {
+    console.warn("[grupos] no se pudo resolver la solicitud", { code: error.code });
+    return { ok: false, code: "error" };
+  }
+  if (data === "sin_permiso" || data === "sin_sesion" || data === "cerrado") {
+    return { ok: false, code: "forbidden" };
+  }
+
+  if (data === "aprobada" || data === "rechazada") {
+    try {
+      const { data: ficha } = await db
+        .from("chat_groups")
+        .select("name")
+        .eq("id", grupo.data)
+        .maybeSingle();
+      const nombre = (ficha as { name: string } | null)?.name ?? "el grupo";
+      await createNotification(createAdminClient(), {
+        tenantId: guard.tenant.id,
+        profileId: perfil.data,
+        kind: "group_message",
+        category: "mensajes",
+        title: input.aprobar
+          ? `Ya podés entrar a “${nombre}”`
+          : `No aprobaron tu ingreso a “${nombre}”`,
+        body: input.aprobar
+          ? "Tu solicitud fue aceptada."
+          : "Podés encontrar otros grupos en Mensajes.",
+        href: input.aprobar ? `/mensajes/grupos/${grupo.data}` : "/mensajes/grupos",
+        dedupeUnread: true,
+      });
+    } catch (notifyError) {
+      console.warn("[grupos] no se pudo avisar la resolución", {
+        message: notifyError instanceof Error ? notifyError.message : "error desconocido",
+      });
+    }
+  }
+
+  revalidatePath(`/mensajes/grupos/${grupo.data}/info`);
+  revalidatePath(`/mensajes/grupos/${grupo.data}`);
+  return { ok: true, groupId: grupo.data };
+}
+
+export async function cambiarRolEnGrupoAction(input: {
+  groupId: string;
+  profileId: string;
+  role: "admin" | "member";
+}): Promise<GrupoActionResult> {
+  const parsed = z.object({
+    groupId: z.uuid(),
+    profileId: z.uuid(),
+    role: z.enum(["admin", "member"]),
+  }).safeParse(input);
+  if (!parsed.success) return { ok: false, code: "invalid" };
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    return {
+      ok: false,
+      code: guard.reason === "unauthenticated" ? "unauthenticated" : "error",
+    };
+  }
+
+  const { data, error } = await supabaseSinTiparGrupos(guard.supabase).rpc(
+    "cambiar_rol_en_grupo",
+    {
+      p_group: parsed.data.groupId,
+      p_profile: parsed.data.profileId,
+      p_role: parsed.data.role,
+    },
+  );
+
+  if (error) {
+    console.warn("[grupos] no se pudo cambiar el rol", { code: error.code });
+    return { ok: false, code: "error" };
+  }
+  if (data !== "ok") return { ok: false, code: "forbidden" };
+
+  revalidatePath(`/mensajes/grupos/${parsed.data.groupId}/info`);
+  return { ok: true, groupId: parsed.data.groupId };
+}
+
 /**
  * Unirse a un grupo PÚBLICO. Que sea público, esté activo y sea de mi
  * comunidad lo verifica `chat_group_members_insert` (0133) — acá sólo se

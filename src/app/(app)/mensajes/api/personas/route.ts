@@ -51,6 +51,7 @@ export type PersonaEncontrada = {
   avatarUrl: string | null;
   areaLabel: string | null;
   identityVerified: boolean;
+  numeroCl: string;
 };
 
 export type BusquedaDePersonas = {
@@ -105,6 +106,7 @@ export async function GET(request: Request) {
     avatar_url: string | null;
     area_label: string | null;
     identity_verified: boolean | null;
+    numero_cl: string;
   }[];
 
   return NextResponse.json({
@@ -115,6 +117,7 @@ export async function GET(request: Request) {
       avatarUrl: fila.avatar_url,
       areaLabel: fila.area_label,
       identityVerified: fila.identity_verified === true,
+      numeroCl: fila.numero_cl,
     })),
   } satisfies BusquedaDePersonas);
 }

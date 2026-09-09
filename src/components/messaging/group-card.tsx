@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Lock, UsersThree } from "@phosphor-icons/react/dist/ssr";
+import { Lock, UserPlus, UsersThree } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { Avatar, Chip } from "@/components/ui";
 import {
@@ -85,6 +85,12 @@ export function GroupCard({
               <span className="inline-flex items-center gap-1 text-xs text-foreground-muted">
                 <Lock size={14} aria-hidden="true" />
                 {COPY.groups.privateBadge}
+              </span>
+            )}
+            {grupo.visibility === "request" && (
+              <span className="inline-flex items-center gap-1 text-xs text-foreground-muted">
+                <UserPlus size={14} aria-hidden="true" />
+                {COPY.groups.requestBadge}
               </span>
             )}
           </div>

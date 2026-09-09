@@ -40,9 +40,11 @@ import {
 import { topicoDeGrupo } from "@/lib/messaging/escribiendo";
 import { miembrosLabel, type MensajeDeGrupoRow } from "@/lib/messaging/grupos";
 import {
+  contarMiembrosEnLinea,
   listarMensajesDelGrupo,
   obtenerGrupo,
   perfilesDeAutores,
+  tengoSolicitudPendiente,
 } from "../queries";
 import { SectionTopBar } from "@/components/shell";
 
@@ -85,6 +87,15 @@ export default async function GrupoPage({
   const soyMiembro = grupo.miRol !== null;
   const cerrado = grupo.status === "closed";
   const administro = grupo.miRol === "owner" || grupo.miRol === "admin";
+  const [enLinea, solicitudPendiente] = await Promise.all([
+    soyMiembro ? contarMiembrosEnLinea(grupo.id) : Promise.resolve(0),
+    !soyMiembro && grupo.visibility === "request"
+      ? tengoSolicitudPendiente(grupo.id, user.id)
+      : Promise.resolve(false),
+  ]);
+  const resumenMiembros = soyMiembro
+    ? `${miembrosLabel(grupo.member_count)} · ${COPY.groups.onlineMembers(enLinea)}`
+    : miembrosLabel(grupo.member_count);
 
   /**
    * FUNCIÓN Y NO CONSTANTE: las dos ramas de la pantalla lo montan, pero sólo
@@ -114,10 +125,10 @@ export default async function GrupoPage({
                 nombres={nombres}
                 className="text-sm"
               >
-                {miembrosLabel(grupo.member_count)}
+                {resumenMiembros}
               </RenglonEnVivo>
             ) : (
-              miembrosLabel(grupo.member_count)
+              resumenMiembros
             )}
           </p>
         </div>
@@ -147,7 +158,15 @@ export default async function GrupoPage({
         <EmptyState
           title={COPY.groups.notMemberTitle}
           message={COPY.groups.notMemberMessage}
-          action={cerrado ? undefined : <GroupJoinButton groupId={grupo.id} />}
+          action={
+            cerrado ? undefined : (
+              <GroupJoinButton
+                groupId={grupo.id}
+                visibility={grupo.visibility}
+                requested={solicitudPendiente}
+              />
+            )
+          }
         />
       </div>
     );

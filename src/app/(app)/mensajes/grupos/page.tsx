@@ -9,12 +9,17 @@ import { COPY } from "@/components/messaging/copy";
 import { GroupCard } from "@/components/messaging/group-card";
 import { GroupJoinButton } from "@/components/messaging/group-join-button";
 import { InboxTabs } from "@/components/messaging/inbox-tabs";
+import { InboxSearch } from "@/components/messaging/inbox-search";
 import {
   CATEGORIAS_DE_GRUPO,
   ETIQUETA_DE_CATEGORIA,
   esCategoriaDeGrupo,
 } from "@/lib/messaging/grupos";
-import { listarGruposPublicos, listarMisGrupos } from "./queries";
+import {
+  listarGruposPublicos,
+  listarMisGrupos,
+  listarMisSolicitudes,
+} from "./queries";
 import { SectionTopBar } from "@/components/shell";
 
 export const metadata: Metadata = { title: COPY.groups.title };
@@ -41,7 +46,10 @@ export default async function GruposPage({
 
   const categoria = esCategoriaDeGrupo(tema) ? tema : null;
 
-  const mios = await listarMisGrupos(user.id);
+  const [mios, solicitudes] = await Promise.all([
+    listarMisGrupos(user.id),
+    listarMisSolicitudes(user.id),
+  ]);
   const publicos = await listarGruposPublicos({
     categoria,
     excluir: mios.map((g) => g.id),
@@ -69,6 +77,8 @@ export default async function GruposPage({
       </div>
 
       <InboxTabs active="grupos" />
+
+      <InboxSearch />
 
       {/* Filtro por tema. `scrollbar-none` + scroll horizontal: nueve chips no
           entran en 375px, y esconderlos detrás de un "Más" tapa justo la forma
@@ -139,7 +149,13 @@ export default async function GruposPage({
                 key={grupo.id}
                 grupo={grupo}
                 href={`/mensajes/grupos/${grupo.id}`}
-                action={<GroupJoinButton groupId={grupo.id} />}
+                action={
+                  <GroupJoinButton
+                    groupId={grupo.id}
+                    visibility={grupo.visibility}
+                    requested={solicitudes.has(grupo.id)}
+                  />
+                }
               />
             ))}
           </ul>

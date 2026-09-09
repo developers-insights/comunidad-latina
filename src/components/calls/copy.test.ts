@@ -26,6 +26,10 @@ describe("copy del tope", () => {
     expect(COPY.agregar.boton(3)).toBe("Añadir 3");
   });
 
+  it("la presencia de un candidato se nombra sin jerga", () => {
+    expect(COPY.agregar.enLinea).toBe("En línea");
+  });
+
   it("el conteo de participantes concuerda en número", () => {
     expect(COPY.pantalla.participantes(1)).toBe("1 persona");
     expect(COPY.pantalla.participantes(6)).toBe("6 personas");

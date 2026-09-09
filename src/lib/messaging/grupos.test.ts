@@ -9,6 +9,8 @@ import {
   esFotoDeGrupoValida,
   esUrlDeAvatarsPublico,
   miembrosLabel,
+  requiereSolicitud,
+  VISIBILIDADES,
 } from "./grupos";
 
 /**
@@ -38,6 +40,14 @@ const SQL_0134 = readFileSync(
 const SQL_0135 = readFileSync(
   new URL(
     "../../../supabase/migrations/0135_grupos_moderables_y_cierres.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
+const SQL_0150 = readFileSync(
+  new URL(
+    "../../../supabase/migrations/0150_admision_de_grupos_y_numero_cl.sql",
     import.meta.url,
   ),
   "utf8",
@@ -104,6 +114,85 @@ describe("helpers de presentación", () => {
     expect(administra("admin")).toBe(true);
     expect(administra("member")).toBe(false);
     expect(administra(null)).toBe(false);
+  });
+
+  it("distingue el ingreso por solicitud de la entrada directa y la invitación", () => {
+    expect(VISIBILIDADES).toEqual(["public", "private", "request"]);
+    expect(requiereSolicitud("request")).toBe(true);
+    expect(requiereSolicitud("public")).toBe(false);
+    expect(requiereSolicitud("private")).toBe(false);
+  });
+});
+
+describe("la admisión de grupos y el Número CL (0150)", () => {
+  it("agrega el tercer modo sin volver descubribles los grupos por invitación", () => {
+    expect(SQL_0150).toContain("visibility in ('public', 'private', 'request')");
+    expect(SQL_0150).toContain("visibility in ('public', 'request')");
+  });
+
+  it("las solicitudes tienen cuatro policies, RLS forzada y tenant", () => {
+    const plano = SQL_0150.replace(/\s+/g, " ");
+    expect(plano).toContain("alter table public.chat_group_join_requests enable row level security");
+    expect(plano).toContain("alter table public.chat_group_join_requests force row level security");
+    for (const cmd of ["select", "insert", "update", "delete"]) {
+      expect(plano).toContain(
+        `create policy chat_group_join_requests_${cmd} on public.chat_group_join_requests`,
+      );
+    }
+    expect(SQL_0150).toContain("tenant_id = (select app.current_tenant_id())");
+  });
+
+  it("pedir ingreso sólo permite la propia solicitud en un grupo activo y sin veto", () => {
+    const insert = policy(SQL_0150, "chat_group_join_requests_insert");
+    expect(insert).toContain("profile_id = (select auth.uid())");
+    expect(insert).toContain("g.visibility = 'request'");
+    expect(insert).toContain("g.status = 'active'");
+    expect(insert).toContain("from public.chat_group_bans b");
+    expect(insert).toContain("not app.es_miembro_de_grupo(group_id)");
+  });
+
+  it("aprobar o rechazar es una RPC atómica que vuelve a comprobar el rol", () => {
+    expect(SQL_0150).toContain("create or replace function public.resolver_solicitud_de_grupo");
+    expect(SQL_0150).toContain("for update");
+    expect(SQL_0150).toContain("v_mi_rol not in ('owner', 'admin')");
+    expect(SQL_0150).toContain("insert into public.chat_group_members");
+    expect(SQL_0150).toContain("p.tenant_id = v_tenant");
+    expect(SQL_0150).toContain("delete from public.chat_group_join_requests");
+    expect(SQL_0150).toContain(
+      "revoke all on function public.resolver_solicitud_de_grupo(uuid, uuid, boolean) from public, anon",
+    );
+  });
+
+  it("sólo el owner cambia administradores y las claves de la membresía quedan inmóviles", () => {
+    expect(SQL_0150).toContain("create or replace function public.cambiar_rol_en_grupo");
+    expect(SQL_0150).toContain("v_mi_rol <> 'owner'");
+    expect(SQL_0150).toContain("v_su_rol = 'owner'");
+    expect(SQL_0150).toContain("new.group_id is distinct from old.group_id");
+    expect(SQL_0150).toContain("new.profile_id is distinct from old.profile_id");
+    expect(SQL_0150).toContain("new.tenant_id is distinct from old.tenant_id");
+  });
+
+  it("crea un Número CL público estable, no secuencial, único y protegido", () => {
+    expect(SQL_0150).toContain("extensions.gen_random_bytes");
+    expect(SQL_0150).toContain("pg_advisory_xact_lock");
+    expect(SQL_0150).not.toContain("create sequence");
+    expect(SQL_0150).not.toContain("row_number()");
+    expect(SQL_0150).toContain("add column numero_cl text");
+    expect(SQL_0150).toContain("^CL-[0-9]{12}$");
+    expect(SQL_0150).toContain("create unique index profiles_numero_cl_idx");
+    expect(SQL_0150).toContain("new.numero_cl is distinct from old.numero_cl");
+  });
+
+  it("los dos buscadores encuentran por nombre o Número CL y nunca por teléfono", () => {
+    expect(SQL_0150).toContain("create function public.buscar_personas_de_la_comunidad");
+    expect(SQL_0150).toContain("create or replace function public.buscar_en_mensajeria");
+    expect(SQL_0150).toContain("p.numero_cl");
+    expect(SQL_0150).toContain("'persona'::text");
+    expect(SQL_0150).toContain("v_es_numero and p.numero_cl = v_q");
+    const buscadores = SQL_0150.slice(
+      SQL_0150.indexOf("drop function public.buscar_personas_de_la_comunidad"),
+    );
+    expect(buscadores).not.toMatch(/phone|telefono/i);
   });
 });
 

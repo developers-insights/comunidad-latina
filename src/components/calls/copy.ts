@@ -85,6 +85,7 @@ export const COPY = {
     vacio: "No encontramos a nadie con ese nombre en tu comunidad.",
     vacioSinBusqueda: "Todavía no tenés con quién hablar acá. Buscá a alguien por su nombre.",
     yaEsta: "Ya está en la llamada",
+    enLinea: "En línea",
     boton: (n: number) => (n === 1 ? "Añadir 1" : `Añadir ${n}`),
     okTitle: (n: number) =>
       n === 1 ? "Le está sonando" : `Les está sonando a ${n} personas`,

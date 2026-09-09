@@ -12,6 +12,7 @@ export interface CandidatoUI {
   id: string;
   displayName: string;
   avatarUrl: string | null;
+  enLinea: boolean;
 }
 
 export interface HojaAgregarProps {
@@ -169,6 +170,12 @@ export function HojaAgregar({
                   {yaEsta && (
                     <span className="block text-xs text-foreground-muted">
                       {COPY.agregar.yaEsta}
+                    </span>
+                  )}
+                  {!yaEsta && persona.enLinea && (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-success-ink">
+                      <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
+                      {COPY.agregar.enLinea}
                     </span>
                   )}
                 </span>

@@ -15,6 +15,7 @@ import { COPY } from "@/components/messaging/copy";
 import {
   GroupDangerActions,
   GroupInvite,
+  GroupJoinRequests,
   GroupMemberList,
 } from "@/components/messaging/group-manage";
 import {
@@ -23,7 +24,7 @@ import {
   esCategoriaDeGrupo,
   miembrosLabel,
 } from "@/lib/messaging/grupos";
-import { listarMiembros, obtenerGrupo } from "../../queries";
+import { listarMiembros, listarSolicitudesDelGrupo, obtenerGrupo } from "../../queries";
 
 export const metadata: Metadata = { title: COPY.groups.infoTitle };
 
@@ -65,8 +66,14 @@ export default async function InfoDelGrupoPage({
   // chat, que es la pantalla que sí le corresponde (ficha + botón de unirse).
   if (grupo.miRol === null) redirect(`/mensajes/grupos/${grupo.id}`);
 
-  const miembros = await listarMiembros(grupo.id);
   const puedoAdministrar = administra(grupo.miRol);
+  const [miembros, solicitudes] = await Promise.all([
+    listarMiembros(grupo.id),
+    puedoAdministrar && grupo.visibility === "request" && grupo.status === "active"
+      ? listarSolicitudesDelGrupo(grupo.id)
+      : Promise.resolve([]),
+  ]);
+  const enLinea = miembros.filter((miembro) => miembro.enLinea).length;
   const categoria = esCategoriaDeGrupo(grupo.category)
     ? ETIQUETA_DE_CATEGORIA[grupo.category]
     : null;
@@ -81,7 +88,7 @@ export default async function InfoDelGrupoPage({
             {grupo.name}
           </h1>
           <p className="mt-0.5 text-sm text-foreground-muted">
-            {miembrosLabel(grupo.member_count)}
+            {miembrosLabel(grupo.member_count)} · {COPY.groups.onlineMembers(enLinea)}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-1.5">
@@ -168,6 +175,15 @@ export default async function InfoDelGrupoPage({
         </section>
       )}
 
+      {puedoAdministrar && grupo.visibility === "request" && grupo.status === "active" && (
+        <section>
+          <h2 className="mb-3 font-display text-base font-semibold text-foreground">
+            {COPY.groups.requestsTitle}
+          </h2>
+          <GroupJoinRequests groupId={grupo.id} solicitudes={solicitudes} />
+        </section>
+      )}
+
       <section>
         <h2 className="mb-3 font-display text-base font-semibold text-foreground">
           {COPY.groups.membersTitle}
@@ -181,6 +197,7 @@ export default async function InfoDelGrupoPage({
             role: miembro.role,
             displayName: miembro.displayName,
             avatarUrl: miembro.avatarUrl,
+            enLinea: miembro.enLinea,
           }))}
         />
       </section>

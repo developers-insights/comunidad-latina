@@ -4,8 +4,15 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "@phosphor-icons/react/dist/ssr";
 import { Button, Spinner, useToast } from "@/components/ui";
-import { unirmeAlGrupoAction } from "@/app/(app)/mensajes/grupos/actions";
-import { COPY_VETO } from "@/lib/messaging/grupos";
+import {
+  solicitarIngresoAlGrupoAction,
+  unirmeAlGrupoAction,
+} from "@/app/(app)/mensajes/grupos/actions";
+import {
+  COPY_VETO,
+  requiereSolicitud,
+  type VisibilidadDeGrupo,
+} from "@/lib/messaging/grupos";
 import { COPY } from "./copy";
 
 /**
@@ -18,9 +25,13 @@ import { COPY } from "./copy";
  */
 export function GroupJoinButton({
   groupId,
+  visibility = "public",
+  requested = false,
   className,
 }: {
   groupId: string;
+  visibility?: VisibilidadDeGrupo;
+  requested?: boolean;
   className?: string;
 }) {
   const router = useRouter();
@@ -29,13 +40,26 @@ export function GroupJoinButton({
   const [, startTransition] = useTransition();
 
   function unirme() {
-    if (enviando) return;
+    if (enviando || requested) return;
     setEnviando(true);
 
     startTransition(async () => {
-      const resultado = await unirmeAlGrupoAction(groupId);
+      const porSolicitud = requiereSolicitud(visibility);
+      const resultado = porSolicitud
+        ? await solicitarIngresoAlGrupoAction(groupId)
+        : await unirmeAlGrupoAction(groupId);
       if (resultado.ok) {
-        router.push(`/mensajes/grupos/${groupId}`);
+        if (porSolicitud) {
+          setEnviando(false);
+          toast({
+            title: COPY.groups.requestedJoin,
+            description: COPY.groups.requestedJoinMessage,
+            variant: "success",
+          });
+          router.refresh();
+        } else {
+          router.push(`/mensajes/grupos/${groupId}`);
+        }
         return;
       }
 
@@ -71,7 +95,7 @@ export function GroupJoinButton({
       variant="secondary"
       size="sm"
       className={className}
-      disabled={enviando}
+      disabled={enviando || requested}
       onClick={unirme}
     >
       {enviando ? (
@@ -79,7 +103,15 @@ export function GroupJoinButton({
       ) : (
         <Plus size={16} weight="bold" aria-hidden="true" />
       )}
-      {enviando ? COPY.groups.joining : COPY.groups.join}
+      {requested
+        ? COPY.groups.requestedJoin
+        : enviando
+          ? requiereSolicitud(visibility)
+            ? COPY.groups.requestingJoin
+            : COPY.groups.joining
+          : requiereSolicitud(visibility)
+            ? COPY.groups.requestJoin
+            : COPY.groups.join}
     </Button>
   );
 }

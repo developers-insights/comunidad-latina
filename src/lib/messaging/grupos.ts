@@ -62,8 +62,12 @@ export const ETIQUETA_DE_CATEGORIA: Record<CategoriaDeGrupo, string> = {
   otro: "Otros",
 };
 
-export const VISIBILIDADES = ["public", "private"] as const;
+export const VISIBILIDADES = ["public", "private", "request"] as const;
 export type VisibilidadDeGrupo = (typeof VISIBILIDADES)[number];
+
+export function requiereSolicitud(visibilidad: VisibilidadDeGrupo): boolean {
+  return visibilidad === "request";
+}
 
 export const ROLES = ["owner", "admin", "member"] as const;
 export type RolEnGrupo = (typeof ROLES)[number];
@@ -87,12 +91,20 @@ export type GrupoRow = {
   name: string;
   description: string | null;
   category: string;
-  visibility: string;
+  visibility: VisibilidadDeGrupo;
   avatar_url: string | null;
   status: string;
   member_count: number;
   created_by: string;
   created_at: string;
+};
+
+export type SolicitudDeGrupoRow = {
+  profileId: string;
+  requestedAt: string;
+  displayName: string;
+  avatarUrl: string | null;
+  numeroCl: string;
 };
 
 /** Una sola definición de columnas para la query y para el tipo. */

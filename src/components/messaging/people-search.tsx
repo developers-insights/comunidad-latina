@@ -12,6 +12,7 @@ export type PersonaEncontrada = {
   avatarUrl: string | null;
   areaLabel: string | null;
   identityVerified: boolean;
+  numeroCl: string;
 };
 
 type Estado =
@@ -216,11 +217,9 @@ export function PeopleSearch({
                   <span className="block truncate font-medium text-foreground">
                     {persona.displayName}
                   </span>
-                  {persona.areaLabel && (
-                    <span className="block truncate text-xs text-foreground-muted">
-                      {persona.areaLabel}
-                    </span>
-                  )}
+                  <span className="block truncate text-xs text-foreground-muted">
+                    {[persona.numeroCl, persona.areaLabel].filter(Boolean).join(" · ")}
+                  </span>
                 </span>
                 <span className="shrink-0 text-sm font-medium text-brand-ink">
                   {ocupadoId === persona.id ? <Spinner size={16} /> : etiquetaAccion}

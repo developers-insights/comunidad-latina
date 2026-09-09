@@ -8,7 +8,9 @@ import {
   type GrupoRow,
   type MensajeDeGrupoRow,
   type RolEnGrupo,
+  type SolicitudDeGrupoRow,
 } from "@/lib/messaging/grupos";
+import { leerPresencia } from "@/lib/messaging/presencia";
 
 /**
  * LECTURAS DE GRUPOS.
@@ -30,6 +32,7 @@ export type MiembroDeGrupo = {
   displayName: string;
   avatarUrl: string | null;
   identityVerified: boolean;
+  enLinea: boolean;
 };
 
 export type GrupoConMiRol = GrupoRow & { miRol: RolEnGrupo | null };
@@ -54,6 +57,31 @@ export async function listarMisGrupos(profileId: string): Promise<GrupoConMiRol[
     .map((fila) => ({ ...fila.grupo, miRol: fila.role }));
 }
 
+export async function listarMisSolicitudes(profileId: string): Promise<Set<string>> {
+  const supabase = supabaseSinTiparGrupos(await createClient());
+  const { data } = await supabase
+    .from("chat_group_join_requests")
+    .select("group_id")
+    .eq("profile_id", profileId)
+    .limit(100);
+
+  return new Set((data ?? []).map((fila) => String(fila.group_id)));
+}
+
+export async function tengoSolicitudPendiente(
+  groupId: string,
+  profileId: string,
+): Promise<boolean> {
+  const supabase = supabaseSinTiparGrupos(await createClient());
+  const { data } = await supabase
+    .from("chat_group_join_requests")
+    .select("group_id")
+    .eq("group_id", groupId)
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  return data !== null;
+}
+
 /**
  * Los grupos públicos y activos de la comunidad. `excluir` saca los que ya son
  * míos: "Para sumarte" con grupos donde ya estoy es una lista que miente.
@@ -66,7 +94,7 @@ export async function listarGruposPublicos(options: {
   let query = supabase
     .from("chat_groups")
     .select(GRUPO_COLUMNS)
-    .eq("visibility", "public")
+    .in("visibility", ["public", "request"])
     .eq("status", "active")
     .order("member_count", { ascending: false })
     .order("created_at", { ascending: false })
@@ -146,13 +174,19 @@ export async function listarMiembros(groupId: string): Promise<MiembroDeGrupo[]>
     } | null;
   };
 
-  const miembros = ((data ?? []) as unknown as Fila[]).map((fila) => ({
+  const filas = (data ?? []) as unknown as Fila[];
+  const presencia = await leerPresencia(
+    supabase,
+    filas.map((fila) => fila.profile_id),
+  );
+  const miembros = filas.map((fila) => ({
     profileId: fila.profile_id,
     role: fila.role,
     joinedAt: fila.joined_at,
     displayName: fila.perfil?.display_name ?? "Miembro de la comunidad",
     avatarUrl: fila.perfil?.avatar_url ?? null,
     identityVerified: fila.perfil?.identity_verified === true,
+    enLinea: presencia.get(fila.profile_id)?.enLinea === true,
   }));
 
   // Quien creó el grupo y quienes administran, arriba: es lo que se busca
@@ -160,6 +194,56 @@ export async function listarMiembros(groupId: string): Promise<MiembroDeGrupo[]>
   const peso: Record<RolEnGrupo, number> = { owner: 0, admin: 1, member: 2 };
   return miembros.sort(
     (a, b) => peso[a.role] - peso[b.role] || a.joinedAt.localeCompare(b.joinedAt),
+  );
+}
+
+export async function listarSolicitudesDelGrupo(
+  groupId: string,
+): Promise<SolicitudDeGrupoRow[]> {
+  const supabase = supabaseSinTiparGrupos(await createClient());
+  const { data, error } = await supabase
+    .from("chat_group_join_requests")
+    .select(
+      "profile_id, requested_at, perfil:profiles(id, display_name, avatar_url, numero_cl)",
+    )
+    .eq("group_id", groupId)
+    .order("requested_at", { ascending: true })
+    .limit(100);
+
+  if (error) {
+    console.warn("[grupos] no se pudieron leer las solicitudes", { code: error.code });
+    return [];
+  }
+
+  return ((data ?? []) as unknown as {
+    profile_id: string;
+    requested_at: string;
+    perfil: {
+      display_name: string | null;
+      avatar_url: string | null;
+      numero_cl: string;
+    } | null;
+  }[]).map((fila) => ({
+    profileId: fila.profile_id,
+    requestedAt: fila.requested_at,
+    displayName: fila.perfil?.display_name ?? "Miembro de la comunidad",
+    avatarUrl: fila.perfil?.avatar_url ?? null,
+    numeroCl: fila.perfil?.numero_cl ?? "",
+  }));
+}
+
+export async function contarMiembrosEnLinea(groupId: string): Promise<number> {
+  const supabase = supabaseSinTiparGrupos(await createClient());
+  const { data } = await supabase
+    .from("chat_group_members")
+    .select("profile_id")
+    .eq("group_id", groupId)
+    .limit(100);
+  const ids = (data ?? []).map((fila) => String(fila.profile_id));
+  const presencias = await leerPresencia(supabase, ids);
+  return ids.reduce(
+    (total, id) => total + (presencias.get(id)?.enLinea === true ? 1 : 0),
+    0,
   );
 }
 

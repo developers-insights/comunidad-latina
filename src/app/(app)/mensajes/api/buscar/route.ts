@@ -308,6 +308,7 @@ export async function GET(request: Request) {
     display_name: string | null;
     avatar_url: string | null;
     area_label: string | null;
+    numero_cl: string;
   }[])) {
     const nombre = fila.display_name ?? "Miembro de la comunidad";
     if (yaHablo.has(nombre)) continue;
@@ -315,7 +316,7 @@ export async function GET(request: Request) {
       tipo: "persona",
       id: fila.id,
       titulo: nombre,
-      fragmento: fila.area_label,
+      fragmento: [fila.numero_cl, fila.area_label].filter(Boolean).join(" · "),
       cuando: null,
       href: `/perfil/${fila.id}`,
       avatarUrl: fila.avatar_url,

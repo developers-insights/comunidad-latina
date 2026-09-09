@@ -39,7 +39,7 @@ export const COPY = {
 
     // ── Buscador de personas ────────────────────────────────────────────────
     searchLabel: "Buscar a alguien de la comunidad",
-    searchPlaceholder: "Buscá a quién querés escribirle",
+    searchPlaceholder: "Buscá por nombre o Número CL",
     searchHint: "Escribí un nombre para empezar",
     searchEmpty: (termino: string) =>
       `No encontramos a nadie con “${termino}” en la comunidad.`,
@@ -127,7 +127,7 @@ export const COPY = {
 
     // ── El buscador de la bandeja ───────────────────────────────────────────
     findLabel: "Buscar en tus mensajes",
-    findPlaceholder: "Buscá un chat, un grupo o a alguien",
+    findPlaceholder: "Buscá un chat, grupo, nombre o Número CL",
     findHint: "Escribí para buscar",
     findEmpty: (termino: string) =>
       `No encontramos nada con “${termino}” en tus mensajes.`,
@@ -178,6 +178,8 @@ export const COPY = {
     visibilityPublicHelp: "Aparece en la lista y se suman con un toque.",
     visibilityPrivate: "Solo por invitación",
     visibilityPrivateHelp: "No aparece en ninguna lista. Vos elegís a quién sumar.",
+    visibilityRequest: "Con solicitud de ingreso",
+    visibilityRequestHelp: "Aparece en la lista y quien administra decide quién entra.",
     photoLabel: "Foto del grupo",
     submit: "Crear el grupo",
     submitting: "Creando…",
@@ -195,6 +197,10 @@ export const COPY = {
     joining: "Entrando…",
     joined: "Ya estás adentro",
     joinError: "No pudimos sumarte al grupo. Probá de nuevo.",
+    requestJoin: "Solicitar ingreso",
+    requestingJoin: "Enviando…",
+    requestedJoin: "Solicitud enviada",
+    requestedJoinMessage: "Quien administra el grupo va a revisar tu solicitud.",
     leave: "Salir del grupo",
     leaveConfirmTitle: "¿Salir del grupo?",
     leaveConfirmBody:
@@ -212,7 +218,9 @@ export const COPY = {
     you: "Vos",
     roleOwner: "Creó el grupo",
     roleAdmin: "Administra",
+    onlineMembers: (n: number) => n === 1 ? "1 en línea" : `${n} en línea`,
     privateBadge: "Solo por invitación",
+    requestBadge: "Ingreso con solicitud",
     closedBanner: "Este grupo está cerrado. Podés leer lo que se dijo, pero ya no se escribe.",
     notMemberTitle: "Todavía no estás en este grupo",
     notMemberMessage: "Sumate para leer lo que se está hablando y escribir.",
@@ -228,6 +236,17 @@ export const COPY = {
     inviteHelp: "Buscá a alguien de la comunidad para sumarlo al grupo.",
     invited: (name: string) => `${name} ya está adentro`,
     inviteError: "No pudimos sumar a esa persona. Probá de nuevo.",
+    requestsTitle: "Solicitudes de ingreso",
+    requestsEmpty: "No hay solicitudes pendientes.",
+    approveRequest: "Aprobar",
+    rejectRequest: "Rechazar",
+    requestApproved: "Listo, ya está adentro",
+    requestRejected: "Solicitud rechazada",
+    requestDecisionError: "No pudimos resolver la solicitud. Probá de nuevo.",
+    promoteAdmin: "Hacer admin",
+    demoteAdmin: "Quitar como admin",
+    roleChanged: "Actualizamos quién administra el grupo",
+    roleChangeError: "No pudimos cambiar ese rol. Probá de nuevo.",
     alreadyMember: "Esa persona ya está en el grupo.",
     remove: "Sacar del grupo",
     removeConfirmTitle: (name: string) => `¿Sacar a ${name}?`,

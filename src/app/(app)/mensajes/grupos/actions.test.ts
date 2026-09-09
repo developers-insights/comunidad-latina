@@ -58,6 +58,9 @@ import {
   enviarMensajeAlGrupoAction,
   expulsarDelGrupoAction,
   invitarAlGrupoAction,
+  cambiarRolEnGrupoAction,
+  resolverSolicitudDeGrupoAction,
+  solicitarIngresoAlGrupoAction,
   unirmeAlGrupoAction,
 } from "./actions";
 
@@ -313,6 +316,72 @@ describe("invitarAlGrupoAction", () => {
     await expect(
       invitarAlGrupoAction({ groupId: GROUP_ID, profileId: OTRO_ID }),
     ).resolves.toEqual({ ok: false, code: "forbidden" });
+  });
+});
+
+describe("admisión por solicitud", () => {
+  it("solicita ingreso por RPC y trata una solicitud repetida como éxito", async () => {
+    const stub = crearStub({ rpc: { solicitar_ingreso_a_grupo: { data: "pendiente" } } });
+    guardOk(stub);
+
+    await expect(solicitarIngresoAlGrupoAction(GROUP_ID)).resolves.toEqual({
+      ok: true,
+      groupId: GROUP_ID,
+    });
+    expect(stub.rpcCalls).toContainEqual([
+      "solicitar_ingreso_a_grupo",
+      { p_group: GROUP_ID },
+    ]);
+  });
+
+  it("aprobar o rechazar no son dos escrituras desde la action", async () => {
+    const stub = crearStub({ rpc: { resolver_solicitud_de_grupo: { data: "aprobada" } } });
+    guardOk(stub);
+
+    await expect(
+      resolverSolicitudDeGrupoAction({
+        groupId: GROUP_ID,
+        profileId: OTRO_ID,
+        aprobar: true,
+      }),
+    ).resolves.toEqual({ ok: true, groupId: GROUP_ID });
+    expect(stub.rpcCalls).toContainEqual([
+      "resolver_solicitud_de_grupo",
+      { p_group: GROUP_ID, p_profile: OTRO_ID, p_aprobar: true },
+    ]);
+    expect(
+      stub.calls.some((call) => ["insert", "update", "delete"].includes(call.method)),
+    ).toBe(false);
+  });
+});
+
+describe("administradores del grupo", () => {
+  it("promover y degradar pasan por la RPC que exige owner", async () => {
+    const stub = crearStub({ rpc: { cambiar_rol_en_grupo: { data: "ok" } } });
+    guardOk(stub);
+
+    await expect(
+      cambiarRolEnGrupoAction({
+        groupId: GROUP_ID,
+        profileId: OTRO_ID,
+        role: "admin",
+      }),
+    ).resolves.toEqual({ ok: true, groupId: GROUP_ID });
+    expect(stub.rpcCalls).toContainEqual([
+      "cambiar_rol_en_grupo",
+      { p_group: GROUP_ID, p_profile: OTRO_ID, p_role: "admin" },
+    ]);
+  });
+
+  it("rechaza roles fuera de admin/member antes del guard", async () => {
+    await expect(
+      cambiarRolEnGrupoAction({
+        groupId: GROUP_ID,
+        profileId: OTRO_ID,
+        role: "owner" as "admin",
+      }),
+    ).resolves.toEqual({ ok: false, code: "invalid" });
+    expect(mocks.requireTenantMatch).not.toHaveBeenCalled();
   });
 });
 

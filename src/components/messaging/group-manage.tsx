@@ -6,12 +6,19 @@ import { SignOut, UserMinus, XCircle } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { Avatar, Badge, Button, Dialog, useToast } from "@/components/ui";
 import {
+  cambiarRolEnGrupoAction,
   cerrarGrupoAction,
   expulsarDelGrupoAction,
   invitarAlGrupoAction,
+  resolverSolicitudDeGrupoAction,
   salirDelGrupoAction,
 } from "@/app/(app)/mensajes/grupos/actions";
-import { COPY_VETO, administra, type RolEnGrupo } from "@/lib/messaging/grupos";
+import {
+  COPY_VETO,
+  administra,
+  type RolEnGrupo,
+  type SolicitudDeGrupoRow,
+} from "@/lib/messaging/grupos";
 import { COPY } from "./copy";
 import { PeopleSearch, type PersonaEncontrada } from "./people-search";
 
@@ -20,6 +27,7 @@ export type MiembroVisible = {
   role: RolEnGrupo;
   displayName: string;
   avatarUrl: string | null;
+  enLinea: boolean;
 };
 
 /**
@@ -48,6 +56,7 @@ export function GroupMemberList({
   const router = useRouter();
   const { toast } = useToast();
   const [aSacar, setASacar] = useState<MiembroVisible | null>(null);
+  const [cambiandoRol, setCambiandoRol] = useState<string | null>(null);
   const [enviando, startTransition] = useTransition();
 
   const puedoAdministrar = administra(miRol);
@@ -66,6 +75,24 @@ export function GroupMemberList({
         return;
       }
       toast({ title: COPY.groups.removeError, variant: "danger" });
+    });
+  }
+
+  function cambiarRol(miembro: MiembroVisible) {
+    if (miRol !== "owner" || miembro.role === "owner") return;
+    setCambiandoRol(miembro.profileId);
+    startTransition(async () => {
+      const resultado = await cambiarRolEnGrupoAction({
+        groupId,
+        profileId: miembro.profileId,
+        role: miembro.role === "admin" ? "member" : "admin",
+      });
+      setCambiandoRol(null);
+      toast({
+        title: resultado.ok ? COPY.groups.roleChanged : COPY.groups.roleChangeError,
+        variant: resultado.ok ? "success" : "danger",
+      });
+      if (resultado.ok) router.refresh();
     });
   }
 
@@ -99,6 +126,12 @@ export function GroupMemberList({
                       : COPY.groups.roleAdmin}
                   </p>
                 )}
+                {miembro.enLinea && (
+                  <p className="inline-flex items-center gap-1.5 text-xs text-success-ink">
+                    <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
+                    {COPY.groups.onlineMembers(1)}
+                  </p>
+                )}
               </div>
 
               {miembro.role === "owner" && (
@@ -106,15 +139,30 @@ export function GroupMemberList({
               )}
 
               {sePuedeSacar && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-label={COPY.groups.removeConfirmTitle(miembro.displayName)}
-                  onClick={() => setASacar(miembro)}
-                >
-                  <UserMinus size={18} aria-hidden="true" />
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {miRol === "owner" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      loading={cambiandoRol === miembro.profileId}
+                      onClick={() => cambiarRol(miembro)}
+                    >
+                      {miembro.role === "admin"
+                        ? COPY.groups.demoteAdmin
+                        : COPY.groups.promoteAdmin}
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={COPY.groups.removeConfirmTitle(miembro.displayName)}
+                    onClick={() => setASacar(miembro)}
+                  >
+                    <UserMinus size={18} aria-hidden="true" />
+                  </Button>
+                </div>
               )}
             </li>
           );
@@ -150,6 +198,93 @@ export function GroupMemberList({
         }
       />
     </>
+  );
+}
+
+export function GroupJoinRequests({
+  groupId,
+  solicitudes,
+}: {
+  groupId: string;
+  solicitudes: SolicitudDeGrupoRow[];
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [resolviendo, setResolviendo] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  function resolver(solicitud: SolicitudDeGrupoRow, aprobar: boolean) {
+    if (resolviendo) return;
+    setResolviendo(solicitud.profileId);
+    startTransition(async () => {
+      const resultado = await resolverSolicitudDeGrupoAction({
+        groupId,
+        profileId: solicitud.profileId,
+        aprobar,
+      });
+      setResolviendo(null);
+      toast({
+        title: resultado.ok
+          ? aprobar
+            ? COPY.groups.requestApproved
+            : COPY.groups.requestRejected
+          : COPY.groups.requestDecisionError,
+        variant: resultado.ok ? "success" : "danger",
+      });
+      if (resultado.ok) router.refresh();
+    });
+  }
+
+  if (solicitudes.length === 0) {
+    return <p className="text-sm text-foreground-secondary">{COPY.groups.requestsEmpty}</p>;
+  }
+
+  return (
+    <ul className="flex flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface">
+      {solicitudes.map((solicitud, index) => (
+        <li
+          key={solicitud.profileId}
+          className={cn(
+            "flex flex-wrap items-center gap-3 p-3",
+            index > 0 && "border-t border-border-subtle",
+          )}
+        >
+          <Avatar
+            src={solicitud.avatarUrl}
+            name={solicitud.displayName}
+            size="md"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-foreground">
+              {solicitud.displayName}
+            </span>
+            <span className="block text-xs text-foreground-muted">
+              {solicitud.numeroCl}
+            </span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={resolviendo !== null}
+              onClick={() => resolver(solicitud, false)}
+            >
+              {COPY.groups.rejectRequest}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              loading={resolviendo === solicitud.profileId}
+              disabled={resolviendo !== null}
+              onClick={() => resolver(solicitud, true)}
+            >
+              {COPY.groups.approveRequest}
+            </Button>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -9,6 +9,7 @@ import {
   type ParticipanteRow,
   type PersonaEnLlamada,
 } from "@/lib/calls/tipos";
+import { leerPresencia } from "@/lib/messaging/presencia";
 
 /**
  * Lecturas de llamadas.
@@ -190,6 +191,7 @@ export interface Candidato {
   id: string;
   displayName: string;
   avatarUrl: string | null;
+  enLinea: boolean;
 }
 
 /**
@@ -236,10 +238,18 @@ export async function getCandidatos(
   const unicos = [...new Set(ids)].filter((id) => id !== params.userId);
   if (unicos.length === 0) return [];
 
-  const perfiles = await perfilesPorId(supabaseCliente, unicos);
+  const [perfiles, presencia] = await Promise.all([
+    perfilesPorId(supabaseCliente, unicos),
+    leerPresencia(supabaseCliente, unicos),
+  ]);
   return [...perfiles.values()]
-    .map((p) => ({ id: p.id, displayName: p.display_name, avatarUrl: p.avatar_url }))
-    .sort((a, b) => a.displayName.localeCompare(b.displayName, "es"));
+    .map((p) => ({
+      id: p.id,
+      displayName: p.display_name,
+      avatarUrl: p.avatar_url,
+      enLinea: presencia.get(p.id)?.enLinea === true,
+    }))
+    .sort((a, b) => Number(b.enLinea) - Number(a.enLinea) || a.displayName.localeCompare(b.displayName, "es"));
 }
 
 /**

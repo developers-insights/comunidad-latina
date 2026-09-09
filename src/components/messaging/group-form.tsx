@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Lock, Trash, UsersThree } from "@phosphor-icons/react/dist/ssr";
+import { Camera, Lock, Trash, UserPlus, UsersThree } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import {
   Avatar,
@@ -304,6 +304,14 @@ export function GroupForm({ grupo }: { grupo?: GrupoEditable }) {
           icono={<Lock size={20} aria-hidden="true" />}
           titulo={COPY.groups.visibilityPrivate}
           detalle={COPY.groups.visibilityPrivateHelp}
+        />
+        <OpcionVisibilidad
+          valor="request"
+          actual={visibility}
+          onSelect={setVisibility}
+          icono={<UserPlus size={20} aria-hidden="true" />}
+          titulo={COPY.groups.visibilityRequest}
+          detalle={COPY.groups.visibilityRequestHelp}
         />
       </fieldset>
 
