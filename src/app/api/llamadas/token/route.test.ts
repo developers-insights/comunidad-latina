@@ -108,6 +108,19 @@ describe("POST /api/llamadas/token", () => {
     expect(mocks.emitirTokenRtc).not.toHaveBeenCalled();
   });
 
+  it("le niega el token a quien ya salió de la llamada (left_at no nulo), sin firmar nada", async () => {
+    guardOk({
+      call_participants: { data: { profile_id: USER_ID, left_at: "2026-09-08T20:00:00.000Z" } },
+      calls: { data: { id: CALL_ID, canal: CANAL_REAL, status: "en_curso" } },
+    });
+
+    const respuesta = await POST(pedido({ callId: CALL_ID }));
+
+    expect(respuesta.status).toBe(403);
+    await expect(respuesta.json()).resolves.toMatchObject({ error: "no_sos_participante" });
+    expect(mocks.emitirTokenRtc).not.toHaveBeenCalled();
+  });
+
   it("firma con el uid de la sesión y el canal de la base, ignorando lo que venga en el body", async () => {
     guardOk({
       call_participants: { data: { profile_id: USER_ID, left_at: null } },

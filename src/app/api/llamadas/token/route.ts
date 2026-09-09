@@ -20,7 +20,7 @@ import { estaViva, esEstadoDeLlamada, supabaseSinTiparLlamadas } from "@/lib/cal
  *   → 200 { token, canal, uid, appId, expiraEn }
  *   → 400 { error: "pedido_invalido" }
  *   → 401 { error: "sin_sesion" }
- *   → 403 { error: "no_sos_participante" }   no figura en call_participants
+ *   → 403 { error: "no_sos_participante" }   no figura en call_participants, o ya salió (left_at)
  *   → 409 { error: "comunidad_distinta" }    el JWT y el dominio no coinciden
  *   → 409 { error: "llamada_terminada" }     la llamada ya no está viva
  *   → 429 { error: "demasiados_pedidos" }
@@ -130,10 +130,11 @@ export async function POST(request: Request) {
     .eq("profile_id", user.id)
     .maybeSingle();
 
-  if (!participante) {
-    // Mismo cuerpo para "no existe" y para "existe y no sos participante": son
-    // dos hechos distintos y distinguirlos convertiría este endpoint en una
-    // forma de averiguar qué llamadas existen probando ids.
+  if (!participante || participante.left_at !== null) {
+    // Mismo cuerpo para "no existe", "existe y no sos participante" y "ya
+    // saliste de la llamada": son hechos distintos y distinguirlos
+    // convertiría este endpoint en una forma de averiguar qué llamadas
+    // existen, o quién sigue adentro, probando ids.
     return NextResponse.json(
       { error: "no_sos_participante", message: "Esta llamada ya no está disponible." },
       { status: 403 },
