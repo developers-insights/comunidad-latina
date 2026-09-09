@@ -1,5 +1,36 @@
 # PROGRESS — Comunidad Latina
 
+## Tanda del 9/9: cierre del trabajo interrumpido de Codex — admisión de grupos, Número CL, y tres bugs de seguridad más (✅ 2026-09-09)
+
+Una sesión de Codex venía terminando el resto del pliego del 7/9 (admisión de grupos
+con solicitud, promover/degradar admin, Número CL, presencia) y se cortó a mitad de
+camino: ~20 archivos y la migración `0150` sin commitear. Esta sesión retomó,
+terminó y auditó ese trabajo. Detalle completo en
+[`docs/feedback/2026-09-07-mensajeria-y-compartir.md`](feedback/2026-09-07-mensajeria-y-compartir.md#cierre-del-99--trabajo-interrumpido-de-codex-revisado-y-terminado).
+
+**Cuatro bugs de seguridad reales, los cuatro cerrados:**
+1. El endpoint de token de Agora no comprobaba `left_at`: alguien que salió de una
+   llamada podía seguir pidiendo tokens. TDD, commit `919aad9`.
+2. La migración `0150` iba a reintroducir el bug de grupos privados de la `0147`
+   (perdía una rama del `OR` al reemplazar la policy completa). Detectado por
+   auditoría antes de aplicar, corregido en el archivo.
+3. `compartirFacebook` interpretaba mal `window.open()` con `noopener/noreferrer`
+   (siempre devuelve `null` por spec) y copiaba el enlace en el 100% de los casos.
+   Commit `c8ee98b`.
+4. Reenviar un mensaje con adjunto iba a fallar siempre en cuanto se aplicara la
+   `0149` (el trigger de seguridad exige que el owner del objeto de Storage
+   coincida con el sender del mensaje, y el reenvío solo copiaba la fila). Ahora
+   copia el objeto de Storage al reenviar. Commit `f653f00`.
+
+Además: el trigger de `call_participants` de la `0149` dejaba `left_at`/`joined_at`
+inmutables sin ninguna puerta de reingreso (alguien que colgaba por error en una
+llamada de grupo quedaba afuera para siempre); se agregó el camino de reingreso y se
+probó en vivo con rollback contra `ktmbtpuhqqofdkisqseq` antes de aplicar.
+
+Migraciones `0149` y `0150` aplicadas en producción. Advisors sin errores nuevos.
+Realtime confirmado en modo selectivo. **Estado del árbol al cerrar:** `typecheck` 0 ·
+`lint` 0 · **6342/6349 tests** (7 skipped) · `build` verificado.
+
 ## Segunda tanda del 7/9: lo que faltaba del pliego, y tres bugs que nadie veía (✅ 2026-09-07)
 
 Continuación directa de la sección de abajo. Cuatro frentes en paralelo más una

@@ -189,14 +189,14 @@ Esta tabla la mantiene la sesión que implementa. Los tres estados son los del c
 | 5 | Mensajes de voz | escrito; falta probarlo en un teléfono real |
 | 6 | Responder, reaccionar, reenviar, editar, eliminar | escrito y con tests |
 | 7 | Solicitudes con categorías | escrito — las 14 categorías ya existían, faltaba llevarlas a la campanita |
-| 8 | Grupos completos | **reproducido y arreglado** — ver abajo: todo grupo **privado** fallaba siempre |
-| 9 | Llamadas Agora | en curso |
+| 8 | Grupos completos | **reproducido y arreglado**, y admisión con solicitud sumada (ver "Cierre del 9/9") |
+| 9 | Llamadas Agora | escrito y con tests; el bug de seguridad del token quedó cerrado (ver "Cierre del 9/9"); falta probar con dispositivos reales |
 | 10 | Verificación telefónica Twilio | escrito; **apagado por gate legal** — el bloqueo exacto está identificado, ver `docs/legal/borrador-privacidad-telefono.md` |
 | 11 | Editor de fotos | **ya estaba completo** — las cuatro formas, filtros, texto y emoji |
 | 12 | Botón de crear en Boost | escrito; de paso se arregló el estado de los avisos no promocionables |
 | 13 | Derechos y fuente de la foto | escrito — la pregunta ya existía desde 0061; faltaba que la respuesta se viera |
-| 14 | Presencia (En línea / Última vez) | escrito — no estaba en la base; la preferencia es recíproca |
-| 15 | Archivos y enlaces del grupo · "Está escribiendo…" | en curso |
+| 14 | Presencia (En línea / Última vez) | escrito — no estaba en la base; la preferencia es recíproca; sumada a la lista de miembros de grupo y al selector de gente para llamar |
+| 15 | Archivos y enlaces del grupo · "Está escribiendo…" | "Está escribiendo…" ya estaba; archivos/enlaces del grupo sigue sin construir |
 
 ### “Derechos y fuente de la foto”: el diagnóstico de este documento estaba mal
 
@@ -274,3 +274,73 @@ puede ver su propio grupo"— que volvería a morder en el próximo `insert().se
 
 El bloque 6 de `scripts/tenant-isolation-check.sql` busca ahora esta **clase** de bug en
 toda la base, no este caso puntual.
+
+---
+
+## Cierre del 9/9 — trabajo interrumpido de Codex, revisado y terminado
+
+Una sesión de Codex venía completando el pliego (admisión de grupos con solicitud,
+Número CL, presencia, promover/degradar admin) y se cortó a mitad de camino, con ~20
+archivos y una migración (`0150`) sin commitear. Esta sesión retomó ese trabajo: lo
+revisó, lo terminó, lo auditó con dos agentes en paralelo (seguridad de las migraciones
++ code review de los tres commits ya mergeados) y aplicó lo que corregía.
+
+**Bug de seguridad crítico, ya cerrado** — `src/app/api/llamadas/token/route.ts`
+consultaba `left_at` de `call_participants` pero nunca lo comprobaba: alguien que ya
+había salido de una llamada (o al que sacaron) podía seguir pidiendo tokens Agora
+indefinidamente. TDD: test rojo primero, mismo 403 genérico que "no sos participante".
+Commit `919aad9`.
+
+**Lo que encontró la auditoría de las migraciones 0149/0150, y se corrigió antes de
+aplicar:**
+- **Alto** — la 0150 reemplazaba `chat_groups_select` completo y sin darse cuenta
+  **borraba la tercera rama de la 0147** (la que deja ver un grupo privado a quien lo
+  creó). Sin ella, crear un grupo privado hubiera vuelto a fallar con 42501 — el mismo
+  bug de semanas, reintroducido. Se restauró la rama.
+- **Crítico (regresión de performance)** — la nueva `chat_media_select` de la 0149
+  perdía el predicado `adjunto is not null` que permite usar los índices parciales de
+  la 0140; sin él, cada apertura de un adjunto volvía a ser un seq scan. Corregido.
+- **Medio → arreglado con TDD contra la base real** — el trigger de `call_participants`
+  de la 0149 hacía `left_at` y `joined_at` inmutables una vez seteados, sin ninguna
+  puerta de reingreso: alguien que colgaba por error en una llamada de grupo que seguía
+  en curso quedaba afuera para siempre, sin forma de volver a entrar. Se agregó el
+  camino de reingreso (permitido solo si la llamada sigue `sonando`/`en_curso`) y se
+  probó en vivo, con rollback, contra `ktmbtpuhqqofdkisqseq`: reingreso a llamada viva
+  permitido, reingreso a llamada terminada bloqueado, `joined_at` sigue inmutable
+  mientras la persona sigue adentro.
+- **Bajo** — `solicitar_ingreso_a_grupo` no traducía el error crudo de una cuenta
+  suspendida (`ACCOUNT_SUSPENDED`, P0001) a `'sin_permiso'`. Corregido.
+
+**Lo que encontró el code review de los commits `4f12a9f`/`9f75293`/`9ec6465`, y se
+corrigió:**
+- **Crítico** — `compartirFacebook` llamaba `window.open(..., "noopener,noreferrer")` y
+  usaba el valor de retorno para detectar "popup bloqueado". Por spec del navegador,
+  esos dos flags hacen que `window.open` devuelva **siempre** `null` — así que el
+  fallback (copiar el enlace) se ejecutaba en el 100% de los casos, además de abrir el
+  sharer. No se puede recuperar la detección sin sacar `noopener`/`noreferrer`, y
+  sacarlos abriría la puerta a reverse tabnabbing — así que se simplificó: abrir el
+  sharer y no intentar adivinar si se bloqueó. Commit `c8ee98b`.
+- **Alto** — `reenviarMensajeAction` copiaba el `adjunto` de un mensaje reenviado tal
+  cual, con el `path` apuntando al objeto de Storage del **autor original** pero un
+  `sender_id` nuevo (quien reenvía). El trigger de seguridad de adjuntos de la 0149
+  exige que ambos coincidan: reenviar cualquier foto, video, audio o archivo iba a
+  fallar siempre con 42501 en cuanto esa migración se aplicara. Ahora se copia el
+  objeto de Storage al prefijo de quien reenvía antes de insertar, una sola vez para
+  todos los destinos. Commit `f653f00`.
+
+**Migraciones 0149 y 0150 aplicadas** en `ktmbtpuhqqofdkisqseq` (dry-run con
+BEGIN/ROLLBACK antes, dos veces). Advisors de seguridad y performance corridos después:
+sin errores nuevos, solo WARNs preexistentes del proyecto (no introducidos por esta
+tanda). Realtime confirmado en modo selectivo (`puballtables = false`, no expone toda
+la base).
+
+**Deuda técnica que quedó documentada, no bloqueante para este cierre** (del mismo
+review, severidad media/baja): fallos de la RPC de teléfono mal interpretados como
+"rate limited" en vez de error real; `phone_verification_remove` no purga el historial
+de códigos; el Número CL sale en cada búsqueda por nombre (no es un dato "solo para
+compartir a propósito" si alguien busca tu nombre); sin índice utilizable para la
+búsqueda exacta por CL; `resolver_solicitud_de_grupo` no mira `pair_blocked`; el
+backfill del Número CL corre fila por fila (aceptable hoy con 20 perfiles, no a
+escala); reenvío de mensajes con destino fallido colapsa a un error genérico sin
+distinguir causa; Instagram cuenta como "compartido" aunque no se sepa si la persona
+llegó a pegar el link.
