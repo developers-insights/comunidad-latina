@@ -56,4 +56,29 @@ describe("superficies no-public del enumerador", () => {
       "Realtime: falta escribiendo_grupo_emitir (INSERT) en realtime.messages.",
     );
   });
+
+  it("no da falso positivo cuando `roles` llega como string de Postgres, no array JS", async () => {
+    const { auditRealtime } = await import("./rls-enumerator.mjs");
+    // `pg_policies.roles` es `name[]`, pero contra la base real el driver `pg`
+    // lo devolvía como el literal "{authenticated}" en vez de un array — el
+    // gate de check:rls quedaba rojo siempre para estas 4 policies aunque
+    // estuvieran bien configuradas. Verificado 2026-09-09 contra
+    // ktmbtpuhqqofdkisqseq.
+    const completasComoStringDePostgres = [
+      ["escribiendo_directo_recibir", "SELECT"],
+      ["escribiendo_directo_emitir", "INSERT"],
+      ["escribiendo_grupo_recibir", "SELECT"],
+      ["escribiendo_grupo_emitir", "INSERT"],
+    ].map(([policyname, cmd]) => ({
+      schemaname: "realtime",
+      tablename: "messages",
+      policyname,
+      cmd,
+      roles: "{authenticated}",
+      qual: "extension = 'broadcast'::text",
+      with_check: "extension = 'broadcast'::text",
+    }));
+
+    expect(auditRealtime(completasComoStringDePostgres)).toEqual([]);
+  });
 });

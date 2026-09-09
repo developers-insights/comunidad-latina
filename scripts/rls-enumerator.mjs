@@ -129,7 +129,18 @@ export function auditRealtime(policies) {
       problems.push(`Realtime: falta ${policyName} (${cmd}) en realtime.messages.`);
       continue;
     }
-    const roles = Array.isArray(found.roles) ? found.roles : [];
+    // `pg_policies.roles` es `name[]`, pero el driver `pg` no siempre lo
+    // parsea a array JS (depende del type parser registrado para ese OID);
+    // sin este fallback, `roles` llegaba como el string literal de Postgres
+    // "{authenticated}" y el chequeo daba falso positivo para las 4 policies
+    // de Realtime SIEMPRE, incluso estando bien configuradas.
+    const roles = Array.isArray(found.roles)
+      ? found.roles
+      : String(found.roles ?? '')
+          .replace(/^\{|\}$/g, '')
+          .split(',')
+          .map((r) => r.trim())
+          .filter(Boolean);
     const definition = `${found.qual ?? ''} ${found.with_check ?? ''}`;
     if (found.cmd !== cmd || !roles.includes('authenticated') || !definition.includes("extension = 'broadcast'")) {
       problems.push(`Realtime: ${policyName} no está restringida a ${cmd}, authenticated y broadcast.`);
