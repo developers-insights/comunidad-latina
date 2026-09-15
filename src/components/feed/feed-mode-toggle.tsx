@@ -70,7 +70,13 @@ export function FeedModeToggle({ active }: { active: FeedTabId }) {
                 // pegue saltos.
                 scroll={false}
                 className={cn(
-                  "flex min-h-9 items-center whitespace-nowrap rounded-full px-4 text-sm",
+                  // `touch-hitbox` y no `min-h-11`: la pastilla tiene que
+                  // seguir pesando poco (ver la cabecera), pero 36px de alto
+                  // no son un objetivo táctil. La utility le da los 44 reales
+                  // sin engordar lo que se ve, y como las dos opciones están
+                  // lado a lado sólo crece hacia arriba y hacia abajo, donde no
+                  // hay nada que tocar.
+                  "touch-hitbox flex min-h-9 items-center whitespace-nowrap rounded-full px-4 text-sm",
                   "transition-colors duration-(--duration-fast) ease-(--ease-out-premium)",
                   "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
                   current

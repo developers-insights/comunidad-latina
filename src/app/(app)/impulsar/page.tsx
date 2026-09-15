@@ -14,7 +14,7 @@ import {
   UserGear,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
-import { Chip, EmptyState, buttonVariants } from "@/components/ui";
+import { Chip, EmptyState, SectionHeading, buttonVariants } from "@/components/ui";
 import { AdChip } from "@/components/feed/card-ad-chip";
 import { CrearParaPromocionarCta } from "@/components/boosts";
 import { VerResultadosCta } from "@/components/boosts/ver-resultados-cta";
@@ -278,12 +278,17 @@ export default async function ImpulsarIndexPage() {
     <div className="flex flex-col gap-6 pb-8">
       {/* Salida de la pantalla (feedback 2026-09-03, punto 3): la ruta tiene hijos, así que la barra va en la página y no en un layout. */}
       <SectionTopBar fallbackHref="/buscar" />
-      <header>
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-          {COPY.title}
-        </h1>
-        <p className="mt-1 text-sm text-foreground-secondary">{COPY.subtitle}</p>
-      </header>
+      {/* La MISMA cápsula que la portada de cualquier módulo, con el mismo
+          ícono que muestran el círculo del feed y la burbuja de Buscar: los
+          tres lugares por los que se llega acá se reconocen entre sí sin leer.
+          El acento es `--color-sponsored` (dorado) y no un `--accent-*` de
+          vertical, igual que en `BOOST_MODULE`: Boost es una compra. */}
+      <SectionHeading
+        accent="var(--color-sponsored)"
+        image="/icons/menu/boost.webp"
+        title={COPY.title}
+        subtitle={COPY.subtitle}
+      />
 
       {/* Fuera del condicional a propósito: es la mitad del pedido. Con lista o
           sin lista, el botón de crear está siempre en el mismo lugar. */}
@@ -412,7 +417,14 @@ function ImpulsarRow({
 
   return (
     <li>
-      <div className="flex items-center gap-3 rounded-lg border border-border-subtle bg-surface p-3">
+      {/* `flex-wrap` + el ancho mínimo del bloque de texto: en 375px, el botón
+          "Ver cómo va a quedar" (~185px) más la miniatura no dejaban lugar, y
+          como el texto podía encogerse sin límite el título quedaba en "Habi…"
+          y la nota caía en una columna de una palabra por renglón. Con un piso
+          de 9rem el botón ya no entra al lado y baja a su propia línea, que es
+          lo que hay que hacer en un teléfono. En pantallas anchas no cambia
+          nada: ahí entra todo en la misma fila y no se envuelve. */}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border-subtle bg-surface p-3">
         <span
           aria-hidden="true"
           className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface-subtle"
@@ -430,7 +442,7 @@ function ImpulsarRow({
           )}
         </span>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-36 flex-1">
           <p className="truncate text-sm font-semibold text-foreground">{item.title}</p>
 
           {(esNuevo || item.estado === "activa" || trabada) && (

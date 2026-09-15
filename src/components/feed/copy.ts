@@ -503,9 +503,14 @@ export const COPY = {
       }
       // Madrugada (0–4): mismo saludo que la noche —en español no hay uno
       // propio para esta franja—, pero con un guiño a quien sigue despierto.
+      // ⚠️ Corto a propósito: `ComposerGreeting` reserva DOS líneas de alto
+      // (`min-h-12` + `line-clamp-2`) para no empujar el feed al hidratar, y la
+      // versión larga de este saludo era la única de las cuatro que pedía una
+      // tercera línea en 375px — o sea, la única que se cortaba con puntos
+      // suspensivos. Si se reescribe, medirla a 375px antes.
       return name
-        ? `Buenas noches, ${name} 🌙 Si seguís despierto, contanos qué se te cruza por la cabeza.`
-        : "Buenas noches 🌙 Si seguís despierto, contanos qué se te cruza por la cabeza.";
+        ? `Buenas noches, ${name} 🌙 ¿Seguís despierto? Contanos.`
+        : "Buenas noches 🌙 ¿Seguís despierto? Contanos qué se te cruza.";
     },
 
     /**

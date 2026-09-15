@@ -164,18 +164,26 @@ export function MyApplicationCard({ application }: MyApplicationCardProps) {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-subtle pt-3">
-        <Link
-          href={`/empleos/${application.jobId}`}
-          className={cn(
-            "inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand",
-            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-          )}
-        >
-          {C.viewJob}
-          <CaretRight size={14} weight="bold" aria-hidden="true" />
-        </Link>
+        {/* El enlace al aviso SÓLO mientras el aviso existe. Cuando el dueño lo
+            retira, `/empleos/<id>` responde 404 ("Esta página no existe"), así
+            que la tarjeta ofrecía —dos líneas debajo de "Este aviso ya no está
+            publicado"— un botón que lleva a una pantalla de error. Para quien
+            se postuló, eso no se lee como "el aviso se cerró": se lee como que
+            la app se rompió. */}
+        {application.jobIsOpen && (
+          <Link
+            href={`/empleos/${application.jobId}`}
+            className={cn(
+              "inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand",
+              "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+            )}
+          >
+            {C.viewJob}
+            <CaretRight size={14} weight="bold" aria-hidden="true" />
+          </Link>
+        )}
 
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="ml-auto flex flex-wrap items-center gap-1">
           {/* El consentimiento se puede retirar SIEMPRE, incluso con la
               postulación resuelta: es un dato personal, no una jugada del embudo. */}
           <Button variant="ghost" size="sm" loading={sharePending} onClick={toggleShare}>

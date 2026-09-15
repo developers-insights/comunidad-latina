@@ -168,12 +168,7 @@ export const MODULES: ModuleItem[] = [
   {
     href: "/comunidad",
     moduleKey: "comunidad",
-    // Sin `image`: todavía no existe `/icons/menu/comunidad.webp`, y el
-    // cliente confirmó (13/8) que el ícono Phosphor de mano+corazón está bien
-    // así. Sin este campo, el círculo cae al ícono (ver ternario en
-    // module-circles.tsx) — el mismo que ya usa `ComunidadHeading` en la
-    // pantalla del módulo. Si algún día se suma el .webp 3D, alcanza con
-    // agregar `image: "/icons/menu/comunidad.webp"` de vuelta acá.
+    image: "/icons/menu/comunidad.webp",
     label: t("nav", "moduleComunidad"),
     icon: HandHeart,
     palette: accentPalette("var(--accent-comunidad)"),
@@ -215,9 +210,7 @@ export const MODULES: ModuleItem[] = [
  */
 export const BOOST_MODULE: ModuleItem = {
   href: "/impulsar",
-  // Sin `image`: no hay ícono 3D propio (set Meshy) para Boost todavía. El
-  // Phosphor `Megaphone` de abajo es el fallback normal — `ModuleBubble` ya
-  // resuelve el caso sin `image` (chip con el ícono plano, mismo layout).
+  image: "/icons/menu/boost.webp",
   label: t("nav", "moduleBoost"),
   icon: Megaphone,
   palette: accentPalette("var(--color-sponsored)"),

@@ -116,7 +116,11 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
             pronto". Dejó de serlo. */}
         <Link
           href="/feed"
-          className="flex min-h-11 min-w-8 items-center gap-2 rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+          // `touch-hitbox`: con el wordmark escondido queda sólo el isotipo de
+          // 32px, o sea 32 de ancho táctil. Ensanchar el enlace le robaría lugar
+          // a la etiqueta de zona en 375px; el pseudo-elemento da los 44 sin
+          // mover nada.
+          className="touch-hitbox flex min-h-11 min-w-8 items-center gap-2 rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           aria-label={BRAND_NAME}
         >
           {isOptimizableSrc(logoSrc) ? (

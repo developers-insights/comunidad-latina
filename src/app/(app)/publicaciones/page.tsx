@@ -5,7 +5,6 @@ import {
   Badge,
   CardMedia,
   EmptyState,
-  SectionHeading,
   Skeleton,
   buttonVariants,
 } from "@/components/ui";
@@ -62,12 +61,6 @@ function parseAviso(sp: Record<string, string | string[] | undefined>): string |
   const value = (Array.isArray(raw) ? raw[0] : raw) ?? "";
   return value ? value.slice(0, 64) : null;
 }
-
-/** Acento e ícono 3D de la sección (el mismo set del menú). */
-const SECCION = {
-  accent: "var(--accent-social)",
-  image: "/icons/menu/social.webp",
-} as const;
 
 async function Contenido({
   searchParams,
@@ -141,16 +134,25 @@ async function Contenido({
   );
 }
 
+/**
+ * Cabecera plana (título + bajada), la misma de /ajustes y del resto de las
+ * pantallas de cuenta — NO la cápsula `SectionHeading` de los módulos.
+ *
+ * ⚠️ Antes era `SectionHeading` con `accent="var(--accent-social)"` e
+ * `image="/icons/menu/social.webp"`: ninguno de los dos existe. El token
+ * indefinido dejaba la cápsula sin tinte y el .webp ausente pintaba el ícono
+ * roto del navegador arriba de todo. Y aunque existieran, esta pantalla es
+ * TRANSVERSAL (avisos de todos los módulos): darle el acento y el ícono 3D de
+ * una vertical diría que pertenece a esa vertical.
+ */
 function Encabezado() {
   return (
-    <div className="mb-4 space-y-3">
-      <SectionHeading
-        accent={SECCION.accent}
-        image={SECCION.image}
-        title={C.pagina.titulo}
-        subtitle={C.pagina.bajada}
-      />
-    </div>
+    <header className="mb-4">
+      <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
+        {C.pagina.titulo}
+      </h1>
+      <p className="mt-1 text-sm text-foreground-secondary">{C.pagina.bajada}</p>
+    </header>
   );
 }
 
@@ -314,7 +316,12 @@ function Tarjeta({
 function PageSkeleton() {
   return (
     <div className="space-y-3">
-      <Skeleton className="h-20 w-full rounded-2xl" />
+      {/* Mide lo mismo que `Encabezado` (32 + 4 + 20 + mb-4): si el hueco no
+          coincide, la lista salta cuando llegan los datos. */}
+      <div className="mb-4 space-y-2">
+        <Skeleton className="h-8 w-52 max-w-full rounded-lg" />
+        <Skeleton className="h-4 w-72 max-w-full rounded-md" />
+      </div>
       {[0, 1, 2].map((i) => (
         <Skeleton key={i} className="h-24 w-full rounded-2xl" />
       ))}

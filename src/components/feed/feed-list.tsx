@@ -302,8 +302,18 @@ export function FeedList({
                   arriba de todo. Si la primera página trae menos que eso, no se
                   fuerza: aparece cuando hay feed suficiente para que tenga
                   sentido, y si no, no aparece — mejor que empujarlo al final de
-                  una lista corta, donde volvería a ser lo único que se ve. */}
-              {intercalado && i === intercaladoDespuesDe - 1 && intercalado}
+                  una lista corta, donde volvería a ser lo único que se ve.
+
+                  ⚠️ Va envuelto en un Fragment CON key: `intercalado` es un
+                  elemento que creó la página (FeedContent) y que acá cae dentro
+                  del arreglo de hijos de este Fragment. Sin key, React avisaba
+                  en cada render «Each child in a list should have a unique key
+                  prop… passed a child from FeedContent», y un hijo sin key en
+                  una lista es además el que se reconcilia mal cuando la lista
+                  cambia de largo. */}
+              {intercalado && i === intercaladoDespuesDe - 1 ? (
+                <Fragment key="feed-intercalado">{intercalado}</Fragment>
+              ) : null}
             </Fragment>
           ))
         ) : (

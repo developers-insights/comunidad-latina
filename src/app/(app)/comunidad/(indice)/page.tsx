@@ -2,14 +2,13 @@ import { Suspense } from "react";
 import {
   BookOpenText,
   ForkKnife,
-  HandHeart,
   HouseLine,
   Lifebuoy,
   MagnifyingGlass,
   Package,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
-import { Skeleton, SquareTile } from "@/components/ui";
+import { SectionHeading, Skeleton, SquareTile } from "@/components/ui";
 import {
   COMUNIDAD_ACCENT,
   COMUNIDAD_ACCENT_ACOPIO,
@@ -18,7 +17,6 @@ import {
   COMUNIDAD_ACCENT_MANOS,
   COMUNIDAD_ACCENT_PERDIDOS,
   COMUNIDAD_ACCENT_VOLUNTARIOS,
-  ComunidadHeading,
   OrigenNota,
 } from "@/components/comunidad";
 import { COMUNIDAD_COPY } from "@/lib/comunidad";
@@ -131,8 +129,9 @@ const C = COMUNIDAD_COPY.index;
 export default async function ComunidadPage() {
   return (
     <>
-      <ComunidadHeading
-        icon={<HandHeart size={30} weight="fill" aria-hidden="true" />}
+      <SectionHeading
+        accent={COMUNIDAD_ACCENT}
+        image="/icons/menu/comunidad.webp"
         title={C.title}
         subtitle={C.subtitle}
       />

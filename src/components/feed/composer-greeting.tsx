@@ -39,25 +39,34 @@ export function hourInZone(date: Date, timeZone: string): number | null {
  * noches" a alguien a las 3 de la tarde en Los Ángeles. Por eso este
  * componente es de cliente y no se resuelve nada antes de `useHydrated()`:
  * el servidor no puede saber en qué huso está el teléfono de nadie.
+ *
+ * ⚠️ EL HUECO SE RESERVA SIEMPRE, y por eso el `<div>` de afuera existe.
+ * Antes esto devolvía `null` hasta hidratar: el saludo aparecía DESPUÉS del
+ * primer pintado y empujaba hacia abajo el composer y las primeras
+ * publicaciones. `min-h-12` son exactamente las dos líneas que ocupa el saludo
+ * más largo en el ancho más angosto (48px = 2 × 24px de `text-base`), y el
+ * `line-clamp-2` garantiza que nunca pida una tercera: el alto es el mismo
+ * antes y después de hidratar, en las cuatro franjas horarias.
  */
 export function ComposerGreeting({ viewerName }: ComposerGreetingProps) {
   const hydrated = useHydrated();
   const zone = useViewerTimeZone();
   const reduceMotion = useReducedMotion();
 
-  if (!hydrated) return null;
-
-  const hour = hourInZone(new Date(), zone);
-  if (hour === null) return null;
+  const hour = hydrated ? hourInZone(new Date(), zone) : null;
 
   return (
-    <m.p
-      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: "easeOut" }}
-      className="px-1 font-display text-base font-semibold text-foreground"
-    >
-      {COPY.composer.greetingByHour(hour, firstNameOf(viewerName))}
-    </m.p>
+    <div className="flex min-h-12 items-center px-1">
+      {hour !== null && (
+        <m.p
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.32, ease: "easeOut" }}
+          className="line-clamp-2 font-display text-base font-semibold text-foreground"
+        >
+          {COPY.composer.greetingByHour(hour, firstNameOf(viewerName))}
+        </m.p>
+      )}
+    </div>
   );
 }

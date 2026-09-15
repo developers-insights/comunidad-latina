@@ -366,7 +366,12 @@ export function VoicePlayer({
           onClick={cambiarVelocidad}
           aria-label={COPY_COMPOSER.reproductor.velocidad(etiquetaDeVelocidad(velocidad))}
           className={cn(
-            "rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold tabular-nums",
+            // La píldora mide 30×28 y no puede crecer: al lado de una onda de
+            // 17rem, un control de 44px se lee como un botón más. `touch-hitbox`
+            // le da los 44×44 reales con un pseudo-elemento invisible, sin
+            // tocar lo que se ve — la misma utility que ya usan el Trust Score
+            // inline y el cierre del toast.
+            "touch-hitbox rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold tabular-nums",
             "transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring)",
             "active:scale-[0.92] motion-reduce:transition-none motion-reduce:active:scale-100",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",

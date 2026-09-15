@@ -2502,7 +2502,11 @@ antes eran 6).
 5 workflows ultracode: esquema adversarial (autor max + 3 fiscales × 2 rondas + corrector), assets nanobanana, fundaciones (2 agentes paralelos + integrador), R1 (7 módulos paralelos + integrador + 2 fiscales + corrector, 14 findings), R2 (4 módulos + integrador + fiscal max + corrector, 4 findings). ~30 agentes, ~4.1M tokens de subagentes.
 
 ## Datos demo
-- Tenants: `dominicanos` (#1A5EDB) y `comunidadlatina` (#C2410C). En dev: `http://localhost:3000/?t=dominicanos`.
+- Tenants: `dominicanos` (#1A5EDB) y `comunidadlatina` (#C2410C). En dev: `http://localhost:3000/feed?cl-tenant=dominicanos`.
+  ⚠️ El parámetro es **`cl-tenant`**, NO `?t=`. `?t=` dejó de resolver el tenant el 2026-08-24 (pasó a ser el de
+  las PESTAÑAS de Perfil/Negocios/Profesionales/Marketplace; ver el comentario en `src/middleware.ts`), y sin
+  tenant resuelto **todas** las rutas responden 404 sin explicar por qué. El tenant con datos de demo cargados
+  es `dominicanos`; `comunidadlatina` está casi vacío.
 - Usuarios: `maria@demo.comunidadlatina.com` (member) · `carlos@...` (domain_admin) · `geovanny@...` (global_admin).
   **La password NO se documenta acá** (2026-07-08): la vieja `Demo123!demo` estaba en el repo y uno de los tres
   es `global_admin` sobre la MISMA base que usa cualquier deploy → cualquiera con la URL entraba al panel global.
@@ -2534,7 +2538,10 @@ antes eran 6).
 
 ## Cómo correr
 ```
-npm run dev              # app en localhost:3000 (tenant dominicanos por default)
+npm run dev              # app en localhost:3000 — abrir SIEMPRE con ?cl-tenant=dominicanos
+                         # (en localhost no hay dominio que resuelva el tenant: sin el
+                         #  parámetro, toda ruta da 404. La cookie `cl-tenant` que deja
+                         #  la primera visita mantiene la sesión de comunidad después.)
 npm run build            # build producción (--webpack por Serwist)
 npm run typecheck | test | lint
 npm run check:rls        # gate RLS (RLS_ENUMERATOR_ALLOW_INSECURE_TLS=1 en dev)
