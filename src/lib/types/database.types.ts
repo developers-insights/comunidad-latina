@@ -6818,6 +6818,15 @@ export type Database = {
           total: number
         }[]
       }
+      listing_boosts_for_owner: {
+        Args: { p_listing_id: string }
+        Returns: {
+          amount_cents: number
+          duration_days: number
+          ends_at: string | null
+          status: string
+        }[]
+      }
       listing_reach: { Args: { p_listing_id: string }; Returns: number }
       marcar_caso_resuelto: {
         Args: { p_listing: string; p_resuelto?: boolean }

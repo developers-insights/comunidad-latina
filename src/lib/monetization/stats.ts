@@ -33,6 +33,14 @@ import {
  *                 una query porque contar personas distintas necesita
  *                 `viewer_id`, y esa columna no sale de la base ni para el
  *                 dueño del aviso — "quién miró tu publicación" no se entrega.
+ *   impulsos    → RPC `listing_boosts_for_owner` (0152), por la misma razón de
+ *                 forma: el MONTO de un impulso no se puede leer de la tabla.
+ *                 `boosts` tiene grant POR COLUMNA y `amount_cents` está
+ *                 afuera, porque su policy de SELECT tiene una rama pública
+ *                 (transparencia publicitaria) que convertiría la columna en
+ *                 la lista de precios de todos los anunciantes. Las campañas
+ *                 SÍ se leen por tabla: `campaigns_select` no tiene rama
+ *                 pública, así que `budget_cents` ya está acotado al dueño.
  *
  * VENTANAS. Todo lo del bloque básico es HISTÓRICO (los me gusta, los chats y
  * los guardados también lo eran), y lo único acotado a `STATS_WINDOW_DAYS` son
@@ -105,16 +113,44 @@ export interface ListingStats {
    * informan aparte para que el tablero muestre un hueco en vez de un cero
    * inventado».
    *
-   * ⚠️ PENDIENTE: la pantalla que consume esto
-   * (`app/(app)/impulsar/[listingId]/estadisticas/page.tsx`) todavía no lo mira
-   * y pinta el 0 igual. El campo se agrega primero —sin romperle el tipo a
-   * nadie— para que la pantalla pueda mostrar el hueco cuando se actualice.
+   * Lo consume `app/(app)/impulsar/[listingId]/estadisticas/page.tsx` con
+   * `esIlegible` y `sinNumerosTodavia` (abajo).
    */
   unreadable: StatKey[];
 }
 
 /** Las métricas que se leen con su propia query y por lo tanto pueden faltar. */
 export type StatKey = "likes" | "saves" | "chats" | "shares" | "ctaClicks" | "promotions";
+
+/**
+ * Las que alimentan la grilla básica. `views` y `comments` NO están: llegan en
+ * la misma fila de `listings` que ya trajo el caller, así que o vienen las dos
+ * o no hay pantalla — nunca fallan por su cuenta.
+ */
+const CLAVES_BASICAS = ["likes", "saves", "chats", "shares"] as const;
+
+/** ¿Este número salió de una query que se cayó? Entonces no es un número. */
+export function esIlegible(stats: Pick<ListingStats, "unreadable">, key: StatKey): boolean {
+  return stats.unreadable.includes(key);
+}
+
+/**
+ * ¿Se puede AFIRMAR "todavía no hay números"?
+ *
+ * Sólo cuando todo lo que se leyó dio cero Y no faltó ninguna lectura. La suma
+ * en cero no alcanza: si `likes` se cayó vale 0 en el objeto, y con eso la
+ * pantalla mostraba su cartel de "Todavía no hay números" sobre un aviso que
+ * podía tener cincuenta me gusta. Ese cartel es una afirmación sobre el aviso
+ * de alguien que pagó, y no se hace con datos que no se pudieron leer.
+ *
+ * `ctaClicks` y `promotions` no cuentan acá: no son parte de la grilla básica y
+ * cada uno declara su propio hueco en su sección.
+ */
+export function sinNumerosTodavia(stats: ListingStats): boolean {
+  const { views, likes, comments, shares, saves, chats } = stats.basic;
+  if (views + likes + comments + shares + saves + chats > 0) return false;
+  return !CLAVES_BASICAS.some((key) => stats.unreadable.includes(key));
+}
 
 /**
  * Una lectura que puede haber salido mal.
@@ -282,20 +318,28 @@ export async function fetchListingStats(
             : leido((r.data ?? []) as ClickRow[]),
         (e) => ilegible("ctaClicks", [] as ClickRow[], e),
       ),
-    supabase
-      .from("boosts")
-      .select("duration_days, status, ends_at, amount_cents")
-      .eq("listing_id", input.listingId)
-      .neq("status", "pending_payment")
-      .order("created_at", { ascending: false })
-      .limit(5)
-      .then(
-        (r) =>
-          r.error
-            ? ilegible("promotions", [] as BoostRow[], r.error)
-            : leido((r.data ?? []) as BoostRow[]),
-        (e) => ilegible("promotions", [] as BoostRow[], e),
-      ),
+    /**
+     * ⚠️ NO VOLVER A `.from("boosts").select("…, amount_cents")`. Es la
+     * "simplificación" obvia y tumba la consulta ENTERA con 42501: el grant de
+     * `public.boosts` es POR COLUMNA (0018, re-afirmado en 0085) y
+     * `amount_cents` no está en la lista, igual que `buyer_id`. Tampoco se
+     * arregla agregándola al grant: `boosts_select` tiene una rama pública
+     * (`status = 'active'`, alcanza a `anon`) por transparencia publicitaria,
+     * así que abrir la columna publicaría cuánto paga cada anunciante de la
+     * comunidad.
+     *
+     * La RPC (0152) es el único camino al monto: valida sesión, tenant del JWT
+     * y propiedad del aviso ADENTRO, y ya viene filtrada, ordenada y limitada a
+     * 5 — por eso acá no hay `.neq/.order/.limit`. Mismo patrón que
+     * `listing_reach` unas líneas más abajo.
+     */
+    supabase.rpc("listing_boosts_for_owner", { p_listing_id: input.listingId }).then(
+      (r) =>
+        r.error
+          ? ilegible("promotions", [] as BoostRow[], r.error)
+          : leido((r.data ?? []) as BoostRow[]),
+      (e) => ilegible("promotions", [] as BoostRow[], e),
+    ),
     supabase
       .from("campaigns")
       .select("duration_days, status, ends_at, budget_cents")
