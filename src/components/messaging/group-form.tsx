@@ -161,7 +161,14 @@ export function GroupForm({ grupo }: { grupo?: GrupoEditable }) {
 
       if (resultado.ok) {
         toast({ title: grupo ? COPY.groups.saved : COPY.groups.created });
-        router.push(`/mensajes/grupos/${resultado.groupId ?? grupo?.id ?? ""}`);
+        const id = resultado.groupId ?? grupo?.id ?? "";
+        // Al crear, a la ficha —ahí vive "Invitar gente"— y no al chat vacío:
+        // aterrizar en un chat sin nadie más es cómo el cliente reportó que
+        // "falta la opción de agregar personas cuando se quiere crear" un
+        // grupo, cuando esa opción ya existe pero quedaba dos toques después.
+        // Al editar, en cambio, se vuelve al chat: ahí no hay nada nuevo que
+        // agregar.
+        router.push(grupo ? `/mensajes/grupos/${id}` : `/mensajes/grupos/${id}/info`);
         router.refresh();
         return;
       }
