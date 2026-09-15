@@ -31,7 +31,7 @@ import {
 } from "@/components/marketplace";
 import { fetchActiveListingCounts, fetchStoreRatings } from "@/lib/marketplace/store-directory";
 import { t } from "@/lib/i18n";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { ZonaVacia } from "@/components/zona";
 import { resolverVistaZona } from "@/lib/zona/server";
@@ -160,7 +160,17 @@ function MarketplaceTopBar({ tab }: { tab: MarketplaceTabId }) {
 // ---------------------------------------------------------------------------
 
 async function MarketplaceContent({ filters }: { filters: Filters }) {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  // `getAuthUserId()` y no `auth.getUser()`: acá el viewer se usa SÓLO para su
+  // id (avisos propios y conteo de tiendas), y ese id sale del JWT verificado
+  // localmente — sin round-trip al Auth server. Al no depender de `supabase`,
+  // entra en este mismo Promise.all en vez de ser un salto más de la cadena.
+  // Lo que se lee con ese id está respaldado por RLS, que es la condición que
+  // pide `getAuthUserId` para usarse en lugar de `getUser` (ver server.ts).
+  const [tenant, supabase, viewerId] = await Promise.all([
+    getTenant(),
+    createClient(),
+    getAuthUserId(),
+  ]);
 
   /*
    * ── "TU ZONA" NO SE APLICA A ARTÍCULOS, Y ES DELIBERADO ───────────────────
@@ -179,10 +189,6 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
    * la línea que falta acá es un `.in("area_label", vistaZona.areaLabels)`
    * igual al de las otras cinco verticales.
    */
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   // -------------------------------------------------------------------------
   // Query principal: keyset pagination (created_at,id), filtro por categoría
@@ -285,13 +291,13 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
       : Promise.resolve({
           data: [] as { id: string; display_name: string | null; identity_verified: boolean }[],
         }),
-    user
+    viewerId
       ? supabase
           .from("listings")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenant.id)
           .eq("kind", "business")
-          .eq("created_by", user.id)
+          .eq("created_by", viewerId)
           .eq("status", "published")
       : Promise.resolve({ count: 0 }),
   ]);
@@ -359,7 +365,7 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
    * RLS decide; acá sólo se evita ofrecer lo que iba a rebotar.
    */
   const misAvisos = new Set(
-    user ? visibleRows.filter((row) => row.created_by === user.id).map((row) => row.id) : [],
+    viewerId ? visibleRows.filter((row) => row.created_by === viewerId).map((row) => row.id) : [],
   );
 
   const cards: ProductCardModel[] = visibleRows.map((row) => {
@@ -499,10 +505,16 @@ function PageSkeleton() {
 // ---------------------------------------------------------------------------
 
 async function MarketplaceStoresContent({ filters }: { filters: StoreFilters }) {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Mismo criterio que `MarketplaceContent`: el viewer se usa sólo para su id
+  // (a cuáles tiendas sigue), así que sale del JWT verificado local y viaja en
+  // este Promise.all. Antes `auth.getUser()` se esperaba solo y ADEMÁS dejaba
+  // a `resolverVistaZona` detrás suyo sin depender de él: dos saltos de red en
+  // fila para dos datos independientes.
+  const [tenant, supabase, viewerId] = await Promise.all([
+    getTenant(),
+    createClient(),
+    getAuthUserId(),
+  ]);
 
   // "Tu zona": el directorio de tiendas no tiene filtro de zona propio en la
   // URL, así que manda la preferencia (cookie › perfil). Una tienda es un
@@ -562,12 +574,12 @@ async function MarketplaceStoresContent({ filters }: { filters: StoreFilters }) 
     ownerIds.length > 0
       ? supabase.from("profiles").select("id, identity_verified").in("id", ownerIds)
       : Promise.resolve({ data: [] as { id: string; identity_verified: boolean }[] }),
-    user && storeIds.length > 0
+    viewerId && storeIds.length > 0
       ? supabase
           .from("follows")
           .select("target_id")
           .eq("tenant_id", tenant.id)
-          .eq("follower_id", user.id)
+          .eq("follower_id", viewerId)
           .eq("target_kind", "listing")
           .in("target_id", storeIds)
       : Promise.resolve({ data: [] as { target_id: string }[] }),

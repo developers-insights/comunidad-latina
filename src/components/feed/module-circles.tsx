@@ -389,7 +389,11 @@ function ModuleCircleLink({
               alt=""
               width={56}
               height={56}
-              loading="lazy"
+              // `eager` y no `lazy`: esta fila es lo primero que se ve al abrir
+              // el feed, y diferirla dejaba los círculos en blanco durante el
+              // pintado inicial. Son nueve webp de ~2,4 kB — el ahorro de
+              // diferirlos no existe, el parpadeo sí.
+              loading="eager"
               className="size-full object-cover"
             />
           ) : (
