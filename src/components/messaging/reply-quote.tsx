@@ -11,6 +11,8 @@ import {
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { X } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
+import { CommunityEmojiText } from "@/components/emojis";
+import type { CommunityEmoji } from "@/lib/emojis/catalog";
 import { ACCIONES_COPY } from "./copy-acciones";
 import { anclaDeMensaje } from "./helpers-de-mensaje";
 
@@ -142,10 +144,13 @@ export function ReplyQuote({
   citado,
   isOwn,
   className,
+  emojiCatalog = [],
 }: {
   citado: MensajeCitado;
   isOwn: boolean;
   className?: string;
+  /** Ver el docblock de `emojiCatalog` en `message-bubble.tsx`. */
+  emojiCatalog?: readonly CommunityEmoji[];
 }) {
   return (
     <button
@@ -171,7 +176,7 @@ export function ReplyQuote({
           {citado.esPropio ? ACCIONES_COPY.vos : citado.autorNombre}
         </span>
         <span className="block truncate text-xs text-foreground-secondary">
-          {citado.resumen}
+          <CommunityEmojiText text={citado.resumen} catalog={emojiCatalog} />
         </span>
       </span>
     </button>

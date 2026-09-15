@@ -3,6 +3,8 @@ import { Prohibit } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui";
 import { ExternalLinkCard, enlaceExternoDelCuerpo } from "@/components/share/enlace-externo";
+import { CommunityEmojiText } from "@/components/emojis";
+import type { CommunityEmoji } from "@/lib/emojis/catalog";
 import type { ReaccionAgrupada } from "@/lib/messaging/reacciones";
 import { ACCIONES_COPY } from "./copy-acciones";
 import { MessageActions } from "./message-menu";
@@ -62,6 +64,7 @@ export function GroupMessageBubble({
   deletedAt = null,
   respuesta = null,
   media = null,
+  emojiCatalog = [],
 }: {
   body: string;
   isOwn: boolean;
@@ -75,6 +78,8 @@ export function GroupMessageBubble({
   respuesta?: MensajeCitado | null;
   /** Gemelo del `media` de `message-bubble.tsx`, y por el mismo motivo. */
   media?: ReactNode;
+  /** Ver el docblock de `emojiCatalog` en `message-bubble.tsx`. */
+  emojiCatalog?: readonly CommunityEmoji[];
 }) {
   const ancla = anclaDeMensaje(mensaje.mensajeId);
 
@@ -124,7 +129,9 @@ export function GroupMessageBubble({
         </p>
       )}
 
-      {respuesta && <ReplyQuote citado={respuesta} isOwn={isOwn} />}
+      {respuesta && (
+        <ReplyQuote citado={respuesta} isOwn={isOwn} emojiCatalog={emojiCatalog} />
+      )}
 
       {media && <div className="-mx-2 mb-1.5">{media}</div>}
 
@@ -133,7 +140,9 @@ export function GroupMessageBubble({
       )}
 
       {!enlaceExterno && (body.trim().length > 0 || !media) && (
-        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{body}</p>
+        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+          <CommunityEmojiText text={body} catalog={emojiCatalog} />
+        </p>
       )}
 
       <p

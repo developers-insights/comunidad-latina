@@ -11,6 +11,7 @@ import { supabaseSinTiparMensajes } from "@/lib/messaging/adjuntos";
 import { leerReaccionesDeMensajes } from "@/lib/messaging/reacciones";
 import { leerPresencia, presenciaVisible } from "@/lib/messaging/presencia";
 import { topicoDeDirecto } from "@/lib/messaging/escribiendo";
+import { readCommunityEmojiCatalog } from "@/lib/emojis/queries";
 import { AcceptBanner } from "@/components/messaging/accept-banner";
 import { EscribiendoProvider } from "@/components/messaging/escribiendo-live";
 import { Composer } from "@/components/messaging/composer";
@@ -205,8 +206,15 @@ export default async function HiloPage({
    * entra a esta misma tanda —y no a un efecto del cliente— para que el
    * encabezado se pinte completo de una, sin un "En línea" que aparece tarde.
    */
-  const [compartidos, reaccionesPorMensaje, firmas, viewerZone, formatDate, presencias] =
-    await Promise.all([
+  const [
+    compartidos,
+    reaccionesPorMensaje,
+    firmas,
+    viewerZone,
+    formatDate,
+    presencias,
+    emojiCatalog,
+  ] = await Promise.all([
       resolverCompartidos(
         supabase,
         messages
@@ -228,6 +236,7 @@ export default async function HiloPage({
       getViewerTimeZone(),
       getViewerFormatDate(),
       leerPresencia(supabase, other ? [other.id] : []),
+      readCommunityEmojiCatalog(),
     ]);
 
   /**
@@ -429,6 +438,7 @@ export default async function HiloPage({
                   deletedAt={message.deleted_at ?? null}
                   respuesta={citaDe(message)}
                   media={media}
+                  emojiCatalog={emojiCatalog}
                 />
               </div>
             );

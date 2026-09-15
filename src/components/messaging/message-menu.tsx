@@ -411,7 +411,26 @@ export function MessageActions({
     <>
       <div
         ref={anclaRef}
-        className={cn("flex min-w-0 items-end gap-1", className)}
+        /**
+         * ⚠️ `w-full` ES LA CADENA DE ANCHOS DE LA BURBUJA, no decoración.
+         *
+         * La burbuja que va adentro se topa con `max-w-[80%]` (78% en grupos), y
+         * ese porcentaje se resuelve contra ESTE div. Sin `w-full` este div medía
+         * lo que medía su contenido, así que el 80% se resolvía contra un ancho
+         * que dependía de la propia burbuja: la restricción se mordía la cola y
+         * caía en un punto fijo arbitrario —un audio medía 201 px igual en un
+         * teléfono de 320 que en un monitor—. Con `w-full` el 80% vuelve a
+         * significar "80% del renglón", que es lo que dice el diseño.
+         *
+         * El `justify-*` tiene que vivir acá por lo mismo: ocupando el renglón
+         * entero, este div ya no se puede apoyar en el `justify-end` del padre
+         * para alinear la burbuja propia a la derecha.
+         */
+        className={cn(
+          "flex w-full min-w-0 items-end gap-1",
+          isOwn ? "justify-end" : "justify-start",
+          className,
+        )}
         {...gestos}
         // Sin esto, en iOS el toque largo levanta el menú nativo de selección
         // ANTES que el nuestro. El texto se sigue pudiendo seleccionar con un

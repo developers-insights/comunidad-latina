@@ -38,6 +38,7 @@ import {
   type EnlaceInterno,
 } from "@/components/share/enlace-interno";
 import { topicoDeGrupo } from "@/lib/messaging/escribiendo";
+import { readCommunityEmojiCatalog } from "@/lib/emojis/queries";
 import { miembrosLabel, type MensajeDeGrupoRow } from "@/lib/messaging/grupos";
 import {
   contarMiembrosEnLinea,
@@ -197,8 +198,15 @@ export default async function GrupoPage({
    * "quién reaccionó" optimista necesita mi nombre y pedirlo aparte sería un
    * viaje más por una columna que esa consulta ya trae.
    */
-  const [autores, reaccionesPorMensaje, compartidos, firmas, viewerZone, formatDate] =
-    await Promise.all([
+  const [
+    autores,
+    reaccionesPorMensaje,
+    compartidos,
+    firmas,
+    viewerZone,
+    formatDate,
+    emojiCatalog,
+  ] = await Promise.all([
       perfilesDeAutores([...mensajes.map((m) => m.sender_id), user.id]),
       leerReaccionesDeMensajes(
         supabase,
@@ -220,6 +228,7 @@ export default async function GrupoPage({
       ),
       getViewerTimeZone(),
       getViewerFormatDate(),
+      readCommunityEmojiCatalog(),
     ]);
 
   /**
@@ -377,6 +386,7 @@ export default async function GrupoPage({
                   deletedAt={mensaje.deleted_at ?? null}
                   respuesta={citaDe(mensaje)}
                   media={media}
+                  emojiCatalog={emojiCatalog}
                 />
               </div>
             );

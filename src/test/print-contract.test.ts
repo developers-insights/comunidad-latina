@@ -663,15 +663,17 @@ const INVENTARIO: Record<string, Entrada> = {
   // Grabador de notas de voz. Va con el hook y no con "control" porque el
   // micrófono que sigue al dedo mientras se arrastra es un <span> aria-hidden,
   // no un botón — y grabar no significa nada en una hoja impresa.
+  // Dos y no tres desde que el botón de manos libres dejó de ser un avión sobre
+  // `bg-brand` (ver el comentario de ese botón en voice-recorder.tsx).
   "src/components/messaging/voice-recorder.tsx": {
-    inks: ["text-brand-foreground", "text-brand-foreground", "text-brand-foreground"],
+    inks: ["text-brand-foreground", "text-brand-foreground"],
     cobertura: "cl-print-hide",
   },
-  // Reproductor de una nota de voz. Mismo motivo: el tiempo restante y el aviso
-  // de "audio no disponible" son texto suelto sobre la burbuja de marca, y un
-  // reproductor de audio en papel no es nada.
+  // Reproductor de una nota de voz. Un reproductor de audio en papel no es nada.
+  // Una sola tinta clara desde que el modo `propio` dejó de pintar blanco sobre
+  // blanco: la burbuja propia es `brand-tint`, no `bg-brand` (ver voice-player).
   "src/components/messaging/voice-player.tsx": {
-    inks: Array<string>(5).fill("text-brand-foreground"),
+    inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",
   },
   // Mandar la ubicación: el azulejo verde con `text-on-success` es un <span>.

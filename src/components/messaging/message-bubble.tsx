@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { Prohibit } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { ExternalLinkCard, enlaceExternoDelCuerpo } from "@/components/share/enlace-externo";
+import { CommunityEmojiText } from "@/components/emojis";
+import type { CommunityEmoji } from "@/lib/emojis/catalog";
 import type { ReaccionAgrupada } from "@/lib/messaging/reacciones";
 import { ACCIONES_COPY } from "./copy-acciones";
 import { MessageActions } from "./message-menu";
@@ -52,11 +54,23 @@ export function MessageBubble({
   deletedAt = null,
   respuesta = null,
   media = null,
+  emojiCatalog = [],
 }: {
   body: string;
   isOwn: boolean;
   timeLabel: string;
   acciones?: MessageBubbleAcciones;
+  /**
+   * El catálogo de emojis propios (`readCommunityEmojiCatalog`).
+   *
+   * ⚠️ SIN ESTO EL PICKER MIENTE. El emoji de la comunidad viaja en el cuerpo
+   * como código corto —`:klk:`, igual que en los comentarios— y quien lo cambia
+   * por el dibujo es el que PINTA. El composer de mensajes montó el picker sin
+   * montar el renderer, así que el mensaje llegaba y se leía literalmente
+   * ":klk:". Vacío = el texto se pinta tal cual, que es lo correcto cuando el
+   * catálogo está apagado.
+   */
+  emojiCatalog?: readonly CommunityEmoji[];
   editadoAt?: string | null;
   /** Un mensaje bajado deja lápida: no desaparece dejando un hueco. */
   deletedAt?: string | null;
@@ -99,7 +113,9 @@ export function MessageBubble({
           : "rounded-bl-md bg-surface-subtle text-foreground",
       )}
     >
-      {respuesta && <ReplyQuote citado={respuesta} isOwn={isOwn} />}
+      {respuesta && (
+        <ReplyQuote citado={respuesta} isOwn={isOwn} emojiCatalog={emojiCatalog} />
+      )}
 
       {/* El aire lateral de la burbuja es para el texto: la foto lo recupera. */}
       {media && <div className="-mx-2 mb-1.5">{media}</div>}
@@ -111,7 +127,9 @@ export function MessageBubble({
       {/* Un mensaje de foto llega con `body` vacío por contrato (0136 §2): sin
           esta condición dejaría un renglón en blanco arriba de la hora. */}
       {!enlaceExterno && (body.trim().length > 0 || !media) && (
-        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{body}</p>
+        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+          <CommunityEmojiText text={body} catalog={emojiCatalog} />
+        </p>
       )}
 
       {/* `foreground-secondary`, no `-muted`: las dos burbujas se pintan sobre

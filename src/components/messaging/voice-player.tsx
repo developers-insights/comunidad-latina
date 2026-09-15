@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Pause, Play } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
@@ -47,12 +47,54 @@ export interface VoicePlayerProps {
   duracionMs?: number;
   /** `adjunto.onda` — picos 0–100. Sin ella se dibuja una línea pareja. */
   onda?: readonly number[];
-  /** `true` cuando la burbuja es propia (fondo de marca). */
+  /**
+   * `true` cuando la burbuja es propia.
+   *
+   * ⚠️ NO significa "fondo de marca". Las dos burbujas del hilo van sobre
+   * TINTES claros (`bg-brand-tint` y `bg-surface-subtle`), así que la paleta de
+   * este reproductor es la misma de los dos lados y `propio` sólo corrige el
+   * color del texto secundario y el borde del anillo de foco. Cuando esto
+   * pintaba blanco sobre blanco (`brand-foreground`, pensado para un fondo
+   * `bg-brand` sólido que la burbuja nunca tuvo), el audio propio se veía vacío:
+   * el play, la onda y el reloj eran invisibles.
+   */
   propio?: boolean;
   className?: string;
 }
 
-const ONDA_PLANA = Array.from({ length: 48 }, () => 38);
+/**
+ * CUÁNTAS BARRAS SE DIBUJAN. NO es el largo de `adjunto.onda` (48, `PICOS_DE_ONDA`).
+ *
+ * Con 48 barras y 1,5 px de separación, los huecos solos miden 70 px. Adentro de
+ * una burbuja —que mide lo que mide su contenido— eso era TODO el ancho
+ * intrínseco de la onda: las barras son `flex-1` sin ancho propio, así que el
+ * navegador le daba a la onda exactamente el largo de los huecos y cada barra
+ * quedaba en 0 px. La onda no se veía en ningún hilo, en ningún teléfono.
+ *
+ * 24 es el techo que deja barras visibles en el caso más angosto que soportamos
+ * (un audio ajeno en un grupo, con avatar, a 320 px): ~81 px de onda − 34,5 de
+ * huecos = 1,9 px por barra. Subir este número las vuelve a apagar.
+ */
+export const BARRAS_DIBUJADAS = 24;
+
+const ONDA_PLANA = Array.from({ length: BARRAS_DIBUJADAS }, () => 38);
+
+/**
+ * Los 48 picos guardados → las `BARRAS_DIBUJADAS` que entran. Promedio por
+ * cubeta y no "una de cada dos": con un salto, un pico aislado desaparece o se
+ * come la barra entera según dónde caiga, y la misma nota se dibuja distinta
+ * según su largo.
+ */
+export function aBarras(picos: readonly number[], cuantas: number): number[] {
+  if (picos.length <= cuantas) return [...picos];
+  return Array.from({ length: cuantas }, (_, indice) => {
+    const desde = Math.floor((indice * picos.length) / cuantas);
+    const hasta = Math.max(desde + 1, Math.floor(((indice + 1) * picos.length) / cuantas));
+    let suma = 0;
+    for (let i = desde; i < hasta; i += 1) suma += picos[i] ?? 0;
+    return Math.round(suma / (hasta - desde));
+  });
+}
 
 export function VoicePlayer({
   src,
@@ -71,7 +113,10 @@ export function VoicePlayer({
   const [duracionCargada, setDuracionCargada] = useState(0);
   const [fallo, setFallo] = useState(false);
 
-  const picos = onda && onda.length > 0 ? onda : ONDA_PLANA;
+  const picos = useMemo(
+    () => (onda && onda.length > 0 ? aBarras(onda, BARRAS_DIBUJADAS) : ONDA_PLANA),
+    [onda],
+  );
   // Del metadato del archivo sólo cuando `adjunto.duracion_ms` no vino: lo que
   // se guardó al grabar es más fiable que lo que reporta un contenedor webm sin
   // índice de duración (Chrome devuelve Infinity hasta que se busca al final).
@@ -174,7 +219,14 @@ export function VoicePlayer({
     // @media print no los alcanza solo (contrato de `print-contract.test.ts`).
     <div
       className={cn(
-        "cl-print-hide flex w-full max-w-xs items-center gap-2.5",
+        // ⚠️ ANCHO PROPIO, NO `w-full`. La burbuja del hilo mide lo que mide su
+        // contenido, así que un `w-full` acá no pedía nada: el ancho del audio
+        // terminaba siendo el ancho INTRÍNSECO de sus partes (los huecos entre
+        // barras) y salía igual —201 px— en un teléfono de 320 y en un monitor.
+        // `w-[17rem]` es el tamaño con el que se diseñó una nota de voz y
+        // `max-w-full` lo deja achicarse cuando la burbuja no da. En el composer
+        // llega `flex-1`, que fija `flex-basis:0` y manda sobre este `width`.
+        "cl-print-hide flex w-[17rem] min-w-0 max-w-full items-center gap-2.5",
         className,
       )}
     >
@@ -220,10 +272,8 @@ export function VoicePlayer({
           "transition-[transform,background-color,opacity] duration-(--duration-fast) ease-(--ease-spring)",
           "active:scale-[0.92] motion-reduce:transition-none motion-reduce:active:scale-100",
           "disabled:pointer-events-none disabled:opacity-45",
-          "focus-visible:outline-none focus-visible:ring-[3px]",
-          propio
-            ? "bg-brand-foreground/15 text-brand-foreground focus-visible:ring-brand-foreground/70"
-            : "bg-brand text-brand-foreground focus-visible:ring-focus-ring",
+          "bg-brand text-brand-foreground",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
         )}
       >
         {!src && !fallo ? (
@@ -240,7 +290,7 @@ export function VoicePlayer({
           <p
             className={cn(
               "text-xs",
-              propio ? "text-brand-foreground/80" : "text-foreground-muted",
+              propio ? "text-foreground-secondary" : "text-foreground-muted",
             )}
           >
             {COPY_COMPOSER.reproductor.noDisponible}
@@ -280,16 +330,14 @@ export function VoicePlayer({
             }}
             className={cn(
               "relative h-8 cursor-pointer touch-none select-none rounded-md",
-              "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-offset-2",
+              "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+              "focus-visible:ring-offset-2",
               propio
-                ? "focus-visible:ring-brand-foreground/70 focus-visible:ring-offset-brand"
-                : "focus-visible:ring-focus-ring focus-visible:ring-offset-surface-raised",
+                ? "focus-visible:ring-offset-brand-tint"
+                : "focus-visible:ring-offset-surface-subtle",
             )}
           >
-            <Barras
-              picos={picos}
-              className={propio ? "bg-brand-foreground/35" : "bg-border-strong"}
-            />
+            <Barras picos={picos} className="bg-brand/30" />
             {/* La misma onda encima, en color, recortada hasta donde va la
                 reproducción. Es la capa que mueve el rAF. */}
             <div
@@ -298,10 +346,7 @@ export function VoicePlayer({
               className="absolute inset-0"
               style={{ clipPath: "inset(0 100% 0 0)" }}
             >
-              <Barras
-                picos={picos}
-                className={propio ? "bg-brand-foreground" : "bg-brand"}
-              />
+              <Barras picos={picos} className="bg-brand" />
             </div>
           </div>
         )}
@@ -311,7 +356,7 @@ export function VoicePlayer({
         <span
           className={cn(
             "font-mono text-[0.6875rem] tabular-nums",
-            propio ? "text-brand-foreground/85" : "text-foreground-muted",
+            propio ? "text-foreground-secondary" : "text-foreground-muted",
           )}
         >
           {etiquetaTiempo}
@@ -324,10 +369,10 @@ export function VoicePlayer({
             "rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold tabular-nums",
             "transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring)",
             "active:scale-[0.92] motion-reduce:transition-none motion-reduce:active:scale-100",
-            "focus-visible:outline-none focus-visible:ring-2",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
             propio
-              ? "bg-brand-foreground/15 text-brand-foreground focus-visible:ring-brand-foreground/70"
-              : "bg-surface-subtle text-foreground-secondary hover:bg-surface-hover focus-visible:ring-focus-ring",
+              ? "bg-canvas/55 text-foreground-secondary hover:bg-canvas/75"
+              : "bg-surface-subtle text-foreground-secondary hover:bg-surface-hover",
           )}
         >
           {etiquetaDeVelocidad(velocidad)}
@@ -341,10 +386,14 @@ export function VoicePlayer({
  * Las barras. El piso del 8% existe porque un pico de 0 es silencio REAL: una
  * barra de alto cero deja un agujero en la onda, y el silencio de una nota de
  * voz se lee mejor como una línea fina que como un hueco.
+ *
+ * ⚠️ El `gap` es lo único con ancho propio acá: las barras son `flex-1` y no
+ * aportan nada al ancho mínimo. Cada pixel que se le sume a esta separación se
+ * le resta a TODAS las barras — ver `BARRAS_DIBUJADAS`.
  */
 function Barras({ picos, className }: { picos: readonly number[]; className: string }) {
   return (
-    <div aria-hidden="true" className="flex h-full w-full items-center gap-[2px]">
+    <div aria-hidden="true" className="flex h-full w-full items-center gap-[1.5px]">
       {picos.map((pico, indice) => (
         <span
           key={indice}
