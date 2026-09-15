@@ -17,6 +17,20 @@ vi.mock("@/components/feed/media-viewer", () => ({
   useMediaViewer: () => ({ open: viewer.open }),
 }));
 
+// `ListingActions` (barra social nueva de la card) pide sesión con
+// `useRequireAuth`, que sin `AuthSheetProvider` cae a `router.push` — de ahí
+// el mock de next/navigation, no de auth-sheet en sí.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => "/marketplace",
+}));
+
+// useToast lanza fuera de su provider: reemplazamos SOLO ese hook.
+vi.mock("@/components/ui", async () => {
+  const actual = await vi.importActual<typeof import("@/components/ui")>("@/components/ui");
+  return { ...actual, useToast: () => ({ toast: vi.fn() }) };
+});
+
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: unknown; children: React.ReactNode }) => (
     <a href={typeof href === "string" ? href : "#"} {...props}>

@@ -117,8 +117,17 @@ const TONE: Record<ActionTone, ToneStyles> = {
  * parejos y la fila se lee como una sola pieza, no como cuatro botones sueltos
  * que se acomodaron donde entraron.
  */
+/**
+ * `min-w-0`: sin esto, un flex-child con `flex-1` conserva `min-width: auto`
+ * — su ancho intrínseco de contenido (ícono + palabra) — y esa medida sube
+ * hasta el grid padre. En una grilla de 2 columnas angosta (Marketplace en
+ * 375px) eso ESTIRA la columna entera para que el texto entre, empujando la
+ * tarjeta vecina fuera de pantalla. `min-w-0` deja que el botón se achique
+ * de verdad; `compact` (ver ActionLabel) es lo que evita que se achique HASTA
+ * quedar ilegible.
+ */
 const ACTION_BASE = cn(
-  "flex min-h-14 flex-1 select-none flex-col items-center justify-center gap-1 rounded-md px-1 py-2 text-sm font-medium",
+  "flex min-h-14 min-w-0 flex-1 select-none flex-col items-center justify-center gap-1 rounded-md px-1 py-2 text-sm font-medium",
   "transition-[transform,color,background-color] duration-(--duration-fast) ease-(--ease-spring)",
   "active:scale-[0.94]",
   "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
@@ -175,8 +184,25 @@ export function ActionGlyph({ children }: { children: ReactNode }) {
  * contador, no la etiqueta. Si las dos pesaran igual, el ojo tendría que
  * releer "Me gusta" en cada tarjeta del feed para llegar al número.
  */
-export function ActionLabel({ children }: { children: ReactNode }) {
-  return <span className="text-[11px] leading-none tracking-tight">{children}</span>;
+export function ActionLabel({
+  children,
+  visuallyHidden = false,
+}: {
+  children: ReactNode;
+  /**
+   * `true` en una grilla de 2 columnas angosta (ProductCard en /marketplace):
+   * el nombre accesible del botón ya trae la palabra entera (ver `label` en
+   * ActionButton/ActionToggle), así que esconderla visualmente no le quita
+   * nada a un lector de pantalla — sólo le devuelve a la fila el ancho que
+   * necesita para no desbordar la tarjeta.
+   */
+  visuallyHidden?: boolean;
+}) {
+  return (
+    <span className={visuallyHidden ? "sr-only" : "text-[11px] leading-none tracking-tight"}>
+      {children}
+    </span>
+  );
 }
 
 /**

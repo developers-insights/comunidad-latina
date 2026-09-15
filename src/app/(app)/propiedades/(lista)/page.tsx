@@ -44,7 +44,7 @@ import {
   type PropertyOperation,
   type PropertyType,
 } from "@/lib/propiedades/tipos";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getAreaLabelDelPerfil, resolverVistaZona } from "@/lib/zona/server";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
@@ -430,6 +430,24 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
     ),
   ].sort((a, b) => a.localeCompare(b, "es"));
 
+  /**
+   * MIS AVISOS DE ESTA PÁGINA — para el menú ⋯ de cada tarjeta.
+   *
+   * Sale de `created_by`, que este SELECT ya traía, contra el `sub` del JWT
+   * (verificado local, sin round-trip y cache()-eado por request). Cero
+   * consultas nuevas y cero consultas por fila: lo único que baja al navegador
+   * es un booleano por tarjeta, nunca el id de nadie.
+   *
+   * Y no es la autorización: las server actions releen la fila filtrando por
+   * dueño y la RLS decide. Acá sólo se evita ofrecer lo que iba a rebotar.
+   */
+  const viewerId = await getAuthUserId();
+  const misAvisos = new Set(
+    viewerId
+      ? orderedRows.filter((row) => row.created_by === viewerId).map((row) => row.id)
+      : [],
+  );
+
   const cards: ListingCardModel[] = orderedRows.map((row) => {
     let publisher: PublisherView = null;
     if (row.created_by) {
@@ -547,15 +565,19 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
                 <Chip
                   variant="neutral"
                   size="sm"
-                  className="absolute right-3.5 top-3.5 z-10 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
+                  className="absolute left-1/2 top-3.5 z-10 -translate-x-1/2 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
                 >
                   <Megaphone size={14} weight="fill" aria-hidden="true" />
                   Patrocinado
                 </Chip>
-                <ListingCard listing={card} />
+                <ListingCard listing={card} owner={{ esMio: misAvisos.has(card.id) }} />
               </div>
             ) : (
-              <ListingCard key={card.id} listing={card} />
+              <ListingCard
+                key={card.id}
+                listing={card}
+                owner={{ esMio: misAvisos.has(card.id) }}
+              />
             ),
           )}
 

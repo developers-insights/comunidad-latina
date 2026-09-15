@@ -139,6 +139,16 @@ export interface ListingActionsProps extends ListingEngagement {
    */
   detailHref: string | null;
   className?: string;
+  /**
+   * `true` en una grilla de 2 columnas angosta (hoy, sólo `ProductCard` en
+   * /marketplace). Esconde la palabra debajo de cada ícono — el nombre
+   * accesible del botón la sigue diciendo entera — y le devuelve a la fila el
+   * ancho que un flex-child con `min-w-0` (ver action-bar.tsx) no puede
+   * inventar solo: sin esto, "Comentar"/"Compartir"/"Guardar" no entran en los
+   * ~160px de una columna a 375px y la fila fuerza la tarjeta entera más ancha
+   * que su columna — la vecina termina empujada fuera de pantalla.
+   */
+  compact?: boolean;
 }
 
 export function ListingActions({
@@ -150,6 +160,7 @@ export function ListingActions({
   savedByViewer = false,
   like,
   className,
+  compact = false,
 }: ListingActionsProps) {
   const requireAuth = useRequireAuth();
   const { toast } = useToast();
@@ -250,7 +261,7 @@ export function ListingActions({
             <Heart size={ACTION_ICON} weight={like.liked ? "fill" : "regular"} aria-hidden="true" />
             <span className="numeric">{like.count}</span>
           </ActionGlyph>
-          <ActionLabel>{COPY.like}</ActionLabel>
+          <ActionLabel visuallyHidden={compact}>{COPY.like}</ActionLabel>
         </ActionToggle>
       )}
 
@@ -272,7 +283,7 @@ export function ListingActions({
           <ChatCircle size={ACTION_ICON} aria-hidden="true" />
           {commentCount !== undefined && <span className="numeric">{commentCount}</span>}
         </ActionGlyph>
-        <ActionLabel>{COPY.commentAction}</ActionLabel>
+        <ActionLabel visuallyHidden={compact}>{COPY.commentAction}</ActionLabel>
       </ActionButton>
 
       {detailHref && (
@@ -284,7 +295,7 @@ export function ListingActions({
           <ActionGlyph>
             <ShareNetwork size={ACTION_ICON} aria-hidden="true" />
           </ActionGlyph>
-          <ActionLabel>{COPY.share}</ActionLabel>
+          <ActionLabel visuallyHidden={compact}>{COPY.share}</ActionLabel>
         </ActionButton>
       )}
 
@@ -297,7 +308,7 @@ export function ListingActions({
         <ActionGlyph>
           <BookmarkSimple size={ACTION_ICON} weight={saved ? "fill" : "regular"} aria-hidden="true" />
         </ActionGlyph>
-        <ActionLabel>{COPY.save}</ActionLabel>
+        <ActionLabel visuallyHidden={compact}>{COPY.save}</ActionLabel>
       </ActionToggle>
       </ActionRow>
 

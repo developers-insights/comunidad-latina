@@ -30,7 +30,9 @@ import {
   parseInboxQuery,
   type InboxQuery,
 } from "@/lib/notifications/href";
+import { parseEntityKind } from "@/lib/notifications/entity";
 import { groupByRecency } from "@/lib/notifications/recency";
+import { listingPhotoUrl } from "@/components/listings";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Notificaciones" };
@@ -51,6 +53,8 @@ type NotificationRow = {
   created_at: string;
   category: string;
   priority: string;
+  entity_kind: string | null;
+  image_url: string | null;
 };
 
 type BroadcastRow = {
@@ -77,6 +81,10 @@ function toItem(row: NotificationRow, now: Date): NotificationItemData {
     createdAt: row.created_at,
     timeLabel: timeAgo(new Date(row.created_at), now),
     actionLabel: COPY.actionLabels[row.kind] ?? null,
+    entityKind: parseEntityKind(row.entity_kind),
+    // La columna guarda el valor CRUDO de `listings.photos` (0151): la URL
+    // pública se arma en el servidor porque la fila es un client component.
+    imageUrl: row.image_url ? listingPhotoUrl(row.image_url) : null,
   };
 }
 
@@ -195,7 +203,9 @@ async function InboxList({ query, userId }: { query: InboxQuery; userId: string 
 
   let notificationsQuery = supabase
     .from("notifications")
-    .select("id, kind, title, body, href, read_at, created_at, category, priority")
+    .select(
+      "id, kind, title, body, href, read_at, created_at, category, priority, entity_kind, image_url",
+    )
     .is("dismissed_at", null)
     .gt("expires_at", nowIso)
     .order("created_at", { ascending: false })

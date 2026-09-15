@@ -9,6 +9,11 @@ import {
 import { Avatar, BezelCard, Chip } from "@/components/ui";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import { InlineMessageCta } from "@/components/listings/inline-message-cta";
+import { ListingActions, type ListingEngagement } from "@/components/feed/listing-actions";
+import {
+  ListingOwnerMenu,
+  type ListingOwnerView,
+} from "@/components/listings/listing-owner-menu";
 import type { JobCardModel } from "@/app/(app)/empleos/queries";
 import { workModeLabel } from "@/lib/creators/work-mode";
 import { cn } from "@/lib/utils";
@@ -51,6 +56,8 @@ const C = COPY.service;
 export function ServiceCard({
   service,
   isLoggedIn,
+  engagement,
+  owner,
 }: {
   service: JobCardModel;
   /**
@@ -59,6 +66,14 @@ export function ServiceCard({
    * encima del listado y vuelve solo — nadie pierde lo que escribió.
    */
   isLoggedIn: boolean;
+  /** Ausente hasta que /empleos resuelva comentarios/guardado en lote — ver ListingEngagement. */
+  engagement?: ListingEngagement;
+  /**
+   * Propiedad del aviso, ya resuelta EN EL SERVIDOR (created_by contra la
+   * sesión). Llega como booleano: ningún id de nadie baja al navegador por
+   * acá. Ausente → no se dibuja el menú ⋯.
+   */
+  owner?: ListingOwnerView;
 }) {
   const modeLabel = workModeLabel(service.workMode);
   const publisherName =
@@ -134,6 +149,22 @@ export function ServiceCard({
               </div>
             )}
           </div>
+
+          {/* El ⋯ del dueño. Acá NO va sobre una foto —esta tarjeta no tiene—,
+              así que viaja sin `sobreFoto`: ícono sobre la superficie de la
+              card, con el mismo alto tocable. `-mr-2 -mt-2` lo pega a la
+              esquina sin que su área de 44px empuje el encabezado. */}
+          {owner?.esMio && (
+            <ListingOwnerMenu
+              listingId={service.id}
+              kind="service"
+              title={service.title}
+              esMio
+              status={owner.status}
+              pausadoPorReportes={owner.pausadoPorReportes}
+              className="-mr-2 -mt-2"
+            />
+          )}
         </div>
 
         {/* Qué hace, en las palabras del aviso. Dos renglones: alcanza para
@@ -197,6 +228,18 @@ export function ServiceCard({
           </span>
         </p>
 
+        {/* Misma barra social que JobCard y que el feed para `kind="service"`
+            (pedido cliente 2026-09-14: "que tengan todo lo mismo"). */}
+        <ListingActions
+          listingId={service.id}
+          shareKind="job"
+          title={service.title}
+          detailHref={`/empleos/${service.id}`}
+          commentCount={engagement?.commentCount}
+          savedByViewer={engagement?.savedByViewer}
+          like={engagement?.like}
+        />
+
         <div className="flex flex-col gap-1">
           {canContact && (
             <InlineMessageCta
@@ -239,7 +282,7 @@ export function ServiceCard({
       <Chip
         variant="neutral"
         size="sm"
-        className="absolute right-3.5 top-3.5 z-10 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
+        className="absolute left-1/2 top-3.5 z-10 -translate-x-1/2 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
       >
         <Megaphone size={14} weight="fill" aria-hidden="true" />
         {COPY.list.adChip}

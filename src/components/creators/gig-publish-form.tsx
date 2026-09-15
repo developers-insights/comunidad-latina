@@ -32,6 +32,8 @@ import {
   requiresArea,
   type WorkMode,
 } from "@/lib/creators/work-mode";
+import { firstPhotoUrl } from "@/components/listings";
+import { OfrecerImpulso } from "@/components/boosts/ofrecer-impulso";
 import { PHOTO_MAX_COUNT, selectPhotos } from "./helpers";
 import { COPY } from "./copy";
 
@@ -105,7 +107,12 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState<"published" | "pending_review" | null>(null);
+  const [done, setDone] = useState<{
+    status: "published" | "pending_review";
+    listingId: string;
+    /** Para la vista previa de "así va a quedar" cuando queda en revisión. */
+    photos: string[];
+  } | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
@@ -253,7 +260,7 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
         setError(finalized.error);
         return;
       }
-      setDone(finalized.status);
+      setDone({ status: finalized.status, listingId, photos: photoPaths });
       if (finalized.status === "published") celebrate();
     } catch {
       setError(C.errors.generic);
@@ -263,7 +270,7 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
   }
 
   if (done) {
-    const published = done === "published";
+    const published = done.status === "published";
     return (
       <>
         {published && <Celebration active={celebrating} message={C.successPublishedTitle} />}
@@ -290,6 +297,17 @@ export function GigPublishForm({ tenantId }: { tenantId: string }) {
             {C.goToFeed}
           </Link>
         </BezelCard>
+
+        {/* El trabajo ya está creado y fue gratis: esto es una oferta, no un
+            paso del alta. `OfrecerImpulso` decide con `puedePromocionarse` si
+            se puede promocionar ya o si todavía está en revisión. */}
+        <OfrecerImpulso
+          className="mt-4"
+          listingId={done.listingId}
+          status={done.status}
+          titulo={title.trim() || C.successPublishedTitle}
+          thumbnailUrl={firstPhotoUrl(done.photos)}
+        />
       </>
     );
   }

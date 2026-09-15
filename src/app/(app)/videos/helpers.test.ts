@@ -8,6 +8,7 @@ import {
   hasVideoMedia,
   parseStartId,
   parseVideoCategoryParam,
+  parseVideoSearchParam,
   parseVideosScope,
   scopeListingKind,
   shouldShowCategoryMenu,
@@ -117,6 +118,17 @@ describe("categoryFilterValue", () => {
   });
 });
 
+describe("parseVideoSearchParam", () => {
+  it("sanitiza y colapsa espacios, igual que el resto de los buscadores del repo", () => {
+    expect(parseVideoSearchParam("  perro   callejero  ")).toBe("perro callejero");
+  });
+
+  it("ausente o solo espacios es null, no cadena vacía", () => {
+    expect(parseVideoSearchParam(undefined)).toBeNull();
+    expect(parseVideoSearchParam("   ")).toBeNull();
+  });
+});
+
 describe("shouldShowCategoryMenu", () => {
   it("entrar a /videos pelado abre el MENÚ (antes arrancaba reproduciendo)", () => {
     expect(
@@ -149,5 +161,25 @@ describe("shouldShowCategoryMenu", () => {
     expect(
       shouldShowCategoryMenu({ category: ALL_CATEGORIES, startId: null, rawScope: "" }),
     ).toBe(false);
+  });
+
+  it("con ?q= buscando se ve el reel, sin menú de por medio", () => {
+    // El buscador del menú ES la elección: volver a preguntar "¿qué querés
+    // ver?" después de que la persona ya lo escribió sería un paso de más.
+    expect(
+      shouldShowCategoryMenu({ category: null, startId: null, rawScope: "", q: "perro" }),
+    ).toBe(false);
+  });
+
+  it("sin q (undefined, null o vacío) sigue abriendo el menú", () => {
+    expect(shouldShowCategoryMenu({ category: null, startId: null, rawScope: "" })).toBe(
+      true,
+    );
+    expect(
+      shouldShowCategoryMenu({ category: null, startId: null, rawScope: "", q: null }),
+    ).toBe(true);
+    expect(
+      shouldShowCategoryMenu({ category: null, startId: null, rawScope: "", q: "" }),
+    ).toBe(true);
   });
 });

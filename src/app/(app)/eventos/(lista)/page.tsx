@@ -28,7 +28,7 @@ import {
 import { ZonaVacia } from "@/components/zona";
 import { EVENT_CATEGORIES, isEventCategory } from "@/lib/eventos/categorias";
 import { t } from "@/lib/i18n";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { resolverVistaZona } from "@/lib/zona/server";
@@ -243,6 +243,22 @@ async function EventosContent({ filters }: { filters: Filters }) {
   // Se conserva `startsAt` junto a la tarjeta: `EventCardModel.date` ya viene
   // formateado para pintar (día, mes, "es pasado") y no tiene la fecha cruda,
   // que es la que necesita el filtro "este mes".
+  /**
+   * MIS AVISOS DE ESTA PÁGINA — para el menú ⋯ de cada tarjeta.
+   *
+   * Sale de `created_by`, que este SELECT ya traía, contra el id de la sesión.
+   * Cero consultas nuevas y cero consultas por fila: lo único que baja al
+   * navegador es un booleano por tarjeta, nunca el id de nadie. Y no es la
+   * autorización — las server actions releen la fila filtrando por dueño y la
+   * RLS decide; acá sólo se evita ofrecer lo que iba a rebotar.
+   */
+  const viewerId = await getAuthUserId();
+  const misAvisos = new Set(
+    viewerId
+      ? (rows ?? []).filter((row) => row.created_by === viewerId).map((row) => row.id)
+      : [],
+  );
+
   const allEvents: EventRow[] = (rows ?? []).map((row) => {
     const attrs = parseEventAttrs(row.attrs);
     const profile = row.created_by ? profileById.get(row.created_by) : undefined;
@@ -383,19 +399,23 @@ async function EventosContent({ filters }: { filters: Filters }) {
                   <Chip
                     variant="neutral"
                     size="sm"
-                    className="absolute right-3.5 top-3.5 z-10 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
+                    className="absolute left-1/2 top-3.5 z-10 -translate-x-1/2 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
                   >
                     <Megaphone size={14} weight="fill" aria-hidden="true" />
                     Patrocinado
                   </Chip>
-                  <EventCard event={card} />
+                  <EventCard event={card} owner={{ esMio: misAvisos.has(card.id) }} />
                 </div>
               ))}
             </>
           )}
 
           {upcomingRest.map((card) => (
-            <EventCard key={card.id} event={card} />
+            <EventCard
+              key={card.id}
+              event={card}
+              owner={{ esMio: misAvisos.has(card.id) }}
+            />
           ))}
 
           {pastRest.length > 0 && (

@@ -29,6 +29,8 @@ import {
   OriginalityFields,
   type DeclarationValue,
 } from "@/components/integrity/originality-fields";
+import { firstPhotoUrl } from "@/components/listings";
+import { OfrecerImpulso } from "@/components/boosts/ofrecer-impulso";
 import { createProductDraft, finalizeProduct } from "./actions";
 
 const C = COPY.publish;
@@ -104,7 +106,12 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState<"published" | "pending_review" | null>(null);
+  const [done, setDone] = useState<{
+    status: "published" | "pending_review";
+    listingId: string;
+    /** Para la vista previa de "así va a quedar" cuando queda en revisión. */
+    photos: string[];
+  } | null>(null);
   // El borrador se crea una sola vez — reintentos no duplican productos.
   const [draftId, setDraftId] = useState<string | null>(null);
 
@@ -224,7 +231,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
         setError(finalized.error);
         return;
       }
-      setDone(finalized.status);
+      setDone({ status: finalized.status, listingId, photos: photoPaths });
       if (finalized.status === "published") celebrate();
     } catch {
       setError(C.errors.generic);
@@ -237,7 +244,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
   // Pantalla de éxito
   // -------------------------------------------------------------------------
   if (done) {
-    const published = done === "published";
+    const published = done.status === "published";
     const store = stores.find((s) => s.id === storeId);
     return (
       <>
@@ -278,6 +285,17 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
             </Button>
           </div>
         </BezelCard>
+
+        {/* El producto ya está creado y fue gratis: esto es una oferta, no un
+            paso del alta. `OfrecerImpulso` decide con `puedePromocionarse` si
+            se puede promocionar ya o si todavía está en revisión. */}
+        <OfrecerImpulso
+          className="mt-4"
+          listingId={done.listingId}
+          status={done.status}
+          titulo={title.trim() || C.success.publishedTitle}
+          thumbnailUrl={firstPhotoUrl(done.photos)}
+        />
       </>
     );
   }

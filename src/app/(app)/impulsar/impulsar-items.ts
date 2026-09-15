@@ -1,5 +1,7 @@
 import { mediaKindOf, postMediaUrl } from "@/components/feed/helpers";
 import { firstPhotoUrl } from "@/components/listings";
+import { estadoDePromocion } from "@/lib/boosts/estado-promocion";
+import type { EstadoPromocion } from "@/lib/boosts/estado-promocion";
 
 /**
  * Modelo PURO de una fila de /impulsar (índice "Promocioná lo tuyo").
@@ -12,67 +14,16 @@ import { firstPhotoUrl } from "@/components/listings";
 export type ImpulsarItemKind = "listing" | "post";
 
 /**
- * En qué punto está algo propio RESPECTO DE PODER PROMOCIONARSE.
- *
- * No es `listings.status` renombrado: junta el estado de la fila con el de su
- * promoción vigente, que viven en dos tablas y contestan una sola pregunta —
- * "¿puedo ponerle plata a esto ahora?".
- *
- * Los estados no promocionables van SEPARADOS porque cada uno se resuelve de
- * una forma distinta: un borrador se termina, un vencido se renueva, uno en
- * revisión sólo se espera. Hasta el 2026-09-07 los seis se pintaban como
- * "Todavía en revisión" y encima con el botón "Promocionar" en primario, que
- * llevaba a `/impulsar/[listingId]` sólo para leer que no se podía (las dos
- * pantallas de destino exigen `status = 'published'`). De los seis, el texto
- * era cierto en uno.
- *
- * El catálogo de `listings.status` es el CHECK de la migración 0117
- * (draft · pending_review · published · paused · removed · expired · closed);
- * `posts.status` (0007) sólo tiene published · removed · pending_review, así
- * que un post nunca alcanza los estados de aviso. `removed` no llega acá: lo
- * descarta la query del índice.
+ * La regla de "¿puedo promocionar esto?" vive en `lib/boosts/estado-promocion`
+ * desde que también la usan las pantallas de éxito de los wizards, que son
+ * componentes de cliente y no pueden importar de una ruta del App Router. Se
+ * reexporta para no tocar a nadie que ya la traía de acá.
  */
-export type EstadoPromocion =
-  | "activa"
-  | "lista"
-  | "en_revision"
-  | "sin_terminar"
-  | "pausada"
-  | "vencida"
-  | "cerrada"
-  | "no_disponible";
-
-/**
- * Un `status` que no conocemos NUNCA cae en "lista": el destino lo iba a
- * rechazar igual, y un botón que promete lo que el servidor niega es
- * exactamente el bug que esta función existe para cerrar.
- */
-export function estadoDePromocion(
-  status: string,
-  promocionVigente: boolean,
-): EstadoPromocion {
-  if (status === "published") return promocionVigente ? "activa" : "lista";
-
-  switch (status) {
-    case "pending_review":
-      return "en_revision";
-    case "draft":
-      return "sin_terminar";
-    case "paused":
-      return "pausada";
-    case "expired":
-      return "vencida";
-    case "closed":
-      return "cerrada";
-    default:
-      return "no_disponible";
-  }
-}
-
-/** Los dos únicos estados en los que "Promocionar" lleva a algún lado. */
-export function puedePromocionarse(estado: EstadoPromocion): boolean {
-  return estado === "lista" || estado === "activa";
-}
+export {
+  estadoDePromocion,
+  puedePromocionarse,
+  type EstadoPromocion,
+} from "@/lib/boosts/estado-promocion";
 
 /** Ventana de "recién creado" — ver `esReciente`. */
 export const RECIENTE_MS = 30 * 60 * 1000;

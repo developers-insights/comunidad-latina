@@ -13,9 +13,7 @@ import {
   ImageSquare,
   Key,
   MapPin,
-  Megaphone,
   PencilSimple,
-  RocketLaunch,
   ShieldCheck,
   Storefront,
   Tag,
@@ -38,7 +36,8 @@ import {
 import { cn, DEFAULT_CURRENCY } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Celebration, useCelebration } from "@/components/motion";
-import { COPY, formatListingPrice } from "@/components/listings";
+import { COPY, firstPhotoUrl, formatListingPrice } from "@/components/listings";
+import { OfrecerImpulso } from "@/components/boosts/ofrecer-impulso";
 import { MONETIZATION_COPY, FREE_MAX_PHOTOS } from "@/lib/monetization";
 import { listingViewHref } from "@/lib/monetization/href";
 import {
@@ -530,6 +529,8 @@ export function PublishForm({
     status: "published" | "pending_review";
     kind: Kind;
     listingId: string;
+    /** Para la vista previa de "así va a quedar" cuando queda en revisión. */
+    photos: string[];
   } | null>(null);
 
   const [kind, setKind] = useState<Kind | null>(initialKind);
@@ -928,6 +929,7 @@ export function PublishForm({
         status: finalized.status,
         kind: (finalized.kind as Kind) ?? (kind as Kind),
         listingId,
+        photos: photoPaths,
       });
       // Celebración sutil solo cuando el aviso quedó publicado de verdad (no en
       // "queda en revisión", que es un estado de espera, no un logro cerrado).
@@ -983,31 +985,17 @@ export function PublishForm({
               debería haber un botón acá y otro acá… crear campaña o impulsar
               este anuncio". Aplica a los 5 verticales del wizard.
 
-              Sólo si el aviso YA está publicado: las dos rutas exigen
-              status='published' (la RLS de campaigns_insert y el gate de
-              /impulsar), así que ofrecerlas en revisión sería mandar a alguien
-              a una pantalla que le dice que no. Cuando está en revisión se lo
-              decimos con una línea, que es más honesto que un botón muerto. */}
-          {published ? (
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <PromoteCard
-                href={`/impulsar/${done.listingId}`}
-                icon={<RocketLaunch size={20} weight="fill" aria-hidden="true" />}
-                title={M.success.boostCta}
-                hint={M.success.boostHint}
-              />
-              <PromoteCard
-                href={`/impulsar/${done.listingId}?modo=campana`}
-                icon={<Megaphone size={20} weight="fill" aria-hidden="true" />}
-                title={M.success.campaignCta}
-                hint={M.success.campaignHint}
-              />
-            </div>
-          ) : (
-            <p className="text-center text-xs leading-relaxed text-foreground-muted">
-              {M.success.laterNote}
-            </p>
-          )}
+              La regla de cuándo se ofrece vive en `OfrecerImpulso`, que la
+              pregunta con `puedePromocionarse` — la misma función que usa el
+              índice de Boost. Cuando el aviso queda en revisión no hay botón
+              (las rutas de destino exigen status='published'), pero sí la vista
+              previa de cómo va a quedar. */}
+          <OfrecerImpulso
+            listingId={done.listingId}
+            status={done.status}
+            titulo={title.trim() || C.success.publishedTitle}
+            thumbnailUrl={firstPhotoUrl(done.photos)}
+          />
 
           <Button variant="ghost" className="w-full" onClick={resetForm}>
             {C.success.publishAnother}
@@ -1880,36 +1868,3 @@ export function PublishForm({
  * una campaña no son la misma acción con distinto precio, y dos botones
  * idénticos invitan a elegir el de arriba sin leer.
  */
-function PromoteCard({
-  href,
-  icon,
-  title,
-  hint,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  title: string;
-  hint: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "group flex min-h-11 items-start gap-3 rounded-lg border border-border-subtle bg-surface p-4 text-left",
-        "transition-[transform,background-color,border-color] duration-(--duration-fast) ease-(--ease-spring)",
-        "hover:border-brand hover:bg-brand-tint active:scale-[0.98]",
-        "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-      )}
-    >
-      <span className="mt-0.5 shrink-0 text-brand">{icon}</span>
-      <span className="min-w-0">
-        <span className="block text-sm font-semibold text-foreground group-hover:text-brand-ink">
-          {title}
-        </span>
-        <span className="mt-0.5 block text-xs leading-relaxed text-foreground-secondary">
-          {hint}
-        </span>
-      </span>
-    </Link>
-  );
-}

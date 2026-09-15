@@ -252,6 +252,22 @@ const INVENTARIO: Record<string, Entrada> = {
     cobertura: "control",
   },
   "src/app/(app)/publicar/publish-form.tsx": { inks: ["text-on-media"], cobertura: "control" },
+  // Marcador "De esto te avisamos": señala qué fila originó la notificación que
+  // trajo hasta acá. Es rastro de navegación, no del aviso — en papel no dice nada.
+  "src/app/(app)/publicaciones/page.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "cl-print-hide",
+  },
+  // Botón "Quitar foto" sobre la miniatura, y el ⋯ del dueño sobre la foto del
+  // aviso: los dos son <button>, el @media print ya los esconde.
+  "src/components/listings/listing-edit-sheet.tsx": {
+    inks: ["text-on-danger"],
+    cobertura: "control",
+  },
+  "src/components/listings/listing-owner-menu.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "control",
+  },
   // Botón "Quitar foto" del wizard de publicar EMPLEO — idéntico patrón: es un
   // <button>, el @media print ya lo esconde.
   "src/app/(app)/empleos/publicar/publish-form.tsx": {
@@ -586,8 +602,10 @@ const INVENTARIO: Record<string, Entrada> = {
   // negocio delataba el nombre y apellido de quien está detrás.
   // 12 desde el 2026-09-03: el placeholder de carga del slide (el FilmSlate que
   // late mientras baja la primera tanda del reel abierto sobre el feed).
+  // 15 desde el 2026-09-15: el pill que muestra el término buscado dentro del
+  // reel y permite volver al menú (el buscador que pidió el cliente).
   "src/app/(app)/videos/video-reels.tsx": {
-    inks: Array<string>(14).fill("text-on-media"),
+    inks: Array<string>(15).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
   // Ronda del 2026-09-03 (feedback del cliente), tres portadores nuevos de video:
@@ -692,6 +710,19 @@ const INVENTARIO: Record<string, Entrada> = {
   // Glifo Play sobre el thumbnail de video en el índice de Impulsar — mismo
   // patrón que posts-grid.tsx: velo bg-media-scrim con cl-print-fill.
   "src/app/(app)/impulsar/page.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-fill",
+  },
+  // El mismo glifo Play, ahora sobre el thumbnail de cada campaña en "Cómo van
+  // tus promociones" — idéntico patrón y el mismo velo con cl-print-fill.
+  "src/app/(app)/impulsar/resultados/page.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-fill",
+  },
+  // Vista previa de una campaña en revisión: la maqueta dibuja el glifo Play
+  // sobre el medio cuando lo promocionado es un video, con el mismo velo
+  // bg-media-scrim + cl-print-fill que el resto de los thumbnails del repo.
+  "src/components/boosts/vista-previa-en-revision.tsx": {
     inks: ["text-on-media"],
     cobertura: "cl-print-fill",
   },

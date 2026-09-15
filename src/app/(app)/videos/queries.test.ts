@@ -41,6 +41,7 @@ function createStub(rowsByTable: Record<string, unknown[]> = {}) {
       gt: record("gt"),
       in: record("in"),
       or: record("or"),
+      textSearch: record("textSearch"),
       order: record("order"),
       limit: record("limit"),
       maybeSingle: async () => result,
@@ -159,5 +160,42 @@ describe("fetchVideoReelsPage — scope por módulo", () => {
     expect(stub.argsOf("posts", "or").map(([filtro]) => filtro)).toContainEqual(
       "mux_status.is.null,mux_status.eq.ready",
     );
+  });
+});
+
+/**
+ * BUSCADOR DEL MENÚ (pedido cliente 2026-09-15: "un lugar donde buscar los
+ * videos... como TikTok o Instagram"). Reusa el índice FTS que ya existe sobre
+ * `posts.search` (0044 + 0052, el mismo que /empleos usa sobre
+ * `listings.search`): no hace falta migración nueva, así que lo que este test
+ * fija es que la query LO USE con la misma config que el resto del repo.
+ */
+describe("fetchVideoReelsPage — buscador", () => {
+  it("con ?q= filtra por FTS sobre posts.search, config 'spanish'", async () => {
+    const stub = createStub();
+
+    await fetchVideoReelsPage({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      supabase: stub.client as any,
+      tenantId: "tenant-1",
+      viewerId: null,
+      scope: "para-ti",
+      q: "perro callejero",
+      cursor: null,
+    });
+
+    expect(stub.argsOf("posts", "textSearch")).toContainEqual([
+      "search",
+      "perro callejero",
+      { type: "websearch", config: "spanish" },
+    ]);
+  });
+
+  it("sin q no se llama a textSearch — no hay por qué acotar de más", async () => {
+    const stub = createStub();
+
+    await fetchPage(stub, "para-ti");
+
+    expect(stub.argsOf("posts", "textSearch")).toEqual([]);
   });
 });

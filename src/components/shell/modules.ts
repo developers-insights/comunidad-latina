@@ -186,7 +186,9 @@ export const MODULES: ModuleItem[] = [
 ];
 
 /**
- * Boost — OCTAVA sección de /buscar (pedido Manuel, 2026-08-11), separada a
+ * Boost — comprado por Manuel para dos superficies (la OCTAVA sección de
+ * /buscar, 2026-08-11; y el cierre de la fila de círculos del feed, pedido
+ * del cliente 2026-09-15: "acá falta el botón del Boost"), separado a
  * propósito de `MODULES`:
  *
  *  · `MODULES` es el catálogo de VERTICALES de contenido — cada entrada es un
@@ -200,6 +202,11 @@ export const MODULES: ModuleItem[] = [
  *    ningún tenant pide poder ocultar la forma de pagarle a la plataforma —
  *    es infraestructura de monetización, igual de siempre-activa que
  *    `mensajes` o `feed` (ver `ALWAYS_ON_MODULE_KEYS` en ./module-access).
+ *  · Ninguna de las dos superficies lo trata como un módulo más: en /buscar
+ *    entra al final de `BROWSE_MODULES`, y en el feed `moduleCircles()`
+ *    (components/feed/module-circles.tsx) lo agrega aparte del loop de
+ *    `MODULES` y le da un trato visual propio (anillo del acento siempre
+ *    visible) — sigue siendo una COMPRA, nunca "un círculo más".
  *
  * El acento sale de `--color-sponsored` (el mismo dorado del chip/anillo de
  * contenido patrocinado en toda la app — ver card-ad-chip.tsx y los listados

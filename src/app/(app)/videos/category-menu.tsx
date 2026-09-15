@@ -14,6 +14,8 @@ import {
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
+import { ModuleSearchBar } from "@/components/search";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { VideoCategory } from "@/lib/media/video-policy";
 import {
@@ -81,6 +83,19 @@ export function VideoCategoryMenu() {
         </p>
       </header>
 
+      {/* Buscador (pedido cliente: "un lugar donde buscar los videos según la
+          categoría o el tipo... como TikTok o Instagram"). Va ACÁ y no dentro
+          del reel: es la pantalla de descubrimiento, y escribir sobre un video
+          en autoplay a pantalla completa sería peor que elegir antes de
+          entrar. Al enviar, `/videos?q=` entra derecho al reel filtrado —
+          `shouldShowCategoryMenu` no vuelve a mostrar este menú con `q` puesto. */}
+      <div className={cn("mt-5", styles.item)} style={stagger(1)}>
+        <ModuleSearchBar
+          label={t("sections", "searchVideosLabel")}
+          placeholder={t("sections", "searchVideosPlaceholder")}
+        />
+      </div>
+
       {/* "Todos" primero y a lo ancho: es el camino de siempre y el que la
           mayoría va a querer. Que sea la pieza más grande no es decoración —
           es la jerarquía de la pantalla. */}
@@ -88,13 +103,13 @@ export function VideoCategoryMenu() {
         href={`/videos?cat=${ALL_CATEGORIES}`}
         aria-label={VIDEOS_COPY.menu.openAll}
         className={cn(
-          "group mt-5 block rounded-xl bg-brand-tint p-1 shadow-bezel",
+          "group mt-3 block rounded-xl bg-brand-tint p-1 shadow-bezel",
           "transition-transform duration-(--duration-base) ease-(--ease-out-premium)",
           "active:scale-[0.985]",
           "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
           styles.item,
         )}
-        style={stagger(1)}
+        style={stagger(2)}
       >
         <span
           className={cn(
@@ -143,7 +158,7 @@ export function VideoCategoryMenu() {
           const CategoryIcon = visual.icon;
           const label = VIDEO_CATEGORY_LABELS[category];
           return (
-            <li key={category} className={styles.item} style={stagger(index + 2)}>
+            <li key={category} className={styles.item} style={stagger(index + 3)}>
               <Link
                 href={`/videos?cat=${category}`}
                 aria-label={VIDEOS_COPY.menu.openCategory(label)}
@@ -222,7 +237,7 @@ export function VideoCategoryMenu() {
         // pagando. El acento sólo TIÑE — el texto se queda en tinta
         // `foreground`, que es lo único AA garantizado en los dos temas.
         style={{
-          ...stagger(VIDEO_CATEGORY_ORDER.length + 2),
+          ...stagger(VIDEO_CATEGORY_ORDER.length + 3),
           backgroundColor:
             "color-mix(in oklab, var(--accent-creadores) 16%, var(--color-surface-subtle))",
         }}
@@ -268,7 +283,7 @@ export function VideoCategoryMenu() {
 
       <p
         className={cn("mt-5 text-center text-xs text-foreground-muted", styles.item)}
-        style={stagger(VIDEO_CATEGORY_ORDER.length + 3)}
+        style={stagger(VIDEO_CATEGORY_ORDER.length + 4)}
       >
         {VIDEOS_COPY.menu.footnote}
       </p>

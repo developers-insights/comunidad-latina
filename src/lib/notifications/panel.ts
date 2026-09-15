@@ -36,6 +36,10 @@ export type NotificationPanelItem = {
   createdAt: string;
   /** "hace 2 horas", formateado en el servidor (misma función que la bandeja). */
   timeLabel: string;
+  /** Vertical de la entidad que originó el aviso (0151): da el ícono del módulo. */
+  entityKind: string | null;
+  /** Miniatura de esa entidad, con la URL YA RESUELTA por el servidor. */
+  imageUrl: string | null;
 };
 
 export type NotificationPanelData = {

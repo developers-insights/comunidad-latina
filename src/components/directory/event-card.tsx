@@ -2,6 +2,11 @@ import { CalendarBlank, MapPin } from "@phosphor-icons/react/dist/ssr";
 import { AccentLink, BezelCard } from "@/components/ui";
 import { PublisherTrust } from "@/components/listings";
 import { PhotoTap } from "@/components/media/photo-tap";
+import { ListingActions, type ListingEngagement } from "@/components/feed/listing-actions";
+import {
+  ListingOwnerMenuOverlay,
+  type ListingOwnerView,
+} from "@/components/listings/listing-owner-menu";
 import type { TrustLevel, TrustSignal } from "@/components/trust";
 import { COPY } from "./copy";
 import type { EventDateParts } from "./helpers";
@@ -52,7 +57,21 @@ const ACCENT = "var(--accent-eventos)";
  * a todo el directorio): tocar la FOTO abre el visor con las fotos del evento;
  * la píldora "Ver evento" es la única que navega al detalle.
  */
-export function EventCard({ event }: { event: EventCardModel }) {
+export function EventCard({
+  event,
+  engagement,
+  owner,
+}: {
+  event: EventCardModel;
+  /** Ausente hasta que /eventos resuelva comentarios/guardado en lote — ver ListingEngagement. */
+  engagement?: ListingEngagement;
+  /**
+   * Propiedad del aviso, ya resuelta EN EL SERVIDOR (created_by contra la
+   * sesión). Llega como booleano: ningún id de nadie baja al navegador por
+   * acá. Ausente → no se dibuja el menú ⋯.
+   */
+  owner?: ListingOwnerView;
+}) {
   const dateText = event.date
     ? `${event.date.full}${event.date.time ? ` · ${event.date.time}` : ""}`
     : COPY.events.dateToConfirm;
@@ -62,38 +81,48 @@ export function EventCard({ event }: { event: EventCardModel }) {
   return (
     <BezelCard coreClassName="overflow-hidden p-0">
       <article aria-label={event.title}>
-        <PhotoTap photos={photos} label={COPY.openPhotos(event.title)} authorName={event.title}>
-          <DirectoryMedia
-            src={event.photoUrl}
-            accent="eventos"
-            icon={CalendarBlank}
-            aspect="portrait"
-            overlayTopLeft={
-              event.free || event.date?.isPast ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs font-bold text-foreground backdrop-blur-sm">
-                  {event.free ? COPY.events.freeChip : COPY.events.pastLabel}
-                </span>
-              ) : undefined
-            }
-            overlayBottom={
-              <div>
-                <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
-                  {event.title}
-                </h3>
-                <p className="mt-1 flex items-center gap-1.5 text-sm">
-                  <CalendarBlank size={14} aria-hidden="true" className="shrink-0 opacity-80" />
-                  <span className="min-w-0 truncate">{dateText}</span>
-                </p>
-                {event.venueArea && (
-                  <p className="mt-0.5 flex items-center gap-1.5 text-sm opacity-90">
-                    <MapPin size={14} aria-hidden="true" className="shrink-0" />
-                    <span className="min-w-0 truncate">{event.venueArea}</span>
+        <div className="relative">
+          <PhotoTap photos={photos} label={COPY.openPhotos(event.title)} authorName={event.title}>
+            <DirectoryMedia
+              src={event.photoUrl}
+              accent="eventos"
+              icon={CalendarBlank}
+              aspect="portrait"
+              overlayTopLeft={
+                event.free || event.date?.isPast ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs font-bold text-foreground backdrop-blur-sm">
+                    {event.free ? COPY.events.freeChip : COPY.events.pastLabel}
+                  </span>
+                ) : undefined
+              }
+              overlayBottom={
+                <div>
+                  <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
+                    {event.title}
+                  </h3>
+                  <p className="mt-1 flex items-center gap-1.5 text-sm">
+                    <CalendarBlank size={14} aria-hidden="true" className="shrink-0 opacity-80" />
+                    <span className="min-w-0 truncate">{dateText}</span>
                   </p>
-                )}
-              </div>
-            }
+                  {event.venueArea && (
+                    <p className="mt-0.5 flex items-center gap-1.5 text-sm opacity-90">
+                      <MapPin size={14} aria-hidden="true" className="shrink-0" />
+                      <span className="min-w-0 truncate">{event.venueArea}</span>
+                    </p>
+                  )}
+                </div>
+              }
+            />
+          </PhotoTap>
+          <ListingOwnerMenuOverlay
+            listingId={event.id}
+            kind="event"
+            title={event.title}
+            esMio={Boolean(owner?.esMio)}
+            status={owner?.status}
+            pausadoPorReportes={owner?.pausadoPorReportes}
           />
-        </PhotoTap>
+        </div>
 
         <div className="flex flex-col gap-2.5 p-4">
           {event.publisherTrust ? (
@@ -112,6 +141,18 @@ export function EventCard({ event }: { event: EventCardModel }) {
           ) : event.publisherName ? (
             <p className="truncate text-sm text-foreground-muted">{event.publisherName}</p>
           ) : null}
+
+          {/* Misma barra social que el feed para `kind="event"` (pedido
+              cliente 2026-09-14: "que tengan todo lo mismo"). */}
+          <ListingActions
+            listingId={event.id}
+            shareKind="listing"
+            title={event.title}
+            detailHref={`/eventos/${event.id}`}
+            commentCount={engagement?.commentCount}
+            savedByViewer={engagement?.savedByViewer}
+            like={engagement?.like}
+          />
 
           <AccentLink accent={ACCENT} href={`/eventos/${event.id}`} ariaLabel={event.title}>
             {COPY.events.viewEvent}

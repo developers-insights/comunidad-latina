@@ -22,7 +22,7 @@ import {
   type ProductCardModel,
   type StoreHeaderModel,
 } from "@/components/marketplace";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 
 type Params = Promise<{ storeId: string }>;
@@ -113,7 +113,9 @@ async function TiendaContent({ storeId }: { storeId: string }) {
   ] = await Promise.all([
     supabase
       .from("listings")
-      .select("id, title, price_amount, price_currency, attrs, photos, created_at")
+      // `created_by` viaja para decidir el menú ⋯ de cada tarjeta (`misAvisos`,
+      // más abajo). Es una columna más en el MISMO select, no una consulta extra.
+      .select("id, title, price_amount, price_currency, attrs, photos, created_at, created_by")
       .eq("tenant_id", tenant.id)
       .eq("kind", "product")
       .eq("status", "published")
@@ -171,6 +173,22 @@ async function TiendaContent({ storeId }: { storeId: string }) {
     identityVerified,
     categoryLabel,
   };
+
+  /**
+   * MIS AVISOS DE ESTA PÁGINA — para el menú ⋯ de cada tarjeta.
+   *
+   * Sale de `created_by`, que este SELECT ya traía, contra el id de la sesión.
+   * Cero consultas nuevas y cero consultas por fila: lo único que baja al
+   * navegador es un booleano por tarjeta, nunca el id de nadie. Y no es la
+   * autorización — las server actions releen la fila filtrando por dueño y la
+   * RLS decide; acá sólo se evita ofrecer lo que iba a rebotar.
+   */
+  const viewerId = await getAuthUserId();
+  const misAvisos = new Set(
+    viewerId
+      ? (productRows ?? []).filter((row) => row.created_by === viewerId).map((row) => row.id)
+      : [],
+  );
 
   const cards: ProductCardModel[] = (productRows ?? []).map((row) => ({
     id: row.id,
@@ -237,7 +255,11 @@ async function TiendaContent({ storeId }: { storeId: string }) {
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {cards.map((card) => (
-              <ProductCard key={card.id} product={card} />
+              <ProductCard
+                key={card.id}
+                product={card}
+                owner={{ esMio: misAvisos.has(card.id) }}
+              />
             ))}
           </div>
         )}

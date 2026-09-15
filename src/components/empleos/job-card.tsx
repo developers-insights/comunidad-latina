@@ -4,6 +4,11 @@ import { BezelCard, Chip } from "@/components/ui";
 import { DirectoryMedia } from "@/components/directory";
 import { PhotoTap } from "@/components/media/photo-tap";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
+import { ListingActions, type ListingEngagement } from "@/components/feed/listing-actions";
+import {
+  ListingOwnerMenuOverlay,
+  type ListingOwnerView,
+} from "@/components/listings/listing-owner-menu";
 import type { JobCardModel } from "@/app/(app)/empleos/queries";
 import { workModeLabel } from "@/lib/creators/work-mode";
 import { cn } from "@/lib/utils";
@@ -68,7 +73,21 @@ export interface JobCardExtras {
   workMode?: string | null;
 }
 
-export function JobCard({ job }: { job: JobCardModel & JobCardExtras }) {
+export function JobCard({
+  job,
+  engagement,
+  owner,
+}: {
+  job: JobCardModel & JobCardExtras;
+  /** Ausente hasta que /empleos resuelva comentarios/guardado en lote — ver ListingEngagement. */
+  engagement?: ListingEngagement;
+  /**
+   * Propiedad del aviso, ya resuelta EN EL SERVIDOR (created_by contra la
+   * sesión). Llega como booleano: ningún id de nadie baja al navegador por
+   * acá. Ausente → no se dibuja el menú ⋯.
+   */
+  owner?: ListingOwnerView;
+}) {
   const typeLabel = job.employmentType ? EMPLOYMENT_TYPE_LABEL[job.employmentType] : null;
   const modeLabel = workModeLabel(job.workMode);
   // El rango manda sobre el monto único: "US$ 18/hora" cuando el aviso declaró
@@ -79,71 +98,81 @@ export function JobCard({ job }: { job: JobCardModel & JobCardExtras }) {
   const card = (
     <BezelCard coreClassName="overflow-hidden p-0">
       <article aria-label={job.title}>
-        <PhotoTap photos={photos} label={C.openPhotos(job.title)} authorName={job.title}>
-          <DirectoryMedia
-            src={job.photoUrl}
-            accent="empleos"
-            icon={Briefcase}
-            aspect="portrait"
-            overlayTopLeft={
-              typeLabel ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs font-bold text-foreground backdrop-blur-sm">
-                  {typeLabel}
-                </span>
-              ) : undefined
-            }
-            overlayBottom={
-              <div>
-                {/* La escala BAJA en sm y no al revés: el shell de la app está
-                    capado en max-w-lg, así que desde sm la grilla pasa a dos
-                    columnas y cada card se angosta. Con 2xl fijo, "US$ 1.200/mes"
-                    partía en dos renglones. `truncate` es el último seguro: un
-                    monto largo se corta, nunca desarma la franja. */}
-                {/* El rango puede ser casi el doble de largo que un monto
-                    único ("US$ 18 a US$ 22/hora"), así que a 375px baja un
-                    escalón de tamaño en vez de partirse: sigue siendo lo
-                    primero que se lee, pero entra en un renglón. */}
-                <p
-                  className={cn(
-                    "numeric truncate font-display font-bold leading-none",
-                    job.salaryRangeLabel ? "text-xl sm:text-lg" : "text-2xl sm:text-xl",
-                  )}
-                >
-                  {salary ?? C.salaryToAgree}
-                </p>
-                <h3 className="mt-1.5 font-display text-base font-bold leading-snug line-clamp-2">
-                  {job.title}
-                </h3>
-                {(job.areaLabel || modeLabel) && (
-                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm opacity-90">
-                    {job.areaLabel && (
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <MapPin size={14} aria-hidden="true" className="shrink-0" />
-                        <span className="min-w-0 truncate">{job.areaLabel}</span>
-                      </span>
+        <div className="relative">
+          <PhotoTap photos={photos} label={C.openPhotos(job.title)} authorName={job.title}>
+            <DirectoryMedia
+              src={job.photoUrl}
+              accent="empleos"
+              icon={Briefcase}
+              aspect="portrait"
+              overlayTopLeft={
+                typeLabel ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs font-bold text-foreground backdrop-blur-sm">
+                    {typeLabel}
+                  </span>
+                ) : undefined
+              }
+              overlayBottom={
+                <div>
+                  {/* La escala BAJA en sm y no al revés: el shell de la app está
+                      capado en max-w-lg, así que desde sm la grilla pasa a dos
+                      columnas y cada card se angosta. Con 2xl fijo, "US$ 1.200/mes"
+                      partía en dos renglones. `truncate` es el último seguro: un
+                      monto largo se corta, nunca desarma la franja. */}
+                  {/* El rango puede ser casi el doble de largo que un monto
+                      único ("US$ 18 a US$ 22/hora"), así que a 375px baja un
+                      escalón de tamaño en vez de partirse: sigue siendo lo
+                      primero que se lee, pero entra en un renglón. */}
+                  <p
+                    className={cn(
+                      "numeric truncate font-display font-bold leading-none",
+                      job.salaryRangeLabel ? "text-xl sm:text-lg" : "text-2xl sm:text-xl",
                     )}
-                    {/* La MODALIDAD al lado de la zona y no en un chip aparte:
-                        "Corona, Queens · A distancia" son la misma pregunta
-                        (¿dónde tengo que estar?) y separarlas obligaba a
-                        buscar la respuesta en dos lugares de la tarjeta.
-                        Sin declarar (aviso anterior a la 0087) no se muestra
-                        nada — nunca un "Presencial" por defecto. */}
-                    {modeLabel && (
-                      <span className="flex items-center gap-2">
-                        {job.areaLabel && (
-                          <span aria-hidden="true" className="opacity-60">
-                            ·
-                          </span>
-                        )}
-                        <span className="whitespace-nowrap font-semibold">{modeLabel}</span>
-                      </span>
-                    )}
+                  >
+                    {salary ?? C.salaryToAgree}
                   </p>
-                )}
-              </div>
-            }
+                  <h3 className="mt-1.5 font-display text-base font-bold leading-snug line-clamp-2">
+                    {job.title}
+                  </h3>
+                  {(job.areaLabel || modeLabel) && (
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm opacity-90">
+                      {job.areaLabel && (
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <MapPin size={14} aria-hidden="true" className="shrink-0" />
+                          <span className="min-w-0 truncate">{job.areaLabel}</span>
+                        </span>
+                      )}
+                      {/* La MODALIDAD al lado de la zona y no en un chip aparte:
+                          "Corona, Queens · A distancia" son la misma pregunta
+                          (¿dónde tengo que estar?) y separarlas obligaba a
+                          buscar la respuesta en dos lugares de la tarjeta.
+                          Sin declarar (aviso anterior a la 0087) no se muestra
+                          nada — nunca un "Presencial" por defecto. */}
+                      {modeLabel && (
+                        <span className="flex items-center gap-2">
+                          {job.areaLabel && (
+                            <span aria-hidden="true" className="opacity-60">
+                              ·
+                            </span>
+                          )}
+                          <span className="whitespace-nowrap font-semibold">{modeLabel}</span>
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              }
+            />
+          </PhotoTap>
+          <ListingOwnerMenuOverlay
+            listingId={job.id}
+            kind="job"
+            title={job.title}
+            esMio={Boolean(owner?.esMio)}
+            status={owner?.status}
+            pausadoPorReportes={owner?.pausadoPorReportes}
           />
-        </PhotoTap>
+        </div>
 
         <div className="flex flex-col gap-2.5 p-4">
           {job.publisher?.type === "member" ? (
@@ -164,6 +193,20 @@ export function JobCard({ job }: { job: JobCardModel & JobCardExtras }) {
               {C.externalPublisher(job.publisher.name)}
             </p>
           ) : null}
+
+          {/* LA BARRA SOCIAL, IGUAL QUE EN EL FEED (pedido cliente 2026-09-14:
+              "que tengan todo lo mismo" — comentar/compartir/guardar faltaba
+              en esta grilla aunque ya existía para el mismo `kind="job"`
+              dentro de FeedListingCard). */}
+          <ListingActions
+            listingId={job.id}
+            shareKind="job"
+            title={job.title}
+            detailHref={`/empleos/${job.id}`}
+            commentCount={engagement?.commentCount}
+            savedByViewer={engagement?.savedByViewer}
+            like={engagement?.like}
+          />
 
           {/* DOS ACCIONES, UNA SOLA PRIMARIA (cliente 2026-08-20: "mientras
               menos pasos mejor"). Postularse es lo que la persona vino a hacer y
@@ -223,7 +266,7 @@ export function JobCard({ job }: { job: JobCardModel & JobCardExtras }) {
       <Chip
         variant="neutral"
         size="sm"
-        className="absolute right-3.5 top-3.5 z-10 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
+        className="absolute left-1/2 top-3.5 z-10 -translate-x-1/2 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
       >
         <Megaphone size={14} weight="fill" aria-hidden="true" />
         {C.adChip}

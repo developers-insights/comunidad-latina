@@ -349,6 +349,19 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
     return store?.active === true;
   });
 
+  /**
+   * MIS AVISOS DE ESTA PÁGINA — para el menú ⋯ de cada tarjeta.
+   *
+   * Sale de `created_by`, que este SELECT ya traía, contra el id de la sesión.
+   * Cero consultas nuevas y cero consultas por fila: lo único que baja al
+   * navegador es un booleano por tarjeta, nunca el id de nadie. Y no es la
+   * autorización — las server actions releen la fila filtrando por dueño y la
+   * RLS decide; acá sólo se evita ofrecer lo que iba a rebotar.
+   */
+  const misAvisos = new Set(
+    user ? visibleRows.filter((row) => row.created_by === user.id).map((row) => row.id) : [],
+  );
+
   const cards: ProductCardModel[] = visibleRows.map((row) => {
     const attrs = attrsByRow.get(row.id) ?? parseProductAttrs(row.attrs);
     const store = attrs.storeListingId ? storeById.get(attrs.storeListingId) : undefined;
@@ -435,7 +448,11 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3">
             {cards.map((card) => (
-              <ProductCard key={card.id} product={card} />
+              <ProductCard
+                key={card.id}
+                product={card}
+                owner={{ esMio: misAvisos.has(card.id) }}
+              />
             ))}
           </div>
 

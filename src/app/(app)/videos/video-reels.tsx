@@ -8,6 +8,7 @@ import {
   ChatCircle,
   FilmSlate,
   Heart,
+  MagnifyingGlass,
   Megaphone,
   ShareNetwork,
   SlidersHorizontal,
@@ -95,6 +96,8 @@ export interface VideoReelsProps {
   scope: VideosScope;
   /** Tema elegido en el menú de entrada (para la cabecera y el scroll infinito). */
   category?: VideoCategoryFilter | null;
+  /** Término buscado en el menú de entrada (para la cabecera y el scroll infinito). */
+  q?: string | null;
   initialItems: PostCardModel[];
   initialCursor: string | null;
 }
@@ -104,6 +107,7 @@ export function VideoReels({
   viewerId,
   scope,
   category = null,
+  q = null,
   initialItems,
   initialCursor,
 }: VideoReelsProps) {
@@ -123,14 +127,21 @@ export function VideoReels({
 
       {/* Qué se está viendo + la salida al menú. Llegar por el menú y no poder
           volver a él sin el botón del sistema sería un callejón: la categoría
-          es un filtro, y un filtro siempre tiene que poder deshacerse. */}
-      {category && <ReelCategoryBar category={category} />}
+          es un filtro, y un filtro siempre tiene que poder deshacerse. Son
+          mutuamente excluyentes porque así los produce hoy el menú de entrada
+          (categoría O búsqueda, nunca las dos a la vez). */}
+      {category ? (
+        <ReelCategoryBar category={category} />
+      ) : q ? (
+        <ReelSearchBar q={q} />
+      ) : null}
 
       <ReelStream
         tenantId={tenantId}
         viewerId={viewerId}
         scope={scope}
         category={category}
+        q={q}
         initialItems={initialItems}
         initialCursor={initialCursor}
         surface="page"
@@ -209,6 +220,7 @@ export function ReelStream({
   viewerId,
   scope,
   category = null,
+  q = null,
   initialItems,
   initialCursor,
   surface = "page",
@@ -268,6 +280,7 @@ export function ReelStream({
       const page = await loadMoreVideosAction({
         scope,
         category: category ?? undefined,
+        q: q ?? undefined,
         cursor: current,
       });
       setItems((prev) => {
@@ -290,7 +303,7 @@ export function ReelStream({
       loadingRef.current = false;
       setLoadingMore(false);
     }
-  }, [category, cursor, scope]);
+  }, [category, cursor, q, scope]);
 
   // Prefetch: al acercarse al final (o si la primera página vino corta porque
   // el escaneo agotó su tope), pedimos la siguiente tanda. Diferido con un
@@ -331,7 +344,7 @@ export function ReelStream({
   const atEnd =
     !cursor && !loadingMore && items.length > 0 && activeIndex >= items.length - 1;
 
-  if (isEmpty) return <EmptyReels category={category} />;
+  if (isEmpty) return <EmptyReels category={category} q={q} />;
 
   return (
     <>
@@ -1240,15 +1253,53 @@ function ReelCategoryBar({ category }: { category: VideoCategoryFilter }) {
   );
 }
 
+/**
+ * Píldora equivalente a `ReelCategoryBar` cuando se llegó BUSCANDO (pedido
+ * cliente: "como TikTok o Instagram"). Mismo patrón visual — un chip flotante
+ * sobre el video que dice qué se está viendo y vuelve al menú para cambiarlo —
+ * y mismo motivo para no ser un input flotante: escribir sobre un video en
+ * autoplay a pantalla completa es peor que volver a elegir.
+ */
+function ReelSearchBar({ q }: { q: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-[4.25rem] z-20 px-4">
+      <div className="mx-auto w-full max-w-lg">
+        <Link
+          href="/videos"
+          aria-label={`${VIDEOS_COPY.reel.activeSearch(q)}. ${VIDEOS_COPY.reel.clearSearch}`}
+          className={cn(
+            "pointer-events-auto inline-flex min-h-11 max-w-full items-center gap-2 rounded-full",
+            "bg-media-scrim px-3.5 text-sm font-semibold text-on-media backdrop-blur-sm",
+            "transition-transform duration-(--duration-fast) ease-(--ease-spring) active:scale-[0.96]",
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-on-media/60",
+          )}
+        >
+          <MagnifyingGlass size={16} weight="bold" aria-hidden="true" className="shrink-0" />
+          <span className="truncate">{VIDEOS_COPY.reel.activeSearch(q)}</span>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Estado vacío — cálido y con salida clara (publicar desde el feed)
 // ---------------------------------------------------------------------------
 
-function EmptyReels({ category }: { category?: VideoCategoryFilter | null }) {
+function EmptyReels({
+  category,
+  q,
+}: {
+  category?: VideoCategoryFilter | null;
+  q?: string | null;
+}) {
+  // Sin resultados de BÚSQUEDA es su propio caso, y pesa más que la categoría:
+  // el mensaje tiene que hablar de lo que la persona escribió, no del tema.
+  const searched = Boolean(q);
   // Un tema sin videos no es "no hay videos": es "acá todavía no". La salida
   // cambia igual — de una categoría vacía se sale viendo todos, no yendo a
   // publicar (que es la salida cuando de verdad no hay nada).
-  const filtered = Boolean(category) && category !== ALL_CATEGORIES;
+  const filtered = !searched && Boolean(category) && category !== ALL_CATEGORIES;
   const label = category ? categoryLabel(category) : "";
 
   return (
@@ -1256,17 +1307,25 @@ function EmptyReels({ category }: { category?: VideoCategoryFilter | null }) {
       <FilmSlate size={44} className="text-on-media/70" aria-hidden="true" />
       <div>
         <h2 className="font-display text-lg font-bold text-on-media">
-          {filtered ? VIDEOS_COPY.emptyCategoryTitle(label) : VIDEOS_COPY.emptyTitle}
+          {searched
+            ? VIDEOS_COPY.emptySearchTitle(q as string)
+            : filtered
+              ? VIDEOS_COPY.emptyCategoryTitle(label)
+              : VIDEOS_COPY.emptyTitle}
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-on-media/80">
-          {filtered ? VIDEOS_COPY.emptyCategoryMessage : VIDEOS_COPY.emptyMessage}
+          {searched
+            ? VIDEOS_COPY.emptySearchMessage
+            : filtered
+              ? VIDEOS_COPY.emptyCategoryMessage
+              : VIDEOS_COPY.emptyMessage}
         </p>
       </div>
       <Link
-        href={filtered ? `/videos?cat=${ALL_CATEGORIES}` : "/feed"}
+        href={searched || filtered ? `/videos?cat=${ALL_CATEGORIES}` : "/feed"}
         className={buttonVariants({ variant: "primary", size: "md" })}
       >
-        {filtered ? VIDEOS_COPY.emptyCategoryCta : VIDEOS_COPY.emptyCta}
+        {searched || filtered ? VIDEOS_COPY.emptyCategoryCta : VIDEOS_COPY.emptyCta}
       </Link>
       {/* La otra sección de videos, como salida secundaria: quien llegó hasta un
           reel vacío vino a ver videos, y los largos son videos que sí puede

@@ -10,10 +10,15 @@ import type { AuthorView } from "./helpers";
  * testea el ITEM compartido (detalle SSR + hoja del feed), no ese badge: lo
  * stubeamos a un marcador para afirmar "hay/no hay badge" sin montar todo eso.
  */
-vi.mock("@/components/listings", () => ({
+// Directo a los módulos concretos: comment-item.tsx ya no pasa por el barril
+// `@/components/listings` (ver su nota de import — evita un ciclo con
+// listing-card.tsx, que desde este cambio importa ListingActions).
+vi.mock("@/components/listings/publisher-trust", () => ({
   PublisherTrust: ({ score }: { score: number }) => (
     <span data-testid="trust-badge">confianza {score}</span>
   ),
+}));
+vi.mock("@/components/listings/helpers", () => ({
   firstNameOf: (name: string) => name.trim().split(/\s+/)[0] ?? name,
 }));
 

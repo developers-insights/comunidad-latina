@@ -1,6 +1,10 @@
 import { Storefront } from "@phosphor-icons/react/dist/ssr";
 import { Avatar } from "@/components/ui";
-import { PublisherTrust, firstNameOf } from "@/components/listings";
+// Directo a los módulos concretos y no al barril `@/components/listings`: ver
+// la misma nota en comments-sheet.tsx — el barril reexporta listing-card.tsx,
+// que ahora importa ListingActions desde este mismo árbol de módulos.
+import { PublisherTrust } from "@/components/listings/publisher-trust";
+import { firstNameOf } from "@/components/listings/helpers";
 import { CommunityEmojiText } from "@/components/emojis";
 import type { CommunityEmoji } from "@/lib/emojis/catalog";
 import { cn } from "@/lib/utils";

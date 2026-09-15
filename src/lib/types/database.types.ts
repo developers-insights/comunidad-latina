@@ -4214,10 +4214,14 @@ export type Database = {
           category: string
           created_at: string
           dismissed_at: string | null
+          entity_id: string | null
+          entity_kind: string | null
+          entity_type: string | null
           expires_at: string
           group_key: string | null
           href: string | null
           id: string
+          image_url: string | null
           kind: string
           priority: string
           profile_id: string
@@ -4230,10 +4234,14 @@ export type Database = {
           category?: string
           created_at?: string
           dismissed_at?: string | null
+          entity_id?: string | null
+          entity_kind?: string | null
+          entity_type?: string | null
           expires_at?: string
           group_key?: string | null
           href?: string | null
           id?: string
+          image_url?: string | null
           kind: string
           priority?: string
           profile_id: string
@@ -4246,10 +4254,14 @@ export type Database = {
           category?: string
           created_at?: string
           dismissed_at?: string | null
+          entity_id?: string | null
+          entity_kind?: string | null
+          entity_type?: string | null
           expires_at?: string
           group_key?: string | null
           href?: string | null
           id?: string
+          image_url?: string | null
           kind?: string
           priority?: string
           profile_id?: string

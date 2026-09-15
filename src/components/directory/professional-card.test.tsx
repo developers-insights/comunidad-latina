@@ -44,9 +44,16 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/components/auth/auth-sheet", () => ({
-  AUTH_REASON: { message: "Entrá y escribile" },
+  AUTH_REASON: { message: "Entrá y escribile", save: "Entrá para guardarlo" },
   useRequireAuth: () => auth.require,
 }));
+
+// `ListingActions` (barra social nueva de la card) usa useToast, que lanza
+// fuera de su provider: reemplazamos SOLO ese hook.
+vi.mock("@/components/ui", async () => {
+  const actual = await vi.importActual<typeof import("@/components/ui")>("@/components/ui");
+  return { ...actual, useToast: () => ({ toast: vi.fn() }) };
+});
 
 const BASE: ProfessionalCardModel = {
   id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",

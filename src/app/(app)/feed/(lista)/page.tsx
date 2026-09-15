@@ -7,6 +7,7 @@ import {
   COPY,
   FeedSkeleton,
   ComposerTrigger,
+  ComposerGreeting,
   SIGUIENDO_EMPTY_COPY,
   parseTab,
   type FeedTabId,
@@ -24,6 +25,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { ZonaVacia } from "@/components/zona";
 import { resolverVistaZona } from "@/lib/zona/server";
 import { getCaraActiva } from "@/lib/perfil-activo/cara";
+import { getShellContext } from "@/components/shell/shell-context";
 import { FeedAlert } from "../alert-banner";
 import { fetchFeedPageAction } from "../load-more";
 
@@ -142,6 +144,18 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
    * mostraba el negocio. Una sola fuente ahora — ver @/lib/perfil-activo/cara.
    */
   const cara = user ? await getCaraActiva() : null;
+  /**
+   * El saludo usa a la PERSONA, no la cara activa: `cara.displayName` pasa a
+   * ser el nombre del NEGOCIO mientras se actúa como uno (ver cara.ts), y
+   * "Buenos días, Pizzería El Sol" no es una bienvenida. `getShellContext`
+   * está cache()-eada por request — el Header ya la pidió, así que esto no
+   * agrega una consulta.
+   */
+  const shell = user ? await getShellContext() : null;
+  // "Tu cuenta" es el reservado de `getShellContext` cuando el perfil no tiene
+  // `display_name`: no es un nombre real, así que el saludo cae al genérico.
+  const viewerFirstName =
+    shell?.user && shell.user.displayName !== "Tu cuenta" ? shell.user.displayName : "";
 
   const isFirstPage = !decodeCursor(cursorRaw || undefined);
 
@@ -154,11 +168,16 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
       {tab === "para-ti" ? (
         <>
           {user ? (
-            <ComposerTrigger
-              viewerName={cara?.displayName ?? ""}
-              viewerAvatarUrl={cara?.avatarUrl ?? null}
-              negocio={cara?.negocio ? { nombre: cara.negocio.nombre } : null}
-            />
+            // gap-1.5 propio (no el gap-4 del stack de afuera): el saludo
+            // presenta a la tarjeta de abajo, son una sola unidad visual.
+            <div className="flex flex-col gap-1.5">
+              <ComposerGreeting viewerName={viewerFirstName} />
+              <ComposerTrigger
+                viewerName={cara?.displayName ?? ""}
+                viewerAvatarUrl={cara?.avatarUrl ?? null}
+                negocio={cara?.negocio ? { nombre: cara.negocio.nombre } : null}
+              />
+            </div>
           ) : (
             <ComposerInvite />
           )}

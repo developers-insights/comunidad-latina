@@ -37,6 +37,7 @@ import {
 import { etiquetaDeDias, etiquetaDePrecioDesde } from "@/lib/empleos/servicios";
 import { cn } from "@/lib/utils";
 import { ToggleChips, toggleInList } from "./publish-form";
+import { OfrecerImpulso } from "@/components/boosts/ofrecer-impulso";
 import { createServiceDraft, finalizeService } from "./actions";
 import type { WizardHandleRef } from "./wizard-handle";
 
@@ -130,7 +131,10 @@ export function ServicePublishForm({
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState<"published" | "pending_review" | null>(null);
+  const [done, setDone] = useState<{
+    status: "published" | "pending_review";
+    listingId: string;
+  } | null>(null);
   /** El borrador se crea una sola vez: un reintento no duplica avisos. */
   const [draftId, setDraftId] = useState<string | null>(null);
 
@@ -250,7 +254,7 @@ export function ServicePublishForm({
         return;
       }
       if (finalized.status === "published") celebrate();
-      setDone(finalized.status);
+      setDone({ status: finalized.status, listingId });
     } catch {
       setError(C.errors.generic);
     } finally {
@@ -277,7 +281,7 @@ export function ServicePublishForm({
   // Confirmación
   // -------------------------------------------------------------------------
   if (done) {
-    const published = done === "published";
+    const published = done.status === "published";
     return (
       <>
         {published && <Celebration active={celebrating} message={C.successPublishedTitle} />}
@@ -309,6 +313,16 @@ export function ServicePublishForm({
             </Button>
           </div>
         </BezelCard>
+
+        {/* Sin `thumbnailUrl`: un servicio no tiene fotos (ver la cabecera de
+            este archivo), así que la vista previa muestra la tarjeta sin
+            imagen — que es exactamente como va a salir. */}
+        <OfrecerImpulso
+          className="mt-4"
+          listingId={done.listingId}
+          status={done.status}
+          titulo={title.trim() || C.successPublishedTitle}
+        />
       </>
     );
   }

@@ -1,5 +1,13 @@
 import { AccentLink, BezelCard, CardMedia } from "@/components/ui";
 import { PhotoTap } from "@/components/media/photo-tap";
+// Import directo al módulo, no al barril `@/components/feed`: ese barril
+// reexporta feed-listing-card.tsx, que importa de @/components/listings —
+// pasar por él armaría un ciclo entre los dos módulos.
+import { ListingActions, type ListingEngagement } from "@/components/feed/listing-actions";
+import {
+  ListingOwnerMenuOverlay,
+  type ListingOwnerView,
+} from "@/components/listings/listing-owner-menu";
 import { COPY } from "./copy";
 import { categoryLabel, categoryShortLabel } from "./helpers";
 import { SellerChip, type SellerView } from "./seller-chip";
@@ -43,7 +51,21 @@ export interface ProductCardModel {
  * pelea con el producto. El `aria-label` lleva el label LARGO para lectores de
  * pantalla.
  */
-export function ProductCard({ product }: { product: ProductCardModel }) {
+export function ProductCard({
+  product,
+  engagement,
+  owner,
+}: {
+  product: ProductCardModel;
+  /** Ausente hasta que /marketplace resuelva comentarios/guardado en lote — ver ListingEngagement. */
+  engagement?: ListingEngagement;
+  /**
+   * Propiedad del aviso, ya resuelta EN EL SERVIDOR (created_by contra la
+   * sesión). Llega como booleano: ningún id de nadie baja al navegador por
+   * acá. Ausente → no se dibuja el menú ⋯.
+   */
+  owner?: ListingOwnerView;
+}) {
   const categoryFull = categoryLabel(product.category);
   const categoryShort = categoryShortLabel(product.category);
   const photos = product.photos?.length
@@ -55,41 +77,51 @@ export function ProductCard({ product }: { product: ProductCardModel }) {
   return (
     <BezelCard coreClassName="flex h-full flex-col overflow-hidden p-0">
       <article aria-label={product.title} className="flex h-full flex-col">
-        <PhotoTap
-          photos={photos}
-          label={COPY.list.openPhotos(product.title)}
-          authorName={product.title}
-        >
-          <CardMedia
-            src={product.photoUrl}
-            fallbackSrc={FALLBACK_PHOTO}
-            aspect="portrait"
-            overlayTopLeft={
-              categoryShort ? (
-                // cl-print-fill: text-on-media es clara por definición — sin forzar
-                // el relleno a imprimirse, el chip queda blanco sobre papel blanco.
-                <span
-                  aria-label={categoryFull ?? undefined}
-                  className="cl-print-fill inline-flex min-w-0 max-w-full items-center rounded-full bg-media-scrim px-2.5 py-1 text-[11px] font-semibold text-on-media backdrop-blur-sm"
-                >
-                  <span aria-hidden="true" className="min-w-0 truncate">
-                    {categoryShort}
+        <div className="relative">
+          <PhotoTap
+            photos={photos}
+            label={COPY.list.openPhotos(product.title)}
+            authorName={product.title}
+          >
+            <CardMedia
+              src={product.photoUrl}
+              fallbackSrc={FALLBACK_PHOTO}
+              aspect="portrait"
+              overlayTopLeft={
+                categoryShort ? (
+                  // cl-print-fill: text-on-media es clara por definición — sin forzar
+                  // el relleno a imprimirse, el chip queda blanco sobre papel blanco.
+                  <span
+                    aria-label={categoryFull ?? undefined}
+                    className="cl-print-fill inline-flex min-w-0 max-w-full items-center rounded-full bg-media-scrim px-2.5 py-1 text-[11px] font-semibold text-on-media backdrop-blur-sm"
+                  >
+                    <span aria-hidden="true" className="min-w-0 truncate">
+                      {categoryShort}
+                    </span>
                   </span>
-                </span>
-              ) : undefined
-            }
-            overlayBottom={
-              <div>
-                <h3 className="font-display text-sm font-bold leading-snug line-clamp-2">
-                  {product.title}
-                </h3>
-                {product.priceLabel && (
-                  <p className="numeric mt-0.5 text-lg font-bold">{product.priceLabel}</p>
-                )}
-              </div>
-            }
+                ) : undefined
+              }
+              overlayBottom={
+                <div>
+                  <h3 className="font-display text-sm font-bold leading-snug line-clamp-2">
+                    {product.title}
+                  </h3>
+                  {product.priceLabel && (
+                    <p className="numeric mt-0.5 text-lg font-bold">{product.priceLabel}</p>
+                  )}
+                </div>
+              }
+            />
+          </PhotoTap>
+          <ListingOwnerMenuOverlay
+            listingId={product.id}
+            kind="product"
+            title={product.title}
+            esMio={Boolean(owner?.esMio)}
+            status={owner?.status}
+            pausadoPorReportes={owner?.pausadoPorReportes}
           />
-        </PhotoTap>
+        </div>
 
         {/* `gap-2.5 p-4` = el ritmo vertical de TODA tarjeta de listado
             (Propiedades, Negocios, Colaboraciones, Empleos). Acá era `gap-2 p-3`
@@ -100,6 +132,21 @@ export function ProductCard({ product }: { product: ProductCardModel }) {
         <div className="flex flex-1 flex-col gap-2.5 p-4">
           {/* Quién vende: tienda (con su acento y link a la vidriera) o particular. */}
           <SellerChip seller={product.seller} />
+
+          {/* `compact`: esta grilla es a DOS columnas incluso en 375px (a
+              diferencia del resto de los módulos, que bajan a una columna en
+              mobile) — sin las palabras visibles, la fila entra en el ancho
+              de la columna. Ver la nota de `compact` en ListingActionsProps. */}
+          <ListingActions
+            listingId={product.id}
+            shareKind="listing"
+            title={product.title}
+            detailHref={`/marketplace/${product.id}`}
+            commentCount={engagement?.commentCount}
+            savedByViewer={engagement?.savedByViewer}
+            like={engagement?.like}
+            compact
+          />
 
           <AccentLink
             accent={ACCENT}

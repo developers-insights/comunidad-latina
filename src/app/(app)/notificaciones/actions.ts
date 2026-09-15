@@ -12,6 +12,8 @@ import {
   type NotificationCategory,
 } from "@/lib/notifications/categories";
 import { NOTIFICATION_FREQUENCIES } from "@/lib/notifications/prefs";
+import { parseEntityKind } from "@/lib/notifications/entity";
+import { listingPhotoUrl } from "@/components/listings";
 import {
   PANEL_LIMIT,
   type NotificationPanelItem,
@@ -263,7 +265,7 @@ export async function getNotificationPanelAction(): Promise<NotificationPanelRes
   const [{ data, error }, { count, error: countError }] = await Promise.all([
     supabase
       .from("notifications")
-      .select("id, title, body, href, read_at, created_at, category")
+      .select("id, title, body, href, read_at, created_at, category, entity_kind, image_url")
       .is("dismissed_at", null)
       .gt("expires_at", nowIso)
       .order("created_at", { ascending: false })
@@ -296,6 +298,10 @@ export async function getNotificationPanelAction(): Promise<NotificationPanelRes
     read: row.read_at !== null,
     createdAt: row.created_at,
     timeLabel: timeAgo(new Date(row.created_at), now),
+    entityKind: parseEntityKind(row.entity_kind),
+    // La columna guarda el valor CRUDO de `listings.photos` (0151): la URL
+    // pública se arma en el servidor porque el panel es un client component.
+    imageUrl: row.image_url ? listingPhotoUrl(row.image_url) : null,
   }));
 
   return { ok: true, data: { unread: count ?? 0, items } };

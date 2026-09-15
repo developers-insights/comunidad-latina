@@ -27,7 +27,7 @@ const MEGAS_MAX = Math.round(MAX_VIDEO_BYTES / (1024 * 1024));
 export const COPY_VIDEO_PUBLICITARIO = {
   titulo: "El video de tu campaña",
   bajada: `Tu campaña está activa, así que tu publicación puede llevar un video de hasta ${MINUTOS_MAX} minutos. Con cinco te alcanza para recorrer una propiedad entera.`,
-  comoSeVe: `En el feed y en Videos Cortos se ven los primeros ${FEED_PREVIEW_MAX_SECONDS} segundos, con un botón para verlo completo en la sección de Videos largos.`,
+  comoSeVe: `En el feed y en el scroll de Videos se ven los primeros ${FEED_PREVIEW_MAX_SECONDS} segundos, con un botón para verlo completo en Videos largos.`,
   ayudaArchivo: `Hasta ${MEGAS_MAX} MB. Si grabaste con el teléfono, mandá el archivo tal cual: no hace falta que lo edites.`,
 
   elegir: "Elegir un video",

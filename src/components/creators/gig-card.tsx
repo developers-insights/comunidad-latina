@@ -4,6 +4,11 @@ import { BezelCard, CardMedia, MediaScrimBottom } from "@/components/ui";
 import { PublisherTrust } from "@/components/listings";
 import { firstNameOf, type PublisherView } from "@/components/listings";
 import { PhotoTap } from "@/components/media/photo-tap";
+import { ListingActions, type ListingEngagement } from "@/components/feed/listing-actions";
+import {
+  ListingOwnerMenuOverlay,
+  type ListingOwnerView,
+} from "@/components/listings/listing-owner-menu";
 import { cn } from "@/lib/utils";
 import { ApplySheet } from "./apply-sheet";
 import { gigCategoryMeta } from "./categories";
@@ -61,9 +66,20 @@ export interface GigCardProps {
    * que va a rebotar.
    */
   viewerId?: string | null;
+  /** Ausente hasta que /creadores resuelva comentarios/guardado en lote — ver ListingEngagement. */
+  engagement?: ListingEngagement;
+  /**
+   * Estado de la fila y pausa por denuncias, para el menú ⋯.
+   *
+   * A diferencia de las otras ocho tarjetas, acá `esMio` NO se pasa: esta ya
+   * resuelve la propiedad con `viewerId` (ver `isOwnGig`, abajo) y tener dos
+   * respuestas a la misma pregunta es el camino más corto a que se
+   * contradigan.
+   */
+  owner?: Omit<ListingOwnerView, "esMio">;
 }
 
-export function GigCard({ gig, viewerId = null }: GigCardProps) {
+export function GigCard({ gig, viewerId = null, engagement, owner }: GigCardProps) {
   const category = gigCategoryMeta(gig.category);
   const CategoryIcon = category.Icon;
   const photos = gig.photos?.length ? gig.photos : gig.photoUrl ? [gig.photoUrl] : [];
@@ -101,34 +117,44 @@ export function GigCard({ gig, viewerId = null }: GigCardProps) {
   return (
     <BezelCard variant={gig.urgent ? "featured" : "default"} coreClassName="overflow-hidden p-0">
       <article aria-label={gig.title}>
-        <PhotoTap photos={photos} label={COPY.openPhotos(gig.title)} authorName={gig.title}>
-          {gig.photoUrl ? (
-            <CardMedia
-              src={gig.photoUrl}
-              fallbackSrc={gig.photoUrl}
-              aspect="portrait"
-              overlayTopRight={urgentChip}
-              overlayBottom={band}
-            />
-          ) : (
-            // Fallback elegante: gradiente violeta del módulo + ícono de categoría.
-            <div
-              className="relative flex aspect-[4/5] w-full items-center justify-center"
-              style={{
-                background:
-                  "linear-gradient(135deg, color-mix(in oklab, var(--accent-creadores) 78%, black), var(--accent-creadores))",
-              }}
-            >
-              <CategoryIcon size={64} weight="fill" aria-hidden="true" className="text-on-media/85" />
-              {urgentChip && (
-                <div className="absolute right-2.5 top-2.5 flex flex-wrap justify-end gap-1.5">
-                  {urgentChip}
-                </div>
-              )}
-              <MediaScrimBottom>{band}</MediaScrimBottom>
-            </div>
-          )}
-        </PhotoTap>
+        <div className="relative">
+          <PhotoTap photos={photos} label={COPY.openPhotos(gig.title)} authorName={gig.title}>
+            {gig.photoUrl ? (
+              <CardMedia
+                src={gig.photoUrl}
+                fallbackSrc={gig.photoUrl}
+                aspect="portrait"
+                overlayTopRight={urgentChip}
+                overlayBottom={band}
+              />
+            ) : (
+              // Fallback elegante: gradiente violeta del módulo + ícono de categoría.
+              <div
+                className="relative flex aspect-[4/5] w-full items-center justify-center"
+                style={{
+                  background:
+                    "linear-gradient(135deg, color-mix(in oklab, var(--accent-creadores) 78%, black), var(--accent-creadores))",
+                }}
+              >
+                <CategoryIcon size={64} weight="fill" aria-hidden="true" className="text-on-media/85" />
+                {urgentChip && (
+                  <div className="absolute right-2.5 top-2.5 flex flex-wrap justify-end gap-1.5">
+                    {urgentChip}
+                  </div>
+                )}
+                <MediaScrimBottom>{band}</MediaScrimBottom>
+              </div>
+            )}
+          </PhotoTap>
+          <ListingOwnerMenuOverlay
+            listingId={gig.id}
+            kind="creator_gig"
+            title={gig.title}
+            esMio={isOwnGig}
+            status={owner?.status}
+            pausadoPorReportes={owner?.pausadoPorReportes}
+          />
+        </div>
 
         <div className="flex flex-col gap-2.5 p-4">
           {typeof gig.applicationsCount === "number" && (
@@ -157,6 +183,18 @@ export function GigCard({ gig, viewerId = null }: GigCardProps) {
               {gig.publisher.name}
             </p>
           ) : null}
+
+          {/* Misma barra social que el feed para `kind="creator_gig"` (pedido
+              cliente 2026-09-14: "que tengan todo lo mismo"). */}
+          <ListingActions
+            listingId={gig.id}
+            shareKind="listing"
+            title={gig.title}
+            detailHref={`/creadores/${gig.id}`}
+            commentCount={engagement?.commentCount}
+            savedByViewer={engagement?.savedByViewer}
+            like={engagement?.like}
+          />
 
           {/* DOS ACCIONES, UNA SOLA PRIMARIA (cliente 2026-08-20: "mientras
               menos pasos mejor"). La hoja de propuesta ya existía y estaba

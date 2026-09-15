@@ -8,6 +8,11 @@ import {
 } from "@/components/listings";
 import { IdentityBadge } from "@/components/auth/identity-badge";
 import { PhotoTap } from "@/components/media/photo-tap";
+import { ListingActions, type ListingEngagement } from "@/components/feed/listing-actions";
+import {
+  ListingOwnerMenuOverlay,
+  type ListingOwnerView,
+} from "@/components/listings/listing-owner-menu";
 import { Estrellas } from "@/components/resenas";
 import { RESENAS_COPY, formatearPromedio, type ResumenPuntaje } from "@/lib/resenas";
 import { languageLabels } from "@/lib/profile/catalogs";
@@ -69,6 +74,8 @@ const ACCENT = "var(--accent-profesionales)";
 export function ProfessionalCard({
   professional,
   isLoggedIn,
+  engagement,
+  owner,
 }: {
   professional: ProfessionalCardModel;
   /**
@@ -76,6 +83,14 @@ export function ProfessionalCard({
    * (page.tsx) y se pasa, en vez de que cada card pregunte por su cuenta.
    */
   isLoggedIn: boolean;
+  /** Ausente hasta que /profesionales resuelva comentarios/guardado en lote — ver ListingEngagement. */
+  engagement?: ListingEngagement;
+  /**
+   * Propiedad del aviso, ya resuelta EN EL SERVIDOR (created_by contra la
+   * sesión). Llega como booleano: ningún id de nadie baja al navegador por
+   * acá. Ausente → no se dibuja el menú ⋯.
+   */
+  owner?: ListingOwnerView;
 }) {
   const isMember = professional.publisher?.type === "member";
   const isExternal = professional.publisher?.type === "external";
@@ -93,65 +108,75 @@ export function ProfessionalCard({
   return (
     <BezelCard variant={professional.verification ? "success" : "default"} coreClassName="overflow-hidden p-0">
       <article aria-label={professional.title}>
-        <PhotoTap
-          photos={photos}
-          label={COPY.openPhotos(professional.title)}
-          authorName={professional.title}
-        >
-          <DirectoryMedia
-            src={professional.photoUrl}
-            accent="profesionales"
-            icon={UserGear}
-            aspect="portrait"
-            overlayTopLeft={
-              isMember ? (
-                <Avatar
-                  src={avatarSrc}
-                  name={avatarName}
-                  size="md"
-                  className="ring-2 ring-surface shadow-md"
-                  // Identidad verificada (Stripe Identity, gratis) — insignia
-                  // PROPIA sobre el avatar, mismo lugar y mismo componente que
-                  // ProfileHeader. Deliberadamente distinta de la credencial de
-                  // abajo: círculo sobre la persona, no una píldora con texto.
-                  badge={professional.identityVerified ? <IdentityBadge /> : undefined}
-                />
-              ) : undefined
-            }
-            overlayTopRight={
-              professional.verification ? (
-                <Badge variant="success">
-                  {/* Certificate y no ShieldCheck (el de IdentityBadge, arriba a
-                      la izquierda): dos insignias de verificación en la MISMA
-                      card tienen que distinguirse por FORMA, no sólo por texto
-                      — mismo criterio que separa el escudo de IdentityBadge del
-                      sello de CheckAzul en verificacion/check-azul.tsx. Este es
-                      el ícono que ya usa el detalle para "Credenciales". */}
-                  <Certificate size={13} weight="fill" aria-hidden="true" />
-                  {COPY.professionals.verifiedChip(professional.verification.dateLabel)}
-                </Badge>
-              ) : undefined
-            }
-            overlayBottom={
-              <div>
-                <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
-                  {professional.title}
-                </h3>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
-                  <span className="rounded-full bg-on-media/15 px-2 py-0.5 text-xs font-semibold">
-                    {categoryLabel(professional.category)}
-                  </span>
-                  {professional.areaLabel && (
-                    <span className="flex items-center gap-1 opacity-90">
-                      <MapPin size={14} aria-hidden="true" className="shrink-0" />
-                      <span className="min-w-0 truncate">{professional.areaLabel}</span>
+        <div className="relative">
+          <PhotoTap
+            photos={photos}
+            label={COPY.openPhotos(professional.title)}
+            authorName={professional.title}
+          >
+            <DirectoryMedia
+              src={professional.photoUrl}
+              accent="profesionales"
+              icon={UserGear}
+              aspect="portrait"
+              overlayTopLeft={
+                isMember ? (
+                  <Avatar
+                    src={avatarSrc}
+                    name={avatarName}
+                    size="md"
+                    className="ring-2 ring-surface shadow-md"
+                    // Identidad verificada (Stripe Identity, gratis) — insignia
+                    // PROPIA sobre el avatar, mismo lugar y mismo componente que
+                    // ProfileHeader. Deliberadamente distinta de la credencial de
+                    // abajo: círculo sobre la persona, no una píldora con texto.
+                    badge={professional.identityVerified ? <IdentityBadge /> : undefined}
+                  />
+                ) : undefined
+              }
+              overlayTopRight={
+                professional.verification ? (
+                  <Badge variant="success">
+                    {/* Certificate y no ShieldCheck (el de IdentityBadge, arriba a
+                        la izquierda): dos insignias de verificación en la MISMA
+                        card tienen que distinguirse por FORMA, no sólo por texto
+                        — mismo criterio que separa el escudo de IdentityBadge del
+                        sello de CheckAzul en verificacion/check-azul.tsx. Este es
+                        el ícono que ya usa el detalle para "Credenciales". */}
+                    <Certificate size={13} weight="fill" aria-hidden="true" />
+                    {COPY.professionals.verifiedChip(professional.verification.dateLabel)}
+                  </Badge>
+                ) : undefined
+              }
+              overlayBottom={
+                <div>
+                  <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
+                    {professional.title}
+                  </h3>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="rounded-full bg-on-media/15 px-2 py-0.5 text-xs font-semibold">
+                      {categoryLabel(professional.category)}
                     </span>
-                  )}
+                    {professional.areaLabel && (
+                      <span className="flex items-center gap-1 opacity-90">
+                        <MapPin size={14} aria-hidden="true" className="shrink-0" />
+                        <span className="min-w-0 truncate">{professional.areaLabel}</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            }
+              }
+            />
+          </PhotoTap>
+          <ListingOwnerMenuOverlay
+            listingId={professional.id}
+            kind="professional"
+            title={professional.title}
+            esMio={Boolean(owner?.esMio)}
+            status={owner?.status}
+            pausadoPorReportes={owner?.pausadoPorReportes}
           />
-        </PhotoTap>
+        </div>
 
         <div className="flex flex-col gap-2.5 p-4">
           {/* Idiomas (spec cliente: campo propio de cada perfil, no un detalle
@@ -207,6 +232,18 @@ export function ProfessionalCard({
               {COPY.professionals.externalPublisher(professional.publisher.name)}
             </p>
           ) : null}
+
+          {/* Misma barra social que el feed para `kind="professional"`
+              (pedido cliente 2026-09-14: "que tengan todo lo mismo"). */}
+          <ListingActions
+            listingId={professional.id}
+            shareKind="listing"
+            title={professional.title}
+            detailHref={`/profesionales/${professional.id}`}
+            commentCount={engagement?.commentCount}
+            savedByViewer={engagement?.savedByViewer}
+            like={engagement?.like}
+          />
 
           <AccentLink
             accent={ACCENT}

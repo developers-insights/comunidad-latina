@@ -51,6 +51,7 @@ function createStub(options: {
       gt: record("gt"),
       in: record("in"),
       or: record("or"),
+      textSearch: record("textSearch"),
       order: record("order"),
       limit: record("limit"),
       maybeSingle: async () => ({ data: options.single ?? null, error: null }),
@@ -182,6 +183,39 @@ describe("fetchLongVideosPage — la lista es sólo de videos largos", () => {
     });
 
     expect(page.items).toEqual([]);
+  });
+});
+
+/**
+ * BUSCADOR (pedido cliente 2026-09-15). Mismo índice FTS que `/videos` y
+ * `/empleos` (`posts.search`, 0044 + 0052) — sin migración nueva.
+ */
+describe("fetchLongVideosPage — buscador", () => {
+  it("con ?q= filtra por FTS sobre posts.search, config 'spanish'", async () => {
+    const stub = createStub();
+
+    await fetchLongVideosPage({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      supabase: stub.client as any,
+      tenantId: "tenant-1",
+      viewerId: null,
+      q: "recorrida casa",
+      cursor: null,
+    });
+
+    expect(stub.argsOf("posts", "textSearch")).toContainEqual([
+      "search",
+      "recorrida casa",
+      { type: "websearch", config: "spanish" },
+    ]);
+  });
+
+  it("sin q no se llama a textSearch", async () => {
+    const stub = createStub();
+
+    await fetchPage(stub);
+
+    expect(stub.argsOf("posts", "textSearch")).toEqual([]);
   });
 });
 

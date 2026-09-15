@@ -17,6 +17,8 @@ import type { Icon } from "@phosphor-icons/react";
 import { Chip, EmptyState, buttonVariants } from "@/components/ui";
 import { AdChip } from "@/components/feed/card-ad-chip";
 import { CrearParaPromocionarCta } from "@/components/boosts";
+import { VerResultadosCta } from "@/components/boosts/ver-resultados-cta";
+import { VistaPreviaEnRevision } from "@/components/boosts/vista-previa-en-revision";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -181,24 +183,45 @@ export default async function ImpulsarIndexPage() {
   // Lo propio del usuario en este tenant — nunca "removed" (nadie promociona
   // algo que ya se dio de baja). RLS ya aísla por dueño; el filtro explícito
   // es además la query eficiente (mismo patrón que el resto del repo).
-  const [{ data: listingRows }, { data: postRows }] = await Promise.all([
-    supabase
-      .from("listings")
-      .select("id, kind, title, status, photos, created_at")
-      .eq("tenant_id", tenant.id)
-      .eq("created_by", user.id)
-      .neq("status", "removed")
-      .order("created_at", { ascending: false })
-      .limit(LIMIT),
-    supabase
-      .from("posts")
-      .select("id, kind, body, media, status, created_at")
-      .eq("tenant_id", tenant.id)
-      .eq("author_id", user.id)
-      .neq("status", "removed")
-      .order("created_at", { ascending: false })
-      .limit(LIMIT),
-  ]);
+  const [{ data: listingRows }, { data: postRows }, impulsosComprados, promosCompradas] =
+    await Promise.all([
+      supabase
+        .from("listings")
+        .select("id, kind, title, status, photos, created_at")
+        .eq("tenant_id", tenant.id)
+        .eq("created_by", user.id)
+        .neq("status", "removed")
+        .order("created_at", { ascending: false })
+        .limit(LIMIT),
+      supabase
+        .from("posts")
+        .select("id, kind, body, media, status, created_at")
+        .eq("tenant_id", tenant.id)
+        .eq("author_id", user.id)
+        .neq("status", "removed")
+        .order("created_at", { ascending: false })
+        .limit(LIMIT),
+      // ¿Alguna vez compró algo? Dos conteos `head` (sin filas) en el mismo
+      // viaje que ya se estaba haciendo: deciden si esta pantalla muestra la
+      // entrada a /impulsar/resultados, que sin campañas llevaría a un vacío.
+      supabase
+        .from("boosts")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenant.id)
+        .eq("buyer_id", user.id)
+        .neq("status", "pending_payment"),
+      supabase
+        .from("post_promotions")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenant.id)
+        .eq("buyer_id", user.id)
+        .neq("status", "pending_payment"),
+    ]);
+
+  // Un error de conteo NO enciende la entrada: preferimos no ofrecer el enlace
+  // antes que mandar a una pantalla que no sabemos si tiene algo.
+  const tienePromociones =
+    (impulsosComprados.count ?? 0) > 0 || (promosCompradas.count ?? 0) > 0;
 
   const listings = listingRows ?? [];
   const posts = postRows ?? [];
@@ -264,7 +287,12 @@ export default async function ImpulsarIndexPage() {
 
       {/* Fuera del condicional a propósito: es la mitad del pedido. Con lista o
           sin lista, el botón de crear está siempre en el mismo lugar. */}
-      <CrearParaPromocionarCta />
+      <div className="flex flex-col gap-2.5">
+        <CrearParaPromocionarCta />
+        {/* Sólo para quien ya compró algo: sin campañas llevaría a un vacío, y
+            una fila de relleno en la cabecera de la pantalla de compra. */}
+        {tienePromociones && <VerResultadosCta />}
+      </div>
 
       {nothingToPromote ? (
         /* Sin `action`: el CTA de crear está justo arriba y en el mismo lugar
@@ -436,6 +464,22 @@ function ImpulsarRow({
             <p className="mt-1 text-xs leading-relaxed text-foreground-muted">{trabada.nota}</p>
           )}
         </div>
+
+        {/* EN REVISIÓN: mirar, no promocionar.
+            El cliente pidió poder ver la campaña mientras espera ("no sé cómo
+            se va a ver la campaña"). Lo que NO se hace es devolverle el botón
+            "Promocionar" a este estado: llevaría a una pantalla que exige
+            `status = 'published'` sólo para contestar que no, que es el bug que
+            se cerró el 2026-09-07. Ver es otra cosa que comprar, y sólo una de
+            las dos está trabada. */}
+        {item.estado === "en_revision" && (
+          <VistaPreviaEnRevision
+            titulo={item.title}
+            thumbnailUrl={item.thumbnailUrl}
+            thumbnailIsVideo={item.thumbnailIsVideo}
+            tipo={item.kind === "listing" ? "aviso" : "publicacion"}
+          />
+        )}
 
         {trabada === null && (
           <Link

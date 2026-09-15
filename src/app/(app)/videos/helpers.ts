@@ -1,4 +1,5 @@
 import { mediaKindOf } from "@/components/feed/helpers";
+import { sanitizeSearchQuery } from "@/components/search/helpers";
 import { parseVideoCategory, type VideoCategory } from "@/lib/media/video-policy";
 
 /**
@@ -47,6 +48,11 @@ export function hasVideoMedia(mediaPaths: readonly string[] | null | undefined):
 /** `?param=` puede llegar como string o string[] — normaliza al primero. */
 export function firstParamValue(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? "";
+}
+
+/** `?q=` sanitizado, o null si vino vacío. Mismo criterio en /videos y /videos/largos. */
+export function parseVideoSearchParam(raw: string | undefined): string | null {
+  return sanitizeSearchQuery(raw ?? "") || null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -102,12 +108,21 @@ export function categoryFilterValue(
  * compartido o tocado en el feed) se va derecho al video: interponer un menú
  * rompería el deep link, que es exactamente lo que se comparte. Con `?scope=`
  * (el reel acotado a un módulo) también, porque ese link YA declara qué quiere
- * ver — el menú de temas es otra dimensión, no la misma.
+ * ver — el menú de temas es otra dimensión, no la misma. Con `?q=` (buscó desde
+ * el propio menú) también: la búsqueda ES la elección, y volver a preguntar
+ * "¿qué querés ver?" después de que la persona ya lo escribió sería el mismo
+ * paso de más que el menú vino a evitar con `?start=`.
  */
 export function shouldShowCategoryMenu(args: {
   category: VideoCategoryFilter | null;
   startId: string | null;
   rawScope: string;
+  q?: string | null;
 }): boolean {
-  return args.category === null && !args.startId && args.rawScope.trim().length === 0;
+  return (
+    args.category === null &&
+    !args.startId &&
+    args.rawScope.trim().length === 0 &&
+    !args.q
+  );
 }

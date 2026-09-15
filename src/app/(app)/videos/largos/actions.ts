@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { decodeCursor } from "@/components/listings";
+import { MAX_SEARCH_LENGTH, sanitizeSearchQuery } from "@/components/search/helpers";
 import { categoryFilterValue, parseVideoCategoryParam } from "../helpers";
 import { fetchLongVideosPage, type LongVideosPage } from "./queries";
 
@@ -18,6 +19,8 @@ import { fetchLongVideosPage, type LongVideosPage } from "./queries";
  */
 const loadMoreSchema = z.object({
   category: z.string().max(30).optional(),
+  /** Término del buscador. Ausente = sin buscar. */
+  q: z.string().max(MAX_SEARCH_LENGTH).optional(),
   cursor: z.string().min(1).max(200),
   /** El video que se está mirando no se repite en "Más videos largos". */
   excludeId: z.string().max(64).optional(),
@@ -25,6 +28,7 @@ const loadMoreSchema = z.object({
 
 export async function loadMoreLongVideosAction(input: {
   category?: string;
+  q?: string;
   cursor: string;
   excludeId?: string;
 }): Promise<LongVideosPage> {
@@ -32,6 +36,7 @@ export async function loadMoreLongVideosAction(input: {
   if (!parsed.success) return { items: [], nextCursor: null };
 
   const category = categoryFilterValue(parseVideoCategoryParam(parsed.data.category));
+  const q = parsed.data.q ? sanitizeSearchQuery(parsed.data.q) || null : null;
   const cursor = decodeCursor(parsed.data.cursor);
   if (!cursor) return { items: [], nextCursor: null };
 
@@ -45,6 +50,7 @@ export async function loadMoreLongVideosAction(input: {
     tenantId: tenant.id,
     viewerId: user?.id ?? null,
     category,
+    q,
     cursor,
     excludeId: parsed.data.excludeId ?? null,
   });

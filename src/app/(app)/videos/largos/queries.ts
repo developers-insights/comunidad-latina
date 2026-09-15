@@ -94,6 +94,8 @@ interface FetchArgs {
   viewerId: string | null;
   /** Tema del menú. null = todos los temas. */
   category?: VideoCategory | null;
+  /** Término del buscador (`?q=`), ya sanitizado. null = sin buscar. */
+  q?: string | null;
   cursor: LongVideosCursor | null;
   pageSize?: number;
   /** Publicación que NO va en la lista (el "Más videos largos" del reproductor). */
@@ -128,6 +130,7 @@ export async function fetchLongVideosPage({
   tenantId,
   viewerId,
   category = null,
+  q = null,
   cursor,
   pageSize = DEFAULT_PAGE_SIZE,
   excludeId = null,
@@ -159,6 +162,12 @@ export async function fetchLongVideosPage({
       query = query.or("video_category.is.null,video_category.eq.otros");
     } else if (category) {
       query = query.eq("video_category", category);
+    }
+
+    // Buscador (pedido cliente: "como TikTok o Instagram"). Mismo índice FTS
+    // que `/videos` y `/empleos` (`posts.search`, 0044 + 0052) — sin migración.
+    if (q) {
+      query = query.textSearch("search", q, { type: "websearch", config: "spanish" });
     }
 
     // Sólo lo que HOY se puede reproducir (ver el docblock de `canPlayAsLongVideo`).

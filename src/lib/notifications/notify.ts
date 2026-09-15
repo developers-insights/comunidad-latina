@@ -10,6 +10,7 @@ import {
   type NotificationPriority,
 } from "./categories";
 import { buildGroupKey } from "./group";
+import type { NotificationEntityType } from "./entity";
 import {
   prefsFromRows,
   shouldDeliverInApp,
@@ -89,6 +90,21 @@ export type CreateNotificationInput = {
    * "no me cuentes cómo salió lo que pedí".
    */
   ignorePrefs?: boolean;
+  /**
+   * QUÉ originó el aviso (0151). Es lo que le da a la fila su miniatura y el
+   * ícono de su módulo; sin esto la UI sólo puede dibujar el ícono grueso de la
+   * categoría, que para catorce vencimientos es el mismo reloj.
+   *
+   * `imageUrl` se guarda DENORMALIZADO y crudo (path del bucket o URL absoluta,
+   * lo mismo que hay en `listings.photos`): una notificación es el registro de un
+   * hecho pasado, no una vista de la fila viva.
+   */
+  entity?: {
+    type: NotificationEntityType;
+    id: string;
+    kind?: string | null;
+    imageUrl?: string | null;
+  };
 };
 
 export type CreateNotificationOutcome =
@@ -177,6 +193,18 @@ export async function createNotification(
             body: input.body ?? null,
             href: input.href ?? null,
             created_at: nowIso,
+            // La entidad SÓLO se pisa si este caller mandó una. La fila agrupada
+            // es siempre del mismo sujeto (`group_key` lo incluye), así que esto
+            // refresca la miniatura; escribir null cuando no vino la BORRARÍA, y
+            // la fila perdería su ícono y su foto en la interacción número dos.
+            ...(input.entity
+              ? {
+                  entity_type: input.entity.type,
+                  entity_id: input.entity.id,
+                  entity_kind: input.entity.kind ?? null,
+                  image_url: input.entity.imageUrl ?? null,
+                }
+              : {}),
           })
           .eq("id", live.id);
 
@@ -216,6 +244,10 @@ export async function createNotification(
       category,
       priority,
       group_key: groupKey,
+      entity_type: input.entity?.type ?? null,
+      entity_id: input.entity?.id ?? null,
+      entity_kind: input.entity?.kind ?? null,
+      image_url: input.entity?.imageUrl ?? null,
     };
 
     const { error } = await admin.from("notifications").insert(row);

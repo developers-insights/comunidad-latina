@@ -26,6 +26,8 @@ export interface LongVideoListProps {
   initialCursor: string | null;
   /** Tema activo, para que la tanda 2 filtre por lo mismo que la 1. */
   category?: string | null;
+  /** Término buscado, para que la tanda 2 filtre por lo mismo que la 1. */
+  q?: string | null;
   /** El video que se está mirando (en "Más videos largos") no se repite. */
   excludeId?: string | null;
   /**
@@ -43,6 +45,7 @@ export function LongVideoList({
   initialItems,
   initialCursor,
   category = null,
+  q = null,
   excludeId = null,
   priorityFirst = true,
   className,
@@ -56,6 +59,7 @@ export function LongVideoList({
     startTransition(async () => {
       const page = await loadMoreLongVideosAction({
         category: category ?? undefined,
+        q: q ?? undefined,
         cursor,
         excludeId: excludeId ?? undefined,
       });

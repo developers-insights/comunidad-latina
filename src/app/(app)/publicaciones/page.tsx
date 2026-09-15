@@ -11,6 +11,7 @@ import {
 } from "@/components/ui";
 import { FALLBACK_PHOTO } from "@/components/listings";
 import { VENCIMIENTO_COPY, closedReasonForKind } from "@/lib/listings";
+import { AVISO_PARAM } from "@/lib/notifications/entity";
 import { cn } from "@/lib/utils";
 import { fetchMisPublicaciones, type PublicacionPropia } from "./queries";
 import { RenovarBoton } from "./renovar-boton";
@@ -33,13 +34,33 @@ const C = VENCIMIENTO_COPY;
  *
  * Las vencidas van ARRIBA (lo ordena `fetchMisPublicaciones`): son las que
  * dejaron de mostrarse, y probablemente la persona todavía no lo sabe.
+ *
+ * `?aviso=<id>` DESTACA UNA (0151). Antes las dos notificaciones de vencimiento
+ * llegaban acá con el href fijo `/publicaciones`: veinte avisos distintos que
+ * aterrizaban en la misma lista, que es exactamente lo que el cliente describió
+ * como «no sabés de qué notificación te está hablando». Con el parámetro, la
+ * publicación del aviso queda PRIMERA y marcada — no hace falta scroll ni JS, que
+ * es lo que rompería con el Suspense de abajo (el navegador no puede saltar a un
+ * ancla que todavía no se renderizó).
  */
-export default function MisPublicacionesPage() {
+export default function MisPublicacionesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   return (
     <Suspense fallback={<PageSkeleton />}>
-      <Contenido />
+      <Contenido searchParams={searchParams} />
     </Suspense>
   );
+}
+
+/** El id llega de la URL: se usa sólo para comparar contra ids que ya trajo la
+ *  base, nunca para consultar. Cortarlo evita arrastrar una cadena absurda. */
+function parseAviso(sp: Record<string, string | string[] | undefined>): string | null {
+  const raw = sp[AVISO_PARAM];
+  const value = (Array.isArray(raw) ? raw[0] : raw) ?? "";
+  return value ? value.slice(0, 64) : null;
 }
 
 /** Acento e ícono 3D de la sección (el mismo set del menú). */
@@ -48,8 +69,16 @@ const SECCION = {
   image: "/icons/menu/social.webp",
 } as const;
 
-async function Contenido() {
-  const { publicaciones, autenticado } = await fetchMisPublicaciones();
+async function Contenido({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const [{ publicaciones, autenticado }, sp] = await Promise.all([
+    fetchMisPublicaciones(),
+    searchParams,
+  ]);
+  const aviso = parseAviso(sp);
 
   if (!autenticado) {
     return (
@@ -87,13 +116,24 @@ async function Contenido() {
     );
   }
 
+  // La del aviso primero, sin alterar el orden relativo del resto. Un `sort` con
+  // comparador booleano bastaría, pero esto deja explícito que es UNA sola fila
+  // la que se mueve y que un `?aviso=` que ya no existe no cambia nada.
+  const destacada = aviso ? publicaciones.find((p) => p.id === aviso) : undefined;
+  const ordenadas = destacada
+    ? [destacada, ...publicaciones.filter((p) => p.id !== destacada.id)]
+    : publicaciones;
+
   return (
     <>
       <Encabezado />
       <ul className="space-y-3">
-        {publicaciones.map((publicacion) => (
+        {ordenadas.map((publicacion) => (
           <li key={publicacion.id}>
-            <Tarjeta publicacion={publicacion} />
+            <Tarjeta
+              publicacion={publicacion}
+              destacada={publicacion.id === destacada?.id}
+            />
           </li>
         ))}
       </ul>
@@ -151,7 +191,19 @@ function ChipDeEstado({ publicacion }: { publicacion: PublicacionPropia }) {
   }
 }
 
-function Tarjeta({ publicacion }: { publicacion: PublicacionPropia }) {
+/**
+ * Vive acá y no en `VENCIMIENTO_COPY` porque es copy de ESTA pantalla y de este
+ * parámetro: no lo lee ningún otro módulo, y `lib/listings` es compartido.
+ */
+const COPY_DESTACADA = "De esto te avisamos";
+
+function Tarjeta({
+  publicacion,
+  destacada = false,
+}: {
+  publicacion: PublicacionPropia;
+  destacada?: boolean;
+}) {
   const vencida = publicacion.estado.estado === "vencida";
   const porVencer = publicacion.estado.estado === "por_vencer";
   const isClosed = publicacion.status === "closed";
@@ -160,7 +212,14 @@ function Tarjeta({ publicacion }: { publicacion: PublicacionPropia }) {
   const puedeCerrar = puedeCerrarPublicacion(publicacion.status, pausadaPorReportes);
 
   return (
-    <article className="flex gap-3 rounded-2xl border border-border bg-surface p-3">
+    <article
+      // Borde y fondo tintado, nunca una sombra de color: una sombra teñida se
+      // lee como neón, no como jerarquía.
+      className={cn(
+        "flex gap-3 rounded-2xl border p-3",
+        destacada ? "border-brand bg-brand-tint/30" : "border-border bg-surface",
+      )}
+    >
       {/* CardMedia y no un <Image> pelado: los avisos sembrados traen fotos de
           hosts externos y next/image LANZA en runtime con un host fuera del
           allowlist. Ese componente ya resuelve el fallback y el chequeo
@@ -184,6 +243,11 @@ function Tarjeta({ publicacion }: { publicacion: PublicacionPropia }) {
 
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
+          {destacada && (
+            <span className="cl-print-hide rounded-full bg-brand px-2 py-0.5 text-[11px] font-semibold text-brand-foreground">
+              {COPY_DESTACADA}
+            </span>
+          )}
           <span className="text-xs font-medium text-foreground-muted">
             {C.modulos[publicacion.kind] ?? publicacion.kind}
           </span>

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { VIDEO_CATEGORIES } from "@/lib/media/video-policy";
+import { t } from "@/lib/i18n";
 import { VideoCategoryMenu } from "./category-menu";
 import { VIDEO_CATEGORY_LABELS } from "./copy";
 
@@ -28,6 +29,16 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+// `ModuleSearchBar` (buscador del menú, 2026-09-15) es cliente y usa estos
+// hooks — sin el mock, renderizar el menú en jsdom explota fuera de un router.
+const nav = vi.hoisted(() => ({ replace: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: nav.replace }),
+  usePathname: () => "/videos",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+beforeEach(() => nav.replace.mockReset());
 afterEach(cleanup);
 
 describe("Menú de entrada de Videos Cortos", () => {
@@ -77,5 +88,18 @@ describe("Menú de entrada de Videos Cortos", () => {
   it("la pantalla se presenta con un solo encabezado de nivel 1", () => {
     render(<VideoCategoryMenu />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+
+  /**
+   * Buscador (pedido cliente 2026-09-15: "un lugar donde se puedan buscar los
+   * videos... como TikTok o Instagram"). Sólo se ancla que esté presente y
+   * accesible; el comportamiento de escribir/enviar es de `ModuleSearchBar`,
+   * ya probado donde vive.
+   */
+  it("ofrece un buscador de videos, visible desde que se entra a la sección", () => {
+    render(<VideoCategoryMenu />);
+    expect(
+      screen.getByRole("searchbox", { name: t("sections", "searchVideosLabel") }),
+    ).toBeTruthy();
   });
 });

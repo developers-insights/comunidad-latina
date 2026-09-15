@@ -33,6 +33,8 @@ import {
 import { Celebration, Reveal, useCelebration } from "@/components/motion";
 import { formatListingPrice } from "@/components/listings/helpers";
 import { cn } from "@/lib/utils";
+import { firstPhotoUrl } from "@/components/listings";
+import { OfrecerImpulso } from "@/components/boosts/ofrecer-impulso";
 import { createClient } from "@/lib/supabase/client";
 import {
   EMPLOYMENT_TYPES,
@@ -438,7 +440,12 @@ export function JobPublishForm({
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState<"published" | "pending_review" | null>(null);
+  const [done, setDone] = useState<{
+    status: "published" | "pending_review";
+    listingId: string;
+    /** Para la vista previa de "así va a quedar" cuando queda en revisión. */
+    photos: string[];
+  } | null>(null);
   // El borrador se crea una sola vez: un reintento no duplica avisos.
   const [draftId, setDraftId] = useState<string | null>(null);
 
@@ -818,7 +825,7 @@ export function JobPublishForm({
         setError(finalized.error);
         return;
       }
-      setDone(finalized.status);
+      setDone({ status: finalized.status, listingId, photos: photoPaths });
       if (finalized.status === "published") celebrate();
     } catch {
       setError(C.errors.generic);
@@ -857,7 +864,7 @@ export function JobPublishForm({
   // Confirmación
   // -------------------------------------------------------------------------
   if (done) {
-    const published = done === "published";
+    const published = done.status === "published";
     return (
       <>
         {published && <Celebration active={celebrating} message={C.successPublishedTitle} />}
@@ -889,6 +896,17 @@ export function JobPublishForm({
             </Button>
           </div>
         </BezelCard>
+
+        {/* El aviso ya está publicado y fue gratis: esto es una oferta, no un
+            paso del alta. Un aviso en revisión no recibe botón —lo rechazaría
+            el destino— pero sí la vista previa de cómo va a quedar. */}
+        <OfrecerImpulso
+          className="mt-4"
+          listingId={done.listingId}
+          status={done.status}
+          titulo={title.trim() || C.successPublishedTitle}
+          thumbnailUrl={firstPhotoUrl(done.photos)}
+        />
       </>
     );
   }

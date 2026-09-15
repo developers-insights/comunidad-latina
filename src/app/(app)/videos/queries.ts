@@ -132,6 +132,8 @@ interface FetchArgs {
   scope: VideosScope;
   /** Tema elegido en el menú de entrada. null = "Todos" (sin filtro de tema). */
   category?: VideoCategory | null;
+  /** Término del buscador del menú (`?q=`), ya sanitizado. null = sin buscar. */
+  q?: string | null;
   cursor: ReelsCursor | null;
   /** Post que abre el reel (?start=): va primero y el resto pagina detrás. */
   startId?: string | null;
@@ -144,6 +146,7 @@ export async function fetchVideoReelsPage({
   viewerId,
   scope,
   category = null,
+  q = null,
   cursor,
   startId = null,
   pageSize = DEFAULT_PAGE_SIZE,
@@ -187,6 +190,14 @@ export async function fetchVideoReelsPage({
       query = query.or("video_category.is.null,video_category.eq.otros");
     } else if (category) {
       query = query.eq("video_category", category);
+    }
+
+    // Buscador del menú (pedido cliente: "como TikTok o Instagram"). Mismo
+    // índice FTS que /empleos y /propiedades (`posts.search`, 0044 + 0052):
+    // generado sobre `body`, config 'spanish', con su GIN (`posts_search_idx`)
+    // — no hace falta migración nueva.
+    if (q) {
+      query = query.textSearch("search", q, { type: "websearch", config: "spanish" });
     }
 
     if (kind) {

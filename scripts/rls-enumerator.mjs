@@ -74,16 +74,23 @@ const STORAGE_BUCKETS = ['avatars', 'listing-photos', 'tenant-assets', 'post-med
  * arreglar deja de leerse — y el día que aparece un problema NUESTRO se pierde
  * entre los otros diecisiete. Eso es peor que no tener gate.
  *
- * Se excluyen por sufijo y no por lista fija a propósito: el otro producto
- * sigue creando tablas, y una lista a mano se desactualiza sola. Si algún día
- * Comunidad Latina tuviera una tabla terminada en `_caughtcode`, este filtro la
- * dejaría sin auditar — por eso el nombre del sufijo es el del otro producto y
- * no algo genérico como `_externo`.
+ * Se excluyen por patrón de nombre y no por lista fija a propósito: el otro
+ * producto sigue creando tablas, y una lista a mano se desactualiza sola. Los
+ * patrones llevan el nombre del otro producto (no algo genérico como
+ * `_externo`) para que una tabla nuestra no caiga acá por accidente.
+ *
+ * El sufijo solo no alcanzaba: el otro producto sumó después toda la familia
+ * `e_manager_*`, que no termina en `_caughtcode`, y el gate volvió a salir rojo
+ * con 80 problemas ajenos — el mismo modo de falla que este filtro existe para
+ * evitar. Si aparece otra familia con nueva convención, va acá.
  */
-const OTRO_PRODUCTO_SUFIJO = '_caughtcode';
+const OTRO_PRODUCTO_PATRONES = [
+  (t) => t.endsWith('_caughtcode'),
+  (t) => t.startsWith('e_manager_'),
+];
 
-function esDeOtroProducto(tableName) {
-  return tableName.endsWith(OTRO_PRODUCTO_SUFIJO);
+export function esDeOtroProducto(tableName) {
+  return OTRO_PRODUCTO_PATRONES.some((coincide) => coincide(tableName));
 }
 const CMDS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'];
 const SUFFIX_BY_CMD = { SELECT: 'select', INSERT: 'insert', UPDATE: 'update', DELETE: 'delete' };

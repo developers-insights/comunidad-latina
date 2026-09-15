@@ -4,6 +4,11 @@ import { ACCENT_CHIP_CLASS, DirectoryMedia } from "@/components/directory";
 import { PublisherTrust } from "@/components/listings";
 import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 import { AccionesRapidas, EstadoAperturaChip, type AccionRapida } from "@/components/negocios";
+import { ListingActions, type ListingEngagement } from "@/components/feed/listing-actions";
+import {
+  ListingOwnerMenuOverlay,
+  type ListingOwnerView,
+} from "@/components/listings/listing-owner-menu";
 import { Estrellas } from "@/components/resenas";
 import { Badge, BezelCard, Chip, Skeleton, buttonVariants } from "@/components/ui";
 import { PhotoTap } from "@/components/media/photo-tap";
@@ -126,7 +131,21 @@ export interface BusinessCardModel {
  * Tocar la FOTO abre el visor a pantalla completa (feedback 2026-07-26). Sin
  * foto, el gradiente del módulo no es tocable.
  */
-export function BusinessCard({ business }: { business: BusinessCardModel }) {
+export function BusinessCard({
+  business,
+  engagement,
+  owner,
+}: {
+  business: BusinessCardModel;
+  /** Ausente hasta que /negocios resuelva comentarios/guardado en lote — ver ListingEngagement. */
+  engagement?: ListingEngagement;
+  /**
+   * Propiedad del aviso, ya resuelta EN EL SERVIDOR (created_by contra la
+   * sesión). Llega como booleano: ningún id de nadie baja al navegador por
+   * acá. Ausente → no se dibuja el menú ⋯.
+   */
+  owner?: ListingOwnerView;
+}) {
   const photos = business.photos?.length
     ? business.photos
     : business.photoUrl
@@ -139,36 +158,46 @@ export function BusinessCard({ business }: { business: BusinessCardModel }) {
   return (
     <BezelCard coreClassName="overflow-hidden p-0">
       <article aria-label={business.title}>
-        <PhotoTap
-          photos={photos}
-          label={COPY.openPhotos(business.title)}
-          authorName={business.title}
-        >
-          <DirectoryMedia
-            src={business.photoUrl}
-            accent="negocios"
-            icon={Storefront}
-            // Mismo lugar que el sello de licencia de vivienda/profesionales
-            // (overlayTopLeft, ícono + texto — nunca solo color, §3.2), pero
-            // OTRO ícono y OTRO color, porque es otro hecho.
-            //
-            // `store_verified` es el espejo público de un PLAN PAGO
-            // (`business_accounts.verified_presence`), no una verificación de
-            // identidad ni una licencia con fecha. La app reserva el par
-            // verde + escudo para lo que se verifica de la persona (ver
-            // `IdentityBadge` y `SellerIdentityBadge`) y usa azul + sello para
-            // lo que se contrata. Quien compra decide mirando esta insignia: si
-            // dice confianza verificada y en realidad dice plan al día, engaña.
-            overlayTopLeft={
-              business.storeVerified ? (
-                <Badge variant="info">
-                  <SealCheck size={13} weight="fill" aria-hidden="true" />
-                  {COPY.verifiedBadge}
-                </Badge>
-              ) : undefined
-            }
+        <div className="relative">
+          <PhotoTap
+            photos={photos}
+            label={COPY.openPhotos(business.title)}
+            authorName={business.title}
+          >
+            <DirectoryMedia
+              src={business.photoUrl}
+              accent="negocios"
+              icon={Storefront}
+              // Mismo lugar que el sello de licencia de vivienda/profesionales
+              // (overlayTopLeft, ícono + texto — nunca solo color, §3.2), pero
+              // OTRO ícono y OTRO color, porque es otro hecho.
+              //
+              // `store_verified` es el espejo público de un PLAN PAGO
+              // (`business_accounts.verified_presence`), no una verificación de
+              // identidad ni una licencia con fecha. La app reserva el par
+              // verde + escudo para lo que se verifica de la persona (ver
+              // `IdentityBadge` y `SellerIdentityBadge`) y usa azul + sello para
+              // lo que se contrata. Quien compra decide mirando esta insignia: si
+              // dice confianza verificada y en realidad dice plan al día, engaña.
+              overlayTopLeft={
+                business.storeVerified ? (
+                  <Badge variant="info">
+                    <SealCheck size={13} weight="fill" aria-hidden="true" />
+                    {COPY.verifiedBadge}
+                  </Badge>
+                ) : undefined
+              }
+            />
+          </PhotoTap>
+          <ListingOwnerMenuOverlay
+            listingId={business.id}
+            kind="business"
+            title={business.title}
+            esMio={Boolean(owner?.esMio)}
+            status={owner?.status}
+            pausadoPorReportes={owner?.pausadoPorReportes}
           />
-        </PhotoTap>
+        </div>
 
         <div className="flex flex-col gap-2.5 p-4">
           {business.categoryLabel && (
@@ -233,6 +262,18 @@ export function BusinessCard({ business }: { business: BusinessCardModel }) {
               </p>
             )
           )}
+
+          {/* Misma barra social que el feed para `kind="business"` (pedido
+              cliente 2026-09-14: "que tengan todo lo mismo"). */}
+          <ListingActions
+            listingId={business.id}
+            shareKind="business"
+            title={business.title}
+            detailHref={`/negocios/${business.id}`}
+            commentCount={engagement?.commentCount}
+            savedByViewer={engagement?.savedByViewer}
+            like={engagement?.like}
+          />
 
           {business.puedeRecibirMensajes && (
             <InlineMessageCta

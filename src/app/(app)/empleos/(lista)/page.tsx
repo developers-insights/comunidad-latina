@@ -193,17 +193,29 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
                 empleo es un afiche con el pago adelante, un servicio es una
                 persona con su disponibilidad. Ver `service-card.tsx` para por
                 qué no es la misma tarjeta con otro color. */}
-            {items.map((item) =>
-              item.kind === "service" ? (
+            {items.map((item) => {
+              /**
+               * ¿Es tuyo? `publisher.profileId` ES `listings.created_by` — lo
+               * arma `fetchJobsPage` con la columna que ese SELECT ya traía.
+               * Cero consultas nuevas, y al navegador baja un booleano, no un
+               * id. La autorización de verdad vive en las server actions + RLS.
+               */
+              const esMio = Boolean(
+                viewerId &&
+                  item.publisher?.type === "member" &&
+                  item.publisher.profileId === viewerId,
+              );
+              return item.kind === "service" ? (
                 <ServiceCard
                   key={item.id}
                   service={item}
                   isLoggedIn={Boolean(viewerId)}
+                  owner={{ esMio }}
                 />
               ) : (
-                <JobCard key={item.id} job={item} />
-              ),
-            )}
+                <JobCard key={item.id} job={item} owner={{ esMio }} />
+              );
+            })}
           </div>
 
           {nextCursor && (

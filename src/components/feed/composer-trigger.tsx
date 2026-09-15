@@ -21,7 +21,7 @@ export interface ComposerTriggerProps {
 
 /**
  * ÚNICA cosa que vive en el feed del composer (pedido de Manuel, 2026-07-29):
- * la tarjeta "¿Qué querés publicar?". El estado, los inputs de archivo y el
+ * la tarjeta "¿Qué te gustaría publicar?". El estado, los inputs de archivo y el
  * menú viven en `PostComposerHost` (montado una vez en el shell) — esta
  * tarjeta sólo abre ese menú, igual que el "+" del bottom nav (ver
  * composer-context.tsx). Antes esto era parte de `PostComposer`; se separó

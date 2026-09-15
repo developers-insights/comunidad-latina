@@ -5,7 +5,7 @@ import Link from "next/link";
 import { m, useReducedMotion, type Transition } from "motion/react";
 import type { Icon } from "@phosphor-icons/react";
 import { bubbleStyle } from "@/components/ui";
-import { MODULES } from "@/components/shell/modules";
+import { BOOST_MODULE, MODULES } from "@/components/shell/modules";
 import { visibleModules, type VisibleModuleState } from "@/components/shell/module-access";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -108,6 +108,8 @@ export interface ModuleCircle {
   accent: string;
   /** `true` sólo para el círculo del propio feed: el "estás acá" de la fila. */
   esElFeed: boolean;
+  /** `true` sólo para Boost: una COMPRA, no una vertical — trato visual propio. */
+  esBoost: boolean;
   state: VisibleModuleState;
 }
 
@@ -132,9 +134,18 @@ export type ModuleCircleGroups = ModuleCircle[];
  * Videos queda afuera y es lo único que se excluye a mano: ya es una pestaña del
  * bottom nav, y repetirlo acá le enseña a la gente que hay dos caminos para lo
  * mismo. Es el mismo criterio con el que `BROWSE_MODULES` lo saca de /buscar.
- * (Y por eso mismo esta fila NO usa `BROWSE_MODULES`: aquella lista saca también
- * el feed —que acá es el ancla de "estás acá"— y suma Boost, que es una compra,
- * no una vertical que se navegue.)
+ * (Y por eso mismo esta fila NO usa `BROWSE_MODULES` para las verticales: aquella
+ * lista saca también el feed, que acá es el ancla de "estás acá".)
+ *
+ * ── BOOST CIERRA LA FILA (pedido cliente 2026-09-15) ─────────────────────────
+ * Boost SÍ se agrega, pero no sale de `MODULES` ni se mezcla con el resto del
+ * loop: es una COMPRA, no una vertical (ver el comentario de `BOOST_MODULE` en
+ * shell/modules.ts), así que entra aparte, al final, y `ModuleCircleLink` le da
+ * un trato visual propio (anillo del acento siempre visible, no sólo cuando es
+ * "el actual") para que no se lea como un círculo más indistinguible. Pasa por
+ * `visibleModules` igual que cualquier módulo — hoy no tiene `moduleKey` y por
+ * lo tanto es siempre "active" (mismo trato que en /buscar), pero si algún día
+ * gana uno, esta función empieza a respetarlo sin cambiar una línea más.
  */
 export function moduleCircles(
   modules: Record<string, boolean> | null | undefined,
@@ -157,7 +168,23 @@ export function moduleCircles(
       icon: item.icon,
       accent: item.palette.icon,
       esElFeed: item.href === FEED_HREF,
+      esBoost: false,
       state,
+    });
+  }
+
+  const [boost] = visibleModules([BOOST_MODULE], modules, modulesSoon);
+  if (boost) {
+    circles.push({
+      key: BOOST_MODULE.href,
+      label: BOOST_MODULE.label,
+      href: BOOST_MODULE.href,
+      image: BOOST_MODULE.image,
+      icon: BOOST_MODULE.icon,
+      accent: BOOST_MODULE.palette.icon,
+      esElFeed: false,
+      esBoost: true,
+      state: boost.state,
     });
   }
 
@@ -321,6 +348,7 @@ function ModuleCircleLink({
 }) {
   const IconComponent = circle.icon;
   const soon = circle.state === "soon";
+  const isBoost = circle.esBoost;
 
   return (
     <Link
@@ -347,7 +375,10 @@ function ModuleCircleLink({
             // entero — el público incluye gente mayor.
             soon && "opacity-70",
           )}
-          style={{ backgroundColor: "var(--bubble-fill)" }}
+          // Boost usa `--bubble-fill-strong` (18%, no el 12% del resto): es la
+          // MISMA escala tintada que ya define `bubbleStyle`, un paso más
+          // arriba — nunca un color ajeno al sistema.
+          style={{ backgroundColor: isBoost ? "var(--bubble-fill-strong)" : "var(--bubble-fill)" }}
         >
           {circle.image ? (
             /* Set premium 3D (Meshy): la imagen trae su propio fondo pastel del
@@ -377,6 +408,19 @@ function ModuleCircleLink({
             transition={ringTransition}
           />
         )}
+        {isBoost && (
+          // Boost no es "el actual" de nadie —nunca se navega DE VUELTA a él
+          // como destino marcado— así que su anillo no depende de `isCurrent`:
+          // es SIEMPRE visible, la señal de que este círculo es una acción y
+          // no una sección más para recorrer. Mismo `--bubble-line-strong`
+          // (sombra sólida, sin difuminar: un borde, no un brillo) que ya usa
+          // el anillo de arriba — nunca un `box-shadow` con blur.
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-[3px] rounded-full"
+            style={{ boxShadow: "0 0 0 2px var(--bubble-line-strong)" }}
+          />
+        )}
       </span>
 
       <span className="flex min-w-0 flex-col items-center text-center leading-tight">
@@ -387,7 +431,7 @@ function ModuleCircleLink({
             // se queda siempre en `text-foreground` — es la etiqueta principal,
             // nunca el dato que se apaga.
             "line-clamp-2 text-[11px] text-foreground",
-            isCurrent ? "font-semibold" : "font-medium",
+            isCurrent || isBoost ? "font-semibold" : "font-medium",
           )}
         >
           {circle.label}

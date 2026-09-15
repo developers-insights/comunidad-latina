@@ -31,7 +31,7 @@ import {
 } from "@/app/(app)/notificaciones/actions";
 import { getPanelDeCampanaAction } from "@/app/(app)/notificaciones/panel-actions";
 import { useCloseOnBack, useFocusTrap, useMounted } from "@/lib/design/use-overlay";
-import { CategoryIcon } from "./category-icon";
+import { CategoryIcon, NotificationAvatar } from "./category-icon";
 import { COPY } from "./copy";
 
 /**
@@ -670,9 +670,12 @@ function PanelRow({ item, onOpen }: { item: NotificationPanelItem; onOpen: () =>
 
   const contenido = (
     <>
-      <CategoryIcon
+      <NotificationAvatar
         category={category}
-        className={cn("size-9", item.read ? undefined : "bg-brand-tint text-brand-ink")}
+        entityKind={item.entityKind}
+        imageUrl={item.imageUrl}
+        unread={!item.read}
+        className="size-9"
       />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline justify-between gap-2">

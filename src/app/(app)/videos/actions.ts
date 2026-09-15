@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { decodeCursor } from "@/components/listings";
+import { MAX_SEARCH_LENGTH, sanitizeSearchQuery } from "@/components/search/helpers";
 import {
   categoryFilterValue,
   parseStartId,
@@ -22,12 +23,15 @@ const loadMoreSchema = z.object({
   scope: z.string().max(30),
   /** Tema del menú de entrada. Ausente o basura = sin filtro de tema. */
   category: z.string().max(30).optional(),
+  /** Término del buscador. Ausente = sin buscar. */
+  q: z.string().max(MAX_SEARCH_LENGTH).optional(),
   cursor: z.string().min(1).max(200),
 });
 
 export async function loadMoreVideosAction(input: {
   scope: string;
   category?: string;
+  q?: string;
   cursor: string;
 }): Promise<VideoReelsPage> {
   const parsed = loadMoreSchema.safeParse(input);
@@ -37,6 +41,8 @@ export async function loadMoreVideosAction(input: {
   // La categoría se re-valida contra el catálogo cerrado: la página 2 tiene que
   // filtrar por lo MISMO que la página 1, y el valor llega del cliente.
   const category = categoryFilterValue(parseVideoCategoryParam(parsed.data.category));
+  // Mismo criterio: la página 2 busca lo MISMO que la 1.
+  const q = parsed.data.q ? sanitizeSearchQuery(parsed.data.q) || null : null;
   const cursor = decodeCursor(parsed.data.cursor);
   if (!cursor) return { items: [], nextCursor: null };
 
@@ -51,6 +57,7 @@ export async function loadMoreVideosAction(input: {
     viewerId: user?.id ?? null,
     scope,
     category,
+    q,
     cursor,
   });
 }

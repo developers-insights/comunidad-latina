@@ -383,6 +383,21 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
   const profileById = new Map((profilesResult.data ?? []).map((p) => [p.id, p]));
   const trustById = new Map((trustResult.data ?? []).map((t) => [t.profile_id, t]));
 
+  /**
+   * MIS AVISOS DE ESTA PÁGINA — para el menú ⋯ de cada tarjeta.
+   *
+   * Sale de `created_by`, que este SELECT ya traía, contra el id de la sesión.
+   * Cero consultas nuevas y cero consultas por fila: lo único que baja al
+   * navegador es un booleano por tarjeta, nunca el id de nadie. Y no es la
+   * autorización — las server actions releen la fila filtrando por dueño y la
+   * RLS decide; acá sólo se evita ofrecer lo que iba a rebotar.
+   */
+  const misAvisos = new Set(
+    authUserId
+      ? orderedRows.filter((row) => row.created_by === authUserId).map((row) => row.id)
+      : [],
+  );
+
   const cards: ProfessionalCardModel[] = orderedRows.map((row) => {
     let publisher: PublisherView = null;
     let identityVerified = false;
@@ -511,15 +526,24 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
                 <Chip
                   variant="neutral"
                   size="sm"
-                  className="absolute right-3.5 top-3.5 z-10 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
+                  className="absolute left-1/2 top-3.5 z-10 -translate-x-1/2 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
                 >
                   <Megaphone size={14} weight="fill" aria-hidden="true" />
                   Patrocinado
                 </Chip>
-                <ProfessionalCard professional={card} isLoggedIn={isLoggedIn} />
+                <ProfessionalCard
+                  professional={card}
+                  isLoggedIn={isLoggedIn}
+                  owner={{ esMio: misAvisos.has(card.id) }}
+                />
               </div>
             ) : (
-              <ProfessionalCard key={card.id} professional={card} isLoggedIn={isLoggedIn} />
+              <ProfessionalCard
+                key={card.id}
+                professional={card}
+                isLoggedIn={isLoggedIn}
+                owner={{ esMio: misAvisos.has(card.id) }}
+              />
             ),
           )}
 

@@ -2,14 +2,17 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { FilmSlate } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
+import { ModuleSearchBar } from "@/components/search";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
   ALL_CATEGORIES,
   categoryFilterValue,
   firstParamValue,
   parseVideoCategoryParam,
+  parseVideoSearchParam,
   type VideoCategoryFilter,
 } from "../helpers";
 import { VIDEOS_COPY, VIDEO_CATEGORY_LABELS, VIDEO_CATEGORY_ORDER } from "../copy";
@@ -49,6 +52,7 @@ export default async function LongVideosPage({
 }) {
   const sp = await searchParams;
   const category = parseVideoCategoryParam(firstParamValue(sp.cat)) ?? ALL_CATEGORIES;
+  const q = parseVideoSearchParam(firstParamValue(sp.q));
 
   return (
     <div className="pb-10">
@@ -63,16 +67,31 @@ export default async function LongVideosPage({
         </p>
       </header>
 
-      <CategoryFilterRow active={category} />
+      {/* Mismo buscador de /videos, mismo motivo: acá la lista es una grilla de
+          tarjetas (no un scroll de pantalla completa), así que el input SÍ
+          puede vivir arriba del todo, como en /empleos. */}
+      <ModuleSearchBar
+        label={t("sections", "searchVideosLabel")}
+        placeholder={t("sections", "searchVideosPlaceholder")}
+        className="mt-4"
+      />
 
-      <Suspense key={category} fallback={<ListSkeleton />}>
-        <LongVideosContent category={category} />
+      <CategoryFilterRow active={category} q={q} />
+
+      <Suspense key={`${category}|${q ?? ""}`} fallback={<ListSkeleton />}>
+        <LongVideosContent category={category} q={q} />
       </Suspense>
     </div>
   );
 }
 
-async function LongVideosContent({ category }: { category: VideoCategoryFilter }) {
+async function LongVideosContent({
+  category,
+  q,
+}: {
+  category: VideoCategoryFilter;
+  q: string | null;
+}) {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
   const {
     data: { user },
@@ -83,32 +102,40 @@ async function LongVideosContent({ category }: { category: VideoCategoryFilter }
     tenantId: tenant.id,
     viewerId: user?.id ?? null,
     category: categoryFilterValue(category),
+    q,
     cursor: null,
     pageSize: FIRST_PAGE_SIZE,
   });
 
   if (page.items.length === 0) {
-    const filtered = category !== ALL_CATEGORIES;
+    const searched = Boolean(q);
+    const filtered = !searched && category !== ALL_CATEGORIES;
     const label = category === ALL_CATEGORIES ? "" : VIDEO_CATEGORY_LABELS[category];
     return (
       <EmptyState
         icon={<FilmSlate weight="duotone" />}
         title={
-          filtered
-            ? VIDEOS_COPY.largos.emptyCategoryTitle(label)
-            : VIDEOS_COPY.largos.emptyTitle
+          searched
+            ? VIDEOS_COPY.largos.emptySearchTitle(q as string)
+            : filtered
+              ? VIDEOS_COPY.largos.emptyCategoryTitle(label)
+              : VIDEOS_COPY.largos.emptyTitle
         }
         message={
-          filtered
-            ? VIDEOS_COPY.largos.emptyCategoryMessage
-            : VIDEOS_COPY.largos.emptyMessage
+          searched
+            ? VIDEOS_COPY.largos.emptySearchMessage
+            : filtered
+              ? VIDEOS_COPY.largos.emptyCategoryMessage
+              : VIDEOS_COPY.largos.emptyMessage
         }
         action={
           <Link
-            href={filtered ? "/videos/largos" : `/videos?cat=${ALL_CATEGORIES}`}
+            href={searched || filtered ? "/videos/largos" : `/videos?cat=${ALL_CATEGORIES}`}
             className={buttonVariants({ variant: "secondary", size: "md" })}
           >
-            {filtered ? VIDEOS_COPY.largos.emptyCategoryCta : VIDEOS_COPY.largos.emptyCta}
+            {searched || filtered
+              ? VIDEOS_COPY.largos.emptyCategoryCta
+              : VIDEOS_COPY.largos.emptyCta}
           </Link>
         }
       />
@@ -121,6 +148,7 @@ async function LongVideosContent({ category }: { category: VideoCategoryFilter }
       initialItems={page.items}
       initialCursor={page.nextCursor}
       category={category}
+      q={q}
     />
   );
 }
@@ -133,17 +161,29 @@ async function LongVideosContent({ category }: { category: VideoCategoryFilter }
  * El riel scrollea con el dedo (nunca solo — los carruseles automáticos están
  * vetados) y esconde su barra, igual que el resto de los rieles de la app.
  */
-function CategoryFilterRow({ active }: { active: VideoCategoryFilter }) {
+function CategoryFilterRow({
+  active,
+  q,
+}: {
+  active: VideoCategoryFilter;
+  /** Búsqueda activa: se preserva al cambiar de tema, igual que en /empleos. */
+  q: string | null;
+}) {
+  const qs = q ? `q=${encodeURIComponent(q)}` : "";
+  const hrefFor = (cat: VideoCategoryFilter | null) => {
+    const params = [cat ? `cat=${cat}` : "", qs].filter(Boolean).join("&");
+    return params ? `/videos/largos?${params}` : "/videos/largos";
+  };
   const temas: { key: VideoCategoryFilter; label: string; href: string }[] = [
     {
       key: ALL_CATEGORIES,
       label: VIDEOS_COPY.largos.allLabel,
-      href: "/videos/largos",
+      href: hrefFor(null),
     },
     ...VIDEO_CATEGORY_ORDER.map((category) => ({
       key: category as VideoCategoryFilter,
       label: VIDEO_CATEGORY_LABELS[category],
-      href: `/videos/largos?cat=${category}`,
+      href: hrefFor(category),
     })),
   ];
 

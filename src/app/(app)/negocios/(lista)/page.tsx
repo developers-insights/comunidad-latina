@@ -446,6 +446,21 @@ async function NegociosContent({ filters }: { filters: Filters }) {
   ]);
 
   const trustByOwner = new Map<string, OwnerTrustRow>();
+  /**
+   * MIS AVISOS DE ESTA PÁGINA — para el menú ⋯ de cada tarjeta.
+   *
+   * Sale de `created_by`, que este SELECT ya traía, contra el id de la sesión.
+   * Cero consultas nuevas y cero consultas por fila: lo único que baja al
+   * navegador es un booleano por tarjeta, nunca el id de nadie. Y no es la
+   * autorización — las server actions releen la fila filtrando por dueño y la
+   * RLS decide; acá sólo se evita ofrecer lo que iba a rebotar.
+   */
+  const misAvisos = new Set(
+    user
+      ? orderedRows.filter((row) => row.created_by === user.id).map((row) => row.id)
+      : [],
+  );
+
   const nameByOwner = new Map<string, string>();
   const verifiedByOwner = new Map<string, boolean>();
   const levelByOwner = new Map<string, string | null>();
@@ -741,15 +756,22 @@ async function NegociosContent({ filters }: { filters: Filters }) {
                 <Chip
                   variant="neutral"
                   size="sm"
-                  className="absolute right-3.5 top-3.5 z-10 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
+                  className="absolute left-1/2 top-3.5 z-10 -translate-x-1/2 border-[1.5px] border-sponsored bg-surface text-sponsored-ink shadow-sm"
                 >
                   <Megaphone size={14} weight="fill" aria-hidden="true" />
                   Patrocinado
                 </Chip>
-                <BusinessCard business={business} />
+                <BusinessCard
+                  business={business}
+                  owner={{ esMio: misAvisos.has(business.id) }}
+                />
               </div>
             ) : (
-              <BusinessCard key={business.id} business={business} />
+              <BusinessCard
+                key={business.id}
+                business={business}
+                owner={{ esMio: misAvisos.has(business.id) }}
+              />
             );
           })}
         </div>

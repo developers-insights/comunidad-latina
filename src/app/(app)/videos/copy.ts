@@ -1,13 +1,12 @@
 import { VIDEO_CATEGORIES, type VideoCategory } from "@/lib/media/video-policy";
 
 /**
- * Copy del módulo VIDEOS CORTOS (menú de categorías + reel vertical) — español
+ * Copy del módulo VIDEOS (menú de categorías + reel vertical) — español
  * cálido, directo, sin jerga. Archivo propio del módulo: no toca el copy
  * compartido del feed.
  *
- * El módulo pasó a llamarse "Videos Cortos" (contrato 2026-07-30 §4). El nombre
- * de la PESTAÑA y del menú lateral no vive acá sino en `src/lib/i18n/es/nav.ts`,
- * que es de donde lo lee el shell.
+ * El nombre de la PESTAÑA y del menú lateral no vive acá sino en
+ * `src/lib/i18n/es/nav.ts`, que es de donde lo lee el shell.
  */
 
 /**
@@ -49,10 +48,10 @@ export const VIDEO_CATEGORY_HINTS: Record<VideoCategory, string> = {
 };
 
 export const VIDEOS_COPY = {
-  title: "Videos Cortos",
+  title: "Videos",
   subtitle: "Los videos de tu comunidad",
 
-  feedLabel: "Videos Cortos de la comunidad",
+  feedLabel: "Videos de la comunidad",
   videoOf: (author: string) => `Video de ${author}`,
   // Acá vivía `byAuthor: (name) => "por {name}"`, que el reel pintaba debajo del
   // nombre del negocio cuando el video salía firmado por una ficha. Se borró con
@@ -97,7 +96,7 @@ export const VIDEOS_COPY = {
    * reproduciendo de una; ahora se elige primero.
    */
   menu: {
-    eyebrow: "Videos Cortos",
+    eyebrow: "Videos",
     title: "¿Qué querés ver?",
     subtitle: "Elegí un tema y arrancá. Podés volver acá cuando quieras.",
     allLabel: "Todos los videos",
@@ -122,6 +121,9 @@ export const VIDEOS_COPY = {
      * justamente lo que hay que nombrar.
      */
     close: "Volver al feed",
+    /** Píldora del reel cuando se llegó buscando (pedido cliente: "como TikTok o Instagram"). */
+    activeSearch: (term: string) => `Buscando “${term}”`,
+    clearSearch: "Quitar búsqueda",
   },
 
   /**
@@ -165,11 +167,15 @@ export const VIDEOS_COPY = {
      */
     emptyMessage:
       "Los videos de más de 90 segundos son parte de una publicación paga: la recorrida de una casa, la presentación de un negocio. Cuando alguien publique el primero, lo vas a ver acá.",
-    emptyCta: "Ver Videos Cortos",
+    // "los videos cortos" en minúscula: acá es un adjetivo que distingue del
+    // resto (estás en Videos largos), no el nombre de la pestaña.
+    emptyCta: "Ver los videos cortos",
     emptyCategoryTitle: (label: string) => `Todavía no hay videos largos de ${label}`,
     emptyCategoryMessage:
       "Probá con otro tema, o mirá todos los videos largos que hay hasta ahora.",
     emptyCategoryCta: "Ver todos los videos largos",
+    emptySearchTitle: (term: string) => `Sin resultados para “${term}” en videos largos`,
+    emptySearchMessage: "Probá con otra palabra, o mirá todos los videos largos.",
   },
 
   /** Vacío de una categoría concreta: no es "no hay videos", es "acá todavía". */
@@ -177,6 +183,9 @@ export const VIDEOS_COPY = {
   emptyCategoryMessage:
     "Podés ser quien lo estrene: subí el tuyo desde el feed y elegí esta categoría.",
   emptyCategoryCta: "Ver todos los videos",
+  /** Buscador del menú de entrada (pedido cliente: "como TikTok o Instagram"). */
+  emptySearchTitle: (term: string) => `Sin resultados para “${term}”`,
+  emptySearchMessage: "Probá con otra palabra, o mirá todos los videos de la comunidad.",
 } as const;
 
 /** El orden del menú es el del catálogo de la base — una sola fuente. */

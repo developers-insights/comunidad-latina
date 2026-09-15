@@ -6,6 +6,7 @@ import { AccentLink, Badge, BezelCard, CardMedia } from "@/components/ui";
 // barril reexporta feed-listing-card, que a su vez importa de @/components/listings
 // — pasar por él armaría un ciclo entre los dos módulos.
 import { useMediaViewer } from "@/components/feed/media-viewer";
+import { ListingActions, type ListingEngagement } from "@/components/feed/listing-actions";
 import { COPY } from "./copy";
 import {
   FALLBACK_PHOTO,
@@ -13,6 +14,7 @@ import {
   type PublisherView,
   type VerificationView,
 } from "./helpers";
+import { ListingOwnerMenuOverlay, type ListingOwnerView } from "./listing-owner-menu";
 import { PublisherTrust } from "./publisher-trust";
 
 export interface ListingCardModel {
@@ -54,7 +56,26 @@ const MEDIA_BUTTON =
  * Se usa también en /propiedades y en el feed: `photos` es opcional, así que el
  * contrato viejo (sólo `photoUrl`) sigue funcionando sin tocar a quien la llama.
  */
-export function ListingCard({ listing }: { listing: ListingCardModel }) {
+export function ListingCard({
+  listing,
+  engagement,
+  owner,
+}: {
+  listing: ListingCardModel;
+  /**
+   * Ausente en los tres consumidores actuales (grilla de /propiedades, feed y
+   * el panel de avisos del perfil) — ninguno resuelve todavía comentarios ni
+   * guardado en lote para vivienda. Ver ListingEngagement.
+   */
+  engagement?: ListingEngagement;
+  /**
+   * Propiedad del aviso, ya resuelta EN EL SERVIDOR. Ausente → sin menú ⋯:
+   * el feed monta esta tarjeta desde un módulo de otro dueño y todavía no
+   * resuelve la sesión, y ofrecer el menú a ciegas lo mostraría sobre avisos
+   * ajenos. Ver `ListingOwnerView`.
+   */
+  owner?: ListingOwnerView;
+}) {
   const viewer = useMediaViewer();
   const href = `/propiedades/${listing.id}`;
 
@@ -80,50 +101,60 @@ export function ListingCard({ listing }: { listing: ListingCardModel }) {
       coreClassName="overflow-hidden p-0"
     >
       <article aria-label={listing.title}>
-        <button
-          type="button"
-          onClick={openPhotos}
-          aria-label={COPY.list.openPhotos(listing.title)}
-          className={MEDIA_BUTTON}
-        >
-          <CardMedia
-            src={listing.photoUrl}
-            fallbackSrc={FALLBACK_PHOTO}
-            aspect="portrait"
-            quality={62}
-            overlayTopLeft={
-              listing.verification ? (
-                <Badge variant="success">
-                  <ShieldCheck size={13} weight="fill" aria-hidden="true" />
-                  {COPY.list.verifiedChip(listing.verification.dateLabel)}
-                </Badge>
-              ) : undefined
-            }
-            overlayBottom={
-              <div>
-                <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
-                  {listing.title}
-                </h3>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
-                  {listing.priceLabel && (
-                    <span className="numeric text-lg font-bold">{listing.priceLabel}</span>
-                  )}
-                  {listing.areaLabel && (
-                    <span className="flex items-center gap-1 text-sm opacity-90">
-                      <MapPin size={14} aria-hidden="true" className="shrink-0" />
-                      {listing.areaLabel}
-                    </span>
-                  )}
-                  {photos.length > 1 && (
-                    <span className="numeric text-sm opacity-80">
-                      {COPY.list.photoCount(photos.length)}
-                    </span>
-                  )}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={openPhotos}
+            aria-label={COPY.list.openPhotos(listing.title)}
+            className={MEDIA_BUTTON}
+          >
+            <CardMedia
+              src={listing.photoUrl}
+              fallbackSrc={FALLBACK_PHOTO}
+              aspect="portrait"
+              quality={62}
+              overlayTopLeft={
+                listing.verification ? (
+                  <Badge variant="success">
+                    <ShieldCheck size={13} weight="fill" aria-hidden="true" />
+                    {COPY.list.verifiedChip(listing.verification.dateLabel)}
+                  </Badge>
+                ) : undefined
+              }
+              overlayBottom={
+                <div>
+                  <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
+                    {listing.title}
+                  </h3>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                    {listing.priceLabel && (
+                      <span className="numeric text-lg font-bold">{listing.priceLabel}</span>
+                    )}
+                    {listing.areaLabel && (
+                      <span className="flex items-center gap-1 text-sm opacity-90">
+                        <MapPin size={14} aria-hidden="true" className="shrink-0" />
+                        {listing.areaLabel}
+                      </span>
+                    )}
+                    {photos.length > 1 && (
+                      <span className="numeric text-sm opacity-80">
+                        {COPY.list.photoCount(photos.length)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            }
+              }
+            />
+          </button>
+          <ListingOwnerMenuOverlay
+            listingId={listing.id}
+            kind="property"
+            title={listing.title}
+            esMio={Boolean(owner?.esMio)}
+            status={owner?.status}
+            pausadoPorReportes={owner?.pausadoPorReportes}
           />
-        </button>
+        </div>
 
         <div className="flex flex-col gap-2.5 p-4">
           {listing.publisher?.type === "member" ? (
@@ -145,6 +176,20 @@ export function ListingCard({ listing }: { listing: ListingCardModel }) {
               {COPY.list.externalPublisher(listing.publisher.name)}
             </p>
           ) : null}
+
+          {/* Misma barra social que el resto de los avisos (pedido cliente
+              2026-09-14: "que tengan todo lo mismo") — vivienda era la ÚNICA
+              vertical sin ella, incluso en el feed: `FeedListingCard` excluye
+              a `property` a propósito (ver su docblock) y lo manda siempre acá. */}
+          <ListingActions
+            listingId={listing.id}
+            shareKind="listing"
+            title={listing.title}
+            detailHref={href}
+            commentCount={engagement?.commentCount}
+            savedByViewer={engagement?.savedByViewer}
+            like={engagement?.like}
+          />
 
           <AccentLink accent={ACCENT} href={href} ariaLabel={listing.title}>
             {COPY.list.viewDetails}

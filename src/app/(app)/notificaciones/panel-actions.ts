@@ -7,8 +7,10 @@ import {
   type NotificationCategory,
 } from "@/lib/notifications/categories";
 import type { InboxTab } from "@/lib/notifications/href";
+import { parseEntityKind } from "@/lib/notifications/entity";
 import { PANEL_LIMIT, type NotificationPanelItem } from "@/lib/notifications/panel";
 import type { PanelDeCampanaResult } from "@/lib/notifications/panel-campana";
+import { listingPhotoUrl } from "@/components/listings";
 
 /**
  * =============================================================================
@@ -59,7 +61,7 @@ export async function getPanelDeCampanaAction(
 
   let listaQuery = supabase
     .from("notifications")
-    .select("id, title, body, href, read_at, created_at, category")
+    .select("id, title, body, href, read_at, created_at, category, entity_kind, image_url")
     .is("dismissed_at", null)
     .gt("expires_at", nowIso)
     .order("created_at", { ascending: false })
@@ -113,6 +115,11 @@ export async function getPanelDeCampanaAction(
     read: row.read_at !== null,
     createdAt: row.created_at,
     timeLabel: timeAgo(new Date(row.created_at), now),
+    entityKind: parseEntityKind(row.entity_kind),
+    // La columna guarda el valor CRUDO de `listings.photos`; la URL pública se
+    // arma acá y no en el componente porque el panel es `"use client"` y no
+    // tiene por qué arrastrar el módulo de listings al bundle del navegador.
+    imageUrl: row.image_url ? listingPhotoUrl(row.image_url) : null,
   }));
 
   return { ok: true, data: { tab, unread: count ?? 0, counts, items } };

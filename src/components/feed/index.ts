@@ -68,6 +68,7 @@ export { PostActions, type PostActionsProps } from "./post-actions";
 export { PostCard, type PostCardProps } from "./post-card";
 export { PostComposerHost, type PostComposerHostProps } from "./post-composer";
 export { ComposerTrigger, type ComposerTriggerProps } from "./composer-trigger";
+export { ComposerGreeting, type ComposerGreetingProps } from "./composer-greeting";
 export {
   ComposerMenuProvider,
   useComposerMenu,

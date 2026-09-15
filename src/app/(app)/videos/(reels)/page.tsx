@@ -7,6 +7,7 @@ import {
   firstParamValue,
   parseStartId,
   parseVideoCategoryParam,
+  parseVideoSearchParam,
   parseVideosScope,
   shouldShowCategoryMenu,
   type VideoCategoryFilter,
@@ -15,7 +16,7 @@ import { fetchVideoReelsPage } from "../queries";
 import { VideoReels } from "../video-reels";
 import { VIDEOS_COPY } from "../copy";
 
-export const metadata = { title: "Videos Cortos" };
+export const metadata = { title: "Videos" };
 
 /**
  * /videos — VIDEOS CORTOS: menú de categorías + reel vertical.
@@ -29,6 +30,10 @@ export const metadata = { title: "Videos Cortos" };
  *   distinto módulo). Default: para-ti (todos los videos visibles).
  * - `start`: id del post que abre el reel (viene de tocar un video en el
  *   feed): ese video va primero y el scroll sigue con los más viejos.
+ * - `q`: término del buscador del menú de entrada (pedido cliente: "como
+ *   TikTok o Instagram"). Filtra sobre `posts.search` (FTS, 0044); combina con
+ *   `cat` si ambos vienen en la URL, aunque hoy sólo el menú los escribe por
+ *   separado.
  *
  * Llegar con `?start=` va DERECHO al video: el menú se interpone sólo cuando la
  * persona entra a la sección, nunca cuando abre algo que alguien compartió.
@@ -47,17 +52,18 @@ export default async function VideosPage({ searchParams }: { searchParams: Searc
   const scope = parseVideosScope(rawScope || undefined);
   const startId = parseStartId(firstParamValue(sp.start));
   const category = parseVideoCategoryParam(firstParamValue(sp.cat));
+  const q = parseVideoSearchParam(firstParamValue(sp.q));
 
-  if (shouldShowCategoryMenu({ category, startId, rawScope })) {
+  if (shouldShowCategoryMenu({ category, startId, rawScope, q })) {
     return <VideoCategoryMenu />;
   }
 
   return (
     <Suspense
-      key={`${scope}|${category ?? ""}|${startId ?? ""}`}
+      key={`${scope}|${category ?? ""}|${startId ?? ""}|${q ?? ""}`}
       fallback={<ReelsLoading />}
     >
-      <ReelsContent scope={scope} startId={startId} category={category} />
+      <ReelsContent scope={scope} startId={startId} category={category} q={q} />
     </Suspense>
   );
 }
@@ -66,10 +72,12 @@ async function ReelsContent({
   scope,
   startId,
   category,
+  q,
 }: {
   scope: ReturnType<typeof parseVideosScope>;
   startId: string | null;
   category: VideoCategoryFilter | null;
+  q: string | null;
 }) {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
   const {
@@ -82,6 +90,7 @@ async function ReelsContent({
     viewerId: user?.id ?? null,
     scope,
     category: categoryFilterValue(category),
+    q,
     cursor: null,
     startId,
     pageSize: FIRST_PAGE_SIZE,
@@ -89,11 +98,12 @@ async function ReelsContent({
 
   return (
     <VideoReels
-      key={`${scope}|${category ?? ""}`}
+      key={`${scope}|${category ?? ""}|${q ?? ""}`}
       tenantId={tenant.id}
       viewerId={user?.id ?? null}
       scope={scope}
       category={category}
+      q={q}
       initialItems={page.items}
       initialCursor={page.nextCursor}
     />

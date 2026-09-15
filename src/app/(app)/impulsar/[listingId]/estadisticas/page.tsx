@@ -17,7 +17,12 @@ import { Badge, BezelCard, buttonVariants } from "@/components/ui";
 import { BOOST_SCOPE_COPY, normalizeBoostScope } from "@/lib/boosts";
 import { fetchBoostImpressions } from "@/lib/boosts/select";
 import { MONETIZATION_COPY, parseListingTier } from "@/lib/monetization";
-import { STATS_WINDOW_DAYS, fetchListingStats } from "@/lib/monetization/stats";
+import {
+  STATS_WINDOW_DAYS,
+  esIlegible,
+  fetchListingStats,
+  sinNumerosTodavia,
+} from "@/lib/monetization/stats";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -35,6 +40,23 @@ const COPY = {
   impresionesAlcance: (alcance: string) => `Alcance vigente: ${alcance.toLowerCase()}.`,
   impresionesSinDato:
     "No pudimos traer este número ahora mismo. Volvé a entrar en un rato — tu impulso sigue corriendo igual.",
+
+  /**
+   * LOS HUECOS. Un número que no se pudo leer se deja en blanco y se dice; no
+   * se pinta un cero. La diferencia le cuesta plata a quien la lee: ver
+   * "0 me gusta, 0 guardados, 0 chats" después de pagar un impulso se concluye
+   * como "no sirvió" y no se vuelve a comprar, cuando lo único que pasó fue que
+   * una consulta se cayó. Mismo criterio que ya usaban las impresiones de acá
+   * arriba y el alcance de más abajo.
+   */
+  huecoValor: "—",
+  huecoEtiqueta: "No pudimos traerlo",
+  huecoAviso:
+    "Algunos números no se pudieron traer ahora mismo y los dejamos en blanco. No son ceros: volvé a entrar en un rato y van a estar.",
+  ctaSinDato:
+    "No pudimos traer los clics de tus botones ahora mismo. Volvé a entrar en un rato.",
+  promoSinDato:
+    "No pudimos traer tus promociones ahora mismo. Volvé a entrar en un rato.",
 } as const;
 
 type Params = Promise<{ listingId: string }>;
@@ -121,14 +143,15 @@ export default async function EstadisticasPage({ params }: { params: Params }) {
     (row) => row.status === "active" && row.ends_at !== null && new Date(row.ends_at) > new Date(),
   );
 
-  const hasAnything =
-    stats.basic.views +
-      stats.basic.likes +
-      stats.basic.comments +
-      stats.basic.shares +
-      stats.basic.saves +
-      stats.basic.chats >
-    0;
+  // "Todavía no hay números" es una AFIRMACIÓN sobre el aviso de alguien que
+  // pagó: sólo se hace cuando las seis lecturas salieron bien y las seis dieron
+  // cero. Con una sola caída se muestra la grilla, con su hueco declarado.
+  const vacio = sinNumerosTodavia(stats);
+  const hayHuecosBasicos =
+    esIlegible(stats, "likes") ||
+    esIlegible(stats, "saves") ||
+    esIlegible(stats, "chats") ||
+    esIlegible(stats, "shares");
 
   return (
     <div className="flex flex-col gap-5 pb-8">
@@ -155,7 +178,7 @@ export default async function EstadisticasPage({ params }: { params: Params }) {
         <p className="mt-0.5 truncate text-xs text-foreground-muted">{listing.title}</p>
       </header>
 
-      {!hasAnything ? (
+      {vacio ? (
         <BezelCard coreClassName="flex flex-col items-center gap-2 px-6 py-10 text-center">
           <p className="font-display text-lg font-semibold text-foreground">
             {M.stats.emptyTitle}
@@ -168,37 +191,51 @@ export default async function EstadisticasPage({ params }: { params: Params }) {
         /* El orden es el del contrato (§3): vistas · me gusta · comentarios ·
            compartidos · chats. "Guardados" va último porque es el único que la
            spec no pide y no queremos que desplace a los que sí. */
-        <section aria-label={M.stats.subtitleFree} className="grid grid-cols-2 gap-2.5">
-          <MetricCard
-            icon={<Eye size={20} weight="fill" aria-hidden="true" />}
-            label={M.stats.views}
-            value={stats.basic.views}
-          />
-          <MetricCard
-            icon={<Heart size={20} weight="fill" aria-hidden="true" />}
-            label={M.stats.likes}
-            value={stats.basic.likes}
-          />
-          <MetricCard
-            icon={<ChatText size={20} weight="fill" aria-hidden="true" />}
-            label={M.stats.comments}
-            value={stats.basic.comments}
-          />
-          <MetricCard
-            icon={<ShareNetwork size={20} weight="fill" aria-hidden="true" />}
-            label={M.stats.shares}
-            value={stats.basic.shares}
-          />
-          <MetricCard
-            icon={<ChatCircleDots size={20} weight="fill" aria-hidden="true" />}
-            label={M.stats.chats}
-            value={stats.basic.chats}
-          />
-          <MetricCard
-            icon={<BookmarkSimple size={20} weight="fill" aria-hidden="true" />}
-            label="Guardados"
-            value={stats.basic.saves}
-          />
+        <section aria-label={M.stats.subtitleFree} className="flex flex-col gap-2.5">
+          <div className="grid grid-cols-2 gap-2.5">
+            <MetricCard
+              icon={<Eye size={20} weight="fill" aria-hidden="true" />}
+              label={M.stats.views}
+              value={stats.basic.views}
+            />
+            <MetricCard
+              icon={<Heart size={20} weight="fill" aria-hidden="true" />}
+              label={M.stats.likes}
+              value={stats.basic.likes}
+              ilegible={esIlegible(stats, "likes")}
+            />
+            <MetricCard
+              icon={<ChatText size={20} weight="fill" aria-hidden="true" />}
+              label={M.stats.comments}
+              value={stats.basic.comments}
+            />
+            <MetricCard
+              icon={<ShareNetwork size={20} weight="fill" aria-hidden="true" />}
+              label={M.stats.shares}
+              value={stats.basic.shares}
+              ilegible={esIlegible(stats, "shares")}
+            />
+            <MetricCard
+              icon={<ChatCircleDots size={20} weight="fill" aria-hidden="true" />}
+              label={M.stats.chats}
+              value={stats.basic.chats}
+              ilegible={esIlegible(stats, "chats")}
+            />
+            <MetricCard
+              icon={<BookmarkSimple size={20} weight="fill" aria-hidden="true" />}
+              label="Guardados"
+              value={stats.basic.saves}
+              ilegible={esIlegible(stats, "saves")}
+            />
+          </div>
+          {/* Una sola vez y debajo de la grilla: cada tarjeta ya muestra su
+              hueco, esto explica por qué está en blanco sin repetir el motivo
+              seis veces. */}
+          {hayHuecosBasicos && (
+            <p className="text-xs leading-relaxed text-foreground-muted">
+              {COPY.huecoAviso}
+            </p>
+          )}
         </section>
       )}
 
@@ -276,7 +313,14 @@ export default async function EstadisticasPage({ params }: { params: Params }) {
             <p className="-mt-1.5 text-xs text-foreground-muted">
               {M.stats.since(STATS_WINDOW_DAYS)}
             </p>
-            {stats.totalCtaClicks === 0 ? (
+            {/* "Todavía nadie tocó tus botones" también es una afirmación: si
+                la consulta se cayó, el total es 0 por defecto y el cartel diría
+                que nadie tocó nada sin haber podido mirar. */}
+            {esIlegible(stats, "ctaClicks") ? (
+              <p className="rounded-lg bg-surface-subtle px-4 py-3 text-sm text-foreground-secondary">
+                {COPY.ctaSinDato}
+              </p>
+            ) : stats.totalCtaClicks === 0 ? (
               <p className="rounded-lg bg-surface-subtle px-4 py-3 text-sm text-foreground-secondary">
                 {M.stats.ctaEmpty}
               </p>
@@ -298,7 +342,14 @@ export default async function EstadisticasPage({ params }: { params: Params }) {
             <h2 className="font-display text-lg font-bold text-foreground">
               {M.stats.promoSectionTitle}
             </h2>
-            {stats.promotions.length === 0 ? (
+            {/* Idem: "Todavía no promocionaste este aviso" dicho sobre una
+                lista que no se pudo leer es exactamente al revés de la verdad
+                para quien SÍ pagó. */}
+            {esIlegible(stats, "promotions") ? (
+              <p className="rounded-lg bg-surface-subtle px-4 py-3 text-sm text-foreground-secondary">
+                {COPY.promoSinDato}
+              </p>
+            ) : stats.promotions.length === 0 ? (
               <p className="rounded-lg bg-surface-subtle px-4 py-3 text-sm text-foreground-secondary">
                 {M.stats.promoEmpty}
               </p>
@@ -370,26 +421,44 @@ export default async function EstadisticasPage({ params }: { params: Params }) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Una métrica. Con `ilegible`, la tarjeta sigue en la grilla pero SIN número:
+ * un guion en lugar del valor y la etiqueta diciendo qué pasó. Se queda (en vez
+ * de ocultarse como el alcance) porque acá son seis tarjetas fijas: sacar una
+ * haría creer que esa métrica no existe, y correría las otras cinco de lugar.
+ */
 function MetricCard({
   icon,
   label,
   value,
+  ilegible = false,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
+  ilegible?: boolean;
 }) {
   return (
     <BezelCard coreClassName="flex flex-col gap-1 p-4">
-      <span className="text-brand" aria-hidden="true">
+      <span className={ilegible ? "text-foreground-muted" : "text-brand"} aria-hidden="true">
         {icon}
       </span>
       {/* `numeric` = tabular-nums: 1.234 no mueve la tarjeta de al lado al pasar
           a 1.235 (§2.2 del design system). */}
-      <span className="numeric font-display text-2xl font-bold text-foreground">
-        {value.toLocaleString("es-US")}
+      <span
+        className={cn(
+          "numeric font-display text-2xl font-bold",
+          ilegible ? "text-foreground-muted" : "text-foreground",
+        )}
+      >
+        {ilegible ? COPY.huecoValor : value.toLocaleString("es-US")}
       </span>
       <span className="text-xs text-foreground-secondary">{label}</span>
+      {ilegible && (
+        <span className="text-[11px] leading-tight text-foreground-muted">
+          {COPY.huecoEtiqueta}
+        </span>
+      )}
     </BezelCard>
   );
 }

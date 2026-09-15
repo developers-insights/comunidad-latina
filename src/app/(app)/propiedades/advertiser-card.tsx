@@ -1,7 +1,17 @@
-import { House, MapPin } from "@phosphor-icons/react/dist/ssr";
+"use client";
+
+import { House, MapPin, ShareNetwork } from "@phosphor-icons/react/dist/ssr";
 import { AccentLink, Avatar, BezelCard, Chip, Skeleton } from "@/components/ui";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import { IdentityBadge } from "@/components/auth/identity-badge";
+import {
+  ACTION_ICON,
+  ActionButton,
+  ActionGlyph,
+  ActionLabel,
+  ActionRow,
+} from "@/components/feed/action-bar";
+import { CompartirSheet, urlAbsoluta, useCompartir } from "@/components/share";
 import type { TrustLevel, TrustSignal } from "@/components/trust";
 import { ADVERTISER_ROLE_LABEL, type AdvertiserRole } from "@/lib/propiedades/anunciante";
 
@@ -11,7 +21,62 @@ const ACCENT = "var(--accent-vivienda)";
 const COPY = {
   activeCount: (n: number) => (n === 1 ? "1 propiedad activa" : `${n} propiedades activas`),
   viewProfile: "Ver perfil",
+  share: "Compartir",
 } as const;
+
+/**
+ * SOLO COMPARTIR — a propósito, y no la barra completa de `ListingActions`.
+ *
+ * Esta card no es un aviso: es una PERSONA (un anunciante), agregada a partir
+ * de sus avisos de vivienda. `saves` y los comentarios están atados a
+ * `subject_kind IN ('post', 'listing')` — no hay "guardar un perfil" ni
+ * "comentar un perfil" en el schema, y no es este cambio el que agrega esa
+ * feature. Compartir sí aplica igual que a cualquier otra cosa de la app: por
+ * eso usa los MISMOS primitivos visuales (`ActionRow`/`ActionButton`) que
+ * `ListingActions`, para que la fila se sienta de la misma familia aunque
+ * tenga un solo botón.
+ */
+function AdvertiserShareAction({ advertiser }: { advertiser: AdvertiserCardModel }) {
+  const compartir = useCompartir();
+  const href = `/perfil/${advertiser.profileId}`;
+
+  return (
+    <>
+      <ActionRow>
+        <ActionButton
+          tone="share"
+          label={`${COPY.share} · ${advertiser.displayName}`}
+          onClick={() =>
+            compartir.abrir({
+              kind: "profile",
+              id: advertiser.profileId,
+              titulo: advertiser.displayName,
+              url: urlAbsoluta(href),
+            })
+          }
+        >
+          <ActionGlyph>
+            <ShareNetwork size={ACTION_ICON} aria-hidden="true" />
+          </ActionGlyph>
+          <ActionLabel>{COPY.share}</ActionLabel>
+        </ActionButton>
+      </ActionRow>
+
+      {compartir.contenido && (
+        <CompartirSheet
+          open={compartir.abierto}
+          onClose={compartir.cerrar}
+          kind={compartir.contenido.kind}
+          id={compartir.contenido.id}
+          url={compartir.contenido.url ?? urlAbsoluta(href)}
+          titulo={compartir.contenido.titulo}
+          imagenUrl={compartir.contenido.imagenUrl}
+          detalle={compartir.contenido.detalle}
+        />
+      )}
+    </>
+  );
+}
 
 export interface AdvertiserCardModel {
   profileId: string;
@@ -103,6 +168,8 @@ export function AdvertiserCard({ advertiser }: { advertiser: AdvertiserCardModel
             <House size={15} aria-hidden="true" className="shrink-0" />
             {COPY.activeCount(advertiser.activeListingCount)}
           </p>
+
+          <AdvertiserShareAction advertiser={advertiser} />
 
           <AccentLink
             accent={ACCENT}

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { MODULES } from "@/components/shell/modules";
+import { BOOST_MODULE, MODULES } from "@/components/shell/modules";
 import { t } from "@/lib/i18n";
 import { COPY } from "./copy";
 import { FEED_TABS, parseTab, type FeedTabId } from "./helpers";
@@ -82,9 +82,12 @@ function anillo(link: HTMLElement) {
 
 describe("moduleCircles (cómo se arma la fila)", () => {
   it("sale del registro de módulos, no de una lista escrita a mano", () => {
-    const registro = new Set(MODULES.map((item) => item.href));
+    // Boost es la única excepción documentada: no vive en `MODULES` (no es una
+    // vertical), pero sí en el registro del shell (`BOOST_MODULE`) — ver el
+    // docblock de `moduleCircles`.
+    const registro = new Set([...MODULES, BOOST_MODULE].map((item) => item.href));
     for (const circle of moduleCircles(SIN_DECISIONES, SIN_DECISIONES)) {
-      expect(registro.has(circle.key), `${circle.key} no existe en MODULES`).toBe(true);
+      expect(registro.has(circle.key), `${circle.key} no existe en el registro`).toBe(true);
     }
   });
 
@@ -98,7 +101,9 @@ describe("moduleCircles (cómo se arma la fila)", () => {
    * de ruta, las dos superficies cambian juntas o esto se pone rojo.
    */
   it("cada círculo lleva a la MISMA ruta que su burbuja en /buscar", () => {
-    const rutaEnElRegistro = new Map(MODULES.map((item) => [item.href, item.href]));
+    const rutaEnElRegistro = new Map(
+      [...MODULES, BOOST_MODULE].map((item) => [item.href, item.href]),
+    );
     for (const circle of moduleCircles(SIN_DECISIONES, SIN_DECISIONES)) {
       expect(circle.href).toBe(rutaEnElRegistro.get(circle.key));
     }
@@ -186,6 +191,7 @@ describe("ModuleCircles", () => {
       "/marketplace",
       "/creadores",
       "/comunidad",
+      "/impulsar",
     ]);
   });
 
@@ -275,9 +281,32 @@ describe("ModuleCircles", () => {
     // Ausente = activo: un hueco de configuración no puede parecerse a una
     // decisión de producto (ver shell/module-access.ts).
     renderRow("para-ti", null, null);
-    // 9 = los diez módulos del registro menos Videos, que ya es pestaña del
-    // bottom nav.
-    expect(screen.getAllByRole("link")).toHaveLength(9);
+    // 10 = los diez módulos del registro menos Videos (pestaña del bottom
+    // nav) más Boost, que no vive en `MODULES` pero cierra la fila siempre.
+    expect(screen.getAllByRole("link")).toHaveLength(10);
+  });
+
+  /**
+   * Boost (pedido cliente 2026-09-15): entra SIEMPRE al final —no tiene
+   * `moduleKey`, es infraestructura de monetización, igual de siempre-activa
+   * que `feed` o `mensajes` (ver BOOST_MODULE en shell/modules.ts)— y con un
+   * trato visual propio: no es una vertical más, es una COMPRA.
+   */
+  it("Boost cierra la fila, con anillo propio y sin marcarse como 'estás acá'", () => {
+    renderRow("para-ti");
+    const links = screen.getAllByRole("link");
+    const boost = links[links.length - 1]!;
+
+    expect(boost.getAttribute("href")).toBe("/impulsar");
+    expect(boost.textContent).toContain(t("nav", "moduleBoost"));
+    // Anillo SIEMPRE visible (no depende de `isCurrent`, a diferencia del feed).
+    expect(anillo(boost)).not.toBeNull();
+    expect(boost.getAttribute("aria-current")).toBeNull();
+  });
+
+  it("Boost no se puede apagar desde el panel: es infraestructura, no una vertical", () => {
+    renderRow("para-ti", { marketplace: false, creadores: false, eventos: false }, {});
+    expect(hrefs()).toContain("/impulsar");
   });
 });
 

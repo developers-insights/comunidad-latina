@@ -138,7 +138,7 @@ export const SEARCH_GROUP_META: Record<SearchResultType, SearchGroupMeta> = {
     queryParam: "q",
   },
   videos: {
-    label: "Videos Cortos",
+    label: "Videos",
     seeAllLabel: "Ver todos los videos",
     accentVar: "var(--accent-feed)",
     listHref: "/videos",

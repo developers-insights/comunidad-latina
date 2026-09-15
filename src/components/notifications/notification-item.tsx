@@ -13,7 +13,7 @@ import {
   markNotificationReadAction,
   restoreNotificationAction,
 } from "@/app/(app)/notificaciones/actions";
-import { CategoryIcon } from "./category-icon";
+import { NotificationAvatar } from "./category-icon";
 import { COPY } from "./copy";
 import { NotificationMenu } from "./notification-menu";
 
@@ -32,6 +32,10 @@ export type NotificationItemData = {
   timeLabel: string;
   /** Texto del botón de acción; null = la fila entera es la acción. */
   actionLabel: string | null;
+  /** Vertical de la entidad que originó el aviso (0151): da el ícono del módulo. */
+  entityKind: string | null;
+  /** Miniatura de esa entidad, con la URL YA RESUELTA por el servidor. */
+  imageUrl: string | null;
 };
 
 /**
@@ -103,9 +107,11 @@ export function NotificationItem({
 
   const content = (
     <>
-      <CategoryIcon
+      <NotificationAvatar
         category={notification.category}
-        className={notification.read ? undefined : "bg-brand-tint text-brand-ink"}
+        entityKind={notification.entityKind}
+        imageUrl={notification.imageUrl}
+        unread={!notification.read}
       />
 
       <span className="min-w-0 flex-1">

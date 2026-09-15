@@ -38,9 +38,16 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/auth/auth-sheet", () => ({
-  AUTH_REASON: { contact: "Entrá para escribirle" },
+  AUTH_REASON: { contact: "Entrá para escribirle", save: "Entrá para guardarlo" },
   useRequireAuth: () => () => {},
 }));
+
+// `ListingActions` (barra social nueva de la card) usa useToast, que lanza
+// fuera de su provider: reemplazamos SOLO ese hook.
+vi.mock("@/components/ui", async () => {
+  const actual = await vi.importActual<typeof import("@/components/ui")>("@/components/ui");
+  return { ...actual, useToast: () => ({ toast: vi.fn() }) };
+});
 
 afterEach(cleanup);
 

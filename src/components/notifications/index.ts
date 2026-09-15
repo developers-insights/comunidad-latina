@@ -9,7 +9,7 @@ export {
   type NotificationItemData,
 } from "./notification-item";
 export { CriticalNotification } from "./critical-notification";
-export { CategoryIcon } from "./category-icon";
+export { CategoryIcon, NotificationAvatar } from "./category-icon";
 // Sólo el componente: `INBOX_PANEL_ID` e `inboxTabId` son de
 // `@/lib/notifications/href`. Reexportarlos desde acá volvía a esconder que el
 // origen es un archivo `"use client"` — que es exactamente cómo se coló el bug.

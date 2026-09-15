@@ -476,6 +476,39 @@ export const COPY = {
     },
 
     /**
+     * Saludo de bienvenida ARRIBA del feed (restaurado 2026-09-15, pedido del
+     * cliente: "¿te acordás que antes había un mensaje que decía buenos días o
+     * buenas tardes...?"). Vivía en el viejo `post-composer.tsx` hasta que el
+     * commit 9183bdc (2026-07-29) lo retiró junto con el input que lo alojaba.
+     * Mismos cuatro umbrales y mismo copy de entonces — ver `ComposerGreeting`
+     * (composer-greeting.tsx) para DÓNDE se renderiza y con qué hora: la zona
+     * es la de quien mira (`useViewerTimeZone`), nunca la del servidor.
+     */
+    greetingByHour: (hour: number, firstName?: string | null): string => {
+      const name = firstName?.trim() || "";
+      if (hour >= 5 && hour < 12) {
+        return name
+          ? `Buenos días, ${name} ☀️ ¿Qué se cuenta hoy?`
+          : "Buenos días ☀️ ¿Qué se cuenta hoy en tu comunidad?";
+      }
+      if (hour >= 12 && hour < 19) {
+        return name
+          ? `Buenas tardes, ${name} 🌤️ ¿Qué anda pasando por el barrio?`
+          : "Buenas tardes 🌤️ ¿Qué anda pasando por el barrio?";
+      }
+      if (hour >= 19) {
+        return name
+          ? `Buenas noches, ${name} 🌙 Contale a tu comunidad cómo te fue hoy.`
+          : "Buenas noches 🌙 Contale a tu comunidad cómo te fue hoy.";
+      }
+      // Madrugada (0–4): mismo saludo que la noche —en español no hay uno
+      // propio para esta franja—, pero con un guiño a quien sigue despierto.
+      return name
+        ? `Buenas noches, ${name} 🌙 Si seguís despierto, contanos qué se te cruza por la cabeza.`
+        : "Buenas noches 🌙 Si seguís despierto, contanos qué se te cruza por la cabeza.";
+    },
+
+    /**
      * Menú "crear publicación" (feedback cliente 2026-07-24: "menú crear-post"
      * pendiente). Una fila-disparador abre un BottomSheet con TODOS los tipos
      * que se pueden crear desde la comunidad — no solo el post con foto/video,
@@ -487,7 +520,7 @@ export const COPY = {
      * ahora se eligen DENTRO del flujo que abre cada opción.
      */
     createMenu: {
-      rowLabel: "¿Qué querés publicar?",
+      rowLabel: "¿Qué te gustaría publicar?",
       rowHint: "Foto, video, texto, pregunta y todo lo demás",
       /**
        * Reemplaza a `rowHint` mientras se actúa como negocio. La tarjeta es lo

@@ -2,6 +2,24 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.stubEnv("RLS_ENUMERATOR_SKIP_MAIN", "1");
 
+describe("tablas del otro producto de la base compartida", () => {
+  it("excluye las dos convenciones de nombre que usa caughtcode", async () => {
+    const { esDeOtroProducto } = await import("./rls-enumerator.mjs");
+
+    expect(esDeOtroProducto("worker_locks_caughtcode")).toBe(true);
+    expect(esDeOtroProducto("e_manager_projects")).toBe(true);
+    expect(esDeOtroProducto("e_manager_project_secrets")).toBe(true);
+  });
+
+  it("audita las tablas de Comunidad Latina aunque el nombre se parezca", async () => {
+    const { esDeOtroProducto } = await import("./rls-enumerator.mjs");
+
+    expect(esDeOtroProducto("listings")).toBe(false);
+    expect(esDeOtroProducto("notifications")).toBe(false);
+    expect(esDeOtroProducto("manager_notes")).toBe(false);
+  });
+});
+
 describe("superficies no-public del enumerador", () => {
   it("falla si chat-media no existe o le falta un comando", async () => {
     const { auditStorage } = await import("./rls-enumerator.mjs");

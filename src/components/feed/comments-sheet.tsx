@@ -14,7 +14,10 @@ import {
 import { useReducedMotion } from "motion/react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BottomSheet, Button, Skeleton } from "@/components/ui";
-import { buildTrustSignals, firstPhotoUrl, toTrustLevel } from "@/components/listings";
+// Import DIRECTO a helpers.ts y no al barril `@/components/listings`: ese
+// barril reexporta listing-card.tsx, que desde este cambio importa
+// ListingActions de este mismo módulo — pasar por el barril armaría un ciclo.
+import { buildTrustSignals, firstPhotoUrl, toTrustLevel } from "@/components/listings/helpers";
 import { fetchListingCommentsAction } from "@/app/(app)/marketplace/comments-actions";
 import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import { createClient } from "@/lib/supabase/client";
