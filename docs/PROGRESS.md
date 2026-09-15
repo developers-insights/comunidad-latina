@@ -1,5 +1,49 @@
 # PROGRESS — Comunidad Latina
 
+## Tanda del 15/9: los 14 pedidos del Loom de Nacho, y tres bugs que nadie había visto (✅ 2026-09-15)
+
+El cliente grabó un Loom (`Cambios y mejoras en Comunidad Latina`, 4:46). **El audio
+traía cinco pedidos que no estaban en las capturas de WhatsApp** — conviene transcribir
+siempre, no leer sólo lo que se ve.
+
+Implementado: copy del composer (`¿Qué te gustaría publicar?`), saludo por franja
+horaria restaurado (se había perdido en `9183bdc`) con la hora del **viewer**, Boost en
+la fila de círculos, Videos renombrado + buscador reusando `ModuleSearchBar`, compartir
+y menú del dueño con edición en hoja en las nueve tarjetas de aviso, notificaciones que
+llevan al aviso que las originó y muestran su miniatura (`0151`), nota de voz enviable,
+burbuja de audio contenida, emoji renderizado en el chat, y en Boost: métricas honestas,
+`/impulsar/resultados`, previsualización en revisión e impulso ofrecido al publicar.
+
+**Los tres bugs que aparecieron auditando, ninguno reportado por nadie:**
+1. Estadísticas decía *"Todavía no promocionaste este aviso"* a quien **sí había
+   pagado**: la consulta pedía `amount_cents`, que el hardening por columnas de
+   `0018`/`0085` bloquea a propósito, y el `42501` se leía como cero. Resuelto con la
+   RPC de alcance de dueño `listing_boosts_for_owner` (`0152`). Ver la nota en
+   `stats.ts` antes de "simplificar" esa consulta.
+2. **La onda del audio nunca se vio en ningún chat**: las barras son `flex-1` sin ancho
+   propio y no les quedaba espacio. En los audios propios, además, play y reloj
+   pintaban claro sobre claro: invisibles.
+3. En `/marketplace` a 375px la fila de acciones ensanchaba la tarjeta y **empujaba la
+   vecina fuera de pantalla**.
+
+**Dos trampas de entorno que costaron tiempo y ya están resueltas:**
+- En local el tenant se pasa con **`?cl-tenant=`**, no `?t=` (cambió el 2026-08-24).
+  Sin eso **todas** las rutas dan 404 sin explicación. Este documento lo decía mal.
+- `check:rls` salía en rojo permanente con 80 problemas **ajenos**: el filtro de tablas
+  del otro producto de la base compartida miraba sólo el sufijo `_caughtcode` y no la
+  familia `e_manager_*`. Un gate siempre rojo no se lee.
+
+**Hallazgo de infraestructura, sin resolver — es una decisión de Manuel:** la base está
+en `us-west-2` (Oregón) y las funciones en `iad1` (Virginia), con los usuarios en Nueva
+York. Las consultas tardan **menos de 1 ms** pero el viaje son **168–260 ms**, y cada
+pantalla hace 17–23 viajes. La lentitud que se percibe es geografía, no código; mover la
+base a `us-east-1` es la única palanca grande que queda. Ojo: la instancia se llama
+`Comunidad latina y caughtcode y error-manager` — son **tres productos** ahí adentro.
+
+Verificado: `build` exit 0, **6516 tests** en 385 archivos, typecheck sin errores
+propios, lint limpio, y los cinco pedidos del feed/videos mirados en pantalla con sesión
+real. Commits `53c3175`, `a69efb5`, `660125a`, `3f9e5ac`, `8e731eb`.
+
 ## Tanda del 9/9: cierre del trabajo interrumpido de Codex — admisión de grupos, Número CL, y tres bugs de seguridad más (✅ 2026-09-09)
 
 Una sesión de Codex venía terminando el resto del pliego del 7/9 (admisión de grupos
