@@ -6840,6 +6840,17 @@ export type Database = {
         }[]
       }
       listing_reach: { Args: { p_listing_id: string }; Returns: number }
+      my_boosts: {
+        Args: { p_limit?: number }
+        Returns: {
+          amount_cents: number
+          created_at: string
+          ends_at: string | null
+          id: string
+          listing_id: string
+          status: string
+        }[]
+      }
       marcar_caso_resuelto: {
         Args: { p_listing: string; p_resuelto?: boolean }
         Returns: boolean

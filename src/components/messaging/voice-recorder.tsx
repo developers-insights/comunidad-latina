@@ -29,11 +29,16 @@ import { VoicePlayer } from "./voice-player";
  * NOTAS DE VOZ — los seis pasos de la lámina "Voice Chat".
  *
  *   1. El micrófono espera en la barra.        → `inactivo`
- *   2. Mantené presionado y graba.             → `grabando`
+ *   2. Mantené presionado y graba; al soltar SE MANDA (como WhatsApp).
  *   3. Deslizá: ← cancela, ↑ deja manos libres → `grabando` + gesto
- *   4. Manos libres: pausar / seguir / borrar  → `bloqueada` | `pausada`
- *   5. Escuchala antes de mandarla.            → `previa`
+ *   4. Manos libres: pausar / borrar / enviar  → `bloqueada` | `pausada`
+ *   5. Opcional, desde manos libres: el cuadrado la corta y deja
+ *      escucharla antes de mandarla.           → `previa`
  *   6. Se manda y se ve como onda con su duración (eso lo pinta la burbuja).
+ *
+ * Soltar abría la vista previa en vez de mandar, y en manos libres no había
+ * ningún botón de enviar: pedido de Nacho (22/9) «falta poder enviar el
+ * audio, no hay botón todavía».
  *
  * ─── EL GESTO SOSTENIDO NO PUEDE SER LA ÚNICA PUERTA ────────────────────────
  * Mantener el dedo apretado mientras se habla deja afuera a cualquiera con
@@ -74,7 +79,7 @@ export interface GrabacionLista {
 
 export interface VoiceRecorderProps {
   disabled?: boolean;
-  /** Se llama al tocar "Enviar" en la vista previa. */
+  /** Se llama con la nota lista para mandar: al soltar, al tocar el avión o desde la vista previa. */
   onListo: (grabacion: GrabacionLista) => void;
   /** `true` mientras el grabador ocupa la barra: el composer esconde el resto. */
   onActivo?: (activo: boolean) => void;
@@ -109,6 +114,8 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
   const [transcurrido, setTranscurrido] = useState(0);
   const [gesto, setGesto] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
   const [subiendo, setSubiendo] = useState(false);
+  /** Entre `detener` y el `onstop` del recorder: los botones no hacen nada. */
+  const [cerrando, setCerrando] = useState(false);
   /** Hay un dedo apoyado: mientras dure, el gesto se escucha en `window`. */
   const [gestoActivo, setGestoActivo] = useState(false);
 
@@ -119,6 +126,14 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
   const inicioRef = useRef(0);
   const acumuladoRef = useRef(0);
   const cancelarRef = useRef(false);
+  const enviarAlCerrarRef = useRef(false);
+  /**
+   * El toque que TERMINA en el botón persistente también dispara un `click`.
+   * Sólo cuenta como "enviar" si el dedo BAJÓ cuando ya estaba en manos libres:
+   * si no, el mismo toque corto que entra a manos libres mandaría el audio
+   * vacío en el acto.
+   */
+  const clickEnviaRef = useRef(false);
   const punteroRef = useRef<number | null>(null);
   const bajadaRef = useRef(0);
   const arrastroRef = useRef(false);
@@ -277,6 +292,8 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
     const trozos = trozosRef.current;
     trozosRef.current = [];
     const msPorCronometro = acumuladoRef.current;
+    const enviarYa = enviarAlCerrarRef.current;
+    enviarAlCerrarRef.current = false;
     soltarRecursos();
     recorderRef.current = null;
     bloqueadaRef.current = false;
@@ -285,6 +302,7 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
     setGesto({ dx: 0, dy: 0 });
 
     if (cancelarRef.current || trozos.length === 0 || !elegido) {
+      setCerrando(false);
       setEstado({ fase: "inactivo" });
       setTranscurrido(0);
       return;
@@ -292,6 +310,13 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
 
     const blob = new Blob(trozos, { type: elegido.almacenamiento });
     const { onda, duracionMs } = await analizar(blob, msPorCronometro);
+    setCerrando(false);
+    if (enviarYa) {
+      onListo({ blob, mime: elegido.almacenamiento, duracionMs, onda });
+      setEstado({ fase: "inactivo" });
+      setTranscurrido(0);
+      return;
+    }
     setEstado({
       fase: "previa",
       blob,
@@ -302,9 +327,12 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
     });
   }
 
-  function detener() {
+  /** `enviarAlTerminar`: manda sin pasar por la vista previa. */
+  function detener(enviarAlTerminar = false) {
     const recorder = recorderRef.current;
-    if (!recorder) return;
+    if (!recorder || recorder.state === "inactive") return;
+    enviarAlCerrarRef.current = enviarAlTerminar;
+    setCerrando(true);
     if (recorder.state === "recording") {
       acumuladoRef.current += Date.now() - inicioRef.current;
     }
@@ -312,7 +340,7 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
       clearInterval(cronometroRef.current);
       cronometroRef.current = null;
     }
-    if (recorder.state !== "inactive") recorder.stop();
+    recorder.stop();
   }
 
   function cancelar() {
@@ -367,8 +395,14 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
   /**
    * ⚠️ EL GESTO VIVE EN `window`, NO EN EL BOTÓN. No se puede volver atrás.
    *
-   * El micrófono es el botón del estado `inactivo`: en cuanto empieza a grabar,
-   * React lo DESMONTA y en su lugar monta la barra de grabación. Con
+   * Y el botón que recibió el dedo NO SE DESMONTA mientras se graba: es el
+   * mismo <button> en `inactivo`, `pidiendo` y `grabando` (ver el render). En
+   * iOS el `pointerup` se entrega al nodo donde empezó el toque; si ese nodo
+   * ya no está en el documento, el evento no burbujea hasta `window` y la
+   * grabación queda trabada sin nada que tocar.
+   *
+   * Historia: el micrófono ERA el botón del estado `inactivo`: en cuanto empezaba
+   * a grabar, React lo DESMONTABA y en su lugar montaba la barra de grabación. Con
    * `onPointerUp` puesto en ese botón —y con `setPointerCapture` sobre él— el
    * "soltar" del dedo no llegaba nunca a ningún lado: su elemento ya no existía
    * y la captura se perdía con él.
@@ -439,7 +473,7 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
         setEstado({ fase: "grabando", bloqueada: true, pausada: false });
         return;
       }
-      detener();
+      detener(true);
     }
 
     window.addEventListener("pointermove", alMover);
@@ -470,36 +504,6 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
   }
 
   /* -------------------------------- Pantalla -------------------------------- */
-
-  if (estado.fase === "inactivo" || estado.fase === "pidiendo") {
-    return (
-      <button
-        type="button"
-        disabled={disabled}
-        onPointerDown={alBajar}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            void empezar(true);
-          }
-        }}
-        aria-label={COPY_COMPOSER.voz.grabar}
-        title={COPY_COMPOSER.voz.mantener}
-        className={cn(
-          "flex size-11 shrink-0 touch-none select-none items-center justify-center rounded-full",
-          "text-foreground-muted",
-          "transition-[transform,background-color,color] duration-(--duration-fast) ease-(--ease-spring)",
-          "hover:bg-surface-hover hover:text-foreground active:scale-[0.9]",
-          "disabled:pointer-events-none disabled:opacity-45",
-          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
-          "motion-reduce:transition-none motion-reduce:active:scale-100",
-          estado.fase === "pidiendo" && "text-brand",
-        )}
-      >
-        <Microphone size={22} weight={estado.fase === "pidiendo" ? "fill" : "regular"} aria-hidden="true" />
-      </button>
-    );
-  }
 
   if (estado.fase === "denegado" || estado.fase === "sinSoporte" || estado.fase === "error") {
     const titulo =
@@ -574,135 +578,133 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
     );
   }
 
-  // Grabando: sostenido (pasos 2-3) o manos libres (paso 4).
-  const cancelando = esGestoDeCancelar(gesto.dx, gesto.dy);
-  const progresoBloqueo = Math.min(1, Math.abs(gesto.dy) / UMBRAL_BLOQUEAR);
+  // inactivo, pidiendo y grabando comparten raíz y botón (ver el comentario del
+  // gesto): el <button> del final es SIEMPRE el mismo nodo del DOM, en la misma
+  // posición de hijos. Reordenar los hijos de este <div> o partirlo en varios
+  // `return` vuelve a desmontarlo al empezar a grabar.
+  const grabando = estado.fase === "grabando";
+  const bloqueada = grabando && estado.bloqueada;
+  const pausada = grabando && estado.pausada;
+  const cancelando = grabando && esGestoDeCancelar(gesto.dx, gesto.dy);
+  const progresoBloqueo = grabando ? Math.min(1, Math.abs(gesto.dy) / UMBRAL_BLOQUEAR) : 0;
+  const sosteniendo = grabando && !bloqueada;
 
   return (
     <div
       className={cn(
-        "cl-print-hide relative flex flex-1 items-center gap-2 rounded-xl px-2.5 py-1.5 transition-colors duration-(--duration-fast)",
-        cancelando ? "bg-danger-bg" : "bg-surface-subtle",
+        grabando
+          ? "cl-print-hide relative flex flex-1 items-center gap-2 rounded-xl px-2.5 py-1.5 transition-colors duration-(--duration-fast)"
+          : "contents",
+        grabando && (cancelando ? "bg-danger-bg" : "bg-surface-subtle"),
       )}
     >
-      {estado.bloqueada ? (
-        <button
-          type="button"
-          onClick={cancelar}
-          aria-label={COPY_COMPOSER.voz.eliminar}
-          className="flex size-11 shrink-0 items-center justify-center rounded-full text-danger transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring) hover:bg-danger-bg active:scale-[0.9] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring motion-reduce:transition-none motion-reduce:active:scale-100"
-        >
-          <Trash size={19} aria-hidden="true" />
-        </button>
-      ) : (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "flex size-2.5 shrink-0 rounded-full bg-danger",
-            !reduceMotion && "animate-pulse",
-          )}
-        />
-      )}
-
-      <span
-        className={cn(
-          "shrink-0 font-mono text-xs tabular-nums",
-          cancelando ? "text-danger-ink" : "text-foreground-secondary",
-        )}
-        role="timer"
-        aria-live="off"
-      >
-        {formatearDuracion(transcurrido)}
-      </span>
-
-      {/* Medidor en vivo. Escala por `transform` desde un rAF; con
-          prefers-reduced-motion queda quieto y el resto sigue funcionando. */}
-      <span aria-hidden="true" className="flex h-5 shrink-0 items-center gap-[3px]">
-        {Array.from({ length: BARRAS_EN_VIVO }, (_, indice) => (
+      {grabando &&
+        (bloqueada ? (
+          <button
+            type="button"
+            onClick={cancelar}
+            disabled={cerrando}
+            aria-label={COPY_COMPOSER.voz.eliminar}
+            className="flex size-11 shrink-0 items-center justify-center rounded-full text-danger transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring) hover:bg-danger-bg active:scale-[0.9] disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            <Trash size={19} aria-hidden="true" />
+          </button>
+        ) : (
           <span
-            key={indice}
-            ref={(nodo) => {
-              barrasRef.current[indice] = nodo;
-            }}
+            aria-hidden="true"
             className={cn(
-              "h-full w-[3px] origin-center rounded-full",
-              cancelando ? "bg-danger" : "bg-brand",
+              "flex size-2.5 shrink-0 rounded-full bg-danger",
+              !reduceMotion && "animate-pulse",
             )}
-            style={{ transform: "scaleY(0.25)" }}
           />
         ))}
-      </span>
 
-      <p
-        className={cn(
-          "min-w-0 flex-1 truncate text-xs",
-          cancelando ? "text-danger-ink" : "text-foreground-muted",
-        )}
-        role="status"
-      >
-        {estado.bloqueada
-          ? COPY_COMPOSER.voz.bloqueada
-          : cancelando
-            ? COPY_COMPOSER.voz.soltarCancelar
-            : progresoBloqueo > 0.3
-              ? COPY_COMPOSER.voz.deslizarBloquear
-              : COPY_COMPOSER.voz.deslizarCancelar}
-      </p>
-
-      {estado.bloqueada ? (
-        <>
-          <button
-            type="button"
-            onClick={alternarPausa}
-            aria-label={estado.pausada ? COPY_COMPOSER.voz.seguir : COPY_COMPOSER.voz.pausar}
-            className="flex size-11 shrink-0 items-center justify-center rounded-full text-foreground-secondary transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring) hover:bg-surface-hover active:scale-[0.9] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring motion-reduce:transition-none motion-reduce:active:scale-100"
-          >
-            {estado.pausada ? (
-              <Play size={19} weight="fill" aria-hidden="true" />
-            ) : (
-              <Pause size={19} weight="fill" aria-hidden="true" />
-            )}
-          </button>
-          {/* ⚠️ CUADRADO, NUNCA UN AVIÓN. Este botón TERMINA la grabación y abre
-              la vista previa: no manda nada. Cuando era un avión sobre `bg-brand`
-              —idéntico al de enviar, que aparece un instante después en el mismo
-              lugar— la gente tocaba, veía cambiar la barra y daba el audio por
-              enviado. De ahí el reclamo "el audio nunca se envía".
-              El avión sobre `bg-brand` es, en todo el grabador, UNA sola cosa:
-              enviar. */}
-          <button
-            type="button"
-            onClick={detener}
-            aria-label={COPY_COMPOSER.voz.detener}
-            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-surface-hover text-foreground transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring) hover:bg-surface-subtle active:scale-[0.9] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring motion-reduce:transition-none motion-reduce:active:scale-100"
-          >
-            <Stop size={19} weight="fill" aria-hidden="true" />
-          </button>
-        </>
-      ) : (
+      {grabando && (
         <span
-          aria-hidden="true"
           className={cn(
-            "flex size-11 shrink-0 items-center justify-center rounded-full",
-            "bg-brand text-brand-foreground",
+            "shrink-0 font-mono text-xs tabular-nums",
+            cancelando ? "text-danger-ink" : "text-foreground-secondary",
           )}
-          style={
-            reduceMotion
-              ? undefined
-              : {
-                  transform: `translate3d(${gesto.dx}px, ${gesto.dy}px, 0) scale(${1 + progresoBloqueo * 0.08})`,
-                }
-          }
+          role="timer"
+          aria-live="off"
         >
-          {progresoBloqueo > 0.3 ? (
-            <Lock size={19} weight="fill" />
-          ) : (
-            <Microphone size={22} weight="fill" />
-          )}
+          {formatearDuracion(transcurrido)}
         </span>
       )}
 
-      {!estado.bloqueada && progresoBloqueo > 0.15 && (
+      {/* Medidor en vivo. Escala por `transform` desde un rAF; con
+          prefers-reduced-motion queda quieto y el resto sigue funcionando. */}
+      {grabando && (
+        <span aria-hidden="true" className="flex h-5 shrink-0 items-center gap-[3px]">
+          {Array.from({ length: BARRAS_EN_VIVO }, (_, indice) => (
+            <span
+              key={indice}
+              ref={(nodo) => {
+                barrasRef.current[indice] = nodo;
+              }}
+              className={cn(
+                "h-full w-[3px] origin-center rounded-full",
+                cancelando ? "bg-danger" : "bg-brand",
+              )}
+              style={{ transform: "scaleY(0.25)" }}
+            />
+          ))}
+        </span>
+      )}
+
+      {grabando && (
+        <p
+          className={cn(
+            "line-clamp-2 min-w-0 flex-1 text-xs leading-tight",
+            cancelando ? "text-danger-ink" : "text-foreground-muted",
+          )}
+          role="status"
+        >
+          {bloqueada
+            ? COPY_COMPOSER.voz.bloqueada
+            : cancelando
+              ? COPY_COMPOSER.voz.soltarCancelar
+              : progresoBloqueo > 0.3
+                ? COPY_COMPOSER.voz.deslizarBloquear
+                : COPY_COMPOSER.voz.soltarEnviar}
+        </p>
+      )}
+
+      {bloqueada && (
+        <button
+          type="button"
+          onClick={alternarPausa}
+          disabled={cerrando}
+          aria-label={pausada ? COPY_COMPOSER.voz.seguir : COPY_COMPOSER.voz.pausar}
+          className="flex size-11 shrink-0 items-center justify-center rounded-full text-foreground-secondary transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring) hover:bg-surface-hover active:scale-[0.9] disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring motion-reduce:transition-none motion-reduce:active:scale-100"
+        >
+          {pausada ? (
+            <Play size={19} weight="fill" aria-hidden="true" />
+          ) : (
+            <Pause size={19} weight="fill" aria-hidden="true" />
+          )}
+        </button>
+      )}
+
+      {/* ⚠️ CUADRADO, NUNCA UN AVIÓN. Este botón TERMINA la grabación y abre
+          la vista previa para escucharla: no manda nada. Cuando era un avión
+          sobre `bg-brand` la gente tocaba, veía cambiar la barra y daba el audio
+          por enviado. El avión sobre `bg-brand` es, en todo el grabador, UNA
+          sola cosa: enviar de verdad. */}
+      {bloqueada && (
+        <button
+          type="button"
+          onClick={() => detener()}
+          disabled={cerrando}
+          aria-label={COPY_COMPOSER.voz.detener}
+          title={COPY_COMPOSER.voz.detener}
+          className="flex size-11 shrink-0 items-center justify-center rounded-full text-foreground-secondary transition-[transform,background-color] duration-(--duration-fast) ease-(--ease-spring) hover:bg-surface-hover active:scale-[0.9] disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring motion-reduce:transition-none motion-reduce:active:scale-100"
+        >
+          <Stop size={19} weight="fill" aria-hidden="true" />
+        </button>
+      )}
+
+      {sosteniendo && progresoBloqueo > 0.15 && (
         <span
           aria-hidden="true"
           className="pointer-events-none absolute right-4 bottom-full mb-2 flex flex-col items-center text-foreground-muted"
@@ -712,6 +714,68 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
           <Lock size={14} />
         </span>
       )}
+
+      <button
+        type="button"
+        disabled={disabled || cerrando}
+        onPointerDown={(event) => {
+          clickEnviaRef.current = bloqueada;
+          alBajar(event);
+        }}
+        onClick={(event) => {
+          // `detail === 0`: click de teclado (Enter/Espacio) sobre el botón ya
+          // en manos libres, que no pasa por `pointerdown`.
+          const valido = clickEnviaRef.current || event.detail === 0;
+          clickEnviaRef.current = false;
+          if (bloqueada && valido) detener(true);
+        }}
+        onKeyDown={(event) => {
+          if (estado.fase !== "inactivo") return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            void empezar(true);
+          }
+        }}
+        aria-label={
+          bloqueada
+            ? COPY_COMPOSER.voz.enviar
+            : sosteniendo
+              ? COPY_COMPOSER.voz.soltarEnviar
+              : COPY_COMPOSER.voz.grabar
+        }
+        title={grabando ? undefined : COPY_COMPOSER.voz.mantener}
+        className={cn(
+          "flex size-11 shrink-0 touch-none select-none items-center justify-center rounded-full",
+          "transition-[transform,background-color,color] duration-(--duration-fast) ease-(--ease-spring)",
+          "disabled:pointer-events-none disabled:opacity-45",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          "motion-reduce:transition-none",
+          !grabando &&
+            "text-foreground-muted hover:bg-surface-hover hover:text-foreground active:scale-[0.9] motion-reduce:active:scale-100",
+          estado.fase === "pidiendo" && "text-brand",
+          grabando && "bg-brand text-brand-foreground shadow-xs",
+          bloqueada && "hover:bg-brand-hover active:scale-[0.94] motion-reduce:active:scale-100",
+        )}
+        style={
+          sosteniendo && !reduceMotion
+            ? {
+                transform: `translate3d(${gesto.dx}px, ${gesto.dy}px, 0) scale(${1 + progresoBloqueo * 0.08})`,
+              }
+            : undefined
+        }
+      >
+        {bloqueada ? (
+          <PaperPlaneRight size={19} weight="fill" aria-hidden="true" />
+        ) : sosteniendo && progresoBloqueo > 0.3 ? (
+          <Lock size={19} weight="fill" aria-hidden="true" />
+        ) : (
+          <Microphone
+            size={22}
+            weight={estado.fase === "inactivo" ? "regular" : "fill"}
+            aria-hidden="true"
+          />
+        )}
+      </button>
     </div>
   );
 }

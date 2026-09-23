@@ -36,6 +36,7 @@ export async function InboxTabs({
       className="mb-5"
       label={COPY.inbox.tabsLabel}
       active={active}
+      replace
       items={[
         { id: "personas", label: COPY.inbox.tabPersonas, href: "/mensajes" },
         { id: "grupos", label: COPY.inbox.tabGrupos, href: "/mensajes/grupos" },

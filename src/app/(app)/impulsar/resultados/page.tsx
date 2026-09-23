@@ -76,6 +76,9 @@ const COPY = {
   tipoAviso: "Aviso",
   tipoPublicacion: "Publicación",
 
+  caidaTitulo: "No pudimos traer tus promociones",
+  caidaMensaje: "Es un problema nuestro, no de tus promociones. Volvé a entrar en un rato.",
+
   vacioTitulo: "Todavía no promocionaste nada",
   vacioMensaje:
     "Cuando le pongas Boost a un aviso o a una publicación, acá vas a ver cuánta gente lo vio y cómo le fue.",
@@ -132,15 +135,13 @@ export default async function ResultadosDePromocionesPage() {
   // un checkout abandonado nunca se sirvió y no tiene resultados que mostrar.
   // Listarlo acá sólo agregaría filas en cero a una pantalla cuyo único trabajo
   // es decir si lo que se pagó sirvió.
-  const [{ data: boostRows }, { data: promoRows }] = await Promise.all([
-    supabase
-      .from("boosts")
-      .select("id, listing_id, status, amount_cents, ends_at, created_at")
-      .eq("tenant_id", tenant.id)
-      .eq("buyer_id", user.id)
-      .neq("status", "pending_payment")
-      .order("created_at", { ascending: false })
-      .limit(LIMIT),
+  //
+  // Los impulsos de AVISOS salen por la RPC `my_boosts` (0153) y NO por
+  // `.from("boosts")`: `amount_cents` y `buyer_id` están fuera del grant por
+  // columnas de esa tabla, y pedirlas tumbaba la consulta entera con 42501 —
+  // la pantalla mostraba sólo las publicaciones y callaba todos los avisos.
+  const [boostsRes, promosRes] = await Promise.all([
+    supabase.rpc("my_boosts", { p_limit: LIMIT }),
     supabase
       .from("post_promotions")
       .select("id, post_id, status, amount_cents, ends_at, created_at")
@@ -151,8 +152,16 @@ export default async function ResultadosDePromocionesPage() {
       .limit(LIMIT),
   ]);
 
-  const boosts = boostRows ?? [];
-  const promociones = promoRows ?? [];
+  for (const [cual, res] of [["impulsos", boostsRes], ["promociones", promosRes]] as const) {
+    if (res.error) {
+      console.warn(`[resultados] no se pudieron leer los ${cual}`, { code: res.error.code });
+    }
+  }
+  // Una lectura caída no es "no promocionaste nada": se avisa en vez de
+  // mostrar el estado vacío.
+  const faltanCampanas = Boolean(boostsRes.error || promosRes.error);
+  const boosts = boostsRes.data ?? [];
+  const promociones = promosRes.data ?? [];
   const ahoraMs = new Date().getTime();
 
   const listingIds = [...new Set(boosts.map((row) => row.listing_id))];
@@ -205,9 +214,9 @@ export default async function ResultadosDePromocionesPage() {
     ahoraMs,
   });
 
-  const hayHuecos = campanas.some(
-    (c) => c.vecesMostrada.estado === "ilegible" || c.vistas.estado === "ilegible",
-  );
+  const hayHuecos =
+    faltanCampanas ||
+    campanas.some((c) => c.vecesMostrada.estado === "ilegible" || c.vistas.estado === "ilegible");
   // Una aclaración sólo se muestra si su número está en pantalla en algún lado.
   const muestraVecesMostrada = campanas.some((c) => c.vecesMostrada.estado !== "no_aplica");
   const muestraVistas = campanas.some((c) => c.vistas.estado !== "no_aplica");
@@ -223,7 +232,13 @@ export default async function ResultadosDePromocionesPage() {
         <p className="mt-1 text-sm text-foreground-secondary">{COPY.bajada}</p>
       </header>
 
-      {campanas.length === 0 ? (
+      {campanas.length === 0 && faltanCampanas ? (
+        <EmptyState
+          icon={<ChartLineUp size={32} weight="fill" aria-hidden="true" />}
+          title={COPY.caidaTitulo}
+          message={COPY.caidaMensaje}
+        />
+      ) : campanas.length === 0 ? (
         <EmptyState
           icon={<ChartLineUp size={32} weight="fill" aria-hidden="true" />}
           title={COPY.vacioTitulo}

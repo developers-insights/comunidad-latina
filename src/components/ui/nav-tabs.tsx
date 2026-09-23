@@ -49,10 +49,17 @@ export interface NavTabsProps {
   active: string;
   /** Nombre accesible de la barra ("Secciones del perfil"). */
   label: string;
+  /**
+   * Cambiar de pestaña REEMPLAZA la entrada del historial en vez de apilar una.
+   * Para pestañas hermanas de una misma pantalla con "Volver" (la bandeja de
+   * mensajes): sin esto, Personas → Grupos → Personas y "Volver" rebotaba por
+   * las pestañas en vez de salir de la pantalla.
+   */
+  replace?: boolean;
   className?: string;
 }
 
-export function NavTabs({ items, active, label, className }: NavTabsProps) {
+export function NavTabs({ items, active, label, replace = false, className }: NavTabsProps) {
   return (
     <nav aria-label={label} className={className}>
       <ul className="scrollbar-none flex gap-1 overflow-x-auto border-b border-border-subtle">
@@ -62,6 +69,7 @@ export function NavTabs({ items, active, label, className }: NavTabsProps) {
             <li key={item.id} className="shrink-0">
               <Link
                 href={item.href}
+                replace={replace}
                 aria-current={current ? "page" : undefined}
                 // `scroll={false}`: cambiar de pestaña no tiene por qué mandar a
                 // la persona al tope de la página — la cabecera del perfil, que

@@ -54,6 +54,16 @@ export const COPY = {
       title: "Guardados",
       description: "Lo que te guardaste para mirar después.",
     },
+    /**
+     * Pedido de Nacho (22/9): «falta la parte donde dice mi publicidad,
+     * relacionado al Boost, para que la gente pueda ver las métricas de sus
+     * publicaciones». La pantalla ya existía (/impulsar/resultados) pero sólo
+     * se llegaba desde el índice de Boost, y sólo si ya habías comprado algo.
+     */
+    advertising: {
+      title: "Tu publicidad",
+      description: "Cuánta gente vio lo que promocionaste con Boost y cuánto pagaste.",
+    },
     editProfile: {
       title: "Editar tu perfil",
       description: "Tu nombre, tu foto, tu zona y tu bio.",

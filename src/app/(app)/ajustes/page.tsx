@@ -9,6 +9,7 @@ import {
   FileText,
   Lifebuoy,
   LockKey,
+  Megaphone,
   PencilSimple,
   Prohibit,
   Pulse,
@@ -219,6 +220,7 @@ export default async function AjustesPage() {
             />
             <Row href="/mensajes" icon={ChatCircle} {...COPY.rows.messages} />
             <Row href="/perfil/guardados" icon={BookmarkSimple} {...COPY.rows.saved} />
+            <Row href="/impulsar/resultados" icon={Megaphone} {...COPY.rows.advertising} />
           </Group>
 
           <Group title={COPY.groups.account}>

@@ -678,11 +678,10 @@ const INVENTARIO: Record<string, Entrada> = {
     ],
     cobertura: "control",
   },
-  // Grabador de notas de voz. Va con el hook y no con "control" porque el
-  // micrófono que sigue al dedo mientras se arrastra es un <span> aria-hidden,
-  // no un botón — y grabar no significa nada en una hoja impresa.
-  // Dos y no tres desde que el botón de manos libres dejó de ser un avión sobre
-  // `bg-brand` (ver el comentario de ese botón en voice-recorder.tsx).
+  // Grabador de notas de voz. Va con el hook y no con "control" porque la
+  // barra de grabación entera (timer, medidor, carteles) no es un <button>, y
+  // grabar no significa nada en una hoja impresa. Las dos tintas son el botón
+  // persistente (micrófono → enviar) y el avión de la vista previa.
   "src/components/messaging/voice-recorder.tsx": {
     inks: ["text-brand-foreground", "text-brand-foreground"],
     cobertura: "cl-print-hide",

@@ -45,13 +45,14 @@ describe("la cadena de anchos de la burbuja", () => {
 });
 
 describe("el grabador: un avión, una sola acción", () => {
-  it("el único PaperPlaneRight del grabador es el de enviar", () => {
+  it("todo PaperPlaneRight del grabador manda la nota, y terminar sin mandar es un cuadrado", () => {
     const fuente = leer("voice-recorder.tsx");
     const aviones = fuente.match(/<PaperPlaneRight/g) ?? [];
-    // El de manos libres TERMINA la grabación y abre la vista previa: no manda
-    // nada. Con el mismo ícono y el mismo `bg-brand` que el de enviar, la gente
-    // tocaba, veía cambiar la barra y daba el audio por enviado.
-    expect(aviones).toHaveLength(1);
+    // Dos aviones y los dos mandan: el de la vista previa (`enviar`) y el de
+    // manos libres (`detener(true)`). Cuando el de manos libres era un avión
+    // que sólo abría la vista previa, la gente daba el audio por enviado.
+    expect(aviones).toHaveLength(2);
+    expect(fuente).toContain("if (bloqueada && valido) detener(true);");
     expect(fuente).toContain("<Stop size={19}");
   });
 });
