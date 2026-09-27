@@ -4,10 +4,12 @@ const mocks = vi.hoisted(() => ({
   requireTenantMatch: vi.fn(),
   limit: vi.fn(),
   revalidatePath: vi.fn(),
+  createAdminClient: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mocks.createAdminClient }));
 vi.mock("@/lib/rate-limit", () => ({ DAY_MS: 86_400_000, limit: mocks.limit }));
 
 import { eliminarAvisoAction } from "./eliminar-action";
@@ -48,6 +50,7 @@ function conSesion(supabase: unknown) {
     user: { id: USER_ID },
     supabase,
   });
+  mocks.createAdminClient.mockReturnValue(supabase);
 }
 
 const FILA = { data: { id: LISTING_ID, kind: "product", status: "published" }, error: null };
@@ -89,6 +92,20 @@ describe("eliminarAvisoAction", () => {
       boosts: { select: { data: [{ id: "b1" }], error: null } },
     });
     conSesion(supabase);
+    const r = await eliminarAvisoAction({ listingId: LISTING_ID, confirmed: true });
+    expect(r).toEqual({ ok: false, error: ELIMINAR_COPY.tuvoPagos });
+    expect(borrados).toEqual([]);
+  });
+
+  it("un pago que la RLS le oculta al dueño igual bloquea el borrado", async () => {
+    const { supabase, borrados } = stub({
+      listings: { select: FILA },
+    });
+    conSesion(supabase);
+    const { supabase: admin } = stub({
+      boosts: { select: { data: [{ id: "b-de-otro" }], error: null } },
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
     const r = await eliminarAvisoAction({ listingId: LISTING_ID, confirmed: true });
     expect(r).toEqual({ ok: false, error: ELIMINAR_COPY.tuvoPagos });
     expect(borrados).toEqual([]);

@@ -6,6 +6,7 @@ import { DAY_MS, limit } from "@/lib/rate-limit";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { listingViewHref } from "@/lib/monetization/href";
 import { supabaseSinTiparListings } from "@/lib/listings";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ELIMINAR_COPY as C, TABLAS_CON_PAGOS } from "./eliminar-copy";
 
 const schema = z.object({ listingId: z.uuid(), confirmed: z.literal(true) });
@@ -47,10 +48,12 @@ export async function eliminarAvisoAction(rawInput: {
   if (kind === "business") return { ok: false, error: C.negocio };
 
   // boosts, campaigns y listing_premiums caen en CASCADE con el aviso: borrarlo
-  // se llevaría puesto el registro de lo que alguien pagó.
+  // se llevaría puesto el registro de lo que alguien pagó. Se mira con service
+  // role porque la RLS de esas tablas le oculta al dueño los pagos de terceros.
+  const admin = supabaseSinTiparListings(createAdminClient());
   const pagos = await Promise.all(
     TABLAS_CON_PAGOS.map((tabla) =>
-      sinTipar.from(tabla).select("id").eq("listing_id", listingId).limit(1),
+      admin.from(tabla).select("id").eq("listing_id", listingId).limit(1),
     ),
   );
   if (pagos.some((r) => r.error)) return { ok: false, error: C.generico };
