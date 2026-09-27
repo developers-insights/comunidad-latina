@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { LLAMADA_COLUMNS, supabaseSinTiparLlamadas, type LlamadaRow } from "./tipos";
+import { elegirTimbre, type InvitacionPendiente } from "./timbre";
 
 /**
  * =============================================================================
@@ -164,6 +165,8 @@ export interface LlamadaEntrante {
   groupId: string | null;
   iniciadaPor: string;
   createdAt: string;
+  /** Desde acá corre el minuto de timbre. */
+  invitadaAt: string;
   quienLlama: { displayName: string; avatarUrl: string | null } | null;
   grupoNombre: string | null;
 }
@@ -171,12 +174,10 @@ export interface LlamadaEntrante {
 /**
  * Fuera de una llamada: ¿me están llamando ahora?
  *
- * La consulta va contra `calls` y NO contra `call_participants`, aunque el
- * evento de Realtime sea la fila de participante. Es a propósito: `calls_select`
- * ya sólo devuelve las llamadas en las que estoy invitado, así que la pregunta
- * "¿hay una llamada sonando para mí?" es literalmente un `where status =
- * 'sonando'`. Preguntarlo del otro lado obligaría a traer mis filas de
- * participante de los últimos 90 días para descartarlas casi todas.
+ * Suena por INVITACIÓN (0155), no por el estado de la llamada: en un grupo la
+ * llamada pasa a `en_curso` con el primero que atiende y a los demás les
+ * tiene que seguir sonando. Sólo se leen mis filas sin entrar del último
+ * minuto (índice parcial `call_participants_timbre_idx`).
  */
 export function useLlamadaEntrante(miId: string): {
   entrante: LlamadaEntrante | null;
@@ -191,34 +192,12 @@ export function useLlamadaEntrante(miId: string): {
       const supabase = createClient();
       const db = supabaseSinTiparLlamadas(supabase);
       const desde = new Date(Date.now() - VENTANA_DE_TIMBRE_MS).toISOString();
-
-      const { data } = await db
-        .from("calls")
-        .select(LLAMADA_COLUMNS)
-        .eq("status", "sonando")
-        .neq("iniciada_por", miId)
-        .gt("created_at", desde)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      const llamada = ((data ?? []) as unknown as LlamadaRow[])[0];
-      if (!llamada || descartadasRef.current.has(llamada.id)) {
+      const elegida = await buscarTimbre(db, miId, desde, descartadasRef.current);
+      if (!elegida) {
         setEntrante(null);
         return;
       }
-
-      // Ya la atendí en otra pestaña: no vuelve a sonar acá.
-      const { data: miFila } = await db
-        .from("call_participants")
-        .select("joined_at, left_at")
-        .eq("call_id", llamada.id)
-        .eq("profile_id", miId)
-        .maybeSingle();
-
-      if (!miFila || miFila.joined_at !== null || miFila.left_at !== null) {
-        setEntrante(null);
-        return;
-      }
+      const { llamada, invitadaAt } = elegida;
 
       const { data: perfil } = await supabase
         .from("profiles")
@@ -242,6 +221,7 @@ export function useLlamadaEntrante(miId: string): {
         groupId: llamada.group_id,
         iniciadaPor: llamada.iniciada_por,
         createdAt: llamada.created_at,
+        invitadaAt,
         quienLlama: perfil
           ? { displayName: perfil.display_name, avatarUrl: perfil.avatar_url }
           : null,
@@ -260,7 +240,7 @@ export function useLlamadaEntrante(miId: string): {
   // esperar a que alguien cierre la fila del otro lado.
   useEffect(() => {
     if (!entrante) return;
-    const vence = Date.parse(entrante.createdAt) + VENTANA_DE_TIMBRE_MS - Date.now();
+    const vence = Date.parse(entrante.invitadaAt) + VENTANA_DE_TIMBRE_MS - Date.now();
     const id = window.setTimeout(() => setEntrante(null), Math.max(1000, vence));
     return () => window.clearTimeout(id);
   }, [entrante]);
@@ -271,4 +251,76 @@ export function useLlamadaEntrante(miId: string): {
   }, []);
 
   return { entrante, descartar, via };
+}
+
+type Db = ReturnType<typeof supabaseSinTiparLlamadas>;
+
+async function buscarTimbre(
+  db: Db,
+  miId: string,
+  desde: string,
+  descartadas: ReadonlySet<string>,
+): Promise<{ llamada: LlamadaRow; invitadaAt: string } | null> {
+  const { data: filas, error } = await db
+    .from("call_participants")
+    .select("call_id, invitada_at")
+    .eq("profile_id", miId)
+    .is("joined_at", null)
+    .is("left_at", null)
+    .gt("invitada_at", desde)
+    .order("invitada_at", { ascending: false })
+    .limit(5);
+
+  // 42703 = la columna no existe: la 0155 todavía no se aplicó. Sin este
+  // respaldo, desplegar el código antes que la migración apagaría TODOS los
+  // timbres, también los de a dos.
+  if (error?.code === "42703") return buscarTimbreSinInvitadaAt(db, miId, desde, descartadas);
+
+  const invitaciones = (filas ?? []) as InvitacionPendiente[];
+  if (invitaciones.length === 0) return null;
+
+  const { data: llamadas } = await db
+    .from("calls")
+    .select(LLAMADA_COLUMNS)
+    .in(
+      "id",
+      invitaciones.map((i) => i.call_id),
+    )
+    .in("status", ["sonando", "en_curso"]);
+
+  return elegirTimbre({
+    invitaciones,
+    llamadas: (llamadas ?? []) as unknown as LlamadaRow[],
+    descartadas,
+    miId,
+  });
+}
+
+async function buscarTimbreSinInvitadaAt(
+  db: Db,
+  miId: string,
+  desde: string,
+  descartadas: ReadonlySet<string>,
+): Promise<{ llamada: LlamadaRow; invitadaAt: string } | null> {
+  const { data } = await db
+    .from("calls")
+    .select(LLAMADA_COLUMNS)
+    .eq("status", "sonando")
+    .neq("iniciada_por", miId)
+    .gt("created_at", desde)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const llamada = ((data ?? []) as unknown as LlamadaRow[])[0];
+  if (!llamada || descartadas.has(llamada.id)) return null;
+
+  const { data: miFila } = await db
+    .from("call_participants")
+    .select("joined_at, left_at")
+    .eq("call_id", llamada.id)
+    .eq("profile_id", miId)
+    .maybeSingle();
+
+  if (!miFila || miFila.joined_at !== null || miFila.left_at !== null) return null;
+  return { llamada, invitadaAt: llamada.created_at };
 }

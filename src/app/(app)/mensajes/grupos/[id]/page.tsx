@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CaretRight, LockKey } from "@phosphor-icons/react/dist/ssr";
+import { CaretRight, Info, LockKey } from "@phosphor-icons/react/dist/ssr";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate, getViewerTimeZone } from "@/lib/time/viewer-zone";
@@ -48,6 +48,8 @@ import {
   tengoSolicitudPendiente,
 } from "../queries";
 import { SectionTopBar } from "@/components/shell";
+import { BotonesDeLlamada } from "@/components/calls/botones-de-llamada";
+import { iniciarLlamadaAction } from "@/app/(app)/llamadas/actions";
 
 export const metadata: Metadata = { title: COPY.groups.title };
 
@@ -133,13 +135,18 @@ export default async function GrupoPage({
             )}
           </p>
         </div>
+        {soyMiembro && !cerrado && grupo.member_count > 1 && (
+          <BotonesDeLlamada groupId={grupo.id} onIniciar={iniciarLlamadaAction} />
+        )}
         {soyMiembro && (
           <Link
             href={`/mensajes/grupos/${grupo.id}/info`}
-            className="flex min-h-11 shrink-0 items-center gap-1 rounded-md px-2 text-sm font-medium text-brand-ink transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+            className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-md px-2 text-sm font-medium text-brand-ink transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
           >
-            {COPY.groups.infoTitle}
-            <CaretRight size={14} aria-hidden="true" />
+            {/* En el teléfono, con los dos botones de llamar, el texto le comía el nombre al grupo. */}
+            <Info size={20} aria-hidden="true" className="sm:hidden" />
+            <span className="sr-only sm:not-sr-only">{COPY.groups.infoTitle}</span>
+            <CaretRight size={14} aria-hidden="true" className="hidden sm:block" />
           </Link>
         )}
       </div>

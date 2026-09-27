@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { COPY_COMPOSER } from "./copy-composer";
 import { PICOS_DE_ONDA } from "@/lib/messaging/audio";
 import { BARRAS_DIBUJADAS, VoicePlayer, aBarras } from "./voice-player";
 
@@ -61,5 +62,95 @@ describe("VoicePlayer — la cadena de anchos", () => {
 
   it("mantiene `cl-print-hide` (contrato de print-contract.test.ts)", () => {
     expect(pintar([50]).className).toContain("cl-print-hide");
+  });
+});
+
+/**
+ * «Una vez escuchado el audio no se puede volver a escuchar, se traba» (Nacho, 23/9).
+ *
+ * El hilo se refresca solo cada 15 s y cada refresco vuelve a firmar los
+ * adjuntos: la URL del MISMO archivo cambia de token. Un <audio> al que le
+ * cambian la `src` recarga, corta lo que sonaba y NO dispara `pause`
+ * (el algoritmo de carga del estándar sólo rechaza las promesas pendientes),
+ * así que el botón se quedaba en "Pausar" sobre un audio mudo, y tocarlo
+ * llamaba a `pause()` sobre algo ya pausado: nada.
+ */
+describe("VoicePlayer — la firma que se renueva", () => {
+  const firmada = (token: string) =>
+    `https://x.supabase.co/storage/v1/object/sign/chat-media/t/c/nota.webm?token=${token}`;
+
+  beforeEach(() => {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (this: HTMLMediaElement) {
+      this.dispatchEvent(new Event("play"));
+      return Promise.resolve();
+    });
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(function (this: HTMLMediaElement) {
+      this.dispatchEvent(new Event("pause"));
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function audio(container: HTMLElement) {
+    return container.querySelector("audio") as HTMLAudioElement;
+  }
+
+  it("una firma nueva del mismo archivo no recarga el audio", () => {
+    const { container, rerender } = render(<VoicePlayer src={firmada("AAA")} duracionMs={9000} />);
+    rerender(<VoicePlayer src={firmada("BBB")} duracionMs={9000} />);
+    expect(audio(container).getAttribute("src")).toBe(firmada("AAA"));
+  });
+
+  it("otro archivo sí se carga", () => {
+    const { container, rerender } = render(<VoicePlayer src={firmada("AAA")} duracionMs={9000} />);
+    const otra = "https://x.supabase.co/storage/v1/object/sign/chat-media/t/c/otra.webm?token=CCC";
+    rerender(<VoicePlayer src={otra} duracionMs={9000} />);
+    expect(audio(container).getAttribute("src")).toBe(otra);
+  });
+
+  it("si la firma en uso venció, pasa a la nueva en vez de darlo por perdido", () => {
+    const { container, rerender } = render(<VoicePlayer src={firmada("AAA")} duracionMs={9000} />);
+    rerender(<VoicePlayer src={firmada("BBB")} duracionMs={9000} />);
+    act(() => {
+      audio(container).dispatchEvent(new Event("error"));
+    });
+    expect(audio(container).getAttribute("src")).toBe(firmada("BBB"));
+    expect(screen.queryByText(COPY_COMPOSER.reproductor.noDisponible)).toBeNull();
+  });
+
+  it("una recarga del elemento devuelve el botón a Escuchar", () => {
+    const { container } = render(<VoicePlayer src={firmada("AAA")} duracionMs={9000} />);
+    fireEvent.click(screen.getByRole("button", { name: COPY_COMPOSER.reproductor.reproducir }));
+    expect(screen.getByRole("button", { name: COPY_COMPOSER.reproductor.pausar })).toBeTruthy();
+    act(() => {
+      audio(container).dispatchEvent(new Event("emptied"));
+    });
+    expect(screen.getByRole("button", { name: COPY_COMPOSER.reproductor.reproducir })).toBeTruthy();
+  });
+
+  it("se vuelve a escuchar después de terminar", () => {
+    const { container } = render(<VoicePlayer src={firmada("AAA")} duracionMs={9000} />);
+    const play = HTMLMediaElement.prototype.play as unknown as ReturnType<typeof vi.fn>;
+    fireEvent.click(screen.getByRole("button", { name: COPY_COMPOSER.reproductor.reproducir }));
+    act(() => {
+      audio(container).dispatchEvent(new Event("pause"));
+      audio(container).dispatchEvent(new Event("ended"));
+    });
+    fireEvent.click(screen.getByRole("button", { name: COPY_COMPOSER.reproductor.reproducir }));
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("button", { name: COPY_COMPOSER.reproductor.pausar })).toBeTruthy();
+  });
+
+  it("un play interrumpido no marca el audio como no disponible", async () => {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() =>
+      Promise.reject(new DOMException("interrumpido", "AbortError")),
+    );
+    render(<VoicePlayer src={firmada("AAA")} duracionMs={9000} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: COPY_COMPOSER.reproductor.reproducir }));
+    });
+    expect(screen.queryByText(COPY_COMPOSER.reproductor.noDisponible)).toBeNull();
   });
 });

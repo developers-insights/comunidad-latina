@@ -25,7 +25,12 @@ import { KINDS, MAX_PARTICIPANTES, supabaseSinTiparLlamadas } from "@/lib/calls/
  */
 
 export type ResultadoDeLlamada =
-  | { ok: true; callId: string }
+  | {
+      ok: true;
+      callId: string;
+      /** Sólo en grupos: `true` si ya les suena a todos; `false` si hay que elegir a quién. */
+      todos?: boolean;
+    }
   | { ok: false; code: CodigoDeLlamada };
 
 const iniciarSchema = z
@@ -110,10 +115,38 @@ export async function iniciarLlamadaAction(input: {
   if (error || !llamada) return { ok: false, code: codigoDeLlamada(error) };
   const callId = String(llamada.id);
 
+  // Llamada de grupo: si el grupo entero entra en la llamada, les suena a todos
+  // (lo que pidió el cliente el 23/9). Si no entra, no se elige por la persona:
+  // la pantalla abre la hoja de "Añadir". Las invitaciones van de a una y en
+  // paralelo: un bloqueo rechaza SU fila por RLS y no las de los demás.
+  if (parsed.data.groupId) {
+    const { data: miembros } = await db
+      .from("chat_group_members")
+      .select("profile_id")
+      .eq("group_id", parsed.data.groupId)
+      .limit(MAX_PARTICIPANTES + 1);
+
+    const filas = (miembros ?? []) as { profile_id: string }[];
+    const otros = filas.map((m) => String(m.profile_id)).filter((id) => id !== user.id);
+    const entra = filas.length <= MAX_PARTICIPANTES && otros.length > 0;
+
+    if (entra) {
+      await Promise.all(
+        otros.map((profileId) =>
+          db.from("call_participants").insert({
+            call_id: callId,
+            profile_id: profileId,
+            tenant_id: tenant.id,
+          }),
+        ),
+      );
+    }
+
+    revalidatePath("/llamadas");
+    return { ok: true, callId, todos: entra };
+  }
+
   // Llamada de a dos: se invita a la otra persona en el acto, para que le suene.
-  // Llamada de grupo: no se invita a nadie todavía — la pantalla abre la hoja de
-  // "Añadir" con los miembros, porque un grupo puede tener cuarenta personas y
-  // la llamada entra diez. Elegir por la persona sería elegir mal.
   if (parsed.data.profileId) {
     const { error: errorInvitado } = await db.from("call_participants").insert({
       call_id: callId,
@@ -179,7 +212,11 @@ export async function atenderLlamadaAction(input: {
   return { ok: true, callId: parsed.data.callId };
 }
 
-/** No quiero atender. La llamada muere para los dos. */
+/**
+ * No quiero atender. En un directo la llamada muere para los dos; en un grupo
+ * sólo se apaga MI timbre (lo hace el cliente): si no, el primero que rechaza
+ * le corta la llamada a todo el grupo.
+ */
 export async function rechazarLlamadaAction(input: {
   callId: string;
 }): Promise<ResultadoDeLlamada> {
@@ -191,6 +228,13 @@ export async function rechazarLlamadaAction(input: {
   const { supabase } = g;
   const db = supabaseSinTiparLlamadas(supabase);
   const ahora = new Date().toISOString();
+
+  const { data: llamada } = await db
+    .from("calls")
+    .select("group_id")
+    .eq("id", parsed.data.callId)
+    .maybeSingle();
+  if (llamada?.group_id) return { ok: true, callId: parsed.data.callId };
 
   /**
    * ⚠️ Acá NO se toca `call_participants`, y no es un olvido.

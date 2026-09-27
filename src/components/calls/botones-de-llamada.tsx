@@ -18,7 +18,9 @@ export interface BotonesDeLlamadaProps {
     kind: "audio" | "video";
     profileId?: string;
     groupId?: string;
-  }) => Promise<{ ok: true; callId: string } | { ok: false; code: CodigoDeLlamada }>;
+  }) => Promise<
+    { ok: true; callId: string; todos?: boolean } | { ok: false; code: CodigoDeLlamada }
+  >;
   className?: string;
 }
 
@@ -72,9 +74,9 @@ export function BotonesDeLlamada({
       }
 
       // `entrar=1` marca que esto vino de un gesto: es lo que autoriza a la
-      // pantalla a pedir micrófono sola. `agregar=1` abre la hoja de personas en
-      // una llamada de grupo, donde todavía no hay a quién hacerle sonar nada.
-      const extra = groupId ? "&agregar=1" : "";
+      // pantalla a pedir micrófono sola. `agregar=1` abre la hoja de personas
+      // cuando el grupo no entraba entero y todavía no le suena a nadie.
+      const extra = groupId && !resultado.todos ? "&agregar=1" : "";
       router.push(`/llamadas/${resultado.callId}?entrar=1${extra}`);
     });
   }

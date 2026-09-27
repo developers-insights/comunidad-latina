@@ -96,6 +96,11 @@ export function aBarras(picos: readonly number[], cuantas: number): number[] {
   });
 }
 
+/** Misma ruta con otra firma: el token cambia en cada refresco del hilo, el archivo no. */
+export function mismoArchivo(a: string, b: string): boolean {
+  return a.split("?")[0] === b.split("?")[0];
+}
+
 export function VoicePlayer({
   src,
   duracionMs,
@@ -112,6 +117,21 @@ export function VoicePlayer({
   const [transcurrido, setTranscurrido] = useState(0);
   const [duracionCargada, setDuracionCargada] = useState(0);
   const [fallo, setFallo] = useState(false);
+
+  /**
+   * ⚠️ LA FIRMA NUEVA DEL MISMO ARCHIVO NO SE LE PASA AL <audio>.
+   * El hilo hace `router.refresh()` cada 15 s y cada vuelta re-firma los
+   * adjuntos con otro token. Cambiarle la `src` a un <audio> lo recarga: corta
+   * lo que suena y NO dispara `pause`, así que el botón quedaba en "Pausar"
+   * sobre un audio mudo (reclamo de Nacho, 23/9: "se traba"). La firma nueva
+   * se guarda y se usa sólo si la vigente falla (venció).
+   */
+  const [srcEnUso, setSrcEnUso] = useState(src);
+  const [srcUltima, setSrcUltima] = useState(src);
+  if (src !== srcUltima) {
+    setSrcUltima(src);
+    if (src && (!srcEnUso || !mismoArchivo(src, srcEnUso))) setSrcEnUso(src);
+  }
 
   const picos = useMemo(
     () => (onda && onda.length > 0 ? aBarras(onda, BARRAS_DIBUJADAS) : ONDA_PLANA),
@@ -169,14 +189,18 @@ export function VoicePlayer({
 
   function alternar() {
     const audio = audioRef.current;
-    if (!audio || !src) return;
-    if (sonando) {
+    if (!audio || !srcEnUso) return;
+    if (!audio.paused) {
       audio.pause();
       return;
     }
     reclamarReproduccion(id, () => audio.pause());
     audio.playbackRate = velocidad;
-    void audio.play().catch(() => setFallo(true));
+    // Sólo "no se puede reproducir" es definitivo; un AbortError (se recargó
+    // en el medio) o un NotAllowedError dejan el botón listo para otro toque.
+    void audio.play().catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "NotSupportedError") setFallo(true);
+    });
   }
 
   function cambiarVelocidad() {
@@ -230,15 +254,16 @@ export function VoicePlayer({
         className,
       )}
     >
-      {src && (
+      {srcEnUso && (
         <audio
           ref={audioRef}
-          src={src}
+          src={srcEnUso}
           preload="metadata"
           // Una `src` nueva (la firma venció y se renovó) reinicia lo pintado
           // acá y no en un efecto: el elemento avisa cuándo empieza a cargar, y
           // un `setState` sincrónico dentro de un efecto encadena renders.
           onLoadStart={() => {
+            setSonando(false);
             setFallo(false);
             setTranscurrido(0);
             setDuracionCargada(0);
@@ -248,6 +273,7 @@ export function VoicePlayer({
             const duracion = event.currentTarget.duration;
             if (Number.isFinite(duracion) && duracion > 0) setDuracionCargada(duracion);
           }}
+          onEmptied={() => setSonando(false)}
           onPlay={() => setSonando(true)}
           onPause={() => setSonando(false)}
           onTimeUpdate={(event) => setTranscurrido(event.currentTarget.currentTime)}
@@ -256,14 +282,21 @@ export function VoicePlayer({
             setTranscurrido(0);
             reiniciarPintado();
           }}
-          onError={() => setFallo(true)}
+          onError={() => {
+            if (srcUltima && srcUltima !== srcEnUso) {
+              setSrcEnUso(srcUltima);
+              return;
+            }
+            setSonando(false);
+            setFallo(true);
+          }}
         />
       )}
 
       <button
         type="button"
         onClick={alternar}
-        disabled={!src || fallo}
+        disabled={!srcEnUso || fallo}
         aria-label={
           sonando ? COPY_COMPOSER.reproductor.pausar : COPY_COMPOSER.reproductor.reproducir
         }
@@ -276,7 +309,7 @@ export function VoicePlayer({
           "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
         )}
       >
-        {!src && !fallo ? (
+        {!srcEnUso && !fallo ? (
           <Spinner size={16} />
         ) : sonando ? (
           <Pause size={18} weight="fill" aria-hidden="true" />

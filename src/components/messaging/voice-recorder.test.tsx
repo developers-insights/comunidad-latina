@@ -131,6 +131,71 @@ describe("VoiceRecorder — enviar", () => {
     expect(onListo).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * «Si apreto una vez en el celular no se puede enviar el audio» (Nacho, 23/9).
+   * En el teléfono `getUserMedia` tarda más que un toque —y la primera vez hay
+   * un cartel de permiso en el medio—, así que el dedo se levanta con la fase
+   * todavía en `pidiendo`. Los tests de arriba esperan el micrófono ANTES de
+   * soltar, que es justo lo que en un teléfono no pasa.
+   */
+  function microfonoQueTarda() {
+    const pendiente: { dar: (valor: unknown) => void } = { dar: () => {} };
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn(
+          () =>
+            new Promise((resolver) => {
+              pendiente.dar = resolver;
+            }),
+        ),
+      },
+    });
+    return pendiente;
+  }
+
+  it("un toque que termina antes de que llegue el micrófono entra a manos libres", async () => {
+    const microfono = microfonoQueTarda();
+    const onListo = vi.fn();
+    render(<VoiceRecorder onListo={onListo} />);
+    const nodo = boton();
+    await apoyar(nodo);
+    await soltar();
+    await act(async () => {
+      fireEvent.click(nodo, { detail: 1 });
+    });
+    await act(async () => {
+      microfono.dar({ getTracks: () => [{ stop() {} }] });
+    });
+    await hastaQue(() => screen.queryByRole("timer") !== null);
+    expect(screen.getByText(COPY_COMPOSER.voz.bloqueada)).toBeTruthy();
+    expect(onListo).not.toHaveBeenCalled();
+
+    const enviar = screen.getByRole("button", { name: COPY_COMPOSER.voz.enviar });
+    await act(async () => {
+      fireEvent.pointerDown(enviar, { pointerId: 2 });
+      fireEvent.click(enviar, { detail: 1 });
+    });
+    await hastaQue(() => onListo.mock.calls.length > 0);
+    expect(onListo).toHaveBeenCalledTimes(1);
+  });
+
+  it("sostener y soltar mientras el navegador pregunta no graba nada", async () => {
+    const microfono = microfonoQueTarda();
+    const parar = vi.fn();
+    render(<VoiceRecorder onListo={() => {}} />);
+    await apoyar(boton());
+    await act(async () => {
+      await new Promise((resolver) => setTimeout(resolver, 450));
+    });
+    await soltar();
+    await act(async () => {
+      microfono.dar({ getTracks: () => [{ stop: parar }] });
+    });
+    expect(screen.queryByRole("timer")).toBeNull();
+    expect(parar).toHaveBeenCalled();
+  });
+
   it("en manos libres, el cuadrado abre la vista previa y no manda", async () => {
     const onListo = vi.fn();
     render(<VoiceRecorder onListo={onListo} />);

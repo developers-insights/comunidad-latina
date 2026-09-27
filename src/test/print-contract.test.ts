@@ -767,6 +767,11 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-brand-foreground"],
     cobertura: "control",
   },
+  // Vista previa de un PDF antes de mandarlo: el único portador es el "Enviar".
+  "src/components/messaging/archivo-previa.tsx": {
+    inks: ["text-brand-foreground"],
+    cobertura: "control",
+  },
   // Contacto inline (call cliente 2026-07-24, extendido a las cuatro pantallas
   // el 2026-08-20): mismo composer que el hilo de Mensajes, embebido en la
   // publicación, el perfil o la card. Único portador = el botón redondo de
