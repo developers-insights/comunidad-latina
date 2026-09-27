@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 // Fuente única: public/brand/logo-original.svg (vectorización fiel de logo.jpg, el logo que mandó el cliente).
-// Todo raster de marca sale de acá; scripts/generate-icons.mjs es el monograma CL viejo y NO se debe volver a correr.
 // El wordmark de og-logo.png usa Bookman Old Style Bold instalada en Windows: el PNG se genera local y se commitea,
 // así producción no depende de la fuente.
 
