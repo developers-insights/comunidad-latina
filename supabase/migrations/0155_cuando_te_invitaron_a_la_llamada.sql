@@ -97,4 +97,46 @@ $$;
 
 revoke execute on function app.validar_participante_de_llamada() from public, anon;
 
+-- En una llamada de grupo sólo se puede invitar a miembros de ese grupo: antes
+-- quien iniciaba la llamada podía hacer sonar a cualquier perfil del tenant.
+drop policy if exists call_participants_insert on public.call_participants;
+create policy call_participants_insert on public.call_participants
+for insert to authenticated
+with check (
+  tenant_id = (select app.current_tenant_id())
+  and exists (
+    select 1
+      from public.calls c
+     where c.id = call_participants.call_id
+       and c.tenant_id = call_participants.tenant_id
+       and c.status in ('sonando', 'en_curso')
+       and (
+         (
+           app.inicie_la_llamada(c.id)
+           and not app.pair_blocked((select auth.uid()), call_participants.profile_id)
+           and (
+             c.group_id is null
+             or exists (
+               select 1
+                 from public.chat_group_members m
+                where m.group_id = c.group_id
+                  and m.profile_id = call_participants.profile_id
+             )
+           )
+         )
+         or (
+           call_participants.profile_id = (select auth.uid())
+           and c.group_id is not null
+           and app.es_miembro_de_grupo(c.group_id)
+         )
+       )
+  )
+  and exists (
+    select 1
+      from public.profiles p
+     where p.id = call_participants.profile_id
+       and p.tenant_id = call_participants.tenant_id
+  )
+);
+
 commit;

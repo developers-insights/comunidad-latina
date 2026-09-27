@@ -157,7 +157,7 @@ export function WorkPanel({
         <p className="text-xs text-foreground-muted">{W.registered}</p>
       </BezelCard>
 
-      {status === "changes_requested" && (
+      {(status === "changes_requested" || (status === "funded" && !isCreator)) && (
         <>
           <Button variant="ghost" size="sm" className="self-center" onClick={() => setDisputeOpen(true)}>
             <Warning size={15} aria-hidden="true" />

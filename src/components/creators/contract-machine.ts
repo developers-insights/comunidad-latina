@@ -84,6 +84,7 @@ export const TRANSITIONS: readonly TransitionRule[] = [
 
   { action: "deliver", from: "funded", to: "delivered", role: "creator", stamp: "delivered_at" },
   { action: "cancel", from: "funded", to: "canceled", role: "client", stamp: "canceled_at" },
+  { action: "dispute", from: "funded", to: "disputed", role: "client", stamp: null },
 
   { action: "approve", from: "delivered", to: "approved", role: "client", stamp: "approved_at" },
   {

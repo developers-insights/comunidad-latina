@@ -66,7 +66,10 @@ alter table public.creator_profile_boosts force row level security;
 create policy creator_profile_boosts_select on public.creator_profile_boosts
 for select to anon, authenticated
 using (
-  status = 'active'
+  (
+    status = 'active'
+    and ((select auth.uid()) is null or tenant_id = (select app.current_tenant_id()))
+  )
   or (
     tenant_id = (select app.current_tenant_id())
     and (

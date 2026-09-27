@@ -76,7 +76,21 @@ export async function activarImpulsoDePerfil(
     return;
   }
 
-  const startsAt = new Date();
+  // Dos pestañas pueden pagar dos checkouts antes de que el primero se active:
+  // el segundo se encadena detrás del vigente en vez de superponerse y perderse.
+  const ahora = new Date();
+  const { data: vigente, error: vigenteError } = await admin
+    .from("creator_profile_boosts")
+    .select("ends_at")
+    .eq("tenant_id", fila.tenant_id)
+    .eq("creator_id", fila.creator_id)
+    .eq("status", "active")
+    .gt("ends_at", ahora.toISOString())
+    .order("ends_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (vigenteError) throw new Error(`select creator_profile_boosts vigente: ${vigenteError.code}`);
+  const startsAt = vigente?.ends_at ? new Date(vigente.ends_at) : ahora;
   const endsAt = new Date(startsAt.getTime() + fila.duration_days * 86_400_000);
 
   const { data: activadas, error: updateError } = await admin
@@ -85,7 +99,7 @@ export async function activarImpulsoDePerfil(
       status: "active",
       starts_at: startsAt.toISOString(),
       ends_at: endsAt.toISOString(),
-      updated_at: startsAt.toISOString(),
+      updated_at: ahora.toISOString(),
     })
     .eq("id", fila.id)
     .eq("status", "pending_payment")

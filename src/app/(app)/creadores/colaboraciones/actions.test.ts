@@ -21,6 +21,9 @@ vi.mock("@/lib/config/services", () => ({
   get isStripeConfigured() {
     return mocks.stripeConfigured.value;
   },
+  get isPagosDemoPermitido() {
+    return !mocks.stripeConfigured.value && process.env.NODE_ENV !== "production" && !process.env.VERCEL_ENV;
+  },
 }));
 vi.mock("@/lib/stripe", () => ({ getStripe: () => mocks.stripe }));
 vi.mock("@/lib/stripe/checkout", () => ({ crearCheckoutSessionIdempotente: mocks.crearCheckoutSessionIdempotente }));
@@ -369,6 +372,27 @@ describe("cancelContract", () => {
     const result = await cancelContract(CONTRACT_ID);
     expect(result).toEqual({ ok: true, refundPending: true });
     expect(row().status).toBe("canceled");
+  });
+
+  it("con un hito ya hecho, el negocio no cancela: tiene que ir a disputa", async () => {
+    mocks.stripeConfigured.value = true;
+    setup(contract({ status: "funded", stripe_payment_intent_id: "pi_1" }), CLIENT, {
+      gig_contract_milestones: [{ id: "m1", contract_id: CONTRACT_ID, done_at: "2026-09-27T10:00:00Z" }],
+    });
+    const result = await cancelContract(CONTRACT_ID);
+    expect(result.ok).toBe(false);
+    expect(row().status).toBe("funded");
+    expect(mocks.stripe.refunds.create).not.toHaveBeenCalled();
+  });
+
+  it("con un hito sin hacer, cancelar todavía devuelve la plata", async () => {
+    mocks.stripeConfigured.value = true;
+    mocks.stripe.refunds.create.mockResolvedValue({ id: "re_2" });
+    setup(contract({ status: "funded", stripe_payment_intent_id: "pi_1" }), CLIENT, {
+      gig_contract_milestones: [{ id: "m1", contract_id: CONTRACT_ID, done_at: null }],
+    });
+    const result = await cancelContract(CONTRACT_ID);
+    expect(result).toEqual({ ok: true, refundPending: false });
   });
 
   it("entregado ya no se cancela", async () => {

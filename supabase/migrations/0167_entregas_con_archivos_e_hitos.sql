@@ -114,6 +114,9 @@ on conflict (id) do update
       file_size_limit = excluded.file_size_limit,
       allowed_mime_types = excluded.allowed_mime_types;
 
+-- El cliente NO lee el bucket directo: podría bajarse archivos subidos antes de
+-- que la entrega quede registrada y después cancelar con reembolso. Los recibe
+-- sólo por URL firmada desde deliveryFileUrl, que exige que estén en job_deliverables.
 drop policy if exists gig_deliveries_select on storage.objects;
 create policy gig_deliveries_select on storage.objects
 for select to authenticated
@@ -126,7 +129,7 @@ using (
       select 1 from public.gig_contracts c
       where c.id::text = (storage.foldername(name))[2]
         and c.tenant_id = (select app.current_tenant_id())
-        and (c.client_id = (select auth.uid()) or c.creator_id = (select auth.uid()))
+        and c.creator_id = (select auth.uid())
     )
   )
 );

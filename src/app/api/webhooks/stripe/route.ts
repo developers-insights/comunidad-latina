@@ -124,6 +124,11 @@ export async function POST(request: Request) {
       console.warn("[pagos:webhook] Firma inválida — 400.");
       return NextResponse.json({ error: "Firma inválida" }, { status: 400 });
     }
+    // Con el secreto de Connect sólo entra la sincronización de la cuenta del
+    // creador: cualquier otro evento firmado así no tiene por qué tocar pagos.
+    if (!connectEvent.account || connectEvent.type !== "account.updated") {
+      return NextResponse.json({ received: true, ignored: true });
+    }
     event = connectEvent;
   }
 

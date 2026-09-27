@@ -81,7 +81,9 @@ export async function runEscrowSweep(input: {
       q
         .select(ESCROW_CONTRACT_COLUMNS)
         .eq("status", "approved")
-        .order("approved_at", { ascending: true })
+        // Los que nunca se intentaron primero, y después los de intento más viejo:
+        // si ordenara por approved_at, 50 creadores sin cuenta de cobro taparían el lote para siempre.
+        .order("payout_attempted_at", { ascending: true, nullsFirst: true })
         .limit(BATCH),
     "pagos pendientes",
   );

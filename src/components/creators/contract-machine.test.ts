@@ -177,10 +177,15 @@ describe("disputa", () => {
     expect(findTransition("creator", "delivered", "dispute")).toBeNull();
   });
 
-  it("no se disputa antes de la entrega ni después de aprobar", () => {
-    for (const status of ["proposed", "accepted", "signed", "funded", "approved"] as const) {
+  it("no se disputa antes de pagar ni después de aprobar", () => {
+    for (const status of ["proposed", "accepted", "signed", "approved"] as const) {
       expect(findTransition("client", status, "dispute")).toBeNull();
     }
+  });
+
+  it("con el pago hecho, el negocio puede disputar en vez de cancelar; el creador no", () => {
+    expect(findTransition("client", "funded", "dispute")?.to).toBe("disputed");
+    expect(findTransition("creator", "funded", "dispute")).toBeNull();
   });
 
   it("la disputa congela la plata", () => {

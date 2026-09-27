@@ -654,7 +654,14 @@ async function finishRelease(
     }
     throw new Error(`update gig_contracts (release): ${error.code}`);
   }
-  if ((data ?? []).length === 0) return { kind: "skipped", status: "raced" };
+  if ((data ?? []).length === 0) {
+    if (transferId) {
+      console.error(
+        `[creadores:cobro] ALERTA la transferencia ${transferId} al creador salió, pero el contrato ${contract.id} ya no estaba "approved" (disputa o reembolso en paralelo). Revisar en el Dashboard y, si corresponde, revertirla.`,
+      );
+    }
+    return { kind: "skipped", status: "raced" };
+  }
 
   await recordContractEvent(admin, {
     tenantId: contract.tenant_id,

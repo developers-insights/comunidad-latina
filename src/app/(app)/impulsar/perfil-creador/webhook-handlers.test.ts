@@ -30,7 +30,7 @@ function session(over: Partial<Stripe.Checkout.Session> = {}) {
   } as Stripe.Checkout.Session;
 }
 
-function admin(fila: Fila | null, activadas: Fila[] = [{ id: "cpb-1" }]) {
+function admin(fila: Fila | null, activadas: Fila[] = [{ id: "cpb-1" }], vigente: Fila | null = null) {
   const updates: Fila[] = [];
   const audits: Fila[] = [];
   const client = {
@@ -44,9 +44,13 @@ function admin(fila: Fila | null, activadas: Fila[] = [{ id: "cpb-1" }]) {
         };
       }
       return {
-        select: () => ({
-          eq: () => ({ maybeSingle: async () => ({ data: fila, error: null }) }),
-        }),
+        select: (cols: string) => {
+          const data = cols === "ends_at" ? vigente : fila;
+          const chain: Record<string, unknown> = {};
+          for (const m of ["eq", "gt", "order", "limit"]) chain[m] = () => chain;
+          chain.maybeSingle = async () => ({ data, error: null });
+          return chain;
+        },
         update: (values: Fila) => {
           updates.push(values);
           const chain = {
@@ -94,6 +98,16 @@ describe("activarImpulsoDePerfil", () => {
       ignorePrefs: true,
     });
     expect(a.audits[0]).toMatchObject({ action: "creator_profile_boost_activated" });
+  });
+
+  it("si ya hay uno vigente, el pagado de nuevo arranca cuando termina el anterior", async () => {
+    const finDelVigente = "2026-10-10T12:00:00.000Z";
+    const a = admin(PENDIENTE, [{ id: "cpb-1" }], { ends_at: finDelVigente });
+    await activarImpulsoDePerfil(a.client, "cpb-1", session());
+
+    const { starts_at, ends_at } = a.updates[0] as { starts_at: string; ends_at: string };
+    expect(starts_at).toBe(finDelVigente);
+    expect(Date.parse(ends_at) - Date.parse(finDelVigente)).toBe(7 * 86_400_000);
   });
 
   it("si no existe, no hace nada", async () => {

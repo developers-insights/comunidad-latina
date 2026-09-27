@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { findTransition, type ContractAction } from "@/components/creators/contract-machine";
-import { isStripeConfigured } from "@/lib/config/services";
+import { isStripeConfigured, isPagosDemoPermitido } from "@/lib/config/services";
 import {
   ACCESS_COPY,
   buildContractSnapshot,
@@ -368,8 +368,8 @@ export async function startPayment(contractId: string): Promise<StartPaymentResu
   const admin = adminClient();
 
   if (!isStripeConfigured) {
-    if (process.env.VERCEL_ENV === "production") {
-      console.error("[creadores:pago] Stripe sin configurar en producción: no se permite el pago de demostración.");
+    if (!isPagosDemoPermitido) {
+      console.error("[creadores:pago] Stripe sin configurar fuera de desarrollo local: no se permite el pago de demostración.");
       return fail(COPY.generic);
     }
     const moved = await moveStatus(admin, a.contract, "signed", {
@@ -418,6 +418,9 @@ export async function startPayment(contractId: string): Promise<StartPaymentResu
 // Cancelación
 // ---------------------------------------------------------------------------
 
+const CANCELAR_CON_AVANCE =
+  "El creador ya empezó a trabajar, así que no se puede cancelar. Si hay un problema con el trabajo, abrí una disputa y lo revisamos.";
+
 export type CancelResult = { ok: true; refundPending: boolean } | Fail;
 
 export async function cancelContract(contractId: string): Promise<CancelResult> {
@@ -427,6 +430,25 @@ export async function cancelContract(contractId: string): Promise<CancelResult> 
   if (!rule) return fail(ACCESS_COPY.notAllowed, { stale: true });
 
   const admin = adminClient();
+
+  // Con el pago ya hecho, el negocio no puede cancelar y llevarse el 100% si el
+  // creador ya avanzó: a partir de ahí el camino es la disputa, que congela la plata.
+  if (a.role === "client" && rule.from === "funded") {
+    const [hitos, entregas] = await Promise.all([
+      db(admin)
+        .from("gig_contract_milestones")
+        .select("id", { count: "exact", head: true })
+        .eq("contract_id", contractId)
+        .not("done_at", "is", null),
+      db(admin)
+        .from("job_deliverables")
+        .select("id", { count: "exact", head: true })
+        .eq("contract_id", contractId),
+    ]);
+    if (hitos.error || entregas.error) return fail(COPY.generic);
+    if ((hitos.count ?? 0) > 0 || (entregas.count ?? 0) > 0) return fail(CANCELAR_CON_AVANCE);
+  }
+
   const moved = await moveStatus(admin, a.contract, rule.from, {
     status: "canceled",
     canceled_at: new Date().toISOString(),
