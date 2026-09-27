@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { handleStoreMembershipEvent } from "@/app/(app)/marketplace/membresia/webhook-handlers";
 import { handleGigContractEvent } from "@/lib/creators/stripe-webhook";
+import {
+  activarImpulsoDePerfil,
+  idDeImpulsoDePerfil,
+} from "@/app/(app)/impulsar/perfil-creador/webhook-handlers";
 import { isStripeConfigured } from "@/lib/config/services";
 import { listingViewHref } from "@/lib/monetization/href";
 import {
@@ -313,6 +317,14 @@ export async function POST(request: Request) {
           break;
         }
 
+        const impulsoDePerfilId = idDeImpulsoDePerfil(session);
+        if (impulsoDePerfilId) {
+          if (session.payment_status === "paid") {
+            await activarImpulsoDePerfil(admin, impulsoDePerfilId, session);
+          }
+          break;
+        }
+
         // Presencia Verificada (§7): suscripción con metadata.business_account_id.
         // `unpaid` (métodos async) espera al async_payment_succeeded de abajo.
         await activateVerifiedPresence(admin, session, event.id);
@@ -326,11 +338,13 @@ export async function POST(request: Request) {
         if (boostId) await activateBoost(admin, boostId, session);
         const postPromotionId = metadataString(session.metadata, "post_promotion_id");
         if (postPromotionId) await activatePostPromotion(admin, postPromotionId, session);
+        const impulsoDePerfilId = idDeImpulsoDePerfil(session);
+        if (impulsoDePerfilId) await activarImpulsoDePerfil(admin, impulsoDePerfilId, session);
         // Presencia también entra por acá, y ANTES no: exigirle `paid` al
         // completed sin atender este evento dejaría la presencia sin encender
         // nunca tras un pago diferido real. El arreglo no puede cambiar
         // "concede sin cobrar" por "cobra sin conceder".
-        if (!boostId && !postPromotionId) {
+        if (!boostId && !postPromotionId && !impulsoDePerfilId) {
           await activateVerifiedPresence(admin, session, event.id);
         }
         break;
