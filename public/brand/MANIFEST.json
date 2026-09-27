@@ -77,6 +77,11 @@
   ],
   "vectoriales": [
     {
+      "file": "logo-original.svg",
+      "format": "svg",
+      "description": "Logo ORIGINAL del cliente (logo.jpg en la raíz: tres figuras azul, amarilla con vestido y roja, con borde blanco). Vectorización fiel, no rediseño: siluetas medidas sobre el original (IoU de relleno ~0,97 contra logo.jpg). Fuente única de logo-mark.png, favicon, íconos PWA, íconos de tienda y og-logo.png vía scripts/generate-brand-logo.mjs."
+    },
+    {
       "file": "brand-mark.svg",
       "format": "svg",
       "description": "Emblema de marca vectorial: escudo con gradiente azul, gloss, borde interior y monograma CL. Se renderiza vía <BrandMark> (src/components/experience/brand-mark.tsx) con shine en hover.",
@@ -85,7 +90,12 @@
     {
       "file": "favicon.svg",
       "format": "svg",
-      "description": "Favicon cuadrado: fondo azul #1A5EDB + monograma CL crema."
+      "description": "Favicon: el logo original sobre gris oscuro con viñeta (el fondo del logo del cliente). Copia de src/app/icon.svg."
+    },
+    {
+      "file": "og-logo.png",
+      "format": "png 1200x630",
+      "description": "Logo original + wordmark \"Comunidad Latina\" (Bookman Old Style Bold, como el original) para compartir. Todavía NO está enchufado: el OG del sitio sigue siendo /images/og-default.png."
     }
   ],
   "no_enviados": [
