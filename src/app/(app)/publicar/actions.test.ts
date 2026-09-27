@@ -29,6 +29,12 @@ const mocks = vi.hoisted(() => ({
   enqueueModeration: vi.fn(),
   createAdminClient: vi.fn(),
   checkPhotoCount: vi.fn(),
+  validarVideoDeAviso: vi.fn(),
+}));
+
+vi.mock("@/lib/media/listing-video-server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/media/listing-video-server")>()),
+  validarVideoDeAviso: mocks.validarVideoDeAviso,
 }));
 
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
@@ -156,6 +162,7 @@ beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
   mocks.limit.mockReturnValue({ ok: true, remaining: 9, retryAfterMs: 0 });
   mocks.checkPhotoCount.mockReturnValue({ ok: true, max: 4 });
+  mocks.validarVideoDeAviso.mockResolvedValue({ ok: true, columns: null });
   mocks.moderateText.mockResolvedValue({
     flagged: false,
     score: 0,
@@ -299,5 +306,56 @@ describe("finalizeListing — auto-aprobación dev", () => {
 
     expect(result).toMatchObject({ ok: true, status: "pending_review" });
     expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("finalizeListing — el video del aviso (Nacho, 23/9)", () => {
+  const VIDEO = {
+    path: `${TENANT_ID}/${USER_ID}/aviso-video-1.mp4`,
+    posterPath: null,
+    durationSeconds: 40,
+  };
+  const COLUMNAS = {
+    video_path: VIDEO.path,
+    video_poster_path: null,
+    video_duration_seconds: 40,
+  };
+
+  it("guarda el video junto con las fotos, validado contra el tier de la fila", async () => {
+    const stub = useHappyPath();
+    useAdmin();
+    mocks.validarVideoDeAviso.mockResolvedValue({ ok: true, columns: COLUMNAS });
+
+    const result = await finalizeListing({ listingId: LISTING_ID, photoPaths: [], video: VIDEO });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(mocks.validarVideoDeAviso).toHaveBeenCalledWith(
+      expect.objectContaining({ input: VIDEO, tenantId: TENANT_ID, userId: USER_ID, tier: "free" }),
+    );
+    const update = stub.calls.find((c) => c.table === "listings" && c.method === "update");
+    expect(update?.args[0]).toMatchObject(COLUMNAS);
+  });
+
+  it("un video que no pasa la regla no publica nada y dice por qué", async () => {
+    const stub = useHappyPath();
+    useAdmin();
+    mocks.validarVideoDeAviso.mockResolvedValue({ ok: false, error: "necesita premium" });
+
+    const result = await finalizeListing({ listingId: LISTING_ID, photoPaths: [], video: VIDEO });
+
+    expect(result).toEqual({ ok: false, error: "necesita premium" });
+    expect(stub.calls.some((c) => c.method === "update")).toBe(false);
+  });
+
+  it("un video sin revisión automática entra a la cola humana", async () => {
+    useHappyPath();
+    useAdmin();
+    mocks.validarVideoDeAviso.mockResolvedValue({ ok: true, columns: COLUMNAS });
+
+    await finalizeListing({ listingId: LISTING_ID, photoPaths: [], video: VIDEO });
+
+    const [, input] = mocks.enqueueModeration.mock.calls[0];
+    expect(input).toMatchObject({ tier: 3 });
+    expect(input.reasons).toContain("video_async_review");
   });
 });

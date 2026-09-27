@@ -89,6 +89,40 @@ export async function subirVideoDeAviso(
   return { ok: true, input: { path, posterPath, durationSeconds: valor.seconds } };
 }
 
+/**
+ * Estado del video de un formulario de aviso. Al subir, el video queda
+ * "guardado" con su ruta: un reintento después de un error del servidor no lo
+ * vuelve a subir.
+ */
+export function useVideoDeAviso() {
+  const [video, setVideo] = useState<VideoDelAviso | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+
+  async function subir(): Promise<SubirVideoResult> {
+    if (video?.tipo === "nuevo") setProgress(0);
+    const result = await subirVideoDeAviso(video, setProgress);
+    setProgress(null);
+    if (result.ok && result.input && video?.tipo === "nuevo") {
+      setVideo({
+        tipo: "guardado",
+        path: result.input.path,
+        posterPath: result.input.posterPath,
+        url: "",
+        posterUrl: null,
+        seconds: result.input.durationSeconds,
+      });
+    }
+    return result;
+  }
+
+  function reset() {
+    setVideo(null);
+    setProgress(null);
+  }
+
+  return { video, setVideo, progress, subir, reset };
+}
+
 type Aviso = { texto: string; conPremium: boolean };
 
 export function ListingVideoField({

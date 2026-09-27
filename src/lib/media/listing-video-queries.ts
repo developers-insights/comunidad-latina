@@ -6,6 +6,38 @@ import {
   type ListingVideoView,
 } from "./listing-video-policy";
 
+export interface VideoGuardado {
+  path: string;
+  posterPath: string | null;
+  seconds: number;
+}
+
+/**
+ * El video y el tier de UN aviso, para la hoja de edición. `null` si la
+ * consulta falla (0160 sin aplicar): la hoja sigue editando texto y fotos.
+ */
+export async function fetchVideoDeAviso(
+  supabase: unknown,
+  listingId: string,
+): Promise<{ tier: string | null; video: VideoGuardado | null } | null> {
+  const { data, error } = await (supabase as SupabaseClient)
+    .from("listings")
+    .select(LISTING_VIDEO_COLUMNS)
+    .eq("id", listingId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as Omit<ListingVideoRow, "id">;
+  const video =
+    row.video_path && typeof row.video_duration_seconds === "number"
+      ? {
+          path: row.video_path,
+          posterPath: row.video_poster_path ?? null,
+          seconds: row.video_duration_seconds,
+        }
+      : null;
+  return { tier: row.tier ?? null, video };
+}
+
 /**
  * Los videos de una página de avisos, en UNA consulta aparte y no dentro del
  * SELECT de cada módulo: el feed trae sus avisos por RPC (`feed_listings_page`,

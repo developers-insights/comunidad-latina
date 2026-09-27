@@ -48,6 +48,7 @@ export const LISTING_VIDEO_COPY = {
   midiendo: "Revisando el video…",
   subiendo: (pct: number) => `Subiendo el video… ${pct}%`,
   duracion: (seconds: number) => `Dura ${formatDuration(seconds) ?? `${seconds} s`}`,
+  resumen: (seconds: number) => `Con un video de ${formatDuration(seconds) ?? `${seconds} s`}`,
   largoPremium:
     "En el feed se ven los primeros 90 segundos y después aparece «Ver video completo».",
   verPremium: "Ver qué incluye premium",

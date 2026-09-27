@@ -39,6 +39,10 @@ import { cn } from "@/lib/utils";
 import { ToggleChips, toggleInList } from "./publish-form";
 import { OfrecerImpulso } from "@/components/boosts/ofrecer-impulso";
 import { createServiceDraft, finalizeService } from "./actions";
+import {
+  ListingVideoField,
+  useVideoDeAviso,
+} from "@/components/listings/listing-video-field";
 import type { WizardHandleRef } from "./wizard-handle";
 
 /**
@@ -137,6 +141,7 @@ export function ServicePublishForm({
   } | null>(null);
   /** El borrador se crea una sola vez: un reintento no duplica avisos. */
   const [draftId, setDraftId] = useState<string | null>(null);
+  const videoDelAviso = useVideoDeAviso();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -247,7 +252,14 @@ export function ServicePublishForm({
         setDraftId(listingId);
       }
 
-      const finalized = await finalizeService({ listingId });
+      const videoSubido = await videoDelAviso.subir();
+      if (!videoSubido.ok) {
+        setError(videoSubido.error);
+        setSubmitting(false);
+        return;
+      }
+
+      const finalized = await finalizeService({ listingId, video: videoSubido.input });
       if (!finalized.ok) {
         setError(finalized.error);
         setSubmitting(false);
@@ -371,6 +383,13 @@ export function ServicePublishForm({
                 placeholder={C.steps.what.descriptionPlaceholder}
               />
             </Field>
+            <ListingVideoField
+              value={videoDelAviso.video}
+              onChange={videoDelAviso.setVideo}
+              tier="free"
+              disabled={submitting}
+              progress={videoDelAviso.progress}
+            />
           </>
         )}
 

@@ -19,6 +19,12 @@ import {
 } from "@/lib/listings/edicion";
 import { cn } from "@/lib/utils";
 import { listingPhotoUrl } from "./helpers";
+import {
+  ListingVideoField,
+  useVideoDeAviso,
+  type ListingVideoInputPayload,
+} from "./listing-video-field";
+import { listingVideoPublicUrl } from "@/lib/media/listing-video-policy";
 
 /**
  * =============================================================================
@@ -106,6 +112,8 @@ function Cuerpo({
   const [description, setDescription] = useState("");
   const [precioCrudo, setPrecioCrudo] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
+  const videoDelAviso = useVideoDeAviso();
+  const ponerVideo = videoDelAviso.setVideo;
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [subiendo, setSubiendo] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -131,11 +139,24 @@ function Cuerpo({
         result.aviso.priceAmount === null ? "" : String(result.aviso.priceAmount),
       );
       setPhotos(result.aviso.photos);
+      const guardado = result.aviso.video;
+      ponerVideo(
+        guardado
+          ? {
+              tipo: "guardado",
+              path: guardado.path,
+              posterPath: guardado.posterPath,
+              url: listingVideoPublicUrl(guardado.path),
+              posterUrl: guardado.posterPath ? listingVideoPublicUrl(guardado.posterPath) : null,
+              seconds: guardado.seconds,
+            }
+          : null,
+      );
     })();
     return () => {
       vigente = false;
     };
-  }, [listingId]);
+  }, [listingId, ponerVideo]);
 
   if (cargaFallida) {
     return (
@@ -155,7 +176,13 @@ function Cuerpo({
   const precioInvalido = precio === undefined;
   const tituloCorto = title.trim().length < EDICION_LIMITES.tituloMin;
 
-  const cambiado = hayCambios(
+  const videoActual = videoDelAviso.video;
+  const videoCambiado =
+    aviso.videoDisponible &&
+    (videoActual?.tipo === "nuevo" ||
+      (videoActual?.tipo === "guardado" ? videoActual.path : null) !== (aviso.video?.path ?? null));
+
+  const cambiado = videoCambiado || hayCambios(
     {
       title: aviso.title,
       description: aviso.description,
@@ -222,12 +249,23 @@ function Cuerpo({
     setErrorMessage(null);
 
     startTransition(async () => {
+      let video: ListingVideoInputPayload | null | undefined;
+      if (videoCambiado) {
+        const subido = await videoDelAviso.subir();
+        if (!subido.ok) {
+          setErrorMessage(subido.error);
+          return;
+        }
+        video = subido.input;
+      }
+
       const result = await editarAvisoAction({
         listingId: aviso.id,
         title: title.trim(),
         description: description.trim(),
         priceAmount: campos.precio ? (precio ?? null) : aviso.priceAmount,
         photoPaths: photos,
+        ...(video !== undefined ? { video } : {}),
       });
 
       if (!result.ok) {
@@ -332,6 +370,17 @@ function Cuerpo({
           onQuitar={(path) => setPhotos((previas) => previas.filter((p) => p !== path))}
           onAgregar={() => archivoRef.current?.click()}
           subiendo={subiendo}
+        />
+      )}
+
+      {aviso.videoDisponible && (
+        <ListingVideoField
+          value={videoDelAviso.video}
+          onChange={videoDelAviso.setVideo}
+          tier={aviso.tier}
+          premiumHref={`/negocios/presencia/aviso/${aviso.id}`}
+          disabled={deshabilitado}
+          progress={videoDelAviso.progress}
         />
       )}
 

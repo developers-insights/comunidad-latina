@@ -20,6 +20,13 @@ import {
   type DeclarationInput,
 } from "@/lib/integrity";
 import { currentSourceHost } from "@/lib/integrity/source-host";
+import {
+  columnasDeVideo,
+  errorDeVideoDeLaBase,
+  listingVideoInputSchema,
+  validarVideoDeAviso,
+  type ListingVideoInput,
+} from "@/lib/media/listing-video-server";
 import { productDraftSchema, type DraftInput } from "./schema";
 
 /**
@@ -172,6 +179,7 @@ const finalizeSchema = z.object({
   photoPaths: z.array(z.string().min(1).max(300)).max(4),
   /** Declaración de originalidad y licencia (pliego / 0061). Opcional al borde. */
   declaration: declarationSchema.nullish(),
+  video: listingVideoInputSchema,
 });
 
 export type FinalizeResult =
@@ -188,6 +196,7 @@ export async function finalizeProduct(rawInput: {
   listingId: string;
   photoPaths: string[];
   declaration?: DeclarationInput | null;
+  video?: ListingVideoInput | null;
 }): Promise<FinalizeResult> {
   const parsed = finalizeSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -224,7 +233,7 @@ export async function finalizeProduct(rawInput: {
   // mismo round-trip que el UPDATE necesitaría de todos modos.
   const { data: current, error: readError } = await supabase
     .from("listings")
-    .select("id, title, description")
+    .select("id, title, description, tier")
     .eq("id", listingId)
     .eq("tenant_id", tenant.id)
     .eq("created_by", user.id)
@@ -235,6 +244,15 @@ export async function finalizeProduct(rawInput: {
     console.warn("[marketplace] finalize: producto no encontrado", { listingId });
     return { ok: false, error: GENERIC_ERROR };
   }
+
+  const videoCheck = await validarVideoDeAviso({
+    input: parsed.data.video,
+    tenantId: tenant.id,
+    userId: user.id,
+    tier: (current as { tier?: string | null }).tier,
+  });
+  if (!videoCheck.ok) return { ok: false, error: videoCheck.error };
+  const videoColumns = videoCheck.columns;
 
   // ---- Moderación de texto ANTES de decidir el status (§8) -----------------
   const moderation = await moderateText(`${current.title}\n${current.description ?? ""}`);
@@ -260,6 +278,7 @@ export async function finalizeProduct(rawInput: {
 
   // ---- Fotos: sin Vision, una imagen JAMÁS se publica sola (§5.6) ----------
   const autoApprove = devAutoApprove();
+  const videoNeedsReview = videoColumns !== null && !autoApprove;
   const photoNeedsReview = photoPaths.length > 0 && !isVisionConfigured && !autoApprove;
 
   const wantsPublish =
@@ -267,6 +286,7 @@ export async function finalizeProduct(rawInput: {
     !moderation.flagged &&
     tier <= TIER_AUTO &&
     !photoNeedsReview &&
+    !videoNeedsReview &&
     !integrity.needsHumanReview;
 
   // La RLS de UPDATE del dueño NUNCA permite status=published (anti
@@ -280,7 +300,7 @@ export async function finalizeProduct(rawInput: {
   // de publicación y del re-encolado.
   const { data: updated, error: updateError } = await supabase
     .from("listings")
-    .update({ photos: photoPaths, status: "pending_review" })
+    .update({ photos: photoPaths, status: "pending_review", ...columnasDeVideo(videoColumns) })
     .eq("id", listingId)
     .eq("tenant_id", tenant.id)
     .eq("created_by", user.id)
@@ -291,7 +311,7 @@ export async function finalizeProduct(rawInput: {
 
   if (updateError || !updated) {
     console.warn("[marketplace] finalize falló", { listingId, code: updateError?.code });
-    return { ok: false, error: GENERIC_ERROR };
+    return { ok: false, error: errorDeVideoDeLaBase(updateError) ?? GENERIC_ERROR };
   }
 
   let finalStatus: "published" | "pending_review" = "pending_review";
@@ -331,12 +351,14 @@ export async function finalizeProduct(rawInput: {
       moderation.skipped ||
       tier > TIER_AUTO ||
       photoNeedsReview ||
+      videoNeedsReview ||
       integrity.needsHumanReview;
     if (shouldEnqueue) {
       try {
         const reasons = [
           ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
           ...(photoNeedsReview ? ["photo_pending_review"] : []),
+          ...(videoNeedsReview ? ["video_async_review"] : []),
           ...integrity.reasons,
         ];
         const outcome = await enqueueModeration(createAdminClient(), {
@@ -346,7 +368,7 @@ export async function finalizeProduct(rawInput: {
           aiScore: moderation.skipped ? null : moderation.score,
           reasons,
           tier:
-            moderation.flagged || photoNeedsReview || integrity.needsHumanReview
+            moderation.flagged || photoNeedsReview || videoNeedsReview || integrity.needsHumanReview
               ? TIER_HUMAN
               : TIER_REVIEW,
         });

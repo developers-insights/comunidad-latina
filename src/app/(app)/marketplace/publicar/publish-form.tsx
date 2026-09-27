@@ -32,6 +32,10 @@ import {
 import { firstPhotoUrl } from "@/components/listings";
 import { OfrecerImpulso } from "@/components/boosts/ofrecer-impulso";
 import { createProductDraft, finalizeProduct } from "./actions";
+import {
+  ListingVideoField,
+  useVideoDeAviso,
+} from "@/components/listings/listing-video-field";
 
 const C = COPY.publish;
 const MAX_PHOTOS = 4;
@@ -101,6 +105,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
   const [condition, setCondition] = useState("");
   const [fulfillment, setFulfillment] = useState<FulfillmentMethod[]>([]);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const videoDelAviso = useVideoDeAviso();
   // Declaración de originalidad y licencia (pliego / Content Integrity).
   const [declaration, setDeclaration] = useState<DeclarationValue>(EMPTY_DECLARATION_VALUE);
 
@@ -171,6 +176,7 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
     setCondition("");
     setFulfillment([]);
     setPhotos([]);
+    videoDelAviso.reset();
     setDeclaration(EMPTY_DECLARATION_VALUE);
     setDraftId(null);
     setDone(null);
@@ -225,8 +231,19 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
         photoPaths.push(path);
       }
 
+      const videoSubido = await videoDelAviso.subir();
+      if (!videoSubido.ok) {
+        setError(videoSubido.error);
+        return;
+      }
+
       // 3) Cierre: estado final según moderación/degradación elegante
-      const finalized = await finalizeProduct({ listingId, photoPaths, declaration });
+      const finalized = await finalizeProduct({
+        listingId,
+        photoPaths,
+        declaration,
+        video: videoSubido.input,
+      });
       if (!finalized.ok) {
         setError(finalized.error);
         return;
@@ -514,6 +531,14 @@ export function PublishForm({ tenantId, stores }: { tenantId: string; stores: St
 
         {photos.length > 0 && <p className="text-xs text-foreground-muted">{C.reviewNote}</p>}
       </div>
+
+      <ListingVideoField
+        value={videoDelAviso.video}
+        onChange={videoDelAviso.setVideo}
+        tier="free"
+        disabled={submitting}
+        progress={videoDelAviso.progress}
+      />
 
       {/* Declaración de originalidad y licencia. Va PEGADA a las fotos porque
           es de las fotos que habla — no al final, junto al botón, donde se lee

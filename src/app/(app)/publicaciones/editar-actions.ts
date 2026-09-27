@@ -19,6 +19,16 @@ import { registerUploadedMedia } from "@/lib/integrity";
 import { retireAssetFromSubject } from "@/lib/integrity/retire";
 import { currentSourceHost } from "@/lib/integrity/source-host";
 import { supabaseSinTiparListings } from "@/lib/listings";
+import { fetchVideoDeAviso, type VideoGuardado } from "@/lib/media/listing-video-queries";
+import {
+  SIN_VIDEO,
+  columnasDeVideo,
+  errorDeVideoDeLaBase,
+  listingVideoInputSchema,
+  validarVideoDeAviso,
+  type ListingVideoColumns,
+  type ListingVideoInput,
+} from "@/lib/media/listing-video-server";
 import {
   EDICION_COPY,
   EDICION_LIMITES,
@@ -149,6 +159,10 @@ export interface AvisoEditable {
   tenantId: string;
   /** Pausado por denuncias: la hoja lo dice y no ofrece guardar. */
   bloqueadoPorModeracion: boolean;
+  /** `videoDisponible` en false = la 0160 todavía no está aplicada: la hoja no ofrece video. */
+  tier: string | null;
+  video: VideoGuardado | null;
+  videoDisponible: boolean;
 }
 
 export type CargarAvisoResult =
@@ -182,10 +196,14 @@ export async function cargarAvisoParaEditar(rawInput: {
     return { ok: false, error: EDICION_COPY.errores.noEsTuya };
   }
   const fila = data as FilaDeAviso;
+  const extra = await fetchVideoDeAviso(supabase, fila.id);
 
   return {
     ok: true,
     aviso: {
+      tier: extra?.tier ?? null,
+      video: extra?.video ?? null,
+      videoDisponible: extra !== null,
       id: fila.id,
       kind: fila.kind,
       status: fila.status,
@@ -209,6 +227,8 @@ const editarSchema = z.object({
   description: z.string().trim().max(EDICION_LIMITES.descripcionMax),
   priceAmount: z.number().min(0).max(EDICION_LIMITES.precioMax).nullable(),
   photoPaths: z.array(z.string().min(1).max(300)).max(EDICION_LIMITES.fotosMax),
+  /** Ausente = no se tocó; `null` = se quitó. */
+  video: listingVideoInputSchema,
 });
 
 export type EditarAvisoResult =
@@ -222,6 +242,7 @@ export async function editarAvisoAction(rawInput: {
   description: string;
   priceAmount: number | null;
   photoPaths: string[];
+  video?: ListingVideoInput | null;
 }): Promise<EditarAvisoResult> {
   // Zod PURO primero (sin I/O): un payload roto no consume guard ni cuota.
   const parsed = editarSchema.safeParse(rawInput);
@@ -315,7 +336,28 @@ export async function editarAvisoAction(rawInput: {
 
   // Guardar "lo mismo" mandaría un aviso publicado a la cola de revisión a
   // cambio de nada: se corta acá y se dice que no había nada que guardar.
-  if (!hayCambios(valoresActuales, valoresNuevos)) {
+  let videoColumns: ListingVideoColumns | null = null;
+  if (entrada.video !== undefined) {
+    const actual = await fetchVideoDeAviso(supabase, entrada.listingId);
+    const pathActual = actual?.video?.path ?? null;
+    if ((entrada.video?.path ?? null) !== pathActual) {
+      if (entrada.video === null) {
+        videoColumns = SIN_VIDEO;
+      } else {
+        const videoCheck = await validarVideoDeAviso({
+          input: entrada.video,
+          tenantId: tenant.id,
+          userId: user.id,
+          tier: actual?.tier,
+        });
+        if (!videoCheck.ok) return { ok: false, error: videoCheck.error };
+        videoColumns = videoCheck.columns;
+      }
+    }
+  }
+  const videoNuevo = videoColumns !== null && videoColumns.video_path !== null;
+
+  if (!hayCambios(valoresActuales, valoresNuevos) && videoColumns === null) {
     return { ok: true, status: fila.status, sinCambios: true };
   }
 
@@ -348,6 +390,7 @@ export async function editarAvisoAction(rawInput: {
   // Sin Vision, una imagen JAMÁS se publica sola (§5.6) — misma regla del alta.
   const autoApprove = devAutoApprove();
   const photoNeedsReview = nuevas.length > 0 && !isVisionConfigured && !autoApprove;
+  const videoNeedsReview = videoNuevo && !autoApprove;
 
   const nuevoStatus = statusDespuesDeEditar(fila.status);
 
@@ -359,6 +402,7 @@ export async function editarAvisoAction(rawInput: {
       price_amount: entrada.priceAmount,
       photos: entrada.photoPaths,
       status: nuevoStatus,
+      ...columnasDeVideo(videoColumns),
     })
     .eq("id", entrada.listingId)
     .eq("tenant_id", tenant.id)
@@ -375,7 +419,7 @@ export async function editarAvisoAction(rawInput: {
       listingId: entrada.listingId,
       code: updateError?.code,
     });
-    return { ok: false, error: GENERICO };
+    return { ok: false, error: errorDeVideoDeLaBase(updateError) ?? GENERICO };
   }
 
   // Las que salieron quedan ANOTADAS, no borradas: el libro de procedencia es
@@ -395,6 +439,7 @@ export async function editarAvisoAction(rawInput: {
     moderation.skipped ||
     tier > TIER_AUTO ||
     photoNeedsReview ||
+    videoNeedsReview ||
     integrity.needsHumanReview;
 
   if (debeEncolar) {
@@ -402,6 +447,7 @@ export async function editarAvisoAction(rawInput: {
       const reasons = [
         ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
         ...(photoNeedsReview ? ["photo_pending_review"] : []),
+        ...(videoNeedsReview ? ["video_async_review"] : []),
         ...integrity.reasons,
       ];
       const outcome = await enqueueModeration(createAdminClient(), {
@@ -411,7 +457,7 @@ export async function editarAvisoAction(rawInput: {
         aiScore: moderation.skipped ? null : moderation.score,
         reasons,
         tier:
-          moderation.flagged || photoNeedsReview || integrity.needsHumanReview
+          moderation.flagged || photoNeedsReview || videoNeedsReview || integrity.needsHumanReview
             ? TIER_HUMAN
             : TIER_REVIEW,
       });

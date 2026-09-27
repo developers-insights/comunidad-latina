@@ -8,6 +8,13 @@ import { isVisionConfigured } from "@/lib/config/services";
 import { requireIdentidadVerificada } from "@/lib/verificacion/gate";
 import { MONETIZATION_COPY, checkPhotoCount } from "@/lib/monetization";
 import {
+  columnasDeVideo,
+  errorDeVideoDeLaBase,
+  listingVideoInputSchema,
+  validarVideoDeAviso,
+  type ListingVideoInput,
+} from "@/lib/media/listing-video-server";
+import {
   TIER_AUTO,
   TIER_HUMAN,
   TIER_REVIEW,
@@ -580,6 +587,7 @@ const finalizeSchema = z.object({
    * y la que hace que el escaneo levante su alerta de licencia.
    */
   declaration: declarationSchema.nullish(),
+  video: listingVideoInputSchema,
 });
 
 export type FinalizeResult =
@@ -595,6 +603,7 @@ export async function finalizeListing(rawInput: {
   listingId: string;
   photoPaths: string[];
   declaration?: DeclarationInput | null;
+  video?: ListingVideoInput | null;
 }): Promise<FinalizeResult> {
   const parsed = finalizeSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -647,6 +656,15 @@ export async function finalizeListing(rawInput: {
     return { ok: false, error: MONETIZATION_COPY.errors.tooManyPhotos(photoCheck.max) };
   }
 
+  const videoCheck = await validarVideoDeAviso({
+    input: parsed.data.video,
+    tenantId: tenant.id,
+    userId: user.id,
+    tier: current?.tier,
+  });
+  if (!videoCheck.ok) return { ok: false, error: videoCheck.error };
+  const videoColumns = videoCheck.columns;
+
   // ---- Moderación de texto ANTES de decidir el status (§8) -----------------
   const moderation = await moderateText(
     `${current?.title ?? ""}\n${current?.description ?? ""}`,
@@ -674,7 +692,7 @@ export async function finalizeListing(rawInput: {
   // La RLS de UPDATE garantiza que solo el dueño puede tocar la fila.
   const { data: updated, error: updateError } = await supabase
     .from("listings")
-    .update({ photos: photoPaths, status: "pending_review" })
+    .update({ photos: photoPaths, status: "pending_review", ...columnasDeVideo(videoColumns) })
     .eq("id", listingId)
     .eq("tenant_id", tenant.id)
     .eq("created_by", user.id)
@@ -683,7 +701,7 @@ export async function finalizeListing(rawInput: {
 
   if (updateError || !updated) {
     console.warn("[vivienda] finalize falló", { listingId, code: updateError?.code });
-    return { ok: false, error: GENERIC_ERROR };
+    return { ok: false, error: errorDeVideoDeLaBase(updateError) ?? GENERIC_ERROR };
   }
 
   // Auto-aprobación SOLO fuera de producción: aunque la env var se filtre a
@@ -698,6 +716,7 @@ export async function finalizeListing(rawInput: {
 
   // §5.6: una imagen sin Vision es una imagen sin moderar → la mira un humano.
   const photoNeedsReview = photoPaths.length > 0 && !isVisionConfigured && !devAutoApprove;
+  const videoNeedsReview = videoColumns !== null && !devAutoApprove;
 
   // La auto-aprobación dev NO es un pase libre: sigue respetando el veredicto
   // de la IA sobre el texto (mismo criterio que finalizeProduct) y, desde
@@ -709,6 +728,7 @@ export async function finalizeListing(rawInput: {
     !moderation.flagged &&
     textTier <= TIER_AUTO &&
     !photoNeedsReview &&
+    !videoNeedsReview &&
     !integrity.needsHumanReview;
 
   let finalStatus: "published" | "pending_review" = "pending_review";
@@ -750,12 +770,14 @@ export async function finalizeListing(rawInput: {
       moderation.skipped ||
       textTier > TIER_AUTO ||
       photoNeedsReview ||
+      videoNeedsReview ||
       integrity.needsHumanReview;
     if (shouldEnqueue) {
       try {
         const reasons = [
           ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
           ...(photoNeedsReview ? ["photo_pending_review"] : []),
+          ...(videoNeedsReview ? ["video_async_review"] : []),
           ...integrity.reasons,
         ];
         const outcome = await enqueueModeration(createAdminClient(), {
@@ -765,7 +787,7 @@ export async function finalizeListing(rawInput: {
           aiScore: moderation.skipped ? null : moderation.score,
           reasons,
           tier:
-            moderation.flagged || photoNeedsReview || integrity.needsHumanReview
+            moderation.flagged || photoNeedsReview || videoNeedsReview || integrity.needsHumanReview
               ? TIER_HUMAN
               : TIER_REVIEW,
         });

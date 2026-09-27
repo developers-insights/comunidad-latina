@@ -7,6 +7,13 @@ import { isVisionConfigured } from "@/lib/config/services";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import {
+  columnasDeVideo,
+  errorDeVideoDeLaBase,
+  listingVideoInputSchema,
+  validarVideoDeAviso,
+  type ListingVideoInput,
+} from "@/lib/media/listing-video-server";
+import {
   TIER_AUTO,
   TIER_HUMAN,
   TIER_REVIEW,
@@ -157,6 +164,7 @@ export async function createLostFoundCaseDraft(
 const finalizeSchema = z.object({
   caseId: z.uuid(),
   photoPaths: z.array(z.string().min(1).max(300)).max(LOST_FOUND_MAX_PHOTOS),
+  video: listingVideoInputSchema,
 });
 
 export type FinalizeLostFoundResult =
@@ -166,6 +174,7 @@ export type FinalizeLostFoundResult =
 export async function finalizeLostFoundCase(rawInput: {
   caseId: string;
   photoPaths: string[];
+  video?: ListingVideoInput | null;
 }): Promise<FinalizeLostFoundResult> {
   const parsed = finalizeSchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -197,13 +206,23 @@ export async function finalizeLostFoundCase(rawInput: {
     return { ok: false, error: C.errors.generic };
   }
 
+  // Un caso en borrador siempre es `free`; el trigger de la 0160 mira el tier real.
+  const videoCheck = await validarVideoDeAviso({
+    input: parsed.data.video,
+    tenantId: tenant.id,
+    userId: user.id,
+    tier: "free",
+  });
+  if (!videoCheck.ok) return { ok: false, error: videoCheck.error };
+  const videoColumns = videoCheck.columns;
+
   // UPDATE con el cliente del USUARIO: el mismo round-trip RE-CONFIRMA la
   // propiedad (.eq de tenant/creador/kind) y trae el texto para moderar.
   // `.in(status, draft|pending_review)`: un caso bajado por moderación
   // ('removed') no se re-publica llamando finalize otra vez.
   const { data: updated, error: updateError } = await supabase
     .from("listings")
-    .update({ photos: photoPaths, status: "pending_review" })
+    .update({ photos: photoPaths, status: "pending_review", ...columnasDeVideo(videoColumns) })
     .eq("id", caseId)
     .eq("tenant_id", tenant.id)
     .eq("created_by", user.id)
@@ -214,7 +233,7 @@ export async function finalizeLostFoundCase(rawInput: {
 
   if (updateError || !updated) {
     console.warn("[comunidad] finalize del caso falló", { caseId, code: updateError?.code });
-    return { ok: false, error: C.errors.generic };
+    return { ok: false, error: errorDeVideoDeLaBase(updateError) ?? C.errors.generic };
   }
 
   // ---- Moderación de texto ANTES de decidir el status (§8). Acá el texto es
@@ -230,6 +249,7 @@ export async function finalizeLostFoundCase(rawInput: {
   // pending_review.
   const autoApprove = devAutoApprove();
   const photoNeedsAsyncReview = photoPaths.length > 0 && !isVisionConfigured && !autoApprove;
+  const videoNeedsAsyncReview = videoColumns !== null && !autoApprove;
 
   let status: "published" | "pending_review" =
     moderation.flagged || tier === TIER_HUMAN ? "pending_review" : "published";
@@ -258,15 +278,22 @@ export async function finalizeLostFoundCase(rawInput: {
   }
 
   const shouldEnqueue =
-    moderation.flagged || moderation.skipped || tier > TIER_AUTO || photoNeedsAsyncReview;
+    moderation.flagged ||
+    moderation.skipped ||
+    tier > TIER_AUTO ||
+    photoNeedsAsyncReview ||
+    videoNeedsAsyncReview;
   if (shouldEnqueue) {
     try {
       const reasons = [
         ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
         ...(photoNeedsAsyncReview ? ["photo_async_review"] : []),
+        ...(videoNeedsAsyncReview ? ["video_async_review"] : []),
       ];
       const enqueueTier =
-        status === "pending_review" || photoNeedsAsyncReview ? TIER_HUMAN : TIER_REVIEW;
+        status === "pending_review" || photoNeedsAsyncReview || videoNeedsAsyncReview
+          ? TIER_HUMAN
+          : TIER_REVIEW;
       const outcome = await enqueueModeration(createAdminClient(), {
         tenantId: tenant.id,
         // 'listing' y no un subject_kind nuevo: un caso ES un listing, así que

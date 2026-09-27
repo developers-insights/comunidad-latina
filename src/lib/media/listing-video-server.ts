@@ -100,6 +100,15 @@ export async function validarVideoDeAviso(
   };
 }
 
+/**
+ * Las columnas de la 0160 no están en `database.types.ts` (se regenera aparte):
+ * tipadas como `object`, se esparcen en un UPDATE tipado sin que el resto del
+ * payload pierda sus tipos.
+ */
+export function columnasDeVideo(columns: ListingVideoColumns | null): object {
+  return columns ?? {};
+}
+
 export function errorDeVideoDeLaBase(error: { message?: string } | null | undefined): string | null {
   const message = error?.message ?? "";
   if (message.includes("LISTING_VIDEO_NEEDS_PREMIUM")) {
