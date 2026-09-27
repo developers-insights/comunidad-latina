@@ -1,5 +1,64 @@
 # PROGRESS — Comunidad Latina
 
+## Tanda del 27/9: todo lo pendiente del chat con Nacho (13/9–26/9), en seis frentes (✅ 2026-09-27)
+
+Origen: el chat de WhatsApp con Nacho de las últimas dos semanas (texto, 30 capturas y
+50 audios transcriptos), contrastado contra el código. Lo del 14/9, 15/9 y 21/9 ya
+estaba en producción (`660125a`, `d7eae3d`); esto cierra lo del 23/9 en adelante.
+
+- **Mensajes:** el PDF abre una vista previa con Enviar/Cancelar en vez de mandarse
+  solo. Audio: dos causas reales — el `router.refresh()` cada 15 s re-firmaba la URL y
+  el `<audio>` recargaba y quedaba "sonando" mudo (no se podía re-escuchar); y un
+  toque corto mientras el celular pedía el micrófono se perdía. Llamadas de audio y
+  video en grupos (invita a todos si entran, hasta 10), timbre por `invitada_at` (0155).
+- **Avisos:** menú del dueño "···" en los avisos del feed (Promocionar, Editar,
+  Pausar, Eliminar con confirmación; Reportar para terceros). Video en los avisos de
+  todos los módulos: hasta 90 s gratis, 91 s–5 min sólo con aviso premium (el que ya
+  existía), corte a 90 s con "Ver video completo" → `/videos/largos/aviso/[id]` (0160).
+  Eliminar se niega si el aviso tuvo pagos (lo mira con service role).
+- **Creator Marketplace:** firma de ambas partes con huella del texto (0165), cobro
+  real con Stripe — cargo a la plataforma y transfer al creador por Connect con
+  `source_transaction` (0166) —, entregas con archivos en bucket privado e hitos
+  (0167), revisión de 72 h con liberación automática por cron de Vercel
+  (`/api/cron/creadores`, cada hora), reseñas dobles desde `approved` (0168) y
+  refresco en vivo (0169). Métricas de campaña: estado vacío honesto, no hay fuente.
+- **Boost para influencers:** `/impulsar/perfil-creador` — el creador paga para
+  aparecer "Patrocinado" arriba del directorio, con el precio de `boost/<duración>`
+  de la comunidad (0175); entra a "Tu publicidad" y se revoca si se reembolsa.
+- **Logo original** del cliente vectorizado (`public/brand/logo-original.svg`) y
+  todos los raster regenerados con `scripts/generate-brand-logo.mjs`; OG del sitio
+  con el logo. El script viejo `generate-icons.mjs` se borró (volvía a poner el CL).
+- **Twilio:** la home ya no manda a `/entrar` (era un `redirects()` de
+  `next.config.ts`, no el middleware), nueva `/legal/sms` bilingüe, secciones de SMS
+  en términos y privacidad, consentimiento en `/ajustes/telefono`. Lo que hay que
+  cargar en la consola: `docs/twilio-toll-free-reenvio.md`.
+
+**Revisión final (code-reviewer + security-auditor, PASA):** se corrigió antes de
+aplicar — el negocio podía bajarse archivos del bucket de entregas y cancelar con
+reembolso (0167), impulsos de perfil legibles entre comunidades (0175), invitar a no
+miembros a una llamada de grupo (0155), eventos de Connect pasando por todos los
+handlers, y cancelar con reembolso total un contrato con avance (ahora va a disputa).
+El gate `check:rls` pedía policies de denegación nombradas en tres tablas: 0170.
+
+**Queda afuera, a propósito o por decisión pendiente:**
+- Admin de Geovanny: el clasificador no dejó asignar el rol desde la base. Se hace
+  desde `/admin/global/administradores` (cuenta GEOVANNY del tenant `dominicanos`).
+- Stripe Connect: habilitarlo en la cuenta y crear el endpoint de Connect
+  (`account.updated`, misma URL) → `STRIPE_CONNECT_WEBHOOK_SECRET`. Sin eso los
+  creadores no pueden cobrar (el pago queda retenido, no se pierde). Sumar
+  `checkout.session.expired` al endpoint actual.
+- El texto del contrato no tiene revisión legal; asume que el costo de Stripe sale
+  de la comisión (la pantalla del cliente dice "Pagás $1,000 · el creador recibe $800").
+- Creator Marketplace etapa 1: invitaciones y "Editar/Compartir" del trabajo
+  publicado; panel de staff para resolver disputas; seguimiento de `payout.paid`.
+- La duración del video la declara el cliente (bypass posible del premium; lo frena
+  la revisión humana y el tope de bytes). Medirla en servidor requiere Mux o ffprobe.
+- Nada de esto se probó en un celular real ni con un cobro de Stripe real.
+
+Verificado: typecheck 0 · eslint limpio · **6810 tests** en 414 archivos · `build`
+exit 0 · migraciones 0155, 0160, 0165–0170, 0175 aplicadas y verificadas por los
+objetos · `check:rls` verde (118) · advisors sin errores nuevos.
+
 ## Tanda del 15/9: los 14 pedidos del Loom de Nacho, y tres bugs que nadie había visto (✅ 2026-09-15)
 
 El cliente grabó un Loom (`Cambios y mejoras en Comunidad Latina`, 4:46). **El audio
