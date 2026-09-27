@@ -70,7 +70,6 @@ export { GigListSkeleton, CreatorListSkeleton, ContractsListSkeleton } from "./s
 export { ApplySheet } from "./apply-sheet";
 export { ApplicationRow, WithdrawButton, type ApplicationCreator } from "./application-row";
 export { ContractForm } from "./contract-form";
-export { ContractActions } from "./contract-actions";
 export { ReviewForm } from "./review-form";
 export { CreatorProfileForm, type CreatorProfileInitial } from "./creator-profile-form";
 export { GigPublishForm } from "./gig-publish-form";

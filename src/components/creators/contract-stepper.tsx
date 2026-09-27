@@ -2,64 +2,56 @@ import { Prohibit, Warning } from "@phosphor-icons/react/dist/ssr";
 import { Badge, type BadgeProps } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { CONTRACT_STEPS, contractStepIndex, type ContractStatus } from "./contract-machine";
-import { COPY } from "./copy";
+import { STATUS_COPY, STEP_COPY } from "./flow-copy";
 
 const STATUS_VARIANT: Record<ContractStatus, NonNullable<BadgeProps["variant"]>> = {
   proposed: "neutral",
   accepted: "info",
-  funded: "info",
+  signed: "info",
+  funded: "brand",
   delivered: "brand",
+  changes_requested: "warning",
+  approved: "success",
   released: "success",
   canceled: "neutral",
   disputed: "warning",
   rejected: "danger",
 };
 
-/** Cápsula de estado (código de color fijo del contrato). Solo lectura. */
-export function ContractStatusBadge({
-  status,
-  className,
-}: {
-  status: ContractStatus;
-  className?: string;
-}) {
+export function ContractStatusBadge({ status, className }: { status: ContractStatus; className?: string }) {
   return (
-    <Badge variant={STATUS_VARIANT[status]} className={className}>
-      {COPY.status[status]}
+    <Badge variant={STATUS_VARIANT[status] ?? "neutral"} className={className}>
+      {STATUS_COPY[status] ?? status}
     </Badge>
   );
 }
 
-/**
- * Stepper visual del ciclo de garantía: propuesto → aceptado → en garantía →
- * entregado → liberado, con el hito actual resaltado en el violeta del módulo
- * (decorativo). Las salidas (cancelado / rechazado / en disputa) se muestran
- * como estado terminal aparte.
- */
 export function ContractStepper({ status }: { status: ContractStatus }) {
   const idx = contractStepIndex(status);
-  const canceled = status === "canceled";
-  const rejected = status === "rejected";
+  const offRail = status === "canceled" || status === "rejected";
   const disputed = status === "disputed";
-  // canceled y rejected salen del carril (idx = -1): sin hito actual ni tramo
-  // alcanzado.
-  const offRail = canceled || rejected;
+  const complete = status === "released";
 
   return (
     <div>
-      <ol className="flex items-stretch gap-1.5" aria-label="Progreso del contrato">
+      <ol className="flex items-stretch gap-1.5" aria-label="Progreso de la colaboración">
         {CONTRACT_STEPS.map((step, i) => {
           const reached = !offRail && idx >= 0 && i <= idx;
-          const current = !offRail && !disputed && i === idx;
+          const current = !offRail && !disputed && !complete && i === idx;
           return (
-            <li key={step} className="flex flex-1 flex-col items-center gap-1.5 text-center">
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "h-1.5 w-full rounded-full transition-colors",
-                  reached ? "bg-[var(--accent-creadores)]" : "bg-border",
-                )}
-              />
+            <li
+              key={step}
+              aria-current={current ? "step" : undefined}
+              className="flex flex-1 flex-col items-center gap-1.5 text-center"
+            >
+              <span aria-hidden="true" className="relative h-1.5 w-full overflow-hidden rounded-full bg-border">
+                <span
+                  className={cn(
+                    "absolute inset-0 origin-left rounded-full bg-[var(--accent-creadores)] transition-transform duration-700 ease-[cubic-bezier(0.32,0.72,0,1)]",
+                    reached ? "scale-x-100" : "scale-x-0",
+                  )}
+                />
+              </span>
               <span
                 className={cn(
                   "text-[11px] leading-tight",
@@ -70,29 +62,28 @@ export function ContractStepper({ status }: { status: ContractStatus }) {
                       : "font-medium text-foreground-muted",
                 )}
               >
-                {COPY.status[step]}
+                {STEP_COPY[step]}
               </span>
             </li>
           );
         })}
       </ol>
 
-      {canceled && (
-        <p className="mt-3 flex items-center justify-center gap-1.5 text-sm font-medium text-foreground-secondary">
+      {offRail && (
+        <p
+          className={cn(
+            "mt-3 flex items-center justify-center gap-1.5 text-sm font-medium",
+            status === "rejected" ? "text-danger-ink" : "text-foreground-secondary",
+          )}
+        >
           <Prohibit size={16} aria-hidden="true" />
-          {COPY.status.canceled}
-        </p>
-      )}
-      {rejected && (
-        <p className="mt-3 flex items-center justify-center gap-1.5 text-sm font-medium text-danger-ink">
-          <Prohibit size={16} aria-hidden="true" />
-          {COPY.status.rejected}
+          {STATUS_COPY[status]}
         </p>
       )}
       {disputed && (
         <p className="mt-3 flex items-center justify-center gap-1.5 text-sm font-medium text-warning-ink">
           <Warning size={16} weight="fill" aria-hidden="true" />
-          {COPY.status.disputed}
+          {STATUS_COPY.disputed}
         </p>
       )}
     </div>

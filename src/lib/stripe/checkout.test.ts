@@ -77,3 +77,14 @@ describe("crearCheckoutSession", () => {
     });
   });
 });
+
+describe("crearCheckoutSessionIdempotente", () => {
+  it("pasa la clave de idempotencia a Stripe y mantiene Managed Payments apagado", async () => {
+    const { crearCheckoutSessionIdempotente } = await import("./checkout");
+
+    await crearCheckoutSessionIdempotente({ mode: "payment", line_items: [] }, "gig-checkout:1");
+
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ managed_payments: { enabled: false } });
+    expect(create.mock.calls[0]?.[1]).toEqual({ idempotencyKey: "gig-checkout:1" });
+  });
+});

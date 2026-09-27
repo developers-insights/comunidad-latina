@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { contractBreakdown } from "./money";
 import { DemoSeal } from "./demo-seal";
 import { COPY } from "./copy";
+import { FLOW_COPY } from "./flow-copy";
 
 export interface ContractBreakdownProps {
   amountCents: number;
@@ -11,35 +12,47 @@ export interface ContractBreakdownProps {
   creatorNetCents: number | null;
   feePct: number;
   currency?: string;
+  demo?: boolean;
+  showStripeFee?: boolean;
+  netLabel?: string;
+  title?: string;
+  note?: string | null;
 }
 
-/**
- * Desglose SIEMPRE visible del pago en garantía (monto / comisión 20% / neto del
- * creador) con los valores GENERADOS por la DB. BezelCard "featured" (tinte de
- * marca) + sello de modo demostración. La pieza de confianza de la pantalla.
- */
-export function ContractBreakdown(props: ContractBreakdownProps) {
+export function ContractBreakdown({
+  demo = false,
+  showStripeFee = false,
+  netLabel,
+  title,
+  note,
+  ...props
+}: ContractBreakdownProps) {
   const b = contractBreakdown(props);
 
   return (
     <BezelCard variant="featured" coreClassName="flex flex-col gap-4 p-5">
       <div className="flex items-center gap-2">
-        <ShieldCheck size={20} weight="fill" aria-hidden="true" className="text-brand" />
-        <h3 className="font-display text-base font-bold text-foreground">
-          {COPY.contract.breakdownTitle}
-        </h3>
-        <DemoSeal className="ml-auto" />
+        <ShieldCheck size={20} weight="duotone" aria-hidden="true" className="text-brand" />
+        <h3 className="font-display text-base font-bold text-foreground">{title ?? COPY.contract.breakdownTitle}</h3>
+        {demo && <DemoSeal className="ml-auto" />}
       </div>
 
       <dl className="flex flex-col gap-2.5">
         <Row label={COPY.contract.breakdownAmount} value={b.amountLabel} />
         <Row label={COPY.contract.breakdownFee(b.feePct)} value={`− ${b.feeLabel}`} muted />
+        {showStripeFee && (
+          <Row label={FLOW_COPY.payment.stripeFee} value={FLOW_COPY.payment.stripeFeeValue} muted />
+        )}
         <div className="mt-1 border-t border-border-subtle pt-3">
-          <Row label={COPY.contract.breakdownNet} value={b.netLabel} strong />
+          <Row label={netLabel ?? COPY.contract.breakdownNet} value={b.netLabel} strong />
         </div>
       </dl>
 
-      <p className="text-xs leading-relaxed text-foreground-muted">{COPY.contract.demoNote}</p>
+      {note !== null && (
+        <p className="text-xs leading-relaxed text-foreground-muted">
+          {note ?? (demo ? COPY.contract.demoNote : COPY.contract.protectedNote)}
+        </p>
+      )}
     </BezelCard>
   );
 }

@@ -96,3 +96,16 @@ export async function crearCheckoutSession(
     managed_payments: { enabled: false },
   });
 }
+
+export async function crearCheckoutSessionIdempotente(
+  params: CheckoutParams,
+  idempotencyKey: string,
+): Promise<Stripe.Checkout.Session> {
+  return getStripe().checkout.sessions.create(
+    {
+      ...params,
+      managed_payments: { enabled: false },
+    },
+    { idempotencyKey },
+  );
+}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { handleStoreMembershipEvent } from "@/app/(app)/marketplace/membresia/webhook-handlers";
+import { handleGigContractEvent } from "@/lib/creators/stripe-webhook";
 import { isStripeConfigured } from "@/lib/config/services";
 import { listingViewHref } from "@/lib/monetization/href";
 import {
@@ -104,8 +105,22 @@ export async function POST(request: Request) {
       process.env.STRIPE_WEBHOOK_SECRET,
     );
   } catch {
-    console.warn("[pagos:webhook] Firma inválida — 400.");
-    return NextResponse.json({ error: "Firma inválida" }, { status: 400 });
+    // Los eventos de cuentas conectadas (account.updated del creador) llegan
+    // por un endpoint de Connect aparte, con su propio secreto, a esta misma URL.
+    const connectSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+    let connectEvent: Stripe.Event | null = null;
+    if (connectSecret) {
+      try {
+        connectEvent = getStripe().webhooks.constructEvent(rawBody, signature, connectSecret);
+      } catch {
+        connectEvent = null;
+      }
+    }
+    if (!connectEvent) {
+      console.warn("[pagos:webhook] Firma inválida — 400.");
+      return NextResponse.json({ error: "Firma inválida" }, { status: 400 });
+    }
+    event = connectEvent;
   }
 
   const admin = createAdminClient();
@@ -170,6 +185,20 @@ export async function POST(request: Request) {
 
   // 3. Procesamiento — corto y puntual para responder 2xx rápido.
   try {
+    // Pago protegido del Creator Marketplace (0165–0168). Va primero porque
+    // también mira charge.refunded / charge.dispute.created: esos cobros son
+    // suyos (se reconocen por payment_intent) y no tienen que llegar al módulo
+    // de reembolsos de los otros productos. Para lo que no es suyo devuelve
+    // false sin escribir nada.
+    if (await handleGigContractEvent(admin, event, getStripe)) {
+      await admin
+        .from("payment_events")
+        .update({ processed: true })
+        .eq("provider", "stripe")
+        .eq("event_id", event.id);
+      return NextResponse.json({ received: true });
+    }
+
     // Membresía de tienda (§7, USD 10/mes): se reconoce por
     // metadata.kind='store_membership' y la maneja su propio módulo, junto a la
     // action que abre su Checkout. Devuelve true ⇒ el evento ya está atendido y

@@ -4,13 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileText } from "@phosphor-icons/react/dist/ssr";
 import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
-import { BottomSheet, Button, Field, Input, Textarea, type ButtonProps } from "@/components/ui";
+import { BottomSheet, Button, Field, Input, Select, Textarea, type ButtonProps } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { proposeContract } from "@/app/(app)/creadores/actions";
 import { centsToInput } from "@/lib/pricing/money";
 import { dollarsToCents } from "./money";
 import { ContactBlockNotice, hasContactInfo } from "./contact-block-notice";
-import { DemoSeal } from "./demo-seal";
+import { REVISIONS_DEFAULT, REVISIONS_MAX, REVISIONS_MIN } from "@/lib/creators/contract-terms";
 import { COPY } from "./copy";
 
 /**
@@ -94,10 +94,13 @@ export function ContractForm({
   const [amount, setAmount] = useState(
     defaultAmountCents ? prefillAmount(defaultAmountCents) : "",
   );
+  const [revisions, setRevisions] = useState(String(REVISIONS_DEFAULT));
+  const [usageRights, setUsageRights] = useState("Redes sociales · 90 días");
+  const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const contactBlocked = hasContactInfo(title, scope);
+  const contactBlocked = hasContactInfo(title, scope, usageRights, message);
 
   /**
    * Abrir la propuesta. Sin sesión pide entrar acá mismo y la abre recién
@@ -128,6 +131,7 @@ export function ContractForm({
     if (!Number.isInteger(days) || days < 1) {
       return setError(COPY.contract.errors.generic);
     }
+    if (usageRights.trim().length < 3) return setError(COPY.contract.errors.terms);
 
     setError(null);
     setSubmitting(true);
@@ -139,6 +143,9 @@ export function ContractForm({
         scope: scope.trim(),
         deliveryDays: days,
         amountCents: dollarsToCents(amountValue),
+        revisionsIncluded: Number(revisions),
+        usageRights: usageRights.trim(),
+        proposalMessage: message.trim() || null,
       });
       if (!result.ok) {
         if (result.needsAuth) {
@@ -191,7 +198,6 @@ export function ContractForm({
             <p className="text-sm text-foreground-secondary">
               {COPY.contract.withCreator} <span className="font-semibold text-foreground">{creatorName}</span>
             </p>
-            <DemoSeal />
           </div>
           <p className="-mt-1 text-sm text-foreground-secondary">{COPY.contract.proposeIntro}</p>
 
@@ -243,7 +249,39 @@ export function ContractForm({
             </Field>
           </div>
 
-          <ContactBlockNotice text={[title, scope].join("\n")} />
+          <div className="grid grid-cols-2 gap-3">
+            <Field htmlFor="contract-revisions" label={COPY.contract.revisionsLabel} help={COPY.contract.revisionsHelp}>
+              <Select id="contract-revisions" value={revisions} onChange={(event) => setRevisions(event.target.value)}>
+                {Array.from({ length: REVISIONS_MAX - REVISIONS_MIN + 1 }, (_, i) => REVISIONS_MIN + i).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field htmlFor="contract-usage" label={COPY.contract.usageRightsLabel} help={COPY.contract.usageRightsHelp}>
+              <Input
+                id="contract-usage"
+                value={usageRights}
+                maxLength={120}
+                placeholder={COPY.contract.usageRightsPlaceholder}
+                onChange={(event) => setUsageRights(event.target.value)}
+              />
+            </Field>
+          </div>
+
+          <Field htmlFor="contract-message" label={COPY.contract.messageLabel} optional>
+            <Textarea
+              id="contract-message"
+              rows={2}
+              value={message}
+              maxLength={600}
+              placeholder={COPY.contract.messagePlaceholder}
+              onChange={(event) => setMessage(event.target.value)}
+            />
+          </Field>
+
+          <ContactBlockNotice text={[title, scope, usageRights, message].join("\n")} />
 
           {error && (
             <p role="alert" className="text-sm font-medium text-danger">

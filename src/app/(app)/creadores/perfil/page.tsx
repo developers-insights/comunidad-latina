@@ -9,6 +9,7 @@ import {
   SocialAudience,
   type CreatorProfileInitial,
 } from "@/components/creators";
+import { PAYOUT_COPY } from "@/components/creators/flow-copy";
 import { createClient } from "@/lib/supabase/server";
 import { getCreatorCommission } from "@/lib/creators/commission";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -103,6 +104,9 @@ export default async function MiPerfilCreadorPage() {
             className={buttonVariants({ variant: "secondary", size: "sm" })}
           >
             {COPY.contractsList.title}
+          </Link>
+          <Link href="/creadores/cobros" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+            {PAYOUT_COPY.title}
           </Link>
         </div>
       </header>
