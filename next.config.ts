@@ -237,15 +237,13 @@ const nextConfig: NextConfig = {
   // config"). En dev Serwist está disabled, así que Turbopack puede ignorar
   // ese webpack() tranquilamente.
   turbopack: {},
-  // Entrada del demo directo al login (feedback de revisión: la landing es un
-  // "para después"; lo primero que interesa es la app tras el registro). 307
-  // temporal a propósito — reversible sin cache agresivo: borrar este bloque
-  // devuelve la landing en `/`. La landing sigue viva en el repo, solo deja de
-  // ser la puerta de entrada. Los subpaths de (marketing) —/guias, etc.— no se
-  // tocan.
+  // `/` NO se redirige desde acá: un redirect de next.config corre antes que el
+  // proxy y no sabe si hay sesión. Hasta el 2026-09-27 mandaba a TODOS a
+  // /entrar, y Twilio rechazó la verificación toll-free (30491) porque el sitio
+  // "exigía login". Ahora el anónimo ve la landing y quien tiene sesión va al
+  // feed desde `src/middleware.ts`.
   async redirects() {
     return [
-      { source: "/", destination: "/entrar", permanent: false },
       // "Ayuda mutua" pasó a ser el tablón "Pedir ayuda" (0130, pedido del
       // cliente del 2026-09-03). Las rutas viejas están linkeadas desde avisos
       // por mail, desde notificaciones ya enviadas y desde el historial de los

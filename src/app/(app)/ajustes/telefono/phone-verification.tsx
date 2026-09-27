@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { CheckCircle, DeviceMobile, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr";
 import {
   removePhoneAction,
@@ -8,6 +9,7 @@ import {
   verifyPhoneCodeAction,
 } from "./actions";
 import { FormError } from "@/components/auth/form-error";
+import { SMS_CONSENT_ES, SMS_POLICY_HREF, SMS_SEND_CTA } from "@/lib/phone/sms-consent";
 import { BezelCard, Button, Field, Input, useToast } from "@/components/ui";
 
 /**
@@ -30,11 +32,13 @@ import { BezelCard, Button, Field, Input, useToast } from "@/components/ui";
 const COPY = {
   stepPhoneTitle: "Verificá tu teléfono",
   stepPhoneBody:
-    "Te mandamos un código por mensaje de texto. Tu número no se muestra en tu perfil ni se comparte con nadie.",
+    "Es opcional. Te mandamos un código por SMS para confirmar que el número es tuyo. No se muestra en tu perfil ni se comparte con nadie.",
   phoneLabel: "Tu número de teléfono",
   phonePlaceholder: "(917) 555-0142",
   phoneHelp: "Si es de Estados Unidos, con los 10 dígitos alcanza.",
-  sendCta: "Mandame el código",
+  sendCta: SMS_SEND_CTA,
+  smsConsent: SMS_CONSENT_ES,
+  smsPolicy: "Ver la Política de SMS",
   resendCta: "Mandar otro código",
   resendWait: (seconds: number) => `Podés pedir otro en ${seconds} s`,
 
@@ -224,10 +228,28 @@ export function PhoneVerification({ verifiedPhone, ttlMinutes }: PhoneVerificati
       </Field>
 
       {!awaitingCode ? (
-        <Button type="button" loading={pending} onClick={send} className="self-start">
-          <PaperPlaneTilt size={18} aria-hidden="true" />
-          {COPY.sendCta}
-        </Button>
+        <div className="flex flex-col gap-3">
+          <Button
+            type="button"
+            loading={pending}
+            onClick={send}
+            className="self-start"
+            aria-describedby="sms-consent"
+          >
+            <PaperPlaneTilt size={18} aria-hidden="true" />
+            {COPY.sendCta}
+          </Button>
+          <p id="sms-consent" className="text-xs leading-relaxed text-foreground-muted">
+            {COPY.smsConsent}{" "}
+            <Link
+              href={SMS_POLICY_HREF}
+              className="font-semibold text-brand-ink underline underline-offset-4 hover:no-underline"
+            >
+              {COPY.smsPolicy}
+            </Link>
+            .
+          </p>
+        </div>
       ) : (
         <>
           <Field htmlFor="phone-code" label={COPY.codeLabel} error={fieldErrors.code}>

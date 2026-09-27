@@ -162,7 +162,7 @@ export async function sendPhoneCodeAction(
   const sent = await getSmsSender().send({
     to: phone.e164,
     maskedTo: masked,
-    body: verificationSmsBody({ code: request.code, communityName: tenant.name }),
+    body: verificationSmsBody({ code: request.code }),
   });
 
   if (!sent.ok) {

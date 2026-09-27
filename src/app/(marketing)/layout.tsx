@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { BRAND_NAME } from "@/lib/brand";
+import { SUPPORT_EMAIL } from "@/lib/support/contact";
 import { t } from "@/lib/i18n";
 import { buttonVariants } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme";
@@ -19,14 +20,8 @@ export default async function MarketingLayout({ children }: { children: ReactNod
       </a>
       <header className="sticky top-0 z-40 border-b border-border-subtle bg-surface/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-4">
-          {/*
-            A /guias y no a "/": `/` redirige a `/entrar`, así que el logo
-            mandaba al login a quien llegó a una guía desde Google. Esa persona
-            todavía no tiene cuenta ni la está buscando — está leyendo. /guias
-            es el índice público de esta superficie, o sea su verdadero inicio.
-          */}
           <Link
-            href="/guias"
+            href="/"
             className="rounded-full font-display text-lg font-bold tracking-tight text-brand-ink"
           >
             {/* Marca del programa, no nombre del tenant. Ver @/lib/brand. */}
@@ -144,6 +139,17 @@ export default async function MarketingLayout({ children }: { children: ReactNod
                   "Comunidad Latina" quedaba "Comunidad Latina · Una comunidad de
                   Comunidad Latina". Ver @/lib/brand. */}
               © {new Date().getFullYear()} {BRAND_NAME} · {COPY.footer.tagline}
+            </p>
+            {/* Twilio y la CTIA buscan la razón social y un contacto en la home
+                del sitio registrado; sin esto la verificación toll-free vuelve. */}
+            <p className="mt-1 text-xs text-foreground-muted">
+              {COPY.footer.operatedBy}{" "}
+              <a
+                href={`mailto:${SUPPORT_EMAIL}`}
+                className="underline decoration-border underline-offset-2 transition-colors hover:text-foreground"
+              >
+                {SUPPORT_EMAIL}
+              </a>
             </p>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { BezelCard } from "@/components/ui";
+import { SUPPORT_EMAIL } from "@/lib/support/contact";
 
 /**
  * Primitivos de prosa legal (Términos, Privacidad, Normas). Tipografía y
@@ -11,24 +12,9 @@ import { BezelCard } from "@/components/ui";
 /** Fecha humana única para los documentos legales de este lanzamiento. */
 export const LEGAL_LAST_UPDATED = "agosto de 2026";
 
-/**
- * ⚠️ PENDIENTE DE NEGOCIO — NO ES UNA DECISIÓN TÉCNICA.
- *
- * El RGPD (art. 13.1) y la CCPA exigen un canal REAL para ejercer derechos. Sin
- * esto, el derecho de acceso, rectificación y oposición no se puede ejercer:
- * la persona lee que puede escribirnos y no hay a dónde.
- *
- * Estaba escrito a mano en tres lugares distintos como
- * "[correo de contacto legal — completar]". Se centraliza acá para que
- * completarlo sea UNA línea y no una búsqueda por el repo — y para que quede a
- * la vista de quien revise, en vez de escondido a mitad de una página.
- *
- * `null` = todavía sin definir. `<LegalContact />` lo dice explícitamente en
- * vez de mostrar un corchete que parece un error de programación.
- */
-export const LEGAL_CONTACT_EMAIL: string | null = null;
+export const LEGAL_CONTACT_EMAIL: string | null = SUPPORT_EMAIL;
 
-/** Estado cuya ley rige los Términos. Mismo caso: falta decisión del cliente. */
+/** Estado cuya ley rige los Términos. Falta la decisión del cliente. */
 export const LEGAL_GOVERNING_STATE: string | null = null;
 
 /**
@@ -64,14 +50,16 @@ export const legalProse = {
 export function LegalHeader({
   title,
   intro,
+  updated = LEGAL_LAST_UPDATED,
 }: {
   title: string;
   intro: ReactNode;
+  updated?: string;
 }) {
   return (
     <header>
       <p className="text-sm font-semibold uppercase tracking-wide text-brand-ink">
-        Última actualización: {LEGAL_LAST_UPDATED}
+        Última actualización: {updated}
       </p>
       <h1 className="mt-2 font-display text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
         {title}

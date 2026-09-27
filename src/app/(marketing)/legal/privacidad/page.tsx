@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getTenant } from "@/lib/tenant/resolve";
 import { JsonLd } from "@/components/marketing/json-ld";
+import { SMS_POLICY_HREF } from "@/lib/phone/sms-consent";
 import {
   LegalCallout,
   LegalContact,
@@ -16,6 +17,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.co
 const TOC = [
   { id: "resumen", label: "Resumen honesto" },
   { id: "que-pedimos", label: "Qué te pedimos al registrarte" },
+  { id: "tu-telefono", label: "Tu teléfono y los mensajes de texto" },
   { id: "por-que-podemos", label: "Por qué podemos usar tus datos" },
   { id: "ubicacion", label: "Tu ubicación es aproximada, siempre" },
   { id: "mensajes", label: "Tus mensajes se borran solos" },
@@ -69,6 +71,7 @@ export default async function PrivacidadPage() {
 
       <LegalHeader
         title="Política de Privacidad"
+        updated="27 de septiembre de 2026"
         intro={
           <>
             <strong className={legalProse.strong}>En criollo:</strong> pedimos lo mínimo
@@ -106,6 +109,30 @@ export default async function PrivacidadPage() {
           No pedimos teléfono, número de seguro social ni dirección postal en el registro. Si más
           adelante contás tu zona o barrio —por ejemplo, para buscar vivienda—, es siempre
           aproximado.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="tu-telefono" title="Tu teléfono y los mensajes de texto">
+        <p className={legalProse.p}>
+          Tu número de teléfono lo tenemos solo si elegís verificarlo, que es opcional. Lo usamos
+          para una sola cosa: mandarte por SMS el código de verificación que pediste y confirmar
+          que el número es tuyo. No aparece en tu perfil ni en las búsquedas, y podés borrarlo
+          cuando quieras desde <em>Ajustes › Tu teléfono</em>.
+        </p>
+        <p className={legalProse.p}>
+          <strong className={legalProse.strong}>
+            Tu número y tu consentimiento para recibir SMS no se comparten con terceros ni con
+            empresas vinculadas para marketing o fines promocionales, y no se venden.
+          </strong>{" "}
+          Twilio, el proveedor que entrega los mensajes, recibe el número y el texto del SMS solo
+          para enviarlo. Cómo funcionan los mensajes, STOP y HELP incluidos, está en la{" "}
+          <Link
+            href={SMS_POLICY_HREF}
+            className="font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 hover:decoration-brand-ink"
+          >
+            Política de mensajes de texto (SMS)
+          </Link>
+          .
         </p>
       </LegalSection>
 
@@ -240,6 +267,11 @@ export default async function PrivacidadPage() {
           <li>
             <strong className={legalProse.strong}>Stripe</strong> — cobra las suscripciones de
             negocios y, cuando esté activa, hace la verificación de identidad.
+          </li>
+          <li>
+            <strong className={legalProse.strong}>Twilio</strong> — entrega los SMS con tu código
+            de verificación, si elegís verificar tu teléfono. Recibe tu número y el texto del
+            mensaje, nada más.
           </li>
           <li>
             <strong className={legalProse.strong}>OpenAI</strong>,{" "}
@@ -392,7 +424,7 @@ export default async function PrivacidadPage() {
       <LegalSection id="contacto" title="Contacto">
         <p className={legalProse.p}>
           Para cualquier consulta sobre tus datos o esta Política, o para ejercer cualquiera de
-          los derechos de arriba, escribinos por <LegalContact />. Te respondemos dentro de los
+          los derechos de arriba, escribinos a <LegalContact />. Te respondemos dentro de los
           plazos que marca la ley: 30 días si estás en Europa, 45 si estás en California.
         </p>
         <p className={legalProse.p}>

@@ -121,7 +121,15 @@ export async function middleware(request: NextRequest) {
 
   // 6. Refrescar la sesión de Supabase (patrón @supabase/ssr) reenviando los
   //    headers ya mutados a los Server Components.
-  const response = await updateSession(request);
+  const { response, hasSession } = await updateSession(request);
+
+  if (hasSession && request.nextUrl.pathname === "/") {
+    const feed = NextResponse.redirect(new URL("/feed", request.url), 307);
+    // Sin copiar las cookies, el token que getClaims() acaba de refrescar se
+    // pierde en el salto y el feed arranca con la sesión vieja.
+    response.cookies.getAll().forEach((cookie) => feed.cookies.set(cookie));
+    return feed;
+  }
 
   // 7. En dev, la pista persiste a cookie para no tener que repetirla en cada
   //    URL. En producción NO se escribe: `resolveTenantSlug` ya la ignora ahí,

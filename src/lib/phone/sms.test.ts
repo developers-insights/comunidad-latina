@@ -26,3 +26,20 @@ describe("getSmsSender", () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain("123456");
   });
 });
+
+describe("verificationSmsBody", () => {
+  it("empieza con la marca registrada en Twilio y trae el código", async () => {
+    const { verificationSmsBody } = await import("./sms");
+
+    const body = verificationSmsBody({ code: "482913" });
+
+    expect(body.startsWith("Comunidad Latina: ")).toBe(true);
+    expect(body).toContain("482913");
+  });
+
+  it("dice cómo darse de baja", async () => {
+    const { verificationSmsBody } = await import("./sms");
+
+    expect(verificationSmsBody({ code: "482913" })).toContain("STOP");
+  });
+});

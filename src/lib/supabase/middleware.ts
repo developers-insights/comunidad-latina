@@ -1,6 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+export interface SessionUpdate {
+  response: NextResponse;
+  hasSession: boolean;
+}
+
 /**
  * Refresca la sesión de Supabase en el middleware (patrón oficial @supabase/ssr).
  *
@@ -12,12 +17,12 @@ import { NextResponse, type NextRequest } from "next/server";
  * carga sin sesión en vez de romper — assertSupabaseConfigured() avisa al dev
  * en el primer uso real del cliente.
  */
-export async function updateSession(request: NextRequest): Promise<NextResponse> {
+export async function updateSession(request: NextRequest): Promise<SessionUpdate> {
   let supabaseResponse = NextResponse.next({ request });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return supabaseResponse;
+  if (!url || !anonKey) return { response: supabaseResponse, hasSession: false };
 
   const supabase = createServerClient(url, anonKey, {
     cookies: {
@@ -44,7 +49,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   // token está por expirar y persiste las cookies vía el mismo setAll de arriba.
   // Si el proyecto usa secreto simétrico (HS*) o no hay WebCrypto, getClaims()
   // cae solo a getUser() → mismo comportamiento que antes, sin romper la sesión.
-  await supabase.auth.getClaims();
+  const { data } = await supabase.auth.getClaims();
 
-  return supabaseResponse;
+  return { response: supabaseResponse, hasSession: Boolean(data?.claims?.sub) };
 }
