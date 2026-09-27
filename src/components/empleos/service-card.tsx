@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { ListingVideoMedia } from "@/components/listings/listing-video";
+import type { ListingVideoView } from "@/lib/media/listing-video-policy";
 import {
   CalendarDots,
   CaretRight,
@@ -58,6 +60,7 @@ export function ServiceCard({
   isLoggedIn,
   engagement,
   owner,
+  video,
 }: {
   service: JobCardModel;
   /**
@@ -74,6 +77,7 @@ export function ServiceCard({
    * acá. Ausente → no se dibuja el menú ⋯.
    */
   owner?: ListingOwnerView;
+  video?: ListingVideoView | null;
 }) {
   const modeLabel = workModeLabel(service.workMode);
   const publisherName =
@@ -92,6 +96,14 @@ export function ServiceCard({
   const card = (
     <BezelCard coreClassName="p-4">
       <article aria-label={service.title} className="flex flex-col gap-3.5">
+        {video && (
+          <ListingVideoMedia
+            video={video}
+            title={service.title}
+            aspect="video"
+            className="rounded-lg"
+          />
+        )}
         <div className="flex items-start gap-3.5">
           {/* La persona primero. El halo del acento + el ícono de herramientas
               dicen "oficio" sin necesidad de una foto que casi nunca hay. */}

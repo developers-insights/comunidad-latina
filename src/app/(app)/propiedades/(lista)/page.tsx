@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { fetchListingVideos } from "@/lib/media/listing-video-queries";
 import Link from "next/link";
 import { CaretDown, Megaphone, Plus } from "@phosphor-icons/react/dist/ssr";
 import {
@@ -358,7 +359,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
     ...new Set(orderedRows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
   ];
 
-  const [checksResult, profilesResult, trustResult, zonesResult] = await Promise.all([
+  const [checksResult, profilesResult, trustResult, zonesResult, videos] = await Promise.all([
     listingIds.length > 0
       ? supabase
           .from("verification_checks")
@@ -393,6 +394,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
           .eq("status", "published")
           .not("area_label", "is", null)
           .limit(200),
+    fetchListingVideos(supabase, listingIds),
   ]);
 
   // Sólo el check MÁS RECIENTE por sujeto decide (viene ordenado checked_at desc).
@@ -468,6 +470,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
 
     return {
       id: row.id,
+      video: videos.get(row.id) ?? null,
       title: row.title,
       priceLabel: formatListingPrice(
         row.price_amount,

@@ -8,6 +8,8 @@ import {
   HandHeart,
 } from "@phosphor-icons/react/dist/ssr";
 import { Chip } from "@/components/ui";
+import { ListingVideoMedia } from "@/components/listings/listing-video";
+import type { ListingVideoView } from "@/lib/media/listing-video-policy";
 import { isOptimizableSrc } from "@/components/listings";
 import {
   COMUNIDAD_COPY,
@@ -38,7 +40,13 @@ const C = COMUNIDAD_COPY.perdidos.card;
  * dos destinos táctiles superpuestos en una card de 375px es una mis-tap
  * garantizada. La galería completa vive en el detalle.
  */
-export function CasoCard({ caso }: { caso: LostFoundCase }) {
+export function CasoCard({
+  caso,
+  video = null,
+}: {
+  caso: LostFoundCase;
+  video?: ListingVideoView | null;
+}) {
   const resuelto = caso.resolvedAt !== null;
   const foto = caso.photos[0] ?? null;
   const esEncontrado = caso.type === "found";
@@ -54,7 +62,15 @@ export function CasoCard({ caso }: { caso: LostFoundCase }) {
         resuelto && "opacity-70 hover:opacity-100",
       )}
     >
-      {foto ? (
+      {video ? (
+        <ListingVideoMedia
+          video={video}
+          title={caso.title}
+          aspect="video"
+          interactive={false}
+          className="aspect-[4/3]"
+        />
+      ) : foto ? (
         <div className="relative aspect-[4/3] w-full overflow-hidden bg-surface-subtle">
           <Image
             src={foto}

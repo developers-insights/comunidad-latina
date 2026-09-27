@@ -17,10 +17,7 @@ import {
 import { ListingOwnerMenuOverlay, type ListingOwnerView } from "./listing-owner-menu";
 import { PublisherTrust } from "./publisher-trust";
 import { ListingVideoMedia } from "./listing-video";
-import {
-  LISTING_VIDEO_CARD_CAP_SECONDS,
-  type ListingVideoView,
-} from "@/lib/media/listing-video-policy";
+import type { ListingVideoView } from "@/lib/media/listing-video-policy";
 
 export interface ListingCardModel {
   id: string;
@@ -101,14 +98,6 @@ export function ListingCard({
     });
   }
 
-  function openVideo() {
-    if (!listing.video) return;
-    viewer.open({
-      items: [{ kind: "video", url: listing.video.url, posterUrl: listing.video.posterUrl }],
-      authorName: listing.title,
-      maxPlaybackSeconds: LISTING_VIDEO_CARD_CAP_SECONDS,
-    });
-  }
 
   const verifiedBadge = listing.verification ? (
     <Badge variant="success">
@@ -152,7 +141,6 @@ export function ListingCard({
             <ListingVideoMedia
               video={listing.video}
               title={listing.title}
-              onOpen={openVideo}
               overlayTopLeft={verifiedBadge}
               overlayBottom={overlayBottom}
             />

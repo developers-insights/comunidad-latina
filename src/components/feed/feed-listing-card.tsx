@@ -28,7 +28,6 @@ import {
 } from "@/components/listings";
 import { ListingOwnerMenu } from "@/components/listings/listing-owner-menu";
 import { ListingVideoMedia } from "@/components/listings/listing-video";
-import { LISTING_VIDEO_CARD_CAP_SECONDS } from "@/lib/media/listing-video-policy";
 // Las TRES acciones que la ficha monta ya estaban escritas, probadas y en uso
 // en otras pantallas. Ninguna pide un campo nuevo del modelo: se resuelven con
 // el id que la card ya tiene. Ver el docblock de `ListingSheetAction`.
@@ -560,14 +559,6 @@ export function FeedListingCard({
     });
   }
 
-  function openVideo() {
-    if (!listing.video) return;
-    viewer.open({
-      items: [{ kind: "video", url: listing.video.url, posterUrl: listing.video.posterUrl }],
-      authorName: listing.title,
-      maxPlaybackSeconds: LISTING_VIDEO_CARD_CAP_SECONDS,
-    });
-  }
 
   const overlayTopLeft = (
     <>
@@ -625,7 +616,6 @@ export function FeedListingCard({
             <ListingVideoMedia
               video={listing.video}
               title={listing.title}
-              onOpen={openVideo}
               overlayTopLeft={overlayTopLeft}
               overlayBottom={overlayBottom}
             />

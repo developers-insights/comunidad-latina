@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { fetchListingVideos } from "@/lib/media/listing-video-queries";
 import Link from "next/link";
 import { CaretDown, Plus } from "@phosphor-icons/react/dist/ssr";
 import {
@@ -261,7 +262,7 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
     ),
   ];
 
-  const [storesResult, sellersResult, ownsStoreResult] = await Promise.all([
+  const [storesResult, sellersResult, ownsStoreResult, videos] = await Promise.all([
     storeIds.length > 0
       ? supabase
           .from("listings")
@@ -300,6 +301,7 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
           .eq("created_by", viewerId)
           .eq("status", "published")
       : Promise.resolve({ count: 0 }),
+    fetchListingVideos(supabase, pageRows.map((row) => row.id)),
   ]);
 
   // Identidad de quien ADMINISTRA cada tienda (para el badge de identidad de
@@ -458,6 +460,7 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
                 key={card.id}
                 product={card}
                 owner={{ esMio: misAvisos.has(card.id) }}
+                video={videos.get(card.id)}
               />
             ))}
           </div>

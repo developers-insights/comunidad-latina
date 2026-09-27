@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { FilmSlate, Play, VideoCamera, X } from "@phosphor-icons/react/dist/ssr";
 import { prepareMediaUploadAction } from "@/app/(app)/feed/actions";
@@ -146,18 +146,17 @@ export function ListingVideoField({
   const ayudaId = useId();
   const [midiendo, setMidiendo] = useState(false);
   const [aviso, setAviso] = useState<Aviso | null>(null);
-  const [posterLocal, setPosterLocal] = useState<string | null>(null);
-
   const posterBlob = value?.tipo === "nuevo" ? value.poster : null;
-  useEffect(() => {
-    if (!posterBlob) {
-      setPosterLocal(null);
-      return;
-    }
-    const url = URL.createObjectURL(posterBlob);
-    setPosterLocal(url);
-    return () => URL.revokeObjectURL(url);
-  }, [posterBlob]);
+  const posterLocal = useMemo(
+    () => (posterBlob ? URL.createObjectURL(posterBlob) : null),
+    [posterBlob],
+  );
+  useEffect(
+    () => () => {
+      if (posterLocal) URL.revokeObjectURL(posterLocal);
+    },
+    [posterLocal],
+  );
 
   async function elegir(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -210,7 +209,7 @@ export function ListingVideoField({
 
       {value ? (
         <div className="flex items-center gap-3 rounded-lg border border-border-subtle bg-surface-subtle p-2.5">
-          <div className="relative size-16 shrink-0 overflow-hidden rounded-md bg-media-shade">
+          <div className="cl-print-hide relative size-16 shrink-0 overflow-hidden rounded-md bg-media-shade">
             {poster ? (
               // eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob) o del bucket público
               <img src={poster} alt="" className="size-full object-cover" />

@@ -206,7 +206,7 @@ describe("el video del aviso en la hoja de edición", () => {
     video_duration_seconds: 200,
   };
 
-  function conFila() {
+  function useFila() {
     return useGuardOk({
       listings: {
         select: { data: filaPublicada(), error: null },
@@ -216,7 +216,7 @@ describe("el video del aviso en la hoja de edición", () => {
   }
 
   it("cargar trae el video guardado y el tier", async () => {
-    conFila();
+    useFila();
     mocks.fetchVideoDeAviso.mockResolvedValue({
       tier: "premium",
       video: { path: VIDEO.path, posterPath: null, seconds: 200 },
@@ -227,7 +227,7 @@ describe("el video del aviso en la hoja de edición", () => {
   });
 
   it("sumar un video solo ya cuenta como cambio y se valida contra el tier de la fila", async () => {
-    const stub = conFila();
+    const stub = useFila();
     mocks.fetchVideoDeAviso.mockResolvedValue({ tier: "premium", video: null });
     mocks.validarVideoDeAviso.mockResolvedValue({ ok: true, columns: COLUMNAS });
 
@@ -247,7 +247,7 @@ describe("el video del aviso en la hoja de edición", () => {
   });
 
   it("quitar el video escribe las tres columnas en null", async () => {
-    const stub = conFila();
+    const stub = useFila();
     mocks.fetchVideoDeAviso.mockResolvedValue({
       tier: "free",
       video: { path: VIDEO.path, posterPath: null, seconds: 40 },
@@ -269,7 +269,7 @@ describe("el video del aviso en la hoja de edición", () => {
   });
 
   it("sin tocar el video no se valida ni se escribe", async () => {
-    const stub = conFila();
+    const stub = useFila();
     await editarAvisoAction(ENTRADA_VALIDA);
     expect(mocks.validarVideoDeAviso).not.toHaveBeenCalled();
     const update = stub.calls.find((c) => c.method === "update");
@@ -277,7 +277,7 @@ describe("el video del aviso en la hoja de edición", () => {
   });
 
   it("un video que no pasa la regla no escribe nada", async () => {
-    const stub = conFila();
+    const stub = useFila();
     mocks.validarVideoDeAviso.mockResolvedValue({ ok: false, error: "necesita premium" });
     const result = await editarAvisoAction({ ...ENTRADA_VALIDA, video: VIDEO });
     expect(result).toEqual({ ok: false, error: "necesita premium" });

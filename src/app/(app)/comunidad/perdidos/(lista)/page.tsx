@@ -19,7 +19,8 @@ import {
   type LostFoundCategory,
   type LostFoundType,
 } from "@/lib/comunidad";
-import { getAuthUserId } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
+import { fetchListingVideos } from "@/lib/media/listing-video-queries";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import { fetchLostFoundPage } from "../../queries";
@@ -133,6 +134,10 @@ async function Listado({ filtros }: { filtros: Filtros }) {
     area: filtros.zona || null,
     cursor: filtros.cursor || null,
   });
+  const videos = await fetchListingVideos(
+    await createClient(),
+    items.map((caso) => caso.id),
+  );
 
   const hayFiltro = Boolean(filtros.zona || filtros.tipo || filtros.categoria);
 
@@ -167,7 +172,7 @@ async function Listado({ filtros }: { filtros: Filtros }) {
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {items.map((caso) => (
-          <CasoCard key={caso.id} caso={caso} />
+          <CasoCard key={caso.id} caso={caso} video={videos.get(caso.id)} />
         ))}
       </div>
 

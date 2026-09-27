@@ -1,4 +1,6 @@
 import { Certificate, MapPin, Translate, UserGear } from "@phosphor-icons/react/dist/ssr";
+import { ListingVideoMedia } from "@/components/listings/listing-video";
+import type { ListingVideoView } from "@/lib/media/listing-video-policy";
 import { AccentLink, Avatar, Badge, BezelCard } from "@/components/ui";
 import {
   PublisherTrust,
@@ -76,6 +78,7 @@ export function ProfessionalCard({
   isLoggedIn,
   engagement,
   owner,
+  video,
 }: {
   professional: ProfessionalCardModel;
   /**
@@ -91,6 +94,8 @@ export function ProfessionalCard({
    * acá. Ausente → no se dibuja el menú ⋯.
    */
   owner?: ListingOwnerView;
+  /** Video del aviso (0160), resuelto en lote por la página. */
+  video?: ListingVideoView | null;
 }) {
   const isMember = professional.publisher?.type === "member";
   const isExternal = professional.publisher?.type === "external";
@@ -105,69 +110,85 @@ export function ProfessionalCard({
   const spokenLanguages = languageLabels(professional.languages);
   const ratingPromedio = formatearPromedio(professional.rating.promedio);
 
+  const mediaOverlayTopLeft = (
+    isMember ? (
+      <Avatar
+        src={avatarSrc}
+        name={avatarName}
+        size="md"
+        className="ring-2 ring-surface shadow-md"
+        // Identidad verificada (Stripe Identity, gratis) — insignia
+        // PROPIA sobre el avatar, mismo lugar y mismo componente que
+        // ProfileHeader. Deliberadamente distinta de la credencial de
+        // abajo: círculo sobre la persona, no una píldora con texto.
+        badge={professional.identityVerified ? <IdentityBadge /> : undefined}
+      />
+    ) : undefined
+  );
+
+  const mediaOverlayTopRight = (
+    professional.verification ? (
+      <Badge variant="success">
+        {/* Certificate y no ShieldCheck (el de IdentityBadge, arriba a
+            la izquierda): dos insignias de verificación en la MISMA
+            card tienen que distinguirse por FORMA, no sólo por texto
+            — mismo criterio que separa el escudo de IdentityBadge del
+            sello de CheckAzul en verificacion/check-azul.tsx. Este es
+            el ícono que ya usa el detalle para "Credenciales". */}
+        <Certificate size={13} weight="fill" aria-hidden="true" />
+        {COPY.professionals.verifiedChip(professional.verification.dateLabel)}
+      </Badge>
+    ) : undefined
+  );
+
+  const mediaOverlayBottom = (
+    <div>
+      <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
+        {professional.title}
+      </h3>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+        <span className="rounded-full bg-on-media/15 px-2 py-0.5 text-xs font-semibold">
+          {categoryLabel(professional.category)}
+        </span>
+        {professional.areaLabel && (
+          <span className="flex items-center gap-1 opacity-90">
+            <MapPin size={14} aria-hidden="true" className="shrink-0" />
+            <span className="min-w-0 truncate">{professional.areaLabel}</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <BezelCard variant={professional.verification ? "success" : "default"} coreClassName="overflow-hidden p-0">
       <article aria-label={professional.title}>
         <div className="relative">
-          <PhotoTap
-            photos={photos}
-            label={COPY.openPhotos(professional.title)}
-            authorName={professional.title}
-          >
-            <DirectoryMedia
-              src={professional.photoUrl}
-              accent="profesionales"
-              icon={UserGear}
+          {video ? (
+            <ListingVideoMedia
+              video={video}
+              title={professional.title}
               aspect="portrait"
-              overlayTopLeft={
-                isMember ? (
-                  <Avatar
-                    src={avatarSrc}
-                    name={avatarName}
-                    size="md"
-                    className="ring-2 ring-surface shadow-md"
-                    // Identidad verificada (Stripe Identity, gratis) — insignia
-                    // PROPIA sobre el avatar, mismo lugar y mismo componente que
-                    // ProfileHeader. Deliberadamente distinta de la credencial de
-                    // abajo: círculo sobre la persona, no una píldora con texto.
-                    badge={professional.identityVerified ? <IdentityBadge /> : undefined}
-                  />
-                ) : undefined
-              }
-              overlayTopRight={
-                professional.verification ? (
-                  <Badge variant="success">
-                    {/* Certificate y no ShieldCheck (el de IdentityBadge, arriba a
-                        la izquierda): dos insignias de verificación en la MISMA
-                        card tienen que distinguirse por FORMA, no sólo por texto
-                        — mismo criterio que separa el escudo de IdentityBadge del
-                        sello de CheckAzul en verificacion/check-azul.tsx. Este es
-                        el ícono que ya usa el detalle para "Credenciales". */}
-                    <Certificate size={13} weight="fill" aria-hidden="true" />
-                    {COPY.professionals.verifiedChip(professional.verification.dateLabel)}
-                  </Badge>
-                ) : undefined
-              }
-              overlayBottom={
-                <div>
-                  <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
-                    {professional.title}
-                  </h3>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
-                    <span className="rounded-full bg-on-media/15 px-2 py-0.5 text-xs font-semibold">
-                      {categoryLabel(professional.category)}
-                    </span>
-                    {professional.areaLabel && (
-                      <span className="flex items-center gap-1 opacity-90">
-                        <MapPin size={14} aria-hidden="true" className="shrink-0" />
-                        <span className="min-w-0 truncate">{professional.areaLabel}</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-              }
+              overlayTopLeft={<>{mediaOverlayTopLeft}{mediaOverlayTopRight}</>}
+              overlayBottom={mediaOverlayBottom}
             />
-          </PhotoTap>
+          ) : (
+            <PhotoTap
+              photos={photos}
+              label={COPY.openPhotos(professional.title)}
+              authorName={professional.title}
+            >
+              <DirectoryMedia
+                src={professional.photoUrl}
+                accent="profesionales"
+                icon={UserGear}
+                aspect="portrait"
+                overlayTopLeft={mediaOverlayTopLeft}
+                overlayTopRight={mediaOverlayTopRight}
+                overlayBottom={mediaOverlayBottom}
+              />
+            </PhotoTap>
+          )}
           <ListingOwnerMenuOverlay
             listingId={professional.id}
             kind="professional"

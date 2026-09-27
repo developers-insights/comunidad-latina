@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { fetchListingVideos } from "@/lib/media/listing-video-queries";
 import Link from "next/link";
 import {
   Clock,
@@ -422,7 +423,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
     new Set(orderedRows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
   );
 
-  const [scoresResult, ownersResult, ratings, horarios, fotosPropias] = await Promise.all([
+  const [scoresResult, ownersResult, ratings, horarios, fotosPropias, videos] = await Promise.all([
     ownerIds.length > 0
       ? supabase
           .from("trust_scores")
@@ -443,6 +444,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
     // esto devuelve un mapa vacío en vez de dejar el directorio ENTERO sin
     // resultados por un `column does not exist`.
     fetchFotosDeNegocios(supabase, listingIds),
+    fetchListingVideos(supabase, listingIds),
   ]);
 
   const trustByOwner = new Map<string, OwnerTrustRow>();
@@ -764,6 +766,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
                 <BusinessCard
                   business={business}
                   owner={{ esMio: misAvisos.has(business.id) }}
+                video={videos.get(business.id)}
                 />
               </div>
             ) : (
@@ -771,6 +774,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
                 key={business.id}
                 business={business}
                 owner={{ esMio: misAvisos.has(business.id) }}
+                video={videos.get(business.id)}
               />
             );
           })}

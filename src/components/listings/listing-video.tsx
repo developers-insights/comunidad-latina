@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, m } from "motion/react";
 import { Play, VideoCamera } from "@phosphor-icons/react/dist/ssr";
 import { usePrefersReducedMotion } from "@/components/motion";
+import { useMediaViewer } from "@/components/feed/media-viewer";
 import { CARD_MEDIA_ASPECT, MediaScrimBottom, type CardMediaAspect } from "@/components/ui";
 import { formatDuration } from "@/lib/media/video-policy";
 import {
@@ -24,6 +25,7 @@ export function ListingVideoMedia({
   overlayTopLeft,
   overlayBottom,
   onOpen,
+  interactive = true,
   className,
 }: {
   video: ListingVideoView;
@@ -32,9 +34,12 @@ export function ListingVideoMedia({
   overlayTopLeft?: React.ReactNode;
   overlayBottom?: React.ReactNode;
   onOpen?: () => void;
+  /** `false` cuando la tarjeta entera ya es un enlace: sin botones adentro de un `<a>`. */
+  interactive?: boolean;
   className?: string;
 }) {
   const reduce = usePrefersReducedMotion();
+  const viewer = useMediaViewer();
   const boxRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [frenado, setFrenado] = useState(false);
@@ -74,10 +79,29 @@ export function ListingVideoMedia({
     };
   }, [reduce, frenado]);
 
+  function abrir() {
+    if (onOpen) {
+      onOpen();
+      return;
+    }
+    videoRef.current?.pause();
+    viewer.open({
+      items: [{ kind: "video", url: video.url, posterUrl: video.posterUrl }],
+      authorName: title,
+      maxPlaybackSeconds: LISTING_VIDEO_CARD_CAP_SECONDS,
+      startSeconds: videoRef.current?.currentTime,
+      // La tarjeta pausa antes de abrir (dos copias sonando juntas); sin esto
+      // queda congelada al volver, porque nunca dejó de estar a la vista.
+      onClose: () => {
+        if (!reduce && !frenado) videoRef.current?.play().catch(() => {});
+      },
+    });
+  }
+
   function aplicarTope(event: React.SyntheticEvent<HTMLVideoElement>) {
     const node = event.currentTarget;
     if (node.currentTime < LISTING_VIDEO_CARD_CAP_SECONDS) return;
-    if (video.fullVideoHref) {
+    if (interactive && video.fullVideoHref) {
       node.pause();
       setFrenado(true);
       return;
@@ -95,19 +119,21 @@ export function ListingVideoMedia({
         src={video.url}
         poster={video.posterUrl || undefined}
         muted
-        loop={!video.fullVideoHref}
+        loop={!interactive || !video.fullVideoHref}
         playsInline
         preload="metadata"
         onTimeUpdate={aplicarTope}
         className="absolute inset-0 size-full object-cover"
       />
 
-      <button
-        type="button"
-        onClick={onOpen}
-        aria-label={C.reproducir(title)}
-        className="absolute inset-0 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring"
-      />
+      {interactive && (
+        <button
+          type="button"
+          onClick={abrir}
+          aria-label={C.reproducir(title)}
+          className="absolute inset-0 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring"
+        />
+      )}
 
       <div className="pointer-events-none absolute left-2.5 top-2.5 flex max-w-[70%] flex-wrap gap-1.5">
         <span className="cl-print-fill inline-flex items-center gap-1 rounded-full bg-media-scrim px-2 py-0.5 text-xs font-semibold text-on-media backdrop-blur-sm">
@@ -121,7 +147,7 @@ export function ListingVideoMedia({
       {overlayBottom && <MediaScrimBottom>{overlayBottom}</MediaScrimBottom>}
 
       <AnimatePresence>
-        {frenado && video.fullVideoHref && (
+        {interactive && frenado && video.fullVideoHref && (
           <m.div
             key="ver-video-completo"
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.96 }}
