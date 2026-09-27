@@ -48,7 +48,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Comunidad Latina",
-    images: [{ url: "/images/og-default.png", width: 1200, height: 630 }],
+    images: [{ url: "/brand/og-logo.png", width: 1200, height: 630 }],
   },
 };
 

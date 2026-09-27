@@ -38,7 +38,7 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       type: "website",
       locale: "es_US",
-      images: [{ url: "/images/og-default.png", width: 1200, height: 630 }],
+      images: [{ url: "/brand/og-logo.png", width: 1200, height: 630 }],
     },
   };
 }

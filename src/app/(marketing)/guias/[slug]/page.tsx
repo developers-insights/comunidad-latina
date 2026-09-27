@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       locale: "es_US",
       publishedTime: guide.published_at ?? undefined,
       modifiedTime: guide.updated_at,
-      images: [{ url: "/images/og-default.png", width: 1200, height: 630 }],
+      images: [{ url: "/brand/og-logo.png", width: 1200, height: 630 }],
     },
   };
 }
