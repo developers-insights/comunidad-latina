@@ -10,6 +10,12 @@ import {
   CreatorsNav,
   type CreatorCardModel,
 } from "@/components/creators";
+import { AdChip } from "@/components/feed/card-ad-chip";
+import { separarPatrocinados } from "@/app/(app)/impulsar/perfil-creador/modelo";
+import {
+  leerPerfilesPatrocinados,
+  registrarImpresionesDePerfil,
+} from "@/app/(app)/impulsar/perfil-creador/patrocinados";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { leerChecksAzules } from "@/lib/verificacion/read";
@@ -33,21 +39,48 @@ async function DirectoryContent() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: rows, error } = await supabase
-    .from("creator_profiles")
-    .select(
-      "profile_id, headline, skills, portfolio_photos, available, completed_jobs, rating_avg, rating_count",
-    )
-    .eq("tenant_id", tenant.id)
-    .order("available", { ascending: false })
-    .order("rating_avg", { ascending: false, nullsFirst: false })
-    .order("completed_jobs", { ascending: false })
-    .limit(PAGE_SIZE);
+  const [{ data: rows, error }, patrocinados] = await Promise.all([
+    supabase
+      .from("creator_profiles")
+      .select(
+        "profile_id, status, headline, skills, portfolio_photos, available, completed_jobs, rating_avg, rating_count",
+      )
+      .eq("tenant_id", tenant.id)
+      .order("available", { ascending: false })
+      .order("rating_avg", { ascending: false, nullsFirst: false })
+      .order("completed_jobs", { ascending: false })
+      .limit(PAGE_SIZE),
+    leerPerfilesPatrocinados(supabase, tenant.id),
+  ]);
 
   if (error) console.warn("[creadores] directorio falló", { code: error.code });
 
-  const profileRows = rows ?? [];
+  // Un patrocinado puede no entrar en la primera página orgánica: se trae su
+  // fila aparte para que el lugar pago se cumpla igual.
+  const organicos = rows ?? [];
+  const idsOrganicos = new Set(organicos.map((row) => row.profile_id));
+  const faltantes = patrocinados
+    .map((p) => p.creatorId)
+    .filter((id) => !idsOrganicos.has(id));
+  const { data: filasFaltantes } =
+    faltantes.length > 0
+      ? await supabase
+          .from("creator_profiles")
+          .select(
+            "profile_id, status, headline, skills, portfolio_photos, available, completed_jobs, rating_avg, rating_count",
+          )
+          .eq("tenant_id", tenant.id)
+          .in("profile_id", faltantes)
+      : { data: [] as typeof organicos };
+
+  const profileRows = [...organicos, ...(filasFaltantes ?? [])];
   const profileIds = profileRows.map((row) => row.profile_id);
+  // Sólo un creador aprobado ocupa el lugar pago: si lo suspendieron después de
+  // pagar, vuelve a su lugar orgánico en vez de quedar arriba.
+  const aprobados = new Set(
+    profileRows.filter((row) => row.status === "approved").map((row) => row.profile_id),
+  );
+  const patrocinadosVigentes = patrocinados.filter((p) => aprobados.has(p.creatorId));
 
   const [profilesResult, followsResult, myProfileResult, checksAzules] = await Promise.all([
     profileIds.length > 0
@@ -97,6 +130,15 @@ async function DirectoryContent() {
 
   const hasMyProfile = Boolean(myProfileResult.data);
 
+  const { patrocinados: arriba, resto } = separarPatrocinados(
+    creators.filter((c) => idsOrganicos.has(c.profileId) || aprobados.has(c.profileId)),
+    patrocinadosVigentes.map((p) => p.creatorId),
+  );
+  const servidos = new Set(arriba.map((c) => c.profileId));
+  await registrarImpresionesDePerfil(
+    patrocinadosVigentes.filter((p) => servidos.has(p.creatorId)).map((p) => p.impulsoId),
+  );
+
   return (
     <>
       <header className="mb-4 flex items-start justify-between gap-3">
@@ -129,7 +171,13 @@ async function DirectoryContent() {
         />
       ) : (
         <div className="flex flex-col gap-4">
-          {creators.map((creator) => (
+          {arriba.map((creator) => (
+            <div key={creator.profileId} className="flex flex-col gap-2">
+              <AdChip className="self-start" />
+              <CreatorCard creator={creator} />
+            </div>
+          ))}
+          {resto.map((creator) => (
             <CreatorCard key={creator.profileId} creator={creator} />
           ))}
         </div>

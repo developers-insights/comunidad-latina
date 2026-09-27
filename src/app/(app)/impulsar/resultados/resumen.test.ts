@@ -190,3 +190,55 @@ describe("armarResumen", () => {
     expect(totales.pagadoCents).toBe(0);
   });
 });
+
+describe("armarResumen · perfil de creador", () => {
+  const perfil = {
+    id: "cp1",
+    status: "active",
+    amount_cents: 1000,
+    impressions: 57,
+    ends_at: EN_3_DIAS,
+    created_at: "2026-09-12T00:00:00.000Z",
+  };
+  const creador = { displayName: "Yari Contenido", avatarUrl: "https://cdn.test/yari.webp" };
+
+  it("el impulso del perfil entra a la lista con sus veces mostradas y sin vistas", () => {
+    const { campanas } = armar({ perfiles: [perfil], creador });
+    const fila = campanas.find((c) => c.tipo === "perfil");
+    expect(fila).toMatchObject({
+      id: "cp1",
+      titulo: "Tu perfil de creador",
+      thumbnailUrl: "https://cdn.test/yari.webp",
+      estado: "activa",
+      diasRestantes: 3,
+      pagadoCents: 1000,
+      vecesMostrada: medido(57),
+      vistas: NO_APLICA,
+      href: "/impulsar/perfil-creador",
+    });
+  });
+
+  it("se ordena con el resto por fecha de compra", () => {
+    const { campanas } = armar({ perfiles: [perfil], creador });
+    expect(campanas.map((c) => c.tipo)).toEqual(["perfil", "aviso", "publicacion"]);
+  });
+
+  it("suma a los totales: activas, gasto y veces mostradas", () => {
+    const { totales } = armar({ perfiles: [perfil], creador });
+    expect(totales.activas).toBe(2);
+    expect(totales.pagadoCents).toBe(4500);
+    expect(totales.vecesMostrada).toEqual(medido(297));
+  });
+
+  it("sin datos del creador igual se lista, sin foto", () => {
+    const { campanas } = armar({ perfiles: [perfil], creador: null });
+    const fila = campanas.find((c) => c.tipo === "perfil");
+    expect(fila?.thumbnailUrl).toBeNull();
+    expect(fila?.titulo).toBe("Tu perfil de creador");
+  });
+
+  it("sin impulsos de perfil, la lista queda como estaba", () => {
+    const { campanas } = armar();
+    expect(campanas.some((c) => c.tipo === "perfil")).toBe(false);
+  });
+});

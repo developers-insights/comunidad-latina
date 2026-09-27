@@ -4,6 +4,9 @@ import { SelectorDeCreacion, opcionesDisponibles } from "@/components/boosts";
 import { SectionTopBar } from "@/components/shell";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
+import { EntradaCreador } from "../perfil-creador/entrada-creador";
+import { leerSituacionParaBoost } from "../perfil-creador/situacion";
 
 export const metadata = { title: "Publicá algo nuevo" };
 
@@ -21,6 +24,7 @@ const COPY = {
    */
   bajada:
     "Primero se publica, después se promociona. Elegí qué querés crear y volvé a Boost cuando esté listo.",
+  perfilTitulo: "Tu perfil de creador",
   revision:
     "Algunos avisos pasan por una revisión corta antes de salir. Mientras tanto lo vas a ver acá en Boost como «En revisión»: te avisamos apenas se apruebe y ahí sí lo podés promocionar.",
 } as const;
@@ -50,13 +54,20 @@ const COPY = {
  * es lo que hace `esReciente` en `../impulsar-items.ts`.
  */
 export default async function CrearParaPromocionarPage() {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  const [tenant, supabase, formatDate] = await Promise.all([
+    getTenant(),
+    createClient(),
+    getViewerFormatDate(),
+  ]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/entrar?next=/impulsar/crear");
 
   const opciones = opcionesDisponibles(tenant.modules, tenant.modulesSoon);
+  // El perfil de creador no se "publica": ya existe. Por eso no es una fila más
+  // del selector (que lleva a crear algo) sino una entrada propia arriba.
+  const comoCreador = await leerSituacionParaBoost(supabase, tenant, user.id);
 
   return (
     <div className="flex flex-col gap-6 pb-8">
@@ -69,6 +80,22 @@ export default async function CrearParaPromocionarPage() {
           {COPY.bajada}
         </p>
       </header>
+
+      {comoCreador && comoCreador.situacion !== "no_disponible" && (
+        <section aria-labelledby="crear-perfil" className="flex flex-col gap-3">
+          <h2 id="crear-perfil" className="font-display text-lg font-bold text-foreground">
+            {COPY.perfilTitulo}
+          </h2>
+          <EntradaCreador
+            situacion={comoCreador.situacion}
+            vigenteHasta={
+              comoCreador.vigenteHasta
+                ? formatDate(comoCreador.vigenteHasta, { locale: tenant.locale, style: "long" })
+                : null
+            }
+          />
+        </section>
+      )}
 
       <SelectorDeCreacion opciones={opciones} />
 

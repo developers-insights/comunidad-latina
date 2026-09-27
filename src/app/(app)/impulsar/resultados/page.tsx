@@ -58,7 +58,7 @@ const COPY = {
    * promocionó publicaciones) manda a buscar algo que no existe.
    */
   aclaracionMostrada:
-    "«Veces que se mostró» cuenta cada vez que tu aviso ocupó el lugar pago en un listado.",
+    "«Veces que se mostró» cuenta cada vez que tu aviso o tu perfil ocupó el lugar pago en un listado.",
   aclaracionVistas:
     "«Vistas» cuenta a quien lo abrió, y son todas las del aviso, no sólo las del tiempo que pagaste.",
 
@@ -75,6 +75,7 @@ const COPY = {
 
   tipoAviso: "Aviso",
   tipoPublicacion: "Publicación",
+  tipoPerfil: "Perfil de creador",
 
   caidaTitulo: "No pudimos traer tus promociones",
   caidaMensaje: "Es un problema nuestro, no de tus promociones. Volvé a entrar en un rato.",
@@ -140,7 +141,7 @@ export default async function ResultadosDePromocionesPage() {
   // `.from("boosts")`: `amount_cents` y `buyer_id` están fuera del grant por
   // columnas de esa tabla, y pedirlas tumbaba la consulta entera con 42501 —
   // la pantalla mostraba sólo las publicaciones y callaba todos los avisos.
-  const [boostsRes, promosRes] = await Promise.all([
+  const [boostsRes, promosRes, perfilesRes, cuentaRes] = await Promise.all([
     supabase.rpc("my_boosts", { p_limit: LIMIT }),
     supabase
       .from("post_promotions")
@@ -150,18 +151,27 @@ export default async function ResultadosDePromocionesPage() {
       .neq("status", "pending_payment")
       .order("created_at", { ascending: false })
       .limit(LIMIT),
+    // Impulsos del perfil de creador (0175): monto e impresiones están fuera
+    // del grant, así que van por la RPC de dueño, igual que `my_boosts`.
+    supabase.rpc("my_creator_profile_boosts", { p_limit: LIMIT }),
+    supabase.from("profiles").select("display_name, avatar_url").eq("id", user.id).maybeSingle(),
   ]);
 
-  for (const [cual, res] of [["impulsos", boostsRes], ["promociones", promosRes]] as const) {
+  for (const [cual, res] of [
+    ["impulsos", boostsRes],
+    ["promociones", promosRes],
+    ["impulsos de perfil", perfilesRes],
+  ] as const) {
     if (res.error) {
       console.warn(`[resultados] no se pudieron leer los ${cual}`, { code: res.error.code });
     }
   }
   // Una lectura caída no es "no promocionaste nada": se avisa en vez de
   // mostrar el estado vacío.
-  const faltanCampanas = Boolean(boostsRes.error || promosRes.error);
+  const faltanCampanas = Boolean(boostsRes.error || promosRes.error || perfilesRes.error);
   const boosts = boostsRes.data ?? [];
   const promociones = promosRes.data ?? [];
+  const perfiles = perfilesRes.data ?? [];
   const ahoraMs = new Date().getTime();
 
   const listingIds = [...new Set(boosts.map((row) => row.listing_id))];
@@ -211,6 +221,13 @@ export default async function ResultadosDePromocionesPage() {
     listingsPorId,
     postsPorId,
     impresionesPorBoost,
+    perfiles,
+    creador: cuentaRes.data
+      ? {
+          displayName: cuentaRes.data.display_name ?? "",
+          avatarUrl: cuentaRes.data.avatar_url ?? null,
+        }
+      : null,
     ahoraMs,
   });
 
@@ -445,7 +462,11 @@ function CuerpoDeCampana({ campana }: { campana: CampanaResumen }) {
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <ChipDeEstado campana={campana} />
             <span className="text-[11px] text-foreground-muted">
-              {campana.tipo === "aviso" ? COPY.tipoAviso : COPY.tipoPublicacion}
+              {campana.tipo === "aviso"
+                ? COPY.tipoAviso
+                : campana.tipo === "perfil"
+                  ? COPY.tipoPerfil
+                  : COPY.tipoPublicacion}
             </span>
           </div>
         </div>
