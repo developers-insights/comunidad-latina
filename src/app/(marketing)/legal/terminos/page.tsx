@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getTenant } from "@/lib/tenant/resolve";
 import { JsonLd } from "@/components/marketing/json-ld";
+import { SMS_POLICY_HREF, SMS_SEND_CTA, SMS_SENDER_NUMBER } from "@/lib/phone/sms-consent";
 import {
   LEGAL_GOVERNING_STATE,
   LegalCallout,
@@ -18,6 +19,7 @@ const TOC = [
   { id: "que-es-esto", label: "Qué es esta plataforma" },
   { id: "quien-puede-usar", label: "Quién puede usarla" },
   { id: "tu-cuenta", label: "Tu cuenta" },
+  { id: "mensajes-sms", label: "Mensajes de texto (SMS)" },
   { id: "lo-que-publicas", label: "Lo que publicás" },
   { id: "verificacion", label: "Sobre la verificación" },
   { id: "vivienda-y-negocios", label: "Vivienda, negocios y acuerdos entre usuarios" },
@@ -64,6 +66,7 @@ export default async function TerminosPage() {
 
       <LegalHeader
         title="Términos de Uso"
+        updated="27 de septiembre de 2026"
         intro={
           <>
             <strong className={legalProse.strong}>En criollo:</strong> esto es la letra chica,
@@ -111,6 +114,34 @@ export default async function TerminosPage() {
           <li>Sos responsable de tu contraseña y de lo que pase con tu cuenta.</li>
           <li>Si notás algo raro (alguien entró sin tu permiso), avisanos apenas puedas.</li>
         </ul>
+      </LegalSection>
+
+      <LegalSection id="mensajes-sms" title="Mensajes de texto (SMS)">
+        <p className={legalProse.p}>
+          Verificar tu teléfono es opcional y no es una condición para usar la plataforma. Si lo
+          hacés, al tocar «{SMS_SEND_CTA}» en <em>Ajustes › Tu teléfono</em> aceptás recibir por
+          SMS, desde el {SMS_SENDER_NUMBER}, un código de verificación de un solo uso. Por ese
+          número no mandamos publicidad ni ofertas.
+        </p>
+        <ul className={legalProse.ul}>
+          <li>La frecuencia varía: llega un mensaje por cada código que pidas.</li>
+          <li>Pueden aplicarse tarifas de mensajes y datos de tu compañía de teléfono.</li>
+          <li>
+            Respondé STOP para dejar de recibirlos y HELP para pedir ayuda. También podés
+            escribirnos a <LegalContact />.
+          </li>
+          <li>Las compañías de teléfono no son responsables por mensajes demorados o que no lleguen.</li>
+        </ul>
+        <p className={legalProse.p}>
+          El detalle completo está en la{" "}
+          <Link
+            href={SMS_POLICY_HREF}
+            className="font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 hover:decoration-brand-ink"
+          >
+            Política de mensajes de texto (SMS)
+          </Link>
+          .
+        </p>
       </LegalSection>
 
       <LegalSection id="lo-que-publicas" title="Lo que publicás">
@@ -203,7 +234,7 @@ export default async function TerminosPage() {
         <p className={legalProse.p}>
           Estos Términos se rigen por las leyes de Estados Unidos
           {LEGAL_GOVERNING_STATE ? ` y del estado de ${LEGAL_GOVERNING_STATE}` : ""}. Para
-          cualquier consulta legal sobre estos Términos, escribinos por <LegalContact />.
+          cualquier consulta legal sobre estos Términos, escribinos a <LegalContact />.
         </p>
         <p className={legalProse.p}>
           Si vivís fuera de Estados Unidos, esto no te quita los derechos que te dé la ley de tu

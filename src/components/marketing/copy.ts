@@ -103,6 +103,7 @@ export const COPY = {
 
   footer: {
     tagline: "Hecho para la comunidad, con la comunidad.",
+    operatedBy: "Operado por Comunidad Latina LLC · Contacto:",
     exploreTitle: "Explorar",
     explore: [
       { label: "Propiedades", href: "/propiedades" },
@@ -120,6 +121,7 @@ export const COPY = {
     legal: [
       { label: "Términos de uso", href: "/legal/terminos" },
       { label: "Privacidad", href: "/legal/privacidad" },
+      { label: "Mensajes de texto (SMS)", href: "/legal/sms" },
       // La política de cookies tiene que ser alcanzable desde CUALQUIER página,
       // y el pie es la única pieza que está en todas. Estaba sólo en el pie de
       // los documentos legales, o sea que había que encontrarla para poder

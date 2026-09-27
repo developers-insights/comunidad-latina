@@ -49,16 +49,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = baseUrl();
   const now = new Date();
 
-  // `/` NO va en el sitemap: hoy responde 307 a /entrar (decisión de producto,
-  // ver el bloque `redirects` de next.config.ts — la landing dejó de ser la
-  // puerta de entrada). Entregarle a Google una URL con prioridad máxima que
-  // redirige es gastar crawl budget en un salto, y el destino real (/entrar) es
-  // un formulario de login sin nada que indexar. La prioridad 1 pasa a /guias,
-  // que es el contenido con el que este producto se posiciona de verdad.
-  // Si algún día vuelve la landing (borrar ese bloque de redirects), su entrada
-  // vuelve acá.
   const staticEntries: MetadataRoute.Sitemap = [
-    { url: `${base}/guias`, lastModified: now, changeFrequency: "weekly", priority: 1 },
+    { url: `${base}/`, lastModified: now, changeFrequency: "weekly", priority: 1 },
+    { url: `${base}/guias`, lastModified: now, changeFrequency: "weekly", priority: 0.9 },
     { url: `${base}/propiedades`, lastModified: now, changeFrequency: "daily", priority: 0.9 },
     { url: `${base}/profesionales`, lastModified: now, changeFrequency: "weekly", priority: 0.7 },
     { url: `${base}/eventos`, lastModified: now, changeFrequency: "daily", priority: 0.7 },

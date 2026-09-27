@@ -1,5 +1,6 @@
 import "server-only";
 
+import { BRAND_NAME } from "@/lib/brand";
 import { isSmsConfigured } from "@/lib/config/services";
 import { createTwilioSender } from "./twilio";
 import { CODE_TTL_MINUTES } from "./verification";
@@ -100,13 +101,13 @@ export function getSmsSender(): SmsSender {
  * decide el DEFAULT de `phone_verification_codes.expires_at`, y un SMS que
  * promete un vencimiento distinto del real es la clase de detalle que hace que
  * alguien tire el mensaje creyendo que todavía le sirve.
+ *
+ * Abre con la MARCA y no con el nombre de la comunidad: el número toll-free está
+ * registrado en Twilio a nombre de Comunidad Latina, y un SMS firmado con otro
+ * nombre es exactamente la inconsistencia que hizo rechazar la verificación
+ * (docs/twilio-toll-free-reenvio.md). El STOP va en cada mensaje porque no hay
+ * otro mensaje donde decirlo.
  */
-export function verificationSmsBody({
-  code,
-  communityName,
-}: {
-  code: string;
-  communityName: string;
-}): string {
-  return `${code} es tu código de ${communityName}. Vence en ${CODE_TTL_MINUTES} minutos. No se lo pases a nadie.`;
+export function verificationSmsBody({ code }: { code: string }): string {
+  return `${BRAND_NAME}: tu código de verificación es ${code}. Vence en ${CODE_TTL_MINUTES} minutos. No se lo pases a nadie. Respondé STOP para no recibir más SMS.`;
 }
