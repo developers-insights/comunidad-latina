@@ -2216,6 +2216,72 @@ export type Database = {
           },
         ]
       }
+      creator_profile_boosts: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          creator_id: string
+          currency: string
+          duration_days: number
+          ends_at: string | null
+          id: string
+          impressions: number
+          package: string
+          starts_at: string | null
+          status: string
+          stripe_checkout_session_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          creator_id: string
+          currency: string
+          duration_days: number
+          ends_at?: string | null
+          id?: string
+          impressions?: number
+          package: string
+          starts_at?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          creator_id?: string
+          currency?: string
+          duration_days?: number
+          ends_at?: string | null
+          id?: string
+          impressions?: number
+          package?: string
+          starts_at?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creator_profile_boosts_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "creator_profiles"
+            referencedColumns: ["profile_id"]
+          },
+          {
+            foreignKeyName: "creator_profile_boosts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       creator_profiles: {
         Row: {
           available: boolean
@@ -6851,6 +6917,17 @@ export type Database = {
           status: string
         }[]
       }
+      my_creator_profile_boosts: {
+        Args: { p_limit?: number }
+        Returns: {
+          amount_cents: number
+          created_at: string
+          ends_at: string | null
+          id: string
+          impressions: number
+          status: string
+        }[]
+      }
       marcar_caso_resuelto: {
         Args: { p_listing: string; p_resuelto?: boolean }
         Returns: boolean
@@ -6947,6 +7024,10 @@ export type Database = {
       }
       record_boost_impressions: {
         Args: { p_boost_ids: string[] }
+        Returns: number
+      }
+      record_creator_profile_boost_impressions: {
+        Args: { p_ids: string[] }
         Returns: number
       }
       record_cta_click: {

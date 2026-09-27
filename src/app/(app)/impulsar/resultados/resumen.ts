@@ -83,7 +83,7 @@ export type EstadoCampana = "activa" | "terminada" | "cancelada";
 
 export interface CampanaResumen {
   id: string;
-  tipo: "aviso" | "publicacion";
+  tipo: "aviso" | "publicacion" | "perfil";
   /** Título del aviso o recorte del post. Nunca vacío: hay respaldo. */
   titulo: string;
   thumbnailUrl: string | null;
@@ -176,6 +176,20 @@ export interface PromoRowInput {
   created_at: string;
 }
 
+export interface PerfilBoostRowInput {
+  id: string;
+  status: string;
+  amount_cents: number | null;
+  impressions: number | null;
+  ends_at: string | null;
+  created_at: string;
+}
+
+export interface CreadorLite {
+  displayName: string;
+  avatarUrl: string | null;
+}
+
 export interface ListingLite {
   id: string;
   title: string;
@@ -222,6 +236,8 @@ export function armarResumen(input: {
   listingsPorId: ReadonlyMap<string, ListingLite>;
   postsPorId: ReadonlyMap<string, PostLite>;
   impresionesPorBoost: ReadonlyMap<string, number> | null;
+  perfiles?: readonly PerfilBoostRowInput[];
+  creador?: CreadorLite | null;
   ahoraMs: number;
 }): ResumenDeCampanas {
   const deAvisos: CampanaResumen[] = input.boosts.map((row) => {
@@ -275,7 +291,28 @@ export function armarResumen(input: {
     };
   });
 
-  const campanas = [...deAvisos, ...dePosts].sort(
+  const dePerfil: CampanaResumen[] = (input.perfiles ?? []).map((row) => {
+    const estado = estadoDeCampana(row.status, row.ends_at, input.ahoraMs);
+    return {
+      id: row.id,
+      tipo: "perfil",
+      titulo: "Tu perfil de creador",
+      thumbnailUrl: input.creador?.avatarUrl ?? null,
+      thumbnailIsVideo: false,
+      estado,
+      diasRestantes: diasRestantesDe(estado, row.ends_at, input.ahoraMs),
+      endsAt: row.ends_at,
+      pagadoCents: row.amount_cents,
+      // El contador viaja en la misma fila de la RPC: si la RPC respondió, el
+      // número es real (0 incluido); si se cayó, la fila ni siquiera llega.
+      vecesMostrada: medido(row.impressions ?? 0),
+      vistas: NO_APLICA,
+      href: "/impulsar/perfil-creador",
+      createdAt: row.created_at,
+    };
+  });
+
+  const campanas = [...deAvisos, ...dePosts, ...dePerfil].sort(
     (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
   );
 

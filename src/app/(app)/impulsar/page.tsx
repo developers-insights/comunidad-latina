@@ -21,6 +21,7 @@ import { VerResultadosCta } from "@/components/boosts/ver-resultados-cta";
 import { VistaPreviaEnRevision } from "@/components/boosts/vista-previa-en-revision";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { cn } from "@/lib/utils";
 import { SectionTopBar } from "@/components/shell";
 import {
@@ -31,6 +32,8 @@ import {
   type EstadoPromocion,
   type ImpulsarItem,
 } from "./impulsar-items";
+import { EntradaCreador } from "./perfil-creador/entrada-creador";
+import { leerSituacionParaBoost } from "./perfil-creador/situacion";
 
 export const metadata = { title: "Boost" };
 
@@ -174,7 +177,11 @@ function postIconFor(): Icon {
  * con su regex antes de tocar la base).
  */
 export default async function ImpulsarIndexPage() {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
+  const [tenant, supabase, formatDate] = await Promise.all([
+    getTenant(),
+    createClient(),
+    getViewerFormatDate(),
+  ]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -183,8 +190,14 @@ export default async function ImpulsarIndexPage() {
   // Lo propio del usuario en este tenant — nunca "removed" (nadie promociona
   // algo que ya se dio de baja). RLS ya aísla por dueño; el filtro explícito
   // es además la query eficiente (mismo patrón que el resto del repo).
-  const [{ data: listingRows }, { data: postRows }, impulsosComprados, promosCompradas] =
-    await Promise.all([
+  const [
+    { data: listingRows },
+    { data: postRows },
+    impulsosComprados,
+    promosCompradas,
+    perfilesComprados,
+    comoCreador,
+  ] = await Promise.all([
       supabase
         .from("listings")
         .select("id, kind, title, status, photos, created_at")
@@ -216,12 +229,21 @@ export default async function ImpulsarIndexPage() {
         .eq("tenant_id", tenant.id)
         .eq("buyer_id", user.id)
         .neq("status", "pending_payment"),
+      supabase
+        .from("creator_profile_boosts")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenant.id)
+        .eq("creator_id", user.id)
+        .neq("status", "pending_payment"),
+      leerSituacionParaBoost(supabase, tenant, user.id),
     ]);
 
   // Un error de conteo NO enciende la entrada: preferimos no ofrecer el enlace
   // antes que mandar a una pantalla que no sabemos si tiene algo.
   const tienePromociones =
-    (impulsosComprados.count ?? 0) > 0 || (promosCompradas.count ?? 0) > 0;
+    (impulsosComprados.count ?? 0) > 0 ||
+    (promosCompradas.count ?? 0) > 0 ||
+    (perfilesComprados.count ?? 0) > 0;
 
   const listings = listingRows ?? [];
   const posts = postRows ?? [];
@@ -294,6 +316,16 @@ export default async function ImpulsarIndexPage() {
           sin lista, el botón de crear está siempre en el mismo lugar. */}
       <div className="flex flex-col gap-2.5">
         <CrearParaPromocionarCta />
+        {comoCreador && (
+          <EntradaCreador
+            situacion={comoCreador.situacion}
+            vigenteHasta={
+              comoCreador.vigenteHasta
+                ? formatDate(comoCreador.vigenteHasta, { locale: tenant.locale, style: "long" })
+                : null
+            }
+          />
+        )}
         {/* Sólo para quien ya compró algo: sin campañas llevaría a un vacío, y
             una fila de relleno en la cabecera de la pantalla de compra. */}
         {tienePromociones && <VerResultadosCta />}
