@@ -107,6 +107,7 @@ function revocaciones(stub: ReturnType<typeof createAdminStub>) {
   return [
     ...callsTo(stub, "boosts", "update"),
     ...callsTo(stub, "post_promotions", "update"),
+    ...callsTo(stub, "creator_profile_boosts", "update"),
     ...callsTo(stub, "store_memberships", "update"),
     ...callsTo(stub, "listing_premiums", "update"),
     ...callsTo(stub, "business_accounts", "update"),
@@ -145,6 +146,19 @@ const PROMO_ROW = {
   buyer_id: BUYER,
   status: "active",
   stripe_checkout_session_id: "cs_test_promo_1",
+};
+
+const PERFIL_SESSION = {
+  id: "cs_test_perfil_1",
+  metadata: { creator_profile_boost_id: "perfil-1", tenant_id: TENANT },
+};
+
+const PERFIL_ROW = {
+  id: "perfil-1",
+  tenant_id: TENANT,
+  buyer_id: BUYER,
+  status: "active",
+  stripe_checkout_session_id: "cs_test_perfil_1",
 };
 
 /** Un `charge.refunded`. Por defecto: reembolso TOTAL de un impulso. */
@@ -368,6 +382,45 @@ describe("reembolsos — el reembolso total de un pago único sí apaga", () => 
     expect(updates).toHaveLength(1);
     expect(updates[0].args[0]).toMatchObject({ status: "canceled" });
     expect(mocks.createNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("devuelto el 100% de un impulso de perfil de creador activo → se cancela y se avisa", async () => {
+    mocks.listSessions.mockResolvedValue({ data: [PERFIL_SESSION] });
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      creator_profile_boosts: { select: { data: PERFIL_ROW, error: null }, update: { error: null } },
+      audit_log: { insert: { error: null } },
+    });
+
+    const res = await POST(signedRequest(refundEvent()));
+
+    expect(res.status).toBe(200);
+    const updates = callsTo(stub, "creator_profile_boosts", "update");
+    expect(updates).toHaveLength(1);
+    expect(updates[0].args[0]).toMatchObject({ status: "canceled" });
+    expect(callsTo(stub, "creator_profile_boosts", "eq").map((c) => c.args)).toContainEqual([
+      "status",
+      "active",
+    ]);
+    expect(mocks.createNotification).toHaveBeenCalledTimes(1);
+    expect(callsTo(stub, "audit_log", "insert")).toHaveLength(1);
+  });
+
+  it("NO revoca un impulso de perfil si la Session del cobro no es la vinculada", async () => {
+    mocks.listSessions.mockResolvedValue({ data: [PERFIL_SESSION] });
+    const stub = useAdmin({
+      payment_events: { insert: { error: null } },
+      creator_profile_boosts: {
+        select: { data: { ...PERFIL_ROW, stripe_checkout_session_id: "cs_otra" }, error: null },
+        update: { error: null },
+      },
+    });
+
+    const res = await POST(signedRequest(refundEvent()));
+
+    expect(res.status).toBe(200);
+    expect(revocaciones(stub)).toHaveLength(0);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
   });
 
   it("reentregado el mismo reembolso sobre un impulso ya cancelado, no revoca ni notifica dos veces", async () => {
