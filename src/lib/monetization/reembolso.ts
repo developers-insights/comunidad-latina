@@ -155,6 +155,15 @@ type CompraUnica =
         buyer_id: string;
         status: string;
       };
+    }
+  | {
+      producto: "creator_profile_boost";
+      row: {
+        id: string;
+        tenant_id: string;
+        buyer_id: string;
+        status: string;
+      };
     };
 
 /**
@@ -250,6 +259,37 @@ async function campanaDeLaSession(
   return { producto: "post_promotion", row: data };
 }
 
+async function impulsoDePerfilDeLaSession(
+  admin: AdminClient,
+  session: Stripe.Checkout.Session,
+): Promise<CompraUnica | null> {
+  const impulsoId = metadataString(session.metadata, "creator_profile_boost_id");
+  if (!impulsoId) return null;
+
+  const { data, error } = await admin
+    .from("creator_profile_boosts")
+    .select("id, tenant_id, buyer_id:creator_id, status, stripe_checkout_session_id")
+    .eq("id", impulsoId)
+    .maybeSingle();
+  if (error) {
+    console.warn(
+      `[pagos:reembolso] no se pudo leer creator_profile_boosts (${error.code}) — el reembolso de ${session.id} queda sin aplicar.`,
+    );
+    return null;
+  }
+  if (!data) return null;
+
+  if (data.stripe_checkout_session_id !== session.id) {
+    console.error(
+      `[pagos:reembolso] ALERTA: la session ${session.id} dice ser del impulso de perfil ${impulsoId}, pero ese impulso está vinculado a ${
+        data.stripe_checkout_session_id ?? "ninguna"
+      } — NO se revoca. Reconciliar a mano en el Dashboard.`,
+    );
+    return null;
+  }
+  return { producto: "creator_profile_boost", row: data };
+}
+
 /** La compra one-time detrás de un PaymentIntent, o `null` si no es de las nuestras. */
 async function compraUnicaDelPago(
   admin: AdminClient,
@@ -258,7 +298,9 @@ async function compraUnicaDelPago(
   const session = await sessionDelCobro(paymentIntentId);
   if (!session) return null;
   return (
-    (await boostDeLaSession(admin, session)) ?? (await campanaDeLaSession(admin, session))
+    (await boostDeLaSession(admin, session)) ??
+    (await campanaDeLaSession(admin, session)) ??
+    (await impulsoDePerfilDeLaSession(admin, session))
   );
 }
 
@@ -406,6 +448,44 @@ async function revocarCampana(
   });
 }
 
+async function revocarImpulsoDePerfil(
+  admin: AdminClient,
+  row: Extract<CompraUnica, { producto: "creator_profile_boost" }>["row"],
+  chargeId: string,
+): Promise<void> {
+  const ahora = new Date().toISOString();
+  const { error } = await admin
+    .from("creator_profile_boosts")
+    .update({ status: "canceled", ends_at: ahora })
+    .eq("id", row.id)
+    .eq("status", "active");
+  if (error) throw new Error(`update creator_profile_boosts: ${error.code}`);
+
+  console.info(
+    `[pagos:reembolso] impulso de perfil ${row.id} (tenant=${row.tenant_id} owner=${row.buyer_id}) revocado por reembolso total del cobro ${chargeId}.`,
+  );
+
+  await createNotification(admin, {
+    tenantId: row.tenant_id,
+    profileId: row.buyer_id,
+    kind: "creator_profile_boost",
+    category: "pagos",
+    ignorePrefs: true,
+    title: "Te devolvimos el pago de tu promoción",
+    body: "Tu perfil de creador dejó de aparecer como Patrocinado. Sigue visible en el directorio, y podés promocionarlo de nuevo cuando quieras.",
+    href: "/impulsar/perfil-creador",
+    dedupeUnread: true,
+  });
+  await admin.from("audit_log").insert({
+    tenant_id: row.tenant_id,
+    actor_id: row.buyer_id,
+    action: "creator_profile_boost_revoked_refund",
+    subject_kind: "creator_profile_boost",
+    subject_id: row.id,
+    meta: { via: "stripe_refund", charge_id: chargeId },
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Reembolso                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -460,7 +540,8 @@ async function atenderReembolso(admin: AdminClient, charge: Stripe.Charge): Prom
   }
 
   if (compra.producto === "boost") await revocarBoost(admin, compra.row, charge.id);
-  else await revocarCampana(admin, compra.row, charge.id);
+  else if (compra.producto === "post_promotion") await revocarCampana(admin, compra.row, charge.id);
+  else await revocarImpulsoDePerfil(admin, compra.row, charge.id);
 }
 
 /* -------------------------------------------------------------------------- */
