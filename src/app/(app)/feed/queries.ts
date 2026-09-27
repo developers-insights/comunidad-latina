@@ -32,6 +32,8 @@ import { MUX_FILTER_KEY, muxThumbnailUrl, parseMuxStatus } from "@/lib/media/mux
 import { zonasDeCampana, type ZonasDeCampana } from "@/lib/zona/campanas";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { timeAgo } from "@/lib/utils";
+import { fetchListingVideos } from "@/lib/media/listing-video-queries";
+import type { ListingVideoView } from "@/lib/media/listing-video-policy";
 import type { TaggedProfile } from "@/lib/social/post-tags";
 import {
   MUSIC_CATEGORIES,
@@ -891,6 +893,8 @@ export const LISTING_COLUMNS =
 export interface ListingExtras {
   verificationByListing: Map<string, VerificationView>;
   authors: Map<string, AuthorView>;
+  /** Video del aviso (0160). Ausente en la mayoría: sólo los que tienen uno. */
+  videoByListing?: Map<string, ListingVideoView>;
 }
 
 /**
@@ -909,7 +913,7 @@ export async function fetchListingExtras(
     .map((row) => row.created_by)
     .filter((id): id is string => Boolean(id));
 
-  const [checksResult, authors] = await Promise.all([
+  const [checksResult, authors, videoByListing] = await Promise.all([
     listingIds.length > 0
       ? supabase
           .from("verification_checks")
@@ -921,6 +925,7 @@ export async function fetchListingExtras(
           .order("checked_at", { ascending: false })
       : Promise.resolve({ data: [] as never[] }),
     fetchAuthorViews(supabase, publisherIds),
+    fetchListingVideos(supabase, listingIds),
   ]);
 
   // `checked_at` es `timestamptz`: el instante en que se consultó el registro
@@ -939,7 +944,7 @@ export async function fetchListingExtras(
     }
   }
 
-  return { verificationByListing, authors };
+  return { verificationByListing, authors, videoByListing };
 }
 
 /** Row property → modelo de la ListingCard real de VIVIENDA (se reutiliza tal cual). */
@@ -977,6 +982,7 @@ export function toListingCardModel(
       .map(listingPhotoUrl),
     verification: extras.verificationByListing.get(row.id) ?? null,
     publisher,
+    video: extras.videoByListing?.get(row.id) ?? null,
   };
 }
 
@@ -998,6 +1004,8 @@ export function toFeedListingModel(
     photoUrl: firstPhotoUrl(row.photos),
     verifiedDateLabel: extras.verificationByListing.get(row.id)?.dateLabel ?? null,
     publisherName: row.publisher_name,
+    authorId: row.created_by,
+    video: extras.videoByListing?.get(row.id) ?? null,
     publisherTrust: author
       ? {
           displayName: author.displayName,

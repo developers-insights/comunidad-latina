@@ -625,6 +625,22 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: Array<string>(3).fill("text-on-media"),
     cobertura: "cl-print-fill",
   },
+  // Video de aviso (0160): la misma tarjeta que la de arriba, con la duración
+  // impresa con su relleno.
+  "src/app/(app)/videos/largos/aviso-video-card.tsx": {
+    inks: Array<string>(3).fill("text-on-media"),
+    cobertura: "cl-print-fill",
+  },
+  // La duración sobre el video de la tarjeta de aviso.
+  "src/components/listings/listing-video.tsx": {
+    inks: ["text-on-media"],
+    cobertura: "cl-print-fill",
+  },
+  // La miniatura del video elegido en el formulario: no tiene sentido en papel.
+  "src/components/listings/listing-video-field.tsx": {
+    inks: ["text-on-media", "text-on-media"],
+    cobertura: "cl-print-hide",
+  },
   "src/app/(app)/videos/largos/page.tsx": {
     inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",

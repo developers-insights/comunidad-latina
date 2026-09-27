@@ -28,7 +28,7 @@
  */
 
 import {
-  FEED_PREVIEW_MAX_SECONDS,
+  SHORT_VIDEO_MAX_SECONDS,
   PREMIUM_DETAIL_MAX_SECONDS,
   normalizeDeclaredDuration,
 } from "@/lib/media/video-policy";
@@ -71,10 +71,9 @@ export interface TierLimits {
   /**
    * Segundos del único video de la publicación.
    *
-   * Los dos números salen de `video-policy.ts` y NO se re-declaran acá: 59 s
-   * (lo que el feed reproduce) para gratis, 300 s (el video completo del
-   * detalle premium) para premium. El conflicto nº3 del feedback ya está
-   * resuelto allá; acá sólo se elige cuál aplica.
+   * Los dos números salen de `video-policy.ts` y NO se re-declaran acá: 90 s
+   * para gratis (Nacho, 23/9: "todos los videos de más de 90 s son pagos") y
+   * 300 s para premium.
    */
   maxVideoSeconds: number;
   /** ¿Puede tener botones externos (Llamar, WhatsApp, Sitio web…)? */
@@ -88,7 +87,7 @@ export interface TierLimits {
 export const TIER_LIMITS: Record<ListingTier, TierLimits> = {
   free: {
     maxPhotos: FREE_MAX_PHOTOS,
-    maxVideoSeconds: FEED_PREVIEW_MAX_SECONDS,
+    maxVideoSeconds: SHORT_VIDEO_MAX_SECONDS,
     actionButtons: false,
     recommendedFeed: false,
     searchPriority: false,

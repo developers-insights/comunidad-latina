@@ -1,4 +1,6 @@
 import { CalendarBlank, MapPin } from "@phosphor-icons/react/dist/ssr";
+import { ListingVideoMedia } from "@/components/listings/listing-video";
+import type { ListingVideoView } from "@/lib/media/listing-video-policy";
 import { AccentLink, BezelCard } from "@/components/ui";
 import { PublisherTrust } from "@/components/listings";
 import { PhotoTap } from "@/components/media/photo-tap";
@@ -61,6 +63,7 @@ export function EventCard({
   event,
   engagement,
   owner,
+  video,
 }: {
   event: EventCardModel;
   /** Ausente hasta que /eventos resuelva comentarios/guardado en lote — ver ListingEngagement. */
@@ -71,6 +74,8 @@ export function EventCard({
    * acá. Ausente → no se dibuja el menú ⋯.
    */
   owner?: ListingOwnerView;
+  /** Video del aviso (0160), resuelto en lote por la página. */
+  video?: ListingVideoView | null;
 }) {
   const dateText = event.date
     ? `${event.date.full}${event.date.time ? ` · ${event.date.time}` : ""}`
@@ -78,42 +83,56 @@ export function EventCard({
 
   const photos = event.photos?.length ? event.photos : event.photoUrl ? [event.photoUrl] : [];
 
+  const mediaOverlayTopLeft = (
+    event.free || event.date?.isPast ? (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs font-bold text-foreground backdrop-blur-sm">
+        {event.free ? COPY.events.freeChip : COPY.events.pastLabel}
+      </span>
+    ) : undefined
+  );
+
+  const mediaOverlayBottom = (
+    <div>
+      <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
+        {event.title}
+      </h3>
+      <p className="mt-1 flex items-center gap-1.5 text-sm">
+        <CalendarBlank size={14} aria-hidden="true" className="shrink-0 opacity-80" />
+        <span className="min-w-0 truncate">{dateText}</span>
+      </p>
+      {event.venueArea && (
+        <p className="mt-0.5 flex items-center gap-1.5 text-sm opacity-90">
+          <MapPin size={14} aria-hidden="true" className="shrink-0" />
+          <span className="min-w-0 truncate">{event.venueArea}</span>
+        </p>
+      )}
+    </div>
+  );
+
   return (
     <BezelCard coreClassName="overflow-hidden p-0">
       <article aria-label={event.title}>
         <div className="relative">
-          <PhotoTap photos={photos} label={COPY.openPhotos(event.title)} authorName={event.title}>
-            <DirectoryMedia
-              src={event.photoUrl}
-              accent="eventos"
-              icon={CalendarBlank}
+          {video ? (
+            <ListingVideoMedia
+              video={video}
+              title={event.title}
               aspect="portrait"
-              overlayTopLeft={
-                event.free || event.date?.isPast ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs font-bold text-foreground backdrop-blur-sm">
-                    {event.free ? COPY.events.freeChip : COPY.events.pastLabel}
-                  </span>
-                ) : undefined
-              }
-              overlayBottom={
-                <div>
-                  <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
-                    {event.title}
-                  </h3>
-                  <p className="mt-1 flex items-center gap-1.5 text-sm">
-                    <CalendarBlank size={14} aria-hidden="true" className="shrink-0 opacity-80" />
-                    <span className="min-w-0 truncate">{dateText}</span>
-                  </p>
-                  {event.venueArea && (
-                    <p className="mt-0.5 flex items-center gap-1.5 text-sm opacity-90">
-                      <MapPin size={14} aria-hidden="true" className="shrink-0" />
-                      <span className="min-w-0 truncate">{event.venueArea}</span>
-                    </p>
-                  )}
-                </div>
-              }
+              overlayTopLeft={mediaOverlayTopLeft}
+              overlayBottom={mediaOverlayBottom}
             />
-          </PhotoTap>
+          ) : (
+            <PhotoTap photos={photos} label={COPY.openPhotos(event.title)} authorName={event.title}>
+              <DirectoryMedia
+                src={event.photoUrl}
+                accent="eventos"
+                icon={CalendarBlank}
+                aspect="portrait"
+                overlayTopLeft={mediaOverlayTopLeft}
+                overlayBottom={mediaOverlayBottom}
+              />
+            </PhotoTap>
+          )}
           <ListingOwnerMenuOverlay
             listingId={event.id}
             kind="event"

@@ -255,6 +255,7 @@ describe("Publicación", () => {
     expect(mocks.finalizeJob).toHaveBeenCalledWith({
       listingId: "listing-1",
       photoPaths: [],
+      video: null,
     });
     await waitFor(() => expect(screen.getByText(C.successReviewTitle)).toBeTruthy());
   });

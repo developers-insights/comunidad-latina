@@ -33,6 +33,8 @@ const mocks = vi.hoisted(() => ({
   retireAssetFromSubject: vi.fn(),
   currentSourceHost: vi.fn(),
   revalidatePath: vi.fn(),
+  fetchVideoDeAviso: vi.fn(),
+  validarVideoDeAviso: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
@@ -62,6 +64,13 @@ vi.mock("@/lib/integrity/retire", () => ({
 }));
 vi.mock("@/lib/integrity/source-host", () => ({
   currentSourceHost: mocks.currentSourceHost,
+}));
+vi.mock("@/lib/media/listing-video-queries", () => ({
+  fetchVideoDeAviso: mocks.fetchVideoDeAviso,
+}));
+vi.mock("@/lib/media/listing-video-server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/media/listing-video-server")>()),
+  validarVideoDeAviso: mocks.validarVideoDeAviso,
 }));
 
 import {
@@ -181,6 +190,99 @@ beforeEach(() => {
   mocks.retireAssetFromSubject.mockResolvedValue(true);
   mocks.currentSourceHost.mockResolvedValue("dominicanos.example");
   mocks.createAdminClient.mockReturnValue({});
+  mocks.fetchVideoDeAviso.mockResolvedValue({ tier: "free", video: null });
+  mocks.validarVideoDeAviso.mockResolvedValue({ ok: true, columns: null });
+});
+
+describe("el video del aviso en la hoja de edición", () => {
+  const VIDEO = {
+    path: `${TENANT_ID}/${USER_ID}/aviso-video-1.mp4`,
+    posterPath: null,
+    durationSeconds: 200,
+  };
+  const COLUMNAS = {
+    video_path: VIDEO.path,
+    video_poster_path: null,
+    video_duration_seconds: 200,
+  };
+
+  function useFila() {
+    return useGuardOk({
+      listings: {
+        select: { data: filaPublicada(), error: null },
+        update: { data: { id: LISTING_ID }, error: null },
+      },
+    });
+  }
+
+  it("cargar trae el video guardado y el tier", async () => {
+    useFila();
+    mocks.fetchVideoDeAviso.mockResolvedValue({
+      tier: "premium",
+      video: { path: VIDEO.path, posterPath: null, seconds: 200 },
+    });
+    const result = await cargarAvisoParaEditar({ listingId: LISTING_ID });
+    expect(result.ok && result.aviso.tier).toBe("premium");
+    expect(result.ok && result.aviso.video?.seconds).toBe(200);
+  });
+
+  it("sumar un video solo ya cuenta como cambio y se valida contra el tier de la fila", async () => {
+    const stub = useFila();
+    mocks.fetchVideoDeAviso.mockResolvedValue({ tier: "premium", video: null });
+    mocks.validarVideoDeAviso.mockResolvedValue({ ok: true, columns: COLUMNAS });
+
+    const result = await editarAvisoAction({
+      ...ENTRADA_VALIDA,
+      title: "Bicicleta rodado 29 casi nueva",
+      priceAmount: 250,
+      video: VIDEO,
+    });
+
+    expect(result).toMatchObject({ ok: true, status: "pending_review" });
+    expect(mocks.validarVideoDeAviso).toHaveBeenCalledWith(
+      expect.objectContaining({ input: VIDEO, tier: "premium" }),
+    );
+    const update = stub.calls.find((c) => c.method === "update");
+    expect(update?.args[0]).toMatchObject(COLUMNAS);
+  });
+
+  it("quitar el video escribe las tres columnas en null", async () => {
+    const stub = useFila();
+    mocks.fetchVideoDeAviso.mockResolvedValue({
+      tier: "free",
+      video: { path: VIDEO.path, posterPath: null, seconds: 40 },
+    });
+
+    await editarAvisoAction({
+      ...ENTRADA_VALIDA,
+      title: "Bicicleta rodado 29 casi nueva",
+      priceAmount: 250,
+      video: null,
+    });
+
+    const update = stub.calls.find((c) => c.method === "update");
+    expect(update?.args[0]).toMatchObject({
+      video_path: null,
+      video_poster_path: null,
+      video_duration_seconds: null,
+    });
+  });
+
+  it("sin tocar el video no se valida ni se escribe", async () => {
+    const stub = useFila();
+    await editarAvisoAction(ENTRADA_VALIDA);
+    expect(mocks.validarVideoDeAviso).not.toHaveBeenCalled();
+    const update = stub.calls.find((c) => c.method === "update");
+    expect(update?.args[0]).not.toHaveProperty("video_path");
+  });
+
+  it("un video que no pasa la regla no escribe nada", async () => {
+    const stub = useFila();
+    mocks.validarVideoDeAviso.mockResolvedValue({ ok: false, error: "necesita premium" });
+    const result = await editarAvisoAction({ ...ENTRADA_VALIDA, video: VIDEO });
+    expect(result).toEqual({ ok: false, error: "necesita premium" });
+    expect(stub.calls.some((c) => c.method === "update")).toBe(false);
+  });
 });
 
 /* ============================ 1 · No es tuyo ============================== */

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { fetchListingVideos } from "@/lib/media/listing-video-queries";
 import Link from "next/link";
 import { CaretDown, Megaphone } from "@phosphor-icons/react/dist/ssr";
 import {
@@ -329,7 +330,7 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
     ...new Set(orderedRows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
   ];
 
-  const [checksResult, profilesResult, trustResult, languagesByProfile, ratingsByListing] =
+  const [checksResult, profilesResult, trustResult, languagesByProfile, ratingsByListing, videos] =
     await Promise.all([
       listingIds.length > 0
         ? supabase
@@ -354,6 +355,7 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
         : Promise.resolve({ data: [] as never[] }),
       fetchLanguagesByProfile(supabase, publisherIds),
       fetchListingRatings(supabase, listingIds),
+      fetchListingVideos(supabase, listingIds),
     ]);
 
   // Sólo el check MÁS RECIENTE por sujeto decide (viene ordenado checked_at desc).
@@ -535,6 +537,7 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
                   professional={card}
                   isLoggedIn={isLoggedIn}
                   owner={{ esMio: misAvisos.has(card.id) }}
+                video={videos.get(card.id)}
                 />
               </div>
             ) : (
@@ -543,6 +546,7 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
                 professional={card}
                 isLoggedIn={isLoggedIn}
                 owner={{ esMio: misAvisos.has(card.id) }}
+                video={videos.get(card.id)}
               />
             ),
           )}

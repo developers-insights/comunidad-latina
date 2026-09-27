@@ -1,4 +1,6 @@
 import { AccentLink, BezelCard, CardMedia } from "@/components/ui";
+import { ListingVideoMedia } from "@/components/listings/listing-video";
+import type { ListingVideoView } from "@/lib/media/listing-video-policy";
 import { PhotoTap } from "@/components/media/photo-tap";
 // Import directo al módulo, no al barril `@/components/feed`: ese barril
 // reexporta feed-listing-card.tsx, que importa de @/components/listings —
@@ -55,6 +57,7 @@ export function ProductCard({
   product,
   engagement,
   owner,
+  video,
 }: {
   product: ProductCardModel;
   /** Ausente hasta que /marketplace resuelva comentarios/guardado en lote — ver ListingEngagement. */
@@ -65,6 +68,8 @@ export function ProductCard({
    * acá. Ausente → no se dibuja el menú ⋯.
    */
   owner?: ListingOwnerView;
+  /** Video del aviso (0160), resuelto en lote por la página. */
+  video?: ListingVideoView | null;
 }) {
   const categoryFull = categoryLabel(product.category);
   const categoryShort = categoryShortLabel(product.category);
@@ -74,45 +79,59 @@ export function ProductCard({
       ? [product.photoUrl]
       : [];
 
+  const mediaOverlayTopLeft = (
+    categoryShort ? (
+      // cl-print-fill: text-on-media es clara por definición — sin forzar
+      // el relleno a imprimirse, el chip queda blanco sobre papel blanco.
+      <span
+        aria-label={categoryFull ?? undefined}
+        className="cl-print-fill inline-flex min-w-0 max-w-full items-center rounded-full bg-media-scrim px-2.5 py-1 text-[11px] font-semibold text-on-media backdrop-blur-sm"
+      >
+        <span aria-hidden="true" className="min-w-0 truncate">
+          {categoryShort}
+        </span>
+      </span>
+    ) : undefined
+  );
+
+  const mediaOverlayBottom = (
+    <div>
+      <h3 className="font-display text-sm font-bold leading-snug line-clamp-2">
+        {product.title}
+      </h3>
+      {product.priceLabel && (
+        <p className="numeric mt-0.5 text-lg font-bold">{product.priceLabel}</p>
+      )}
+    </div>
+  );
+
   return (
     <BezelCard coreClassName="flex h-full flex-col overflow-hidden p-0">
       <article aria-label={product.title} className="flex h-full flex-col">
         <div className="relative">
-          <PhotoTap
-            photos={photos}
-            label={COPY.list.openPhotos(product.title)}
-            authorName={product.title}
-          >
-            <CardMedia
-              src={product.photoUrl}
-              fallbackSrc={FALLBACK_PHOTO}
+          {video ? (
+            <ListingVideoMedia
+              video={video}
+              title={product.title}
               aspect="portrait"
-              overlayTopLeft={
-                categoryShort ? (
-                  // cl-print-fill: text-on-media es clara por definición — sin forzar
-                  // el relleno a imprimirse, el chip queda blanco sobre papel blanco.
-                  <span
-                    aria-label={categoryFull ?? undefined}
-                    className="cl-print-fill inline-flex min-w-0 max-w-full items-center rounded-full bg-media-scrim px-2.5 py-1 text-[11px] font-semibold text-on-media backdrop-blur-sm"
-                  >
-                    <span aria-hidden="true" className="min-w-0 truncate">
-                      {categoryShort}
-                    </span>
-                  </span>
-                ) : undefined
-              }
-              overlayBottom={
-                <div>
-                  <h3 className="font-display text-sm font-bold leading-snug line-clamp-2">
-                    {product.title}
-                  </h3>
-                  {product.priceLabel && (
-                    <p className="numeric mt-0.5 text-lg font-bold">{product.priceLabel}</p>
-                  )}
-                </div>
-              }
+              overlayTopLeft={mediaOverlayTopLeft}
+              overlayBottom={mediaOverlayBottom}
             />
-          </PhotoTap>
+          ) : (
+            <PhotoTap
+              photos={photos}
+              label={COPY.list.openPhotos(product.title)}
+              authorName={product.title}
+            >
+              <CardMedia
+                src={product.photoUrl}
+                fallbackSrc={FALLBACK_PHOTO}
+                aspect="portrait"
+                overlayTopLeft={mediaOverlayTopLeft}
+                overlayBottom={mediaOverlayBottom}
+              />
+            </PhotoTap>
+          )}
           <ListingOwnerMenuOverlay
             listingId={product.id}
             kind="product"

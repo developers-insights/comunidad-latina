@@ -1,4 +1,5 @@
 import { Suspense, cache } from "react";
+import { fetchListingVideos } from "@/lib/media/listing-video-queries";
 import { notFound } from "next/navigation";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { allPhotoUrls, firstPhotoUrl } from "@/components/listings";
@@ -183,7 +184,10 @@ async function TiendaContent({ storeId }: { storeId: string }) {
    * autorización — las server actions releen la fila filtrando por dueño y la
    * RLS decide; acá sólo se evita ofrecer lo que iba a rebotar.
    */
-  const viewerId = await getAuthUserId();
+  const [viewerId, videos] = await Promise.all([
+    getAuthUserId(),
+    fetchListingVideos(supabase, (productRows ?? []).map((row) => row.id)),
+  ]);
   const misAvisos = new Set(
     viewerId
       ? (productRows ?? []).filter((row) => row.created_by === viewerId).map((row) => row.id)
@@ -259,6 +263,7 @@ async function TiendaContent({ storeId }: { storeId: string }) {
                 key={card.id}
                 product={card}
                 owner={{ esMio: misAvisos.has(card.id) }}
+                video={videos.get(card.id)}
               />
             ))}
           </div>

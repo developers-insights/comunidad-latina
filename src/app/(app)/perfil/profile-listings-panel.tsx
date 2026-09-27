@@ -40,17 +40,14 @@ export function ProfileListingsPanel({ items, isOwn }: ProfileListingsPanelProps
       {items.map((item) =>
         item.kind === "property" ? (
           // `isOwn` ya es la respuesta a "¿es tuyo?": esta pestaña ES el perfil
-          // de alguien, y sus avisos son suyos por definición. Las demás
-          // verticales se pintan con `FeedListingCard`, que vive en el módulo
-          // del feed (de otro dueño) y todavía no monta el menú ⋯ — desde la
-          // grilla de cada sección sí lo tienen.
+          // de alguien, y sus avisos son suyos por definición.
           <ListingCard
             key={item.listing.id}
             listing={item.listing}
             owner={{ esMio: isOwn }}
           />
         ) : (
-          <FeedListingCard key={item.listing.id} listing={item.listing} />
+          <FeedListingCard key={item.listing.id} listing={item.listing} esMio={isOwn} />
         ),
       )}
     </div>

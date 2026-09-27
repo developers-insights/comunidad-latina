@@ -18,6 +18,8 @@ import {
 import { VIDEOS_COPY, VIDEO_CATEGORY_LABELS, VIDEO_CATEGORY_ORDER } from "../copy";
 import { LongVideoList } from "./long-video-list";
 import { fetchLongVideosPage } from "./queries";
+import { fetchAvisosConVideoLargo } from "./aviso-queries";
+import { AvisosConVideoLargo } from "./aviso-video-card";
 import { SectionTopBar } from "@/components/shell";
 
 export const metadata = { title: "Videos largos" };
@@ -97,15 +99,30 @@ async function LongVideosContent({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const page = await fetchLongVideosPage({
-    supabase,
-    tenantId: tenant.id,
-    viewerId: user?.id ?? null,
-    category: categoryFilterValue(category),
-    q,
-    cursor: null,
-    pageSize: FIRST_PAGE_SIZE,
-  });
+  const conAvisos = category === ALL_CATEGORIES && !q;
+  const [page, avisos] = await Promise.all([
+    fetchLongVideosPage({
+      supabase,
+      tenantId: tenant.id,
+      viewerId: user?.id ?? null,
+      category: categoryFilterValue(category),
+      q,
+      cursor: null,
+      pageSize: FIRST_PAGE_SIZE,
+    }),
+    conAvisos
+      ? fetchAvisosConVideoLargo({
+          supabase,
+          tenantId: tenant.id,
+          viewerId: user?.id ?? null,
+          locale: tenant.locale,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const seccionAvisos = <AvisosConVideoLargo avisos={avisos} className="mt-5" />;
+
+  if (page.items.length === 0 && avisos.length > 0) return seccionAvisos;
 
   if (page.items.length === 0) {
     const searched = Boolean(q);
@@ -143,13 +160,16 @@ async function LongVideosContent({
   }
 
   return (
-    <LongVideoList
-      className="mt-4"
-      initialItems={page.items}
-      initialCursor={page.nextCursor}
-      category={category}
-      q={q}
-    />
+    <>
+      {seccionAvisos}
+      <LongVideoList
+        className="mt-4"
+        initialItems={page.items}
+        initialCursor={page.nextCursor}
+        category={category}
+        q={q}
+      />
+    </>
   );
 }
 

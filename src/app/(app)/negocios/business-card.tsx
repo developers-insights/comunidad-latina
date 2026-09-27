@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { ListingVideoMedia } from "@/components/listings/listing-video";
+import type { ListingVideoView } from "@/lib/media/listing-video-policy";
 import { CaretRight, MapPin, SealCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { ACCENT_CHIP_CLASS, DirectoryMedia } from "@/components/directory";
 import { PublisherTrust } from "@/components/listings";
@@ -135,6 +137,7 @@ export function BusinessCard({
   business,
   engagement,
   owner,
+  video,
 }: {
   business: BusinessCardModel;
   /** Ausente hasta que /negocios resuelva comentarios/guardado en lote — ver ListingEngagement. */
@@ -145,6 +148,8 @@ export function BusinessCard({
    * acá. Ausente → no se dibuja el menú ⋯.
    */
   owner?: ListingOwnerView;
+  /** Video del aviso (0160), resuelto en lote por la página. */
+  video?: ListingVideoView | null;
 }) {
   const photos = business.photos?.length
     ? business.photos
@@ -155,40 +160,51 @@ export function BusinessCard({
   const promedio = formatearPromedio(business.rating.promedio);
   const hayAccionesArriba = business.puedeRecibirMensajes || business.acciones.length > 0;
 
+  const mediaOverlayTopLeft = (
+    business.storeVerified ? (
+      <Badge variant="info">
+        <SealCheck size={13} weight="fill" aria-hidden="true" />
+        {COPY.verifiedBadge}
+      </Badge>
+    ) : undefined
+  );
+
   return (
     <BezelCard coreClassName="overflow-hidden p-0">
       <article aria-label={business.title}>
         <div className="relative">
-          <PhotoTap
-            photos={photos}
-            label={COPY.openPhotos(business.title)}
-            authorName={business.title}
-          >
-            <DirectoryMedia
-              src={business.photoUrl}
-              accent="negocios"
-              icon={Storefront}
-              // Mismo lugar que el sello de licencia de vivienda/profesionales
-              // (overlayTopLeft, ícono + texto — nunca solo color, §3.2), pero
-              // OTRO ícono y OTRO color, porque es otro hecho.
-              //
-              // `store_verified` es el espejo público de un PLAN PAGO
-              // (`business_accounts.verified_presence`), no una verificación de
-              // identidad ni una licencia con fecha. La app reserva el par
-              // verde + escudo para lo que se verifica de la persona (ver
-              // `IdentityBadge` y `SellerIdentityBadge`) y usa azul + sello para
-              // lo que se contrata. Quien compra decide mirando esta insignia: si
-              // dice confianza verificada y en realidad dice plan al día, engaña.
-              overlayTopLeft={
-                business.storeVerified ? (
-                  <Badge variant="info">
-                    <SealCheck size={13} weight="fill" aria-hidden="true" />
-                    {COPY.verifiedBadge}
-                  </Badge>
-                ) : undefined
-              }
+          {video ? (
+            <ListingVideoMedia
+              video={video}
+              title={business.title}
+              aspect="portrait"
+              overlayTopLeft={mediaOverlayTopLeft}
             />
-          </PhotoTap>
+          ) : (
+            <PhotoTap
+              photos={photos}
+              label={COPY.openPhotos(business.title)}
+              authorName={business.title}
+            >
+              <DirectoryMedia
+                src={business.photoUrl}
+                accent="negocios"
+                icon={Storefront}
+                // Mismo lugar que el sello de licencia de vivienda/profesionales
+                // (overlayTopLeft, ícono + texto — nunca solo color, §3.2), pero
+                // OTRO ícono y OTRO color, porque es otro hecho.
+                //
+                // `store_verified` es el espejo público de un PLAN PAGO
+                // (`business_accounts.verified_presence`), no una verificación de
+                // identidad ni una licencia con fecha. La app reserva el par
+                // verde + escudo para lo que se verifica de la persona (ver
+                // `IdentityBadge` y `SellerIdentityBadge`) y usa azul + sello para
+                // lo que se contrata. Quien compra decide mirando esta insignia: si
+                // dice confianza verificada y en realidad dice plan al día, engaña.
+                overlayTopLeft={mediaOverlayTopLeft}
+              />
+            </PhotoTap>
+          )}
           <ListingOwnerMenuOverlay
             listingId={business.id}
             kind="business"

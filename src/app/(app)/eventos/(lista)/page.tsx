@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { fetchListingVideos } from "@/lib/media/listing-video-queries";
 import Link from "next/link";
 import { Megaphone } from "@phosphor-icons/react/dist/ssr";
 import { Chip, EmptyState, SectionCta, SectionHeading, buttonVariants } from "@/components/ui";
@@ -214,7 +215,7 @@ async function EventosContent({ filters }: { filters: Filters }) {
   const publisherIds = [
     ...new Set((rows ?? []).map((row) => row.created_by).filter((id): id is string => Boolean(id))),
   ];
-  const [{ data: profiles }, { data: trustRows }] = await Promise.all([
+  const [{ data: profiles }, { data: trustRows }, videos] = await Promise.all([
     publisherIds.length > 0
       ? supabase
           .from("profiles")
@@ -236,6 +237,7 @@ async function EventosContent({ filters }: { filters: Filters }) {
             signals: unknown;
           }[],
         }),
+    fetchListingVideos(supabase, (rows ?? []).map((row) => row.id)),
   ]);
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
   const trustById = new Map((trustRows ?? []).map((t) => [t.profile_id, t]));
@@ -404,7 +406,11 @@ async function EventosContent({ filters }: { filters: Filters }) {
                     <Megaphone size={14} weight="fill" aria-hidden="true" />
                     Patrocinado
                   </Chip>
-                  <EventCard event={card} owner={{ esMio: misAvisos.has(card.id) }} />
+                  <EventCard
+                    event={card}
+                    owner={{ esMio: misAvisos.has(card.id) }}
+                    video={videos.get(card.id)}
+                  />
                 </div>
               ))}
             </>
@@ -415,6 +421,7 @@ async function EventosContent({ filters }: { filters: Filters }) {
               key={card.id}
               event={card}
               owner={{ esMio: misAvisos.has(card.id) }}
+              video={videos.get(card.id)}
             />
           ))}
 
@@ -426,7 +433,7 @@ async function EventosContent({ filters }: { filters: Filters }) {
                 </h2>
               )}
               {pastRest.map((card) => (
-                <EventCard key={card.id} event={card} />
+                <EventCard key={card.id} event={card} video={videos.get(card.id)} />
               ))}
             </>
           )}

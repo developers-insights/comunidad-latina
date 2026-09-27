@@ -125,9 +125,28 @@ export function renderFeedItem(
         />
       );
     case "listing-property":
-      return <ListingCard listing={item.listing} />;
+      return (
+        <ListingCard
+          listing={item.listing}
+          owner={{
+            esMio: Boolean(
+              viewerId &&
+                item.listing.publisher?.type === "member" &&
+                item.listing.publisher.profileId === viewerId,
+            ),
+            reportable: true,
+            haySesion: Boolean(viewerId),
+          }}
+        />
+      );
     case "listing":
-      return <FeedListingCard listing={item.listing} engagement={item.engagement} />;
+      return (
+        <FeedListingCard
+          listing={item.listing}
+          engagement={item.engagement}
+          viewerId={viewerId}
+        />
+      );
     case "guide":
       return <GuideCard guide={item.guide} />;
   }

@@ -24,6 +24,13 @@ import {
   type JobQuestion,
 } from "@/components/empleos/helpers";
 import { COPY } from "@/components/empleos/copy";
+import {
+  columnasDeVideo,
+  errorDeVideoDeLaBase,
+  listingVideoInputSchema,
+  validarVideoDeAviso,
+  type ListingVideoInput,
+} from "@/lib/media/listing-video-server";
 import { WORK_MODES, requiresArea } from "@/lib/creators/work-mode";
 import {
   APPLY_BY_ATTR,
@@ -296,6 +303,7 @@ export async function createJobDraft(
 const finalizeJobSchema = z.object({
   listingId: z.uuid(),
   photoPaths: z.array(z.string().min(1).max(300)).max(4),
+  video: listingVideoInputSchema,
 });
 
 export type FinalizeJobResult =
@@ -314,6 +322,7 @@ function devAutoApprove(): boolean {
 export async function finalizeJob(rawInput: {
   listingId: string;
   photoPaths: string[];
+  video?: ListingVideoInput | null;
 }): Promise<FinalizeJobResult> {
   return finalizeEmpleosListing(rawInput, "job");
 }
@@ -331,12 +340,16 @@ export async function finalizeJob(rawInput: {
  */
 export async function finalizeService(rawInput: {
   listingId: string;
+  video?: ListingVideoInput | null;
 }): Promise<FinalizeJobResult> {
-  return finalizeEmpleosListing({ listingId: rawInput.listingId, photoPaths: [] }, "service");
+  return finalizeEmpleosListing(
+    { listingId: rawInput.listingId, photoPaths: [], video: rawInput.video },
+    "service",
+  );
 }
 
 async function finalizeEmpleosListing(
-  rawInput: { listingId: string; photoPaths: string[] },
+  rawInput: { listingId: string; photoPaths: string[]; video?: ListingVideoInput | null },
   kind: EmpleosKind,
 ): Promise<FinalizeJobResult> {
   const parsed = finalizeJobSchema.safeParse(rawInput);
@@ -369,6 +382,17 @@ async function finalizeEmpleosListing(
     return { ok: false, error: C.errors.generic };
   }
 
+  // Un aviso en borrador siempre es `free` (la policy de INSERT lo exige); el
+  // trigger de la 0160 vuelve a mirar el tier real de la fila.
+  const videoCheck = await validarVideoDeAviso({
+    input: parsed.data.video,
+    tenantId: tenant.id,
+    userId: user.id,
+    tier: "free",
+  });
+  if (!videoCheck.ok) return { ok: false, error: videoCheck.error };
+  const videoColumns = videoCheck.columns;
+
   // UPDATE con el cliente del USUARIO: escribe las fotos y pasa a
   // 'pending_review'. La RLS de listings (0004) NUNCA deja que el dueño escriba
   // status='published' (anti bait-and-switch post-verificación) — ese salto lo
@@ -379,7 +403,7 @@ async function finalizeEmpleosListing(
   // un humano en la cola, no este flujo.
   const { data: updated, error: updateError } = await supabase
     .from("listings")
-    .update({ photos: photoPaths, status: "pending_review" })
+    .update({ photos: photoPaths, status: "pending_review", ...columnasDeVideo(videoColumns) })
     .eq("id", listingId)
     .eq("tenant_id", tenant.id)
     .eq("created_by", user.id)
@@ -393,7 +417,7 @@ async function finalizeEmpleosListing(
       listingId,
       code: updateError?.code,
     });
-    return { ok: false, error: C.errors.generic };
+    return { ok: false, error: errorDeVideoDeLaBase(updateError) ?? C.errors.generic };
   }
 
   // ---- Moderación de texto ANTES de decidir el status (§8). Las PREGUNTAS y
@@ -416,6 +440,7 @@ async function finalizeEmpleosListing(
   // El TEXTO sigue siendo lo único que gobierna pending_review.
   const autoApprove = devAutoApprove();
   const photoNeedsAsyncReview = photoPaths.length > 0 && !isVisionConfigured && !autoApprove;
+  const videoNeedsAsyncReview = videoColumns !== null && !autoApprove;
 
   let status: "published" | "pending_review" =
     moderation.flagged || tier === TIER_HUMAN ? "pending_review" : "published";
@@ -448,15 +473,22 @@ async function finalizeEmpleosListing(
   // ---- Cola de moderación (admin, uso permitido §6) — para que el aviso sea
   // resoluble desde /admin/moderacion en vez de quedar huérfano.
   const shouldEnqueue =
-    moderation.flagged || moderation.skipped || tier > TIER_AUTO || photoNeedsAsyncReview;
+    moderation.flagged ||
+    moderation.skipped ||
+    tier > TIER_AUTO ||
+    photoNeedsAsyncReview ||
+    videoNeedsAsyncReview;
   if (shouldEnqueue) {
     try {
       const reasons = [
         ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
         ...(photoNeedsAsyncReview ? ["photo_async_review"] : []),
+        ...(videoNeedsAsyncReview ? ["video_async_review"] : []),
       ];
       const enqueueTier =
-        status === "pending_review" || photoNeedsAsyncReview ? TIER_HUMAN : TIER_REVIEW;
+        status === "pending_review" || photoNeedsAsyncReview || videoNeedsAsyncReview
+          ? TIER_HUMAN
+          : TIER_REVIEW;
       const outcome = await enqueueModeration(createAdminClient(), {
         tenantId: tenant.id,
         subjectKind: "listing",

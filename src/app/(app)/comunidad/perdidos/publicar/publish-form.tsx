@@ -41,6 +41,10 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { createLostFoundCaseDraft, finalizeLostFoundCase } from "../../actions";
+import {
+  ListingVideoField,
+  useVideoDeAviso,
+} from "@/components/listings/listing-video-field";
 
 /**
  * Wizard de /comunidad/perdidos/publicar — TRES pasos, mobile-first.
@@ -136,6 +140,7 @@ export function CasoPublishForm({ tenantId }: { tenantId: string }) {
   const [zona, setZona] = useState("");
   const [fecha, setFecha] = useState("");
   const [fotos, setFotos] = useState<PhotoItem[]>([]);
+  const videoDelAviso = useVideoDeAviso();
 
   const [draftId, setDraftId] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -283,7 +288,17 @@ export function CasoPublishForm({ tenantId }: { tenantId: string }) {
         photoPaths.push(path);
       }
 
-      const cerrado = await finalizeLostFoundCase({ caseId, photoPaths });
+      const videoSubido = await videoDelAviso.subir();
+      if (!videoSubido.ok) {
+        setError(videoSubido.error);
+        return;
+      }
+
+      const cerrado = await finalizeLostFoundCase({
+        caseId,
+        photoPaths,
+        video: videoSubido.input,
+      });
       if (!cerrado.ok) {
         setError(cerrado.error);
         return;
@@ -554,6 +569,14 @@ export function CasoPublishForm({ tenantId }: { tenantId: string }) {
               </Button>
             </>
           )}
+
+          <ListingVideoField
+            value={videoDelAviso.video}
+            onChange={videoDelAviso.setVideo}
+            tier="free"
+            disabled={enviando}
+            progress={videoDelAviso.progress}
+          />
         </section>
       )}
 

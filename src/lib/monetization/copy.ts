@@ -39,7 +39,7 @@ export const COPY = {
 
     freePoints: [
       "Hasta 5 fotos",
-      "1 video de hasta 59 segundos",
+      "1 video de hasta 90 segundos",
       "Chat de Comunidad Latina para que te escriban",
       "Aparece en tu perfil, en las búsquedas y en su sección",
     ],
@@ -97,7 +97,7 @@ export const COPY = {
     /** La promesa que saca el miedo de encima, antes del botón. */
     safetyTitle: "Si cancelás, no perdés tu aviso",
     safetyBody:
-      "Tu aviso sigue publicado como gratuito: hasta 5 fotos, un video de 59 segundos y contacto por el chat. Guardamos los botones que cargaste y vuelven apenas te suscribas de nuevo.",
+      "Tu aviso sigue publicado como gratuito: hasta 5 fotos, un video de 90 segundos y contacto por el chat. Guardamos los botones que cargaste y vuelven apenas te suscribas de nuevo.",
 
     activateCta: "Pasar a premium",
     reactivateCta: "Volver a premium",

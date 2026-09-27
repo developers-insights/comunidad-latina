@@ -26,6 +26,12 @@ const mocks = vi.hoisted(() => ({
   moderationTier: vi.fn(),
   enqueueModeration: vi.fn(),
   createAdminClient: vi.fn(),
+  validarVideoDeAviso: vi.fn(),
+}));
+
+vi.mock("@/lib/media/listing-video-server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/media/listing-video-server")>()),
+  validarVideoDeAviso: mocks.validarVideoDeAviso,
 }));
 
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
@@ -137,6 +143,53 @@ beforeEach(() => {
   mocks.moderateText.mockResolvedValue({ flagged: false, score: 0, categories: [], skipped: false });
   mocks.moderationTier.mockReturnValue(1);
   mocks.enqueueModeration.mockResolvedValue({ ok: true });
+  mocks.validarVideoDeAviso.mockResolvedValue({ ok: true, columns: null });
+});
+
+describe("finalizeProduct — el video del producto", () => {
+  const VIDEO = {
+    path: `${TENANT_ID}/${USER_ID}/aviso-video-1.mp4`,
+    posterPath: null,
+    durationSeconds: 30,
+  };
+  const COLUMNAS = {
+    video_path: VIDEO.path,
+    video_poster_path: null,
+    video_duration_seconds: 30,
+  };
+
+  it("guarda el video en el mismo UPDATE que las fotos", async () => {
+    const stub = useGuardOk({
+      listings: {
+        select: { data: { ...PRODUCT_ROW, tier: "free" }, error: null },
+        update: { data: { id: LISTING_ID }, error: null },
+      },
+    });
+    useAdmin();
+    mocks.validarVideoDeAviso.mockResolvedValue({ ok: true, columns: COLUMNAS });
+
+    const result = await finalizeProduct({ listingId: LISTING_ID, photoPaths: [], video: VIDEO });
+
+    expect(result.ok).toBe(true);
+    expect(mocks.validarVideoDeAviso).toHaveBeenCalledWith(
+      expect.objectContaining({ input: VIDEO, tier: "free" }),
+    );
+    const update = stub.calls.find((c) => c.method === "update");
+    expect(update?.args[0]).toMatchObject(COLUMNAS);
+  });
+
+  it("si el video no pasa, no toca el producto", async () => {
+    const stub = useGuardOk({
+      listings: { select: { data: { ...PRODUCT_ROW, tier: "free" }, error: null } },
+    });
+    useAdmin();
+    mocks.validarVideoDeAviso.mockResolvedValue({ ok: false, error: "muy largo" });
+
+    const result = await finalizeProduct({ listingId: LISTING_ID, photoPaths: [], video: VIDEO });
+
+    expect(result).toEqual({ ok: false, error: "muy largo" });
+    expect(stub.calls.some((c) => c.method === "update")).toBe(false);
+  });
 });
 
 afterEach(() => {

@@ -66,6 +66,10 @@ import {
   type WorkDay,
 } from "@/lib/empleos/detalles";
 import { createJobDraft, finalizeJob } from "./actions";
+import {
+  ListingVideoField,
+  useVideoDeAviso,
+} from "@/components/listings/listing-video-field";
 import type { WizardHandleRef } from "./wizard-handle";
 
 /**
@@ -468,6 +472,7 @@ export function JobPublishForm({
   const [questionErrors, setQuestionErrors] = useState<Record<string, string>>({});
   const [areaLabel, setAreaLabel] = useState("");
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const videoDelAviso = useVideoDeAviso();
   // Ficha del puesto — todo opcional, todo plegado en el paso 2.
   const [days, setDays] = useState<WorkDay[]>([]);
   const [schedule, setSchedule] = useState("");
@@ -820,7 +825,13 @@ export function JobPublishForm({
         photoPaths.push(path);
       }
 
-      const finalized = await finalizeJob({ listingId, photoPaths });
+      const videoSubido = await videoDelAviso.subir();
+      if (!videoSubido.ok) {
+        setError(videoSubido.error);
+        return;
+      }
+
+      const finalized = await finalizeJob({ listingId, photoPaths, video: videoSubido.input });
       if (!finalized.ok) {
         setError(finalized.error);
         return;
@@ -847,6 +858,7 @@ export function JobPublishForm({
     setQuestionErrors({});
     setAreaLabel("");
     setPhotos([]);
+    videoDelAviso.reset();
     setDays([]);
     setSchedule("");
     setExperience("");
@@ -1612,6 +1624,14 @@ export function JobPublishForm({
                 <p className="text-xs text-foreground-muted">{C.steps.where.reviewNote}</p>
               )}
             </div>
+
+            <ListingVideoField
+              value={videoDelAviso.video}
+              onChange={videoDelAviso.setVideo}
+              tier="free"
+              disabled={submitting}
+              progress={videoDelAviso.progress}
+            />
           </>
         )}
       </Reveal>

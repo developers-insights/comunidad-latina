@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  FEED_PREVIEW_MAX_SECONDS,
+  SHORT_VIDEO_MAX_SECONDS,
   PREMIUM_DETAIL_MAX_SECONDS,
 } from "@/lib/media/video-policy";
 import {
@@ -79,16 +79,16 @@ describe("topes de fotos", () => {
 
 describe("tope de video", () => {
   it("consume los segundos de video-policy en vez de re-declararlos", () => {
-    expect(maxVideoSecondsFor("free")).toBe(FEED_PREVIEW_MAX_SECONDS);
+    expect(maxVideoSecondsFor("free")).toBe(SHORT_VIDEO_MAX_SECONDS);
     expect(maxVideoSecondsFor("premium")).toBe(PREMIUM_DETAIL_MAX_SECONDS);
   });
 
-  it("gratis acepta 59 s y rechaza 60 s", () => {
-    expect(checkListingVideo("free", 59)).toEqual({ ok: true, seconds: 59 });
-    expect(checkListingVideo("free", 60)).toEqual({
+  it("gratis acepta 90 s y rechaza 91 s", () => {
+    expect(checkListingVideo("free", 90)).toEqual({ ok: true, seconds: 90 });
+    expect(checkListingVideo("free", 91)).toEqual({
       ok: false,
       reason: "too-long",
-      max: 59,
+      max: 90,
     });
   });
 
@@ -97,13 +97,13 @@ describe("tope de video", () => {
     expect(checkListingVideo("premium", 301).ok).toBe(false);
   });
 
-  it("redondea HACIA ARRIBA: 59,4 s no entra en el tope gratuito", () => {
+  it("redondea HACIA ARRIBA: 90,4 s no entra en el tope gratuito", () => {
     // Heredado de normalizeDeclaredDuration — si redondeara hacia abajo, el
     // redondeo sería la forma barata de esquivar el tope.
-    expect(checkListingVideo("free", 59.4)).toEqual({
+    expect(checkListingVideo("free", 90.4)).toEqual({
       ok: false,
       reason: "too-long",
-      max: 59,
+      max: 90,
     });
   });
 
@@ -112,7 +112,7 @@ describe("tope de video", () => {
       expect(checkListingVideo("free", raw)).toEqual({
         ok: false,
         reason: "unknown",
-        max: 59,
+        max: 90,
       });
     }
   });

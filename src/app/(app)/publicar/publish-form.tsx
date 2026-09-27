@@ -72,6 +72,11 @@ import {
   type EventMode,
 } from "@/lib/eventos/detalles";
 import { createListingDraft, finalizeListing } from "./actions";
+import {
+  ListingVideoField,
+  useVideoDeAviso,
+} from "@/components/listings/listing-video-field";
+import { LISTING_VIDEO_COPY } from "@/lib/media/listing-video-policy";
 
 const C = COPY.publish;
 const M = MONETIZATION_COPY;
@@ -567,6 +572,8 @@ export function PublishForm({
   const [areaLabel, setAreaLabel] = useState("");
   const [exactAddress, setExactAddress] = useState("");
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const videoDelAviso = useVideoDeAviso();
+  const video = videoDelAviso.video;
   // Declaración de originalidad y licencia (pliego / Content Integrity).
   const [declaration, setDeclaration] = useState<DeclarationValue>(EMPTY_DECLARATION_VALUE);
   // Campos específicos de professional/event
@@ -815,6 +822,7 @@ export function PublishForm({
     setAreaLabel("");
     setExactAddress("");
     setPhotos([]);
+    videoDelAviso.reset();
     setCategory("");
     setCredentials("");
     setEventStartsAt("");
@@ -919,8 +927,19 @@ export function PublishForm({
         photoPaths.push(path);
       }
 
+      const videoSubido = await videoDelAviso.subir();
+      if (!videoSubido.ok) {
+        setError(videoSubido.error);
+        return;
+      }
+
       // 3) Cierre: estado final según moderación/degradación elegante
-      const finalized = await finalizeListing({ listingId, photoPaths, declaration });
+      const finalized = await finalizeListing({
+        listingId,
+        photoPaths,
+        declaration,
+        video: videoSubido.input,
+      });
       if (!finalized.ok) {
         setError(finalized.error);
         return;
@@ -1711,6 +1730,14 @@ export function PublishForm({
             <p className="text-xs text-foreground-muted">{C.steps.photos.reviewNote}</p>
           )}
 
+          <ListingVideoField
+            value={video}
+            onChange={videoDelAviso.setVideo}
+            tier="free"
+            disabled={submitting}
+            progress={videoDelAviso.progress}
+          />
+
           {/* Declaración de originalidad y licencia. Va en el paso de FOTOS, no
               en el de vista previa: es de las fotos que habla, y acá la persona
               todavía las tiene delante. */}
@@ -1762,6 +1789,11 @@ export function PublishForm({
                 // (src/test/print-contract.test.ts). Acá se lee siempre.
                 <p className="text-xs text-foreground-muted">
                   {M.preview.photoCount(photos.length)}
+                </p>
+              )}
+              {video && (
+                <p className="numeric text-xs text-foreground-muted">
+                  {LISTING_VIDEO_COPY.resumen(video.seconds)}
                 </p>
               )}
               {/* Operación y tipo, juntos y arriba del precio: es el orden en

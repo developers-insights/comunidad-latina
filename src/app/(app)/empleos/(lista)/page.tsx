@@ -22,7 +22,8 @@ import { ServiceCard } from "@/components/empleos/service-card";
 import { JobListSkeleton } from "@/components/empleos/job-skeletons";
 import { t } from "@/lib/i18n";
 import { getTenant } from "@/lib/tenant/resolve";
-import { getAuthUserId } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
+import { fetchListingVideos } from "@/lib/media/listing-video-queries";
 import { ZonaVacia } from "@/components/zona";
 import { resolverVistaZona } from "@/lib/zona/server";
 import { cn } from "@/lib/utils";
@@ -82,6 +83,10 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
       zoneFilter: vistaZona.zona.label,
     }),
   ]);
+  const videos = await fetchListingVideos(
+    await createClient(),
+    items.map((item) => item.id),
+  );
 
   const nextParams = new URLSearchParams();
   if (filters.tipo) nextParams.set("tipo", filters.tipo);
@@ -211,9 +216,10 @@ async function EmpleosContent({ filters }: { filters: Filters }) {
                   service={item}
                   isLoggedIn={Boolean(viewerId)}
                   owner={{ esMio }}
+                  video={videos.get(item.id)}
                 />
               ) : (
-                <JobCard key={item.id} job={item} owner={{ esMio }} />
+                <JobCard key={item.id} job={item} owner={{ esMio }} video={videos.get(item.id)} />
               );
             })}
           </div>
