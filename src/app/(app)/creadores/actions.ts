@@ -19,7 +19,7 @@ import {
   reindexOrder,
   type PriceError,
 } from "@/lib/creators/service-packages";
-import { isVisionConfigured } from "@/lib/config/services";
+import { isStripeConfigured, isVisionConfigured } from "@/lib/config/services";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import {
@@ -31,12 +31,14 @@ import {
   moderationTier,
 } from "@/lib/moderation";
 import { blockContactInfoIn } from "@/lib/moderation/contact-block";
+import { roleOf } from "@/components/creators/contract-machine";
 import {
-  findTransition,
-  roleOf,
-  type ContractAction,
-  type ContractStatus,
-} from "@/components/creators/contract-machine";
+  PROPOSAL_MESSAGE_MAX,
+  REVISIONS_DEFAULT,
+  normalizeRevisions,
+  normalizeUsageRights,
+} from "@/lib/creators/contract-terms";
+import { notifyContractParty, recordContractEvent } from "@/lib/creators/escrow";
 import { dollarsToCents } from "@/components/creators/money";
 import { COPY } from "@/components/creators/copy";
 
@@ -52,9 +54,8 @@ import { COPY } from "@/components/creators/copy";
  *    correcta para ESA transición, (c) que la transición es legal (máquina pura).
  *    Espejo del patrón boosts (0016): nadie mueve su propia plata.
  *
- * Pagos SIEMPRE en modo demostración en esta fase (payment_mode='demo'): la
- * máquina de estados es real, los montos son reales, no hay Stripe. Estas
- * actions jamás tocan stripe_* ni las columnas generadas (fee/net).
+ * El ciclo de vida del contrato (firma, pago con Stripe, entrega, revisión,
+ * liberación) vive en colaboraciones/actions.ts y lib/creators/escrow.ts.
  */
 
 const GENERIC_ERROR = COPY.apply.errors.generic;
@@ -903,6 +904,9 @@ const proposeSchema = z.object({
   scope: z.string().trim().min(10).max(2000),
   deliveryDays: z.number().int().min(1).max(365),
   amountCents: z.number().int().positive().max(100_000_000),
+  revisionsIncluded: z.number().int().optional(),
+  usageRights: z.string().optional(),
+  proposalMessage: z.string().trim().max(PROPOSAL_MESSAGE_MAX).nullish(),
 });
 
 export type ProposeContractResult =
@@ -923,7 +927,14 @@ export async function proposeContract(
   // sirven igual de bien para mudar la conversación afuera. La regla es
   // simétrica — si sólo se controlara al creador, el "coordinamos por WhatsApp"
   // entraría por el campo del cliente.
-  const contact = blockContactInfoIn([input.title, input.scope]);
+  const revisionsIncluded = normalizeRevisions(input.revisionsIncluded ?? REVISIONS_DEFAULT);
+  const usageRights = normalizeUsageRights(input.usageRights ?? "Redes sociales del negocio · 90 días");
+  if (revisionsIncluded === null || usageRights === null) {
+    return { ok: false, error: COPY.contract.errors.terms };
+  }
+  const proposalMessage = input.proposalMessage?.trim() || null;
+
+  const contact = blockContactInfoIn([input.title, input.scope, usageRights, proposalMessage ?? ""]);
   if (!contact.ok) {
     return { ok: false, contactBlocked: true, error: contact.message };
   }
@@ -1006,9 +1017,8 @@ export async function proposeContract(
   const feePct = await getCreatorCommission(supabase);
 
   // INSERT gateado con ADMIN (gig_contracts INSERT=false para authenticated).
-  // status='proposed', payment_mode='demo', code y currency por DEFAULT. Jamás
-  // tocamos stripe_* ni las columnas generadas (fee/net), que las calcula la
-  // base a partir de amount_cents y fee_pct.
+  // status='proposed', code y currency por DEFAULT. Las columnas fee/net las
+  // genera la base a partir de amount_cents y fee_pct.
   const admin = createAdminClient();
   const { data: created, error } = await admin
     .from("gig_contracts")
@@ -1023,6 +1033,12 @@ export async function proposeContract(
       delivery_days: input.deliveryDays,
       amount_cents: input.amountCents,
       fee_pct: feePct,
+      payment_mode: isStripeConfigured ? "stripe" : "demo",
+      ...({
+        revisions_included: revisionsIncluded,
+        usage_rights: usageRights,
+        proposal_message: proposalMessage,
+      } as Record<string, unknown>),
     })
     .select("id, code")
     .single();
@@ -1032,93 +1048,22 @@ export async function proposeContract(
     return { ok: false, error: COPY.contract.errors.generic };
   }
 
+  await recordContractEvent(admin, {
+    tenantId: tenant.id,
+    contractId: created.id,
+    actorId: user.id,
+    kind: "proposed",
+    note: proposalMessage,
+  });
+  await notifyContractParty(admin, {
+    tenantId: tenant.id,
+    profileId: input.creatorId,
+    contractId: created.id,
+    title: "Te enviaron una propuesta de trabajo",
+    body: `"${input.title}". Revisá las condiciones y aceptala, pedí cambios o rechazala.`,
+  });
+
   return { ok: true, contractId: created.id, code: created.code };
-}
-
-// ===========================================================================
-// Contrato — transiciones de estado (garantía / escrow) vía ADMIN
-// ===========================================================================
-
-const transitionSchema = z.object({
-  contractId: z.uuid(),
-  action: z.enum(["accept", "reject", "fund", "deliver", "release", "cancel", "dispute"]),
-});
-
-export type TransitionResult =
-  | { ok: true; status: string }
-  | { ok: false; error: string; needsAuth?: boolean; stale?: boolean };
-
-export async function transitionContract(
-  rawInput: z.input<typeof transitionSchema>,
-): Promise<TransitionResult> {
-  const parsed = transitionSchema.safeParse(rawInput);
-  if (!parsed.success) {
-    return { ok: false, error: COPY.contract.errors.notAllowed };
-  }
-  const { contractId, action } = parsed.data;
-
-  const guard = await requireTenantMatch();
-  if (!guard.ok) {
-    if (guard.reason === "unauthenticated") {
-      return { ok: false, needsAuth: true, error: COPY.apply.needLogin };
-    }
-    return { ok: false, error: guard.message };
-  }
-  const { tenant, supabase, user } = guard;
-
-  // Leemos el contrato con el cliente del usuario: la RLS solo lo muestra a las
-  // partes (+staff). De ahí salen el estado actual y quién es cada quién.
-  const { data: contract } = await supabase
-    .from("gig_contracts")
-    .select("id, tenant_id, client_id, creator_id, status")
-    .eq("id", contractId)
-    .maybeSingle();
-
-  if (!contract || contract.tenant_id !== tenant.id) {
-    return { ok: false, error: COPY.contract.errors.notAllowed };
-  }
-
-  // AUTORIZACIÓN: rol de la parte + legalidad de la transición (máquina pura).
-  const role = roleOf(user.id, contract);
-  const rule = findTransition(role, contract.status as ContractStatus, action as ContractAction);
-  if (!rule) {
-    return { ok: false, error: COPY.contract.errors.notAllowed };
-  }
-
-  // Escritura EXCLUSIVA service_role, gateada por el estado ACTUAL (optimista):
-  // si otra parte ya movió el contrato, el `.eq('status', from)` no matchea y no
-  // se aplica dos veces. En demo no tocamos stripe_* ni fee/net (generadas).
-  const admin = createAdminClient();
-  const update: {
-    status: string;
-    accepted_at?: string;
-    rejected_at?: string;
-    funded_at?: string;
-    delivered_at?: string;
-    released_at?: string;
-    canceled_at?: string;
-  } = { status: rule.to };
-  if (rule.stamp) update[rule.stamp] = new Date().toISOString();
-
-  const { data: updated, error } = await admin
-    .from("gig_contracts")
-    .update(update)
-    .eq("id", contractId)
-    .eq("tenant_id", tenant.id)
-    .eq("status", rule.from)
-    .select("id, status")
-    .maybeSingle();
-
-  if (error) {
-    console.error("[creadores] transición de contrato falló", { contractId, action, code: error.code });
-    return { ok: false, error: COPY.contract.errors.generic };
-  }
-  if (!updated) {
-    // Carrera: el estado cambió entre la lectura y la escritura.
-    return { ok: false, stale: true, error: COPY.contract.errors.notAllowed };
-  }
-
-  return { ok: true, status: updated.status };
 }
 
 // ===========================================================================
@@ -1160,7 +1105,11 @@ export async function submitReview(
     .eq("id", contractId)
     .maybeSingle();
 
-  if (!contract || contract.tenant_id !== tenant.id || contract.status !== "released") {
+  if (
+    !contract ||
+    contract.tenant_id !== tenant.id ||
+    (contract.status !== "released" && contract.status !== "approved")
+  ) {
     return { ok: false, error: COPY.reviews.errors.generic };
   }
 
