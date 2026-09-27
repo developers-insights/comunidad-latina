@@ -138,6 +138,7 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
   const bajadaRef = useRef(0);
   const arrastroRef = useRef(false);
   const bloqueadaRef = useRef(false);
+  const tocoMientrasPediaRef = useRef(false);
   const cronometroRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const gestoRef = useRef({ dx: 0, dy: 0 });
   const centroRef = useRef({ x: 0, y: 0 });
@@ -219,8 +220,12 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
       return;
     }
 
-    // Soltó el dedo mientras el navegador preguntaba. No se graba medio segundo
-    // de nada: se descarta el stream y se vuelve al principio.
+    // En el teléfono el micrófono tarda más que un toque: un toque corto que
+    // terminó mientras se pedía es manos libres. Sólo un sostenido largo
+    // soltado en la espera (el cartel de permiso) se descarta.
+    const tocoCorto = tocoMientrasPediaRef.current;
+    tocoMientrasPediaRef.current = false;
+    if (tocoCorto) bloqueadaRef.current = true;
     if (!desdeTeclado && punteroRef.current === null && !bloqueadaRef.current) {
       stream.getTracks().forEach((pista) => pista.stop());
       setEstado({ fase: "inactivo" });
@@ -263,8 +268,9 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
       if (ms >= MAX_DURACION_AUDIO_MS) detener();
     }, 200);
 
-    bloqueadaRef.current = desdeTeclado;
-    setEstado({ fase: "grabando", bloqueada: desdeTeclado, pausada: false });
+    const manosLibres = desdeTeclado || tocoCorto;
+    bloqueadaRef.current = manosLibres;
+    setEstado({ fase: "grabando", bloqueada: manosLibres, pausada: false });
   }
 
   function conectarMedidor(stream: MediaStream) {
@@ -460,7 +466,10 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
       gestoRef.current = { dx: 0, dy: 0 };
       setGesto({ dx: 0, dy: 0 });
 
-      if (estado.fase === "pidiendo") return; // el permiso decide, no el dedo
+      if (estado.fase === "pidiendo") {
+        tocoMientrasPediaRef.current = duracion < MS_DE_TOQUE && !arrastroRef.current;
+        return;
+      }
       if (estado.fase !== "grabando" || estado.bloqueada) return;
 
       if (cancelando) {
@@ -493,6 +502,8 @@ export function VoiceRecorder({ disabled = false, onListo, onActivo }: VoiceReco
     punteroRef.current = event.pointerId;
     bajadaRef.current = Date.now();
     arrastroRef.current = false;
+    tocoMientrasPediaRef.current = false;
+    bloqueadaRef.current = false;
     gestoRef.current = { dx: 0, dy: 0 };
     setGesto({ dx: 0, dy: 0 });
     // El centro se guarda ACÁ porque el botón desaparece apenas arranca la

@@ -21,6 +21,7 @@ import {
 } from "./attach-menu";
 import { ComposerReplyBar, useResponder } from "./reply-quote";
 import { PhotoPicker } from "./photo-picker";
+import { ArchivoPrevia } from "./archivo-previa";
 import { LocationPicker } from "./location-picker";
 import { VoiceRecorder } from "./voice-recorder";
 
@@ -48,6 +49,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [hoja, setHoja] = useState<null | "galeria" | "camara" | "enlace" | "ubicacion">(null);
   const [grabando, setGrabando] = useState(false);
+  const [archivosElegidos, setArchivosElegidos] = useState<File[]>([]);
 
   const destino = useMemo(
     () => ({ tipo: "directo" as const, conversationId }),
@@ -192,7 +194,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
         onChange={(event) => {
           const archivos = Array.from(event.target.files ?? []);
           event.target.value = "";
-          if (archivos.length > 0) void enviarArchivos(archivos, "");
+          if (archivos.length > 0) setArchivosElegidos(archivos);
         }}
       />
 
@@ -301,6 +303,14 @@ export function Composer({ conversationId }: { conversationId: string }) {
         open={menuAbierto}
         onClose={() => setMenuAbierto(false)}
         onElegir={elegirDelMenu}
+      />
+      <ArchivoPrevia
+        archivos={archivosElegidos}
+        onCancelar={() => setArchivosElegidos([])}
+        onEnviar={(archivos, pie) => {
+          setArchivosElegidos([]);
+          void enviarArchivos(archivos, pie);
+        }}
       />
       <PhotoPicker
         open={hoja === "galeria" || hoja === "camara"}

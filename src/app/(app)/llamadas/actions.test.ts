@@ -28,8 +28,10 @@ vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 import {
   invitarALlamadaAction,
   iniciarLlamadaAction,
+  rechazarLlamadaAction,
   terminarLlamadaAction,
 } from "./actions";
+import { MAX_PARTICIPANTES } from "@/lib/calls/tipos";
 
 const USER_ID = "99999999-9999-4999-8999-999999999999";
 const TENANT_ID = "22222222-2222-4222-8222-222222222222";
@@ -274,5 +276,87 @@ describe("iniciarLlamadaAction", () => {
 
     expect(resultado).toEqual({ ok: false, code: "invalid" });
     expect(registros).toHaveLength(0);
+  });
+});
+
+/**
+ * Llamar a un grupo (Nacho, 23/9: "llamar y videollamar en grupos"). Si el
+ * grupo entra entero en la llamada, les suena a todos sin que quien llama tenga
+ * que elegir uno por uno; si no entra, se elige en la hoja de Añadir.
+ */
+describe("iniciarLlamadaAction — grupos", () => {
+  const GRUPO = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1";
+
+  it("un grupo que entra en la llamada: invita a todos menos a mí", async () => {
+    const registros = guardCon({
+      calls: { insert: { data: { id: CALL_ID }, error: null } },
+      chat_group_members: {
+        select: { data: [{ profile_id: USER_ID }, { profile_id: A }, { profile_id: B }], error: null },
+      },
+      call_participants: { insert: { error: null } },
+    });
+
+    const resultado = await iniciarLlamadaAction({ kind: "video", groupId: GRUPO });
+
+    expect(resultado).toEqual({ ok: true, callId: CALL_ID, todos: true });
+    const invitados = registros
+      .filter((r) => r.tabla === "call_participants" && r.metodo === "insert")
+      .map((r) => (r.args[0] as { profile_id: string }).profile_id);
+    expect(invitados.sort()).toEqual([A, B].sort());
+  });
+
+  it("un grupo más grande que la llamada no le hace sonar a nadie: se elige", async () => {
+    const miembros = Array.from({ length: MAX_PARTICIPANTES + 1 }, (_, i) => ({
+      profile_id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(i).padStart(12, "0")}`,
+    }));
+    const registros = guardCon({
+      calls: { insert: { data: { id: CALL_ID }, error: null } },
+      chat_group_members: { select: { data: miembros, error: null } },
+    });
+
+    const resultado = await iniciarLlamadaAction({ kind: "audio", groupId: GRUPO });
+
+    expect(resultado).toEqual({ ok: true, callId: CALL_ID, todos: false });
+    expect(registros.some((r) => r.tabla === "call_participants")).toBe(false);
+  });
+
+  it("alguien que no se puede invitar (bloqueo) no frena a los demás", async () => {
+    guardCon({
+      calls: { insert: { data: { id: CALL_ID }, error: null } },
+      chat_group_members: {
+        select: { data: [{ profile_id: A }, { profile_id: B }, { profile_id: C }], error: null },
+      },
+      call_participants: {
+        insert: [{ error: null }, { error: { code: "42501", message: "row-level security" } }, { error: null }],
+      },
+    });
+
+    const resultado = await iniciarLlamadaAction({ kind: "audio", groupId: GRUPO });
+
+    expect(resultado).toEqual({ ok: true, callId: CALL_ID, todos: true });
+  });
+});
+
+describe("rechazarLlamadaAction", () => {
+  it("en un directo, rechazar termina la llamada", async () => {
+    const registros = guardCon({
+      calls: { select: { data: { group_id: null }, error: null }, update: { error: null } },
+    });
+
+    await rechazarLlamadaAction({ callId: CALL_ID });
+
+    const cierre = registros.find((r) => r.tabla === "calls" && r.metodo === "update");
+    expect(cierre?.args[0]).toMatchObject({ status: "rechazada" });
+  });
+
+  it("en un grupo, rechazar sólo me apaga el timbre: la llamada sigue para los demás", async () => {
+    const registros = guardCon({
+      calls: { select: { data: { group_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1" }, error: null } },
+    });
+
+    const resultado = await rechazarLlamadaAction({ callId: CALL_ID });
+
+    expect(resultado).toEqual({ ok: true, callId: CALL_ID });
+    expect(registros.some((r) => r.tabla === "calls" && r.metodo === "update")).toBe(false);
   });
 });

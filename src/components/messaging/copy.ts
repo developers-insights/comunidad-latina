@@ -446,6 +446,17 @@ export const COPY = {
       tope: (maximo: number) => `Podés mandar hasta ${maximo} por vez.`,
     },
 
+    /** Un archivo (PDF) elegido: se revisa antes de mandarlo. */
+    archivo: {
+      titulo: (cantidad: number) =>
+        cantidad === 1 ? "¿Mandamos este archivo?" : `¿Mandamos estos ${cantidad} archivos?`,
+      pie: "Escribí algo (opcional)",
+      enviar: (cantidad: number) => (cantidad === 1 ? "Enviar" : `Enviar ${cantidad}`),
+      cancelar: "Cancelar",
+      tipoPdf: "PDF",
+      tipoOtro: "Archivo",
+    },
+
     /** Compartir un enlace. */
     enlace: {
       titulo: "Compartir un enlace",
