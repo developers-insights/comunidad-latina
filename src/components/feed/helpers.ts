@@ -4,6 +4,7 @@ import type { TaggedProfile } from "@/lib/social/post-tags";
 import type { MusicTrackView } from "@/lib/media/audio-track";
 import type { CreditoDeFoto } from "@/lib/feed/creditos-de-foto";
 import { playbackCapSeconds } from "@/lib/media/video-policy";
+import type { ListingVideoView } from "@/lib/media/listing-video-policy";
 
 /**
  * Helpers puros del módulo FEED SOCIAL. Sin dependencias de servidor:
@@ -495,6 +496,9 @@ export interface FeedListingModel {
   photoUrl: string | null;
   verifiedDateLabel: string | null;
   publisherName: string | null;
+  /** `listings.created_by`: el feed lo compara con la sesión para el menú ⋯. */
+  authorId?: string | null;
+  video?: ListingVideoView | null;
   publisherTrust: {
     displayName: string;
     firstName: string;

@@ -26,6 +26,9 @@ import {
   // mismo con las mismas palabras.
   COPY as LISTINGS_COPY,
 } from "@/components/listings";
+import { ListingOwnerMenu } from "@/components/listings/listing-owner-menu";
+import { ListingVideoMedia } from "@/components/listings/listing-video";
+import { LISTING_VIDEO_CARD_CAP_SECONDS } from "@/lib/media/listing-video-policy";
 // Las TRES acciones que la ficha monta ya estaban escritas, probadas y en uso
 // en otras pantallas. Ninguna pide un campo nuevo del modelo: se resuelven con
 // el id que la card ya tiene. Ver el docblock de `ListingSheetAction`.
@@ -480,11 +483,19 @@ function AccentCta({
 export function FeedListingCard({
   listing,
   engagement,
+  viewerId = null,
+  esMio: esMioResuelto,
 }: {
   listing: FeedListingModel;
   engagement?: ListingEngagement;
+  /** Sesión de quien mira. Decide si el ⋯ ofrece las acciones del dueño o Reportar. */
+  viewerId?: string | null;
+  /** Para superficies que ya resolvieron la propiedad en el servidor (el perfil propio). */
+  esMio?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const esMio =
+    esMioResuelto ?? Boolean(viewerId && listing.authorId && listing.authorId === viewerId);
   const viewer = useMediaViewer();
   const KindIcon = KIND_ICON[listing.kind] ?? Storefront;
   const kindLabel =
@@ -549,44 +560,57 @@ export function FeedListingCard({
     });
   }
 
+  function openVideo() {
+    if (!listing.video) return;
+    viewer.open({
+      items: [{ kind: "video", url: listing.video.url, posterUrl: listing.video.posterUrl }],
+      authorName: listing.title,
+      maxPlaybackSeconds: LISTING_VIDEO_CARD_CAP_SECONDS,
+    });
+  }
+
+  const overlayTopLeft = (
+    <>
+      <Badge variant="neutral">
+        <KindIcon size={13} aria-hidden="true" />
+        {kindLabel}
+      </Badge>
+      {listing.verifiedDateLabel && (
+        <Badge variant="success">
+          <ShieldCheck size={13} aria-hidden="true" />
+          {COPY.listing.verifiedChip(listing.verifiedDateLabel)}
+        </Badge>
+      )}
+    </>
+  );
+
+  const overlayBottom = (
+    <div>
+      <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
+        {listing.title}
+      </h3>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+        {listing.priceLabel && (
+          <span className="numeric text-lg font-bold">{listing.priceLabel}</span>
+        )}
+        {listing.areaLabel && (
+          <span className="flex items-center gap-1 text-sm opacity-90">
+            <MapPin size={14} aria-hidden="true" className="shrink-0" />
+            {listing.areaLabel}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
   const media = (
     <CardMedia
       src={listing.photoUrl}
       fallbackSrc={FALLBACK_PHOTO}
       aspect="portrait"
       quality={62}
-      overlayTopLeft={
-        <>
-          <Badge variant="neutral">
-            <KindIcon size={13} aria-hidden="true" />
-            {kindLabel}
-          </Badge>
-          {listing.verifiedDateLabel && (
-            <Badge variant="success">
-              <ShieldCheck size={13} aria-hidden="true" />
-              {COPY.listing.verifiedChip(listing.verifiedDateLabel)}
-            </Badge>
-          )}
-        </>
-      }
-      overlayBottom={
-        <div>
-          <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
-            {listing.title}
-          </h3>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
-            {listing.priceLabel && (
-              <span className="numeric text-lg font-bold">{listing.priceLabel}</span>
-            )}
-            {listing.areaLabel && (
-              <span className="flex items-center gap-1 text-sm opacity-90">
-                <MapPin size={14} aria-hidden="true" className="shrink-0" />
-                {listing.areaLabel}
-              </span>
-            )}
-          </div>
-        </div>
-      }
+      overlayTopLeft={overlayTopLeft}
+      overlayBottom={overlayBottom}
     />
   );
 
@@ -597,7 +621,15 @@ export function FeedListingCard({
           aria-label={listing.title}
           className="overflow-hidden rounded-[calc(var(--radius-xl)-6px)] bg-surface shadow-[inset_0_1px_0_var(--cl-bezel-highlight)]"
         >
-          {canOpenPhotos ? (
+          {listing.video ? (
+            <ListingVideoMedia
+              video={listing.video}
+              title={listing.title}
+              onOpen={openVideo}
+              overlayTopLeft={overlayTopLeft}
+              overlayBottom={overlayBottom}
+            />
+          ) : canOpenPhotos ? (
             <button
               type="button"
               onClick={openPhotos}
@@ -618,25 +650,40 @@ export function FeedListingCard({
           )}
 
           <div className="flex flex-col gap-2.5 p-4">
-            {listing.publisherTrust ? (
-              <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
-                <span className="truncate">{listing.publisherTrust.displayName}</span>
-                <PublisherTrust
-                  displayName={listing.publisherTrust.displayName}
-                  firstName={listing.publisherTrust.firstName}
-                  score={listing.publisherTrust.score}
-                  level={listing.publisherTrust.level}
-                  signals={listing.publisherTrust.signals}
-                  profileId={listing.publisherTrust.profileId}
-                  size="inline"
-                />
+            {/* El ⋯ va en la fila de quien publica, a la derecha: es la cabecera
+                de la tarjeta y el mismo lugar que ocupa en una publicación. */}
+            <div className="-my-1.5 flex min-h-11 items-center gap-2">
+              <div className="min-w-0 flex-1">
+                {listing.publisherTrust ? (
+                  <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
+                    <span className="truncate">{listing.publisherTrust.displayName}</span>
+                    <PublisherTrust
+                      displayName={listing.publisherTrust.displayName}
+                      firstName={listing.publisherTrust.firstName}
+                      score={listing.publisherTrust.score}
+                      level={listing.publisherTrust.level}
+                      signals={listing.publisherTrust.signals}
+                      profileId={listing.publisherTrust.profileId}
+                      size="inline"
+                    />
+                  </div>
+                ) : listing.publisherName ? (
+                  <p className="flex items-center gap-1.5 text-sm text-foreground-muted">
+                    <Storefront size={16} aria-hidden="true" className="shrink-0" />
+                    {COPY.listing.externalPublisher(listing.publisherName)}
+                  </p>
+                ) : null}
               </div>
-            ) : listing.publisherName ? (
-              <p className="flex items-center gap-1.5 text-sm text-foreground-muted">
-                <Storefront size={16} aria-hidden="true" className="shrink-0" />
-                {COPY.listing.externalPublisher(listing.publisherName)}
-              </p>
-            ) : null}
+              <ListingOwnerMenu
+                listingId={listing.id}
+                kind={listing.kind}
+                title={listing.title}
+                esMio={esMio}
+                reportable
+                haySesion={Boolean(viewerId) || esMio}
+                className="-mr-2"
+              />
+            </div>
 
             {/*
               LA BARRA, ARRIBA DEL CTA — y sin quitarle nada a la tarjeta.

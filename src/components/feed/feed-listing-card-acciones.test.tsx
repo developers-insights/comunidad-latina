@@ -263,3 +263,48 @@ describe("la barra no saca a nadie del feed", () => {
     expect(fichaAbierta()).toBe(true);
   });
 });
+
+describe("el menú ⋯ de un aviso en el feed (Nacho, 23/9)", () => {
+  const YO = "99999999-9999-4999-8999-999999999999";
+
+  it("al dueño le ofrece promocionar, editar y eliminar", async () => {
+    render(<FeedListingCard listing={negocio({ kind: "event", authorId: YO })} viewerId={YO} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Opciones de esta publicación/ }));
+    const promocionar = await screen.findByText("Promocionar");
+    expect(promocionar.closest("a")?.getAttribute("href")).toBe(`/impulsar/${BUSINESS_ID}`);
+    expect(screen.getByText("Editar")).toBeTruthy();
+    expect(screen.getByText("Eliminar aviso")).toBeTruthy();
+    expect(screen.queryByText("Reportar")).toBeNull();
+  });
+
+  it("a quien no es dueño le ofrece reportar y nada del dueño", async () => {
+    render(
+      <FeedListingCard listing={negocio({ kind: "event", authorId: "otra" })} viewerId={YO} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Opciones de esta publicación/ }));
+    expect(await screen.findByText("Reportar")).toBeTruthy();
+    expect(screen.queryByText("Editar")).toBeNull();
+    expect(screen.queryByText("Promocionar")).toBeNull();
+  });
+});
+
+describe("un aviso con video", () => {
+  const video = {
+    url: "https://x.supabase.co/storage/v1/object/public/post-media/t/u/v.mp4",
+    posterUrl: null,
+    durationSeconds: 200,
+    fullVideoHref: `/videos/largos/aviso/${BUSINESS_ID}`,
+  };
+
+  it("muestra el video en lugar de la foto y lo abre en el visor cortado a 90 s", () => {
+    render(<FeedListingCard listing={negocio({ video })} />);
+    expect(document.querySelector("video")?.getAttribute("src")).toBe(video.url);
+    fireEvent.click(screen.getByRole("button", { name: /^Ver el video de/ }));
+    expect(viewer.open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [expect.objectContaining({ kind: "video", url: video.url })],
+        maxPlaybackSeconds: 90,
+      }),
+    );
+  });
+});

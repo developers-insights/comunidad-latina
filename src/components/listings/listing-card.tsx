@@ -16,6 +16,11 @@ import {
 } from "./helpers";
 import { ListingOwnerMenuOverlay, type ListingOwnerView } from "./listing-owner-menu";
 import { PublisherTrust } from "./publisher-trust";
+import { ListingVideoMedia } from "./listing-video";
+import {
+  LISTING_VIDEO_CARD_CAP_SECONDS,
+  type ListingVideoView,
+} from "@/lib/media/listing-video-policy";
 
 export interface ListingCardModel {
   id: string;
@@ -32,6 +37,7 @@ export interface ListingCardModel {
   /** SOLO presente si hay verification_check found_active vinculado. */
   verification: VerificationView | null;
   publisher: PublisherView;
+  video?: ListingVideoView | null;
 }
 
 /** Vivienda → acento azul del módulo (para el CTA en píldora). */
@@ -95,6 +101,46 @@ export function ListingCard({
     });
   }
 
+  function openVideo() {
+    if (!listing.video) return;
+    viewer.open({
+      items: [{ kind: "video", url: listing.video.url, posterUrl: listing.video.posterUrl }],
+      authorName: listing.title,
+      maxPlaybackSeconds: LISTING_VIDEO_CARD_CAP_SECONDS,
+    });
+  }
+
+  const verifiedBadge = listing.verification ? (
+    <Badge variant="success">
+      <ShieldCheck size={13} weight="fill" aria-hidden="true" />
+      {COPY.list.verifiedChip(listing.verification.dateLabel)}
+    </Badge>
+  ) : undefined;
+
+  const overlayBottom = (
+    <div>
+      <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
+        {listing.title}
+      </h3>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+        {listing.priceLabel && (
+          <span className="numeric text-lg font-bold">{listing.priceLabel}</span>
+        )}
+        {listing.areaLabel && (
+          <span className="flex items-center gap-1 text-sm opacity-90">
+            <MapPin size={14} aria-hidden="true" className="shrink-0" />
+            {listing.areaLabel}
+          </span>
+        )}
+        {photos.length > 1 && (
+          <span className="numeric text-sm opacity-80">
+            {COPY.list.photoCount(photos.length)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <BezelCard
       variant={listing.verification ? "success" : "default"}
@@ -102,50 +148,31 @@ export function ListingCard({
     >
       <article aria-label={listing.title}>
         <div className="relative">
-          <button
-            type="button"
-            onClick={openPhotos}
-            aria-label={COPY.list.openPhotos(listing.title)}
-            className={MEDIA_BUTTON}
-          >
-            <CardMedia
-              src={listing.photoUrl}
-              fallbackSrc={FALLBACK_PHOTO}
-              aspect="portrait"
-              quality={62}
-              overlayTopLeft={
-                listing.verification ? (
-                  <Badge variant="success">
-                    <ShieldCheck size={13} weight="fill" aria-hidden="true" />
-                    {COPY.list.verifiedChip(listing.verification.dateLabel)}
-                  </Badge>
-                ) : undefined
-              }
-              overlayBottom={
-                <div>
-                  <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
-                    {listing.title}
-                  </h3>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
-                    {listing.priceLabel && (
-                      <span className="numeric text-lg font-bold">{listing.priceLabel}</span>
-                    )}
-                    {listing.areaLabel && (
-                      <span className="flex items-center gap-1 text-sm opacity-90">
-                        <MapPin size={14} aria-hidden="true" className="shrink-0" />
-                        {listing.areaLabel}
-                      </span>
-                    )}
-                    {photos.length > 1 && (
-                      <span className="numeric text-sm opacity-80">
-                        {COPY.list.photoCount(photos.length)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              }
+          {listing.video ? (
+            <ListingVideoMedia
+              video={listing.video}
+              title={listing.title}
+              onOpen={openVideo}
+              overlayTopLeft={verifiedBadge}
+              overlayBottom={overlayBottom}
             />
-          </button>
+          ) : (
+            <button
+              type="button"
+              onClick={openPhotos}
+              aria-label={COPY.list.openPhotos(listing.title)}
+              className={MEDIA_BUTTON}
+            >
+              <CardMedia
+                src={listing.photoUrl}
+                fallbackSrc={FALLBACK_PHOTO}
+                aspect="portrait"
+                quality={62}
+                overlayTopLeft={verifiedBadge}
+                overlayBottom={overlayBottom}
+              />
+            </button>
+          )}
           <ListingOwnerMenuOverlay
             listingId={listing.id}
             kind="property"
@@ -153,6 +180,8 @@ export function ListingCard({
             esMio={Boolean(owner?.esMio)}
             status={owner?.status}
             pausadoPorReportes={owner?.pausadoPorReportes}
+            reportable={owner?.reportable}
+            haySesion={owner?.haySesion}
           />
         </div>
 
