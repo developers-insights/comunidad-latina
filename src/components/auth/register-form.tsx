@@ -8,7 +8,7 @@ import { FormError } from "@/components/auth/form-error";
 import { suggestUsername } from "@/lib/profile/username";
 import { UsernameInput } from "@/components/auth/username-input";
 import { NewPasswordFields, validateNewPassword } from "@/components/auth/new-password-fields";
-import { authLinkClass } from "@/components/auth/auth-card";
+import { authLinkClass, authSubmitClass } from "@/components/auth/auth-card";
 import { Button, Field, Input } from "@/components/ui";
 
 const COPY = {
@@ -318,7 +318,7 @@ export function RegisterForm({
         loading={pending}
         disabled={!consentComplete}
         aria-describedby={!consentComplete ? "register-consent-hint" : undefined}
-        className="mt-2 w-full hover:-translate-y-0.5 motion-reduce:hover:translate-y-0"
+        className={authSubmitClass}
       >
         {COPY.submit}
       </Button>

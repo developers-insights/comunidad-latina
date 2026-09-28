@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updatePasswordAction } from "@/app/(auth)/actions";
 import { FormError } from "@/components/auth/form-error";
-import { AuthHeader } from "@/components/auth/auth-card";
+import { AuthHeader, authSubmitClass } from "@/components/auth/auth-card";
 import {
   NewPasswordFields,
   validateNewPassword,
@@ -101,7 +101,7 @@ export function ActualizarClient() {
           type="submit"
           size="lg"
           loading={pending}
-          className="mt-2 w-full hover:-translate-y-0.5 motion-reduce:hover:translate-y-0"
+          className={authSubmitClass}
         >
           {COPY.submit}
         </Button>

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { EnvelopeSimple, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr";
 import { requestPasswordResetAction } from "@/app/(auth)/actions";
 import { FormError } from "@/components/auth/form-error";
-import { AuthHeader, authLinkClass } from "@/components/auth/auth-card";
+import { AuthHeader, authLinkClass, authSubmitClass } from "@/components/auth/auth-card";
 import { Button, Field, Input } from "@/components/ui";
 
 const COPY = {
@@ -90,7 +90,7 @@ export function RecuperarClient() {
               type="submit"
               size="lg"
               loading={pending}
-              className="mt-2 w-full hover:-translate-y-0.5 motion-reduce:hover:translate-y-0"
+              className={authSubmitClass}
             >
               <EnvelopeSimple size={18} aria-hidden="true" />
               {COPY.submit}

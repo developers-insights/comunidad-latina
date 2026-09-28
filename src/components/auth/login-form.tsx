@@ -10,7 +10,7 @@ import { safeInternalPath } from "@/lib/url/safe-href";
 import { FormError } from "@/components/auth/form-error";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { PasswordInput } from "@/components/auth/password-input";
-import { authLinkClass, authSubtitleClass, authTitleClass } from "@/components/auth/auth-card";
+import { authLinkClass, authSubmitClass, authSubtitleClass, authTitleClass } from "@/components/auth/auth-card";
 import type { OAuthProvider } from "@/lib/auth/oauth-providers";
 import {
   Button,
@@ -64,7 +64,6 @@ const COPY = {
   createAccount: "Creala en un minuto",
 } as const;
 
-const submitClass = "mt-2 w-full hover:-translate-y-0.5 motion-reduce:hover:translate-y-0";
 
 /** Los errores que llegan por `?error=` en la URL, con su copy. */
 const URL_ERRORS: Record<string, string> = {
@@ -262,7 +261,7 @@ export function LoginForm({
                 {COPY.forgotPassword}
               </Link>
             </div>
-            <Button type="submit" size="lg" loading={pending} className={submitClass}>
+            <Button type="submit" size="lg" loading={pending} className={authSubmitClass}>
               {COPY.submitPassword}
             </Button>
           </form>
@@ -298,7 +297,7 @@ export function LoginForm({
                   aria-describedby={emailError ? "magic-email-error" : undefined}
                 />
               </Field>
-              <Button type="submit" size="lg" loading={pending} className={submitClass}>
+              <Button type="submit" size="lg" loading={pending} className={authSubmitClass}>
                 <EnvelopeSimple size={18} aria-hidden="true" />
                 {COPY.submitMagic}
               </Button>

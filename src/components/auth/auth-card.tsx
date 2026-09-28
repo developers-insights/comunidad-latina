@@ -7,6 +7,12 @@ export const authLinkClass =
 export const authTitleClass =
   "font-display text-[1.75rem] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground text-balance";
 
+// Tailwind 4 escribe `translate` y `scale` como propiedades propias, no dentro
+// de `transform`: sin listarlas acá, el levantar del hover y el hundir del press
+// saltan de golpe en vez de interpolar.
+export const authSubmitClass =
+  "mt-2 w-full transition-[translate,scale,background-color,opacity] hover:-translate-y-0.5 motion-reduce:hover:translate-y-0";
+
 export const authSubtitleClass = "text-[0.9375rem] leading-relaxed text-foreground-secondary text-pretty";
 
 // Sombras negras a propósito: una sombra teñida con el color de marca se lee
