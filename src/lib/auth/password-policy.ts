@@ -46,7 +46,10 @@ export function passwordRuleResults(password: string): Record<PasswordRuleId, bo
 }
 
 export function passwordProblem(password: string): string | null {
-  if (password.length > PASSWORD_MAX_LENGTH) return PASSWORD_COPY.long;
+  // En bytes y no en caracteres: Supabase Auth rechaza >72 bytes, y una ñ son dos.
+  if (new TextEncoder().encode(password).length > PASSWORD_MAX_LENGTH) {
+    return PASSWORD_COPY.long;
+  }
   const r = passwordRuleResults(password);
   if (!r.length) return PASSWORD_COPY.short;
   if (!r.uppercase) return PASSWORD_COPY.uppercase;
