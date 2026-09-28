@@ -1,5 +1,28 @@
 # PROGRESS — Comunidad Latina
 
+## Alta con email, login con Google y redirects sin localhost (✅ 2026-09-28, `5dbcd97`)
+
+- **Causa del "redirige a localhost":** Supabase Auth tenía `site_url=http://localhost:3000`
+  y la allow-list vacía; todo `redirectTo` caía ahí. Corregido por Management API
+  (fuera del repo, ver memoria `auth-google-y-supabase-config`). La allow-list NO lleva
+  wildcard de previews: un tercero podía nombrar un proyecto Vercel que matcheara y
+  robar el `code` de OAuth.
+- **Mails:** SMTP propio vía Resend (el de Supabase manda 2/h) y `RESEND_API_KEY` +
+  `EMAIL_FROM` subidas a Vercel prod — antes el correo de confirmación del alta no salía.
+- **/registro reactivado** con contraseña + confirmación y checklist en vivo
+  (`src/lib/auth/password-policy.ts`: ≥8, mayúscula, número; se mide en bytes, tope 72).
+- **Google:** proyecto de Google Cloud `comunidad-latina-510023`, en producción, sin
+  logo (subirlo obliga a verificación de marca). El callback provisiona también cuentas
+  de email vinculadas (antes salteaban el chequeo de comunidad) y neutraliza la cuenta
+  pre-creada sin confirmar por un tercero (`src/lib/auth/preclaimed.ts`).
+- **Diseño:** layout de auth con el logo real, fondo de luz en los colores del logo,
+  dos columnas en desktop.
+
+**Pendiente:** rate-limit persistente del alta (hoy en memoria por instancia) + límite
+por email/Turnstile; enviar desde `@comunidadlatina.com` (3 registros DNS en GoDaddy);
+dominio personalizado de Supabase para que la pantalla de Google no muestre
+`ktmbtpuhqqofdkisqseq.supabase.co`.
+
 ## Tanda del 27/9: todo lo pendiente del chat con Nacho (13/9–26/9), en seis frentes (✅ 2026-09-27)
 
 Origen: el chat de WhatsApp con Nacho de las últimas dos semanas (texto, 30 capturas y
