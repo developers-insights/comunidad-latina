@@ -5,6 +5,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { sendEmailInBackground } from "@/lib/email";
 import { welcomeEmail } from "@/lib/email/templates";
 import { syncEmailVerified } from "@/lib/auth/email-verified";
+import { resolveRequestOrigin } from "../recuperar/origin";
 
 /**
  * Confirmación de cuenta: el enlace del correo pega acá con `?token_hash=…`.
@@ -20,6 +21,7 @@ import { syncEmailVerified } from "@/lib/auth/email-verified";
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const origin = await resolveRequestOrigin(request);
   const tokenHash = url.searchParams.get("token_hash");
   // Ver safe-href.ts: el filtro por string dejaba salir del sitio con un tab
   // embebido, y acá el redirect ocurre con la sesión RECIÉN abierta.
@@ -69,7 +71,7 @@ export async function GET(request: Request) {
         });
       }
 
-      return NextResponse.redirect(new URL(next, url.origin));
+      return NextResponse.redirect(new URL(next, origin));
     }
 
     console.error("[auth] confirmar: verifyOtp falló", { code: error?.code });
@@ -77,5 +79,5 @@ export async function GET(request: Request) {
 
   // Enlace vencido o ya usado (el token es de un solo uso) → a /entrar, donde
   // un intento de ingreso con la cuenta sin confirmar reenvía el enlace solo.
-  return NextResponse.redirect(new URL("/entrar?error=confirmacion", url.origin));
+  return NextResponse.redirect(new URL("/entrar?error=confirmacion", origin));
 }

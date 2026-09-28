@@ -5,6 +5,7 @@ import Link from "next/link";
 import { EnvelopeSimple, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr";
 import { requestPasswordResetAction } from "@/app/(auth)/actions";
 import { FormError } from "@/components/auth/form-error";
+import { AuthHeader, authLinkClass, authSubmitClass } from "@/components/auth/auth-card";
 import { Button, Field, Input } from "@/components/ui";
 
 const COPY = {
@@ -14,7 +15,7 @@ const COPY = {
   emailPlaceholder: "nombre@ejemplo.com",
   submit: "Mandame el enlace",
   emailRequired: "Escribí tu email para poder mandarte el enlace.",
-  sent: "Si ese email está registrado, te mandamos un enlace para restablecer tu contraseña. Revisá tu correo (y la carpeta de spam).",
+  sent: "Si ese email tiene una cuenta, ya te mandamos el enlace. Revisá tu correo, y también el correo no deseado.",
   backToLogin: "Volver a entrar",
   remembered: "¿Te acordaste la contraseña?",
 } as const;
@@ -27,6 +28,7 @@ export function RecuperarClient() {
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending) return;
     setFormError(null);
     setEmailError(undefined);
 
@@ -51,12 +53,7 @@ export function RecuperarClient() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="font-display text-2xl font-bold text-foreground">
-          {COPY.title}
-        </h1>
-        <p className="text-sm text-foreground-secondary">{COPY.subtitle}</p>
-      </header>
+      <AuthHeader title={COPY.title} subtitle={COPY.subtitle} />
 
       {sent ? (
         <div
@@ -67,7 +64,7 @@ export function RecuperarClient() {
           <p className="text-sm text-foreground">{COPY.sent}</p>
           <Link
             href="/entrar"
-            className="mt-1 text-sm font-semibold text-brand-ink underline-offset-4 hover:underline"
+            className={`mt-1 text-sm ${authLinkClass}`}
           >
             {COPY.backToLogin}
           </Link>
@@ -76,7 +73,7 @@ export function RecuperarClient() {
         <>
           <FormError>{formError}</FormError>
 
-          <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+          <form method="post" onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
             <Field htmlFor="recuperar-email" label={COPY.email} error={emailError}>
               <Input
                 id="recuperar-email"
@@ -89,7 +86,12 @@ export function RecuperarClient() {
                 aria-describedby={emailError ? "recuperar-email-error" : undefined}
               />
             </Field>
-            <Button type="submit" size="lg" loading={pending} className="mt-2 w-full">
+            <Button
+              type="submit"
+              size="lg"
+              loading={pending}
+              className={authSubmitClass}
+            >
               <EnvelopeSimple size={18} aria-hidden="true" />
               {COPY.submit}
             </Button>
@@ -99,7 +101,7 @@ export function RecuperarClient() {
             {COPY.remembered}{" "}
             <Link
               href="/entrar"
-              className="font-semibold text-brand-ink underline-offset-4 hover:underline"
+              className={authLinkClass}
             >
               {COPY.backToLogin}
             </Link>

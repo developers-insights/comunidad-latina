@@ -1,0 +1,112 @@
+/*
+ * Los colores de las luces son los del logo (tres figuras), no `--cl-brand`:
+ * el brand varía por tenant y el logo del programa no. Si alguien los pasa a
+ * `--cl-brand`, en `comunidadlatina` (#C2410C) el fondo queda naranja y deja
+ * de dialogar con el logo que tiene al lado.
+ *
+ * Las variables se voltean por tema acá y no con `dark:` porque este archivo no
+ * pasa por Tailwind; los dos selectores de abajo espejan el @custom-variant de
+ * globals.css (clase `.dark`, o SO oscuro sin clase explícita).
+ */
+.backdrop {
+  --glow-blue: rgb(27 98 148 / 0.17);
+  --glow-yellow: rgb(204 185 14 / 0.2);
+  --glow-red: rgb(186 30 71 / 0.12);
+  --top-light: rgb(255 255 255 / 0.75);
+  --grain-opacity: 0.08;
+  --grain-blend: multiply;
+
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--cl-canvas);
+  background-image:
+    radial-gradient(70% 45% at 50% -10%, var(--top-light), transparent 70%),
+    radial-gradient(42% 34% at 4% 10%, var(--glow-blue), transparent 72%),
+    radial-gradient(36% 30% at 98% 24%, var(--glow-yellow), transparent 72%),
+    radial-gradient(52% 40% at 76% 106%, var(--glow-red), transparent 72%);
+}
+
+.backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  background-size: 180px 180px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+:global(.dark) .backdrop {
+  --glow-blue: rgb(70 150 215 / 0.16);
+  --glow-yellow: rgb(204 185 14 / 0.07);
+  --glow-red: rgb(225 70 110 / 0.1);
+  --top-light: rgb(255 255 255 / 0.045);
+  --grain-opacity: 0.14;
+  --grain-blend: overlay;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not(.light):not(.dark)) .backdrop {
+    --glow-blue: rgb(70 150 215 / 0.16);
+    --glow-yellow: rgb(204 185 14 / 0.07);
+    --glow-red: rgb(225 70 110 / 0.1);
+    --top-light: rgb(255 255 255 / 0.045);
+    --grain-opacity: 0.14;
+    --grain-blend: overlay;
+  }
+}
+
+.figure {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: rise 720ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.figure:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.figure:nth-child(3) {
+  animation-delay: 180ms;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12%) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.enter {
+  animation: enter 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .figure,
+  .enter {
+    animation: none;
+  }
+}
+
+@media print {
+  .backdrop {
+    display: none;
+  }
+}

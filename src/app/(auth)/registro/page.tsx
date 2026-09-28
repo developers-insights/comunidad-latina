@@ -1,13 +1,22 @@
 import { redirect } from "next/navigation";
+import { getAuthUserId } from "@/lib/supabase/server";
+import { AuthCard } from "@/components/auth/auth-card";
+import { availableOAuthProviders } from "../oauth-actions";
+import { RegistroClient } from "./registro-client";
 
-export const metadata = { title: "Entrar" };
+export const metadata = { title: "Crear cuenta" };
 
-/**
- * El alta de cuentas nuevas está en pausa (todavía nadie puede crear una): esta
- * ruta ya no dibuja el formulario, redirige directo a /entrar. El mecanismo de
- * alta (`registerAction`, `RegistroClient`) queda intacto para reactivarlo el
- * día que corresponda — lo único que se apaga es el camino para llegar acá.
- */
-export default function RegistroPage() {
-  redirect("/entrar");
+export default async function RegistroPage() {
+  const userId = await getAuthUserId();
+  if (userId) redirect("/feed");
+
+  // Resuelto en el SERVIDOR: el flag sale de env vars fuera del bundle. Sin
+  // credenciales viene vacío y los botones no se dibujan.
+  const providers = await availableOAuthProviders();
+
+  return (
+    <AuthCard>
+      <RegistroClient oauthProviders={providers} />
+    </AuthCard>
+  );
 }

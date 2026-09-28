@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isGoogleAuthConfigured, isAppleAuthConfigured } from "@/lib/config/services";
 import { OAUTH_PROVIDERS, type OAuthProvider } from "@/lib/auth/oauth-providers";
 import { safeInternalPath } from "@/lib/url/safe-href";
-import { resolveOrigin } from "./recuperar/origin";
+import { resolveOriginAsync } from "./recuperar/origin";
 
 /**
  * Arranque del login con Google / Apple.
@@ -75,7 +75,7 @@ export async function startOAuthAction(input: StartOAuthInput): Promise<StartOAu
   if (!isConfigured(provider)) return { ok: false, message: COPY.unavailable };
 
   const headerStore = await headers();
-  const origin = resolveOrigin(headerStore);
+  const origin = await resolveOriginAsync(headerStore);
   const next = safeInternalPath(parsed.data.next, "/feed");
 
   const supabase = await createClient();

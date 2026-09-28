@@ -4,12 +4,13 @@ import { useState } from "react";
 import { RegisterForm } from "@/components/auth/register-form";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { CheckEmail } from "@/components/auth/check-email";
+import { AuthDivider, AuthHeader } from "@/components/auth/auth-card";
 import type { OAuthProvider } from "@/lib/auth/oauth-providers";
 
 const COPY = {
   title: "Sumate a tu comunidad",
   subtitle:
-    "En un minuto estás adentro. Para crear tu cuenta no te pedimos ni tu teléfono ni tu dirección.",
+    "En un minuto estás adentro. No te pedimos ni tu teléfono ni tu dirección.",
   emailDivider: "o con tu email",
 } as const;
 
@@ -29,12 +30,7 @@ export function RegistroClient({
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="font-display text-2xl font-bold text-foreground">
-          {COPY.title}
-        </h1>
-        <p className="text-sm text-foreground-secondary">{COPY.subtitle}</p>
-      </header>
+      <AuthHeader title={COPY.title} subtitle={COPY.subtitle} />
 
       {/* Google y Apple ARRIBA en el alta —al revés que en /entrar— porque acá
           sí son el camino más corto: cero campos, cero contraseña que inventar
@@ -42,15 +38,7 @@ export function RegistroClient({
           entero justo debajo, sin nada plegado. */}
       <OAuthButtons providers={oauthProviders} next="/bienvenida" withDivider={false} />
 
-      {oauthProviders.length > 0 && (
-        <div className="flex items-center gap-3" aria-hidden="true">
-          <span className="h-px flex-1 bg-border-subtle" />
-          <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-            {COPY.emailDivider}
-          </span>
-          <span className="h-px flex-1 bg-border-subtle" />
-        </div>
-      )}
+      {oauthProviders.length > 0 && <AuthDivider label={COPY.emailDivider} />}
 
       <RegisterForm
         // Al confirmar aterriza en /bienvenida a completar el onboarding: este

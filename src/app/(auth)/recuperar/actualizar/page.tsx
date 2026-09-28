@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LinkBreak } from "@phosphor-icons/react/dist/ssr";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { EmptyState, buttonVariants } from "@/components/ui";
+import { AuthCard } from "@/components/auth/auth-card";
 import { ActualizarClient } from "./actualizar-client";
 
 export const metadata = { title: "Nueva contraseña" };
@@ -17,7 +18,8 @@ export default async function ActualizarPage() {
 
   if (!user) {
     return (
-      <EmptyState
+      <AuthCard>
+        <EmptyState
         icon={<LinkBreak weight="regular" />}
         title="Ese enlace ya no sirve"
         message="El enlace para restablecer tu contraseña venció o ya se usó. Pedí uno nuevo y te lo mandamos de nuevo."
@@ -26,9 +28,14 @@ export default async function ActualizarPage() {
             Pedir un enlace nuevo
           </Link>
         }
-      />
+        />
+      </AuthCard>
     );
   }
 
-  return <ActualizarClient />;
+  return (
+    <AuthCard>
+      <ActualizarClient />
+    </AuthCard>
+  );
 }

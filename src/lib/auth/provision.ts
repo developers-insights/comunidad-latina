@@ -31,8 +31,11 @@ import { suggestUsername } from "@/lib/profile/username";
 const TERMS_VERSION = "v1-2026-07";
 
 export type ProvisionResult =
-  /** Ya existía o se creó bien. */
-  | { ok: true; created: boolean }
+  /**
+   * Ya existía o se creó bien. `claimsChanged`: se escribió `app_metadata`, así
+   * que el JWT en mano no trae el claim y quien llama tiene que refrescarlo.
+   */
+  | { ok: true; created: boolean; claimsChanged: boolean }
   /** No se pudo dejar la cuenta usable. Quien llama TIENE que cerrar la sesión. */
   | { ok: false; reason: "otro_tenant" | "error" };
 
@@ -106,15 +109,16 @@ export async function ensureProfileForOAuthUser(
     if (existing.tenant_id !== tenantId) return { ok: false, reason: "otro_tenant" };
 
     // El perfil está, pero el JWT puede no tener el claim (cuenta vieja, o un
-    // usuario creado a mano). Se repara sin ruido.
-    await ensureAppMetadata(admin, user, tenantId);
-    return { ok: true, created: false };
+    // usuario creado a mano). Si la reparación falla no se deja entrar: sin el
+    // claim cada policy lo deja afuera y la app se ve vacía sin error.
+    const repaired = await ensureAppMetadata(admin, user, tenantId);
+    if (repaired === "error") return { ok: false, reason: "error" };
+    return { ok: true, created: false, claimsChanged: repaired === "updated" };
   }
 
   // ── Alta nueva ────────────────────────────────────────────────────────────
-  if (!(await ensureAppMetadata(admin, user, tenantId))) {
-    return { ok: false, reason: "error" };
-  }
+  const metadata = await ensureAppMetadata(admin, user, tenantId);
+  if (metadata === "error") return { ok: false, reason: "error" };
 
   /**
    * CONSENTIMIENTO. La pantalla de entrada declara, junto a los botones, que al
@@ -152,7 +156,7 @@ export async function ensureProfileForOAuthUser(
    */
   void suggestUsername;
 
-  return { ok: true, created: true };
+  return { ok: true, created: true, claimsChanged: metadata === "updated" };
 }
 
 /** Setea `app_metadata: { tenant_id, role }` si falta. Nunca pisa un rol existente. */
@@ -160,9 +164,9 @@ async function ensureAppMetadata(
   admin: ReturnType<typeof createAdminClient>,
   user: User,
   tenantId: string,
-): Promise<boolean> {
+): Promise<"unchanged" | "updated" | "error"> {
   const meta = user.app_metadata ?? {};
-  if (meta.tenant_id === tenantId && typeof meta.role === "string") return true;
+  if (meta.tenant_id === tenantId && typeof meta.role === "string") return "unchanged";
 
   const { error } = await admin.auth.admin.updateUserById(user.id, {
     app_metadata: {
@@ -176,7 +180,7 @@ async function ensureAppMetadata(
 
   if (error) {
     console.error("[auth] oauth: no se pudo setear app_metadata", { code: error.code });
-    return false;
+    return "error";
   }
-  return true;
+  return "updated";
 }

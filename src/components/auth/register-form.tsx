@@ -7,6 +7,8 @@ import { registerAction, type RegisterInput } from "@/app/(auth)/actions";
 import { FormError } from "@/components/auth/form-error";
 import { suggestUsername } from "@/lib/profile/username";
 import { UsernameInput } from "@/components/auth/username-input";
+import { NewPasswordFields, validateNewPassword } from "@/components/auth/new-password-fields";
+import { authLinkClass, authSubmitClass } from "@/components/auth/auth-card";
 import { Button, Field, Input } from "@/components/ui";
 
 const COPY = {
@@ -19,8 +21,6 @@ const COPY = {
   usernameHelp: "Así te encuentran y te mencionan. Se puede cambiar después.",
   email: "Tu email",
   emailPlaceholder: "nombre@ejemplo.com",
-  password: "Creá una contraseña",
-  passwordHelp: "Al menos 8 caracteres.",
   ageLabel: "Confirmo que tengo 18 años o más.",
   ageRequired: "Confirmá que tenés 18 años o más para sumarte.",
   // El texto de aceptación se arma con enlaces (ver más abajo).
@@ -32,9 +32,9 @@ const COPY = {
   termsNorms: "Normas de la Comunidad",
   termsRequired: "Aceptá los Términos, la Privacidad y las Normas para sumarte.",
   consentHint: "Confirmá tu edad y aceptá las condiciones para poder sumarte.",
-  submit: "Sumate a tu comunidad",
+  submit: "Crear mi cuenta",
   hasAccount: "¿Ya tenés cuenta?",
-  goLogin: "Entrá acá",
+  goLogin: "Entrá",
 } as const;
 
 const legalLinkClass =
@@ -88,6 +88,8 @@ export function RegisterForm({
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
   const [usernameTouched, setUsernameTouched] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
 
   const consentComplete = ageConfirmed && termsAccepted;
 
@@ -98,15 +100,20 @@ export function RegisterForm({
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending) return;
     setFormError(null);
 
-    // Puerta de consentimiento (defensa en profundidad; el botón ya va
-    // deshabilitado hasta tildar ambos). El server igual lo revalida.
-    if (!consentComplete) {
-      setFieldErrors({
-        ...(ageConfirmed ? {} : { ageConfirmed: COPY.ageRequired }),
-        ...(termsAccepted ? {} : { termsAccepted: COPY.termsRequired }),
-      });
+    // El consentimiento es defensa en profundidad (el botón ya va deshabilitado
+    // hasta tildar ambos) y la contraseña se valida acá para no gastar un
+    // round-trip en algo que el checklist ya mostraba. El server revalida todo.
+    const clientErrors: Record<string, string> = {
+      ...validateNewPassword(password, passwordConfirm),
+      ...(ageConfirmed ? {} : { ageConfirmed: COPY.ageRequired }),
+      ...(termsAccepted ? {} : { termsAccepted: COPY.termsRequired }),
+    };
+    if (Object.keys(clientErrors).length > 0) {
+      setFieldErrors(clientErrors);
+      focusFirstInvalid(clientErrors);
       return;
     }
 
@@ -116,7 +123,8 @@ export function RegisterForm({
       lastName,
       username,
       email: String(form.get("email") ?? ""),
-      password: String(form.get("password") ?? ""),
+      password,
+      passwordConfirm,
       ageConfirmed,
       termsAccepted,
       ...(needs && needs.length > 0 ? { needs: [...needs] } : {}),
@@ -235,23 +243,21 @@ export function RegisterForm({
         />
       </Field>
 
-      <Field
-        htmlFor="register-password"
-        label={COPY.password}
-        help={COPY.passwordHelp}
-        error={fieldErrors.password}
-      >
-        <Input
-          id="register-password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          aria-invalid={fieldErrors.password ? true : undefined}
-          aria-describedby={
-            fieldErrors.password ? "register-password-error" : undefined
-          }
-        />
-      </Field>
+      <NewPasswordFields
+        idPrefix="register"
+        password={password}
+        confirm={passwordConfirm}
+        onPasswordChange={(value) => {
+          setPassword(value);
+          if (fieldErrors.password) setFieldErrors((prev) => omit(prev, "password"));
+        }}
+        onConfirmChange={(value) => {
+          setPasswordConfirm(value);
+          if (fieldErrors.passwordConfirm) setFieldErrors((prev) => omit(prev, "passwordConfirm"));
+        }}
+        passwordError={fieldErrors.password}
+        confirmError={fieldErrors.passwordConfirm}
+      />
 
       <div className="mt-1 flex flex-col gap-3">
         <ConsentCheckbox
@@ -312,7 +318,7 @@ export function RegisterForm({
         loading={pending}
         disabled={!consentComplete}
         aria-describedby={!consentComplete ? "register-consent-hint" : undefined}
-        className="mt-2 w-full"
+        className={authSubmitClass}
       >
         {COPY.submit}
       </Button>
@@ -328,10 +334,7 @@ export function RegisterForm({
       {!hideLoginLink && (
         <p className="text-center text-sm text-foreground-secondary">
           {COPY.hasAccount}{" "}
-          <Link
-            href={loginHref}
-            className="font-semibold text-brand-ink underline-offset-4 hover:underline"
-          >
+          <Link href={loginHref} className={authLinkClass}>
             {COPY.goLogin}
           </Link>
         </p>
@@ -347,6 +350,7 @@ const FIELD_CONTROL_ID: Record<string, string> = {
   username: "register-username",
   email: "register-email",
   password: "register-password",
+  passwordConfirm: "register-password-confirm",
 };
 
 /**
@@ -362,7 +366,10 @@ function focusFirstInvalid(errors: Record<string, string>): void {
     if (!errors[field]) continue;
     const control = document.getElementById(FIELD_CONTROL_ID[field]);
     control?.focus();
-    control?.scrollIntoView({ block: "center", behavior: "smooth" });
+    control?.scrollIntoView({
+      block: "center",
+      behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
     return;
   }
 }

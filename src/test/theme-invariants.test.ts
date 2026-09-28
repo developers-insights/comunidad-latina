@@ -329,6 +329,17 @@ function reporte(hallazgos: Hallazgo[], conSugerencia = false): string[] {
  */
 const HEX_PERMITIDO = new Map<string, string>([
   [
+    "src/components/auth/brand-logo.tsx",
+    "El logo del cliente: sus tres colores SON la marca registrada del programa, " +
+      "iguales en todo tenant y en los dos temas. Un token los haría cambiar con la " +
+      "comunidad o con el modo oscuro, que es justo lo que un logo no puede hacer.",
+  ],
+  [
+    "src/components/auth/google-logo.tsx",
+    "La G de Google: sus guías de marca exigen los cuatro colores exactos, sin " +
+      "variante por tema. Tokenizarla sería incumplir la guía del proveedor.",
+  ],
+  [
     "src/app/(app)/feed/[id]/opengraph-image.tsx",
     "No es una pantalla: es una IMAGEN que arma Satori en el servidor para el " +
       "preview de WhatsApp y las redes. Ahí no hay documento, ni :root, ni " +

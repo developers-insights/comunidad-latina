@@ -3,12 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { EnvelopeSimple, Eye, EyeSlash, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr";
+import { EnvelopeSimple, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr";
 import { createClient } from "@/lib/supabase/client";
 import { resendConfirmationAction } from "@/app/(auth)/actions";
 import { safeInternalPath } from "@/lib/url/safe-href";
 import { FormError } from "@/components/auth/form-error";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
+import { PasswordInput } from "@/components/auth/password-input";
+import { authLinkClass, authSubmitClass, authSubtitleClass, authTitleClass } from "@/components/auth/auth-card";
 import type { OAuthProvider } from "@/lib/auth/oauth-providers";
 import {
   Button,
@@ -28,8 +30,6 @@ const COPY = {
   email: "Tu email",
   emailPlaceholder: "nombre@ejemplo.com",
   password: "Tu contraseña",
-  showPassword: "Mostrar contraseña",
-  hidePassword: "Ocultar contraseña",
   submitPassword: "Entrar",
   forgotPassword: "¿Te olvidaste la contraseña?",
   submitMagic: "Mandame el enlace",
@@ -60,7 +60,10 @@ const COPY = {
     "No pudimos terminar de crear tu cuenta. No se guardó nada — probá de nuevo en un momento, o sumate con tu email.",
   providerFailed:
     "Ese servicio no pudo confirmarnos quién sos. Probá de nuevo, o entrá con tu email y contraseña.",
+  noAccount: "¿No tenés cuenta?",
+  createAccount: "Creala en un minuto",
 } as const;
+
 
 /** Los errores que llegan por `?error=` en la URL, con su copy. */
 const URL_ERRORS: Record<string, string> = {
@@ -88,6 +91,8 @@ export interface LoginFormProps {
   onSuccess?: () => void;
   /** Oculta el título y el subtítulo (la hoja pone los suyos en la cabecera). */
   hideHeader?: boolean;
+  /** Link "¿No tenés cuenta?". Ausente en la hoja, que cambia de paso sin navegar. */
+  registerHref?: string;
 }
 
 export function LoginForm({
@@ -96,6 +101,7 @@ export function LoginForm({
   oauthProviders = [],
   onSuccess,
   hideHeader = false,
+  registerHref,
 }: LoginFormProps) {
   const router = useRouter();
   // `safeInternalPath` y no la vieja `safeNextPath`: aquella clasificaba por
@@ -108,7 +114,6 @@ export function LoginForm({
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [pending, setPending] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
   const [error, setError] = useState<string | null>(
@@ -128,6 +133,7 @@ export function LoginForm({
 
   async function onPasswordSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (pending) return;
     setError(null);
     const emailOk = validateEmail();
     if (!password) setPasswordError(COPY.passwordRequired);
@@ -170,6 +176,7 @@ export function LoginForm({
 
   async function onMagicSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (pending) return;
     setError(null);
     if (!validateEmail()) return;
 
@@ -193,11 +200,9 @@ export function LoginForm({
   return (
     <div className="flex flex-col gap-6">
       {!hideHeader && (
-        <header className="flex flex-col gap-1">
-          <h1 className="font-display text-2xl font-bold text-foreground">
-            {COPY.title}
-          </h1>
-          <p className="text-sm text-foreground-secondary">{COPY.subtitle}</p>
+        <header className="flex flex-col gap-2">
+          <h1 className={authTitleClass}>{COPY.title}</h1>
+          <p className={authSubtitleClass}>{COPY.subtitle}</p>
         </header>
       )}
 
@@ -238,35 +243,15 @@ export function LoginForm({
               label={COPY.password}
               error={passwordError ?? undefined}
             >
-              <div className="relative">
-                <Input
-                  id="login-password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pr-11"
-                  aria-invalid={passwordError ? true : undefined}
-                  aria-describedby={passwordError ? "login-password-error" : undefined}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? COPY.hidePassword : COPY.showPassword}
-                  aria-pressed={showPassword}
-                  // 32px visuales, 44px tocables: el ::after agranda el área sin
-                  // agrandar el ícono, que si crece se come el campo. Es un
-                  // control de alto tráfico y errarle mete el dedo en el input.
-                  className="absolute right-1.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-foreground-muted transition-colors after:absolute after:left-1/2 after:top-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-                >
-                  {showPassword ? (
-                    <EyeSlash size={18} aria-hidden="true" />
-                  ) : (
-                    <Eye size={18} aria-hidden="true" />
-                  )}
-                </button>
-              </div>
+              <PasswordInput
+                id="login-password"
+                name="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                aria-invalid={passwordError ? true : undefined}
+                aria-describedby={passwordError ? "login-password-error" : undefined}
+              />
             </Field>
             <div className="-mt-1 flex justify-end">
               <Link
@@ -276,7 +261,7 @@ export function LoginForm({
                 {COPY.forgotPassword}
               </Link>
             </div>
-            <Button type="submit" size="lg" loading={pending} className="mt-2 w-full">
+            <Button type="submit" size="lg" loading={pending} className={authSubmitClass}>
               {COPY.submitPassword}
             </Button>
           </form>
@@ -312,7 +297,7 @@ export function LoginForm({
                   aria-describedby={emailError ? "magic-email-error" : undefined}
                 />
               </Field>
-              <Button type="submit" size="lg" loading={pending} className="mt-2 w-full">
+              <Button type="submit" size="lg" loading={pending} className={authSubmitClass}>
                 <EnvelopeSimple size={18} aria-hidden="true" />
                 {COPY.submitMagic}
               </Button>
@@ -325,6 +310,15 @@ export function LoginForm({
           con contraseña —el caso mayoritario en una app que arrancó sin OAuth—
           no tiene que saltear nada para llegar a lo suyo. */}
       <OAuthButtons providers={oauthProviders} next={destination} />
+
+      {registerHref && (
+        <p className="text-center text-sm text-foreground-secondary">
+          {COPY.noAccount}{" "}
+          <Link href={registerHref} className={authLinkClass}>
+            {COPY.createAccount}
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

@@ -27,39 +27,24 @@ import { KNOWN_TENANT_DOMAINS } from "@/lib/tenant/resolve";
  *  - los hosts que calcula la plataforma (`VERCEL_PROJECT_PRODUCTION_URL`,
  *    `VERCEL_URL`, `VERCEL_BRANCH_URL`) — así los previews siguen andando,
  *  - el host de `NEXT_PUBLIC_SITE_URL`,
- *  - localhost / 127.0.0.1 en cualquier puerto, para dev.
+ *  - localhost / 127.0.0.1 en cualquier puerto, SÓLO fuera de Vercel (dev).
  *
  * Lo legítimo no cambia: el enlace sigue volviendo al MISMO host donde la
  * persona se registró, siempre que ese host sea nuestro.
  *
  * =============================================================================
- * POR QUÉ HAY UNA VERSIÓN SÍNCRONA Y OTRA ASÍNCRONA (auditoría 2026-08-13)
+ * POR QUÉ CONSULTA LA BASE (auditoría 2026-08-13)
  * =============================================================================
  * `KNOWN_TENANT_DOMAINS` sale de `DOMAIN_TENANTS`, el mapa HARDCODEADO. Desde
  * la migración 0060 los dominios se dan de alta en `public.tenant_domains`
- * desde el panel admin, sin commit ni deploy — y el propio comentario de
- * `DOMAIN_TENANTS` dice "NO hay que agregar acá los dominios nuevos". Resultado
- * medido: una comunidad con dominio recién dado de alta se servía perfecto (el
- * proxy sí lee la base) pero sus correos de confirmación y de reset salían
- * apuntando al host canónico de Vercel en vez de a SU dominio. Nadie lo nota
- * hasta que alguien no encuentra el enlace.
+ * desde el panel admin, sin commit ni deploy. Con sólo el mapa, una comunidad
+ * con dominio recién dado de alta recibía sus correos de confirmación y de
+ * reset apuntando al host canónico de Vercel. Por eso se le pregunta a la misma
+ * fuente que el proxy, reusando `lookupTenantDomain` (caché de 300s, timeout de
+ * 1,5s y stale-on-error de 24h ya resueltos ahí).
  *
- * El arreglo es preguntarle a la misma fuente que el proxy, reusando
- * `lookupTenantDomain` (caché de 300s, timeout de 1,5s y stale-on-error de 24h
- * ya resueltos ahí — no se escribe una segunda consulta). Pero esa consulta es
- * ASÍNCRONA y `resolveOrigin` lo llaman cuatro server actions que hoy la usan
- * sin `await`. Entonces conviven dos:
- *
- *   · `resolveOrigin` / `isAllowedOriginHost` — síncronas, la allowlist de
- *     siempre (mapa hardcodeado + hosts de la plataforma + loopback). Es el
- *     camino que se usa HOY.
- *   · `resolveOriginAsync` / `isAllowedOriginHostAsync` — las mismas más la
- *     consulta a `tenant_domains`. Es el camino correcto.
- *
- * ⏳ PENDIENTE, y es de una palabra: cambiar los cuatro call sites a
- * `await resolveOriginAsync(...)` — `src/app/(auth)/actions.ts` (319, 360, 489)
- * y `src/app/(auth)/oauth-actions.ts` (78), las cuatro dentro de funciones ya
- * async. Cuando eso pase, las versiones síncronas se borran.
+ * Hasta 2026-09 convivía una versión síncrona sin la consulta; se borró cuando
+ * los cuatro call sites pasaron a `await resolveOriginAsync(...)`.
  *
  * EL FALLO SIGUE SIENDO FAIL-CLOSED. La base sólo puede AGREGAR hosts, nunca
  * sacar el corte: si no contesta, o contesta que el host no existe, la
@@ -98,18 +83,19 @@ function isLoopback(hostname: string): boolean {
 }
 
 /**
- * ¿Este `host[:port]` es uno de los nuestros SEGÚN LO QUE SABE EL CÓDIGO?
  * Loopback + mapa hardcodeado de tenants + hosts que declara la plataforma.
- *
- * No consulta la base: es el respaldo del que `isAllowedOriginHostAsync` parte,
- * y el que se usa cuando la base no puede consultarse.
+ * No consulta la base: es el respaldo cuando la base no puede consultarse.
  */
-export function isAllowedOriginHost(host: string): boolean {
+function isKnownOriginHost(host: string): boolean {
   const normalized = host.trim().toLowerCase();
   if (!normalized) return false;
 
   const hostname = normalized.split(":")[0];
-  if (isLoopback(hostname)) return true;
+  // En Vercel nadie legítimo llega por loopback: honrarlo sólo serviría para
+  // que un header forjado deje un enlace a localhost dentro de un correo.
+  if (isLoopback(hostname)) {
+    return process.env.VERCEL_ENV !== "production" && process.env.VERCEL_ENV !== "preview";
+  }
   if (KNOWN_TENANT_DOMAINS.has(hostname)) return true;
 
   return configuredHosts().some((known) => known.toLowerCase() === normalized);
@@ -126,7 +112,7 @@ export function isAllowedOriginHost(host: string): boolean {
  * hosts propios, nunca aflojar el corte.
  */
 export async function isAllowedOriginHostAsync(host: string): Promise<boolean> {
-  if (isAllowedOriginHost(host)) return true;
+  if (isKnownOriginHost(host)) return true;
 
   const hostname = normalizeHost(host);
   if (!hostname) return false;
@@ -163,22 +149,30 @@ function originFor(headers: Headers, host: string): string {
   return `${scheme}://${host}`;
 }
 
-/** Versión síncrona: sólo la allowlist del código. Ver el bloque de arriba. */
-export function resolveOrigin(headers: Headers): string {
-  const host = requestHost(headers);
-  // Host ausente o ajeno → la URL canónica del deploy.
-  return host && isAllowedOriginHost(host) ? originFor(headers, host) : canonicalOrigin();
-}
-
 /**
- * Versión que además reconoce los dominios cargados en `tenant_domains`.
- *
- * Es la que corresponde usar: sin ella, una comunidad con dominio propio dado
- * de alta desde el panel recibe sus correos de confirmación apuntando al host
- * de Vercel. Misma degradación que la síncrona ante cualquier duda.
+ * El origin público validado del request. Ante cualquier duda (host ajeno,
+ * base caída con host desconocido) devuelve la URL canónica del deploy.
  */
 export async function resolveOriginAsync(headers: Headers): Promise<string> {
   const host = requestHost(headers);
   if (!host) return canonicalOrigin();
   return (await isAllowedOriginHostAsync(host)) ? originFor(headers, host) : canonicalOrigin();
+}
+
+/**
+ * Lo mismo para un Route Handler: primero los headers (como el proxy), y si no
+ * trae ninguno, el host de `request.url` — siempre pasando por la allowlist.
+ * Detrás de un proxy propio `request.url` puede ser el host interno; por eso
+ * no se usa su origin a secas para armar un redirect.
+ */
+export async function resolveRequestOrigin(request: Request): Promise<string> {
+  const headers = new Headers(request.headers);
+  if (!requestHost(headers)) {
+    const url = new URL(request.url);
+    headers.set("host", url.host);
+    if (!headers.get("x-forwarded-proto")) {
+      headers.set("x-forwarded-proto", url.protocol.replace(/:$/, ""));
+    }
+  }
+  return resolveOriginAsync(headers);
 }

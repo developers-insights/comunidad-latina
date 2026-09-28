@@ -17,7 +17,8 @@ import {
   normalizeUsername,
   usernameProblem,
 } from "@/lib/profile/username";
-import { resolveOrigin } from "./recuperar/origin";
+import { resolveOriginAsync } from "./recuperar/origin";
+import { PASSWORD_COPY, passwordProblem } from "@/lib/auth/password-policy";
 
 /** Versión del set legal (Términos/Privacidad/Normas) vigente al registrarse. */
 const TERMS_VERSION = "v1-2026-07";
@@ -36,8 +37,6 @@ const COPY = {
   usernameFormat: "Solo letras sin acento, números, punto y guion bajo.",
   usernameEdges: "No puede empezar ni terminar con punto o guion bajo.",
   usernameTaken: "Ese nombre de usuario ya está en uso en esta comunidad. Probá con otro.",
-  passwordShort: "La contraseña necesita al menos 8 caracteres.",
-  passwordLong: "La contraseña es demasiado larga.",
   emailTaken: "Ya existe una cuenta con este email. Probá entrar directamente.",
   genericError:
     "Algo no salió bien de nuestro lado — no es tu culpa. Probá de nuevo en un momento.",
@@ -49,6 +48,7 @@ const COPY = {
   ageRequired: "Para sumarte, confirmá que tenés 18 años o más.",
   termsRequired:
     "Para sumarte, aceptá los Términos, la Política de Privacidad y las Normas de la Comunidad.",
+  samePassword: "Elegí una contraseña distinta a la anterior.",
   resetLinkExpired: "El enlace venció o ya se usó. Pedí uno nuevo desde acá.",
 } as const;
 
@@ -83,6 +83,34 @@ const usernameSchema = z.string().superRefine((value, ctx) => {
   }[problem];
   ctx.addIssue({ code: "custom", message });
 });
+
+const passwordSchema = z.string().superRefine((value, ctx) => {
+  const problem = passwordProblem(value);
+  if (problem) ctx.addIssue({ code: "custom", message: problem });
+});
+
+const passwordConfirmSchema = z
+  .string({ error: PASSWORD_COPY.confirmRequired })
+  .min(1, PASSWORD_COPY.confirmRequired);
+
+// `when` hace que el desajuste se informe aunque otros campos también fallen:
+// sin él, zod saltea el refine del objeto y la persona lo descubre recién en
+// el segundo envío.
+const passwordsMatch = (data: { password: string; passwordConfirm: string }) =>
+  data.password === data.passwordConfirm;
+
+const passwordsMatchParams = {
+  message: PASSWORD_COPY.mismatch,
+  path: ["passwordConfirm"],
+  when: (payload: { value: unknown }) => {
+    const value = payload.value as { password?: unknown; passwordConfirm?: unknown } | null;
+    return (
+      typeof value?.password === "string" &&
+      typeof value.passwordConfirm === "string" &&
+      value.passwordConfirm.length > 0
+    );
+  },
+};
 
 /**
  * ── QUÉ SE PIDE EN EL ALTA Y QUÉ NO (decisión, 2026-08-08) ───────────────────
@@ -136,7 +164,8 @@ const registerSchema = z.object({
     .trim()
     .toLowerCase()
     .pipe(z.email(COPY.emailInvalid)),
-  password: z.string().min(8, COPY.passwordShort).max(72, COPY.passwordLong),
+  password: passwordSchema,
+  passwordConfirm: passwordConfirmSchema,
   // Consentimiento (plan cliente semana 3). Defensa en profundidad: el cliente
   // ya deshabilita el botón hasta tildar ambos, pero el server no confía en eso.
   // Minimización de datos: solo la atestación 18+, jamás la fecha de nacimiento.
@@ -149,7 +178,7 @@ const registerSchema = z.object({
   area: z.string().trim().min(2, COPY.areaShort).max(80).optional(),
   /** Ruta interna a la que aterriza al confirmar (se sanitiza server-side). */
   next: z.string().optional(),
-});
+}).refine(passwordsMatch, passwordsMatchParams);
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 
@@ -316,7 +345,7 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
     displayName,
     tenantName: tenant.name,
     brandHex: tenant.brandHex,
-    origin: resolveOrigin(headerStore),
+    origin: await resolveOriginAsync(headerStore),
     next,
   });
 
@@ -357,7 +386,7 @@ export async function resendConfirmationAction(
     password: parsed.data.password,
     tenantName: tenant.name,
     brandHex: tenant.brandHex,
-    origin: resolveOrigin(headerStore),
+    origin: await resolveOriginAsync(headerStore),
     next: safeInternalPath(parsed.data.next, "/bienvenida"),
   });
 
@@ -486,7 +515,7 @@ export async function requestPasswordResetAction(
     return { ok: false, formError: COPY.tooManyAttempts };
   }
 
-  const origin = resolveOrigin(headerStore);
+  const origin = await resolveOriginAsync(headerStore);
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     // El callback canjea el code por sesión y manda a fijar la contraseña nueva.
@@ -504,9 +533,12 @@ export async function requestPasswordResetAction(
   return { ok: true };
 }
 
-const updatePasswordSchema = z.object({
-  password: z.string().min(8, COPY.passwordShort).max(72, COPY.passwordLong),
-});
+const updatePasswordSchema = z
+  .object({
+    password: passwordSchema,
+    passwordConfirm: passwordConfirmSchema,
+  })
+  .refine(passwordsMatch, passwordsMatchParams);
 
 export type UpdatePasswordInput = z.infer<typeof updatePasswordSchema>;
 
@@ -531,6 +563,12 @@ export async function updatePasswordAction(
 
   const { error } = await supabase.auth.updateUser({ password });
   if (error) {
+    if (error.code === "same_password") {
+      return { ok: false, fieldErrors: { password: COPY.samePassword } };
+    }
+    if (error.code === "weak_password") {
+      return { ok: false, fieldErrors: { password: PASSWORD_COPY.short } };
+    }
     console.error("[auth] recuperar: updateUser falló", { code: error.code });
     return { ok: false, formError: COPY.genericError };
   }

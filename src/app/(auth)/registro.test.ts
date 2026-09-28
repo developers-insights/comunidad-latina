@@ -65,13 +65,15 @@ vi.mock("@/lib/auth/confirmation", () => ({
 }));
 
 import { registerAction } from "./actions";
+import { PASSWORD_COPY } from "@/lib/auth/password-policy";
 
 const VALID = {
   displayName: "Rosa",
   lastName: "Martínez",
   username: "rosa.martinez",
   email: "Rosa@Ejemplo.com ",
-  password: "una-contrasena",
+  password: "Una-contrasena1",
+  passwordConfirm: "Una-contrasena1",
   ageConfirmed: true,
   termsAccepted: true,
 } as const;
@@ -286,5 +288,87 @@ describe("registerAction — apellido y nombre de usuario", () => {
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.fieldErrors?.username).toBeUndefined();
     expect(result.ok === false && result.formError).toBeTruthy();
+  });
+});
+
+describe("registerAction — contraseña y confirmación", () => {
+  it("rechaza una contraseña sin mayúscula sin tocar la base", async () => {
+    const result = await registerAction({
+      ...VALID,
+      password: "una-contrasena1",
+      passwordConfirm: "una-contrasena1",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      fieldErrors: { password: PASSWORD_COPY.uppercase },
+    });
+    expect(mocks.createUser).not.toHaveBeenCalled();
+  });
+
+  it("rechaza una contraseña sin número", async () => {
+    const result = await registerAction({
+      ...VALID,
+      password: "Una-contrasena",
+      passwordConfirm: "Una-contrasena",
+    });
+
+    expect(result.ok === false && result.fieldErrors?.password).toBe(PASSWORD_COPY.number);
+  });
+
+  it("rechaza una contraseña corta", async () => {
+    const result = await registerAction({ ...VALID, password: "Ab1", passwordConfirm: "Ab1" });
+
+    expect(result.ok === false && result.fieldErrors?.password).toBe(PASSWORD_COPY.short);
+  });
+
+  it("confirmación distinta → error en passwordConfirm, no en password", async () => {
+    const result = await registerAction({ ...VALID, passwordConfirm: "Una-contrasena2" });
+
+    expect(result).toEqual({
+      ok: false,
+      fieldErrors: { passwordConfirm: PASSWORD_COPY.mismatch },
+    });
+    expect(mocks.createUser).not.toHaveBeenCalled();
+  });
+
+  it("confirmación vacía → pide repetirla", async () => {
+    const result = await registerAction({ ...VALID, passwordConfirm: "" });
+
+    expect(result.ok === false && result.fieldErrors?.passwordConfirm).toBe(
+      PASSWORD_COPY.confirmRequired,
+    );
+    expect(mocks.createUser).not.toHaveBeenCalled();
+  });
+
+  it("confirmación ausente (cliente viejo) → pide repetirla, no revienta", async () => {
+    const { passwordConfirm: _omit, ...sinConfirmacion } = VALID;
+    void _omit;
+    const result = await registerAction(sinConfirmacion as unknown as typeof VALID);
+
+    expect(result.ok === false && result.fieldErrors?.passwordConfirm).toBe(
+      PASSWORD_COPY.confirmRequired,
+    );
+  });
+
+  it("el desajuste se informa aunque otro campo también esté mal", async () => {
+    const result = await registerAction({
+      ...VALID,
+      displayName: "R",
+      passwordConfirm: "otra-cosa",
+    });
+
+    expect(result.ok === false && result.fieldErrors?.displayName).toBeTruthy();
+    expect(result.ok === false && result.fieldErrors?.passwordConfirm).toBe(
+      PASSWORD_COPY.mismatch,
+    );
+  });
+
+  it("la confirmación nunca viaja a Supabase", async () => {
+    await registerAction({ ...VALID });
+
+    const [args] = mocks.createUser.mock.calls[0];
+    expect(args).not.toHaveProperty("passwordConfirm");
+    expect(args.password).toBe(VALID.password);
   });
 });

@@ -9,10 +9,8 @@ export const metadata = { title: "Bienvenida" };
  * cero campos de texto libre en los pasos 1-2, escape route siempre visible.
  * Si ya hay sesión, el paso 3 (registro) se saltea solo.
  *
- * Sin sesión el paso 3 ES el alta de cuenta — y el alta está en pausa. Por eso
- * acá SÍ se exige sesión (a diferencia de /propiedades o /guias): sin ella no
- * hay ningún paso 3 honesto al que llegar, así que se manda a /entrar antes de
- * dibujar el paso 1.
+ * Se exige sesión: el alta vive en /registro (que al confirmar el correo o al
+ * volver de Google aterriza acá), así que el paso 3 del wizard nunca crea cuentas.
  */
 export default async function BienvenidaPage() {
   const supabase = await createClient();

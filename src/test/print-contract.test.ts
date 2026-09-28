@@ -327,6 +327,11 @@ const INVENTARIO: Record<string, Entrada> = {
     inks: ["text-on-success"],
     cobertura: "cl-print-fill",
   },
+  // El check de cada regla cumplida en el checklist de contraseña nueva.
+  "src/components/auth/new-password-fields.tsx": {
+    inks: ["text-on-success"],
+    cobertura: "cl-print-fill",
+  },
   // El segundo portador que no es control: el sello AZUL del check pago (0101),
   // hermano del escudo verde de arriba y con el mismo problema — es una tinta
   // clara que sólo se lee encima de su relleno. Mismo hook `cl-print-fill`, misma

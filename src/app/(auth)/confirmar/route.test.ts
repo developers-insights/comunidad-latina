@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Tests de la ruta que canjea el enlace de confirmación.
@@ -22,7 +22,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { verifyOtp: mocks.verifyOtp } }),
 }));
 vi.mock("@/lib/email", () => ({ sendEmailInBackground: mocks.sendEmailInBackground }));
-vi.mock("@/lib/tenant/resolve", () => ({ getTenant: mocks.getTenant }));
+vi.mock("@/lib/tenant/resolve", () => ({
+  getTenant: mocks.getTenant,
+  KNOWN_TENANT_DOMAINS: new Set(["dominicanos.com"]),
+}));
 
 import { GET } from "./route";
 
@@ -47,11 +50,16 @@ function confirmedUser() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "comunidad-latina-sigma.vercel.app");
   mocks.getTenant.mockResolvedValue({
     name: "Dominicanos en Chile",
     brandHex: "#123456",
   });
   mocks.verifyOtp.mockResolvedValue(confirmedUser());
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("GET /confirmar", () => {
@@ -102,5 +110,16 @@ describe("GET /confirmar", () => {
 
     expect(res.headers.get("location")).toBe(`${ORIGIN}/entrar?error=confirmacion`);
     expect(mocks.sendEmailInBackground).not.toHaveBeenCalled();
+  });
+
+  it("en Vercel, un request.url interno (localhost) nunca termina en el Location", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    const res = await GET(
+      new Request("http://localhost:3000/confirmar?token_hash=hash-123", {
+        headers: { "x-forwarded-host": "dominicanos.com", "x-forwarded-proto": "https" },
+      }),
+    );
+
+    expect(res.headers.get("location")).toBe("https://dominicanos.com/bienvenida");
   });
 });
