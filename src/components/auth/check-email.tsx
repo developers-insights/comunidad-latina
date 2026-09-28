@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { EnvelopeSimple } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState } from "@/components/ui";
+import { authLinkClass } from "@/components/auth/auth-card";
 
 const COPY = {
   title: "Revisá tu correo",
@@ -38,7 +39,7 @@ export function CheckEmail({ email }: { email?: string }) {
         {COPY.resendPrompt}{" "}
         <Link
           href="/entrar"
-          className="rounded-sm font-semibold text-brand-ink underline-offset-4 hover:underline"
+          className={authLinkClass}
         >
           {COPY.resendLink}
         </Link>
