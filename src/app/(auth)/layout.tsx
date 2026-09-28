@@ -29,7 +29,7 @@ export default async function AuthLayout({ children }: { children: ReactNode }) 
       <ThemeToggle className="absolute right-2 top-[max(0.5rem,env(safe-area-inset-top))] z-10" />
 
       <div className="mx-auto grid w-full max-w-6xl flex-1 lg:grid-cols-2 lg:gap-16 lg:px-10">
-        <aside className="hidden flex-col justify-center py-16 lg:flex">
+        <aside className="hidden flex-col justify-center py-16 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:self-start">
           <Link href={brandHomeHref} aria-label={BRAND_NAME} className={`self-start ${brandLinkClass}`}>
             <BrandLogo animated className="h-28" />
           </Link>

@@ -4,7 +4,25 @@
     {
       "name": "comunidad-latina",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "comunidad-latina-google",
+      "runtimeExecutable": "envkit",
+      "runtimeArgs": [
+        "run",
+        "--only",
+        "AUTH_GOOGLE_CLIENT_ID",
+        "--",
+        "npm",
+        "run",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": true
     }
