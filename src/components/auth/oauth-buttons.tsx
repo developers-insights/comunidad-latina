@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { AppleLogo, GoogleLogo } from "@phosphor-icons/react/dist/ssr";
-import type { Icon } from "@phosphor-icons/react";
+import { AppleLogo } from "@phosphor-icons/react/dist/ssr";
 import { startOAuthAction } from "@/app/(auth)/oauth-actions";
 import { OAUTH_LABEL, type OAuthProvider } from "@/lib/auth/oauth-providers";
 import { FormError } from "@/components/auth/form-error";
-import { Button } from "@/components/ui";
+import { AuthDivider } from "@/components/auth/auth-card";
+import { GoogleLogo } from "@/components/auth/google-logo";
+import { Button, Spinner } from "@/components/ui";
+import styles from "./oauth-buttons.module.css";
 
 /**
  * Entrar con Google o con Apple.
@@ -38,11 +40,6 @@ const COPY = {
   legalNormsJoin: "y las",
   legalNorms: "Normas de la Comunidad",
 } as const;
-
-const PROVIDER_ICON: Record<OAuthProvider, Icon> = {
-  google: GoogleLogo,
-  apple: AppleLogo,
-};
 
 const legalLinkClass =
   "rounded-sm font-medium text-brand-ink underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring";
@@ -83,43 +80,53 @@ export function OAuthButtons({ providers, next, withDivider = true }: OAuthButto
 
   return (
     <div className="flex flex-col gap-3">
-      {withDivider && (
-        <div className="flex items-center gap-3" aria-hidden="true">
-          <span className="h-px flex-1 bg-border-subtle" />
-          <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-            {COPY.divider}
-          </span>
-          <span className="h-px flex-1 bg-border-subtle" />
-        </div>
-      )}
+      {withDivider && <AuthDivider label={COPY.divider} />}
 
       <FormError>{error}</FormError>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2.5">
         {providers.map((provider) => {
-          const ProviderIcon = PROVIDER_ICON[provider];
+          const loading = pending && busy === provider;
+          // Los demás quedan bloqueados mientras uno está en vuelo: dos
+          // pedidos de OAuth en paralelo pisan el mismo code verifier de
+          // PKCE en la cookie y el segundo rompe al primero.
+          const blocked = pending && busy !== provider;
+
+          if (provider === "google") {
+            return (
+              <button
+                key={provider}
+                type="button"
+                className={styles.google}
+                disabled={loading || blocked}
+                aria-busy={loading || undefined}
+                onClick={() => go(provider)}
+              >
+                {loading ? <Spinner size={20} /> : <GoogleLogo size={20} />}
+                {OAUTH_LABEL[provider]}
+              </button>
+            );
+          }
+
           return (
             <Button
               key={provider}
               type="button"
               variant="outline"
               size="lg"
-              className="w-full"
-              loading={pending && busy === provider}
-              // Los demás quedan bloqueados mientras uno está en vuelo: dos
-              // pedidos de OAuth en paralelo pisan el mismo code verifier de
-              // PKCE en la cookie y el segundo rompe al primero.
-              disabled={pending && busy !== provider}
+              className="w-full rounded-full"
+              loading={loading}
+              disabled={blocked}
               onClick={() => go(provider)}
             >
-              <ProviderIcon size={20} weight="fill" aria-hidden="true" />
+              {!loading && <AppleLogo size={20} weight="fill" aria-hidden="true" />}
               {OAUTH_LABEL[provider]}
             </Button>
           );
         })}
       </div>
 
-      <p className="text-center text-xs leading-relaxed text-foreground-muted">
+      <p className="text-center text-xs leading-relaxed text-foreground-muted text-pretty">
         {COPY.legalPrefix}{" "}
         <Link href="/legal/terminos" target="_blank" rel="noopener noreferrer" className={legalLinkClass}>
           {COPY.legalTerms}

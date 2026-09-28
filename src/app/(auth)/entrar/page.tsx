@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getAuthUserId } from "@/lib/supabase/server";
 import { safeInternalPath } from "@/lib/url/safe-href";
 import { LoginForm } from "@/components/auth/login-form";
+import { AuthCard } from "@/components/auth/auth-card";
 import { availableOAuthProviders } from "../oauth-actions";
 
 export const metadata = { title: "Entrar" };
@@ -30,5 +31,9 @@ export default async function EntrarPage({
   // bloque de botones no se dibuja (degradación elegante, §7).
   const providers = await availableOAuthProviders();
 
-  return <LoginForm next={next} urlError={error} oauthProviders={providers} />;
+  return (
+    <AuthCard>
+      <LoginForm next={next} urlError={error} oauthProviders={providers} registerHref="/registro" />
+    </AuthCard>
+  );
 }

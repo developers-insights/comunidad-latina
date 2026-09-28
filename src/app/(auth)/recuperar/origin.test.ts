@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetTenantDomainCache, type TenantDomainRow } from "@/lib/tenant/domain-lookup";
-import {
-  isAllowedOriginHost,
-  isAllowedOriginHostAsync,
-  resolveOrigin,
-  resolveOriginAsync,
-} from "./origin";
+import { isAllowedOriginHostAsync, resolveOriginAsync, resolveRequestOrigin } from "./origin";
 
 /**
  * De dónde sale el origin absoluto de los enlaces que viajan por correo.
@@ -25,7 +20,7 @@ const ENV_KEYS = [
   "VERCEL_PROJECT_PRODUCTION_URL",
 ] as const;
 
-describe("resolveOrigin", () => {
+function isolateEnv() {
   const original: Record<string, string | undefined> = {};
 
   beforeEach(() => {
@@ -33,102 +28,168 @@ describe("resolveOrigin", () => {
       original[key] = process.env[key];
       delete process.env[key];
     }
+    __resetTenantDomainCache();
+    // Ningún test de este bloque puede depender de la red: la base "no conoce" nada.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("[]", { status: 200 })));
   });
   afterEach(() => {
     for (const key of ENV_KEYS) {
       if (original[key] === undefined) delete process.env[key];
       else process.env[key] = original[key];
     }
+    vi.unstubAllGlobals();
   });
+}
 
-  it("usa el host del request cuando es un dominio propio de un tenant", () => {
+describe("resolveOriginAsync — allowlist del código", () => {
+  isolateEnv();
+
+  it("usa el host del request cuando es un dominio propio de un tenant", async () => {
     const h = new Headers({
       "x-forwarded-host": "dominicanos.com",
       "x-forwarded-proto": "https",
       host: "internal:3000",
     });
-    expect(resolveOrigin(h)).toBe("https://dominicanos.com");
+    expect(await resolveOriginAsync(h)).toBe("https://dominicanos.com");
   });
 
-  it("usa el host del request cuando coincide con el deploy de Vercel", () => {
+  it("usa el host del request cuando coincide con el deploy de Vercel", async () => {
     process.env.VERCEL_PROJECT_PRODUCTION_URL = "comunidad-latina-sigma.vercel.app";
     const h = new Headers({ "x-forwarded-host": "comunidad-latina-sigma.vercel.app" });
-    expect(resolveOrigin(h)).toBe("https://comunidad-latina-sigma.vercel.app");
+    expect(await resolveOriginAsync(h)).toBe("https://comunidad-latina-sigma.vercel.app");
   });
 
-  it("acepta el host único de un preview (VERCEL_URL)", () => {
+  it("acepta el host único de un preview (VERCEL_URL)", async () => {
     process.env.VERCEL_ENV = "preview";
     process.env.VERCEL_URL = "cl-git-rama-equipo.vercel.app";
     const h = new Headers({ "x-forwarded-host": "cl-git-rama-equipo.vercel.app" });
-    expect(resolveOrigin(h)).toBe("https://cl-git-rama-equipo.vercel.app");
+    expect(await resolveOriginAsync(h)).toBe("https://cl-git-rama-equipo.vercel.app");
   });
 
-  it("IGNORA un x-forwarded-host ajeno y cae a la URL canónica", () => {
+  it("IGNORA un x-forwarded-host ajeno y cae a la URL canónica", async () => {
     process.env.NEXT_PUBLIC_SITE_URL = "https://comunidad-latina-sigma.vercel.app";
     const h = new Headers({
       "x-forwarded-host": "atacante.example",
       host: "comunidad-latina-sigma.vercel.app",
     });
-    expect(resolveOrigin(h)).toBe("https://comunidad-latina-sigma.vercel.app");
+    expect(await resolveOriginAsync(h)).toBe("https://comunidad-latina-sigma.vercel.app");
   });
 
-  it("IGNORA un Host ajeno aunque no venga x-forwarded-host", () => {
+  it("IGNORA un Host ajeno aunque no venga x-forwarded-host", async () => {
     process.env.NEXT_PUBLIC_SITE_URL = "https://comunidad-latina-sigma.vercel.app";
     const h = new Headers({ host: "atacante.example" });
-    expect(resolveOrigin(h)).toBe("https://comunidad-latina-sigma.vercel.app");
+    expect(await resolveOriginAsync(h)).toBe("https://comunidad-latina-sigma.vercel.app");
   });
 
-  it("acota el esquema: un x-forwarded-proto raro no se copia a la URL", () => {
+  it("acota el esquema: un x-forwarded-proto raro no se copia a la URL", async () => {
     const h = new Headers({
       "x-forwarded-host": "dominicanos.com",
       "x-forwarded-proto": "javascript",
     });
-    expect(resolveOrigin(h)).toBe("https://dominicanos.com");
+    expect(await resolveOriginAsync(h)).toBe("https://dominicanos.com");
   });
 
-  it("toma el primer proto cuando x-forwarded-proto trae varios", () => {
+  it("toma el primer proto cuando x-forwarded-proto trae varios", async () => {
     const h = new Headers({
       "x-forwarded-host": "dominicanos.com",
       "x-forwarded-proto": "https,http",
     });
-    expect(resolveOrigin(h)).toBe("https://dominicanos.com");
+    expect(await resolveOriginAsync(h)).toBe("https://dominicanos.com");
   });
 
-  it("asume http en localhost", () => {
+  it("asume http en localhost", async () => {
     const h = new Headers({ host: "localhost:3000" });
-    expect(resolveOrigin(h)).toBe("http://localhost:3000");
+    expect(await resolveOriginAsync(h)).toBe("http://localhost:3000");
   });
 
-  it("asume http en 127.0.0.1", () => {
+  it("asume http en 127.0.0.1", async () => {
     const h = new Headers({ host: "127.0.0.1:3000" });
-    expect(resolveOrigin(h)).toBe("http://127.0.0.1:3000");
+    expect(await resolveOriginAsync(h)).toBe("http://127.0.0.1:3000");
   });
 
-  it("sin host usa NEXT_PUBLIC_SITE_URL y le saca la barra final", () => {
+  it("sin host usa NEXT_PUBLIC_SITE_URL y le saca la barra final", async () => {
     process.env.NEXT_PUBLIC_SITE_URL = "https://comunidad-latina-sigma.vercel.app/";
     const h = new Headers();
-    expect(resolveOrigin(h)).toBe("https://comunidad-latina-sigma.vercel.app");
+    expect(await resolveOriginAsync(h)).toBe("https://comunidad-latina-sigma.vercel.app");
   });
 
-  it("sin host ni env cae a localhost:3000", () => {
+  it("sin host ni env cae a localhost:3000", async () => {
     const h = new Headers();
-    expect(resolveOrigin(h)).toBe("http://localhost:3000");
+    expect(await resolveOriginAsync(h)).toBe("http://localhost:3000");
+  });
+
+  it("en Vercel un host loopback NO se honra, aunque NEXT_PUBLIC_SITE_URL sea localhost", async () => {
+    process.env.VERCEL_ENV = "production";
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "www.comunidadlatina.com";
+    process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000";
+    const h = new Headers({ "x-forwarded-host": "localhost:3000" });
+    expect(await resolveOriginAsync(h)).toBe("https://www.comunidadlatina.com");
+  });
+
+  it("en un preview de Vercel tampoco se honra loopback", async () => {
+    process.env.VERCEL_ENV = "preview";
+    process.env.VERCEL_URL = "comunidad-latina-abc123-insights3.vercel.app";
+    const h = new Headers({ host: "127.0.0.1:3000" });
+    expect(await resolveOriginAsync(h)).toBe(
+      "https://comunidad-latina-abc123-insights3.vercel.app",
+    );
   });
 });
 
-describe("isAllowedOriginHost", () => {
-  it("acepta los dominios de tenant, con y sin www", () => {
-    expect(isAllowedOriginHost("dominicanos.com")).toBe(true);
-    expect(isAllowedOriginHost("www.comunidadlatina.com")).toBe(true);
+describe("resolveRequestOrigin — redirects de los Route Handlers", () => {
+  isolateEnv();
+
+  it("usa el host de los headers aunque request.url sea el host interno", async () => {
+    const req = new Request("http://localhost:3000/callback?code=x", {
+      headers: { "x-forwarded-host": "dominicanos.com", "x-forwarded-proto": "https" },
+    });
+    expect(await resolveRequestOrigin(req)).toBe("https://dominicanos.com");
   });
 
-  it("rechaza un host parecido: no hay match por sufijo ni por prefijo", () => {
-    expect(isAllowedOriginHost("dominicanos.com.atacante.example")).toBe(false);
-    expect(isAllowedOriginHost("evil-dominicanos.com")).toBe(false);
+  it("sin headers de host cae al host de request.url, validado", async () => {
+    const req = new Request("https://www.comunidadlatina.com/callback?code=x");
+    expect(await resolveRequestOrigin(req)).toBe("https://www.comunidadlatina.com");
   });
 
-  it("rechaza vacío", () => {
-    expect(isAllowedOriginHost("   ")).toBe(false);
+  it("request.url interno (localhost) en Vercel → URL canónica, nunca localhost", async () => {
+    process.env.VERCEL_ENV = "production";
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "www.comunidadlatina.com";
+    const req = new Request("http://localhost:3000/callback?code=x");
+    expect(await resolveRequestOrigin(req)).toBe("https://www.comunidadlatina.com");
+  });
+
+  it("un host ajeno en los headers no se usa para el redirect", async () => {
+    process.env.VERCEL_ENV = "production";
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "www.comunidadlatina.com";
+    const req = new Request("https://www.comunidadlatina.com/callback", {
+      headers: { "x-forwarded-host": "atacante.example" },
+    });
+    expect(await resolveRequestOrigin(req)).toBe("https://www.comunidadlatina.com");
+  });
+
+  it("en dev local el redirect vuelve a localhost con http", async () => {
+    const req = new Request("http://localhost:3000/callback", {
+      headers: { host: "localhost:3000" },
+    });
+    expect(await resolveRequestOrigin(req)).toBe("http://localhost:3000");
+  });
+});
+
+describe("isAllowedOriginHostAsync — allowlist del código", () => {
+  isolateEnv();
+
+  it("acepta los dominios de tenant, con y sin www", async () => {
+    expect(await isAllowedOriginHostAsync("dominicanos.com")).toBe(true);
+    expect(await isAllowedOriginHostAsync("www.comunidadlatina.com")).toBe(true);
+  });
+
+  it("rechaza un host parecido: no hay match por sufijo ni por prefijo", async () => {
+    expect(await isAllowedOriginHostAsync("dominicanos.com.atacante.example")).toBe(false);
+    expect(await isAllowedOriginHostAsync("evil-dominicanos.com")).toBe(false);
+  });
+
+  it("rechaza vacío", async () => {
+    expect(await isAllowedOriginHostAsync("   ")).toBe(false);
   });
 });
 
@@ -206,8 +267,6 @@ describe("resolveOriginAsync — los dominios que sólo viven en tenant_domains"
     stubDb(() => ok([row("colombianosmiami.com")]));
     const h = new Headers({ "x-forwarded-host": "colombianosmiami.com" });
 
-    // La versión síncrona todavía no lo conoce: por eso hace falta la otra.
-    expect(resolveOrigin(h)).toBe("https://comunidad-latina-sigma.vercel.app");
     expect(await resolveOriginAsync(h)).toBe("https://colombianosmiami.com");
   });
 
