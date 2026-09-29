@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
-import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { getTenant } from "@/lib/tenant/resolve";
-import { ensureProfileForOAuthUser } from "@/lib/auth/provision";
-import { syncEmailVerified } from "@/lib/auth/email-verified";
-import { neutralizePreclaimedAccount, wasPreclaimedUnconfirmed } from "@/lib/auth/preclaimed";
+import { finalizeOAuthSession } from "@/lib/auth/finalize-oauth";
 import { safeInternalPath } from "@/lib/url/safe-href";
 import { resolveRequestOrigin } from "../recuperar/origin";
 
@@ -21,23 +17,6 @@ import { resolveRequestOrigin } from "../recuperar/origin";
  * sin `tenant_id` en el JWT y sin fila en `profiles`: una app vacía y rota.
  * Ver el comentario largo de `lib/auth/provision.ts`.
  */
-
-/**
- * ¿La cuenta tiene alguna identidad de un proveedor externo?
- *
- * No alcanza con `app_metadata.provider`: es el proveedor con el que NACIÓ la
- * cuenta. Quien se registró con email y después entra con Google queda
- * vinculado al mismo usuario (vinculación automática de Supabase) y `provider`
- * sigue diciendo "email" — decidir por ese campo salteaba el chequeo de
- * comunidad justo en ese caso.
- */
-function hasExternalIdentity(user: User): boolean {
-  const meta = user.app_metadata ?? {};
-  const providers: unknown[] = Array.isArray(meta.providers) ? meta.providers : [];
-  return [meta.provider, ...providers].some(
-    (p) => typeof p === "string" && p !== "email" && p !== "phone",
-  );
-}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -68,77 +47,21 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-    if (!error) {
-      const user = data.user;
-      let provisionedNew = false;
-
-      /**
-       * Sólo las cuentas con una identidad externa necesitan provisionarse: las
-       * de email ya pasaron por `registerAction`. `app_metadata` lo escribe el
-       * Auth server, nunca el cliente.
-       */
-      if (user && hasExternalIdentity(user)) {
-        const tenant = await getTenant();
-        const provisioned = await ensureProfileForOAuthUser(user, tenant.id);
-
-        if (!provisioned.ok) {
-          // Una sesión que no se pudo dejar usable no se deja abierta: sería
-          // exactamente el usuario huérfano que este paso existe para evitar.
-          await supabase.auth.signOut();
-          const reason =
-            provisioned.reason === "otro_tenant" ? "otra_comunidad" : "alta";
-          return NextResponse.redirect(new URL(`/entrar?error=${reason}`, origin));
-        }
-        provisionedNew = provisioned.created;
-
-        if (wasPreclaimedUnconfirmed(user)) {
-          const neutralized = await neutralizePreclaimedAccount(user, data.session.access_token);
-          if (!neutralized) {
-            await supabase.auth.signOut();
-            return NextResponse.redirect(new URL("/entrar?error=alta", origin));
-          }
-          // El perfil lo armó quien registró el email: que el dueño lo revise.
-          provisionedNew = true;
-        }
-
-        /**
-         * El JWT se emitió ANTES de que existiera `app_metadata.tenant_id`, así
-         * que el token que la persona tiene en la mano todavía no lleva el
-         * claim — y sin él, cada policy que use `app.current_tenant_id()` la
-         * deja afuera. Refrescar la sesión mintea uno nuevo con el claim puesto.
-         * Sin esta línea, la primera visita después de crear la cuenta muestra
-         * una app vacía y la segunda funciona: el bug más difícil de reproducir
-         * de todo el flujo.
-         */
-        if (provisioned.claimsChanged) {
-          const { error: refreshError } = await supabase.auth.refreshSession();
-          if (refreshError) {
-            console.error("[auth] callback: refreshSession falló", {
-              code: refreshError.code,
-            });
-            await supabase.auth.signOut();
-            return NextResponse.redirect(new URL("/entrar?error=alta", origin));
-          }
-        }
-      }
-
-      // Google confirma el correo, y la vinculación con una cuenta de email sin
-      // confirmar la deja confirmada: sin este espejo `profiles.email_verified`
-      // quedaba en false y el gate de creador (0064) era imposible de cumplir.
-      if (user) await syncEmailVerified(user);
-
-      // Cuenta recién creada → al onboarding, no al feed. Es donde se
-      // completan zona y necesidades, que es lo que hace que el feed tenga
-      // algo que mostrar.
-      if (provisionedNew) {
-        return NextResponse.redirect(new URL("/bienvenida", origin));
-      }
-
-      return NextResponse.redirect(new URL(next, origin));
+    if (!error && data.user) {
+      // Provisión, chequeo de comunidad, cuentas pre-reclamadas, refresh del
+      // JWT y foto de Google: lo mismo que el botón de Google Identity Services.
+      const result = await finalizeOAuthSession({
+        supabase,
+        user: data.user,
+        accessToken: data.session.access_token,
+        next,
+      });
+      const target = result.ok ? result.redirectTo : `/entrar?error=${result.reason}`;
+      return NextResponse.redirect(new URL(target, origin));
     }
 
     console.error("[auth] callback: exchangeCodeForSession falló", {
-      code: error.code,
+      code: error?.code ?? "sin_usuario",
     });
   }
 

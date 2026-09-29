@@ -11,7 +11,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/lib/supabase/server", () => ({ getAuthUserId: mocks.getAuthUserId }));
-vi.mock("../oauth-actions", () => ({ availableOAuthProviders: mocks.availableOAuthProviders }));
+vi.mock("../oauth-actions", () => ({
+  availableOAuthProviders: mocks.availableOAuthProviders,
+  googleIdentityClientId: async () => "client-id.apps.googleusercontent.com",
+}));
 vi.mock("./registro-client", () => ({ RegistroClient: () => null }));
 
 import RegistroPage from "./page";
@@ -28,7 +31,9 @@ describe("/registro", () => {
     const page = (await RegistroPage()) as ReactElement<{ children: ReactElement }>;
 
     expect(mocks.redirect).not.toHaveBeenCalled();
-    const client = page.props.children as ReactElement<{ oauthProviders: string[] }>;
+    const provider = page.props.children as ReactElement<{ clientId: string; children: ReactElement }>;
+    expect(provider.props.clientId).toBe("client-id.apps.googleusercontent.com");
+    const client = provider.props.children as ReactElement<{ oauthProviders: string[] }>;
     expect(client.type).toBe(RegistroClient);
     expect(client.props.oauthProviders).toEqual(["google"]);
   });

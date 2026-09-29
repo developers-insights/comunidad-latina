@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getAuthUserId } from "@/lib/supabase/server";
 import { AuthCard } from "@/components/auth/auth-card";
-import { availableOAuthProviders } from "../oauth-actions";
+import { GoogleClientIdProvider } from "@/components/auth/google-identity-context";
+import { availableOAuthProviders, googleIdentityClientId } from "../oauth-actions";
 import { RegistroClient } from "./registro-client";
 
 export const metadata = { title: "Crear cuenta" };
@@ -12,11 +13,16 @@ export default async function RegistroPage() {
 
   // Resuelto en el SERVIDOR: el flag sale de env vars fuera del bundle. Sin
   // credenciales viene vacío y los botones no se dibujan.
-  const providers = await availableOAuthProviders();
+  const [providers, googleClientId] = await Promise.all([
+    availableOAuthProviders(),
+    googleIdentityClientId(),
+  ]);
 
   return (
     <AuthCard>
-      <RegistroClient oauthProviders={providers} />
+      <GoogleClientIdProvider clientId={googleClientId}>
+        <RegistroClient oauthProviders={providers} />
+      </GoogleClientIdProvider>
     </AuthCard>
   );
 }

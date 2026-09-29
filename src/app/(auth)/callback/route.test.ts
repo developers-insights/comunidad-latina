@@ -26,6 +26,7 @@ vi.mock("@/lib/auth/provision", () => ({
   ensureProfileForOAuthUser: mocks.ensureProfileForOAuthUser,
 }));
 vi.mock("@/lib/auth/email-verified", () => ({ syncEmailVerified: mocks.syncEmailVerified }));
+vi.mock("@/lib/auth/google-avatar", () => ({ importGoogleAvatarIfMissing: vi.fn(async () => "no-source") }));
 vi.mock("@/lib/auth/preclaimed", async (importActual) => ({
   ...(await importActual<typeof import("@/lib/auth/preclaimed")>()),
   neutralizePreclaimedAccount: mocks.neutralizePreclaimedAccount,

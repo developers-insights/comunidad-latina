@@ -2,11 +2,12 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
+import { CheckCircle, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { registerAction, type RegisterInput } from "@/app/(auth)/actions";
 import { FormError } from "@/components/auth/form-error";
 import { suggestUsername } from "@/lib/profile/username";
 import { UsernameInput } from "@/components/auth/username-input";
+import { useUsernameAvailability } from "@/components/auth/use-username-availability";
 import { NewPasswordFields, validateNewPassword } from "@/components/auth/new-password-fields";
 import { authLinkClass, authSubmitClass } from "@/components/auth/auth-card";
 import { Button, Field, Input } from "@/components/ui";
@@ -19,6 +20,7 @@ const COPY = {
   nameHelp: "Tu apellido no se muestra: lo decidís vos después, en tu perfil.",
   username: "Tu nombre de usuario",
   usernameHelp: "Así te encuentran y te mencionan. Se puede cambiar después.",
+  usernameAvailable: "Disponible",
   email: "Tu email",
   emailPlaceholder: "nombre@ejemplo.com",
   ageLabel: "Confirmo que tengo 18 años o más.",
@@ -91,7 +93,24 @@ export function RegisterForm({
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
 
+  const usernameLive = useUsernameAvailability(username);
+
   const consentComplete = ageConfirmed && termsAccepted;
+
+  /**
+   * El error del submit manda sobre el chequeo en vivo: si el server ya dijo
+   * "tomado" para ESTE valor, no tiene sentido pisarlo con "disponible" porque
+   * el debounce todavía no corrió sobre el mismo texto otra vez. Se limpia solo
+   * en cuanto la persona edita el campo (ver el `onChange` de abajo).
+   */
+  const usernameServerError = fieldErrors.username;
+  const usernameLiveMessage =
+    !usernameServerError && (usernameLive.status === "invalid" || usernameLive.status === "taken")
+      ? usernameLive.message
+      : null;
+  const usernameShowAvailable =
+    !usernameServerError && !usernameLiveMessage && usernameLive.status === "available";
+  const usernameHasStatusText = Boolean(usernameServerError || usernameLiveMessage || usernameShowAvailable);
 
   function retitleUsername(nextFirst: string, nextLast: string) {
     if (usernameTouched) return;
@@ -211,8 +230,7 @@ export function RegisterForm({
       <Field
         htmlFor="register-username"
         label={COPY.username}
-        help={COPY.usernameHelp}
-        error={fieldErrors.username}
+        help={usernameHasStatusText ? undefined : COPY.usernameHelp}
       >
         <UsernameInput
           id="register-username"
@@ -223,11 +241,27 @@ export function RegisterForm({
             setUsername(next);
             if (fieldErrors.username) setFieldErrors((prev) => omit(prev, "username"));
           }}
-          invalid={Boolean(fieldErrors.username)}
-          describedBy={
-            fieldErrors.username ? "register-username-error" : "register-username-help"
-          }
+          invalid={Boolean(usernameServerError || usernameLiveMessage)}
+          describedBy={usernameHasStatusText ? "register-username-status" : "register-username-help"}
+          liveStatus={usernameLive.status}
         />
+        {/* Un único aria-live="polite" para todo el estado del handle — error de
+            submit, chequeo en vivo o disponibilidad — en vez de una región por
+            estado, que es lo que el lector de pantalla necesita anunciar UNA
+            vez por cambio, no una vez por fuente. */}
+        <p id="register-username-status" aria-live="polite" className="text-sm">
+          {usernameServerError || usernameLiveMessage ? (
+            <span className="flex items-start gap-1.5 text-danger">
+              <WarningCircle size={16} weight="fill" aria-hidden="true" className="mt-0.5 shrink-0" />
+              {usernameServerError || usernameLiveMessage}
+            </span>
+          ) : usernameShowAvailable ? (
+            <span className="flex items-center gap-1.5 text-success">
+              <CheckCircle size={16} weight="fill" aria-hidden="true" className="shrink-0" />
+              {COPY.usernameAvailable}
+            </span>
+          ) : null}
+        </p>
       </Field>
 
       <Field htmlFor="register-email" label={COPY.email} error={fieldErrors.email}>

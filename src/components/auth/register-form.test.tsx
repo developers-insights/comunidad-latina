@@ -1,17 +1,29 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PASSWORD_COPY } from "@/lib/auth/password-policy";
+import { USERNAME_CHECK_DEBOUNCE_MS } from "./use-username-availability";
 
-const mocks = vi.hoisted(() => ({ registerAction: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  registerAction: vi.fn(),
+  checkUsernameAvailabilityAction: vi.fn(),
+}));
 
 vi.mock("@/app/(auth)/actions", () => ({ registerAction: mocks.registerAction }));
+// Sin este mock, el chequeo en vivo dispararía la server action REAL (headers(),
+// Supabase admin) en cada test que toca el campo de usuario — incluidos los que
+// no tienen nada que ver con la disponibilidad del handle.
+vi.mock("@/app/(auth)/username-actions", () => ({
+  checkUsernameAvailabilityAction: mocks.checkUsernameAvailabilityAction,
+}));
 
 import { RegisterForm } from "./register-form";
 
 beforeEach(() => {
   mocks.registerAction.mockReset();
   mocks.registerAction.mockResolvedValue({ ok: true });
+  mocks.checkUsernameAvailabilityAction.mockReset();
+  mocks.checkUsernameAvailabilityAction.mockResolvedValue({ status: "unknown" });
   Element.prototype.scrollIntoView = vi.fn();
 });
 afterEach(cleanup);
@@ -73,5 +85,123 @@ describe("RegisterForm — contraseña", () => {
     submit();
 
     await waitFor(() => expect(screen.getByText(PASSWORD_COPY.mismatch)).toBeTruthy());
+  });
+});
+
+describe("RegisterForm — disponibilidad del username en vivo", () => {
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+  afterEach(() => vi.useRealTimers());
+
+  const usernameField = () => document.getElementById("register-username") as HTMLInputElement;
+  const setUsername = (value: string) => fireEvent.change(usernameField(), { target: { value } });
+
+  async function settle(ms = USERNAME_CHECK_DEBOUNCE_MS + 10) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  it("un formato inválido se resuelve local, sin llamar al server", async () => {
+    render(<RegisterForm onSuccess={vi.fn()} />);
+    setUsername("rosa martinez");
+    await settle();
+
+    expect(mocks.checkUsernameAvailabilityAction).not.toHaveBeenCalled();
+    expect(screen.getByText("Solo letras sin acento, números, punto y guion bajo.")).toBeTruthy();
+  });
+
+  it("espera el debounce y consulta UNA vez con el valor final", async () => {
+    mocks.checkUsernameAvailabilityAction.mockResolvedValue({ status: "available" });
+    render(<RegisterForm onSuccess={vi.fn()} />);
+
+    setUsername("ro");
+    await settle(100);
+    setUsername("rosa");
+    await settle(100);
+    setUsername("rosa.m");
+    await settle();
+
+    expect(mocks.checkUsernameAvailabilityAction).toHaveBeenCalledTimes(1);
+    expect(mocks.checkUsernameAvailabilityAction).toHaveBeenCalledWith("rosa.m");
+    expect(screen.getByText("Disponible")).toBeTruthy();
+  });
+
+  it("tomado: muestra el mismo mensaje que el error del servidor al enviar", async () => {
+    mocks.checkUsernameAvailabilityAction.mockResolvedValue({
+      status: "taken",
+      message: "Ese nombre de usuario ya está en uso en esta comunidad. Probá con otro.",
+    });
+    render(<RegisterForm onSuccess={vi.fn()} />);
+
+    setUsername("rosa.martinez");
+    await settle();
+
+    expect(
+      screen.getByText("Ese nombre de usuario ya está en uso en esta comunidad. Probá con otro."),
+    ).toBeTruthy();
+  });
+
+  it("una respuesta vieja que llega tarde no pisa el resultado del valor actual", async () => {
+    let resolveFirst!: (value: { status: "taken"; message: string }) => void;
+    mocks.checkUsernameAvailabilityAction.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveFirst = resolve; }),
+    );
+
+    render(<RegisterForm onSuccess={vi.fn()} />);
+
+    setUsername("rosa");
+    await settle();
+    expect(mocks.checkUsernameAvailabilityAction).toHaveBeenCalledTimes(1);
+
+    // Se sigue escribiendo antes de que la primera respuesta llegue.
+    mocks.checkUsernameAvailabilityAction.mockResolvedValueOnce({ status: "available" });
+    setUsername("rosa.martinez");
+    await settle();
+
+    // La respuesta vieja ("rosa" → tomado) llega recién ahora: no puede pisar
+    // el resultado de "rosa.martinez" ("available"), que es el valor vigente.
+    await act(async () => {
+      resolveFirst({ status: "taken", message: "Ese nombre de usuario ya está en uso en esta comunidad. Probá con otro." });
+    });
+
+    expect(screen.getByText("Disponible")).toBeTruthy();
+  });
+
+  it("apenas el handle deja de coincidir con uno tomado, el error desaparece", async () => {
+    mocks.checkUsernameAvailabilityAction.mockResolvedValue({
+      status: "taken",
+      message: "Ese nombre de usuario ya está en uso en esta comunidad. Probá con otro.",
+    });
+    render(<RegisterForm onSuccess={vi.fn()} />);
+
+    setUsername("rosa");
+    await settle();
+    expect(
+      screen.getByText("Ese nombre de usuario ya está en uso en esta comunidad. Probá con otro."),
+    ).toBeTruthy();
+
+    mocks.checkUsernameAvailabilityAction.mockResolvedValue({ status: "available" });
+    setUsername("rosa2");
+    await settle();
+
+    expect(
+      screen.queryByText("Ese nombre de usuario ya está en uso en esta comunidad. Probá con otro."),
+    ).toBeNull();
+    expect(screen.getByText("Disponible")).toBeTruthy();
+  });
+
+  it("no bloquea el botón de enviar cuando el chequeo queda en 'unknown'", async () => {
+    mocks.checkUsernameAvailabilityAction.mockResolvedValue({ status: "unknown" });
+    render(<RegisterForm onSuccess={vi.fn()} />);
+
+    setUsername("rosa.martinez");
+    await settle();
+
+    const boton = screen.getByRole("button", { name: "Crear mi cuenta" }) as HTMLButtonElement;
+    // El botón sólo se deshabilita por el consentimiento (edad + términos),
+    // nunca por el resultado del chequeo en vivo.
+    fireEvent.click(document.getElementById("register-age") as HTMLInputElement);
+    fireEvent.click(document.getElementById("register-terms") as HTMLInputElement);
+    expect(boton.disabled).toBe(false);
   });
 });

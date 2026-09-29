@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
 import { AppleLogo } from "@phosphor-icons/react/dist/ssr";
 import { startOAuthAction } from "@/app/(auth)/oauth-actions";
@@ -8,6 +8,8 @@ import { OAUTH_LABEL, type OAuthProvider } from "@/lib/auth/oauth-providers";
 import { FormError } from "@/components/auth/form-error";
 import { AuthDivider } from "@/components/auth/auth-card";
 import { GoogleLogo } from "@/components/auth/google-logo";
+import { GoogleIdentityButton } from "@/components/auth/google-identity-button";
+import { useGoogleClientId } from "@/components/auth/google-identity-context";
 import { Button, Spinner } from "@/components/ui";
 import styles from "./oauth-buttons.module.css";
 
@@ -51,15 +53,32 @@ export interface OAuthButtonsProps {
   next?: string;
   /** Separador "o" arriba de los botones. Se apaga cuando van solos. */
   withDivider?: boolean;
+  /**
+   * Client ID para Google Identity Services. Si no viene, se toma del
+   * `GoogleClientIdProvider` de la página; sin ninguno, Google entra por redirect.
+   */
+  googleClientId?: string | null;
 }
 
-export function OAuthButtons({ providers, next, withDivider = true }: OAuthButtonsProps) {
+export function OAuthButtons({
+  providers,
+  next,
+  withDivider = true,
+  googleClientId,
+}: OAuthButtonsProps) {
+  const contextClientId = useGoogleClientId();
+  const gisClientId = googleClientId ?? contextClientId;
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<OAuthProvider | null>(null);
   // La transición termina antes de que el navegador salga hacia el proveedor: sin
   // este flag el botón se rehabilita y un segundo toque pisa el verifier de PKCE.
   const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gisPending, setGisPending] = useState(false);
+  const onGisPendingChange = useCallback((value: boolean) => {
+    setGisPending(value);
+    if (value) setBusy("google");
+  }, []);
 
   if (providers.length === 0) return null;
 
@@ -90,7 +109,7 @@ export function OAuthButtons({ providers, next, withDivider = true }: OAuthButto
 
       <div className="flex flex-col gap-2.5">
         {providers.map((provider) => {
-          const inFlight = pending || redirecting;
+          const inFlight = pending || redirecting || gisPending;
           const loading = inFlight && busy === provider;
           // Los demás quedan bloqueados mientras uno está en vuelo: dos
           // pedidos de OAuth en paralelo pisan el mismo code verifier de
@@ -98,7 +117,7 @@ export function OAuthButtons({ providers, next, withDivider = true }: OAuthButto
           const blocked = inFlight && busy !== provider;
 
           if (provider === "google") {
-            return (
+            const redirectButton = (
               <button
                 key={provider}
                 type="button"
@@ -110,6 +129,18 @@ export function OAuthButtons({ providers, next, withDivider = true }: OAuthButto
                 {loading ? <Spinner size={20} /> : <GoogleLogo size={20} />}
                 {OAUTH_LABEL[provider]}
               </button>
+            );
+            if (!gisClientId) return redirectButton;
+            return (
+              <GoogleIdentityButton
+                key={provider}
+                clientId={gisClientId}
+                next={next}
+                fallback={redirectButton}
+                blocked={blocked}
+                onPendingChange={onGisPendingChange}
+                onError={setError}
+              />
             );
           }
 

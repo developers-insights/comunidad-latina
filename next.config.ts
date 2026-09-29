@@ -137,11 +137,18 @@ const envPattern = supabaseRemotePattern();
  *   OpenAI NO está: se llama sólo desde el servidor (ver la nota en la lista).
  * - img-src: blob:/data: (previews de upload) + Storage de Supabase + Pexels (demo).
  * - media-src: <video>/<audio> de Supabase Storage + blob: (preview local).
+ * - Google Identity Services (botón "Continuar con Google", sólo en las
+ *   pantallas de auth): el script `gsi/client`, su hoja `gsi/style`, el iframe
+ *   del botón bajo `gsi/` y los fetch que hace a `gsi/`. Acotado al path
+ *   `/gsi/` a propósito: `accounts.google.com` entero habilitaría cualquier
+ *   script de Google en la página. Sin estas cuatro entradas el botón no se
+ *   dibuja y la pantalla cae sola al login por redirect — que anda, pero
+ *   vuelve a mostrar `<ref>.supabase.co` en el consentimiento.
  */
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://js.stripe.com",
-  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' https://js.stripe.com https://accounts.google.com/gsi/client",
+  "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
   // https://images.pexels.com → SOLO por las fotos del seed demo (ver deuda arriba).
   // `https://image.mux.com`: la MINIATURA de un video por Mux (0116). El poster
   // sale de ahí, no del bucket — sin este host el reel arranca en negro.
@@ -169,8 +176,8 @@ const csp = [
   // Sin estos tres, el video por Mux no reproduce NI sube: falla en el
   // navegador, con la API andando perfecto y sin un solo error del lado del
   // servidor. Es el modo de falla más caro de diagnosticar que tiene el CSP.
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://images.pexels.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com https://stream.mux.com https://storage.mux.com https://image.mux.com",
-  "frame-src https://js.stripe.com https://hooks.stripe.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://images.pexels.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com https://stream.mux.com https://storage.mux.com https://image.mux.com https://accounts.google.com/gsi/",
+  "frame-src https://js.stripe.com https://hooks.stripe.com https://accounts.google.com/gsi/",
   "worker-src 'self' blob:",
   "base-uri 'self'",
   "form-action 'self'",

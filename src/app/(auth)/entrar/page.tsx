@@ -3,7 +3,8 @@ import { getAuthUserId } from "@/lib/supabase/server";
 import { safeInternalPath } from "@/lib/url/safe-href";
 import { LoginForm } from "@/components/auth/login-form";
 import { AuthCard } from "@/components/auth/auth-card";
-import { availableOAuthProviders } from "../oauth-actions";
+import { GoogleClientIdProvider } from "@/components/auth/google-identity-context";
+import { availableOAuthProviders, googleIdentityClientId } from "../oauth-actions";
 
 export const metadata = { title: "Entrar" };
 
@@ -29,11 +30,16 @@ export default async function EntrarPage({
   // Los proveedores se resuelven en el SERVIDOR: el flag sale de env vars que no
   // están en el bundle del cliente. Sin credenciales el array viene vacío y el
   // bloque de botones no se dibuja (degradación elegante, §7).
-  const providers = await availableOAuthProviders();
+  const [providers, googleClientId] = await Promise.all([
+    availableOAuthProviders(),
+    googleIdentityClientId(),
+  ]);
 
   return (
     <AuthCard>
-      <LoginForm next={next} urlError={error} oauthProviders={providers} registerHref="/registro" />
+      <GoogleClientIdProvider clientId={googleClientId}>
+        <LoginForm next={next} urlError={error} oauthProviders={providers} registerHref="/registro" />
+      </GoogleClientIdProvider>
     </AuthCard>
   );
 }

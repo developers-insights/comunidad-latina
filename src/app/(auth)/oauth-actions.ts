@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { isGoogleAuthConfigured, isAppleAuthConfigured } from "@/lib/config/services";
 import { OAUTH_PROVIDERS, type OAuthProvider } from "@/lib/auth/oauth-providers";
+import { finalizeOAuthSession, type FinalizeFailure } from "@/lib/auth/finalize-oauth";
 import { safeInternalPath } from "@/lib/url/safe-href";
 import { resolveOriginAsync } from "./recuperar/origin";
 
@@ -36,7 +37,15 @@ const COPY = {
     "Esa forma de entrar todavía no está disponible. Podés entrar con tu email y contraseña.",
   genericError:
     "No pudimos abrir la pantalla de ese servicio. Probá de nuevo, o entrá con tu email.",
+  sessionMissing:
+    "Google no llegó a confirmarnos quién sos. Probá de nuevo, o entrá con tu email y contraseña.",
 } as const;
+
+const FINALIZE_COPY: Record<FinalizeFailure, string> = {
+  otra_comunidad:
+    "Esa cuenta pertenece a otra comunidad. Entrá desde el sitio de esa comunidad, o creá una cuenta nueva acá con otro correo.",
+  alta: "No pudimos terminar de crear tu cuenta. No se guardó nada — probá de nuevo en un momento, o sumate con tu email.",
+};
 
 const schema = z.object({
   provider: z.enum(OAUTH_PROVIDERS),
@@ -107,4 +116,49 @@ export async function startOAuthAction(input: StartOAuthInput): Promise<StartOAu
   }
 
   return { ok: true, url: data.url };
+}
+
+/**
+ * El client ID de Google para el botón de Google Identity Services. No es un
+ * secreto (viaja en cada pedido a Google), pero vive en una env server-side:
+ * sin credenciales devuelve `null` y el botón cae al flujo por redirect.
+ */
+export async function googleIdentityClientId(): Promise<string | null> {
+  return isGoogleAuthConfigured ? (process.env.AUTH_GOOGLE_CLIENT_ID ?? null) : null;
+}
+
+const finalizeSchema = z.object({ next: z.string().optional() });
+
+export type FinalizeGoogleSignInResult =
+  | { ok: true; redirectTo: string }
+  | { ok: false; message: string };
+
+/**
+ * Segunda mitad del login con Google Identity Services: el navegador ya hizo
+ * `signInWithIdToken` y la sesión está en las cookies. Acá corre EXACTAMENTE lo
+ * mismo que en `/callback` (ver `lib/auth/finalize-oauth.ts`).
+ */
+export async function finalizeGoogleSignInAction(
+  input: z.infer<typeof finalizeSchema>,
+): Promise<FinalizeGoogleSignInResult> {
+  const parsed = finalizeSchema.safeParse(input);
+  const next = safeInternalPath(parsed.success ? parsed.data.next : undefined, "/feed");
+
+  const supabase = await createClient();
+  // `getUser` y no `getSession`: valida el JWT contra el Auth server en vez de
+  // creerle a la cookie.
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const { data: sessionData } = await supabase.auth.getSession();
+  const user = userData?.user;
+  const accessToken = sessionData?.session?.access_token;
+
+  if (userError || !user || !accessToken) {
+    console.error("[auth] google gis: no hay sesión para finalizar", { code: userError?.code });
+    if (user) await supabase.auth.signOut();
+    return { ok: false, message: COPY.sessionMissing };
+  }
+
+  const result = await finalizeOAuthSession({ supabase, user, accessToken, next });
+  if (!result.ok) return { ok: false, message: FINALIZE_COPY[result.reason] };
+  return { ok: true, redirectTo: result.redirectTo };
 }

@@ -88,3 +88,72 @@
     transform: none;
   }
 }
+
+/*
+ * Botón oficial de Google Identity Services. Es un iframe de Google (máx.
+ * 400px, alto 40px en `size: large`): se centra en una franja del mismo alto
+ * que el botón propio para que el cambio de uno a otro no mueva la pantalla.
+ */
+.gisSlot {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.gisHost {
+  display: flex;
+  width: 100%;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  color-scheme: normal;
+}
+
+.gisHostLoading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gisPending {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  border: 1px solid var(--g-border);
+  border-radius: 9999px;
+  background-color: var(--g-bg);
+  color: var(--g-fg);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: progress;
+}
+
+.gisSlot {
+  --g-bg: #ffffff;
+  --g-border: #747775;
+  --g-fg: #1f1f1f;
+}
+
+:global(.dark) .gisSlot {
+  --g-bg: #131314;
+  --g-border: #8e918f;
+  --g-fg: #e3e3e3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not(.light):not(.dark)) .gisSlot {
+    --g-bg: #131314;
+    --g-border: #8e918f;
+    --g-fg: #e3e3e3;
+  }
+}

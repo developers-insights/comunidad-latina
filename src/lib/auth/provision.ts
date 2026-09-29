@@ -61,16 +61,6 @@ function displayNameFrom(user: User): string {
   return local && local.length >= 2 ? local.slice(0, 60) : "Vecino";
 }
 
-/** La foto del proveedor, si vino. Es una URL pública suya, no un archivo nuestro. */
-function avatarFrom(user: User): string | null {
-  const meta = user.user_metadata ?? {};
-  for (const key of ["avatar_url", "picture"] as const) {
-    const value = meta[key];
-    if (typeof value === "string" && value.startsWith("https://")) return value;
-  }
-  return null;
-}
-
 export async function ensureProfileForOAuthUser(
   user: User,
   tenantId: string,
@@ -136,7 +126,9 @@ export async function ensureProfileForOAuthUser(
     tenant_id: tenantId,
     display_name: displayName,
     role: "member",
-    avatar_url: avatarFrom(user),
+    // La foto la copia `importGoogleAvatarIfMissing` al bucket: una URL de
+    // Google acá no pasa el `img-src` del CSP y nunca se dibujaba.
+    avatar_url: null,
     age_confirmed_at: consentedAt,
     terms_accepted_at: consentedAt,
     terms_version: TERMS_VERSION,

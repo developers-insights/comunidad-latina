@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui";
-import { availableOAuthProviders } from "@/app/(auth)/oauth-actions";
+import { availableOAuthProviders, googleIdentityClientId } from "@/app/(auth)/oauth-actions";
 import type { OAuthProvider } from "@/lib/auth/oauth-providers";
 import { CheckEmail } from "./check-email";
 import { LoginForm } from "./login-form";
@@ -62,6 +62,7 @@ export function AuthSheetPanel({
     oauthProviders ?? [],
   );
   const asked = useRef(false);
+  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
 
   // Qué proveedor está disponible sale de env vars del SERVIDOR, así que hay
   // que preguntarlo. Se pregunta una sola vez, al abrir la hoja: en el arranque
@@ -77,6 +78,13 @@ export function AuthSheetPanel({
       .catch(() => undefined);
   }, [oauthProviders]);
 
+  // Sin client ID el botón de Google entra por redirect, que sigue andando.
+  useEffect(() => {
+    void googleIdentityClientId()
+      .then(setGoogleClientId)
+      .catch(() => undefined);
+  }, []);
+
   /**
    * Google y Apple ARRIBA — al revés que en /entrar, donde van abajo porque
    * quien llega ahí fue a entrar y la mayoría tiene contraseña. Acá la persona
@@ -85,7 +93,12 @@ export function AuthSheetPanel({
    */
   const oauthBlock = providers.length > 0 && (
     <>
-      <OAuthButtons providers={providers} next={destination} withDivider={false} />
+      <OAuthButtons
+        providers={providers}
+        next={destination}
+        withDivider={false}
+        googleClientId={googleClientId}
+      />
       <div className="flex items-center gap-3" aria-hidden="true">
         <span className={dividerLine} />
         <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
