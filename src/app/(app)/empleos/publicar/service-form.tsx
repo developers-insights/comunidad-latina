@@ -2,41 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  CalendarDots,
-  CheckCircle,
-  MapPin,
-  Toolbox,
-} from "@phosphor-icons/react/dist/ssr";
-import {
-  BezelCard,
-  Button,
-  Field,
-  Input,
-  ProgressDots,
-  Select,
-  Textarea,
-  buttonVariants,
-} from "@/components/ui";
+import { CalendarDots, CheckCircle, Toolbox } from "@phosphor-icons/react/dist/ssr";
+import { BezelCard, Button, ProgressDots, buttonVariants } from "@/components/ui";
 import { Celebration, Reveal, useCelebration } from "@/components/motion";
 import { COPY } from "@/components/empleos/copy";
-import { JOB_PAY_PERIODS, type JobPayPeriod } from "@/components/empleos/helpers";
-import {
-  WORK_MODES,
-  WORK_MODE_HELP,
-  WORK_MODE_LABEL,
-  requiresArea,
-  type WorkMode,
-} from "@/lib/creators/work-mode";
-import {
-  MAX_SALARY,
-  MAX_SCHEDULE_LENGTH,
-  WORK_DAYS,
-  type WorkDay,
-} from "@/lib/empleos/detalles";
+import { WORK_MODE_LABEL, requiresArea } from "@/lib/creators/work-mode";
 import { etiquetaDeDias, etiquetaDePrecioDesde } from "@/lib/empleos/servicios";
 import { cn } from "@/lib/utils";
-import { ToggleChips, toggleInList } from "./publish-form";
+import {
+  SERVICIO_VACIO,
+  ServiceWhatFields,
+  ServiceWhenFields,
+  precioDeServicio,
+  validarPasoDeServicio,
+  type ServiceFormValues,
+} from "./service-fields";
 import { OfrecerImpulso } from "@/components/boosts/ofrecer-impulso";
 import { createServiceDraft, finalizeService } from "./actions";
 import {
@@ -72,7 +52,6 @@ const TOTAL_STEPS = 3;
 
 const ACCENT = "var(--accent-empleos)";
 const ACCENT_TINT = `color-mix(in oklab, ${ACCENT} 12%, transparent)`;
-const ACCENT_EDGE = `color-mix(in oklab, ${ACCENT} 42%, transparent)`;
 
 /** Cintillo + título del paso. Gemelo del de empleos, con su propio total. */
 function StepHeader({
@@ -143,41 +122,22 @@ export function ServicePublishForm({
   const [draftId, setDraftId] = useState<string | null>(null);
   const videoDelAviso = useVideoDeAviso();
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  /**
-   * Arranca en "presencial" por la misma razón que el empleo: el jardinero, el
-   * pintor y la señora que limpia son la enorme mayoría de esta pestaña. Quien
-   * arregla computadoras a distancia lo cambia de un toque, y al hacerlo
-   * desaparece el pedido de zona.
-   */
-  const [workMode, setWorkMode] = useState<WorkMode>("presencial");
-  const [areaLabel, setAreaLabel] = useState("");
-  const [days, setDays] = useState<WorkDay[]>([]);
-  const [schedule, setSchedule] = useState("");
-  const [price, setPrice] = useState("");
-  const [payPeriod, setPayPeriod] = useState<JobPayPeriod>("hour");
+  const [values, setValues] = useState<ServiceFormValues>(SERVICIO_VACIO);
+  const patch = (changes: Partial<ServiceFormValues>) =>
+    setValues((current) => ({ ...current, ...changes }));
+  const { title, description, workMode, areaLabel, days, schedule, price, payPeriod } = values;
 
   const needsArea = requiresArea(workMode);
-  const priceAmount = Number(price.replace(",", "."));
-  const priceValid = price.trim().length > 0 && Number.isFinite(priceAmount) && priceAmount > 0;
-  const priceTooBig = priceValid && priceAmount > MAX_SALARY;
-  const pricePreview = priceValid
-    ? etiquetaDePrecioDesde(priceAmount, currency, payPeriod)
-    : null;
+  const priceInfo = precioDeServicio(values);
+  const priceAmount = priceInfo.amount;
+  const priceValid = priceInfo.valid;
+  const pricePreview =
+    priceValid && !priceInfo.tooBig
+      ? etiquetaDePrecioDesde(priceAmount, currency, payPeriod)
+      : null;
 
   function validateStep(current: number): string | null {
-    if (current === 0) {
-      if (title.trim().length < 8) return C.errors.titleShort;
-      if (description.trim().length < 30) return C.errors.descriptionShort;
-    }
-    if (current === 1) {
-      if (needsArea && areaLabel.trim().length < 3) return C.errors.areaShort;
-      // Un monto escrito y roto ("abc", "0") es distinto de no poner monto: lo
-      // primero se corrige, lo segundo es una elección válida.
-      if (price.trim().length > 0 && (!priceValid || priceTooBig)) return C.errors.priceInvalid;
-    }
-    return null;
+    return current === 0 || current === 1 ? validarPasoDeServicio(values, current) : null;
   }
 
   function goNext() {
@@ -275,14 +235,7 @@ export function ServicePublishForm({
   }
 
   function resetForm() {
-    setTitle("");
-    setDescription("");
-    setWorkMode("presencial");
-    setAreaLabel("");
-    setDays([]);
-    setSchedule("");
-    setPrice("");
-    setPayPeriod("hour");
+    setValues(SERVICIO_VACIO);
     setDraftId(null);
     setDone(null);
     setError(null);
@@ -356,40 +309,15 @@ export function ServicePublishForm({
               intro={C.steps.what.intro}
               icon={<Toolbox weight="fill" />}
             />
-            <Field
-              htmlFor="service-title"
-              label={C.steps.what.titleLabel}
-              help={C.steps.what.titleHelp}
-            >
-              <Input
-                id="service-title"
-                value={title}
-                maxLength={120}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder={C.steps.what.titlePlaceholder}
+            <ServiceWhatFields values={values} onChange={patch}>
+              <ListingVideoField
+                value={videoDelAviso.video}
+                onChange={videoDelAviso.setVideo}
+                tier="free"
+                disabled={submitting}
+                progress={videoDelAviso.progress}
               />
-            </Field>
-            <Field
-              htmlFor="service-description"
-              label={C.steps.what.descriptionLabel}
-              help={C.steps.what.descriptionHelp}
-            >
-              <Textarea
-                id="service-description"
-                value={description}
-                rows={6}
-                maxLength={4000}
-                onChange={(event) => setDescription(event.target.value)}
-                placeholder={C.steps.what.descriptionPlaceholder}
-              />
-            </Field>
-            <ListingVideoField
-              value={videoDelAviso.video}
-              onChange={videoDelAviso.setVideo}
-              tier="free"
-              disabled={submitting}
-              progress={videoDelAviso.progress}
-            />
+            </ServiceWhatFields>
           </>
         )}
 
@@ -401,128 +329,7 @@ export function ServicePublishForm({
               intro={C.steps.when.intro}
               icon={<CalendarDots weight="fill" />}
             />
-
-            {/* Modalidad primero: DECIDE si abajo se pide zona. */}
-            <ToggleChips
-              legend={C.steps.when.modeLegend}
-              help={WORK_MODE_HELP[workMode] ?? C.steps.when.modeHelp}
-              options={WORK_MODES.map((mode) => ({
-                value: mode,
-                label: WORK_MODE_LABEL[mode],
-              }))}
-              selected={[workMode]}
-              onToggle={(mode) => setWorkMode(mode)}
-            />
-
-            {needsArea ? (
-              <Field
-                htmlFor="service-area"
-                label={C.steps.when.areaLabel}
-                help={C.steps.when.areaHelp}
-              >
-                <Input
-                  id="service-area"
-                  value={areaLabel}
-                  maxLength={80}
-                  onChange={(event) => setAreaLabel(event.target.value)}
-                  placeholder={C.steps.when.areaPlaceholder}
-                />
-              </Field>
-            ) : (
-              <div
-                className="flex items-start gap-2.5 rounded-md border border-border-subtle bg-surface-subtle px-4 py-3"
-                style={{ borderColor: ACCENT_EDGE }}
-              >
-                <MapPin
-                  size={18}
-                  aria-hidden="true"
-                  className="mt-0.5 shrink-0"
-                  style={{ color: ACCENT }}
-                />
-                <p className="text-sm leading-snug text-foreground-secondary">
-                  <span className="block font-semibold text-foreground">
-                    {C.steps.when.areaRemoteTitle}
-                  </span>
-                  {C.steps.when.areaRemoteBody}
-                </p>
-              </div>
-            )}
-
-            <ToggleChips
-              legend={C.steps.when.daysLabel}
-              help={C.steps.when.daysHelp}
-              options={WORK_DAYS.map((day) => ({
-                value: day.value,
-                label: day.short,
-                ariaLabel: day.label,
-              }))}
-              selected={days}
-              onToggle={(day) => setDays((current) => toggleInList(current, day))}
-              square
-            />
-
-            <Field
-              htmlFor="service-schedule"
-              label={C.steps.when.scheduleLabel}
-              help={C.steps.when.scheduleHelp}
-              optional
-            >
-              <Input
-                id="service-schedule"
-                value={schedule}
-                maxLength={MAX_SCHEDULE_LENGTH}
-                onChange={(event) => setSchedule(event.target.value)}
-                placeholder={C.steps.when.schedulePlaceholder}
-              />
-            </Field>
-
-            {/* PRECIO DE REFERENCIA — opcional, y la vista previa lo dice: sin
-                monto no queda un hueco, queda "A convenir". */}
-            <div className="flex flex-col gap-3 rounded-md border border-border-subtle bg-surface-subtle p-4">
-              <div>
-                <p className="text-sm font-semibold text-foreground">{C.steps.when.priceTitle}</p>
-                <p className="mt-0.5 text-xs leading-snug text-foreground-muted">
-                  {C.steps.when.priceHelp}
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <Field
-                  htmlFor="service-price"
-                  label={C.steps.when.amountLabel}
-                  help={C.steps.when.amountHelp}
-                  className="flex-1"
-                  optional
-                >
-                  <Input
-                    id="service-price"
-                    value={price}
-                    inputMode="decimal"
-                    maxLength={9}
-                    onChange={(event) => setPrice(event.target.value)}
-                    placeholder={C.steps.when.amountPlaceholder}
-                  />
-                </Field>
-                <Field htmlFor="service-period" label={C.steps.when.periodLabel} className="w-40">
-                  <Select
-                    id="service-period"
-                    value={payPeriod}
-                    onChange={(event) => setPayPeriod(event.target.value as JobPayPeriod)}
-                  >
-                    {JOB_PAY_PERIODS.map((period) => (
-                      <option key={period} value={period}>
-                        {COPY.publish.payPeriodLabel[period]}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <p className="text-sm text-foreground-secondary">
-                {C.steps.when.previewLabel}{" "}
-                <span className="numeric font-display font-bold text-foreground">
-                  {pricePreview ?? C.steps.when.previewToAgree}
-                </span>
-              </p>
-            </div>
+            <ServiceWhenFields values={values} onChange={patch} currency={currency} />
           </>
         )}
 

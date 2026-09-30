@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { ListingVideoMedia } from "@/components/listings/listing-video";
 import type { ListingVideoView } from "@/lib/media/listing-video-policy";
@@ -12,10 +15,9 @@ import { Avatar, BezelCard, Chip } from "@/components/ui";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 import { ListingActions, type ListingEngagement } from "@/components/feed/listing-actions";
-import {
-  ListingOwnerMenu,
-  type ListingOwnerView,
-} from "@/components/listings/listing-owner-menu";
+import type { ListingOwnerView } from "@/components/listings/listing-owner-menu";
+import { ServiceOwnerMenu } from "./service-owner-menu";
+import { aplicarEdicionDeServicio } from "./service-edit-model";
 import type { JobCardModel } from "@/app/(app)/empleos/queries";
 import { workModeLabel } from "@/lib/creators/work-mode";
 import { cn } from "@/lib/utils";
@@ -56,7 +58,7 @@ const C = COPY.service;
  * Eventos para escribir sin salir de la publicación.
  */
 export function ServiceCard({
-  service,
+  service: servicioDelServidor,
   isLoggedIn,
   engagement,
   owner,
@@ -79,6 +81,17 @@ export function ServiceCard({
   owner?: ListingOwnerView;
   video?: ListingVideoView | null;
 }) {
+  /**
+   * Lo editado se ve al instante. Queda atado al objeto que llegó del servidor:
+   * cuando la lista se refresca llega otro objeto y el parche se descarta solo,
+   * así nunca se queda pegado un dato más viejo que el de la base.
+   */
+  const [edicion, setEdicion] = useState<{
+    base: JobCardModel;
+    model: JobCardModel;
+  } | null>(null);
+  const service =
+    edicion && edicion.base === servicioDelServidor ? edicion.model : servicioDelServidor;
   const modeLabel = workModeLabel(service.workMode);
   const publisherName =
     service.publisher?.type === "member"
@@ -92,6 +105,9 @@ export function ServiceCard({
    * Se muestra el aviso igual, sin el botón que no puede cumplir.
    */
   const canContact = service.publisher?.type === "member";
+  const avatarUrl = service.publisher?.type === "member" ? service.publisher.avatarUrl : null;
+  const profileHref =
+    service.publisher?.type === "member" ? `/perfil/${service.publisher.profileId}` : null;
 
   const card = (
     <BezelCard coreClassName="p-4">
@@ -108,11 +124,17 @@ export function ServiceCard({
           {/* La persona primero. El halo del acento + el ícono de herramientas
               dicen "oficio" sin necesidad de una foto que casi nunca hay. */}
           <span className="relative shrink-0">
-            <Avatar
-              src={service.publisher?.type === "member" ? service.publisher.avatarUrl : null}
-              name={publisherName ?? C.offeredByUnknown}
-              size="lg"
-            />
+            {profileHref && publisherName ? (
+              <Link
+                href={profileHref}
+                aria-label={C.viewProfile(publisherName)}
+                className="block rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+              >
+                <Avatar src={avatarUrl} name={publisherName} size="lg" />
+              </Link>
+            ) : (
+              <Avatar src={avatarUrl} name={publisherName ?? C.offeredByUnknown} size="lg" />
+            )}
             <span
               aria-hidden="true"
               className={cn(
@@ -146,7 +168,17 @@ export function ServiceCard({
 
             {publisherName && (
               <div className="mt-1 flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
-                <span className="truncate">{C.offeredBy(publisherName)}</span>
+                {profileHref ? (
+                  <Link
+                    href={profileHref}
+                    aria-label={C.viewProfile(publisherName)}
+                    className="truncate rounded-sm hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+                  >
+                    {C.offeredBy(publisherName)}
+                  </Link>
+                ) : (
+                  <span className="truncate">{C.offeredBy(publisherName)}</span>
+                )}
                 {service.publisher?.type === "member" && (
                   <PublisherTrust
                     displayName={service.publisher.displayName}
@@ -167,13 +199,18 @@ export function ServiceCard({
               card, con el mismo alto tocable. `-mr-2 -mt-2` lo pega a la
               esquina sin que su área de 44px empuje el encabezado. */}
           {owner?.esMio && (
-            <ListingOwnerMenu
+            <ServiceOwnerMenu
               listingId={service.id}
-              kind="service"
               title={service.title}
               esMio
               status={owner.status}
               pausadoPorReportes={owner.pausadoPorReportes}
+              onGuardado={(valores, currency) =>
+                setEdicion({
+                  base: servicioDelServidor,
+                  model: aplicarEdicionDeServicio(servicioDelServidor, valores, currency),
+                })
+              }
               className="-mr-2 -mt-2"
             />
           )}
@@ -290,7 +327,7 @@ export function ServiceCard({
    * porque esta tarjeta no tiene overlay de foto ocupando esa esquina.
    */
   return (
-    <div className="relative rounded-xl ring-2 ring-sponsored/70 shadow-[0_0_0_1px_var(--color-sponsored),0_10px_28px_-14px_var(--color-sponsored)]">
+    <div className="relative rounded-xl ring-2 ring-sponsored/70 shadow-[0_10px_28px_-14px_rgba(0,0,0,0.22)]">
       <Chip
         variant="neutral"
         size="sm"

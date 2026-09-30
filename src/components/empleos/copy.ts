@@ -409,6 +409,7 @@ export const COPY = {
     /** Encabezado de la tarjeta: quién ofrece, no qué se busca. */
     offeredBy: (name: string) => `${name} lo ofrece`,
     offeredByUnknown: "Servicio de la comunidad",
+    viewProfile: (name: string) => `Ver el perfil de ${name}`,
     availabilityLabel: "Disponible",
     zoneLabel: "Zona",
     availabilityUnknown: "Horarios a coordinar",
@@ -495,6 +496,7 @@ export const COPY = {
     emptyPublishCta: "Publicar el primero",
     /** Publicador sin cuenta (seed/API) — mismo texto que /propiedades y /profesionales. */
     externalPublisher: (name: string) => `Publicado por ${name}`,
+    viewProfile: (name: string) => `Ver el perfil de ${name}`,
     /** Miembro con cuenta pero sin perfil resuelto en el batch (caso borde). */
     communityMember: "Miembro de la comunidad",
   },
