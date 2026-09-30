@@ -1,3 +1,5 @@
+import type { SolicitudDelAviso } from "./solicitud";
+
 /**
  * NOTIFICACIONES — el contrato del desplegable de la campana.
  *
@@ -40,6 +42,8 @@ export type NotificationPanelItem = {
   entityKind: string | null;
   /** Miniatura de esa entidad, con la URL YA RESUELTA por el servidor. */
   imageUrl: string | null;
+  /** Solicitud de contacto respondible desde la gaveta. */
+  solicitud?: SolicitudDelAviso | null;
 };
 
 export type NotificationPanelData = {

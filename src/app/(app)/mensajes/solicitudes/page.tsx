@@ -8,6 +8,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { ConversationActions } from "@/components/messaging/conversation-actions";
 import { COPY } from "@/components/messaging/copy";
 import { InboxTabs } from "@/components/messaging/inbox-tabs";
+import { RefrescoEnVivo } from "@/components/notifications/refresco-en-vivo";
 import { leerSolicitudes } from "../bandeja-queries";
 
 export const metadata: Metadata = { title: COPY.inbox.solicitudesTitle };
@@ -41,6 +42,7 @@ export default async function SolicitudesPage() {
 
   return (
     <>
+      <RefrescoEnVivo userId={userId} canal="solicitudes" />
       <h1 className="mb-5 font-display text-2xl font-bold tracking-tight text-foreground">
         {COPY.inbox.title}
       </h1>

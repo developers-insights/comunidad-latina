@@ -33,6 +33,9 @@ import {
 import { parseEntityKind } from "@/lib/notifications/entity";
 import { groupByRecency } from "@/lib/notifications/recency";
 import { listingPhotoUrl } from "@/components/listings";
+import { RefrescoEnVivo } from "@/components/notifications/refresco-en-vivo";
+import { leerSolicitudesDeAvisos } from "@/lib/notifications/solicitud-server";
+import type { SolicitudDelAviso } from "@/lib/notifications/solicitud";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Notificaciones" };
@@ -53,6 +56,8 @@ type NotificationRow = {
   created_at: string;
   category: string;
   priority: string;
+  entity_type: string | null;
+  entity_id: string | null;
   entity_kind: string | null;
   image_url: string | null;
 };
@@ -65,7 +70,11 @@ type BroadcastRow = {
   starts_at: string;
 };
 
-function toItem(row: NotificationRow, now: Date): NotificationItemData {
+function toItem(
+  row: NotificationRow,
+  now: Date,
+  solicitud: SolicitudDelAviso | null = null,
+): NotificationItemData {
   return {
     id: row.id,
     kind: row.kind,
@@ -85,6 +94,7 @@ function toItem(row: NotificationRow, now: Date): NotificationItemData {
     // La columna guarda el valor CRUDO de `listings.photos` (0151): la URL
     // pública se arma en el servidor porque la fila es un client component.
     imageUrl: row.image_url ? listingPhotoUrl(row.image_url) : null,
+    solicitud,
   };
 }
 
@@ -138,6 +148,7 @@ export default async function NotificacionesPage({
 
   return (
     <>
+      <RefrescoEnVivo userId={userId} canal="bandeja" />
       <header className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
@@ -204,7 +215,7 @@ async function InboxList({ query, userId }: { query: InboxQuery; userId: string 
   let notificationsQuery = supabase
     .from("notifications")
     .select(
-      "id, kind, title, body, href, read_at, created_at, category, priority, entity_kind, image_url",
+      "id, kind, title, body, href, read_at, created_at, category, priority, entity_type, entity_id, entity_kind, image_url",
     )
     .is("dismissed_at", null)
     .gt("expires_at", nowIso)
@@ -280,8 +291,9 @@ async function InboxList({ query, userId }: { query: InboxQuery; userId: string 
       .map((b) => ({ id: b.id, title: b.title, body: b.body, ctaUrl: b.cta_url }));
   }
 
+  const solicitudes = await leerSolicitudesDeAvisos(supabase, userId, rows);
   const now = new Date();
-  const items = rows.map((row) => toItem(row, now));
+  const items = rows.map((row) => toItem(row, now, solicitudes.get(row.id) ?? null));
 
   // Críticas SIN LEER arriba de todo. Una crítica ya leída vuelve a la fila:
   // la persona ya la vio, dejarla fijada para siempre es ruido.

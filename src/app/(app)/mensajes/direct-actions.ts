@@ -5,6 +5,7 @@ import { z } from "zod";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
+import { avisarSolicitudNueva } from "@/lib/notifications/solicitud-server";
 
 /**
  * CONTACTO DIRECTO PERSONA → PERSONA.
@@ -95,6 +96,10 @@ export async function abrirChatDirectoAction(input: {
 
   const conversationId = typeof data === "string" ? data : "";
   if (!conversationId) return { ok: false, code: "error" };
+
+  // Sin esto la solicitud nacía muda: la otra persona sólo se enteraba si entraba
+  // a Mensajes → Solicitudes por su cuenta (queja del 2026-09-30).
+  await avisarSolicitudNueva(supabase, { userId: user.id, conversationId });
 
   revalidatePath("/mensajes");
   return { ok: true, conversationId };

@@ -15,6 +15,11 @@ const mocks = vi.hoisted(() => ({
   requireTenantMatch: vi.fn(),
   revalidatePath: vi.fn(),
   limit: vi.fn(() => ({ ok: true, remaining: 10, retryAfterMs: 0 })),
+  avisarSolicitudNueva: vi.fn(async () => undefined),
+}));
+
+vi.mock("@/lib/notifications/solicitud-server", () => ({
+  avisarSolicitudNueva: mocks.avisarSolicitudNueva,
 }));
 
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
@@ -61,6 +66,25 @@ describe("abrirChatDirectoAction", () => {
       p_profile_id: OTRO_ID,
     });
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/mensajes");
+  });
+
+  it("le avisa a la otra persona apenas se crea la solicitud", async () => {
+    stubConRpc({ data: CONVERSATION_ID });
+
+    await abrirChatDirectoAction({ profileId: OTRO_ID });
+
+    expect(mocks.avisarSolicitudNueva).toHaveBeenCalledWith(expect.anything(), {
+      userId: USER_ID,
+      conversationId: CONVERSATION_ID,
+    });
+  });
+
+  it("si la RPC falla no se avisa nada", async () => {
+    stubConRpc({ error: { message: "USER_BLOCKED: no disponible." } });
+
+    await abrirChatDirectoAction({ profileId: OTRO_ID });
+
+    expect(mocks.avisarSolicitudNueva).not.toHaveBeenCalled();
   });
 
   it("un id que no es uuid no llega ni al guard", async () => {

@@ -98,10 +98,34 @@ export const COPY = {
     error: "Algo no cargó bien de nuestro lado — no es tu culpa. Probá de nuevo.",
   },
 
+  /**
+   * SOLICITUD DE CONTACTO, respondida desde el aviso.
+   *
+   * "Confirmar/Eliminar" y no "Aceptar/Ignorar" porque es el par que la gente ya
+   * trae aprendido de Instagram y Facebook para esta misma decisión. El estado
+   * posterior dice qué cambió y ofrece el paso natural siguiente.
+   */
+  solicitud: {
+    pendiente: "Si confirmás, van a poder escribirse.",
+    confirmar: "Confirmar",
+    eliminar: "Eliminar",
+    confirmarLabel: (nombre: string) => `Confirmar la solicitud de ${nombre}`,
+    eliminarLabel: (nombre: string) => `Eliminar la solicitud de ${nombre}`,
+    aceptada: "Ya pueden hablar",
+    escribir: "Escribirle",
+    escribirLabel: (nombre: string) => `Escribirle a ${nombre}`,
+    eliminada: "Solicitud eliminada",
+    noDisponible: "Esta solicitud ya no está disponible",
+    error: "No pudimos responder la solicitud. Probá de nuevo.",
+    verPerfil: (nombre: string) => `Ver el perfil de ${nombre}`,
+    nuevaDescripcion: "Podés responderle desde la campana.",
+  },
+
   /** Etiqueta del botón de acción, por kind. Sin entrada = la fila entera es la
    *  acción (se toca y navega), que es lo normal. */
   actionLabels: {
     contact_request: "Ver la solicitud",
+    contact_accepted: "Abrir el chat",
     message: "Abrir el chat",
     job_application: "Ver la postulación",
     job_application_update: "Ver el aviso",

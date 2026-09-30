@@ -344,6 +344,9 @@ export async function sendListingMessageAction(input: {
         title: `Te escribieron por "${listing.title}"`,
         body: "Entrá a Mensajes para leer el mensaje y aceptar o ignorar la solicitud.",
         href: "/mensajes",
+        // Con la conversación como entidad, la campana ofrece Confirmar/Eliminar
+        // sin salir de donde estás.
+        entity: { type: "conversation", id: conversationId },
       });
 
       // Email "lead recibido" (fire-and-forget). Minimización §11: del

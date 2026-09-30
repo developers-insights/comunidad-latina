@@ -14,7 +14,7 @@ import {
   CloudSlash,
   SlidersHorizontal,
 } from "@phosphor-icons/react/dist/ssr";
-import { BottomSheet, Skeleton } from "@/components/ui";
+import { BottomSheet, Skeleton, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
   CATEGORY_META,
@@ -31,6 +31,10 @@ import {
 } from "@/app/(app)/notificaciones/actions";
 import { getPanelDeCampanaAction } from "@/app/(app)/notificaciones/panel-actions";
 import { useCloseOnBack, useFocusTrap, useMounted } from "@/lib/design/use-overlay";
+import { createClient } from "@/lib/supabase/client";
+import { useAvisosEnVivo, type AvisoEnVivo } from "@/lib/notifications/en-vivo";
+import { KIND_SOLICITUD, KIND_SOLICITUD_ACEPTADA } from "@/lib/notifications/solicitud";
+import { SolicitudEnAviso } from "./solicitud-en-aviso";
 import { CategoryIcon, NotificationAvatar } from "./category-icon";
 import { COPY } from "./copy";
 
@@ -93,8 +97,15 @@ const GAP = 8;
 
 type Estado = "vacio" | "cargando" | "listo" | "error";
 
-export function NotificationPanel({ initialUnread }: { initialUnread: number }) {
+export function NotificationPanel({
+  initialUnread,
+  userId,
+}: {
+  initialUnread: number;
+  userId: string | null;
+}) {
   const router = useRouter();
+  const { toast } = useToast();
   const mounted = useMounted();
   const reduceMotion = useReducedMotion();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -161,6 +172,51 @@ export function NotificationPanel({ initialUnread }: { initialUnread: number }) 
     void cargar(pestana);
   }
 
+  const abiertoRef = useRef(false);
+  const tabRef = useRef<InboxTab>("todas");
+  useEffect(() => {
+    abiertoRef.current = open;
+    tabRef.current = tab;
+  }, [open, tab]);
+
+  const contarNoLeidas = useCallback(async () => {
+    const { count, error } = await createClient()
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .is("dismissed_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .is("read_at", null);
+    if (error) {
+      console.warn("[notificaciones] no se pudo recontar el globito", { code: error.code });
+      return;
+    }
+    if (typeof count === "number") setUnread(count);
+  }, []);
+
+  const alAvisar = useCallback(
+    (aviso: AvisoEnVivo) => {
+      if (abiertoRef.current) {
+        void cargar(tabRef.current);
+      } else {
+        void contarNoLeidas();
+      }
+      if (
+        aviso.tipo === "nuevo" &&
+        aviso.title &&
+        !abiertoRef.current &&
+        (aviso.kind === KIND_SOLICITUD || aviso.kind === KIND_SOLICITUD_ACEPTADA)
+      ) {
+        toast({
+          title: aviso.title,
+          description: aviso.kind === KIND_SOLICITUD ? COPY.solicitud.nuevaDescripcion : undefined,
+        });
+      }
+    },
+    [cargar, contarNoLeidas, toast],
+  );
+
+  useAvisosEnVivo(userId, alAvisar);
+
   /** Mide dónde termina el botón: el panel cuelga de ahí, no de un número fijo. */
   const medir = useCallback(() => {
     const rect = triggerRef.current?.getBoundingClientRect();
@@ -211,6 +267,13 @@ export function NotificationPanel({ initialUnread }: { initialUnread: number }) 
       await markNotificationReadAction(item.id).catch(() => undefined);
       router.refresh();
     });
+  }
+
+  function marcarLeidaLocal(id: string) {
+    setItems((previos) =>
+      previos.map((otro) => (otro.id === id ? { ...otro, read: true } : otro)),
+    );
+    setUnread((previo) => Math.max(0, previo - 1));
   }
 
   /**
@@ -340,9 +403,25 @@ export function NotificationPanel({ initialUnread }: { initialUnread: number }) 
                       {estado === "error" && <PanelError onRetry={() => void cargar(tab)} />}
                       {estado !== "error" && items.length > 0 && (
                         <ul className="flex flex-col gap-1">
-                          {items.map((item) => (
-                            <PanelRow key={item.id} item={item} onOpen={() => abrirAviso(item)} />
-                          ))}
+                          {items.map((item) =>
+                            item.solicitud ? (
+                              <li key={item.id}>
+                                <SolicitudEnAviso
+                                  compacta
+                                  notificationId={item.id}
+                                  solicitud={item.solicitud}
+                                  titulo={item.title}
+                                  createdAt={item.createdAt}
+                                  timeLabel={item.timeLabel}
+                                  leida={item.read}
+                                  onNavegar={cerrar}
+                                  onLeida={() => marcarLeidaLocal(item.id)}
+                                />
+                              </li>
+                            ) : (
+                              <PanelRow key={item.id} item={item} onOpen={() => abrirAviso(item)} />
+                            ),
+                          )}
                         </ul>
                       )}
                       {estado === "listo" && items.length === 0 && <PanelEmpty tab={tab} />}

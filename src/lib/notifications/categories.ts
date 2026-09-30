@@ -214,6 +214,7 @@ export const KIND_CATEGORY: Record<string, NotificationCategory> = {
   // Emisores existentes (0045)
   message: "mensajes",
   contact_request: "mensajes",
+  contact_accepted: "mensajes",
   /**
    * Mensaje nuevo en un GRUPO de chat (0133). Kind propio y no `message`:
    * `kind` es la etiqueta FINA del evento y "alguien escribió en Ciclistas de
