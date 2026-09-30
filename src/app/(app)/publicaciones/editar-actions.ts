@@ -589,9 +589,9 @@ type Bloqueo = "cola_abierta" | "denuncias" | "error" | null;
 
 /**
  * Por qué un aviso pausado no puede volver solo a la vista, aunque su dueño lo
- * haya pausado. Se pregunta a la base y no a `attrs.paused_reason`: la 0124
- * reescribió `protect_listing_counters` sin la guarda de la 0118, así que hoy
- * el dueño puede borrar esa marca con su propio JWT.
+ * haya pausado. Se pregunta a la cola y a las denuncias y no sólo a
+ * `attrs.paused_reason`: esa marca estuvo desprotegida entre la 0124 y la 0178,
+ * y un aviso puede tener revisión abierta sin estar pausado por denuncias.
  */
 async function bloqueoParaRepublicar(
   admin: ReturnType<typeof createAdminClient>,
