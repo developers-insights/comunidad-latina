@@ -8,12 +8,19 @@
 - **Servicios:** "Editar" abre el formulario real de publicar precargado (`service-edit-sheet.tsx`, `editar-servicio-actions.ts`), antes abría la hoja genérica de avisos.
 - Verificado: tsc 0, eslint limpio, vitest 7010/7010, `next build` OK, deploy Production READY con `8377659`.
 
-**Pendiente / decisiones abiertas**
-- "Eliminar" una solicitud hoy BLOQUEA (status `blocked`, semántica heredada de "Ignorar"). Propuesta: que sólo descarte, como Instagram. Espera OK de Manuel.
-- Bug: `editarAvisoAction` (publicaciones genéricas) deja un aviso publicado en `pending_review` aunque el texto pase moderación → queda trabado. Servicios ya no pasa por ahí.
-- Sin link a perfil todavía: `empleos/applicant-profile-card.tsx`, `empleos/[id]/page.tsx`, `service-detail.tsx`.
-- `anon` tiene privilegios de tabla sobre `notifications` en prod (cubierto por FORCE RLS): hacer `revoke`.
-- Probar en celular real: gesto de audio, Confirmar desde la campana en vivo.
+**Segunda vuelta (✅ 2026-09-30, `245c070`)**
+- "Eliminar"/"Ignorar" una solicitud ya no bloquea: status `declined` + `declined_at`, RPC `descartar_solicitud`; el solicitante la sigue viendo pendiente; re-pedir sólo tras 30 días. `revoke all on notifications from anon`. Migración 0177 APLICADA.
+- Aviso editado ya no queda trabado en `pending_review`: `src/lib/listings/republicar.ts` (republica sin tocar `published_at`, repone vencimiento) y `cola.ts` (`encolarSiQuedaEnRevision`: todo lo que termina en revisión se encola). Aplicado a editar, reactivar, altas de event/property/business/professional/marketplace/creadores/empleos/perdidos y a editar servicio.
+- 11 avisos huérfanos en prod ENCOLADOS en moderación (tier 3, `orphan_pending_review`) con `scripts/encolar-huerfanos.mjs` — no se publicaron: los tiene que aprobar un moderador.
+- Seguridad: la 0124 había perdido las guardas de 0098 (vencimiento/renovación) y 0118 (marca de pausa) en `app.protect_listing_counters()` → el dueño podía forjarlas. 0178 las repone, permitiendo sólo la pausa/reactivación del dueño. APLICADA y verificada.
+- Moderación: aprobar ya no es boost (published_at sólo si era null). `finalizeListing` con candado de status. Toast "Listo, ya se ve de nuevo" al reactivar.
+- Empleos: links a perfil con `ProfileLink` en cards, detalles y candidatos (no en la tarjeta propia del formulario de postulación, a propósito).
+- Verificado: tsc 0, eslint limpio, vitest 7078/7078, next build OK, deploy Production READY.
+
+**Pendiente**
+- `buscar_en_mensajeria` (0140) no filtra por status: el buscador muestra conversaciones `declined`/`blocked`.
+- `empleos/actions.ts` reusa cualquier conversación del par, incluida una `declined`.
+- Probar en celular real: gesto de audio y Confirmar/Eliminar desde la campana.
 
 ## Alta con email, login con Google y redirects sin localhost (✅ 2026-09-28, `5dbcd97`)
 
