@@ -10,11 +10,10 @@ import { requireIdentidadVerificada } from "@/lib/verificacion/gate";
 import {
   TIER_AUTO,
   TIER_HUMAN,
-  TIER_REVIEW,
-  enqueueModeration,
   moderateText,
   moderationTier,
 } from "@/lib/moderation";
+import { encolarSiQuedaEnRevision } from "@/lib/listings/cola";
 import {
   EMPLOYMENT_TYPES,
   JOB_PAY_PERIODS,
@@ -469,46 +468,30 @@ async function finalizeEmpleosListing(
         });
         status = "pending_review";
       }
-    } catch {
-      // Admin no configurado → el aviso queda en revisión.
+    } catch (error) {
+      console.warn("[empleos] admin client no disponible para publicar, queda en revisión", {
+        listingId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       status = "pending_review";
     }
   }
 
-  // ---- Cola de moderación (admin, uso permitido §6) — para que el aviso sea
-  // resoluble desde /admin/moderacion en vez de quedar huérfano.
-  const shouldEnqueue =
-    moderation.flagged ||
-    moderation.skipped ||
-    tier > TIER_AUTO ||
-    photoNeedsAsyncReview ||
-    videoNeedsAsyncReview;
-  if (shouldEnqueue) {
-    try {
-      const reasons = [
-        ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
-        ...(photoNeedsAsyncReview ? ["photo_async_review"] : []),
-        ...(videoNeedsAsyncReview ? ["video_async_review"] : []),
-      ];
-      const enqueueTier =
-        status === "pending_review" || photoNeedsAsyncReview || videoNeedsAsyncReview
-          ? TIER_HUMAN
-          : TIER_REVIEW;
-      const outcome = await enqueueModeration(createAdminClient(), {
-        tenantId: tenant.id,
-        subjectKind: "listing",
-        subjectId: listingId,
-        aiScore: moderation.skipped ? null : moderation.score,
-        reasons,
-        tier: enqueueTier,
-      });
-      if (!outcome.ok) {
-        console.warn("[empleos] no se pudo encolar moderación del aviso", { listingId });
-      }
-    } catch {
-      console.warn("[empleos] admin client no disponible para encolar moderación");
-    }
-  }
+  await encolarSiQuedaEnRevision({
+    status,
+    exigeHumano: moderation.flagged || photoNeedsAsyncReview || videoNeedsAsyncReview,
+    monitorear: moderation.skipped === true || tier > TIER_AUTO,
+    tenantId: tenant.id,
+    listingId,
+    aiScore: moderation.skipped ? null : moderation.score,
+    reasons: [
+      ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
+      ...(photoNeedsAsyncReview ? ["photo_async_review"] : []),
+      ...(videoNeedsAsyncReview ? ["video_async_review"] : []),
+    ],
+    motivoEnRevision: "new_listing",
+    origen: "empleos",
+  });
 
   return { ok: true, status };
 }

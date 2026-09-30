@@ -6,14 +6,7 @@ import { DAY_MS, limit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { supabaseSinTiparListings } from "@/lib/listings";
-import {
-  TIER_AUTO,
-  TIER_HUMAN,
-  TIER_REVIEW,
-  enqueueModeration,
-  moderateText,
-  moderationTier,
-} from "@/lib/moderation";
+import { TIER_AUTO, TIER_HUMAN, moderateText, moderationTier } from "@/lib/moderation";
 import { fetchVideoDeAviso, type VideoGuardado } from "@/lib/media/listing-video-queries";
 import {
   SIN_VIDEO,
@@ -33,6 +26,8 @@ import {
   puedeEditarse,
   statusDespuesDeEditar,
 } from "@/lib/listings/edicion";
+import { republicarAvisoEditado, vuelveAPublicarse } from "@/lib/listings/republicar";
+import { encolarSiQuedaEnRevision } from "@/lib/listings/cola";
 import {
   SERVICE_USER_FACING_ISSUES,
   serviceDraftSchema,
@@ -280,7 +275,6 @@ export async function editarServicioAction(rawInput: {
   const videoNeedsAsyncReview =
     videoColumns !== null && videoColumns.video_path !== null && !devAutoApprove();
 
-  const eraPublicado = fila.status === "published";
   const statusInicial = statusDespuesDeEditar(fila.status);
 
   const { data: updated, error: updateError } = await sinTipar
@@ -314,51 +308,52 @@ export async function editarServicioAction(rawInput: {
 
   let status: "published" | "pending_review" | "paused" = statusInicial;
 
-  // La RLS del dueño no deja escribir `published`: el regreso a publicado, como
-  // en el alta, lo hace el admin client y sólo si el texto pasó la moderación y
-  // el aviso ya estaba a la vista. Uno que esperaba revisión humana no se
-  // publica solo porque se lo editó.
-  if (eraPublicado && !moderation.flagged && tier !== TIER_HUMAN) {
+  // El video de un servicio se revisa después de publicado (igual que en el
+  // alta): no retiene la vuelta a la vista, sólo entra a la cola.
+  if (
+    vuelveAPublicarse({
+      statusPrevio: fila.status,
+      textoMarcado: moderation.flagged,
+      tier,
+      mediaPendiente: false,
+    })
+  ) {
     try {
-      const { error: publishError } = await createAdminClient()
-        .from("listings")
-        .update({ status: "published", published_at: new Date().toISOString() })
-        .eq("id", listingId)
-        .eq("tenant_id", tenant.id)
-        .eq("created_by", user.id)
-        .eq("status", "pending_review");
-      if (!publishError) status = "published";
-    } catch {
-      console.warn("[empleos] admin client no disponible, el servicio queda en revisión");
+      const resultado = await republicarAvisoEditado(
+        supabaseSinTiparListings(createAdminClient()),
+        { listingId, tenantId: tenant.id, userId: user.id },
+      );
+      if (resultado.ok) {
+        status = "published";
+      } else {
+        console.warn("[empleos] la edición del servicio no pudo volver a publicarse", {
+          listingId,
+          motivo: resultado.motivo,
+          code: resultado.code,
+        });
+      }
+    } catch (error) {
+      console.warn("[empleos] admin client no disponible para volver a publicar el servicio", {
+        listingId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
-  const debeEncolar =
-    moderation.flagged ||
-    moderation.skipped ||
-    tier > TIER_AUTO ||
-    videoNeedsAsyncReview;
-  if (debeEncolar && fila.status !== "paused") {
-    try {
-      const outcome = await enqueueModeration(createAdminClient(), {
-        tenantId: tenant.id,
-        subjectKind: "listing",
-        subjectId: listingId,
-        aiScore: moderation.skipped ? null : moderation.score,
-        reasons: [
-          ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
-          ...(videoNeedsAsyncReview ? ["video_async_review"] : []),
-        ],
-        tier:
-          status === "pending_review" || videoNeedsAsyncReview ? TIER_HUMAN : TIER_REVIEW,
-      });
-      if (!outcome.ok) {
-        console.warn("[empleos] no se pudo encolar la revisión de la edición", { listingId });
-      }
-    } catch {
-      console.warn("[empleos] admin client no disponible para encolar moderación");
-    }
-  }
+  await encolarSiQuedaEnRevision({
+    status,
+    exigeHumano: moderation.flagged || videoNeedsAsyncReview,
+    monitorear: moderation.skipped === true || tier > TIER_AUTO,
+    tenantId: tenant.id,
+    listingId,
+    aiScore: moderation.skipped ? null : moderation.score,
+    reasons: [
+      ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
+      ...(videoNeedsAsyncReview ? ["video_async_review"] : []),
+    ],
+    motivoEnRevision: "edited_listing",
+    origen: "empleos",
+  });
 
   revalidatePath("/empleos");
   revalidatePath(`/empleos/${listingId}`);

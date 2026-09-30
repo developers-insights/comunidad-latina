@@ -185,6 +185,21 @@ describe("finalizeGig — un aviso dado de baja NO se re-publica", () => {
     expect(publish?.table).toBe("listings");
     expect(publish?.args[0]).toMatchObject({ status: "published" });
   });
+
+  it("si el admin no logra publicarlo, queda en revisión Y en la cola, no huérfano", async () => {
+    useGuardOk({
+      listings: { update: { data: GIG_ROW, error: null } },
+    });
+    useAdmin({ listings: { update: { data: null, error: { code: "XX000" } } } });
+
+    const result = await finalizeGig({ listingId: LISTING_ID, photoPaths: [] });
+
+    expect(result).toEqual({ ok: true, status: "pending_review" });
+    expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
+    const [, input] = mocks.enqueueModeration.mock.calls[0];
+    expect(input).toMatchObject({ subjectKind: "listing", subjectId: LISTING_ID, tier: 3 });
+    expect(input.reasons).toContain("new_listing");
+  });
 });
 
 describe("finalizeGig — cuota propia", () => {

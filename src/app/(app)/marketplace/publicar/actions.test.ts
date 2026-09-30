@@ -247,6 +247,24 @@ describe("finalizeProduct — un producto dado de baja NO se re-publica", () => 
       args: ["status", ["draft", "pending_review"]],
     });
   });
+
+  it("un producto limpio que queda en revisión entra a la cola: si no, nadie lo ve nunca", async () => {
+    useGuardOk({
+      listings: {
+        select: { data: PRODUCT_ROW, error: null },
+        update: { data: { id: LISTING_ID }, error: null },
+      },
+    });
+    useAdmin();
+
+    const result = await finalizeProduct({ listingId: LISTING_ID, photoPaths: [] });
+
+    expect(result).toEqual({ ok: true, status: "pending_review" });
+    expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
+    const [, input] = mocks.enqueueModeration.mock.calls[0];
+    expect(input).toMatchObject({ subjectKind: "listing", subjectId: LISTING_ID, tier: 3 });
+    expect(input.reasons).toContain("new_listing");
+  });
 });
 
 describe("finalizeProduct — cuota propia", () => {

@@ -17,11 +17,10 @@ import {
 import {
   TIER_AUTO,
   TIER_HUMAN,
-  TIER_REVIEW,
-  enqueueModeration,
   moderateText,
   moderationTier,
 } from "@/lib/moderation";
+import { encolarSiQuedaEnRevision } from "@/lib/listings/cola";
 import {
   declarationSchema,
   normalizeDeclaration,
@@ -753,52 +752,29 @@ export async function finalizeListing(rawInput: {
         finalStatus = "published";
       }
     } catch {
-      // Admin no configurado — el aviso queda en revisión, nunca rompemos. Se
-      // loguea igual que su hermano de la cola de moderación treinta líneas
-      // abajo: sin la línea, "el aviso quedó en revisión" no distingue entre la
+      // Sin la línea, "el aviso quedó en revisión" no distingue entre la
       // moderación haciendo su trabajo y el cliente admin sin configurar.
       console.warn("[vivienda] admin client no disponible para auto-aprobar");
     }
   }
 
-  // ---- Cola de moderación (§8/§12) ------------------------------------------
-  // Sin esto el aviso queda en `pending_review` y NADIE lo ve: /admin/moderacion
-  // lista la cola, no los listings. Mismo patrón que marketplace/publicar.
-  if (finalStatus === "pending_review") {
-    const shouldEnqueue =
-      moderation.flagged ||
-      moderation.skipped ||
-      textTier > TIER_AUTO ||
-      photoNeedsReview ||
-      videoNeedsReview ||
-      integrity.needsHumanReview;
-    if (shouldEnqueue) {
-      try {
-        const reasons = [
-          ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
-          ...(photoNeedsReview ? ["photo_pending_review"] : []),
-          ...(videoNeedsReview ? ["video_async_review"] : []),
-          ...integrity.reasons,
-        ];
-        const outcome = await enqueueModeration(createAdminClient(), {
-          tenantId: tenant.id,
-          subjectKind: "listing",
-          subjectId: listingId,
-          aiScore: moderation.skipped ? null : moderation.score,
-          reasons,
-          tier:
-            moderation.flagged || photoNeedsReview || videoNeedsReview || integrity.needsHumanReview
-              ? TIER_HUMAN
-              : TIER_REVIEW,
-        });
-        if (!outcome.ok) {
-          console.warn("[vivienda] no se pudo encolar moderación del aviso", { listingId });
-        }
-      } catch {
-        console.warn("[vivienda] admin client no disponible para encolar moderación");
-      }
-    }
-  }
+  await encolarSiQuedaEnRevision({
+    status: finalStatus,
+    exigeHumano:
+      moderation.flagged || photoNeedsReview || videoNeedsReview || integrity.needsHumanReview,
+    monitorear: moderation.skipped === true || textTier > TIER_AUTO,
+    tenantId: tenant.id,
+    listingId,
+    aiScore: moderation.skipped ? null : moderation.score,
+    reasons: [
+      ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
+      ...(photoNeedsReview ? ["photo_pending_review"] : []),
+      ...(videoNeedsReview ? ["video_async_review"] : []),
+      ...integrity.reasons,
+    ],
+    motivoEnRevision: "new_listing",
+    origen: "vivienda",
+  });
 
   return { ok: true, status: finalStatus, kind };
 }

@@ -274,6 +274,24 @@ describe("finalizeListing — una foto sin moderar NUNCA queda huérfana", () =>
 
     expect(result).toEqual({ ok: true, status: "pending_review", kind: "property" });
   });
+
+  it("texto limpio y sin fotos: queda en revisión Y en la cola, no huérfano", async () => {
+    useGuardOk({
+      listings: {
+        select: { data: { ...LISTING_ROW, kind: "event" }, error: null },
+        update: { data: { id: LISTING_ID, created_by: USER_ID, kind: "event" }, error: null },
+      },
+    });
+    useAdmin();
+
+    const result = await finalizeListing({ listingId: LISTING_ID, photoPaths: [] });
+
+    expect(result).toEqual({ ok: true, status: "pending_review", kind: "event" });
+    expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
+    const [, input] = mocks.enqueueModeration.mock.calls[0];
+    expect(input).toMatchObject({ subjectKind: "listing", subjectId: LISTING_ID, tier: 3 });
+    expect(input.reasons).toContain("new_listing");
+  });
 });
 
 describe("finalizeListing — auto-aprobación dev", () => {
