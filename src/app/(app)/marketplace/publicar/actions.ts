@@ -8,11 +8,10 @@ import { isVisionConfigured } from "@/lib/config/services";
 import {
   TIER_AUTO,
   TIER_HUMAN,
-  TIER_REVIEW,
-  enqueueModeration,
   moderateText,
   moderationTier,
 } from "@/lib/moderation";
+import { encolarSiQuedaEnRevision } from "@/lib/listings/cola";
 import {
   declarationSchema,
   normalizeDeclaration,
@@ -336,52 +335,31 @@ export async function finalizeProduct(rawInput: {
           code: publishError.code,
         });
       }
-    } catch {
-      // Admin no configurado — el producto queda en revisión, nunca rompemos.
+    } catch (error) {
+      console.warn("[marketplace] admin client no disponible para auto-aprobar", {
+        listingId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
-  // ---- Cola de moderación (§8/§12) ------------------------------------------
-  // A diferencia de /publicar (que hoy no encola), acá SÍ — mismo patrón que
-  // feed/actions.ts — para que un producto pending_review sea resoluble desde
-  // /admin/moderacion en vez de quedar huérfano.
-  if (finalStatus === "pending_review") {
-    const shouldEnqueue =
-      moderation.flagged ||
-      moderation.skipped ||
-      tier > TIER_AUTO ||
-      photoNeedsReview ||
-      videoNeedsReview ||
-      integrity.needsHumanReview;
-    if (shouldEnqueue) {
-      try {
-        const reasons = [
-          ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
-          ...(photoNeedsReview ? ["photo_pending_review"] : []),
-          ...(videoNeedsReview ? ["video_async_review"] : []),
-          ...integrity.reasons,
-        ];
-        const outcome = await enqueueModeration(createAdminClient(), {
-          tenantId: tenant.id,
-          subjectKind: "listing",
-          subjectId: listingId,
-          aiScore: moderation.skipped ? null : moderation.score,
-          reasons,
-          tier:
-            moderation.flagged || photoNeedsReview || videoNeedsReview || integrity.needsHumanReview
-              ? TIER_HUMAN
-              : TIER_REVIEW,
-        });
-        if (!outcome.ok) {
-          console.warn("[marketplace] no se pudo encolar moderación del producto", {
-            listingId,
-          });
-        }
-      } catch {
-        console.warn("[marketplace] admin client no disponible para encolar moderación");
-      }
-    }
-  }
+  await encolarSiQuedaEnRevision({
+    status: finalStatus,
+    exigeHumano:
+      moderation.flagged || photoNeedsReview || videoNeedsReview || integrity.needsHumanReview,
+    monitorear: moderation.skipped === true || tier > TIER_AUTO,
+    tenantId: tenant.id,
+    listingId,
+    aiScore: moderation.skipped ? null : moderation.score,
+    reasons: [
+      ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
+      ...(photoNeedsReview ? ["photo_pending_review"] : []),
+      ...(videoNeedsReview ? ["video_async_review"] : []),
+      ...integrity.reasons,
+    ],
+    motivoEnRevision: "new_listing",
+    origen: "marketplace",
+  });
 
   return { ok: true, status: finalStatus };
 }

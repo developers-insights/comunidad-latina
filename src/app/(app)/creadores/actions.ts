@@ -25,11 +25,10 @@ import { requireTenantMatch } from "@/lib/tenant/guard";
 import {
   TIER_AUTO,
   TIER_HUMAN,
-  TIER_REVIEW,
-  enqueueModeration,
   moderateText,
   moderationTier,
 } from "@/lib/moderation";
+import { encolarSiQuedaEnRevision } from "@/lib/listings/cola";
 import { blockContactInfoIn } from "@/lib/moderation/contact-block";
 import { roleOf } from "@/components/creators/contract-machine";
 import {
@@ -284,43 +283,31 @@ export async function finalizeGig(rawInput: {
         });
         status = "pending_review";
       }
-    } catch {
-      // Admin no configurado → el aviso queda en revisión.
+    } catch (error) {
+      console.warn("[creadores] admin client no disponible para publicar, queda en revisión", {
+        listingId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       status = "pending_review";
     }
   }
 
-  // ---- Cola de moderación (admin, uso permitido §6) — espejo de
-  // createPostAction. El aviso ya está visible en Trabajos; igual entra a la
-  // cola para que un humano vea la imagen (sin Vision) o el texto marcado. Se
-  // resuelve desde /admin/moderacion, que ya soporta subject_kind='listing'.
-  const shouldEnqueue =
-    moderation.flagged || moderation.skipped || tier > TIER_AUTO || photoNeedsAsyncReview;
-  if (shouldEnqueue) {
-    try {
-      const reasons = [
-        ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
-        ...(photoNeedsAsyncReview ? ["photo_async_review"] : []),
-      ];
-      // pending_review → cola humana; publicado con foto sin Vision → cola
-      // humana igual (la imagen necesita ojos), pero el aviso ya está visible.
-      const enqueueTier =
-        status === "pending_review" || photoNeedsAsyncReview ? TIER_HUMAN : TIER_REVIEW;
-      const outcome = await enqueueModeration(createAdminClient(), {
-        tenantId: tenant.id,
-        subjectKind: "listing",
-        subjectId: listingId,
-        aiScore: moderation.skipped ? null : moderation.score,
-        reasons,
-        tier: enqueueTier,
-      });
-      if (!outcome.ok) {
-        console.warn("[creadores] no se pudo encolar moderación del aviso", { listingId });
-      }
-    } catch {
-      console.warn("[creadores] admin client no disponible para encolar moderación");
-    }
-  }
+  // Publicado con foto sin Vision igual entra a la cola humana: la imagen
+  // necesita ojos aunque el aviso ya esté visible.
+  await encolarSiQuedaEnRevision({
+    status,
+    exigeHumano: moderation.flagged || photoNeedsAsyncReview,
+    monitorear: moderation.skipped === true || tier > TIER_AUTO,
+    tenantId: tenant.id,
+    listingId,
+    aiScore: moderation.skipped ? null : moderation.score,
+    reasons: [
+      ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
+      ...(photoNeedsAsyncReview ? ["photo_async_review"] : []),
+    ],
+    motivoEnRevision: "new_listing",
+    origen: "creadores",
+  });
 
   return { ok: true, status };
 }

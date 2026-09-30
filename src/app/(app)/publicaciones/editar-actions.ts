@@ -7,14 +7,7 @@ import { requireTenantMatch } from "@/lib/tenant/guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isVisionConfigured } from "@/lib/config/services";
 import { listingViewHref } from "@/lib/monetization/href";
-import {
-  TIER_AUTO,
-  TIER_HUMAN,
-  TIER_REVIEW,
-  enqueueModeration,
-  moderateText,
-  moderationTier,
-} from "@/lib/moderation";
+import { TIER_AUTO, TIER_HUMAN, moderateText, moderationTier } from "@/lib/moderation";
 import { registerUploadedMedia } from "@/lib/integrity";
 import { retireAssetFromSubject } from "@/lib/integrity/retire";
 import { currentSourceHost } from "@/lib/integrity/source-host";
@@ -44,6 +37,7 @@ import {
   statusDespuesDeEditar,
 } from "@/lib/listings/edicion";
 import { republicarAvisoEditado, vuelveAPublicarse } from "@/lib/listings/republicar";
+import { encolarSiQuedaEnRevision } from "@/lib/listings/cola";
 
 /**
  * =============================================================================
@@ -466,54 +460,23 @@ export async function editarAvisoAction(rawInput: {
     }
   }
 
-  // ---- La cola de moderación, con el mismo criterio que el alta ------------
-  // Un `pending_review` sin fila en la cola no lo ve nadie en /admin/moderacion:
-  // queda invisible para siempre. Por eso quedarse en revisión SIEMPRE encola.
-  const debeEncolar =
-    statusFinal === "pending_review" ||
-    moderation.flagged ||
-    moderation.skipped ||
-    tier > TIER_AUTO ||
-    photoNeedsReview ||
-    videoNeedsReview ||
-    integrity.needsHumanReview;
-
-  if (debeEncolar) {
-    try {
-      const reasons = [
-        ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
-        ...(photoNeedsReview ? ["photo_pending_review"] : []),
-        ...(videoNeedsReview ? ["video_async_review"] : []),
-        ...integrity.reasons,
-        ...(statusFinal === "pending_review" ? ["edited_listing"] : []),
-      ];
-      const outcome = await enqueueModeration(createAdminClient(), {
-        tenantId: tenant.id,
-        subjectKind: "listing",
-        subjectId: entrada.listingId,
-        aiScore: moderation.skipped ? null : moderation.score,
-        reasons,
-        tier:
-          statusFinal === "pending_review" ||
-          moderation.flagged ||
-          photoNeedsReview ||
-          videoNeedsReview ||
-          integrity.needsHumanReview
-            ? TIER_HUMAN
-            : TIER_REVIEW,
-      });
-      if (!outcome.ok) {
-        console.warn("[publicaciones] no se pudo encolar la revisión de la edición", {
-          listingId: entrada.listingId,
-        });
-      }
-    } catch (error) {
-      console.warn("[publicaciones] admin client no disponible para encolar moderación", {
-        listingId: entrada.listingId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
+  await encolarSiQuedaEnRevision({
+    status: statusFinal,
+    exigeHumano:
+      moderation.flagged || photoNeedsReview || videoNeedsReview || integrity.needsHumanReview,
+    monitorear: moderation.skipped === true || tier > TIER_AUTO,
+    tenantId: tenant.id,
+    listingId: entrada.listingId,
+    aiScore: moderation.skipped ? null : moderation.score,
+    reasons: [
+      ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
+      ...(photoNeedsReview ? ["photo_pending_review"] : []),
+      ...(videoNeedsReview ? ["video_async_review"] : []),
+      ...integrity.reasons,
+    ],
+    motivoEnRevision: "edited_listing",
+    origen: "publicaciones",
+  });
 
   revalidar(fila.kind, entrada.listingId);
   return { ok: true, status: statusFinal };
@@ -526,16 +489,16 @@ export async function editarAvisoAction(rawInput: {
 const pausarSchema = z.object({ listingId: z.uuid(), pausar: z.boolean() });
 
 export type PausarAvisoResult =
-  | { ok: true; status: "paused" | "pending_review" }
+  | { ok: true; status: "paused" | "published" | "pending_review" }
   | { ok: false; error: string; needsAuth?: boolean };
 
 /**
  * Pausar NO toca el contenido, así que no vuelve a moderación: es la única
  * acción de este archivo que no cuesta una revisión.
  *
- * Volver a publicar sí pasa por la cola, y no por prudencia nuestra: `published`
- * está fuera del WITH CHECK del dueño. La alternativa sería un botón que rebota
- * siempre.
+ * Volver a publicar: el UPDATE del dueño deja `pending_review` (`published`
+ * está fuera de su WITH CHECK) y el admin lo devuelve a la vista si nada lo
+ * impide; si algo lo impide, queda en la cola. Nunca en revisión sin cola.
  */
 export async function pausarAvisoAction(rawInput: {
   listingId: string;
@@ -612,6 +575,123 @@ export async function pausarAvisoAction(rawInput: {
     return { ok: false, error: GENERICO };
   }
 
+  const status = pausar
+    ? "paused"
+    : await volverAPublicarReactivado({ listingId, tenantId: tenant.id, userId: user.id });
+
   revalidar(fila.kind, listingId);
-  return { ok: true, status: nuevoStatus };
+  return { ok: true, status };
+}
+
+type IdsDeAviso = { listingId: string; tenantId: string; userId: string };
+
+type Bloqueo = "cola_abierta" | "denuncias" | "error" | null;
+
+/**
+ * Por qué un aviso pausado no puede volver solo a la vista, aunque su dueño lo
+ * haya pausado. Se pregunta a la base y no a `attrs.paused_reason`: la 0124
+ * reescribió `protect_listing_counters` sin la guarda de la 0118, así que hoy
+ * el dueño puede borrar esa marca con su propio JWT.
+ */
+async function bloqueoParaRepublicar(
+  admin: ReturnType<typeof createAdminClient>,
+  ids: IdsDeAviso,
+): Promise<Bloqueo> {
+  // `photo` también: el pipeline encola las fotos con el id del aviso dueño.
+  const { data: abierta, error: colaError } = await admin
+    .from("moderation_queue")
+    .select("id")
+    .eq("tenant_id", ids.tenantId)
+    .in("subject_kind", ["listing", "photo"])
+    .eq("subject_id", ids.listingId)
+    .in("status", ["pending", "escalated"])
+    .limit(1)
+    .maybeSingle();
+  if (colaError) {
+    console.warn("[publicaciones] no se pudo leer la cola al reactivar", {
+      listingId: ids.listingId,
+      code: colaError.code,
+    });
+    return "error";
+  }
+  if (abierta) return "cola_abierta";
+
+  // Mismo criterio que `app.peso_de_denuncias_de_aviso` (0118): sólo
+  // 'dismissed' afirma que no pasó nada.
+  const { data: denuncia, error: denunciaError } = await admin
+    .from("scam_reports")
+    .select("id")
+    .eq("tenant_id", ids.tenantId)
+    .eq("target_kind", "listing")
+    .eq("target_id", ids.listingId)
+    .neq("status", "dismissed")
+    .limit(1)
+    .maybeSingle();
+  if (denunciaError) {
+    console.warn("[publicaciones] no se pudieron leer las denuncias al reactivar", {
+      listingId: ids.listingId,
+      code: denunciaError.code,
+    });
+    return "error";
+  }
+  return denuncia ? "denuncias" : null;
+}
+
+/**
+ * Pausar sólo sale de `published` (`puedePausarse`), así que reactivar es
+ * devolver a la vista lo que ya estaba a la vista: se republica con el mismo
+ * helper que la edición — sin tocar `published_at` y reponiendo el vencimiento
+ * previo. El tiempo en pausa corre contra el plazo: congelarlo dependería de
+ * `attrs.paused_at`, que el dueño puede escribir; y reiniciarlo haría de
+ * pausar+reactivar una renovación gratis que esquiva el tope de la 0098. Si
+ * venció durante la pausa, el cron lo pasa a `expired` y se renueva por
+ * `renovar_publicacion`, la única puerta que cuenta renovaciones.
+ */
+async function volverAPublicarReactivado(ids: IdsDeAviso): Promise<"published" | "pending_review"> {
+  const encolar = (reasons: string[]) =>
+    encolarSiQuedaEnRevision({
+      status: "pending_review",
+      exigeHumano: true,
+      monitorear: false,
+      tenantId: ids.tenantId,
+      listingId: ids.listingId,
+      aiScore: null,
+      reasons,
+      motivoEnRevision: "reactivated_listing",
+      origen: "publicaciones",
+    });
+
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch (error) {
+    console.warn("[publicaciones] admin client no disponible para reactivar", {
+      listingId: ids.listingId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return "pending_review";
+  }
+
+  const bloqueo = await bloqueoParaRepublicar(admin, ids);
+  // La revisión que ya está abierta es la que decide: una segunda fila sólo
+  // duplicaría el trabajo del moderador.
+  if (bloqueo === "cola_abierta") return "pending_review";
+  if (bloqueo === "denuncias") {
+    await encolar(["listing_reports_open"]);
+    return "pending_review";
+  }
+  if (bloqueo === "error") {
+    await encolar([]);
+    return "pending_review";
+  }
+
+  const resultado = await republicarAvisoEditado(supabaseSinTiparListings(admin), ids);
+  if (resultado.ok) return "published";
+  console.warn("[publicaciones] el aviso reactivado no pudo volver a publicarse", {
+    listingId: ids.listingId,
+    motivo: resultado.motivo,
+    code: resultado.code,
+  });
+  await encolar([]);
+  return "pending_review";
 }

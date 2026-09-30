@@ -100,8 +100,14 @@ function useGuardOk(config: TableOps) {
   return stub;
 }
 
-function adminStub(result: OpResult = { error: null }) {
-  const stub = createStub({ update: result });
+const FECHAS_PREVIAS = {
+  expires_at: "2026-10-20T00:00:00.000Z",
+  expiry_warn_at: "2026-10-17T00:00:00.000Z",
+  expiry_warned_at: null,
+};
+
+function adminStub(result: OpResult = { data: { id: LISTING_ID }, error: null }) {
+  const stub = createStub({ select: { data: FECHAS_PREVIAS, error: null }, update: result });
   mocks.createAdminClient.mockReturnValue(stub.client);
   return stub;
 }
@@ -208,9 +214,60 @@ describe("editarServicioAction", () => {
     expect(stub.calls).toContainEqual({ method: "eq", args: ["created_by", USER_ID] });
     expect(stub.calls).toContainEqual({ method: "eq", args: ["kind", "service"] });
 
-    const adminUpdate = admin.calls.find((c) => c.method === "update");
-    expect(adminUpdate?.args[0]).toMatchObject({ status: "published" });
+    const adminUpdates = admin.calls.filter((c) => c.method === "update").map((c) => c.args[0]);
+    expect(adminUpdates[0]).toEqual({ status: "published" });
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/empleos");
+  });
+
+  it("volver a publicar no es un boost ni una renovación gratis", async () => {
+    useGuardOk({
+      select: { data: filaServicio(), error: null },
+      update: { data: { id: LISTING_ID }, error: null },
+    });
+    const admin = adminStub();
+
+    await editarServicioAction({ ...ENTRADA, title: "Jardinería y poda de árboles" });
+
+    const adminUpdates = admin.calls.filter((c) => c.method === "update").map((c) => c.args[0]);
+    expect(adminUpdates.some((u) => "published_at" in (u as object))).toBe(false);
+    expect(adminUpdates[1]).toEqual(FECHAS_PREVIAS);
+    expect(admin.calls).toContainEqual({ method: "eq", args: ["status", "pending_review"] });
+    expect(mocks.enqueueModeration).not.toHaveBeenCalled();
+  });
+
+  it("si no se puede volver a publicar, queda en la cola en vez de huérfano", async () => {
+    useGuardOk({
+      select: { data: filaServicio(), error: null },
+      update: { data: { id: LISTING_ID }, error: null },
+    });
+    adminStub({ data: null, error: { code: "XX000" } });
+
+    const result = await editarServicioAction({ ...ENTRADA, title: "Jardinería y poda de árboles" });
+
+    expect(result).toEqual({ ok: true, status: "pending_review" });
+    expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
+    expect(mocks.enqueueModeration.mock.calls[0][1]).toMatchObject({
+      tier: 3,
+      reasons: expect.arrayContaining(["edited_listing"]),
+    });
+  });
+
+  it("editado en pausa con el texto marcado entra a la cola: al reactivarlo no puede salir solo", async () => {
+    useGuardOk({
+      select: { data: filaServicio({ status: "paused" }), error: null },
+      update: { data: { id: LISTING_ID }, error: null },
+    });
+    mocks.moderateText.mockResolvedValue({
+      flagged: true,
+      score: 0.9,
+      categories: ["scam"],
+      skipped: false,
+    });
+
+    const result = await editarServicioAction({ ...ENTRADA, title: "Mandá dinero por adelantado" });
+
+    expect(result).toEqual({ ok: true, status: "paused" });
+    expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
   });
 
   it("un no-dueño es rechazado y no se escribe nada", async () => {
@@ -294,6 +351,7 @@ describe("editarServicioAction", () => {
     const result = await editarServicioAction({ ...ENTRADA, title: "Jardinería y poda de árboles" });
     expect(result).toEqual({ ok: true, status: "pending_review" });
     expect(admin.calls.some((c) => c.method === "update")).toBe(false);
+    expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
   });
 
   it("pausado por denuncias no se edita", async () => {

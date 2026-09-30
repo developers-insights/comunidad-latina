@@ -16,11 +16,10 @@ import {
 import {
   TIER_AUTO,
   TIER_HUMAN,
-  TIER_REVIEW,
-  enqueueModeration,
   moderateText,
   moderationTier,
 } from "@/lib/moderation";
+import { encolarSiQuedaEnRevision } from "@/lib/listings/cola";
 import {
   COMUNIDAD_COPY,
   LOST_FOUND_AREA_MAX,
@@ -270,47 +269,30 @@ export async function finalizeLostFoundCase(rawInput: {
         });
         status = "pending_review";
       }
-    } catch {
-      // Admin client no configurado → el caso queda en revisión. Nunca se rompe
-      // el flujo por esto: la persona ya escribió todo.
+    } catch (error) {
+      console.warn("[comunidad] admin client no disponible para publicar, queda en revisión", {
+        caseId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       status = "pending_review";
     }
   }
 
-  const shouldEnqueue =
-    moderation.flagged ||
-    moderation.skipped ||
-    tier > TIER_AUTO ||
-    photoNeedsAsyncReview ||
-    videoNeedsAsyncReview;
-  if (shouldEnqueue) {
-    try {
-      const reasons = [
-        ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
-        ...(photoNeedsAsyncReview ? ["photo_async_review"] : []),
-        ...(videoNeedsAsyncReview ? ["video_async_review"] : []),
-      ];
-      const enqueueTier =
-        status === "pending_review" || photoNeedsAsyncReview || videoNeedsAsyncReview
-          ? TIER_HUMAN
-          : TIER_REVIEW;
-      const outcome = await enqueueModeration(createAdminClient(), {
-        tenantId: tenant.id,
-        // 'listing' y no un subject_kind nuevo: un caso ES un listing, así que
-        // se resuelve desde /admin/moderacion con las herramientas que ya hay.
-        subjectKind: "listing",
-        subjectId: caseId,
-        aiScore: moderation.skipped ? null : moderation.score,
-        reasons,
-        tier: enqueueTier,
-      });
-      if (!outcome.ok) {
-        console.warn("[comunidad] no se pudo encolar moderación del caso", { caseId });
-      }
-    } catch {
-      console.warn("[comunidad] admin client no disponible para encolar moderación");
-    }
-  }
+  await encolarSiQuedaEnRevision({
+    status,
+    exigeHumano: moderation.flagged || photoNeedsAsyncReview || videoNeedsAsyncReview,
+    monitorear: moderation.skipped === true || tier > TIER_AUTO,
+    tenantId: tenant.id,
+    listingId: caseId,
+    aiScore: moderation.skipped ? null : moderation.score,
+    reasons: [
+      ...(moderation.skipped ? ["moderation_skipped"] : moderation.categories),
+      ...(photoNeedsAsyncReview ? ["photo_async_review"] : []),
+      ...(videoNeedsAsyncReview ? ["video_async_review"] : []),
+    ],
+    motivoEnRevision: "new_listing",
+    origen: "comunidad",
+  });
 
   if (status === "published") {
     revalidatePath("/comunidad/perdidos");

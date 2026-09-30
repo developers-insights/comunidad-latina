@@ -126,6 +126,14 @@ function createSupabaseStub(config: Record<string, TableOps> = {}) {
         calls.push({ table, method: "in", args });
         return builder;
       }),
+      neq: vi.fn((...args: unknown[]) => {
+        calls.push({ table, method: "neq", args });
+        return builder;
+      }),
+      limit: vi.fn((...args: unknown[]) => {
+        calls.push({ table, method: "limit", args });
+        return builder;
+      }),
       maybeSingle: vi.fn(async () => result()),
       single: vi.fn(async () => result()),
       then: (resolve: (v: OpResult) => unknown, reject: (e: unknown) => unknown) =>
@@ -678,8 +686,32 @@ describe("pausar y volver a publicar", () => {
     });
   });
 
-  it("volver a publicar manda a revisión, nunca directo a 'published'", async () => {
-    const stub = useGuardOk({
+  const FECHAS_PREVIAS = {
+    expires_at: "2026-10-20T00:00:00.000Z",
+    expiry_warn_at: "2026-10-17T00:00:00.000Z",
+    expiry_warned_at: null,
+  };
+
+  function useAdminReactivar({
+    colaAbierta = null,
+    denuncia = null,
+    publicar = { data: { id: LISTING_ID }, error: null },
+  }: {
+    colaAbierta?: unknown;
+    denuncia?: unknown;
+    publicar?: OpResult;
+  } = {}) {
+    const admin = createSupabaseStub({
+      moderation_queue: { select: { data: colaAbierta, error: null } },
+      scam_reports: { select: { data: denuncia, error: null } },
+      listings: { select: { data: FECHAS_PREVIAS, error: null }, update: publicar },
+    });
+    mocks.createAdminClient.mockReturnValue(admin.client);
+    return admin;
+  }
+
+  function usePausadoPorElDuenio() {
+    return useGuardOk({
       listings: {
         select: {
           data: filaPublicada({ status: "paused", attrs: { paused_reason: "owner" } }),
@@ -688,10 +720,15 @@ describe("pausar y volver a publicar", () => {
         update: { data: { id: LISTING_ID }, error: null },
       },
     });
+  }
+
+  it("reactivar lo que el dueño pausó vuelve a published sin boost ni plazo nuevo", async () => {
+    const stub = usePausadoPorElDuenio();
+    const admin = useAdminReactivar();
 
     const result = await pausarAvisoAction({ listingId: LISTING_ID, pausar: false });
 
-    expect(result).toMatchObject({ ok: true, status: "pending_review" });
+    expect(result).toMatchObject({ ok: true, status: "published" });
     const update = stub.calls.find((call) => call.method === "update");
     expect(update?.args[0]).toMatchObject({ status: "pending_review" });
     // El motivo de la pausa se va con la pausa: si quedara, la app seguiría
@@ -699,6 +736,50 @@ describe("pausar y volver a publicar", () => {
     expect(
       (update?.args[0] as { attrs: Record<string, unknown> }).attrs.paused_reason,
     ).toBeUndefined();
+    const escrituras = admin.calls
+      .filter((call) => call.table === "listings" && call.method === "update")
+      .map((call) => call.args[0]);
+    expect(escrituras[0]).toEqual({ status: "published" });
+    expect(escrituras[1]).toEqual(FECHAS_PREVIAS);
+    expect(escrituras.some((u) => "published_at" in (u as object))).toBe(false);
+    expect(mocks.enqueueModeration).not.toHaveBeenCalled();
+  });
+
+  it("si lo editaron en pausa y la edición sigue en la cola, no se publica: queda en esa revisión", async () => {
+    usePausadoPorElDuenio();
+    const admin = useAdminReactivar({ colaAbierta: { id: "q-1" } });
+
+    const result = await pausarAvisoAction({ listingId: LISTING_ID, pausar: false });
+
+    expect(result).toMatchObject({ ok: true, status: "pending_review" });
+    expect(admin.calls.some((c) => c.table === "listings" && c.method === "update")).toBe(false);
+    expect(mocks.enqueueModeration).not.toHaveBeenCalled();
+  });
+
+  it("con denuncias sin desestimar no se publica solo: va a la cola humana", async () => {
+    usePausadoPorElDuenio();
+    const admin = useAdminReactivar({ denuncia: { id: "r-1" } });
+
+    const result = await pausarAvisoAction({ listingId: LISTING_ID, pausar: false });
+
+    expect(result).toMatchObject({ ok: true, status: "pending_review" });
+    expect(admin.calls.some((c) => c.table === "listings" && c.method === "update")).toBe(false);
+    expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
+    expect(mocks.enqueueModeration.mock.calls[0][1]).toMatchObject({
+      subjectId: LISTING_ID,
+      tier: 3,
+      reasons: expect.arrayContaining(["reactivated_listing"]),
+    });
+  });
+
+  it("si no se puede volver a publicar, queda en la cola en vez de huérfano", async () => {
+    usePausadoPorElDuenio();
+    useAdminReactivar({ publicar: { data: null, error: { code: "XX000" } } });
+
+    const result = await pausarAvisoAction({ listingId: LISTING_ID, pausar: false });
+
+    expect(result).toMatchObject({ ok: true, status: "pending_review" });
+    expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
   });
 
   it("un aviso pausado por denuncias no lo reactiva su dueño", async () => {
