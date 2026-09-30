@@ -18,6 +18,7 @@ import type { TrustLevel, TrustSignal } from "@/components/trust";
 import type { EstadoApertura } from "@/lib/horarios";
 import { RESENAS_COPY, formatearPromedio, type ResumenPuntaje } from "@/lib/resenas";
 import { cn } from "@/lib/utils";
+import { ProfileLink } from "@/components/social/profile-link";
 
 const COPY = {
   viewBusiness: "Ver negocio",
@@ -260,7 +261,9 @@ export function BusinessCard({
 
           {business.ownerTrust ? (
             <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
-              <span className="truncate">{business.ownerTrust.displayName}</span>
+              <ProfileLink profileId={business.ownerTrust.profileId} name={business.ownerTrust.displayName}>
+                <span className="truncate">{business.ownerTrust.displayName}</span>
+              </ProfileLink>
               <PublisherTrust
                 displayName={business.ownerTrust.displayName}
                 firstName={business.ownerTrust.firstName}

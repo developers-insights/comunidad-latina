@@ -326,13 +326,32 @@ describe("ProfessionalCard: quién publica", () => {
       },
     });
 
-    // Se llega por el badge: tocar la card nunca navega afuera.
     fireEvent.click(screen.getByRole("button", { name: /trust score/i }));
 
-    const link = screen.getByRole("link", { name: /ver el perfil de maría/i });
+    const link = screen.getByRole("link", { name: /^ver el perfil de maría$/i });
     expect(link.getAttribute("href")).toBe(
       "/perfil/22222222-2222-4222-8222-222222222222",
     );
+  });
+
+  it("el nombre de quien publica también lleva a su perfil", () => {
+    renderCard({
+      publisher: {
+        type: "member",
+        profileId: "22222222-2222-4222-8222-222222222222",
+        displayName: "María Peralta",
+        avatarUrl: null,
+        score: 72,
+        level: "confiable",
+        signals: [],
+      },
+    });
+
+    const link = screen.getByRole("link", { name: "Ver el perfil de María Peralta" });
+    expect(link.getAttribute("href")).toBe(
+      "/perfil/22222222-2222-4222-8222-222222222222",
+    );
+    expect(link.textContent).toBe("María Peralta");
   });
 
   it("fuente externa: se atribuye por nombre, sin Trust Score", () => {

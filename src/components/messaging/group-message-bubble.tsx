@@ -11,6 +11,7 @@ import { MessageActions } from "./message-menu";
 import { MessageReactions, ReaccionesProvider } from "./message-reactions";
 import { ReplyQuote, type MensajeCitado } from "./reply-quote";
 import { anclaDeMensaje } from "./helpers-de-mensaje";
+import { ProfileLink } from "@/components/social/profile-link";
 
 /**
  * Burbuja de un mensaje de GRUPO.
@@ -58,6 +59,7 @@ export function GroupMessageBubble({
   timeLabel,
   autorNombre,
   autorAvatar,
+  autorId = null,
   mostrarAutor,
   mensaje,
   editadoAt = null,
@@ -71,6 +73,7 @@ export function GroupMessageBubble({
   timeLabel: string;
   autorNombre: string;
   autorAvatar: string | null;
+  autorId?: string | null;
   mostrarAutor: boolean;
   mensaje: GroupMessageMensaje;
   editadoAt?: string | null;
@@ -124,8 +127,10 @@ export function GroupMessageBubble({
       {!isOwn && mostrarAutor && (
         // `foreground-secondary` y no `-muted`: son 12px sobre `surface-subtle`,
         // donde `-muted` se queda en 4.4:1 — por debajo del AA de texto normal.
-        <p className="mb-0.5 text-xs font-semibold text-foreground-secondary">
-          {autorNombre}
+        <p className="mb-0.5 flex min-w-0 text-xs font-semibold text-foreground-secondary">
+          <ProfileLink profileId={autorId} name={autorNombre}>
+            <span className="truncate">{autorNombre}</span>
+          </ProfileLink>
         </p>
       )}
 
@@ -164,7 +169,9 @@ export function GroupMessageBubble({
 
   const avatar = !isOwn && (
     mostrarAutor ? (
-      <Avatar src={autorAvatar} name={autorNombre} size="sm" />
+      <ProfileLink profileId={autorId} name={autorNombre} variant="avatar" duplicate>
+        <Avatar src={autorAvatar} name={autorNombre} size="sm" />
+      </ProfileLink>
     ) : (
       <span aria-hidden="true" className="size-8 shrink-0" />
     )

@@ -41,6 +41,7 @@ import { VENCIMIENTO_COPY } from "@/lib/listings";
 import { cn, DEFAULT_TIME_ZONE, timeAgo } from "@/lib/utils";
 import { businessCategoryLabel, businessCategoryOf } from "../categories";
 import { BUSINESS_PROFILE_COPY as C } from "./copy";
+import { ProfileLink } from "@/components/social/profile-link";
 
 /**
  * PERFIL COMPLETO DE UN NEGOCIO (call del 29/7, 1:05: "si le das ver al
@@ -258,10 +259,14 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
     const displayName = ownerName ?? "Miembro de la comunidad";
     ownerCard = (
       <BezelCard coreClassName="flex items-center gap-3 p-4">
-        <Avatar src={profile?.avatar_url} name={displayName} size="lg" />
+        <ProfileLink profileId={profile?.id ?? null} name={displayName} variant="avatar" duplicate>
+          <Avatar src={profile?.avatar_url} name={displayName} size="lg" />
+        </ProfileLink>
         <div className="min-w-0">
-          <p className="truncate font-display text-base font-bold text-foreground">
-            {displayName}
+          <p className="flex min-w-0 font-display text-base font-bold text-foreground">
+            <ProfileLink profileId={profile?.id ?? null} name={displayName}>
+              <span className="truncate">{displayName}</span>
+            </ProfileLink>
           </p>
           {/* El desglose del score ofrece "Ver el perfil de…" (call 29/7,
               1:02:24). `profileId` sale del perfil REAL, no de created_by, para

@@ -33,6 +33,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { leerCheckAzul, leerChecksAzules } from "@/lib/verificacion/read";
 import { cn } from "@/lib/utils";
+import { ProfileLink } from "@/components/social/profile-link";
 
 export const metadata = { title: "Trabajo" };
 
@@ -81,18 +82,24 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
     const name = profile?.display_name ?? "Negocio de la comunidad";
     publisherBlock = (
       <div className="flex items-center gap-3 rounded-lg border border-border-subtle bg-surface p-3">
-        <Avatar
-          size="md"
-          src={profile?.avatar_url ?? null}
-          name={name}
-          badge={
-            checkAzul || profile?.identity_verified ? (
-              <InsigniaDePerfil checkAzul={checkAzul} identityVerified={profile?.identity_verified ?? false} />
-            ) : undefined
-          }
-        />
+        <ProfileLink profileId={profile?.id ?? null} name={name} variant="avatar" duplicate>
+          <Avatar
+            size="md"
+            src={profile?.avatar_url ?? null}
+            name={name}
+            badge={
+              checkAzul || profile?.identity_verified ? (
+                <InsigniaDePerfil checkAzul={checkAzul} identityVerified={profile?.identity_verified ?? false} />
+              ) : undefined
+            }
+          />
+        </ProfileLink>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-foreground">{name}</p>
+          <p className="flex min-w-0 font-semibold text-foreground">
+            <ProfileLink profileId={profile?.id ?? null} name={name}>
+              <span className="truncate">{name}</span>
+            </ProfileLink>
+          </p>
           <PublisherTrust
             displayName={name}
             firstName={firstNameOf(name)}

@@ -7,6 +7,7 @@ import { PublisherTrust } from "@/components/listings/publisher-trust";
 import { firstNameOf } from "@/components/listings/helpers";
 import { CommunityEmojiText } from "@/components/emojis";
 import type { CommunityEmoji } from "@/lib/emojis/catalog";
+import { ProfileLink } from "@/components/social/profile-link";
 import { cn } from "@/lib/utils";
 import type { AuthorView } from "./helpers";
 
@@ -101,21 +102,28 @@ export function CommentItem({
         pending && "opacity-60",
       )}
     >
-      <Avatar
-        size="sm"
-        name={entity ? entity.nombre : author.displayName}
-        src={entity ? entity.avatarUrl : author.avatarUrl}
-        badge={
-          entity ? (
-            <span
-              aria-hidden="true"
-              className="cl-print-hide flex size-3.5 items-center justify-center rounded-full bg-brand text-brand-foreground ring-2 ring-surface"
-            >
-              <Storefront size={9} weight="fill" />
-            </span>
-          ) : undefined
-        }
-      />
+      <ProfileLink
+        profileId={entity ? null : author.profileId}
+        name={author.displayName}
+        variant="avatar"
+        duplicate
+      >
+        <Avatar
+          size="sm"
+          name={entity ? entity.nombre : author.displayName}
+          src={entity ? entity.avatarUrl : author.avatarUrl}
+          badge={
+            entity ? (
+              <span
+                aria-hidden="true"
+                className="cl-print-hide flex size-3.5 items-center justify-center rounded-full bg-brand text-brand-foreground ring-2 ring-surface"
+              >
+                <Storefront size={9} weight="fill" />
+              </span>
+            ) : undefined
+          }
+        />
+      </ProfileLink>
       <div
         className={cn(
           "min-w-0 flex-1 rounded-lg px-3.5 py-2.5",
@@ -125,14 +133,19 @@ export function CommentItem({
         )}
       >
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span
-            className={cn(
-              "truncate text-sm font-semibold",
-              onMedia ? "text-on-media" : "text-foreground",
-            )}
+          <ProfileLink
+            profileId={entity ? null : author.profileId}
+            name={author.displayName}
           >
-            {entity ? entity.nombre : author.displayName}
-          </span>
+            <span
+              className={cn(
+                "truncate text-sm font-semibold",
+                onMedia ? "text-on-media" : "text-foreground",
+              )}
+            >
+              {entity ? entity.nombre : author.displayName}
+            </span>
+          </ProfileLink>
           {!entity && author.profileId && (
             <PublisherTrust
               displayName={author.displayName}

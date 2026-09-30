@@ -18,6 +18,7 @@ import { ListingOwnerMenuOverlay, type ListingOwnerView } from "./listing-owner-
 import { PublisherTrust } from "./publisher-trust";
 import { ListingVideoMedia } from "./listing-video";
 import type { ListingVideoView } from "@/lib/media/listing-video-policy";
+import { ProfileLink } from "@/components/social/profile-link";
 
 export interface ListingCardModel {
   id: string;
@@ -176,7 +177,9 @@ export function ListingCard({
         <div className="flex flex-col gap-2.5 p-4">
           {listing.publisher?.type === "member" ? (
             <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
-              <span className="truncate">{listing.publisher.displayName}</span>
+              <ProfileLink profileId={listing.publisher.profileId} name={listing.publisher.displayName}>
+                <span className="truncate">{listing.publisher.displayName}</span>
+              </ProfileLink>
               <PublisherTrust
                 displayName={listing.publisher.displayName}
                 firstName={firstNameOf(listing.publisher.displayName)}

@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { ApplySheet } from "./apply-sheet";
 import { gigCategoryMeta } from "./categories";
 import { COPY } from "./copy";
+import { ProfileLink } from "@/components/social/profile-link";
 
 export interface GigCardModel {
   id: string;
@@ -166,7 +167,9 @@ export function GigCard({ gig, viewerId = null, engagement, owner }: GigCardProp
 
           {gig.publisher?.type === "member" ? (
             <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
-              <span className="truncate">{gig.publisher.displayName}</span>
+              <ProfileLink profileId={gig.publisher.profileId} name={gig.publisher.displayName}>
+                <span className="truncate">{gig.publisher.displayName}</span>
+              </ProfileLink>
               <PublisherTrust
                 displayName={gig.publisher.displayName}
                 firstName={firstNameOf(gig.publisher.displayName)}

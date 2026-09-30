@@ -21,6 +21,7 @@ import {
 } from "@/lib/messaging/grupos";
 import { COPY } from "./copy";
 import { PeopleSearch, type PersonaEncontrada } from "./people-search";
+import { ProfileLink } from "@/components/social/profile-link";
 
 export type MiembroVisible = {
   profileId: string;
@@ -114,10 +115,20 @@ export function GroupMemberList({
                 index > 0 && "border-t border-border-subtle",
               )}
             >
-              <Avatar src={miembro.avatarUrl} name={miembro.displayName} size="md" />
+              <ProfileLink
+                profileId={miembro.profileId}
+                viewerId={miId}
+                name={miembro.displayName}
+                variant="avatar"
+                duplicate
+              >
+                <Avatar src={miembro.avatarUrl} name={miembro.displayName} size="md" />
+              </ProfileLink>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {soyYo ? COPY.groups.you : miembro.displayName}
+                <p className="flex min-w-0 text-sm font-medium text-foreground">
+                  <ProfileLink profileId={miembro.profileId} viewerId={miId} name={miembro.displayName}>
+                    <span className="truncate">{soyYo ? COPY.groups.you : miembro.displayName}</span>
+                  </ProfileLink>
                 </p>
                 {miembro.role !== "member" && (
                   <p className="text-xs text-foreground-muted">
@@ -249,14 +260,23 @@ export function GroupJoinRequests({
             index > 0 && "border-t border-border-subtle",
           )}
         >
-          <Avatar
-            src={solicitud.avatarUrl}
+          <ProfileLink
+            profileId={solicitud.profileId}
             name={solicitud.displayName}
-            size="md"
-          />
+            variant="avatar"
+            duplicate
+          >
+            <Avatar
+              src={solicitud.avatarUrl}
+              name={solicitud.displayName}
+              size="md"
+            />
+          </ProfileLink>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-foreground">
-              {solicitud.displayName}
+            <span className="flex min-w-0 text-sm font-medium text-foreground">
+              <ProfileLink profileId={solicitud.profileId} name={solicitud.displayName}>
+                <span className="truncate">{solicitud.displayName}</span>
+              </ProfileLink>
             </span>
             <span className="block text-xs text-foreground-muted">
               {solicitud.numeroCl}

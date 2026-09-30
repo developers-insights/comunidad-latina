@@ -16,6 +16,7 @@ import {
 import { Avatar, BezelCard, EmptyState } from "@/components/ui";
 import { languageLabels, residenceCountryLabel } from "@/lib/profile/catalogs";
 import type { PersonRow, ReviewRow } from "./profile-data";
+import { ProfileLink } from "@/components/social/profile-link";
 
 /**
  * Los paneles de las pestañas del perfil que NO son la grilla de publicaciones
@@ -230,9 +231,21 @@ export function ProfileReviewsPanel({ reviews }: { reviews: ReviewRow[] }) {
       {reviews.map((review) => (
         <li key={review.id}>
           <BezelCard coreClassName="flex gap-3 p-4">
-            <Avatar size="sm" src={review.reviewerAvatarUrl} name={review.reviewerName} />
+            <ProfileLink
+              profileId={review.reviewerId}
+              name={review.reviewerName}
+              variant="avatar"
+              duplicate
+              className="self-start"
+            >
+              <Avatar size="sm" src={review.reviewerAvatarUrl} name={review.reviewerName} />
+            </ProfileLink>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground">{review.reviewerName}</p>
+              <p className="flex min-w-0 text-sm font-semibold text-foreground">
+                <ProfileLink profileId={review.reviewerId} name={review.reviewerName}>
+                  <span className="truncate">{review.reviewerName}</span>
+                </ProfileLink>
+              </p>
               <RatingStars rating={review.rating} />
               {review.body && (
                 <p className="mt-2 text-sm leading-relaxed text-foreground-secondary">

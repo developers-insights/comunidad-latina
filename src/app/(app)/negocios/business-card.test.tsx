@@ -164,8 +164,16 @@ describe("BusinessCard: Trust Score del dueño, unificado sobre PublisherTrust",
     render(<BusinessCard business={{ ...BASE, ownerTrust }} />);
     fireEvent.click(screen.getByRole("button", { name: /trust score/i }));
 
-    const link = screen.getByRole("link", { name: /ver el perfil de flor/i });
+    const link = screen.getByRole("link", { name: /^ver el perfil de flor$/i });
     expect(link.getAttribute("href")).toBe(`/perfil/${PROFILE_ID}`);
+  });
+
+  it("el nombre del dueño también lleva a su perfil", () => {
+    render(<BusinessCard business={{ ...BASE, ownerTrust }} />);
+
+    const link = screen.getByRole("link", { name: "Ver el perfil de Flor Ramírez" });
+    expect(link.getAttribute("href")).toBe(`/perfil/${PROFILE_ID}`);
+    expect(link.textContent).toBe("Flor Ramírez");
   });
 
   it("sin ownerTrust pero con publisherName (fuente externa), cae al texto 'Publicado por'", () => {

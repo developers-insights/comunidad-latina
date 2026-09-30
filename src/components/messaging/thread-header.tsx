@@ -20,6 +20,7 @@ import { iniciarLlamadaAction } from "@/app/(app)/llamadas/actions";
 import type { EstadoDePresencia } from "@/lib/messaging/presencia";
 import { QuienEscribe, useQuienEscribe } from "./escribiendo-live";
 import { COPY } from "./copy";
+import { ProfileLink } from "@/components/social/profile-link";
 
 /**
  * Copy local del bloqueo global (§ contrato "Bloquear a una persona"). No
@@ -161,7 +162,14 @@ export function ThreadHeader({
       </Link>
 
       <span className="relative shrink-0">
-        <Avatar src={otherProfile.avatarUrl} name={otherProfile.displayName} size="md" />
+        <ProfileLink
+          profileId={otherProfile.id}
+          name={otherProfile.displayName}
+          variant="avatar"
+          duplicate
+        >
+          <Avatar src={otherProfile.avatarUrl} name={otherProfile.displayName} size="md" />
+        </ProfileLink>
         {presencia?.tipo === "en-linea" && (
           <span
             aria-hidden="true"
@@ -171,8 +179,10 @@ export function ThreadHeader({
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate font-display text-base font-semibold text-foreground">
-          {otherProfile.displayName}
+        <p className="flex min-w-0 font-display text-base font-semibold text-foreground">
+          <ProfileLink profileId={otherProfile.id} name={otherProfile.displayName}>
+            <span className="truncate">{otherProfile.displayName}</span>
+          </ProfileLink>
         </p>
         <div className="flex min-w-0 items-center gap-2">
           {trust && (

@@ -4,6 +4,7 @@ import { Avatar, Chip } from "@/components/ui";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
 import type { PostCardModel } from "@/components/feed";
 import { formatDuration } from "@/lib/media/video-policy";
+import { ProfileLink } from "@/components/social/profile-link";
 import { cn } from "@/lib/utils";
 import { VIDEOS_COPY } from "../copy";
 
@@ -59,15 +60,15 @@ export function LongVideoCard({ post, first = false }: LongVideoCardProps) {
   const duration = formatDuration(post.durationSeconds);
 
   return (
-    <li>
+    <li className="overflow-hidden rounded-xl bg-surface shadow-bezel">
       <Link
         href={`/videos/largos/${post.id}`}
         aria-label={VIDEOS_COPY.largos.openVideo(title)}
         className={cn(
-          "group block overflow-hidden rounded-xl bg-surface shadow-bezel",
+          "group block",
           "transition-transform duration-(--duration-base) ease-(--ease-out-premium)",
           "active:scale-[0.99]",
-          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-focus-ring",
         )}
       >
         <div className="relative aspect-video w-full overflow-hidden bg-media-shade">
@@ -129,50 +130,66 @@ export function LongVideoCard({ post, first = false }: LongVideoCardProps) {
           )}
         </div>
 
-        <div className="px-3.5 pb-3.5 pt-3">
+        <div className="px-3.5 pt-3">
           <p className="line-clamp-2 font-display text-[0.9375rem] font-bold leading-snug text-foreground">
             {title}
           </p>
-          <div className="mt-2 flex items-center gap-2.5">
+        </div>
+      </Link>
+      {/* El autor queda FUERA del link del video: adentro, su link al perfil y
+          el botón del Trust Score serían interactivos anidados en un <a>. */}
+      <div className="px-3.5 pb-3.5">
+        <div className="mt-2 flex items-center gap-2.5">
+          <ProfileLink
+            profileId={entity ? null : post.author.profileId}
+            name={post.author.displayName}
+            variant="avatar"
+            duplicate
+          >
             <Avatar
               size="sm"
               name={displayTitle}
               src={entity ? (entity.photoUrl ?? null) : post.author.avatarUrl}
             />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-foreground">
-                {displayTitle}
-              </p>
-              <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                {/* Firma de negocio ⇒ NO se nombra a la persona (misma regla de
-                    privacidad que la tarjeta del feed y el reel). El Trust Score
-                    es de la PERSONA, así que tampoco se pinta con firma. */}
-                {entity ? null : (
-                  post.author.profileId && (
-                    <PublisherTrust
-                      displayName={post.author.displayName}
-                      firstName={firstNameOf(post.author.displayName)}
-                      score={post.author.score}
-                      level={post.author.level}
-                      signals={post.author.signals}
-                      size="inline"
-                      profileId={post.author.profileId}
-                    />
-                  )
-                )}
-                <span className="shrink-0 text-xs text-foreground-muted">
-                  {post.timeAgoLabel}
+          </ProfileLink>
+          <div className="min-w-0 flex-1">
+            <p className="flex min-w-0 text-sm font-semibold text-foreground">
+              <ProfileLink
+                profileId={entity ? null : post.author.profileId}
+                name={post.author.displayName}
+              >
+                <span className="truncate">{displayTitle}</span>
+              </ProfileLink>
+            </p>
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+              {/* Firma de negocio ⇒ NO se nombra a la persona (misma regla de
+                  privacidad que la tarjeta del feed y el reel). El Trust Score
+                  es de la PERSONA, así que tampoco se pinta con firma. */}
+              {entity ? null : (
+                post.author.profileId && (
+                  <PublisherTrust
+                    displayName={post.author.displayName}
+                    firstName={firstNameOf(post.author.displayName)}
+                    score={post.author.score}
+                    level={post.author.level}
+                    signals={post.author.signals}
+                    size="inline"
+                    profileId={post.author.profileId}
+                  />
+                )
+              )}
+              <span className="shrink-0 text-xs text-foreground-muted">
+                {post.timeAgoLabel}
+              </span>
+              {post.viewCount > 0 && (
+                <span className="numeric shrink-0 text-xs text-foreground-muted">
+                  · {VIDEOS_COPY.viewsLabel(post.viewCount)}
                 </span>
-                {post.viewCount > 0 && (
-                  <span className="numeric shrink-0 text-xs text-foreground-muted">
-                    · {VIDEOS_COPY.viewsLabel(post.viewCount)}
-                  </span>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </div>
-      </Link>
+      </div>
     </li>
   );
 }

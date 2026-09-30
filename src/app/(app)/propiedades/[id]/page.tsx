@@ -61,6 +61,7 @@ import {
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { cn } from "@/lib/utils";
 import type { DetailFact } from "@/components/listings";
+import { ProfileLink } from "@/components/social/profile-link";
 
 type Params = Promise<{ id: string }>;
 
@@ -192,10 +193,14 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
     publisherCard = (
       <BezelCard coreClassName="flex flex-col gap-3 p-4">
         <div className="flex items-center gap-3">
-          <Avatar src={profile?.avatar_url} name={displayName} size="lg" />
+          <ProfileLink profileId={profile?.id ?? null} name={displayName} variant="avatar" duplicate>
+            <Avatar src={profile?.avatar_url} name={displayName} size="lg" />
+          </ProfileLink>
           <div className="min-w-0">
-            <p className="truncate font-display text-base font-bold text-foreground">
-              {displayName}
+            <p className="flex min-w-0 font-display text-base font-bold text-foreground">
+              <ProfileLink profileId={profile?.id ?? null} name={displayName}>
+                <span className="truncate">{displayName}</span>
+              </ProfileLink>
             </p>
             <PublisherTrust
               displayName={displayName}

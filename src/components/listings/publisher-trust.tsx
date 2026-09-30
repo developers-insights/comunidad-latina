@@ -55,14 +55,12 @@ export interface PublisherTrustProps {
  * TrustScoreBadge del publicador + su desglose (TrustScoreSheet).
  * El badge SIEMPRE explica — nunca un número mudo (§3.3).
  *
- * Desde el 2026-07-30 el desglose también ofrece IR AL PERFIL (call del 29/7,
- * 1:02:24: "solo sale el score, pero debería también salir ahí, ver perfil… si
- * quieres ver el perfil de la gente que está posteando, para ver si es una
- * gente confiable"). Va DENTRO de la hoja y no al lado del badge a propósito:
- * en la card de un aviso el badge convive con precio, ubicación y el CTA de
- * contacto, y un segundo link ahí compite con la acción principal de la
- * pantalla. Adentro, en cambio, llega justo después de leer por qué el número
- * es el que es — que es exactamente cuándo aparece la pregunta.
+ * El desglose termina con "Ver el perfil de…" (call del 29/7, 1:02:24). Ya NO
+ * es el único camino al perfil: desde el 2026-09-30 el nombre y el avatar de
+ * una persona llevan a su perfil en toda la app (`ProfileLink`), como en
+ * cualquier red social. El botón de la hoja se queda porque en la card de un
+ * aviso no hay nombre tocable —el badge convive con precio y CTA— y porque
+ * llega justo después de leer por qué el número es el que es.
  */
 export function PublisherTrust({
   firstName,

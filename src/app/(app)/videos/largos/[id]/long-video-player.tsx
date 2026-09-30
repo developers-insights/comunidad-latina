@@ -26,6 +26,7 @@ import { formatDuration, longVideoCapSeconds } from "@/lib/media/video-policy";
 import { cn } from "@/lib/utils";
 import { VIDEOS_COPY } from "../../copy";
 import { useReelLike, useReelSave } from "../../video-reels";
+import { ProfileLink } from "@/components/social/profile-link";
 
 /**
  * EL VIDEO LARGO, COMPLETO (cliente 2026-09-03, 19:40–23:44): "una sección de
@@ -185,14 +186,23 @@ export function LongVideoPlayer({ post, tenantId, viewerId }: LongVideoPlayerPro
         {/* Autor con su Trust Score, con la MISMA regla de privacidad del feed y
             del reel: con firma de negocio la persona detrás no se nombra. */}
         <div className="mt-3.5 flex items-center gap-2.5">
-          <Avatar
-            size="md"
-            name={displayTitle}
-            src={entity ? (entity.photoUrl ?? null) : post.author.avatarUrl}
-          />
+          <ProfileLink
+            profileId={entity ? null : post.author.profileId}
+            name={post.author.displayName}
+            variant="avatar"
+            duplicate
+          >
+            <Avatar
+              size="md"
+              name={displayTitle}
+              src={entity ? (entity.photoUrl ?? null) : post.author.avatarUrl}
+            />
+          </ProfileLink>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-foreground">
-              {displayTitle}
+            <p className="flex min-w-0 text-sm font-semibold text-foreground">
+              <ProfileLink profileId={entity ? null : post.author.profileId} name={post.author.displayName}>
+                <span className="truncate">{displayTitle}</span>
+              </ProfileLink>
             </p>
             {!entity && post.author.profileId && (
               <div className="mt-0.5 flex min-w-0">

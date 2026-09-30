@@ -387,6 +387,7 @@ export default async function GrupoPage({
                   timeLabel={timeFormat.format(new Date(mensaje.created_at))}
                   autorNombre={autor?.displayName ?? "Miembro de la comunidad"}
                   autorAvatar={autor?.avatarUrl ?? null}
+                  autorId={autor ? mensaje.sender_id : null}
                   mostrarAutor={mostrarAutor}
                   mensaje={acciones}
                   editadoAt={mensaje.editado_at ?? null}
