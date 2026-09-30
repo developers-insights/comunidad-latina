@@ -1,5 +1,20 @@
 # PROGRESS — Comunidad Latina
 
+## Tanda del 30/9: perfil desde el nombre, solicitudes en vivo, audio tipo WhatsApp, editar servicios (✅ 2026-09-30, `8377659`)
+
+- **Nombre/avatar → perfil en toda la app** con `src/components/social/profile-link.tsx`. Reemplaza la regla vieja de "perfil sólo desde la hoja del Trust Score". Firmas de negocio no linkean a la persona.
+- **Solicitudes de contacto:** la RPC `solicitar_contacto_directo` no emitía aviso (causa de "no le llegó de una" a Nacho). Ahora `avisarSolicitudNueva` avisa, la campana escucha Realtime (`lib/notifications/en-vivo.ts`), Confirmar/Eliminar inline en la notificación (`solicitud-en-aviso.tsx`, `responderSolicitudAction`) y aviso `contact_accepted` de vuelta. Migración `0176_avisos_en_vivo` (notifications en `supabase_realtime`) APLICADA y verificada.
+- **Notas de voz:** fuera el modo manos libres (candado, pausa, stop, vista previa). Mantener graba, soltar manda, deslizar a la izquierda cancela; <0,5 s se descarta. Modo teclado: Enter/Espacio alterna, Esc cancela.
+- **Servicios:** "Editar" abre el formulario real de publicar precargado (`service-edit-sheet.tsx`, `editar-servicio-actions.ts`), antes abría la hoja genérica de avisos.
+- Verificado: tsc 0, eslint limpio, vitest 7010/7010, `next build` OK, deploy Production READY con `8377659`.
+
+**Pendiente / decisiones abiertas**
+- "Eliminar" una solicitud hoy BLOQUEA (status `blocked`, semántica heredada de "Ignorar"). Propuesta: que sólo descarte, como Instagram. Espera OK de Manuel.
+- Bug: `editarAvisoAction` (publicaciones genéricas) deja un aviso publicado en `pending_review` aunque el texto pase moderación → queda trabado. Servicios ya no pasa por ahí.
+- Sin link a perfil todavía: `empleos/applicant-profile-card.tsx`, `empleos/[id]/page.tsx`, `service-detail.tsx`.
+- `anon` tiene privilegios de tabla sobre `notifications` en prod (cubierto por FORCE RLS): hacer `revoke`.
+- Probar en celular real: gesto de audio, Confirmar desde la campana en vivo.
+
 ## Alta con email, login con Google y redirects sin localhost (✅ 2026-09-28, `5dbcd97`)
 
 - **Causa del "redirige a localhost":** Supabase Auth tenía `site_url=http://localhost:3000`
