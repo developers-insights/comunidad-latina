@@ -94,6 +94,12 @@ export function soporteDeGrabacion(): (mime: string) => boolean {
 export const MAX_DURACION_AUDIO_MS = 5 * 60 * 1000;
 
 /**
+ * Menos que esto es un toque que se escapó, no una nota: se descarta y se
+ * avisa cómo grabar, igual que WhatsApp.
+ */
+export const MIN_DURACION_AUDIO_MS = 500;
+
+/**
  * Picos que se guardan en `adjunto.onda`.
  *
  * 48 no es estético: es lo que entra sin apretarse en una burbuja de 240 px con
