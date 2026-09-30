@@ -766,3 +766,166 @@ describe("cargarAvisoParaEditar", () => {
     });
   });
 });
+
+describe("editar un aviso publicado no lo deja trabado en revisión", () => {
+  const FECHAS = {
+    expires_at: "2026-10-20T00:00:00.000Z",
+    expiry_warn_at: "2026-10-17T00:00:00.000Z",
+    expiry_warned_at: null,
+  };
+
+  function useAdmin(update: OpResult = { data: { id: LISTING_ID }, error: null }) {
+    const admin = createSupabaseStub({
+      listings: { select: { data: FECHAS, error: null }, update },
+    });
+    mocks.createAdminClient.mockReturnValue(admin.client);
+    return admin;
+  }
+
+  function updatesDe(stub: ReturnType<typeof createSupabaseStub>) {
+    return stub.calls.filter((call) => call.method === "update").map((call) => call.args[0]);
+  }
+
+  it("con el texto limpio vuelve a published y no queda nada en la cola", async () => {
+    const duenio = useGuardOk({
+      listings: {
+        select: { data: filaPublicada(), error: null },
+        update: { data: { id: LISTING_ID }, error: null },
+      },
+    });
+    const admin = useAdmin();
+
+    const result = await editarAvisoAction(ENTRADA_VALIDA);
+
+    expect(result).toMatchObject({ ok: true, status: "published" });
+    expect(updatesDe(duenio)).toEqual([expect.objectContaining({ status: "pending_review" })]);
+    expect(updatesDe(admin)[0]).toEqual({ status: "published" });
+    expect(admin.calls).toContainEqual({
+      table: "listings",
+      method: "eq",
+      args: ["status", "pending_review"],
+    });
+    expect(mocks.enqueueModeration).not.toHaveBeenCalled();
+  });
+
+  it("volver a publicar no es un boost ni una renovación gratis", async () => {
+    useGuardOk({
+      listings: {
+        select: { data: filaPublicada(), error: null },
+        update: { data: { id: LISTING_ID }, error: null },
+      },
+    });
+    const admin = useAdmin();
+
+    await editarAvisoAction(ENTRADA_VALIDA);
+
+    const escrituras = updatesDe(admin);
+    expect(escrituras.some((u) => "published_at" in (u as object))).toBe(false);
+    expect(escrituras[1]).toEqual(FECHAS);
+  });
+
+  it("con el texto marcado queda en pending_review y entra a la cola humana", async () => {
+    mocks.moderateText.mockResolvedValue({
+      flagged: true,
+      score: 0.9,
+      categories: ["harassment"],
+      skipped: false,
+    });
+    useGuardOk({
+      listings: {
+        select: { data: filaPublicada(), error: null },
+        update: { data: { id: LISTING_ID }, error: null },
+      },
+    });
+    const admin = useAdmin();
+
+    const result = await editarAvisoAction(ENTRADA_VALIDA);
+
+    expect(result).toMatchObject({ ok: true, status: "pending_review" });
+    expect(updatesDe(admin)).toEqual([]);
+    expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
+    expect(mocks.enqueueModeration.mock.calls[0][1]).toMatchObject({
+      subjectId: LISTING_ID,
+      tier: 3,
+    });
+  });
+
+  it("una foto nueva sin Vision no se publica sin que la miren", async () => {
+    useGuardOk({
+      listings: {
+        select: { data: filaPublicada(), error: null },
+        update: { data: { id: LISTING_ID }, error: null },
+      },
+    });
+    const admin = useAdmin();
+
+    const result = await editarAvisoAction({ ...ENTRADA_VALIDA, photoPaths: [FOTO_A, FOTO_B] });
+
+    expect(result).toMatchObject({ ok: true, status: "pending_review" });
+    expect(updatesDe(admin)).toEqual([]);
+    expect(mocks.enqueueModeration.mock.calls[0][1].reasons).toContain("photo_pending_review");
+  });
+
+  it("sacar una foto no pide revisión: vuelve a published", async () => {
+    useGuardOk({
+      listings: {
+        select: { data: filaPublicada({ photos: [FOTO_A, FOTO_B] }), error: null },
+        update: { data: { id: LISTING_ID }, error: null },
+      },
+    });
+    useAdmin();
+
+    const result = await editarAvisoAction({ ...ENTRADA_VALIDA, photoPaths: [FOTO_A] });
+
+    expect(result).toMatchObject({ ok: true, status: "published" });
+  });
+
+  it("un aviso que esperaba revisión no se publica solo, y queda en la cola", async () => {
+    useGuardOk({
+      listings: {
+        select: { data: filaPublicada({ status: "pending_review" }), error: null },
+        update: { data: { id: LISTING_ID }, error: null },
+      },
+    });
+    const admin = useAdmin();
+
+    const result = await editarAvisoAction(ENTRADA_VALIDA);
+
+    expect(result).toMatchObject({ ok: true, status: "pending_review" });
+    expect(updatesDe(admin)).toEqual([]);
+    expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
+  });
+
+  it("un pausado sigue pausado aunque el texto esté limpio", async () => {
+    useGuardOk({
+      listings: {
+        select: {
+          data: filaPublicada({ status: "paused", attrs: { paused_reason: "owner" } }),
+          error: null,
+        },
+        update: { data: { id: LISTING_ID }, error: null },
+      },
+    });
+    const admin = useAdmin();
+
+    const result = await editarAvisoAction(ENTRADA_VALIDA);
+
+    expect(result).toMatchObject({ ok: true, status: "paused" });
+    expect(updatesDe(admin)).toEqual([]);
+  });
+
+  it("si no se puede volver a publicar, queda en la cola en vez de huérfano", async () => {
+    useGuardOk({
+      listings: {
+        select: { data: filaPublicada(), error: null },
+        update: { data: { id: LISTING_ID }, error: null },
+      },
+    });
+    useAdmin({ data: null, error: { code: "XX000" } });
+
+    const result = await editarAvisoAction(ENTRADA_VALIDA);
+
+    expect(result).toMatchObject({ ok: true, status: "pending_review" });
+    expect(mocks.enqueueModeration).toHaveBeenCalledTimes(1);
+  });
+});

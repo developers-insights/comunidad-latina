@@ -24,10 +24,13 @@
  * aviso publicado. Un UPDATE que intente `status = 'published'` con el JWT de la
  * persona rebota con 42501, no "a veces": siempre.
  *
- * O sea que el camino honesto es uno solo, y de paso es el seguro: lo editado
- * vuelve a `pending_review` y se publica de nuevo cuando lo aprueban. Eso es
- * también lo que cierra el agujero de las fotos —una foto nueva nunca llega a
- * verse antes de que la mire el mismo pipeline que la mira en el alta.
+ * O sea que el UPDATE del dueño siempre deja `pending_review`, y el regreso a
+ * `published` lo hace el servidor con el admin client (`republicarAvisoEditado`,
+ * `lib/listings/republicar.ts`) sólo si el aviso ya estaba publicado, el texto
+ * pasó la moderación y no entró media sin revisar. Si no, queda en revisión Y
+ * en la cola: un `pending_review` sin fila en `moderation_queue` no lo ve nadie
+ * y queda invisible para siempre (era el bug). Una foto nueva sigue sin llegar a
+ * verse antes de que la mire el mismo pipeline que en el alta.
  *
  * Lo que SÍ se puede hacer sin volver a revisión está separado en su propio
  * gesto: PAUSAR (published → paused). No cambia una letra del contenido, así que
@@ -328,7 +331,7 @@ export const EDICION_COPY = {
   /** El aviso que se lee ANTES de tocar Guardar. */
   revision: {
     publicada:
-      "Cuando guardes, tu publicación vuelve a revisión un ratito y se muestra de nuevo apenas la aprobemos. No se borra nada.",
+      "Cuando guardes, revisamos los cambios. Si está todo en orden, tu publicación sigue a la vista; si algo necesita una mirada, vuelve a mostrarse apenas la aprobemos.",
     pausada: "Tu publicación está pausada, así que los cambios quedan guardados sin volver a revisión.",
     enRevision: "Tu publicación ya está en revisión. Los cambios entran en la misma revisión.",
   },
