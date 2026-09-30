@@ -48,6 +48,7 @@ import { createClient } from "@/lib/supabase/server";
 import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
+import { ProfileLink } from "@/components/social/profile-link";
 
 type Params = Promise<{ id: string }>;
 
@@ -427,10 +428,14 @@ export default async function ProductoDetallePage({ params }: { params: Params }
             {COPY.detail.storeTitle}
           </h2>
           <BezelCard coreClassName="flex items-center gap-3 p-4">
-            <Avatar src={privateSeller.avatarUrl} name={privateSeller.displayName} size="lg" />
+            <ProfileLink profileId={privateSeller.trust.profileId} name={privateSeller.displayName} variant="avatar" duplicate>
+              <Avatar src={privateSeller.avatarUrl} name={privateSeller.displayName} size="lg" />
+            </ProfileLink>
             <div className="min-w-0">
-              <p className="truncate font-display text-base font-bold text-foreground">
-                {privateSeller.displayName}
+              <p className="flex min-w-0 font-display text-base font-bold text-foreground">
+                <ProfileLink profileId={privateSeller.trust.profileId} name={privateSeller.displayName}>
+                  <span className="truncate">{privateSeller.displayName}</span>
+                </ProfileLink>
               </p>
               {/* `profileId` viaja DENTRO de `privateSeller.trust`: desde que
                   el `trust` de StoreCardModel lo exige, el tipo garantiza que

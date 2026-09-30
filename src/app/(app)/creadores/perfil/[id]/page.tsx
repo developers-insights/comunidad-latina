@@ -25,6 +25,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { leerCheckAzul } from "@/lib/verificacion/read";
 import { cn, formatDate } from "@/lib/utils";
 import { fetchServicePackages } from "../queries";
+import { ProfileLink } from "@/components/social/profile-link";
 
 export const metadata = { title: "Perfil de creador" };
 
@@ -375,10 +376,24 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
               return (
                 <li key={review.id} className="rounded-lg border border-border-subtle bg-surface p-4">
                   <div className="flex items-center gap-2.5">
-                    <Avatar size="sm" src={reviewer?.avatar_url ?? null} name={reviewer?.display_name ?? "Alguien"} />
+                    <ProfileLink
+                      profileId={reviewer?.id ?? null}
+                      viewerId={user?.id ?? null}
+                      name={reviewer?.display_name ?? "Alguien de la comunidad"}
+                      variant="avatar"
+                      duplicate
+                    >
+                      <Avatar size="sm" src={reviewer?.avatar_url ?? null} name={reviewer?.display_name ?? "Alguien"} />
+                    </ProfileLink>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-foreground">
-                        {reviewer?.display_name ?? "Alguien de la comunidad"}
+                      <p className="flex min-w-0 text-sm font-semibold text-foreground">
+                        <ProfileLink
+                          profileId={reviewer?.id ?? null}
+                          viewerId={user?.id ?? null}
+                          name={reviewer?.display_name ?? "Alguien de la comunidad"}
+                        >
+                          <span className="truncate">{reviewer?.display_name ?? "Alguien de la comunidad"}</span>
+                        </ProfileLink>
                       </p>
                       <span aria-hidden="true" className="flex">
                         {Array.from({ length: 5 }, (_, i) => (

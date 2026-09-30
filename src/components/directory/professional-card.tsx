@@ -22,6 +22,7 @@ import { COPY } from "./copy";
 import { categoryLabel } from "./helpers";
 import { DirectoryMedia } from "./module-media";
 import { ProfessionalContactCta } from "./professional-contact-cta";
+import { ProfileLink } from "@/components/social/profile-link";
 
 export interface ProfessionalCardModel {
   id: string;
@@ -237,7 +238,12 @@ export function ProfessionalCard({
 
           {professional.publisher?.type === "member" ? (
             <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
-              <span className="truncate">{professional.publisher.displayName}</span>
+              <ProfileLink
+                profileId={professional.publisher.profileId}
+                name={professional.publisher.displayName}
+              >
+                <span className="truncate">{professional.publisher.displayName}</span>
+              </ProfileLink>
               <PublisherTrust
                 displayName={professional.publisher.displayName}
                 firstName={firstNameOf(professional.publisher.displayName)}

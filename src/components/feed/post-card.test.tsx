@@ -31,8 +31,14 @@ import type { AuthorView, PostCardModel, PostEntityView } from "./helpers";
 // necesitan providers, portales y server actions. Nada de eso participa de lo
 // que se mide acá —qué texto sale en la cabecera— así que se apagan.
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: unknown; children: React.ReactNode }) => (
-    <a href={typeof href === "string" ? href : "#"}>{children}</a>
+  default: ({
+    href,
+    children,
+    ...props
+  }: { href: unknown; children: React.ReactNode } & Record<string, unknown>) => (
+    <a href={typeof href === "string" ? href : "#"} {...props}>
+      {children}
+    </a>
   ),
 }));
 vi.mock("./card-like-context", () => ({
@@ -103,8 +109,8 @@ function post(overrides: Partial<PostCardModel> = {}): PostCardModel {
   };
 }
 
-function renderCard(model: PostCardModel) {
-  return render(<PostCard post={model} tenantId="t" viewerId={null} />);
+function renderCard(model: PostCardModel, viewerId: string | null = null) {
+  return render(<PostCard post={model} tenantId="t" viewerId={viewerId} />);
 }
 
 afterEach(cleanup);
@@ -160,6 +166,13 @@ describe("PostCard · publicación firmada por una ficha", () => {
 
     expect(model.postMenu.authorId).toBe(AUTOR.profileId);
   });
+
+  it("no ofrece ningún link al perfil de la persona", () => {
+    const { container } = renderCard(post({ entity: PANADERIA }));
+
+    const hrefs = [...container.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    expect(hrefs.some((href) => href?.startsWith("/perfil"))).toBe(false);
+  });
 });
 
 describe("PostCard · publicación personal", () => {
@@ -175,5 +188,49 @@ describe("PostCard · publicación personal", () => {
     expect(
       screen.getByRole("article", { name: `Publicación de ${NOMBRE_PERSONAL}` }),
     ).toBeTruthy();
+  });
+});
+
+describe("PostCard · el nombre y el avatar llevan al perfil", () => {
+  it("tocar el nombre lleva al perfil de quien publicó", () => {
+    renderCard(post({ entity: null }));
+
+    const link = screen.getByRole("link", { name: `Ver el perfil de ${NOMBRE_PERSONAL}` });
+    expect(link.getAttribute("href")).toBe(`/perfil/${AUTOR.profileId}`);
+    expect(link.textContent).toContain(NOMBRE_PERSONAL);
+  });
+
+  it("el avatar va al mismo perfil sin sumar una segunda parada de teclado", () => {
+    const { container } = renderCard(post({ entity: null }));
+
+    const perfiles = [...container.querySelectorAll(`a[href="/perfil/${AUTOR.profileId}"]`)];
+    expect(perfiles).toHaveLength(2);
+    const avatar = perfiles.find((a) => a.getAttribute("aria-hidden") === "true");
+    expect(avatar?.getAttribute("tabindex")).toBe("-1");
+    expect(screen.getAllByRole("link", { name: `Ver el perfil de ${NOMBRE_PERSONAL}` })).toHaveLength(1);
+  });
+
+  it("en una publicación propia lleva directo a /perfil", () => {
+    renderCard(post({ entity: null }), AUTOR.profileId);
+
+    const link = screen.getByRole("link", { name: `Ver el perfil de ${NOMBRE_PERSONAL}` });
+    expect(link.getAttribute("href")).toBe("/perfil");
+  });
+
+  it("sin cuenta detrás el nombre queda como texto", () => {
+    renderCard(post({ entity: null, author: { ...AUTOR, profileId: null } }));
+
+    expect(screen.getByText(NOMBRE_PERSONAL)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Ver el perfil/ })).toBeNull();
+  });
+
+  it("el Trust Score sigue abriendo su hoja y no navega", () => {
+    renderCard(post({ entity: null }));
+
+    const badge = screen.getAllByRole("button").find((el) => el.closest("a") === null);
+    expect(badge).toBeTruthy();
+    for (const button of screen.getAllByRole("button")) {
+      expect(button.closest("a")).toBeNull();
+    }
   });
 });

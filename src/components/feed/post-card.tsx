@@ -11,6 +11,7 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 import { Avatar, Chip } from "@/components/ui";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
+import { ProfileLink } from "@/components/social/profile-link";
 import { cn } from "@/lib/utils";
 import { COPY, POST_CARD_COPY } from "./copy";
 import { AdChip } from "./card-ad-chip";
@@ -146,6 +147,30 @@ function EntityHeader({
       </div>
       <p className="mt-0.5 text-xs text-foreground-muted">{timeAgoLabel}</p>
     </div>
+  );
+}
+
+function EntityAvatar({
+  entity,
+  name,
+  src,
+}: {
+  entity: PostEntityView;
+  name: string;
+  src: string | null;
+}) {
+  const href = entityHref(entity.kind, entity.id);
+  const avatar = <Avatar size="sm" name={name} src={src} />;
+  if (!href) return avatar;
+  return (
+    <Link
+      href={href}
+      aria-hidden="true"
+      tabIndex={-1}
+      className="relative inline-flex shrink-0 rounded-full after:absolute after:left-1/2 after:top-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']"
+    >
+      {avatar}
+    </Link>
   );
 }
 
@@ -308,15 +333,33 @@ export function PostCard({
             )}
 
             <header className="flex items-start gap-2.5">
-              <Avatar size="sm" name={avatarName} src={avatarSrc} />
+              {entity ? (
+                <EntityAvatar entity={entity} name={avatarName} src={avatarSrc} />
+              ) : (
+                <ProfileLink
+                  profileId={post.author.profileId}
+                  viewerId={viewerId}
+                  name={post.author.displayName}
+                  variant="avatar"
+                  duplicate
+                >
+                  <Avatar size="sm" name={avatarName} src={avatarSrc} />
+                </ProfileLink>
+              )}
               {entity ? (
                 <EntityHeader entity={entity} timeAgoLabel={post.timeAgoLabel} />
               ) : (
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span className="truncate text-sm font-semibold text-foreground">
-                      {post.author.displayName}
-                    </span>
+                    <ProfileLink
+                      profileId={post.author.profileId}
+                      viewerId={viewerId}
+                      name={post.author.displayName}
+                    >
+                      <span className="truncate text-sm font-semibold text-foreground">
+                        {post.author.displayName}
+                      </span>
+                    </ProfileLink>
                     {post.author.profileId && (
                       <PublisherTrust
                         displayName={post.author.displayName}
@@ -325,9 +368,6 @@ export function PostCard({
                         level={post.author.level}
                         signals={post.author.signals}
                         size="inline"
-                        // "Ver el perfil de…" dentro del desglose del score
-                        // (call 29/7, 1:02:24). El perfil público ya existe en
-                        // /perfil/[id]; acá sólo se ofrece el camino.
                         profileId={post.author.profileId}
                       />
                     )}

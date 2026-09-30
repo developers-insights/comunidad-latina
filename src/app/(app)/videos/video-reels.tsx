@@ -53,6 +53,7 @@ import {
 import { loadMoreVideosAction } from "./actions";
 import { ALL_CATEGORIES, type VideoCategoryFilter, type VideosScope } from "./helpers";
 import { VIDEOS_COPY, VIDEO_CATEGORY_LABELS } from "./copy";
+import { ProfileLink } from "@/components/social/profile-link";
 
 /**
  * Reels vertical (pedido cliente 2026-07-21: "cuando un usuario abre un video
@@ -581,14 +582,23 @@ function ReelSlide({
             {/* La FOTO de la ficha cuando el video salió como negocio (0116), no
                 la de la persona: ver el bloque de privacidad de abajo — la cara
                 filtra lo mismo que el nombre. */}
-            <Avatar
-              size="sm"
-              name={displayTitle}
-              src={entity ? (entity.photoUrl ?? null) : post.author.avatarUrl}
-            />
+            <ProfileLink
+              profileId={entity ? null : post.author.profileId}
+              name={post.author.displayName}
+              variant="avatar"
+              duplicate
+            >
+              <Avatar
+                size="sm"
+                name={displayTitle}
+                src={entity ? (entity.photoUrl ?? null) : post.author.avatarUrl}
+              />
+            </ProfileLink>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-on-media drop-shadow-md">
-                {displayTitle}
+              <p className="flex min-w-0 text-sm font-semibold text-on-media drop-shadow-md">
+                <ProfileLink profileId={entity ? null : post.author.profileId} name={post.author.displayName}>
+                  <span className="truncate">{displayTitle}</span>
+                </ProfileLink>
               </p>
               <div className="flex min-w-0 items-center gap-1.5">
                 {/* ── SIN "por {persona}" CUANDO EL VIDEO ES DE UNA FICHA ─────

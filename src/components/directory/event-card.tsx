@@ -13,6 +13,7 @@ import type { TrustLevel, TrustSignal } from "@/components/trust";
 import { COPY } from "./copy";
 import type { EventDateParts } from "./helpers";
 import { DirectoryMedia } from "./module-media";
+import { ProfileLink } from "@/components/social/profile-link";
 
 /** Trust Score del organizador con cuenta, resuelto en batch server-side. */
 export interface EventPublisherTrust {
@@ -146,7 +147,9 @@ export function EventCard({
         <div className="flex flex-col gap-2.5 p-4">
           {event.publisherTrust ? (
             <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
-              <span className="truncate">{event.publisherTrust.displayName}</span>
+              <ProfileLink profileId={event.publisherTrust.profileId} name={event.publisherTrust.displayName}>
+                <span className="truncate">{event.publisherTrust.displayName}</span>
+              </ProfileLink>
               <PublisherTrust
                 displayName={event.publisherTrust.displayName}
                 firstName={event.publisherTrust.firstName}

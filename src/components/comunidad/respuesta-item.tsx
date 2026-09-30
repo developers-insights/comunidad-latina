@@ -8,6 +8,7 @@ import { ReportSheet } from "@/components/trust";
 import { COMUNIDAD_COPY, type HelpReply } from "@/lib/comunidad";
 import { borrarRespuesta } from "@/app/(app)/comunidad/pedir-ayuda/actions";
 import { cn } from "@/lib/utils";
+import { ProfileLink } from "@/components/social/profile-link";
 
 const C = COMUNIDAD_COPY.pedirAyuda.respuestas;
 
@@ -91,7 +92,9 @@ export function RespuestaItem({
       )}
     >
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-sm font-semibold text-foreground">{respuesta.authorName}</span>
+        <ProfileLink profileId={respuesta.authorId} name={respuesta.authorName}>
+          <span className="truncate text-sm font-semibold text-foreground">{respuesta.authorName}</span>
+        </ProfileLink>
         {esAutorDelPedido && (
           <Chip size="sm" variant="brand">
             {C.autorDelPedido}

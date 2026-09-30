@@ -4,6 +4,7 @@ import { RESENAS_COPY as C, type ResenaVista } from "@/lib/resenas";
 import { cn } from "@/lib/utils";
 import { Estrellas } from "./estrellas";
 import { ResenaAcciones } from "./resena-acciones";
+import { ProfileLink } from "@/components/social/profile-link";
 
 export interface ResenasListaProps {
   listingId: string;
@@ -60,23 +61,37 @@ export function ResenasLista({
                     que el cambiador del header y que un comentario de negocio —
                     una sola gramática visual para "esto lo dice un local" en
                     toda la app. */}
-                <Avatar
-                  src={resena.autorAvatar}
+                <ProfileLink
+                  profileId={resena.esDeNegocio ? null : resena.autorId}
                   name={resena.autorNombre}
-                  size="md"
-                  badge={
-                    resena.esDeNegocio ? (
-                      <span
-                        aria-hidden="true"
-                        className="cl-print-hide flex size-4 items-center justify-center rounded-full bg-brand text-brand-foreground ring-2 ring-surface"
-                      >
-                        <Storefront size={11} weight="fill" />
-                      </span>
-                    ) : undefined
-                  }
-                />
+                  variant="avatar"
+                  duplicate
+                >
+                  <Avatar
+                    src={resena.autorAvatar}
+                    name={resena.autorNombre}
+                    size="md"
+                    badge={
+                      resena.esDeNegocio ? (
+                        <span
+                          aria-hidden="true"
+                          className="cl-print-hide flex size-4 items-center justify-center rounded-full bg-brand text-brand-foreground ring-2 ring-surface"
+                        >
+                          <Storefront size={11} weight="fill" />
+                        </span>
+                      ) : undefined
+                    }
+                  />
+                </ProfileLink>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-foreground">{resena.autorNombre}</p>
+                  <p className="flex min-w-0 font-semibold text-foreground">
+                    <ProfileLink
+                      profileId={resena.esDeNegocio ? null : resena.autorId}
+                      name={resena.autorNombre}
+                    >
+                      <span className="truncate">{resena.autorNombre}</span>
+                    </ProfileLink>
+                  </p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                     <Estrellas
                       valor={resena.puntaje}

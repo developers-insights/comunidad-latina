@@ -52,6 +52,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { VENCIMIENTO_COPY } from "@/lib/listings";
 import { cn } from "@/lib/utils";
+import { ProfileLink } from "@/components/social/profile-link";
 
 const C = COPY.professionals;
 
@@ -201,18 +202,22 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
     publisherCard = (
       <BezelCard coreClassName="flex flex-col gap-3 p-4">
         <div className="flex items-center gap-3">
-          <Avatar
-            src={profile?.avatar_url}
-            name={displayName}
-            size="lg"
-            // Identidad verificada — insignia PROPIA sobre el avatar, distinta
-            // de la banda de credenciales de arriba (VerificationBand): son dos
-            // hechos distintos y tienen que leerse distintos (spec cliente).
-            badge={profile?.identity_verified ? <IdentityBadge /> : undefined}
-          />
+          <ProfileLink profileId={profile?.id ?? null} name={displayName} variant="avatar" duplicate>
+            <Avatar
+              src={profile?.avatar_url}
+              name={displayName}
+              size="lg"
+              // Identidad verificada — insignia PROPIA sobre el avatar, distinta
+              // de la banda de credenciales de arriba (VerificationBand): son dos
+              // hechos distintos y tienen que leerse distintos (spec cliente).
+              badge={profile?.identity_verified ? <IdentityBadge /> : undefined}
+            />
+          </ProfileLink>
           <div className="min-w-0">
-            <p className="truncate font-display text-base font-bold text-foreground">
-              {displayName}
+            <p className="flex min-w-0 font-display text-base font-bold text-foreground">
+              <ProfileLink profileId={profile?.id ?? null} name={displayName}>
+                <span className="truncate">{displayName}</span>
+              </ProfileLink>
             </p>
             <PublisherTrust
               displayName={displayName}

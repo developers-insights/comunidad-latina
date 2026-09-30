@@ -36,6 +36,7 @@ import { JobApplyInline } from "@/components/empleos/job-apply-inline";
 import { ApplySheet } from "@/components/creators/apply-sheet";
 import { sendListingMessageAction } from "@/app/(app)/mensajes/inline-actions";
 import { useCloseOnBack } from "@/lib/design/use-overlay";
+import { ProfileLink } from "@/components/social/profile-link";
 import { cn } from "@/lib/utils";
 import type { CompartidoKind } from "@/components/share";
 import { COPY } from "./copy";
@@ -646,7 +647,13 @@ export function FeedListingCard({
               <div className="min-w-0 flex-1">
                 {listing.publisherTrust ? (
                   <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
-                    <span className="truncate">{listing.publisherTrust.displayName}</span>
+                    <ProfileLink
+                      profileId={listing.publisherTrust.profileId}
+                      viewerId={viewerId}
+                      name={listing.publisherTrust.displayName}
+                    >
+                      <span className="truncate">{listing.publisherTrust.displayName}</span>
+                    </ProfileLink>
                     <PublisherTrust
                       displayName={listing.publisherTrust.displayName}
                       firstName={listing.publisherTrust.firstName}
@@ -808,9 +815,15 @@ export function FeedListingCard({
               </p>
               {listing.publisherTrust ? (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold text-foreground">
-                    {listing.publisherTrust.displayName}
-                  </span>
+                  <ProfileLink
+                    profileId={listing.publisherTrust.profileId}
+                    viewerId={viewerId}
+                    name={listing.publisherTrust.displayName}
+                  >
+                    <span className="text-sm font-semibold text-foreground">
+                      {listing.publisherTrust.displayName}
+                    </span>
+                  </ProfileLink>
                   <PublisherTrust
                     displayName={listing.publisherTrust.displayName}
                     firstName={listing.publisherTrust.firstName}

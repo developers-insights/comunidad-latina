@@ -14,6 +14,7 @@ import { SectionTopBar } from "@/components/shell";
 import { resumenDeDuracion } from "@/lib/calls/duracion";
 import { COPY } from "@/components/calls/copy";
 import { getHistorial, type FilaDeHistorial } from "./queries";
+import { ProfileLink } from "@/components/social/profile-link";
 
 export const metadata: Metadata = { title: COPY.seccion.title };
 
@@ -91,6 +92,9 @@ function FilaDeLlamada({ fila, miId }: { fila: FilaDeHistorial; miId: string }) 
         ? fila.otros[0].displayName
         : `${fila.otros[0].displayName} y ${fila.otros.length - 1} más`);
 
+  const personaId =
+    !fila.grupoNombre && fila.otros.length === 1 ? fila.otros[0].id : null;
+
   const detalle = perdida
     ? fila.status === "rechazada"
       ? COPY.historial.rechazada
@@ -106,15 +110,21 @@ function FilaDeLlamada({ fila, miId }: { fila: FilaDeHistorial; miId: string }) 
   return (
     <li>
       <div className="flex min-h-16 items-center gap-3 rounded-lg px-2 py-2">
-        <Avatar
-          src={fila.otros[0]?.avatarUrl ?? null}
-          name={titulo}
-          size="md"
-          className="shrink-0"
-        />
+        <ProfileLink profileId={personaId} name={titulo} variant="avatar" duplicate>
+          <Avatar
+            src={fila.otros[0]?.avatarUrl ?? null}
+            name={titulo}
+            size="md"
+            className="shrink-0"
+          />
+        </ProfileLink>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-foreground">{titulo}</p>
+          <p className="flex min-w-0 text-sm font-semibold text-foreground">
+            <ProfileLink profileId={personaId} name={titulo}>
+              <span className="truncate">{titulo}</span>
+            </ProfileLink>
+          </p>
           <p
             className={cn(
               "mt-0.5 flex items-center gap-1.5 text-xs",

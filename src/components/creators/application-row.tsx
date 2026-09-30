@@ -14,6 +14,7 @@ import { RatingStars } from "./rating-stars";
 import { ContractForm } from "./contract-form";
 import { formatCents } from "./money";
 import { COPY } from "./copy";
+import { ProfileLink } from "@/components/social/profile-link";
 
 export interface ApplicationCreator {
   profileId: string;
@@ -90,19 +91,35 @@ export function ApplicationRow({ application, creator, gigTitle, gigBudgetCents 
   return (
     <li className="flex flex-col gap-3 rounded-lg border border-border-subtle bg-surface p-4">
       <div className="flex items-start gap-3">
-        <Avatar
-          size="md"
-          src={creator.avatarUrl}
+        <ProfileLink
+          profileId={creator.profileId}
+          href={`/creadores/perfil/${creator.profileId}`}
           name={creator.displayName}
-          badge={
-            creator.checkAzul || creator.identityVerified ? (
-              <InsigniaDePerfil checkAzul={creator.checkAzul} identityVerified={creator.identityVerified} />
-            ) : undefined
-          }
-        />
+          variant="avatar"
+          duplicate
+        >
+          <Avatar
+            size="md"
+            src={creator.avatarUrl}
+            name={creator.displayName}
+            badge={
+              creator.checkAzul || creator.identityVerified ? (
+                <InsigniaDePerfil checkAzul={creator.checkAzul} identityVerified={creator.identityVerified} />
+              ) : undefined
+            }
+          />
+        </ProfileLink>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <p className="truncate font-semibold text-foreground">{creator.displayName}</p>
+            <p className="flex min-w-0 font-semibold text-foreground">
+              <ProfileLink
+                profileId={creator.profileId}
+                href={`/creadores/perfil/${creator.profileId}`}
+                name={creator.displayName}
+              >
+                <span className="truncate">{creator.displayName}</span>
+              </ProfileLink>
+            </p>
             <Badge variant={STATUS_VARIANT[status] ?? "neutral"} className="shrink-0">
               {STATUS_LABEL[status] ?? status}
             </Badge>

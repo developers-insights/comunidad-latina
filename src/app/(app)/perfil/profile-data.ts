@@ -170,6 +170,7 @@ export interface ReviewRow {
   createdAt: string;
   reviewerName: string;
   reviewerAvatarUrl: string | null;
+  reviewerId: string | null;
 }
 
 /**
@@ -224,6 +225,7 @@ export async function fetchProfileReviews(
       // esconde: el promedio la cuenta igual, así que ocultarla mentiría.
       reviewerName: reviewer?.display_name ?? "Alguien de la comunidad",
       reviewerAvatarUrl: reviewer?.avatar_url ?? null,
+      reviewerId: reviewer ? row.reviewer_id : null,
     };
   });
 }
