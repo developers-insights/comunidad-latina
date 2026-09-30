@@ -6,6 +6,7 @@ import { DAY_MS, HOUR_MS, limit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications/notify";
+import { avisarAceptacion } from "@/lib/notifications/solicitud-server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { sendEmailInBackground } from "@/lib/email";
 import { getRecipientEmail } from "@/lib/email/recipients";
@@ -245,11 +246,26 @@ export async function acceptConversationAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, code: "unauthenticated" };
 
+  const { data: previa } = await supabase
+    .from("conversations")
+    .select("tenant_id, status, created_by, counterpart_id")
+    .eq("id", parsed.data)
+    .maybeSingle();
+
   // RPC canónica: solo la contraparte puede aceptar (lo valida la función).
   const { error } = await supabase.rpc("accept_conversation", {
     p_conversation_id: parsed.data,
   });
   if (error) return { ok: false, code: "error" };
+
+  if (previa?.status === "pending" && previa.counterpart_id === user.id) {
+    await avisarAceptacion(supabase, {
+      userId: user.id,
+      tenantId: previa.tenant_id,
+      solicitanteId: previa.created_by,
+      conversationId: parsed.data,
+    });
+  }
 
   revalidatePath(`/mensajes/${parsed.data}`);
   revalidatePath("/mensajes");

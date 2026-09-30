@@ -16,6 +16,8 @@ import {
 import { NotificationAvatar } from "./category-icon";
 import { COPY } from "./copy";
 import { NotificationMenu } from "./notification-menu";
+import { SolicitudEnAviso } from "./solicitud-en-aviso";
+import type { SolicitudDelAviso } from "@/lib/notifications/solicitud";
 
 export type NotificationItemData = {
   id: string;
@@ -36,6 +38,8 @@ export type NotificationItemData = {
   entityKind: string | null;
   /** Miniatura de esa entidad, con la URL YA RESUELTA por el servidor. */
   imageUrl: string | null;
+  /** Estado vivo de la solicitud de contacto, si el aviso es una: habilita responder en el lugar. */
+  solicitud?: SolicitudDelAviso | null;
 };
 
 /**
@@ -97,6 +101,28 @@ export function NotificationItem({
             {COPY.row.undo}
           </button>
         </div>
+      </li>
+    );
+  }
+
+  if (notification.solicitud) {
+    return (
+      <li className="flex items-stretch gap-1">
+        <SolicitudEnAviso
+          notificationId={notification.id}
+          solicitud={notification.solicitud}
+          titulo={notification.title}
+          createdAt={notification.createdAt}
+          timeLabel={notification.timeLabel}
+          leida={notification.read}
+        />
+        <NotificationMenu
+          notificationId={notification.id}
+          category={notification.category}
+          read={notification.read}
+          onChanged={() => router.refresh()}
+          onDismissed={() => setDismissed(true)}
+        />
       </li>
     );
   }

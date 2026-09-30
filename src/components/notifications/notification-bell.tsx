@@ -17,8 +17,7 @@ import { NotificationPanel } from "./notification-panel";
  * Nunca lanza: sin sesión o con la DB caída, la campana se pinta sin badge —
  * un contador roto no puede tumbar el header.
  */
-async function getUnreadCount(): Promise<number> {
-  const userId = await getAuthUserId();
+async function getUnreadCount(userId: string | null): Promise<number> {
   if (!userId) return 0;
 
   try {
@@ -33,7 +32,10 @@ async function getUnreadCount(): Promise<number> {
 
     if (error || typeof count !== "number") return 0;
     return count;
-  } catch {
+  } catch (error) {
+    console.warn("[notificaciones] contador de la campana falló", {
+      message: error instanceof Error ? error.message : "error desconocido",
+    });
     return 0;
   }
 }
@@ -60,6 +62,7 @@ async function getUnreadCount(): Promise<number> {
  * que uno que está desde el principio.
  */
 export async function NotificationBell() {
-  const unread = await getUnreadCount();
-  return <NotificationPanel initialUnread={unread} />;
+  const userId = await getAuthUserId();
+  const unread = await getUnreadCount(userId);
+  return <NotificationPanel initialUnread={unread} userId={userId} />;
 }

@@ -152,6 +152,9 @@ export async function requestContactAction(
         title: `Alguien quiere contactarte por "${listing.title}"`,
         body: "Entrá a Mensajes para aceptar o ignorar la solicitud.",
         href: "/mensajes",
+        ...(typeof data === "string" && data
+          ? { entity: { type: "conversation" as const, id: data } }
+          : {}),
       });
 
       // Email "lead recibido" al dueño (módulo EMAILS, fire-and-forget).

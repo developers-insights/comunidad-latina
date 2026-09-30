@@ -11,6 +11,7 @@ import { parseEntityKind } from "@/lib/notifications/entity";
 import { PANEL_LIMIT, type NotificationPanelItem } from "@/lib/notifications/panel";
 import type { PanelDeCampanaResult } from "@/lib/notifications/panel-campana";
 import { listingPhotoUrl } from "@/components/listings";
+import { leerSolicitudesDeAvisos } from "@/lib/notifications/solicitud-server";
 
 /**
  * =============================================================================
@@ -61,7 +62,9 @@ export async function getPanelDeCampanaAction(
 
   let listaQuery = supabase
     .from("notifications")
-    .select("id, title, body, href, read_at, created_at, category, entity_kind, image_url")
+    .select(
+      "id, kind, title, body, href, read_at, created_at, category, entity_type, entity_id, entity_kind, image_url",
+    )
     .is("dismissed_at", null)
     .gt("expires_at", nowIso)
     .order("created_at", { ascending: false })
@@ -103,8 +106,11 @@ export async function getPanelDeCampanaAction(
     if (isNotificationCategory(fila.category)) counts[fila.category] = fila.unread;
   }
 
+  const filas = data ?? [];
+  const solicitudes = await leerSolicitudesDeAvisos(supabase, user.id, filas);
+
   const now = new Date();
-  const items: NotificationPanelItem[] = (data ?? []).map((row) => ({
+  const items: NotificationPanelItem[] = filas.map((row) => ({
     id: row.id,
     // La columna llega como `text`. Si mañana se suma una categoría y este
     // deploy es viejo, la fila cae en una conocida en vez de romper el ícono.
@@ -120,6 +126,7 @@ export async function getPanelDeCampanaAction(
     // arma acá y no en el componente porque el panel es `"use client"` y no
     // tiene por qué arrastrar el módulo de listings al bundle del navegador.
     imageUrl: row.image_url ? listingPhotoUrl(row.image_url) : null,
+    solicitud: solicitudes.get(row.id) ?? null,
   }));
 
   return { ok: true, data: { tab, unread: count ?? 0, counts, items } };
