@@ -43,6 +43,7 @@ import {
   puedeReactivarse,
   statusDespuesDeEditar,
 } from "@/lib/listings/edicion";
+import { republicarAvisoEditado, vuelveAPublicarse } from "@/lib/listings/republicar";
 
 /**
  * =============================================================================
@@ -60,8 +61,9 @@ import {
  * Dejar un aviso en `published`. El WITH CHECK de `listings_update` sólo admite
  * draft / pending_review / paused / removed / closed para el dueño (0004, última
  * versión 0075). No es una preferencia de este archivo: un UPDATE que intente
- * `status = 'published'` con el JWT de la persona rebota con 42501. Por eso
- * editar devuelve el aviso a `pending_review` y reactivar también.
+ * `status = 'published'` con el JWT de la persona rebota con 42501. Por eso el
+ * UPDATE de editar deja `pending_review`, y la vuelta a `published` (si
+ * corresponde) la hace `republicarAvisoEditado` con el admin client.
  *
  * ── Y POR QUÉ ESO ES, ADEMÁS, LO SEGURO ────────────────────────────────────
  * Es lo que cierra el agujero de las fotos. Una foto agregada al editar pasa por
@@ -232,7 +234,7 @@ const editarSchema = z.object({
 });
 
 export type EditarAvisoResult =
-  | { ok: true; status: "pending_review" | "paused"; sinCambios?: false }
+  | { ok: true; status: "published" | "pending_review" | "paused"; sinCambios?: false }
   | { ok: true; status: string; sinCambios: true }
   | { ok: false; error: string; needsAuth?: boolean };
 
@@ -433,8 +435,42 @@ export async function editarAvisoAction(rawInput: {
     });
   }
 
+  let statusFinal: "published" | "pending_review" | "paused" = nuevoStatus;
+  const republicar = vuelveAPublicarse({
+    statusPrevio: fila.status,
+    textoMarcado: moderation.flagged,
+    tier,
+    mediaPendiente: photoNeedsReview || videoNeedsReview || integrity.needsHumanReview,
+  });
+  if (republicar) {
+    try {
+      const resultado = await republicarAvisoEditado(supabaseSinTiparListings(createAdminClient()), {
+        listingId: entrada.listingId,
+        tenantId: tenant.id,
+        userId: user.id,
+      });
+      if (resultado.ok) {
+        statusFinal = "published";
+      } else {
+        console.warn("[publicaciones] la edición no pudo volver a publicarse", {
+          listingId: entrada.listingId,
+          motivo: resultado.motivo,
+          code: resultado.code,
+        });
+      }
+    } catch (error) {
+      console.warn("[publicaciones] admin client no disponible para volver a publicar", {
+        listingId: entrada.listingId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   // ---- La cola de moderación, con el mismo criterio que el alta ------------
+  // Un `pending_review` sin fila en la cola no lo ve nadie en /admin/moderacion:
+  // queda invisible para siempre. Por eso quedarse en revisión SIEMPRE encola.
   const debeEncolar =
+    statusFinal === "pending_review" ||
     moderation.flagged ||
     moderation.skipped ||
     tier > TIER_AUTO ||
@@ -449,6 +485,7 @@ export async function editarAvisoAction(rawInput: {
         ...(photoNeedsReview ? ["photo_pending_review"] : []),
         ...(videoNeedsReview ? ["video_async_review"] : []),
         ...integrity.reasons,
+        ...(statusFinal === "pending_review" ? ["edited_listing"] : []),
       ];
       const outcome = await enqueueModeration(createAdminClient(), {
         tenantId: tenant.id,
@@ -457,7 +494,11 @@ export async function editarAvisoAction(rawInput: {
         aiScore: moderation.skipped ? null : moderation.score,
         reasons,
         tier:
-          moderation.flagged || photoNeedsReview || videoNeedsReview || integrity.needsHumanReview
+          statusFinal === "pending_review" ||
+          moderation.flagged ||
+          photoNeedsReview ||
+          videoNeedsReview ||
+          integrity.needsHumanReview
             ? TIER_HUMAN
             : TIER_REVIEW,
       });
@@ -466,13 +507,16 @@ export async function editarAvisoAction(rawInput: {
           listingId: entrada.listingId,
         });
       }
-    } catch {
-      console.warn("[publicaciones] admin client no disponible para encolar moderación");
+    } catch (error) {
+      console.warn("[publicaciones] admin client no disponible para encolar moderación", {
+        listingId: entrada.listingId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
   revalidar(fila.kind, entrada.listingId);
-  return { ok: true, status: nuevoStatus };
+  return { ok: true, status: statusFinal };
 }
 
 // ===========================================================================
