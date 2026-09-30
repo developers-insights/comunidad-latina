@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ServiceOwnerMenu } from "./service-owner-menu";
 import { EDICION_COPY } from "@/lib/listings/edicion";
@@ -128,5 +128,29 @@ describe("ServiceOwnerMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     expect(await screen.findByText(EDICION_COPY.errores.noEsTuya)).toBeTruthy();
+  });
+});
+
+describe("ServiceOwnerMenu · volver a publicar", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function reactivar() {
+    render(<ServiceOwnerMenu {...BASE} esMio status="paused" />);
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(BASE.title) }));
+    fireEvent.click(await waitFor(() => screen.getByText(EDICION_COPY.menu.reactivar)));
+    await waitFor(() => expect(actions.toast).toHaveBeenCalled());
+    return actions.toast.mock.calls[0][0];
+  }
+
+  it("si volvió a la vista, lo dice en vez de prometer una revisión", async () => {
+    actions.pausarAvisoAction.mockResolvedValue({ ok: true, status: "published" });
+    expect(await reactivar()).toMatchObject({ title: EDICION_COPY.ok.reactivadaVisibleTitulo });
+  });
+
+  it("si quedó en revisión, avisa que la mandamos a revisión", async () => {
+    actions.pausarAvisoAction.mockResolvedValue({ ok: true, status: "pending_review" });
+    expect(await reactivar()).toMatchObject({ title: EDICION_COPY.ok.reactivadaTitulo });
   });
 });

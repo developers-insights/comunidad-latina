@@ -265,6 +265,22 @@ describe("finalizeListing — una foto sin moderar NUNCA queda huérfana", () =>
     expect(mocks.enqueueModeration).not.toHaveBeenCalled();
   });
 
+  it("el UPDATE sólo mueve borradores o avisos en revisión: nunca resucita un removed", async () => {
+    const stub = useHappyPath();
+    useAdmin();
+
+    await finalizeListing({ listingId: LISTING_ID, photoPaths: [PHOTO] });
+
+    const desdeUpdate = stub.calls.slice(
+      stub.calls.findIndex((c) => c.table === "listings" && c.method === "update"),
+    );
+    expect(desdeUpdate).toContainEqual({
+      table: "listings",
+      method: "in",
+      args: ["status", ["draft", "pending_review"]],
+    });
+  });
+
   it("que la cola falle NO rompe la publicación (degradación elegante §7)", async () => {
     useHappyPath();
     useAdmin();

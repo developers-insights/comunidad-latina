@@ -347,6 +347,8 @@ export const EDICION_COPY = {
     reactivadaTitulo: "La mandamos a revisión",
     reactivadaCuerpo:
       "Vuelve a mostrarse apenas la aprobemos. Te avisamos cuando esté.",
+    reactivadaVisibleTitulo: "Listo, ya se ve de nuevo",
+    reactivadaVisibleCuerpo: "Tu publicación volvió a mostrarse tal como estaba.",
   },
 
   errores: {
@@ -367,3 +369,34 @@ export const EDICION_COPY = {
     demasiado: "Editaste muchas veces hoy. Probá de nuevo mañana.",
   },
 } as const;
+
+export type ToastDePausa = {
+  title: string;
+  description: string;
+  variant: "success" | "info";
+};
+
+export function toastDePausa(
+  pausar: boolean,
+  status: "paused" | "published" | "pending_review",
+): ToastDePausa {
+  if (pausar) {
+    return {
+      title: EDICION_COPY.ok.pausadaTitulo,
+      description: EDICION_COPY.ok.pausadaCuerpo,
+      variant: "success",
+    };
+  }
+  if (status === "published") {
+    return {
+      title: EDICION_COPY.ok.reactivadaVisibleTitulo,
+      description: EDICION_COPY.ok.reactivadaVisibleCuerpo,
+      variant: "success",
+    };
+  }
+  return {
+    title: EDICION_COPY.ok.reactivadaTitulo,
+    description: EDICION_COPY.ok.reactivadaCuerpo,
+    variant: "info",
+  };
+}

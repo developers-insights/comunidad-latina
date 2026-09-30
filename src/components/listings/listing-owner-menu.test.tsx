@@ -250,3 +250,23 @@ describe("pausar", () => {
     await waitFor(() => screen.getByText(EDICION_COPY.menu.pausar));
   });
 });
+
+describe("volver a publicar", () => {
+  async function reactivar() {
+    render(<ListingOwnerMenu {...BASE} esMio status="paused" />);
+    fireEvent.click(screen.getByRole("button", { name: /Opciones/ }));
+    fireEvent.click(await waitFor(() => screen.getByText(EDICION_COPY.menu.reactivar)));
+    await waitFor(() => expect(toast.toast).toHaveBeenCalled());
+    return toast.toast.mock.calls[0][0];
+  }
+
+  it("si volvió a la vista, lo dice en vez de prometer una revisión", async () => {
+    actions.pausarAvisoAction.mockResolvedValue({ ok: true, status: "published" });
+    expect(await reactivar()).toMatchObject({ title: EDICION_COPY.ok.reactivadaVisibleTitulo });
+  });
+
+  it("si quedó en revisión, avisa que la mandamos a revisión", async () => {
+    actions.pausarAvisoAction.mockResolvedValue({ ok: true, status: "pending_review" });
+    expect(await reactivar()).toMatchObject({ title: EDICION_COPY.ok.reactivadaTitulo });
+  });
+});

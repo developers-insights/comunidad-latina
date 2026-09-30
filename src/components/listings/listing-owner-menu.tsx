@@ -25,6 +25,7 @@ import {
   editaEnPaginaPropia,
   puedePausarse,
   puedeReactivarse,
+  toastDePausa,
 } from "@/lib/listings/edicion";
 import { listingViewHref } from "@/lib/monetization/href";
 import { cn } from "@/lib/utils";
@@ -144,19 +145,7 @@ export function ListingOwnerMenu({
         return;
       }
       setStatusActual(result.status);
-      toast(
-        pausar
-          ? {
-              title: EDICION_COPY.ok.pausadaTitulo,
-              description: EDICION_COPY.ok.pausadaCuerpo,
-              variant: "success",
-            }
-          : {
-              title: EDICION_COPY.ok.reactivadaTitulo,
-              description: EDICION_COPY.ok.reactivadaCuerpo,
-              variant: "info",
-            },
-      );
+      toast(toastDePausa(pausar, result.status));
       router.refresh();
     });
   }

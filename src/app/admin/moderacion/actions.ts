@@ -24,6 +24,62 @@ const COPY = {
   genericError: "No pudimos guardar la resolución — no es tu culpa. Probá de nuevo en un momento.",
 } as const;
 
+type StaffClient = NonNullable<Awaited<ReturnType<typeof getStaffContext>>>["supabase"];
+
+type AvisoAntesDeAprobar = {
+  status: string;
+  published_at: string | null;
+  expires_at: string | null;
+  expiry_warn_at: string | null;
+  expiry_warned_at: string | null;
+};
+
+/**
+ * Lo que ya estuvo publicado (ediciones y reactivaciones que pasan por la cola)
+ * vuelve sin `published_at` nuevo ni plazo nuevo: si no, aprobar sería un boost
+ * gratis y una renovación que esquiva el tope de la 0098. `listings_set_expiry`
+ * recalcula en la transición a `published`, así que el plazo previo se repone
+ * después, con el admin client: la guarda de la 0178 no exime al JWT de staff.
+ */
+async function aprobarAviso(supabase: StaffClient, listingId: string, tenantId: string) {
+  const { data, error: readError } = await supabase
+    .from("listings")
+    .select("status, published_at, expires_at, expiry_warn_at, expiry_warned_at")
+    .eq("id", listingId)
+    .maybeSingle();
+  if (readError) throw new Error(`listings.read ${readError.code}`);
+  if (!data) throw new Error("listings.read sin fila");
+  const previo = data as AvisoAntesDeAprobar;
+
+  if (!previo.published_at) {
+    const { error } = await supabase
+      .from("listings")
+      .update({ status: "published", published_at: new Date().toISOString() })
+      .eq("id", listingId);
+    if (error) throw new Error(`listings.publish ${error.code}`);
+    return;
+  }
+
+  const { error: publishError } = await supabase
+    .from("listings")
+    .update({ status: "published" })
+    .eq("id", listingId);
+  if (publishError) throw new Error(`listings.publish ${publishError.code}`);
+  if (previo.status === "published") return;
+
+  const { error: restoreError } = await createAdminClient()
+    .from("listings")
+    .update({
+      expires_at: previo.expires_at,
+      expiry_warn_at: previo.expiry_warn_at,
+      expiry_warned_at: previo.expiry_warned_at,
+    })
+    .eq("id", listingId)
+    .eq("tenant_id", tenantId)
+    .eq("status", "published");
+  if (restoreError) throw new Error(`listings.restore_expiry ${restoreError.code}`);
+}
+
 const schema = z.object({
   itemId: z.uuid(),
   decision: z.enum(["approve", "reject"]),
@@ -92,11 +148,15 @@ export async function resolveModerationItem(
       case "listing":
       case "photo": {
         // photo: el pipeline encola las fotos con el id del listing dueño.
-        const patch =
-          decision === "approve"
-            ? { status: "published", published_at: new Date().toISOString() }
-            : { status: "removed" };
-        await supabase.from("listings").update(patch).eq("id", item.subject_id);
+        if (decision === "approve") {
+          await aprobarAviso(supabase, item.subject_id, item.tenant_id);
+        } else {
+          const { error } = await supabase
+            .from("listings")
+            .update({ status: "removed" })
+            .eq("id", item.subject_id);
+          if (error) throw new Error(`listings.removed ${error.code}`);
+        }
         break;
       }
       case "message": {

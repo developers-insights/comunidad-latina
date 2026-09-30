@@ -18,7 +18,12 @@ import { pausarAvisoAction } from "@/app/(app)/publicaciones/editar-actions";
 import { eliminarAvisoAction } from "@/app/(app)/publicaciones/eliminar-action";
 import { LISTING_MENU_COPY } from "@/components/listings/listing-owner-menu";
 import { BottomSheet, Button, Dialog, useToast } from "@/components/ui";
-import { EDICION_COPY, puedePausarse, puedeReactivarse } from "@/lib/listings/edicion";
+import {
+  EDICION_COPY,
+  puedePausarse,
+  puedeReactivarse,
+  toastDePausa,
+} from "@/lib/listings/edicion";
 import { listingViewHref } from "@/lib/monetization/href";
 import { cn } from "@/lib/utils";
 import { ServiceEditSheet, type ServicioGuardado } from "./service-edit-sheet";
@@ -84,19 +89,7 @@ export function ServiceOwnerMenu({
         return;
       }
       setStatusActual(result.status);
-      toast(
-        pausar
-          ? {
-              title: EDICION_COPY.ok.pausadaTitulo,
-              description: EDICION_COPY.ok.pausadaCuerpo,
-              variant: "success",
-            }
-          : {
-              title: EDICION_COPY.ok.reactivadaTitulo,
-              description: EDICION_COPY.ok.reactivadaCuerpo,
-              variant: "info",
-            },
-      );
+      toast(toastDePausa(pausar, result.status));
       router.refresh();
     });
   }

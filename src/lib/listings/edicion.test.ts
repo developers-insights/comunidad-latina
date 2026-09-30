@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  EDICION_COPY,
   EDICION_LIMITES,
   camposEditables,
   editaEnPaginaPropia,
@@ -13,6 +14,7 @@ import {
   puedePausarse,
   puedeReactivarse,
   statusDespuesDeEditar,
+  toastDePausa,
   type ValoresDeAviso,
 } from "./edicion";
 
@@ -166,5 +168,29 @@ describe("parsearPrecio", () => {
   it("el tope de forma es el mismo que el del alta", () => {
     expect(EDICION_LIMITES.precioMax).toBe(1_000_000);
     expect(EDICION_LIMITES.tituloMax).toBe(120);
+  });
+});
+
+describe("toastDePausa", () => {
+  it("pausar confirma la pausa", () => {
+    expect(toastDePausa(true, "paused")).toMatchObject({
+      title: EDICION_COPY.ok.pausadaTitulo,
+      variant: "success",
+    });
+  });
+
+  it("reactivar y volver a la vista no dice que está en revisión", () => {
+    expect(toastDePausa(false, "published")).toMatchObject({
+      title: EDICION_COPY.ok.reactivadaVisibleTitulo,
+      description: EDICION_COPY.ok.reactivadaVisibleCuerpo,
+      variant: "success",
+    });
+  });
+
+  it("reactivar y quedar en revisión lo dice", () => {
+    expect(toastDePausa(false, "pending_review")).toMatchObject({
+      title: EDICION_COPY.ok.reactivadaTitulo,
+      variant: "info",
+    });
   });
 });

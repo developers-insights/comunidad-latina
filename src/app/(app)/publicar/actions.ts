@@ -695,6 +695,7 @@ export async function finalizeListing(rawInput: {
     .eq("id", listingId)
     .eq("tenant_id", tenant.id)
     .eq("created_by", user.id)
+    .in("status", ["draft", "pending_review"])
     .select("id, created_by, kind")
     .maybeSingle();
 
