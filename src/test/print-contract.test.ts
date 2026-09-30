@@ -701,10 +701,10 @@ const INVENTARIO: Record<string, Entrada> = {
   },
   // Grabador de notas de voz. Va con el hook y no con "control" porque la
   // barra de grabación entera (timer, medidor, carteles) no es un <button>, y
-  // grabar no significa nada en una hoja impresa. Las dos tintas son el botón
-  // persistente (micrófono → enviar) y el avión de la vista previa.
+  // grabar no significa nada en una hoja impresa. La tinta es el botón
+  // persistente (micrófono → enviar).
   "src/components/messaging/voice-recorder.tsx": {
-    inks: ["text-brand-foreground", "text-brand-foreground"],
+    inks: ["text-brand-foreground"],
     cobertura: "cl-print-hide",
   },
   // Reproductor de una nota de voz. Un reproductor de audio en papel no es nada.
