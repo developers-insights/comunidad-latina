@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
+import { visiblesParaMi } from "@/lib/messaging/solicitud-descartada";
 import {
   agruparPorPersona,
   type ConversacionLite,
@@ -227,7 +228,10 @@ export async function leerBandejaDePersonas({
     return { filas: [], totalNoLeidos: 0, hayLecturas: false };
   }
 
-  const todas = (conversacionesData ?? []) as unknown as ConversacionLite[];
+  const todas = visiblesParaMi(
+    (conversacionesData ?? []) as unknown as ConversacionLite[],
+    miId,
+  );
   // Una solicitud recibida sin responder pertenece a la pestaña Solicitudes y a
   // ninguna otra. Las MÍAS sin responder sí se quedan: son una conversación que
   // ya empecé, con su "Esperando respuesta".

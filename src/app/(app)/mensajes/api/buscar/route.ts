@@ -212,7 +212,7 @@ export async function GET(request: Request) {
       .from("conversations")
       .select(CONVERSACION_SELECT("creator"))
       .eq("counterpart_id", miId)
-      .neq("status", "blocked")
+      .not("status", "in", "(blocked,declined)")
       .ilike("creator.display_name", patron)
       .order("created_at", { ascending: false })
       .limit(LIMITE_POR_SECCION),

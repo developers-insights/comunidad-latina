@@ -31,10 +31,14 @@ type Conversacion = {
 function stub(opciones: {
   conversacion: Conversacion;
   rpcError?: { message: string } | null;
+  rpcData?: unknown;
   updateError?: { message: string } | null;
 }) {
   const updates: { table: string; values: unknown; filtros: [string, unknown][] }[] = [];
-  const rpc = vi.fn(async () => ({ data: null, error: opciones.rpcError ?? null }));
+  const rpc = vi.fn(async () => ({
+    data: opciones.rpcData ?? null,
+    error: opciones.rpcError ?? null,
+  }));
 
   const from = vi.fn((table: string) => {
     const filtros: [string, unknown][] = [];
@@ -123,8 +127,8 @@ describe("responderSolicitudAction", () => {
     expect(mocks.avisarAceptacion).not.toHaveBeenCalled();
   });
 
-  it("eliminar pasa la conversación a blocked sólo si seguía pendiente", async () => {
-    const { updates } = stub({ conversacion: pendiente });
+  it("eliminar descarta la solicitud sin bloquear a la persona", async () => {
+    const { rpc, updates } = stub({ conversacion: pendiente, rpcData: "declined" });
 
     const r = await responderSolicitudAction({
       notificationId: AVISO,
@@ -133,14 +137,14 @@ describe("responderSolicitudAction", () => {
     });
 
     expect(r).toEqual({ ok: true, estado: "eliminada" });
-    const cambio = updates.find((u) => u.table === "conversations");
-    expect(cambio?.values).toEqual({ status: "blocked" });
-    expect(cambio?.filtros).toContainEqual(["status", "pending"]);
+    expect(rpc).toHaveBeenCalledWith("descartar_solicitud", { p_conversation_id: CONV });
+    expect(rpc).not.toHaveBeenCalledWith("block_user", expect.anything());
+    expect(updates.some((u) => u.table === "conversations")).toBe(false);
     expect(mocks.avisarAceptacion).not.toHaveBeenCalled();
   });
 
-  it("eliminar una ya eliminada es idempotente", async () => {
-    const { updates } = stub({ conversacion: { ...pendiente, status: "blocked" } });
+  it("eliminar una ya descartada es idempotente", async () => {
+    const { rpc } = stub({ conversacion: { ...pendiente, status: "declined" } });
 
     const r = await responderSolicitudAction({
       notificationId: AVISO,
@@ -149,7 +153,44 @@ describe("responderSolicitudAction", () => {
     });
 
     expect(r).toEqual({ ok: true, estado: "eliminada" });
-    expect(updates.some((u) => u.table === "conversations")).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("eliminar una bloqueada de antes también es idempotente", async () => {
+    const { rpc } = stub({ conversacion: { ...pendiente, status: "blocked" } });
+
+    const r = await responderSolicitudAction({
+      notificationId: AVISO,
+      conversationId: CONV,
+      decision: "eliminar",
+    });
+
+    expect(r).toEqual({ ok: true, estado: "eliminada" });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("un eliminar tardío no pisa una aceptación que llegó desde otro dispositivo", async () => {
+    stub({ conversacion: pendiente, rpcData: "accepted" });
+
+    const r = await responderSolicitudAction({
+      notificationId: AVISO,
+      conversationId: CONV,
+      decision: "eliminar",
+    });
+
+    expect(r).toEqual({ ok: false, code: "ya_resuelta", estado: "aceptada" });
+  });
+
+  it("si descartar falla devuelve error", async () => {
+    stub({ conversacion: pendiente, rpcError: { message: "boom" } });
+
+    const r = await responderSolicitudAction({
+      notificationId: AVISO,
+      conversationId: CONV,
+      decision: "eliminar",
+    });
+
+    expect(r).toEqual({ ok: false, code: "error" });
   });
 
   it("no se puede eliminar una solicitud que ya se aceptó", async () => {
@@ -165,7 +206,7 @@ describe("responderSolicitudAction", () => {
   });
 
   it("confirmar una solicitud eliminada contesta ya_resuelta", async () => {
-    const { rpc } = stub({ conversacion: { ...pendiente, status: "blocked" } });
+    const { rpc } = stub({ conversacion: { ...pendiente, status: "declined" } });
 
     const r = await responderSolicitudAction({
       notificationId: AVISO,

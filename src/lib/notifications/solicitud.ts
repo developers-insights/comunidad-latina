@@ -32,6 +32,7 @@ export function estadoDeSolicitud(status: string | null | undefined): EstadoSoli
     case "accepted":
       return "aceptada";
     case "blocked":
+    case "declined":
       return "eliminada";
     default:
       return "no_disponible";

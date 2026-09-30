@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications/notify";
+import { sigueDescartada } from "@/lib/messaging/solicitud-descartada";
 import { getTenant } from "@/lib/tenant/resolve";
 import { sendEmailInBackground } from "@/lib/email";
 import { getRecipientEmail } from "@/lib/email/recipients";
@@ -134,12 +135,25 @@ export async function requestContactAction(
   // es solo del sistema (RLS with check false), por eso va con admin client.
   // Si algo falla acá, la solicitud de contacto ya salió — jamás se rompe.
   try {
-    const { data: listing } = await supabase
-      .from("listings")
-      .select("title, created_by, tenant_id")
-      .eq("id", parsed.data)
-      .maybeSingle();
-    if (listing?.created_by && listing.created_by !== user.id) {
+    // Descartada por el dueño y todavía dentro de la ventana (0177): el pedido
+    // se acepta igual, pero no le vuelve a llegar ni el aviso ni el mail.
+    const [{ data: listing }, { data: conversacion }] = await Promise.all([
+      supabase
+        .from("listings")
+        .select("title, created_by, tenant_id")
+        .eq("id", parsed.data)
+        .maybeSingle(),
+      supabase
+        .from("conversations")
+        .select("status")
+        .eq("id", typeof data === "string" ? data : "")
+        .maybeSingle(),
+    ]);
+    if (
+      listing?.created_by &&
+      listing.created_by !== user.id &&
+      !sigueDescartada(conversacion?.status)
+    ) {
       const admin = createAdminClient();
       await createNotification(admin, {
         tenantId: listing.tenant_id,

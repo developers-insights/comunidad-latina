@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database.types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
 import { createNotification } from "./notify";
 import {
   KIND_SOLICITUD,
@@ -95,22 +96,26 @@ export async function leerSolicitudesDeAvisos(
  * Idempotente por conversación, no por "no leído": quien toca "Enviar mensaje"
  * cinco veces sobre la misma solicitud pendiente no puede generarle cinco avisos
  * a la otra persona, aunque ella ya haya leído el primero.
+ *
+ * `desde` es el último descarte (0177): una solicitud reabierta pasada la
+ * ventana es una ronda nueva, y el aviso de la ronda anterior no cuenta.
  */
 async function yaAvisado(
   admin: Cliente,
   destinatarioId: string,
   kind: string,
   conversationId: string,
+  desde: string | null = null,
 ): Promise<boolean> {
-  const { data, error } = await admin
+  let consulta = admin
     .from("notifications")
     .select("id")
     .eq("profile_id", destinatarioId)
     .eq("kind", kind)
     .eq("entity_type", "conversation")
-    .eq("entity_id", conversationId)
-    .limit(1)
-    .maybeSingle();
+    .eq("entity_id", conversationId);
+  if (desde) consulta = consulta.gt("created_at", desde);
+  const { data, error } = await consulta.limit(1).maybeSingle();
   if (error) {
     console.warn("[notificaciones] chequeo de aviso previo falló; se avisa igual", {
       code: error.code,
@@ -127,9 +132,18 @@ export async function avisarSolicitudDeContacto(
     destinatarioId: string;
     conversationId: string;
     nombreDeQuienPide: string | null;
+    descartadaEn?: string | null;
   },
 ): Promise<void> {
-  if (await yaAvisado(admin, input.destinatarioId, KIND_SOLICITUD, input.conversationId)) {
+  if (
+    await yaAvisado(
+      admin,
+      input.destinatarioId,
+      KIND_SOLICITUD,
+      input.conversationId,
+      input.descartadaEn ?? null,
+    )
+  ) {
     return;
   }
   const nombre = input.nombreDeQuienPide?.trim() || NOMBRE_DE_RESPALDO;
@@ -160,23 +174,33 @@ async function miNombre(supabase: Cliente, userId: string): Promise<string | nul
 
 /**
  * La RPC `solicitar_contacto_directo` devuelve el mismo id para una charla ya
- * aceptada, para una pendiente de la otra persona hacia mí y para una recién
- * creada. Sólo la última —o una pendiente mía que todavía no se avisó— merece
- * aviso; por eso se mira la fila y no el resultado de la RPC.
+ * aceptada, para una pendiente de la otra persona hacia mí, para una mía que
+ * la otra persona descartó (0177) y para una recién creada. Sólo la última —o
+ * una pendiente mía que todavía no se avisó en esta ronda— merece aviso; por
+ * eso se mira la fila y no el resultado de la RPC. Una `declined` no avisa: la
+ * ventana anti-spam tiene que ser silenciosa.
  */
 export async function avisarSolicitudNueva(
   supabase: Cliente,
   input: { userId: string; conversationId: string },
 ): Promise<void> {
   try {
-    const [{ data: conversacion, error }, nombre] = await Promise.all([
-      supabase
+    const [{ data, error }, nombre] = await Promise.all([
+      supabaseSinTiparGrupos(supabase)
         .from("conversations")
-        .select("id, tenant_id, status, created_by, counterpart_id")
+        .select("id, tenant_id, status, created_by, counterpart_id, declined_at")
         .eq("id", input.conversationId)
         .maybeSingle(),
       miNombre(supabase, input.userId),
     ]);
+    const conversacion = data as {
+      id: string;
+      tenant_id: string;
+      status: string;
+      created_by: string;
+      counterpart_id: string;
+      declined_at: string | null;
+    } | null;
     if (error || !conversacion) {
       console.warn("[notificaciones] no se pudo leer la solicitud recién creada", {
         code: error?.code,
@@ -190,6 +214,7 @@ export async function avisarSolicitudNueva(
       destinatarioId: conversacion.counterpart_id,
       conversationId: conversacion.id,
       nombreDeQuienPide: nombre,
+      descartadaEn: conversacion.declined_at,
     });
   } catch (error) {
     console.warn("[notificaciones] aviso de solicitud nueva falló", {

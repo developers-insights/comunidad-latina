@@ -17,12 +17,13 @@ import { COPY } from "./copy";
  * Tres salidas, y son tres cosas distintas — por eso no se colapsan en dos:
  *
  *  · **Aceptar** → RPC `accept_conversation`. A partir de ahí pueden escribirse.
- *  · **Ignorar** → esta conversación pasa a `blocked` y sale del inbox. La
- *    persona puede volver a pedir contacto por otro aviso: es "ahora no".
+ *  · **Eliminar** → RPC `descartar_solicitud` (0177): pasa a `declined` y sale
+ *    de tu bandeja. NO bloquea: quien la mandó no se entera y puede volver a
+ *    pedir contacto pasada la ventana anti-spam. Es "ahora no".
  *  · **Bloquear** → RPC `block_user` (0020). Bloqueo GLOBAL: cierra todos los
  *    hilos entre ambos y corta el contacto nuevo en las dos direcciones.
  *
- * Ignorar y bloquear terminaban en la misma pantalla vacía, pero prometer
+ * Eliminar y bloquear terminan en la misma pantalla vacía, pero prometer
  * "Bloquear" y hacer sólo lo primero sería mentirle a quien lo usa para
  * protegerse. Bloquear es el único que pide confirmación: es global y la
  * pantalla desde donde se deshace (tu perfil) no es esta.

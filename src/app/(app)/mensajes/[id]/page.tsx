@@ -41,6 +41,7 @@ import {
   type EnlaceInterno,
 } from "@/components/share/enlace-interno";
 import { toTrustProps } from "@/components/messaging/trust";
+import { sigueDescartada } from "@/lib/messaging/solicitud-descartada";
 
 export const metadata: Metadata = { title: COPY.inbox.title };
 
@@ -282,7 +283,9 @@ export default async function HiloPage({
   };
 
   const isAccepted = conversation.status === "accepted";
-  const isPending = conversation.status === "pending";
+  // Descartada (0177): el creador no se entera y quien la descartó, si llega
+  // al hilo por otro lado, todavía puede aceptarla.
+  const isPending = conversation.status === "pending" || sigueDescartada(conversation.status);
   const isBlocked = conversation.status === "blocked";
 
   return (

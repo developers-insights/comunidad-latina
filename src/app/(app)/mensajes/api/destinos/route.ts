@@ -3,6 +3,7 @@ import { z } from "zod";
 import { clientIpFromHeaders, limit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
+import { visiblesParaMi } from "@/lib/messaging/solicitud-descartada";
 
 /**
  * GET /mensajes/api/destinos — a quién le puedo mandar esto.
@@ -91,6 +92,7 @@ type PerfilLite = {
 
 type ConversacionLite = {
   created_at: string;
+  status: string;
   created_by: string;
   counterpart_id: string;
   creator: PerfilLite | null;
@@ -177,7 +179,7 @@ async function personasRecientes(
   const { data, error } = await supabase
     .from("conversations")
     .select(
-      `created_at, created_by, counterpart_id,
+      `created_at, status, created_by, counterpart_id,
        creator:profiles!conversations_created_by_fkey(id, display_name, avatar_url, identity_verified),
        counterpart:profiles!conversations_counterpart_id_fkey(id, display_name, avatar_url, identity_verified)`,
     )
@@ -193,7 +195,7 @@ async function personasRecientes(
   const vistos = new Set<string>();
   const personas: DestinoPersona[] = [];
 
-  for (const fila of (data ?? []) as unknown as ConversacionLite[]) {
+  for (const fila of visiblesParaMi((data ?? []) as unknown as ConversacionLite[], userId)) {
     const otro = fila.created_by === userId ? fila.counterpart : fila.creator;
     if (!otro || otro.id === userId || vistos.has(otro.id)) continue;
     vistos.add(otro.id);
