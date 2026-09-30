@@ -12,6 +12,7 @@ import { sendEmailInBackground } from "@/lib/email";
 import { getRecipientEmail } from "@/lib/email/recipients";
 import { leadReceivedEmail } from "@/lib/email/templates";
 import { COPY } from "@/components/listings/copy";
+import { sigueDescartada } from "@/lib/messaging/solicitud-descartada";
 
 /**
  * Mensaje INLINE desde una publicación (marketplace/eventos): crea —o reutiliza—
@@ -19,10 +20,10 @@ import { COPY } from "@/components/listings/copy";
  * presentación, sin sacar a nadie de la pantalla donde estaba.
  *
  * Contacto protegido §9.2 intacto: el teléfono/dirección jamás se exponen; el
- * hilo nace `pending` y la contraparte acepta o ignora. La policy
- * `messages_insert` (0006) permite escribir al CREADOR mientras está pending
- * —justo este caso, el "mensaje de presentación"— y también si ya está
- * accepted; en `blocked` no escribe nadie.
+ * hilo nace `pending` y la contraparte acepta o descarta. La policy
+ * `messages_insert` (0006, 0177) permite escribir al CREADOR mientras está
+ * pending o descartada —justo este caso, el "mensaje de presentación"— y
+ * también si ya está accepted; en `blocked` no escribe nadie.
  *
  * Reglas del archivo: zod puro primero, `requireTenantMatch()` ANTES de tocar el
  * RPC (crear la conversación es un efecto: no queremos hilos huérfanos de un
@@ -203,15 +204,17 @@ export async function sendListingMessageAction(input: {
   // y la pantalla usa el texto neutro. Preferimos no decir nada antes que
   // afirmar un alta nueva sobre una conversación que ya existía.
   let reused: boolean | undefined;
+  let estabaDescartada = false;
   try {
     const { data: prior } = await supabase
       .from("conversations")
-      .select("id")
+      .select("id, status")
       .eq("tenant_id", tenant.id)
       .eq("listing_id", listingId)
       .eq("created_by", user.id)
       .maybeSingle();
     reused = Boolean(prior);
+    estabaDescartada = sigueDescartada(prior?.status);
   } catch {
     reused = undefined;
   }
@@ -234,6 +237,20 @@ export async function sendListingMessageAction(input: {
   const conversationId = typeof data === "string" ? data : "";
   if (!conversationId) {
     return { ok: false, code: "error", message: COPY.detail.contactDemoBody };
+  }
+
+  // Una solicitud que la otra persona descartó (0177) sólo vuelve a avisar si
+  // `request_contact` la reabrió pasada la ventana; si no, el mensaje queda en
+  // el hilo sin avisar a nadie y la pantalla responde lo mismo que siempre.
+  let silenciada = false;
+  if (estabaDescartada) {
+    const { data: ahora } = await supabase
+      .from("conversations")
+      .select("status")
+      .eq("id", conversationId)
+      .maybeSingle();
+    if (ahora && !sigueDescartada(ahora.status)) reused = false;
+    else silenciada = true;
   }
 
   const { error: messageError } = await supabase.from("messages").insert({
@@ -269,6 +286,11 @@ export async function sendListingMessageAction(input: {
    * `reused === undefined` (la lectura falló) avisa igual: ante la duda,
    * preferimos un aviso de más antes que perder un contacto real.
    */
+  if (silenciada) {
+    revalidatePath("/mensajes");
+    return { ok: true, conversationId, reused: true };
+  }
+
   if (reused === true) {
     /**
      * Pero SÍ se avisa que hay un mensaje nuevo (revisión de código

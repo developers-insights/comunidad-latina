@@ -16,10 +16,11 @@ import { avisarSolicitudNueva } from "@/lib/notifications/solicitud-server";
  * mensaje" del perfil mostraba un toast que decía «muy pronto».
  *
  * Toda la lógica sensible vive en la RPC `solicitar_contacto_directo` (0134),
- * que es SECURITY DEFINER y valida tenant, auto-contacto, bloqueo de perfil y
- * —lo importante— que no se pueda abrir un hilo nuevo con alguien que ya te
- * ignoró. Acá arriba sólo quedan zod, el techo por persona y la traducción de
- * los códigos del RPC a copy propio.
+ * que es SECURITY DEFINER y valida tenant, auto-contacto y bloqueo. Una
+ * solicitud que la otra persona descartó (0177) no es un bloqueo: la RPC
+ * devuelve la misma y sólo la reabre pasada la ventana anti-spam. Acá arriba
+ * sólo quedan zod, el techo por persona y la traducción de los códigos del RPC
+ * a copy propio.
  */
 
 const abrirSchema = z.object({ profileId: z.uuid() });

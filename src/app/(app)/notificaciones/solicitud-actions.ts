@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { avisarAceptacion } from "@/lib/notifications/solicitud-server";
+import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
+import { estadoDelDescarte } from "@/lib/messaging/solicitud-descartada";
 import {
   estadoDeSolicitud,
   type ResponderSolicitudResult,
@@ -73,20 +75,19 @@ export async function responderSolicitudAction(input: {
         conversationId,
       });
     } else {
-      // El filtro por `pending` es lo que evita que un "Eliminar" tardío pise una
+      // La RPC relee la fila con `for update`: un "Eliminar" tardío no pisa una
       // aceptación que llegó desde otro dispositivo entre la lectura y acá.
-      const { data: cambiadas, error } = await supabase
-        .from("conversations")
-        .update({ status: "blocked" })
-        .eq("id", conversationId)
-        .eq("status", "pending")
-        .select("id");
+      const { data: resultado, error } = await supabaseSinTiparGrupos(supabase).rpc(
+        "descartar_solicitud",
+        { p_conversation_id: conversationId },
+      );
       if (error) {
         console.warn("[notificaciones] no se pudo eliminar la solicitud", { code: error.code });
         return { ok: false, code: "error" };
       }
-      if (!cambiadas || cambiadas.length === 0) {
-        return { ok: false, code: "ya_resuelta" };
+      const final = estadoDelDescarte(resultado);
+      if (final !== "eliminada") {
+        return { ok: false, code: "ya_resuelta", ...(final ? { estado: final } : {}) };
       }
     }
   }

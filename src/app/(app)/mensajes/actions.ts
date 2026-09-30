@@ -13,6 +13,8 @@ import { getRecipientEmail } from "@/lib/email/recipients";
 import { newMessageEmail } from "@/lib/email/templates";
 import { isOpenAIConfigured } from "@/lib/config/services";
 import { supabaseSinTiparMensajes } from "@/lib/messaging/adjuntos";
+import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
+import { estadoDelDescarte } from "@/lib/messaging/solicitud-descartada";
 
 /**
  * Server actions del módulo MENSAJES — contacto protegido (§9.2).
@@ -284,13 +286,14 @@ export async function ignoreConversationAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, code: "unauthenticated" };
 
-  // "Ignorar" = blocked. RLS: solo la contraparte puede cambiar el estado,
-  // y la lista filtra blocked — desaparece del inbox sin drama.
-  const { error } = await supabase
-    .from("conversations")
-    .update({ status: "blocked" })
-    .eq("id", parsed.data);
-  if (error) return { ok: false, code: "error" };
+  const { data, error } = await supabaseSinTiparGrupos(supabase).rpc("descartar_solicitud", {
+    p_conversation_id: parsed.data,
+  });
+  if (error) {
+    console.warn("[mensajes] no se pudo descartar la solicitud", { code: error.code });
+    return { ok: false, code: "error" };
+  }
+  if (estadoDelDescarte(data) !== "eliminada") return { ok: false, code: "error" };
 
   revalidatePath("/mensajes");
   return { ok: true };

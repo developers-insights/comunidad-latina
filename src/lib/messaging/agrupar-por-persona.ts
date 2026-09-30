@@ -42,6 +42,8 @@
  * Este archivo es puro y no sabe de Supabase a propósito: se testea sin base.
  */
 
+import { visiblesParaMi } from "./solicitud-descartada";
+
 export type ConversacionLite = {
   id: string;
   status: string;
@@ -103,7 +105,7 @@ export function agruparPorPersona(
 ): HiloDePersona[] {
   const porPersona = new Map<string, ConversacionLite[]>();
 
-  for (const conversacion of conversaciones) {
+  for (const conversacion of visiblesParaMi(conversaciones, miId)) {
     if (conversacion.status === "blocked") continue;
     const soyCreador = conversacion.created_by === miId;
     const otroId = soyCreador ? conversacion.counterpart_id : conversacion.created_by;

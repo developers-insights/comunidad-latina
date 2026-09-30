@@ -82,8 +82,11 @@ function createSupabaseStub(config: {
   prior?: OpResult | (() => never);
   /** Lo que contesta la lectura del aviso, en el bloque de aviso al dueño. */
   lookup?: OpResult;
+  /** La relectura del estado DESPUÉS del RPC (sólo si estaba descartada). */
+  ahora?: OpResult;
 } = {}) {
   const calls: RecordedCall[] = [];
+  let lecturasDeConversacion = 0;
 
   const from = vi.fn((table: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -105,6 +108,8 @@ function createSupabaseStub(config: {
         if (table === "profiles") {
           return { data: { display_name: "Ana" }, error: null };
         }
+        lecturasDeConversacion += 1;
+        if (lecturasDeConversacion > 1 && config.ahora) return config.ahora;
         if (typeof config.prior === "function") return config.prior();
         return config.prior ?? { data: null, error: null };
       }),
@@ -263,6 +268,36 @@ describe("sendListingMessageAction", () => {
     expect(payload.href).toBe(`/mensajes/${CONVERSATION_ID}`);
     // PRIVACIDAD: el cuerpo nunca lleva el texto del mensaje.
     expect(String(payload.body)).not.toContain("¿Sigue en pie?");
+  });
+
+  it("sobre una solicitud descartada dentro de la ventana, escribe pero no avisa a nadie", async () => {
+    mocks.adminThrows.value = false;
+    const stub = useGuardOk({
+      prior: { data: { id: CONVERSATION_ID, status: "declined" }, error: null },
+      ahora: { data: { status: "declined" }, error: null },
+      lookup: { data: { created_by: OWNER_ID, tenant_id: TENANT_ID, title: "Depto 2 amb" }, error: null },
+    });
+
+    const result = await sendListingMessageAction({ listingId: LISTING_ID, body: "¿Y ahora?" });
+
+    expect(result).toEqual({ ok: true, conversationId: CONVERSATION_ID, reused: true });
+    expect(stub.calls.some((call) => call.table === "messages" && call.method === "insert")).toBe(true);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
+
+  it("si request_contact la reabrió pasada la ventana, avisa como solicitud nueva", async () => {
+    mocks.adminThrows.value = false;
+    useGuardOk({
+      prior: { data: { id: CONVERSATION_ID, status: "declined" }, error: null },
+      ahora: { data: { status: "pending" }, error: null },
+      lookup: { data: { created_by: OWNER_ID, tenant_id: TENANT_ID, title: "Depto 2 amb" }, error: null },
+    });
+
+    const result = await sendListingMessageAction({ listingId: LISTING_ID, body: "Hola de nuevo" });
+
+    expect(result).toEqual({ ok: true, conversationId: CONVERSATION_ID, reused: false });
+    const [, payload] = mocks.createNotification.mock.calls[0] as unknown as [unknown, Record<string, unknown>];
+    expect(payload.kind).toBe("contact_request");
   });
 
   it("un contacto NUEVO sí avisa como solicitud de contacto", async () => {
