@@ -82,7 +82,7 @@ const BASE: JobCardModel = {
   photos: [],
   publisher: {
     type: "member",
-    profileId: "p-1",
+    profileId: "00000000-0000-4000-8000-000000000001",
     displayName: "Ramón Peña",
     avatarUrl: null,
     score: 62,
@@ -151,11 +151,19 @@ describe("ServiceCard", () => {
     expect(screen.getByText(COPY.list.adChip)).toBeTruthy();
   });
 
-  it("el avatar y el nombre de quien lo ofrece llevan a su perfil", () => {
-    render(<ServiceCard service={BASE} isLoggedIn />);
+  it("el nombre y el avatar de quien lo ofrece llevan a su perfil, sin duplicar el link", () => {
+    const { container } = render(<ServiceCard service={BASE} isLoggedIn />);
     const links = screen.getAllByRole("link", { name: C.viewProfile("Ramón Peña") });
-    expect(links).toHaveLength(2);
-    for (const link of links) expect(link.getAttribute("href")).toBe("/perfil/p-1");
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute("href")).toBe("/perfil/00000000-0000-4000-8000-000000000001");
+    const hidden = container.querySelector('a[aria-hidden="true"]');
+    expect(hidden?.getAttribute("href")).toBe("/perfil/00000000-0000-4000-8000-000000000001");
+    expect(hidden?.getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("si el aviso es mío, el link va a mi perfil", () => {
+    render(<ServiceCard service={BASE} isLoggedIn owner={{ esMio: true, status: "active" }} />);
+    expect(screen.getByRole("link", { name: C.viewProfile("Ramón Peña") }).getAttribute("href")).toBe("/perfil");
   });
 
   it("un aviso externo no inventa un perfil al que ir", () => {

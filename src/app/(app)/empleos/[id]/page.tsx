@@ -15,6 +15,7 @@ import {
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, Badge, Banner, BezelCard, buttonVariants } from "@/components/ui";
+import { ProfileLink } from "@/components/social/profile-link";
 import {
   DetailFacts,
   DetailTopBar,
@@ -267,10 +268,14 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
     const displayName = profile?.display_name ?? C.fallbackPublisher;
     publisherCard = (
       <BezelCard coreClassName="flex items-center gap-3 p-4">
-        <Avatar src={profile?.avatar_url} name={displayName} size="lg" />
+        <ProfileLink profileId={profile?.id} name={displayName} viewerId={user?.id} variant="avatar" duplicate>
+          <Avatar src={profile?.avatar_url} name={displayName} size="lg" />
+        </ProfileLink>
         <div className="min-w-0">
-          <p className="truncate font-display text-base font-bold text-foreground">
-            {displayName}
+          <p className="flex min-w-0 font-display text-base font-bold text-foreground">
+            <ProfileLink profileId={profile?.id} name={displayName} viewerId={user?.id}>
+              <span className="truncate">{displayName}</span>
+            </ProfileLink>
           </p>
           <PublisherTrust
             displayName={displayName}

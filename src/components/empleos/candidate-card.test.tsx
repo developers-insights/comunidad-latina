@@ -167,3 +167,17 @@ describe("CandidateCard · escribirle sin perder la lista", () => {
     expect(screen.queryByRole("button", { name: C.sendMessage })).toBeNull();
   });
 });
+
+describe("CandidateCard · el nombre y el avatar llevan al perfil", () => {
+  it("con perfil compartido, el nombre es un link y el avatar no suma otro", () => {
+    const { container } = renderCard();
+    const name = screen.getByRole("link", { name: "Ver el perfil de Rosa Pérez" });
+    expect(name.getAttribute("href")).toBe("/perfil/99999999-9999-4999-8999-999999999999");
+    expect(container.querySelector('a[aria-hidden="true"]')?.getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("sin perfil compartido no hay ningún link a la persona", () => {
+    renderCard({ applicantId: null, profile: null });
+    expect(screen.queryByRole("link", { name: /Ver el perfil/ })).toBeNull();
+  });
+});

@@ -306,7 +306,7 @@ describe("JobCard: el nombre de quien publica lleva a su perfil", () => {
     ...BASE,
     publisher: {
       type: "member",
-      profileId: "p-7",
+      profileId: "00000000-0000-4000-8000-000000000007",
       displayName: "Ana Ruiz",
       avatarUrl: null,
       score: 70,
@@ -318,7 +318,7 @@ describe("JobCard: el nombre de quien publica lleva a su perfil", () => {
   it("un miembro: el nombre es un link a /perfil/<id>", () => {
     render(<JobCard job={MIEMBRO} />);
     const link = screen.getByRole("link", { name: C.viewProfile("Ana Ruiz") });
-    expect(link.getAttribute("href")).toBe("/perfil/p-7");
+    expect(link.getAttribute("href")).toBe("/perfil/00000000-0000-4000-8000-000000000007");
   });
 
   it("uno externo no tiene perfil al que ir", () => {

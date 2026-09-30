@@ -6,6 +6,7 @@ import { BezelCard, Chip } from "@/components/ui";
 import { DirectoryMedia } from "@/components/directory";
 import { PhotoTap } from "@/components/media/photo-tap";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
+import { ProfileLink } from "@/components/social/profile-link";
 import { ListingActions, type ListingEngagement } from "@/components/feed/listing-actions";
 import {
   ListingOwnerMenuOverlay,
@@ -196,13 +197,13 @@ export function JobCard({
         <div className="flex flex-col gap-2.5 p-4">
           {job.publisher?.type === "member" ? (
             <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
-              <Link
-                href={`/perfil/${job.publisher.profileId}`}
-                aria-label={C.viewProfile(job.publisher.displayName)}
-                className="truncate rounded-sm hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+              <ProfileLink
+                profileId={job.publisher.profileId}
+                name={job.publisher.displayName}
+                viewerId={owner?.esMio ? job.publisher.profileId : null}
               >
-                {job.publisher.displayName}
-              </Link>
+                <span className="truncate">{job.publisher.displayName}</span>
+              </ProfileLink>
               <PublisherTrust
                 displayName={job.publisher.displayName}
                 firstName={firstNameOf(job.publisher.displayName)}

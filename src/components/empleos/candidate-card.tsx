@@ -21,6 +21,7 @@ import { Avatar, Button, Dialog, useToast } from "@/components/ui";
 import { ContactDone } from "@/components/messaging";
 import { PublisherTrust, firstNameOf, toTrustLevel } from "@/components/listings";
 import type { TrustSignal } from "@/components/trust";
+import { ProfileLink } from "@/components/social/profile-link";
 import { cn } from "@/lib/utils";
 import { portfolioLinkLabel } from "@/lib/empleos/cv";
 import {
@@ -215,7 +216,9 @@ export function CandidateCard({ candidate, trustSignals }: CandidateCardProps) {
       {/* ---- Identidad + estado ------------------------------------------- */}
       <div className="flex items-start gap-3">
         {profile ? (
-          <Avatar size="md" src={profile.avatarUrl} name={profile.displayName} />
+          <ProfileLink profileId={candidate.applicantId} name={profile.displayName} variant="avatar" duplicate>
+            <Avatar size="md" src={profile.avatarUrl} name={profile.displayName} />
+          </ProfileLink>
         ) : (
           <span
             aria-hidden="true"
@@ -228,11 +231,13 @@ export function CandidateCard({ candidate, trustSignals }: CandidateCardProps) {
           <div className="flex items-start justify-between gap-2">
             <p
               className={cn(
-                "truncate font-semibold",
+                "flex min-w-0 font-semibold",
                 profile ? "text-foreground" : "text-foreground-secondary",
               )}
             >
-              {displayName}
+              <ProfileLink profileId={candidate.applicantId} name={displayName}>
+                <span className="truncate">{displayName}</span>
+              </ProfileLink>
             </p>
             <ApplicationStatusBadge status={status} className="shrink-0" />
           </div>

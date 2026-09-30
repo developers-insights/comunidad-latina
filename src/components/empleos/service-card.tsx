@@ -13,6 +13,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { Avatar, BezelCard, Chip } from "@/components/ui";
 import { PublisherTrust, firstNameOf } from "@/components/listings";
+import { ProfileLink } from "@/components/social/profile-link";
 import { InlineMessageCta } from "@/components/listings/inline-message-cta";
 import { ListingActions, type ListingEngagement } from "@/components/feed/listing-actions";
 import type { ListingOwnerView } from "@/components/listings/listing-owner-menu";
@@ -106,8 +107,8 @@ export function ServiceCard({
    */
   const canContact = service.publisher?.type === "member";
   const avatarUrl = service.publisher?.type === "member" ? service.publisher.avatarUrl : null;
-  const profileHref =
-    service.publisher?.type === "member" ? `/perfil/${service.publisher.profileId}` : null;
+  const profileId = service.publisher?.type === "member" ? service.publisher.profileId : null;
+  const viewerId = owner?.esMio ? profileId : null;
 
   const card = (
     <BezelCard coreClassName="p-4">
@@ -124,17 +125,15 @@ export function ServiceCard({
           {/* La persona primero. El halo del acento + el ícono de herramientas
               dicen "oficio" sin necesidad de una foto que casi nunca hay. */}
           <span className="relative shrink-0">
-            {profileHref && publisherName ? (
-              <Link
-                href={profileHref}
-                aria-label={C.viewProfile(publisherName)}
-                className="block rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-              >
-                <Avatar src={avatarUrl} name={publisherName} size="lg" />
-              </Link>
-            ) : (
+            <ProfileLink
+              profileId={profileId}
+              name={publisherName ?? C.offeredByUnknown}
+              viewerId={viewerId}
+              variant="avatar"
+              duplicate
+            >
               <Avatar src={avatarUrl} name={publisherName ?? C.offeredByUnknown} size="lg" />
-            )}
+            </ProfileLink>
             <span
               aria-hidden="true"
               className={cn(
@@ -168,17 +167,9 @@ export function ServiceCard({
 
             {publisherName && (
               <div className="mt-1 flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
-                {profileHref ? (
-                  <Link
-                    href={profileHref}
-                    aria-label={C.viewProfile(publisherName)}
-                    className="truncate rounded-sm hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-                  >
-                    {C.offeredBy(publisherName)}
-                  </Link>
-                ) : (
+                <ProfileLink profileId={profileId} name={publisherName} viewerId={viewerId}>
                   <span className="truncate">{C.offeredBy(publisherName)}</span>
-                )}
+                </ProfileLink>
                 {service.publisher?.type === "member" && (
                   <PublisherTrust
                     displayName={service.publisher.displayName}
