@@ -300,3 +300,29 @@ describe("JobCard: postularse se resuelve en la lista", () => {
     expect(nav.push).not.toHaveBeenCalled();
   });
 });
+
+describe("JobCard: el nombre de quien publica lleva a su perfil", () => {
+  const MIEMBRO: JobCardModel = {
+    ...BASE,
+    publisher: {
+      type: "member",
+      profileId: "p-7",
+      displayName: "Ana Ruiz",
+      avatarUrl: null,
+      score: 70,
+      level: "confiable",
+      signals: [],
+    },
+  };
+
+  it("un miembro: el nombre es un link a /perfil/<id>", () => {
+    render(<JobCard job={MIEMBRO} />);
+    const link = screen.getByRole("link", { name: C.viewProfile("Ana Ruiz") });
+    expect(link.getAttribute("href")).toBe("/perfil/p-7");
+  });
+
+  it("uno externo no tiene perfil al que ir", () => {
+    render(<JobCard job={BASE} />);
+    expect(screen.queryByRole("link", { name: /Ver el perfil/ })).toBeNull();
+  });
+});

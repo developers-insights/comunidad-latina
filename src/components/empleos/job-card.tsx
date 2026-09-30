@@ -196,7 +196,13 @@ export function JobCard({
         <div className="flex flex-col gap-2.5 p-4">
           {job.publisher?.type === "member" ? (
             <div className="flex min-w-0 items-center gap-2 text-sm text-foreground-secondary">
-              <span className="truncate">{job.publisher.displayName}</span>
+              <Link
+                href={`/perfil/${job.publisher.profileId}`}
+                aria-label={C.viewProfile(job.publisher.displayName)}
+                className="truncate rounded-sm hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+              >
+                {job.publisher.displayName}
+              </Link>
               <PublisherTrust
                 displayName={job.publisher.displayName}
                 firstName={firstNameOf(job.publisher.displayName)}
@@ -279,7 +285,7 @@ export function JobCard({
    * sin dejar una esquina cuadrada asomando.
    */
   return (
-    <div className="relative rounded-xl ring-2 ring-sponsored/70 shadow-[0_0_0_1px_var(--color-sponsored),0_10px_28px_-14px_var(--color-sponsored)]">
+    <div className="relative rounded-xl ring-2 ring-sponsored/70 shadow-[0_10px_28px_-14px_rgba(0,0,0,0.22)]">
       {/* Arriba a la DERECHA: el tipo de jornada ya ocupa la esquina izquierda
           sobre la foto (overlayTopLeft), y encimarlos haría ilegibles a los dos. */}
       <Chip

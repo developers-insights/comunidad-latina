@@ -25,6 +25,11 @@ import {
 } from "@/components/empleos/helpers";
 import { COPY } from "@/components/empleos/copy";
 import {
+  SERVICE_USER_FACING_ISSUES,
+  serviceDraftSchema,
+  type ServiceDraftInput,
+} from "./service-schema";
+import {
   columnasDeVideo,
   errorDeVideoDeLaBase,
   listingVideoInputSchema,
@@ -511,46 +516,6 @@ async function finalizeEmpleosListing(
 // ===========================================================================
 // SERVICIO — el otro lado del mostrador (listing kind='service', 0129)
 // ===========================================================================
-
-/**
- * Qué se le pide a un servicio, y qué NO.
- *
- * Un empleo exige salario (transparencia: un aviso sin monto recibe menos
- * postulaciones y esconde la peor parte del trato). Un SERVICIO no: el jardinero
- * cotiza mirando el patio, y obligarlo a poner un número lo empujaría a inventar
- * uno que después no sostiene. Por eso `priceAmount` es opcional y su ausencia
- * significa "a convenir", que la pantalla dice con todas las letras.
- *
- * Tampoco hay `employmentType` (no hay jornada que declarar), ni `questions`
- * (no hay postulación), ni fotos.
- */
-const serviceDraftSchema = z
-  .object({
-    title: z.string().trim().min(8).max(120),
-    description: z.string().trim().min(30).max(4000),
-    /** Piso del precio de referencia. `null`/ausente = a convenir. */
-    priceAmount: z.number().positive().max(MAX_SALARY).nullish(),
-    payPeriod: z.enum(JOB_PAY_PERIODS),
-    /** Modalidad → COLUMNA `listings.work_mode` (0087), igual que el empleo. */
-    workMode: z.enum(WORK_MODES).nullish(),
-    areaLabel: z.string().trim().max(80).nullish(),
-    /** Disponibilidad: MISMAS claves de `attrs` que ya usa un empleo. */
-    days: z.array(z.string()).max(7).nullish(),
-    schedule: z.string().trim().max(MAX_SCHEDULE_LENGTH).nullish(),
-  })
-  .superRefine((value, ctx) => {
-    if (requiresArea(value.workMode ?? null) && (value.areaLabel ?? "").trim().length < 3) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["areaLabel"],
-        message: COPY.servicePublish.errors.areaShort,
-      });
-    }
-  });
-
-export type ServiceDraftInput = z.input<typeof serviceDraftSchema>;
-
-const SERVICE_USER_FACING_ISSUES = new Set<string>([COPY.servicePublish.errors.areaShort]);
 
 /**
  * Borrador del servicio. Mismo flujo de dos fases que el empleo (lo dicta la

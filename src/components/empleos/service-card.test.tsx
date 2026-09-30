@@ -49,6 +49,19 @@ vi.mock("@/components/ui", async () => {
   return { ...actual, useToast: () => ({ toast: vi.fn() }) };
 });
 
+vi.mock("@/app/(app)/empleos/editar-servicio-actions", () => ({
+  cargarServicioParaEditar: vi.fn(),
+  editarServicioAction: vi.fn(),
+}));
+vi.mock("@/app/(app)/publicaciones/editar-actions", () => ({
+  pausarAvisoAction: vi.fn(),
+  cargarAvisoParaEditar: vi.fn(),
+  editarAvisoAction: vi.fn(),
+}));
+vi.mock("@/app/(app)/publicaciones/eliminar-action", () => ({
+  eliminarAvisoAction: vi.fn(),
+}));
+
 afterEach(cleanup);
 
 const C = COPY.service;
@@ -136,5 +149,33 @@ describe("ServiceCard", () => {
   it("impulsado: se declara con la MISMA palabra que el resto de la app", () => {
     render(<ServiceCard service={{ ...BASE, boosted: true }} isLoggedIn />);
     expect(screen.getByText(COPY.list.adChip)).toBeTruthy();
+  });
+
+  it("el avatar y el nombre de quien lo ofrece llevan a su perfil", () => {
+    render(<ServiceCard service={BASE} isLoggedIn />);
+    const links = screen.getAllByRole("link", { name: C.viewProfile("Ramón Peña") });
+    expect(links).toHaveLength(2);
+    for (const link of links) expect(link.getAttribute("href")).toBe("/perfil/p-1");
+  });
+
+  it("un aviso externo no inventa un perfil al que ir", () => {
+    render(
+      <ServiceCard
+        service={{ ...BASE, publisher: { type: "external", name: "Bolsa de trabajo" } }}
+        isLoggedIn
+      />,
+    );
+    expect(screen.queryByRole("link", { name: /Ver el perfil/ })).toBeNull();
+  });
+
+  it("el menú ⋯ sólo aparece para el dueño", () => {
+    const { rerender } = render(<ServiceCard service={BASE} isLoggedIn />);
+    expect(screen.queryByRole("button", { name: /Opciones de esta publicación/ })).toBeNull();
+
+    rerender(<ServiceCard service={BASE} isLoggedIn owner={{ esMio: false }} />);
+    expect(screen.queryByRole("button", { name: /Opciones de esta publicación/ })).toBeNull();
+
+    rerender(<ServiceCard service={BASE} isLoggedIn owner={{ esMio: true }} />);
+    expect(screen.getByRole("button", { name: /Opciones de esta publicación/ })).toBeTruthy();
   });
 });
