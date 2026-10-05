@@ -17,6 +17,7 @@ vi.mock("@/lib/config/services", () => ({
   isPhoneVerificationEnabled: true,
   isPhonePepperConfigured: true,
   isSmsConfigured: true,
+  isWhatsAppOtpConfigured: false,
 }));
 vi.mock("@/lib/phone/sms", () => ({
   getSmsSender: () => ({ name: "test", send: mocks.send }),
@@ -85,8 +86,26 @@ describe("acciones de teléfono", () => {
 
     const result = await sendPhoneCodeAction({ phone: "+19175550142" });
 
-    expect(result).toEqual({ ok: true, maskedPhone: "+191 ••• 0142" });
+    expect(result).toEqual({ ok: true, maskedPhone: "+191 ••• 0142", channel: "sms" });
     expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it("sin WhatsApp configurado rechaza un número de otro país antes de emitir el código", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+
+    const result = await sendPhoneCodeAction({ phone: "+54 9 11 3427 2488" });
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.fieldErrors?.phone).toMatch(/Estados Unidos y Canadá/);
+    expect(mocks.requestPhoneVerification).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  it("un número de 10 dígitos que no es de EE.UU. pide el + y el código del país", async () => {
+    const result = await sendPhoneCodeAction({ phone: "1134272488" });
+
+    expect(!result.ok && result.fieldErrors?.phone).toMatch(/código del país/);
+    expect(mocks.requestPhoneVerification).not.toHaveBeenCalled();
   });
 
   it("verifica teléfono e insignia mediante una única RPC", async () => {

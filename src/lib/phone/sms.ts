@@ -30,8 +30,13 @@ import { CODE_TTL_MINUTES } from "./verification";
 export interface SmsMessage {
   /** Destino en E.164. */
   to: string;
-  /** Texto ya armado. El proveedor no compone nada. */
+  /** Texto ya armado para SMS. El proveedor no compone nada. */
   body: string;
+  /**
+   * El código suelto, para WhatsApp: ahí el texto lo fija la plantilla de
+   * autenticación aprobada por Meta y sólo viaja el código como variable.
+   */
+  code: string;
   /** Para trazar en el log sin filtrar el número entero. */
   maskedTo: string;
 }

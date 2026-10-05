@@ -71,7 +71,7 @@ export default async function PrivacidadPage() {
 
       <LegalHeader
         title="Política de Privacidad"
-        updated="27 de septiembre de 2026"
+        updated="5 de octubre de 2026"
         intro={
           <>
             <strong className={legalProse.strong}>En criollo:</strong> pedimos lo mínimo
@@ -115,17 +115,19 @@ export default async function PrivacidadPage() {
       <LegalSection id="tu-telefono" title="Tu teléfono y los mensajes de texto">
         <p className={legalProse.p}>
           Tu número de teléfono lo tenemos solo si elegís verificarlo, que es opcional. Lo usamos
-          para una sola cosa: mandarte por SMS el código de verificación que pediste y confirmar
-          que el número es tuyo. No aparece en tu perfil ni en las búsquedas, y podés borrarlo
-          cuando quieras desde <em>Ajustes › Tu teléfono</em>.
+          para una sola cosa: mandarte el código de verificación que pediste y confirmar que el
+          número es tuyo. Si es de Estados Unidos o Canadá te llega por SMS; si es de otro país,
+          por WhatsApp. No aparece en tu perfil ni en las búsquedas, y podés borrarlo cuando
+          quieras desde <em>Ajustes › Tu teléfono</em>.
         </p>
         <p className={legalProse.p}>
           <strong className={legalProse.strong}>
             Tu número y tu consentimiento para recibir SMS no se comparten con terceros ni con
             empresas vinculadas para marketing o fines promocionales, y no se venden.
           </strong>{" "}
-          Twilio, el proveedor que entrega los mensajes, recibe el número y el texto del SMS solo
-          para enviarlo. Cómo funcionan los mensajes, STOP y HELP incluidos, está en la{" "}
+          Twilio, el proveedor que entrega los mensajes, recibe el número y el texto del mensaje
+          solo para enviarlo; cuando el código va por WhatsApp, también lo recibe WhatsApp (Meta)
+          para entregarlo. Cómo funcionan los mensajes, STOP y HELP incluidos, está en la{" "}
           <Link
             href={SMS_POLICY_HREF}
             className="font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 hover:decoration-brand-ink"
@@ -272,6 +274,11 @@ export default async function PrivacidadPage() {
             <strong className={legalProse.strong}>Twilio</strong> — entrega los SMS con tu código
             de verificación, si elegís verificar tu teléfono. Recibe tu número y el texto del
             mensaje, nada más.
+          </li>
+          <li>
+            <strong className={legalProse.strong}>WhatsApp (Meta)</strong> — entrega el código de
+            verificación cuando tu número es de un país fuera de Estados Unidos y Canadá. Recibe tu
+            número y el mensaje con el código, nada más.
           </li>
           <li>
             <strong className={legalProse.strong}>OpenAI</strong>,{" "}

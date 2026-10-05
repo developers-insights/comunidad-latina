@@ -1,8 +1,9 @@
 import "server-only";
 
+import { channelFor } from "./channel";
 import type { SmsMessage, SmsSender } from "./sms";
 
-const TWILIO_REJECTED_CODES = new Set([21211, 21214, 21610, 21612, 21614]);
+const TWILIO_REJECTED_CODES = new Set([21211, 21214, 21610, 21612, 21614, 63003]);
 
 function twilioErrorCode(value: unknown): number | null {
   if (typeof value !== "object" || value === null || !("code" in value)) return null;
@@ -12,10 +13,29 @@ function twilioErrorCode(value: unknown): number | null {
 }
 
 function logFailure(message: SmsMessage, status?: number, code?: number): void {
-  console.error("[sms] Twilio no pudo enviar el SMS", {
+  console.error("[sms] Twilio no pudo enviar el código", {
     to: message.maskedTo,
+    channel: channelFor(message.to),
     status,
     code,
+  });
+}
+
+function messageParams(message: SmsMessage): URLSearchParams | null {
+  if (channelFor(message.to) === "sms") {
+    const from = process.env.TWILIO_PHONE_NUMBER;
+    if (!from) return null;
+    return new URLSearchParams({ To: message.to, From: from, Body: message.body });
+  }
+
+  const from = process.env.TWILIO_WHATSAPP_FROM;
+  const contentSid = process.env.TWILIO_WHATSAPP_OTP_CONTENT_SID;
+  if (!from || !contentSid) return null;
+  return new URLSearchParams({
+    To: `whatsapp:${message.to}`,
+    From: `whatsapp:${from}`,
+    ContentSid: contentSid,
+    ContentVariables: JSON.stringify({ "1": message.code }),
   });
 }
 
@@ -26,9 +46,9 @@ export function createTwilioSender(): SmsSender {
       const accountSid = process.env.TWILIO_ACCOUNT_SID;
       const apiKeySid = process.env.TWILIO_API_KEY_SID;
       const apiKeySecret = process.env.TWILIO_API_KEY_SECRET;
-      const from = process.env.TWILIO_PHONE_NUMBER;
+      const params = messageParams(message);
 
-      if (!accountSid || !apiKeySid || !apiKeySecret || !from) {
+      if (!accountSid || !apiKeySid || !apiKeySecret || !params) {
         logFailure(message);
         return { ok: false, reason: "proveedor" };
       }
@@ -42,11 +62,7 @@ export function createTwilioSender(): SmsSender {
               Authorization: `Basic ${Buffer.from(`${apiKeySid}:${apiKeySecret}`).toString("base64")}`,
               "Content-Type": "application/x-www-form-urlencoded",
             },
-            body: new URLSearchParams({
-              To: message.to,
-              From: from,
-              Body: message.body,
-            }),
+            body: params,
             signal: AbortSignal.timeout(10_000),
           },
         );

@@ -7,6 +7,7 @@ const MESSAGE = {
   to: "+19175550142",
   body: "123456 es tu código de Comunidad Latina.",
   maskedTo: "+1 ••• 0142",
+  code: "123456",
 };
 
 beforeEach(() => {
@@ -31,6 +32,44 @@ afterEach(() => {
  * verificación ni convierte el SMS en PII de los logs.
  */
 describe("createTwilioSender", () => {
+  it("manda SMS desde el toll-free a un número de EE.UU.", async () => {
+    mocks.fetch.mockResolvedValue(new Response(null, { status: 201 }));
+
+    await createTwilioSender().send(MESSAGE);
+
+    const body = mocks.fetch.mock.calls[0]?.[1]?.body as URLSearchParams;
+    expect(body.get("To")).toBe("+19175550142");
+    expect(body.get("From")).toBe("+15550000000");
+    expect(body.get("Body")).toBe(MESSAGE.body);
+    expect(body.get("ContentSid")).toBeNull();
+  });
+
+  it("manda por WhatsApp con la plantilla a un número de otro país", async () => {
+    vi.stubEnv("TWILIO_WHATSAPP_FROM", "+15550000000");
+    vi.stubEnv("TWILIO_WHATSAPP_OTP_CONTENT_SID", "HX-de-test");
+    mocks.fetch.mockResolvedValue(new Response(null, { status: 201 }));
+
+    await expect(
+      createTwilioSender().send({ ...MESSAGE, to: "+5491134272488", maskedTo: "+54 ••• 2488" }),
+    ).resolves.toEqual({ ok: true });
+
+    const body = mocks.fetch.mock.calls[0]?.[1]?.body as URLSearchParams;
+    expect(body.get("To")).toBe("whatsapp:+5491134272488");
+    expect(body.get("From")).toBe("whatsapp:+15550000000");
+    expect(body.get("ContentSid")).toBe("HX-de-test");
+    expect(JSON.parse(body.get("ContentVariables") ?? "{}")).toEqual({ "1": "123456" });
+    expect(body.get("Body")).toBeNull();
+  });
+
+  it("sin plantilla de WhatsApp no intenta mandar a un número de otro país", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      createTwilioSender().send({ ...MESSAGE, to: "+18095550142", maskedTo: "+1 ••• 0142" }),
+    ).resolves.toEqual({ ok: false, reason: "proveedor" });
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
   it("acepta una respuesta 201", async () => {
     mocks.fetch.mockResolvedValue(new Response(null, { status: 201 }));
 

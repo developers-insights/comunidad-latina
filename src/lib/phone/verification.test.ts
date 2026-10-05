@@ -369,6 +369,8 @@ describe("parsePhone", () => {
     ["+9999999999999999999", "largo"],
     ["no soy un teléfono", "formato"],
     ["+0123456789", "formato"],
+    ["1134272488", "formato"],
+    ["+1 113 427 2488", "formato"],
   ] as const)("rechaza %j con el problema %s", (raw, problem) => {
     const result = parsePhone(raw);
     expect(result.ok).toBe(false);

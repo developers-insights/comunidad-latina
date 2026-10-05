@@ -65,6 +65,11 @@ export function parsePhone(raw: string): PhoneParseResult {
   if (digitsOnly.length < 8) return { ok: false, problem: "corto" };
   if (digitsOnly.length > 15) return { ok: false, problem: "largo" };
   if (!E164.test(candidate)) return { ok: false, problem: "formato" };
+  // Ningún código de área norteamericano empieza con 0 o 1. Sin este corte, un
+  // celular argentino escrito sin + (`1134272488`, 10 dígitos) se convertía en
+  // `+11134272488` y Twilio lo rechazaba con un "no pudimos mandar" que no
+  // decía qué estaba mal (pasó el 2026-10-05).
+  if (/^\+1[01]/.test(candidate)) return { ok: false, problem: "formato" };
 
   return { ok: true, e164: candidate };
 }

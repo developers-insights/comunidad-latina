@@ -20,6 +20,7 @@ describe("getSmsSender", () => {
       to: "+19175550142",
       maskedTo: "+1 ••• 0142",
       body: "123456 es tu código",
+      code: "123456",
     });
 
     expect(result).toEqual({ ok: false, reason: "proveedor" });

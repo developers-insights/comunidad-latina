@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenant } from "@/lib/tenant/resolve";
-import { isPhoneVerificationEnabled } from "@/lib/config/services";
+import { isPhoneVerificationEnabled, isWhatsAppOtpConfigured } from "@/lib/config/services";
 import { maskPhone } from "@/lib/phone/e164";
 import { CODE_TTL_MINUTES } from "@/lib/phone/verification";
 import { PhoneVerification } from "./phone-verification";
@@ -70,7 +70,11 @@ export default async function TelefonoAjustesPage() {
         </p>
       </header>
 
-      <PhoneVerification verifiedPhone={masked} ttlMinutes={CODE_TTL_MINUTES} />
+      <PhoneVerification
+        verifiedPhone={masked}
+        ttlMinutes={CODE_TTL_MINUTES}
+        whatsappAvailable={isWhatsAppOtpConfigured}
+      />
 
       <p className="text-xs leading-relaxed text-foreground-muted">
         Tu número nunca aparece en tu perfil, ni en las búsquedas, ni se comparte con

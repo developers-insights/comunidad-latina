@@ -22,7 +22,7 @@ import {
 } from "@/components/legal/legal-prose";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
-const UPDATED = "27 de septiembre de 2026";
+const UPDATED = "5 de octubre de 2026";
 const LEGAL_ENTITY = "Comunidad Latina LLC";
 
 const TOC = [
@@ -197,6 +197,16 @@ export default function SmsPolicyPage() {
         </p>
       </LegalSection>
 
+      <LegalSection id="otros-paises" title="Números de otros países">
+        <p className={legalProse.p}>
+          Los SMS salen solo a números de Estados Unidos y Canadá. Si tu número es de otro país
+          —incluidos República Dominicana y Puerto Rico—, el código te llega por WhatsApp desde la
+          cuenta verificada de {BRAND_NAME}, con las mismas reglas: un mensaje por cada código que
+          pidas y nunca publicidad. Para no recibir más, no pidas otro código o borrá tu número
+          desde <em>Ajustes › Tu teléfono</em>.
+        </p>
+      </LegalSection>
+
       <LegalSection id="help" title="Ayuda">
         <p className={legalProse.p}>
           Respondé <Keyword>HELP</Keyword> a cualquiera de nuestros mensajes y te contestamos con
@@ -229,7 +239,7 @@ export default function SmsPolicyPage() {
         className="mt-16 scroll-mt-24 rounded-xl border border-border-subtle bg-surface p-6 sm:p-8"
       >
         <p className="text-sm font-semibold uppercase tracking-wide text-brand-ink">
-          English version · Last updated September 27, 2026
+          English version · Last updated October 5, 2026
         </p>
         <h2 className="mt-2 font-display text-2xl font-bold tracking-tight text-foreground">
           SMS Terms and Policy
@@ -259,6 +269,13 @@ export default function SmsPolicyPage() {
             (or CANCEL, END, QUIT, UNSUBSCRIBE) at any time to stop receiving messages; you will
             get one final confirmation. Reply <Keyword>START</Keyword> to opt back in. Users can
             also delete their number from Settings.
+          </p>
+          <p className={legalProse.p}>
+            <strong className={legalProse.strong}>Numbers outside the US and Canada.</strong> SMS
+            is sent only to US and Canadian numbers. For numbers from any other country (including
+            the Dominican Republic and Puerto Rico), the code is delivered through WhatsApp from
+            the verified {BRAND_NAME} account, under the same rules: one message per code
+            requested, never marketing.
           </p>
           <p className={legalProse.p}>
             <strong className={legalProse.strong}>Help.</strong> Reply <Keyword>HELP</Keyword>{" "}

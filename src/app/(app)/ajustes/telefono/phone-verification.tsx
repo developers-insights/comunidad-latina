@@ -9,7 +9,13 @@ import {
   verifyPhoneCodeAction,
 } from "./actions";
 import { FormError } from "@/components/auth/form-error";
-import { SMS_CONSENT_ES, SMS_POLICY_HREF, SMS_SEND_CTA } from "@/lib/phone/sms-consent";
+import {
+  SMS_CONSENT_ES,
+  SMS_POLICY_HREF,
+  SMS_SEND_CTA,
+  WHATSAPP_CONSENT_ES,
+} from "@/lib/phone/sms-consent";
+import type { OtpChannel } from "@/lib/phone/channel";
 import { BezelCard, Button, Field, Input, useToast } from "@/components/ui";
 
 /**
@@ -33,9 +39,14 @@ const COPY = {
   stepPhoneTitle: "Verificá tu teléfono",
   stepPhoneBody:
     "Es opcional. Te mandamos un código por SMS para confirmar que el número es tuyo. No se muestra en tu perfil ni se comparte con nadie.",
+  stepPhoneBodyWhatsApp:
+    "Es opcional. Te mandamos un código para confirmar que el número es tuyo: por SMS si es de Estados Unidos o Canadá, y por WhatsApp si es de otro país. No se muestra en tu perfil ni se comparte con nadie.",
   phoneLabel: "Tu número de teléfono",
   phonePlaceholder: "(917) 555-0142",
   phoneHelp: "Si es de Estados Unidos, con los 10 dígitos alcanza.",
+  phoneHelpWhatsApp:
+    "Si es de Estados Unidos, con los 10 dígitos alcanza. Si es de otro país, empezá con + y el código del país.",
+  whatsappConsent: WHATSAPP_CONSENT_ES,
   sendCta: SMS_SEND_CTA,
   smsConsent: SMS_CONSENT_ES,
   smsPolicy: "Ver la Política de SMS",
@@ -43,8 +54,8 @@ const COPY = {
   resendWait: (seconds: number) => `Podés pedir otro en ${seconds} s`,
 
   stepCodeTitle: "Escribí el código",
-  stepCodeBody: (masked: string, minutes: number) =>
-    `Te lo mandamos al ${masked}. Vence en ${minutes} minutos.`,
+  stepCodeBody: (masked: string, minutes: number, channel: OtpChannel) =>
+    `Te lo mandamos por ${channel === "whatsapp" ? "WhatsApp" : "SMS"} al ${masked}. Vence en ${minutes} minutos.`,
   codeLabel: "Código de 6 números",
   verifyCta: "Verificar",
   changePhone: "Usar otro número",
@@ -70,9 +81,15 @@ export interface PhoneVerificationProps {
    * escrito a mano acá que se olvide de cambiar.
    */
   ttlMinutes: number;
+  /** Si los números de fuera de EE.UU. y Canadá pueden recibir el código por WhatsApp. */
+  whatsappAvailable?: boolean;
 }
 
-export function PhoneVerification({ verifiedPhone, ttlMinutes }: PhoneVerificationProps) {
+export function PhoneVerification({
+  verifiedPhone,
+  ttlMinutes,
+  whatsappAvailable = false,
+}: PhoneVerificationProps) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const codeRef = useRef<HTMLInputElement>(null);
@@ -80,6 +97,7 @@ export function PhoneVerification({ verifiedPhone, ttlMinutes }: PhoneVerificati
   const [verified, setVerified] = useState(verifiedPhone);
   const [phone, setPhone] = useState("");
   const [maskedPhone, setMaskedPhone] = useState<string | null>(null);
+  const [channel, setChannel] = useState<OtpChannel>("sms");
   const [code, setCode] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -98,6 +116,7 @@ export function PhoneVerification({ verifiedPhone, ttlMinutes }: PhoneVerificati
       const result = await sendPhoneCodeAction({ phone });
       if (result.ok) {
         setMaskedPhone(result.maskedPhone);
+        setChannel(result.channel);
         setCooldown(RESEND_SECONDS);
         // El foco va al campo del código: es el único lugar donde hay algo que
         // hacer, y sin esto queda en el botón que ya se usó.
@@ -193,8 +212,10 @@ export function PhoneVerification({ verifiedPhone, ttlMinutes }: PhoneVerificati
           </h2>
           <p className="mt-0.5 text-sm leading-relaxed text-foreground-secondary">
             {awaitingCode
-              ? COPY.stepCodeBody(maskedPhone, ttlMinutes)
-              : COPY.stepPhoneBody}
+              ? COPY.stepCodeBody(maskedPhone, ttlMinutes, channel)
+              : whatsappAvailable
+                ? COPY.stepPhoneBodyWhatsApp
+                : COPY.stepPhoneBody}
           </p>
         </div>
       </div>
@@ -204,7 +225,9 @@ export function PhoneVerification({ verifiedPhone, ttlMinutes }: PhoneVerificati
       <Field
         htmlFor="phone-number"
         label={COPY.phoneLabel}
-        help={awaitingCode ? undefined : COPY.phoneHelp}
+        help={
+          awaitingCode ? undefined : whatsappAvailable ? COPY.phoneHelpWhatsApp : COPY.phoneHelp
+        }
         error={fieldErrors.phone}
       >
         <Input
@@ -247,7 +270,7 @@ export function PhoneVerification({ verifiedPhone, ttlMinutes }: PhoneVerificati
             >
               {COPY.smsPolicy}
             </Link>
-            .
+            .{whatsappAvailable ? ` ${COPY.whatsappConsent}` : null}
           </p>
         </div>
       ) : (

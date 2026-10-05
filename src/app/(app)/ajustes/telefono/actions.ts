@@ -8,7 +8,9 @@ import {
   isPhoneVerificationEnabled,
   isPhonePepperConfigured,
   isSmsConfigured,
+  isWhatsAppOtpConfigured,
 } from "@/lib/config/services";
+import { channelFor, type OtpChannel } from "@/lib/phone/channel";
 import { maskPhone, parsePhone } from "@/lib/phone/e164";
 import { getSmsSender, verificationSmsBody } from "@/lib/phone/sms";
 import {
@@ -59,6 +61,10 @@ const COPY = {
     "Ya te mandamos varios códigos en la última hora. Esperá un rato y probá de nuevo — así protegemos tu número.",
   rateLimitedDay:
     "Llegaste al límite de códigos por hoy. Volvé mañana y te mandamos uno nuevo.",
+  phoneOutsideUs:
+    "Por ahora sólo podemos verificar números de Estados Unidos y Canadá. Muy pronto vas a poder usar el de tu país.",
+  phoneUsFormat:
+    "Ese número no parece de Estados Unidos. Si es de otro país, escribilo con + y el código del país (por ejemplo, +54 9 11…).",
   sendFailed: "No pudimos mandar el código. Revisá el número y probá de nuevo.",
   sent: "Te mandamos un código por mensaje de texto.",
   codeFormat: "El código son 6 números.",
@@ -69,6 +75,12 @@ const COPY = {
   codeMissing: "No hay ningún código activo. Pedí uno y te lo mandamos.",
   verified: "Listo, tu teléfono quedó verificado.",
 } as const;
+
+function looksLikeUsAttempt(raw: string): boolean {
+  if (raw.trim().startsWith("+")) return false;
+  const digits = raw.replace(/\D/g, "").length;
+  return digits === 10 || digits === 11;
+}
 
 /** El gate legal + el pepper, en un solo lugar. */
 function blocked(): { ok: false; formError: string } | null {
@@ -109,7 +121,7 @@ const sendSchema = z.object({ phone: z.string() });
 export type SendPhoneCodeInput = z.infer<typeof sendSchema>;
 
 export type SendPhoneCodeResult =
-  | { ok: true; maskedPhone: string }
+  | { ok: true; maskedPhone: string; channel: OtpChannel }
   | { ok: false; formError?: string; fieldErrors?: Record<string, string> };
 
 export async function sendPhoneCodeAction(
@@ -127,9 +139,15 @@ export async function sendPhoneCodeAction(
       vacio: COPY.phoneEmpty,
       corto: COPY.phoneShort,
       largo: COPY.phoneLong,
-      formato: COPY.phoneFormat,
+      formato: looksLikeUsAttempt(parsed.data.phone) ? COPY.phoneUsFormat : COPY.phoneFormat,
     }[phone.problem];
     return { ok: false, fieldErrors: { phone: message } };
+  }
+
+  const channel = channelFor(phone.e164);
+  const isDeployed = process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL_ENV);
+  if (channel === "whatsapp" && isDeployed && !isWhatsAppOtpConfigured) {
+    return { ok: false, fieldErrors: { phone: COPY.phoneOutsideUs } };
   }
 
   const context = await sessionContext();
@@ -158,11 +176,12 @@ export async function sendPhoneCodeAction(
   }
 
   const masked = maskPhone(phone.e164);
-  if (request.status === "accepted") return { ok: true, maskedPhone: masked };
+  if (request.status === "accepted") return { ok: true, maskedPhone: masked, channel };
   const sent = await getSmsSender().send({
     to: phone.e164,
     maskedTo: masked,
     body: verificationSmsBody({ code: request.code }),
+    code: request.code,
   });
 
   if (!sent.ok) {
@@ -171,7 +190,7 @@ export async function sendPhoneCodeAction(
     return { ok: false, formError: COPY.sendFailed };
   }
 
-  return { ok: true, maskedPhone: masked };
+  return { ok: true, maskedPhone: masked, channel };
 }
 
 // ---------------------------------------------------------------------------

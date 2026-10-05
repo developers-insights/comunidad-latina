@@ -167,6 +167,19 @@ export const isSmsConfigured = Boolean(
 );
 
 /**
+ * WhatsApp para los números fuera de EE.UU. y Canadá (ver `phone/channel.ts`).
+ * Sale de la MISMA cuenta de Twilio que el SMS, más el sender de WhatsApp
+ * aprobado por Meta y la plantilla de autenticación aprobada. Sin las dos, esos
+ * números se rechazan ANTES de emitir un código: un código emitido cuenta para
+ * el rate limit aunque nunca llegue.
+ */
+export const isWhatsAppOtpConfigured = Boolean(
+  isSmsConfigured &&
+    process.env.TWILIO_WHATSAPP_FROM &&
+    process.env.TWILIO_WHATSAPP_OTP_CONTENT_SID,
+);
+
+/**
  * Sal del servidor para el hash de los códigos: `sha256(código + pepper)`.
  *
  * Vive FUERA de la base a propósito (0066): así un backup completo de Postgres
