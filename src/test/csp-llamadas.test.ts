@@ -20,4 +20,10 @@ describe("CSP de las llamadas", () => {
   ])("permite %s", (fuente) => {
     expect(connectSrc).toContain(fuente);
   });
+
+  it("Permissions-Policy deja pedir cámara y micrófono al propio sitio", () => {
+    const politica = config.match(/"camera=[^"]+"/)?.[0] ?? "";
+    expect(politica).toContain("camera=(self)");
+    expect(politica).toContain("microphone=(self)");
+  });
 });

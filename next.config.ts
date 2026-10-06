@@ -230,17 +230,17 @@ const securityHeaders = [
   // persona hubiera dicho que no, así que el micrófono queda muerto sin un solo
   // síntoma que lleve hasta acá. Mismo caso que ya pasó con `geolocation`.
   //
-  // `camera` SIGUE EN `()`, y no es un olvido: la opción "Cámara" del menú de
-  // adjuntar usa `<input type="file" capture>`, que delega en la app de cámara
-  // del sistema y no pasa por getUserMedia. Abrirla no haría falta para nada de
-  // lo que hay hoy, y es un permiso más que cualquier script de la página
-  // podría pedir.
+  // `camera=(self)` desde las VIDEOLLAMADAS (Agora, 0139). Antes estaba en `()`
+  // porque lo único que usaba cámara era `<input type="file" capture>`, que no
+  // pasa por getUserMedia. Con `()` la videollamada se cortaba al instante con
+  // PERMISSION_DENIED sin que el navegador preguntara nada (2026-10-06) — el
+  // mismo modo de falla mudo que el micrófono y la geolocalización.
   //
   // `(self)` habilita SÓLO a este origen; los iframes de terceros (Stripe, Mux)
   // siguen sin poder pedir ninguno de los dos.
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(self), geolocation=(self), payment=(self)",
+    value: "camera=(self), microphone=(self), geolocation=(self), payment=(self)",
   },
   { key: "Content-Security-Policy", value: csp },
 ];
