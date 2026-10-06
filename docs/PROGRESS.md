@@ -1,5 +1,13 @@
 # PROGRESS — Comunidad Latina
 
+## Chat adentro de la videollamada (✅ 2026-10-06, `d63e033`)
+
+- El botón Chat de la llamada ya no hace `window.open`: el hilo se renderiza en el servidor dentro de `/llamadas/[id]` (en `Suspense`) y se muestra en `src/components/calls/chat-en-llamada.tsx`. Desde `lg`, columna de 380px a la derecha; en celular, hoja al 82% con velo y alto ajustado al teclado (`visualViewport`). Navegar al chat desmontaba `useMotorDeLlamada` y cortaba Agora: por eso NO se navega.
+- `HiloDirecto` / `HiloDeGrupo` (`src/components/messaging/hilo-*.tsx`) salieron de las páginas de `/mensajes` y se reusan con `variante="llamada"` (sin `notFound`/`redirect`, que tumbarían la llamada).
+- Badge de no leídos y envío optimista: `src/components/messaging/en-vuelo.tsx` (sólo activo dentro del panel). `CLASE_PIE_EN_LLAMADA` vive en `clases-en-llamada.ts` porque un Server Component no puede importar constantes de un módulo `use client`.
+- Verificado: tsc 0, eslint limpio, vitest 7103 (5 nuevos del panel), `next build` OK, deploy Production READY. Panel probado en el Browser pane (desktop y mobile) con una página de prueba; **falta una llamada real entre dos celulares** escribiendo en el panel (sobre todo el teclado en iPhone).
+- Cierre 2026-10-06: revisadas todas las ramas. Lo único pendiente de verdad era `docs/STRIPE.md` de `feat/stripe-e2e-test` (entró como `9833fe5`). `auth-google-signup-redesign-e0a518-full` tiene el mismo árbol que `5dbcd97` (ya en main); `otp-sms-supabase-908133` sólo agrega `supabase/.temp/cli-latest` (basura). Las cinco de `ramas-sueltas` siguen sin mergearse a propósito.
+
 ## Tanda del 30/9: perfil desde el nombre, solicitudes en vivo, audio tipo WhatsApp, editar servicios (✅ 2026-09-30, `8377659`)
 
 - **Nombre/avatar → perfil en toda la app** con `src/components/social/profile-link.tsx`. Reemplaza la regla vieja de "perfil sólo desde la hoja del Trust Score". Firmas de negocio no linkean a la persona.
