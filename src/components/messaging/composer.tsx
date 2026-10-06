@@ -12,6 +12,7 @@ import { sendMessageAction } from "@/app/(app)/mensajes/actions";
 import { COPY } from "./copy";
 import { COPY_COMPOSER } from "./copy-composer";
 import { useAvisoDeEscritura } from "./escribiendo-live";
+import { useEnvioOptimista } from "./en-vuelo";
 import {
   AttachMenu,
   ColaDeAdjuntos,
@@ -47,7 +48,9 @@ export function Composer({ conversationId }: { conversationId: string }) {
   const caretPendiente = useRef<number | null>(null);
 
   const [menuAbierto, setMenuAbierto] = useState(false);
-  const [hoja, setHoja] = useState<null | "galeria" | "camara" | "enlace" | "ubicacion">(null);
+  const [hoja, setHoja] = useState<
+    null | "galeria" | "camara" | "enlace" | "ubicacion"
+  >(null);
   const [grabando, setGrabando] = useState(false);
   const [archivosElegidos, setArchivosElegidos] = useState<File[]>([]);
 
@@ -55,8 +58,14 @@ export function Composer({ conversationId }: { conversationId: string }) {
     () => ({ tipo: "directo" as const, conversationId }),
     [conversationId],
   );
-  const { cola, enviarArchivos, enviarAudio, enviarSinArchivo, procesar, descartar } =
-    useAdjuntos(destino);
+  const {
+    cola,
+    enviarArchivos,
+    enviarAudio,
+    enviarSinArchivo,
+    procesar,
+    descartar,
+  } = useAdjuntos(destino);
 
   /**
    * Fuera del `ResponderProvider` esto es `null` y el composer se comporta
@@ -70,6 +79,14 @@ export function Composer({ conversationId }: { conversationId: string }) {
    * `onChange`. Fuera del provider no hace nada.
    */
   const avisarQueEscribo = useAvisoDeEscritura();
+
+  /**
+   * En el chat de la llamada el mensaje aparece al instante y el campo queda
+   * libre para el siguiente; si el envío falla, el texto vuelve al campo.
+   * Fuera de ese provider es `null` y el composer espera como siempre.
+   */
+  const optimista = useEnvioOptimista();
+  const bloqueado = optimista ? false : isPending;
 
   /**
    * Devolver el cursor DESPUÉS de insertar un emoji o un enlace. Va en un
@@ -97,11 +114,15 @@ export function Composer({ conversationId }: { conversationId: string }) {
     const element = textareaRef.current;
     const start = element?.selectionStart ?? value.length;
     const end = element?.selectionEnd ?? start;
-    const siguiente = `${value.slice(0, start)}${fragmento}${value.slice(end)}`.slice(
-      0,
-      MAX_LENGTH,
+    const siguiente =
+      `${value.slice(0, start)}${fragmento}${value.slice(end)}`.slice(
+        0,
+        MAX_LENGTH,
+      );
+    caretPendiente.current = Math.min(
+      start + fragmento.length,
+      siguiente.length,
     );
-    caretPendiente.current = Math.min(start + fragmento.length, siguiente.length);
     setValue(siguiente);
     element?.focus();
   }
@@ -132,20 +153,31 @@ export function Composer({ conversationId }: { conversationId: string }) {
 
   function send() {
     const body = value.trim();
-    if (!body || isPending) return;
+    if (!body || bloqueado) return;
 
     const replyTo = responder?.citado?.id ?? null;
 
+    const tempId = optimista?.agregar(body) ?? null;
+    if (tempId) {
+      setValue("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+    }
+
     startTransition(async () => {
       const result = await sendMessageAction({ conversationId, body, replyTo });
+      if (!result.ok && tempId) {
+        optimista?.quitar(tempId);
+        setValue((actual) => (actual.trim() ? actual : body));
+      }
       if (result.ok) {
-        setValue("");
+        if (tempId) optimista?.confirmar(tempId);
+        else setValue("");
         // El mensaje ya salió: apagar el cartel del otro lado ahora es mejor
         // que dejarlo vencer solo cinco segundos más tarde, al lado de la
         // burbuja que acaba de llegar.
         avisarQueEscribo(false);
         responder?.cancelar();
-        if (textareaRef.current) {
+        if (textareaRef.current && !tempId) {
           textareaRef.current.style.height = "auto";
           textareaRef.current.focus();
         }
@@ -182,7 +214,11 @@ export function Composer({ conversationId }: { conversationId: string }) {
 
   return (
     <div>
-      <ColaDeAdjuntos cola={cola} onReintentar={procesar} onDescartar={descartar} />
+      <ColaDeAdjuntos
+        cola={cola}
+        onReintentar={procesar}
+        onDescartar={descartar}
+      />
 
       <ComposerReplyBar />
 
@@ -210,7 +246,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
             <button
               type="button"
               onClick={() => setMenuAbierto(true)}
-              disabled={isPending}
+              disabled={bloqueado}
               aria-label={COPY_COMPOSER.adjuntar.abrir}
               aria-haspopup="dialog"
               aria-expanded={menuAbierto}
@@ -228,7 +264,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
             </button>
 
             <EmojiPickerPopover
-              disabled={isPending}
+              disabled={bloqueado}
               unicodeGroups={CLASSIC_EMOJI_GROUPS}
               onPickUnicode={insertarEnCaret}
               onPickCommunity={(emoji) => insertarCodigoCorto(emoji.slug)}
@@ -245,7 +281,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
               maxLength={MAX_LENGTH}
               value={value}
               placeholder={COPY.composer.placeholder}
-              disabled={isPending}
+              disabled={bloqueado}
               onChange={(event) => {
                 setValue(event.target.value);
                 autosize(event.target);
@@ -270,7 +306,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
             que se monta SIEMPRE: desmontarlo cortaría la grabación en curso. */}
         {(!hayTexto || grabando) && (
           <VoiceRecorder
-            disabled={isPending}
+            disabled={bloqueado}
             onActivo={setGrabando}
             onListo={(grabacion) => void enviarAudio(grabacion)}
           />
@@ -280,7 +316,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
           <button
             type="submit"
             aria-label={COPY.composer.send}
-            disabled={isPending}
+            disabled={bloqueado}
             className={cn(
               "flex size-11 shrink-0 select-none items-center justify-center rounded-full bg-brand text-brand-foreground shadow-xs",
               "transition-[transform,background-color,opacity] duration-(--duration-fast) ease-(--ease-spring)",
@@ -290,7 +326,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
               "motion-reduce:transition-none motion-reduce:active:scale-100",
             )}
           >
-            {isPending ? (
+            {bloqueado ? (
               <Spinner size={18} />
             ) : (
               <PaperPlaneRight size={20} weight="fill" aria-hidden="true" />
@@ -327,7 +363,9 @@ export function Composer({ conversationId }: { conversationId: string }) {
       <LocationPicker
         open={hoja === "ubicacion"}
         onClose={() => setHoja(null)}
-        onEnviar={(punto) => void enviarSinArchivo({ tipo: "ubicacion", ...punto })}
+        onEnviar={(punto) =>
+          void enviarSinArchivo({ tipo: "ubicacion", ...punto })
+        }
       />
     </div>
   );

@@ -909,8 +909,9 @@ const INVENTARIO: Record<string, Entrada> = {
     prueba: { archivo: "src/components/calls/pantalla-de-llamada.tsx", contiene: ["cl-print-hide"] },
   },
   // Además de heredar el hook, los seis controles son <button>: doble cobertura.
+  // El segundo text-on-danger es el contador de mensajes nuevos del chat.
   "src/components/calls/controles.tsx": {
-    inks: ["text-on-danger", "text-on-media", "text-on-media"],
+    inks: ["text-on-danger", "text-on-danger", "text-on-media", "text-on-media"],
     cobertura: "control",
   },
   // La tilde de "elegido" en la hoja de Añadir: tinta de marca sobre relleno de

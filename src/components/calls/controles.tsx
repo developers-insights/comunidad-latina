@@ -24,6 +24,8 @@ interface ControlProps {
   activo?: boolean;
   destructivo?: boolean;
   disabled?: boolean;
+  /** Contador sobre el círculo (mensajes nuevos del chat). 0 = no se pinta. */
+  insignia?: number;
 }
 
 /**
@@ -45,6 +47,7 @@ function Control({
   activo = false,
   destructivo = false,
   disabled = false,
+  insignia = 0,
 }: ControlProps) {
   return (
     <button
@@ -62,7 +65,7 @@ function Control({
     >
       <span
         className={cn(
-          "flex size-11 items-center justify-center rounded-full ring-1 ring-inset",
+          "relative flex size-11 items-center justify-center rounded-full ring-1 ring-inset",
           "transition-[background-color,color,box-shadow] duration-(--duration-fast)",
           destructivo
             ? "bg-danger text-on-danger ring-on-media/20 shadow-[0_6px_18px_-6px_var(--color-danger)]"
@@ -72,8 +75,23 @@ function Control({
         )}
       >
         {icono}
+        {insignia > 0 && (
+          <span
+            aria-hidden="true"
+            key={insignia}
+            data-testid="insignia-chat"
+            className={cn(
+              styles.insignia,
+              "absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[11px] font-semibold tabular-nums text-on-danger ring-2 ring-media-backdrop",
+            )}
+          >
+            {insignia > 9 ? "9+" : insignia}
+          </span>
+        )}
       </span>
-      <span className="text-[10px] font-medium leading-tight text-on-media/75">{etiqueta}</span>
+      <span className="text-[10px] font-medium leading-tight text-on-media/75">
+        {etiqueta}
+      </span>
     </button>
   );
 }
@@ -84,7 +102,9 @@ export interface ControlesProps {
   camaraApagada: boolean;
   sonidoApagado: boolean;
   puedeAgregar: boolean;
-  hrefDelChat: string | null;
+  chatDisponible: boolean;
+  chatAbierto: boolean;
+  noLeidos: number;
   onMic: () => void;
   onCamara: () => void;
   onSonido: () => void;
@@ -109,7 +129,9 @@ export function Controles(props: ControlesProps) {
     camaraApagada,
     sonidoApagado,
     puedeAgregar,
-    hrefDelChat,
+    chatDisponible,
+    chatAbierto,
+    noLeidos,
     onMic,
     onCamara,
     onSonido,
@@ -128,8 +150,14 @@ export function Controles(props: ControlesProps) {
       <div className="rounded-[2rem] bg-on-media/[0.07] p-1.5 ring-1 ring-inset ring-on-media/12 backdrop-blur-xl">
         <div className="grid grid-cols-6 gap-0.5 rounded-[calc(2rem-0.375rem)] bg-media-shade/25 px-1 py-1.5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]">
           <Control
-            etiqueta={micApagado ? COPY.controles.activarMic : COPY.controles.silenciar}
-            ariaLabel={micApagado ? COPY.controles.activarMicAria : COPY.controles.silenciarAria}
+            etiqueta={
+              micApagado ? COPY.controles.activarMic : COPY.controles.silenciar
+            }
+            ariaLabel={
+              micApagado
+                ? COPY.controles.activarMicAria
+                : COPY.controles.silenciarAria
+            }
             icono={
               micApagado ? (
                 <MicrophoneSlash size={20} weight="fill" aria-hidden="true" />
@@ -144,7 +172,9 @@ export function Controles(props: ControlesProps) {
           <Control
             etiqueta={COPY.controles.video}
             ariaLabel={
-              camaraApagada ? COPY.controles.prenderCamaraAria : COPY.controles.apagarCamaraAria
+              camaraApagada
+                ? COPY.controles.prenderCamaraAria
+                : COPY.controles.apagarCamaraAria
             }
             icono={
               camaraApagada ? (
@@ -164,7 +194,9 @@ export function Controles(props: ControlesProps) {
           <Control
             etiqueta={COPY.controles.altavoz}
             ariaLabel={
-              sonidoApagado ? COPY.controles.encenderSonidoAria : COPY.controles.apagarSonidoAria
+              sonidoApagado
+                ? COPY.controles.encenderSonidoAria
+                : COPY.controles.apagarSonidoAria
             }
             icono={
               sonidoApagado ? (
@@ -187,16 +219,32 @@ export function Controles(props: ControlesProps) {
 
           <Control
             etiqueta={COPY.controles.chat}
-            ariaLabel={COPY.controles.chatAria}
-            icono={<ChatCircleDots size={20} aria-hidden="true" />}
-            disabled={!hrefDelChat}
+            ariaLabel={
+              chatAbierto
+                ? COPY.controles.cerrarChatAria
+                : noLeidos > 0
+                  ? COPY.controles.chatNoLeidos(noLeidos)
+                  : COPY.controles.chatAria
+            }
+            icono={
+              <ChatCircleDots
+                size={20}
+                weight={chatAbierto ? "fill" : "regular"}
+                aria-hidden="true"
+              />
+            }
+            activo={chatAbierto}
+            insignia={chatAbierto ? 0 : noLeidos}
+            disabled={!chatDisponible}
             onClick={onChat}
           />
 
           <Control
             etiqueta={COPY.controles.finalizar}
             ariaLabel={COPY.controles.finalizarAria}
-            icono={<PhoneDisconnect size={20} weight="fill" aria-hidden="true" />}
+            icono={
+              <PhoneDisconnect size={20} weight="fill" aria-hidden="true" />
+            }
             destructivo
             onClick={onFinalizar}
           />

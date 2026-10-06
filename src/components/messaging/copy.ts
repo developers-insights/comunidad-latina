@@ -378,6 +378,7 @@ export const COPY = {
   composer: {
     placeholder: "Escribí tu mensaje…",
     send: "Enviar mensaje",
+    enviando: "Enviando…",
     flaggedTitle: "Ese mensaje no se envió",
     flaggedBody:
       "Detectamos algo que puede lastimar a otra persona, así que lo mandamos a revisión. Probá decirlo de otra forma.",

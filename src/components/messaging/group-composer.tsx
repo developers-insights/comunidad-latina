@@ -13,6 +13,7 @@ import { LIMITES } from "@/lib/messaging/grupos";
 import { COPY } from "./copy";
 import { COPY_COMPOSER } from "./copy-composer";
 import { useAvisoDeEscritura } from "./escribiendo-live";
+import { useEnvioOptimista } from "./en-vuelo";
 import {
   AttachMenu,
   ColaDeAdjuntos,
@@ -49,19 +50,38 @@ export function GroupComposer({ groupId }: { groupId: string }) {
   const caretPendiente = useRef<number | null>(null);
 
   const [menuAbierto, setMenuAbierto] = useState(false);
-  const [hoja, setHoja] = useState<null | "galeria" | "camara" | "enlace" | "ubicacion">(null);
+  const [hoja, setHoja] = useState<
+    null | "galeria" | "camara" | "enlace" | "ubicacion"
+  >(null);
   const [grabando, setGrabando] = useState(false);
   const [archivosElegidos, setArchivosElegidos] = useState<File[]>([]);
 
-  const destino = useMemo(() => ({ tipo: "grupo" as const, groupId }), [groupId]);
-  const { cola, enviarArchivos, enviarAudio, enviarSinArchivo, procesar, descartar } =
-    useAdjuntos(destino);
+  const destino = useMemo(
+    () => ({ tipo: "grupo" as const, groupId }),
+    [groupId],
+  );
+  const {
+    cola,
+    enviarArchivos,
+    enviarAudio,
+    enviarSinArchivo,
+    procesar,
+    descartar,
+  } = useAdjuntos(destino);
 
   /** `null` fuera del `ResponderProvider`, que monta la página del grupo. */
   const responder = useResponder();
 
   /** El throttle vive adentro: llamarlo en cada tecla no cuesta nada. */
   const avisarQueEscribo = useAvisoDeEscritura();
+
+  /**
+   * En el chat de la llamada el mensaje aparece al instante y el campo queda
+   * libre para el siguiente; si el envío falla, el texto vuelve al campo.
+   * Fuera de ese provider es `null` y el composer espera como siempre.
+   */
+  const optimista = useEnvioOptimista();
+  const bloqueado = optimista ? false : enviando;
 
   useEffect(() => {
     const posicion = caretPendiente.current;
@@ -84,11 +104,15 @@ export function GroupComposer({ groupId }: { groupId: string }) {
     const element = textareaRef.current;
     const start = element?.selectionStart ?? valor.length;
     const end = element?.selectionEnd ?? start;
-    const siguiente = `${valor.slice(0, start)}${fragmento}${valor.slice(end)}`.slice(
-      0,
-      LIMITES.mensajeMax,
+    const siguiente =
+      `${valor.slice(0, start)}${fragmento}${valor.slice(end)}`.slice(
+        0,
+        LIMITES.mensajeMax,
+      );
+    caretPendiente.current = Math.min(
+      start + fragmento.length,
+      siguiente.length,
     );
-    caretPendiente.current = Math.min(start + fragmento.length, siguiente.length);
     setValor(siguiente);
     element?.focus();
   }
@@ -102,7 +126,12 @@ export function GroupComposer({ groupId }: { groupId: string }) {
   }
 
   function elegirDelMenu(opcion: OpcionDeAdjunto) {
-    if (opcion === "galeria" || opcion === "camara" || opcion === "enlace" || opcion === "ubicacion") {
+    if (
+      opcion === "galeria" ||
+      opcion === "camara" ||
+      opcion === "enlace" ||
+      opcion === "ubicacion"
+    ) {
       setHoja(opcion);
       return;
     }
@@ -115,20 +144,36 @@ export function GroupComposer({ groupId }: { groupId: string }) {
 
   function enviar() {
     const body = valor.trim();
-    if (!body || enviando) return;
+    if (!body || bloqueado) return;
 
     const replyTo = responder?.citado?.id ?? null;
 
+    const tempId = optimista?.agregar(body) ?? null;
+    if (tempId) {
+      setValor("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+    }
+
     startTransition(async () => {
-      const resultado = await enviarMensajeAlGrupoAction({ groupId, body, replyTo });
+      const resultado = await enviarMensajeAlGrupoAction({
+        groupId,
+        body,
+        replyTo,
+      });
+
+      if (!resultado.ok && tempId) {
+        optimista?.quitar(tempId);
+        setValor((actual) => (actual.trim() ? actual : body));
+      }
 
       if (resultado.ok) {
-        setValor("");
+        if (tempId) optimista?.confirmar(tempId);
+        else setValor("");
         // El mensaje ya salió: el cartel del otro lado se apaga ahora y no
         // cinco segundos más tarde, al lado de la burbuja recién llegada.
         avisarQueEscribo(false);
         responder?.cancelar();
-        if (textareaRef.current) {
+        if (textareaRef.current && !tempId) {
           textareaRef.current.style.height = "auto";
           textareaRef.current.focus();
         }
@@ -178,7 +223,11 @@ export function GroupComposer({ groupId }: { groupId: string }) {
 
   return (
     <div>
-      <ColaDeAdjuntos cola={cola} onReintentar={procesar} onDescartar={descartar} />
+      <ColaDeAdjuntos
+        cola={cola}
+        onReintentar={procesar}
+        onDescartar={descartar}
+      />
 
       <ComposerReplyBar />
 
@@ -206,7 +255,7 @@ export function GroupComposer({ groupId }: { groupId: string }) {
             <button
               type="button"
               onClick={() => setMenuAbierto(true)}
-              disabled={enviando}
+              disabled={bloqueado}
               aria-label={COPY_COMPOSER.adjuntar.abrir}
               aria-haspopup="dialog"
               aria-expanded={menuAbierto}
@@ -224,7 +273,7 @@ export function GroupComposer({ groupId }: { groupId: string }) {
             </button>
 
             <EmojiPickerPopover
-              disabled={enviando}
+              disabled={bloqueado}
               unicodeGroups={CLASSIC_EMOJI_GROUPS}
               onPickUnicode={insertarEnCaret}
               onPickCommunity={(emoji) => insertarCodigoCorto(emoji.slug)}
@@ -242,7 +291,7 @@ export function GroupComposer({ groupId }: { groupId: string }) {
               maxLength={LIMITES.mensajeMax}
               value={valor}
               placeholder={COPY.groups.composerPlaceholder}
-              disabled={enviando}
+              disabled={bloqueado}
               onChange={(event) => {
                 setValor(event.target.value);
                 autosize(event.target);
@@ -265,7 +314,7 @@ export function GroupComposer({ groupId }: { groupId: string }) {
 
         {(!hayTexto || grabando) && (
           <VoiceRecorder
-            disabled={enviando}
+            disabled={bloqueado}
             onActivo={setGrabando}
             onListo={(grabacion) => void enviarAudio(grabacion)}
           />
@@ -275,7 +324,7 @@ export function GroupComposer({ groupId }: { groupId: string }) {
           <button
             type="submit"
             aria-label={COPY.composer.send}
-            disabled={enviando}
+            disabled={bloqueado}
             className={cn(
               "flex size-11 shrink-0 select-none items-center justify-center rounded-full bg-brand text-brand-foreground shadow-xs cl-print-hide",
               "transition-[transform,background-color,opacity] duration-(--duration-fast) ease-(--ease-spring)",
@@ -285,7 +334,7 @@ export function GroupComposer({ groupId }: { groupId: string }) {
               "motion-reduce:transition-none motion-reduce:active:scale-100",
             )}
           >
-            {enviando ? (
+            {bloqueado ? (
               <Spinner size={18} />
             ) : (
               <PaperPlaneRight size={20} weight="fill" aria-hidden="true" />
@@ -322,7 +371,9 @@ export function GroupComposer({ groupId }: { groupId: string }) {
       <LocationPicker
         open={hoja === "ubicacion"}
         onClose={() => setHoja(null)}
-        onEnviar={(punto) => void enviarSinArchivo({ tipo: "ubicacion", ...punto })}
+        onEnviar={(punto) =>
+          void enviarSinArchivo({ tipo: "ubicacion", ...punto })
+        }
       />
     </div>
   );

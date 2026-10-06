@@ -78,12 +78,13 @@ const EXCEPCIONES: Record<string, string> = {
     "llamada a pantalla completa: la salida es Finalizar, que además corta el canal y escribe ended_at",
 
   // ── Páginas que no dibujan nada: sólo redirigen ──────────────────────────
-  "comunidad/ayuda-mutua": "redirect 308 a /comunidad/pedir-ayuda: no renderiza pantalla",
+  "comunidad/ayuda-mutua":
+    "redirect 308 a /comunidad/pedir-ayuda: no renderiza pantalla",
   "comunidad/ayuda-mutua/mios": "redirect 308: no renderiza pantalla",
   "comunidad/ayuda-mutua/publicar": "redirect 308: no renderiza pantalla",
-  "creadores/contratos": "redirect 308 a /creadores/colaboraciones: no renderiza pantalla",
+  "creadores/contratos":
+    "redirect 308 a /creadores/colaboraciones: no renderiza pantalla",
   "creadores/contratos/[id]": "redirect 308: no renderiza pantalla",
-
 };
 
 /** Los tres controles que hoy resuelven "volver" (los tres son la misma barra). */
@@ -105,6 +106,19 @@ function monta(archivo: string): boolean {
   return CONTROLES.some((control) => src.includes(control));
 }
 
+/**
+ * Páginas que delegan TODO su contenido en un componente compartido con la
+ * pantalla de llamada: el control de volver vive en ese componente.
+ */
+const DELEGADAS: Record<string, string> = {
+  "mensajes/[id]": fileURLToPath(
+    new URL("../components/messaging/hilo-directo.tsx", import.meta.url),
+  ),
+  "mensajes/grupos/[id]": fileURLToPath(
+    new URL("../components/messaging/hilo-de-grupo.tsx", import.meta.url),
+  ),
+};
+
 /** Los `layout.tsx` que envuelven a esta página, de adentro hacia afuera. */
 function layoutsQueLaEnvuelven(pagina: string): string[] {
   const out: string[] = [];
@@ -122,10 +136,12 @@ const RUTAS = paginas(APP).map((pagina) => {
   const ruta = relative(APP, join(pagina, "..")).split(sep).join("/");
   // El layout raíz de `(app)` no cuenta: es el shell (header + barra de abajo),
   // no la salida de una pantalla.
-  const envolturas = layoutsQueLaEnvuelven(pagina).filter((l) => l !== join(APP, "layout.tsx"));
+  const envolturas = layoutsQueLaEnvuelven(pagina).filter(
+    (l) => l !== join(APP, "layout.tsx"),
+  );
   return {
     ruta,
-    enLaPagina: monta(pagina),
+    enLaPagina: monta(pagina) || (ruta in DELEGADAS && monta(DELEGADAS[ruta])),
     enUnLayout: envolturas.some(monta),
   };
 });
@@ -147,7 +163,9 @@ describe("toda pantalla de la app tiene cómo volver", () => {
   });
 
   it("nadie monta DOS volver (la página y su layout a la vez)", () => {
-    const duplicadas = RUTAS.filter((r) => r.enLaPagina && r.enUnLayout).map((r) => r.ruta);
+    const duplicadas = RUTAS.filter((r) => r.enLaPagina && r.enUnLayout).map(
+      (r) => r.ruta,
+    );
 
     expect(
       duplicadas,
@@ -157,7 +175,9 @@ describe("toda pantalla de la app tiene cómo volver", () => {
 
   it("las excepciones existen de verdad (ninguna quedó apuntando a una ruta borrada)", () => {
     const rutas = new Set(RUTAS.map((r) => r.ruta));
-    const fantasmas = Object.keys(EXCEPCIONES).filter((ruta) => !rutas.has(ruta));
+    const fantasmas = Object.keys(EXCEPCIONES).filter(
+      (ruta) => !rutas.has(ruta),
+    );
 
     expect(
       fantasmas,

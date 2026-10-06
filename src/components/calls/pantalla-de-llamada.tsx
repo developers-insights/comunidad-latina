@@ -3,10 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ILocalVideoTrack, IRemoteVideoTrack } from "agora-rtc-sdk-ng";
-import { PhoneDisconnect, ShieldCheck, Users } from "@phosphor-icons/react/dist/ssr";
+import {
+  PhoneDisconnect,
+  ShieldCheck,
+  Users,
+} from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { Avatar, Button } from "@/components/ui";
-import { duracionEnSegundos, duracionHablada, formatearDuracion } from "@/lib/calls/duracion";
+import {
+  duracionEnSegundos,
+  duracionHablada,
+  formatearDuracion,
+} from "@/lib/calls/duracion";
 import type { CodigoDeLlamada } from "@/lib/calls/errores";
 import { useMotorDeLlamada, type MotivoDeCierre } from "@/lib/calls/motor";
 import {
@@ -17,6 +25,7 @@ import {
   type PersonaEnLlamada,
 } from "@/lib/calls/tipos";
 import { useVigilanciaDeLlamada } from "@/lib/calls/vigilancia";
+import { ChatEnLlamada } from "./chat-en-llamada";
 import { Controles } from "./controles";
 import { COPY } from "./copy";
 import { FondoDeLlamada } from "./fondo";
@@ -42,8 +51,14 @@ export interface PantallaDeLlamadaProps {
   soyQuienLlama: boolean;
   /** Nombre del grupo, cuando la llamada salió de uno. */
   grupoNombre: string | null;
-  /** A dónde lleva el botón Chat. Se abre en otra pestaña para no cortar. */
-  hrefDelChat: string | null;
+  /**
+   * El hilo de la conversación (1:1) o del grupo, ya renderizado en el
+   * servidor. Se muestra en un panel ADENTRO de esta pantalla: navegar al chat
+   * desmontaría el motor y cortaría la llamada. `null` = no hay chat.
+   */
+  chat: React.ReactNode | null;
+  /** Nombre de la otra persona en una llamada 1:1, para el título del panel. */
+  chatCon: string | null;
   candidatos: CandidatoUI[];
   /** Llamada de grupo recién creada: la hoja de "Añadir" abre sola. */
   abrirAgregar: boolean;
@@ -53,7 +68,9 @@ export interface PantallaDeLlamadaProps {
     invitar: (input: {
       callId: string;
       profileIds: string[];
-    }) => Promise<{ ok: true; sumados: number } | { ok: false; code: CodigoDeLlamada }>;
+    }) => Promise<
+      { ok: true; sumados: number } | { ok: false; code: CodigoDeLlamada }
+    >;
   };
 }
 
@@ -68,7 +85,8 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
     personas,
     soyQuienLlama,
     grupoNombre,
-    hrefDelChat,
+    chat,
+    chatCon,
     candidatos,
     abrirAgregar,
     acciones,
@@ -76,6 +94,16 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
 
   const router = useRouter();
   const [agregarAbierto, setAgregarAbierto] = useState(abrirAgregar);
+  const [chatAbierto, setChatAbierto] = useState(false);
+  const [noLeidos, setNoLeidos] = useState(0);
+  const chatAbiertoRef = useRef(false);
+  useEffect(() => {
+    chatAbiertoRef.current = chatAbierto;
+  }, [chatAbierto]);
+  const alLlegarMensajes = useCallback((cantidad: number) => {
+    if (!chatAbiertoRef.current) setNoLeidos((n) => n + cantidad);
+  }, []);
+  const cerrarChat = useCallback(() => setChatAbierto(false), []);
   const [ahora, setAhora] = useState(() => Date.now());
   const cerrandoRef = useRef(false);
 
@@ -89,7 +117,9 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
       if (motivo === "sali-de-la-pagina") {
         // Saliendo de la página una server action se aborta en vuelo y la
         // llamada quedaba abierta en la base. Ver api/llamadas/terminar.
-        const cuerpo = new Blob([JSON.stringify({ callId })], { type: "application/json" });
+        const cuerpo = new Blob([JSON.stringify({ callId })], {
+          type: "application/json",
+        });
         if (!navigator.sendBeacon?.("/api/llamadas/terminar", cuerpo)) {
           void acciones.terminar({ callId });
         }
@@ -128,7 +158,8 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
   useVigilanciaDeLlamada(callId, () => router.refresh());
 
   const enLinea = motor.fase === "en-linea" || motor.fase === "reconectando";
-  const corriendo = estado === "en_curso" && startedAt !== null && endedAt === null;
+  const corriendo =
+    estado === "en_curso" && startedAt !== null && endedAt === null;
 
   useEffect(() => {
     if (!corriendo) return;
@@ -187,17 +218,18 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
   const enGrilla = conectados.length > 1;
   const dueto = conectados.length === 1 ? conectados[0] : null;
 
-  const titulo = grupoNombre ?? otros[0]?.persona.displayName ?? COPY.pantalla.llamando;
-  const subtituloPais = grupoNombre ? null : (otros[0]?.persona.country ?? null);
+  const titulo =
+    grupoNombre ?? otros[0]?.persona.displayName ?? COPY.pantalla.llamando;
+  const subtituloPais = grupoNombre
+    ? null
+    : (otros[0]?.persona.country ?? null);
 
   const cupo = cupoRestante(personas.length);
 
-  function abrirChat() {
-    if (!hrefDelChat) return;
-    // Otra pestaña y no `router.push`: navegar acá desmontaría el motor y
-    // cortaría la llamada. Que el chat se abra al lado es lo que permite las dos
-    // cosas a la vez.
-    window.open(hrefDelChat, "_blank", "noopener,noreferrer");
+  function alternarChat() {
+    if (!chat) return;
+    setChatAbierto((abierto) => !abierto);
+    setNoLeidos(0);
   }
 
   async function invitar(ids: string[]) {
@@ -213,27 +245,42 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
     return (
       <Marco>
         <TarjetaDeAviso title={title} body={body}>
-          <Button variant="secondary" onClick={() => router.replace("/llamadas")}>
+          <Button
+            variant="secondary"
+            onClick={() => router.replace("/llamadas")}
+          >
             {COPY.errores.salir}
           </Button>
-          <Button onClick={() => window.location.reload()}>{COPY.errores.reintentar}</Button>
+          <Button onClick={() => window.location.reload()}>
+            {COPY.errores.reintentar}
+          </Button>
         </TarjetaDeAviso>
       </Marco>
     );
   }
 
-  if (estado === "terminada" || estado === "perdida" || estado === "rechazada") {
+  if (
+    estado === "terminada" ||
+    estado === "perdida" ||
+    estado === "rechazada"
+  ) {
     return (
       <Marco>
         <TarjetaDeAviso
-          title={estado === "terminada" ? COPY.pantalla.terminada : COPY.historial.sinRespuesta}
+          title={
+            estado === "terminada"
+              ? COPY.pantalla.terminada
+              : COPY.historial.sinRespuesta
+          }
           body={
             segundos > 0
               ? `Duró ${formatearDuracion(segundos)}.`
               : COPY.fallos.terminadaBody
           }
         >
-          <Button onClick={() => router.replace("/llamadas")}>{COPY.pantalla.volver}</Button>
+          <Button onClick={() => router.replace("/llamadas")}>
+            {COPY.pantalla.volver}
+          </Button>
         </TarjetaDeAviso>
       </Marco>
     );
@@ -244,9 +291,16 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
       <Marco>
         <TarjetaDeAviso
           title={titulo}
-          body={kind === "video" ? COPY.pantalla.entrarHintVideo : COPY.pantalla.entrarHint}
+          body={
+            kind === "video"
+              ? COPY.pantalla.entrarHintVideo
+              : COPY.pantalla.entrarHint
+          }
         >
-          <Button variant="secondary" onClick={() => router.replace("/llamadas")}>
+          <Button
+            variant="secondary"
+            onClick={() => router.replace("/llamadas")}
+          >
             {COPY.errores.salir}
           </Button>
           <Button onClick={motor.arrancar}>{COPY.pantalla.entrar}</Button>
@@ -268,89 +322,125 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
 
   return (
     <Marco>
-      {/* Estado de la llamada para lectores de pantalla: cambia poco y siempre
+      <div className="relative flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Estado de la llamada para lectores de pantalla: cambia poco y siempre
           importa, así que va en un live region educado y no en un alert. */}
-      <p className="sr-only" role="status" aria-live="polite">
-        {estadoDeTexto ?? COPY.pantalla.duracionLabel(duracionHablada(segundos))}
-      </p>
-
-      <header className="flex items-start gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-on-media/10 px-2.5 text-xs font-medium text-on-media/85 ring-1 ring-inset ring-on-media/10">
-          <Users size={13} aria-hidden="true" />
-          {COPY.pantalla.participantes(conectados.length + 1)}
-        </span>
-
-        <div className="min-w-0 flex-1 text-center">
-          <p className="truncate font-display text-base font-semibold text-on-media">{titulo}</p>
-          <p className="mt-0.5 text-xs tabular-nums text-on-media/70">
-            {estadoDeTexto ?? formatearDuracion(segundos)}
+          <p className="sr-only" role="status" aria-live="polite">
+            {estadoDeTexto ??
+              COPY.pantalla.duracionLabel(duracionHablada(segundos))}
           </p>
-        </div>
 
-        <SelloSeguro />
-      </header>
+          <header className="flex items-start gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
+            <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-on-media/10 px-2.5 text-xs font-medium text-on-media/85 ring-1 ring-inset ring-on-media/10">
+              <Users size={13} aria-hidden="true" />
+              {COPY.pantalla.participantes(conectados.length + 1)}
+            </span>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4">
-        {enGrilla ? (
-          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            <li className="aspect-[3/4] sm:aspect-square">
-              <Mosaico
-                className="size-full"
-                nombre={yo.displayName}
-                avatarUrl={yo.avatarUrl}
-                video={motor.videoLocal}
+            <div className="min-w-0 flex-1 text-center">
+              <p className="truncate font-display text-base font-semibold text-on-media">
+                {titulo}
+              </p>
+              <p className="mt-0.5 text-xs tabular-nums text-on-media/70">
+                {estadoDeTexto ?? formatearDuracion(segundos)}
+              </p>
+            </div>
+
+            <SelloSeguro />
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4">
+            {enGrilla ? (
+              <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                <li className="aspect-[3/4] sm:aspect-square">
+                  <Mosaico
+                    className="size-full"
+                    nombre={yo.displayName}
+                    avatarUrl={yo.avatarUrl}
+                    video={motor.videoLocal}
+                    micApagado={motor.micApagado}
+                    camaraApagada={motor.camaraApagada}
+                    soyYo
+                    indice={0}
+                  />
+                </li>
+                {otros.map((otro, i) => (
+                  <li
+                    key={otro.persona.id}
+                    className="aspect-[3/4] sm:aspect-square"
+                  >
+                    <Mosaico
+                      className="size-full"
+                      nombre={otro.persona.displayName}
+                      avatarUrl={otro.persona.avatarUrl}
+                      video={otro.video}
+                      micApagado={otro.micApagado}
+                      camaraApagada={otro.camaraApagada}
+                      esperando={!otro.conectado}
+                      indice={i + 1}
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <Dueto
+                titulo={otros[0]?.persona.displayName ?? titulo}
+                pais={subtituloPais}
+                avatarUrl={otros[0]?.persona.avatarUrl ?? null}
+                sonando={estado === "sonando"}
+                videoRemoto={dueto?.video ?? null}
+                micRemotoApagado={dueto?.micApagado ?? false}
+                videoLocal={motor.videoLocal}
+                miNombre={yo.displayName}
+                miAvatar={yo.avatarUrl}
                 micApagado={motor.micApagado}
                 camaraApagada={motor.camaraApagada}
-                soyYo
-                indice={0}
               />
-            </li>
-            {otros.map((otro, i) => (
-              <li key={otro.persona.id} className="aspect-[3/4] sm:aspect-square">
-                <Mosaico
-                  className="size-full"
-                  nombre={otro.persona.displayName}
-                  avatarUrl={otro.persona.avatarUrl}
-                  video={otro.video}
-                  micApagado={otro.micApagado}
-                  camaraApagada={otro.camaraApagada}
-                  esperando={!otro.conectado}
-                  indice={i + 1}
-                />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <Dueto
-            titulo={otros[0]?.persona.displayName ?? titulo}
-            pais={subtituloPais}
-            avatarUrl={otros[0]?.persona.avatarUrl ?? null}
-            sonando={estado === "sonando"}
-            videoRemoto={dueto?.video ?? null}
-            micRemotoApagado={dueto?.micApagado ?? false}
-            videoLocal={motor.videoLocal}
-            miNombre={yo.displayName}
-            miAvatar={yo.avatarUrl}
+            )}
+          </div>
+
+          <Controles
+            kind={kind}
             micApagado={motor.micApagado}
             camaraApagada={motor.camaraApagada}
+            sonidoApagado={motor.sonidoApagado}
+            puedeAgregar={enLinea && cupo > 0}
+            chatDisponible={chat !== null}
+            chatAbierto={chatAbierto}
+            noLeidos={noLeidos}
+            onMic={motor.alternarMic}
+            onCamara={motor.alternarCamara}
+            onSonido={motor.alternarSonido}
+            onAgregar={() => setAgregarAbierto(true)}
+            onChat={alternarChat}
+            onFinalizar={() => motor.colgar("colgue")}
           />
+
+          {/* Un aviso que no depende de la hoja: si la llamada se llenó mientras
+          estaba abierta, el botón "Añadir" ya está deshabilitado y el motivo
+          tiene que estar escrito en algún lado. */}
+          {cupo === 0 && yoEnLista !== null && sigueEnLaLlamada(yoEnLista) && (
+            <p className="pb-2 text-center text-[11px] text-on-media/60">
+              {COPY.agregar.sinCupo}
+            </p>
+          )}
+        </div>
+
+        {chat !== null && (
+          <ChatEnLlamada
+            abierto={chatAbierto}
+            onCerrar={cerrarChat}
+            onNuevosAjenos={alLlegarMensajes}
+            titulo={
+              grupoNombre ??
+              (chatCon ? COPY.chat.conPersona(chatCon) : COPY.chat.titulo)
+            }
+            subtitulo={grupoNombre ? COPY.chat.delGrupo : null}
+          >
+            {chat}
+          </ChatEnLlamada>
         )}
       </div>
-
-      <Controles
-        kind={kind}
-        micApagado={motor.micApagado}
-        camaraApagada={motor.camaraApagada}
-        sonidoApagado={motor.sonidoApagado}
-        puedeAgregar={enLinea && cupo > 0}
-        hrefDelChat={hrefDelChat}
-        onMic={motor.alternarMic}
-        onCamara={motor.alternarCamara}
-        onSonido={motor.alternarSonido}
-        onAgregar={() => setAgregarAbierto(true)}
-        onChat={abrirChat}
-        onFinalizar={() => motor.colgar("colgue")}
-      />
 
       <HojaAgregar
         open={agregarAbierto}
@@ -360,13 +450,6 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
         cupo={cupo}
         onInvitar={invitar}
       />
-
-      {/* Un aviso que no depende de la hoja: si la llamada se llenó mientras
-          estaba abierta, el botón "Añadir" ya está deshabilitado y el motivo
-          tiene que estar escrito en algún lado. */}
-      {cupo === 0 && yoEnLista !== null && sigueEnLaLlamada(yoEnLista) && (
-        <p className="pb-2 text-center text-[11px] text-on-media/60">{COPY.agregar.sinCupo}</p>
-      )}
     </Marco>
   );
 }
@@ -418,7 +501,12 @@ function SelloSeguro() {
       title={COPY.pantalla.selloDetalle}
       className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-success/15 px-2.5 text-[11px] font-semibold text-on-media ring-1 ring-inset ring-success/35"
     >
-      <ShieldCheck size={13} weight="fill" aria-hidden="true" className="text-success" />
+      <ShieldCheck
+        size={13}
+        weight="fill"
+        aria-hidden="true"
+        className="text-success"
+      />
       <span className="hidden sm:inline">{COPY.pantalla.sello}</span>
       <span className="sr-only sm:hidden">{COPY.pantalla.sello}</span>
     </span>
@@ -441,9 +529,15 @@ function TarjetaDeAviso({
           <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-on-media/10 text-on-media">
             <PhoneDisconnect size={22} aria-hidden="true" />
           </span>
-          <h1 className="mt-4 font-display text-lg font-semibold text-on-media">{title}</h1>
-          <p className="mt-1.5 text-sm leading-relaxed text-on-media/75">{body}</p>
-          <div className="mt-6 flex flex-wrap justify-center gap-2">{children}</div>
+          <h1 className="mt-4 font-display text-lg font-semibold text-on-media">
+            {title}
+          </h1>
+          <p className="mt-1.5 text-sm leading-relaxed text-on-media/75">
+            {body}
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            {children}
+          </div>
         </div>
       </div>
     </div>
@@ -510,8 +604,12 @@ function Dueto(props: {
           </span>
 
           <div>
-            <p className="font-display text-2xl font-semibold text-on-media">{props.titulo}</p>
-            {props.pais && <p className="mt-1 text-sm text-on-media/70">{props.pais}</p>}
+            <p className="font-display text-2xl font-semibold text-on-media">
+              {props.titulo}
+            </p>
+            {props.pais && (
+              <p className="mt-1 text-sm text-on-media/70">{props.pais}</p>
+            )}
           </div>
         </div>
       )}
@@ -533,14 +631,26 @@ function Dueto(props: {
   );
 }
 
-function mensajeDeError(motivo: string | undefined): { title: string; body: string } {
+function mensajeDeError(motivo: string | undefined): {
+  title: string;
+  body: string;
+} {
   switch (motivo) {
     case "permiso":
-      return { title: COPY.errores.permisoTitle, body: COPY.errores.permisoBody };
+      return {
+        title: COPY.errores.permisoTitle,
+        body: COPY.errores.permisoBody,
+      };
     case "sin-dispositivo":
-      return { title: COPY.errores.sinDispositivoTitle, body: COPY.errores.sinDispositivoBody };
+      return {
+        title: COPY.errores.sinDispositivoTitle,
+        body: COPY.errores.sinDispositivoBody,
+      };
     case "ocupado":
-      return { title: COPY.errores.ocupadoTitle, body: COPY.errores.ocupadoBody };
+      return {
+        title: COPY.errores.ocupadoTitle,
+        body: COPY.errores.ocupadoBody,
+      };
     case "sin-contexto-seguro":
       return {
         title: COPY.errores.sinContextoSeguroTitle,
@@ -551,8 +661,14 @@ function mensajeDeError(motivo: string | undefined): { title: string; body: stri
     case "token":
       return { title: COPY.errores.tokenTitle, body: COPY.errores.tokenBody };
     case "conexion":
-      return { title: COPY.errores.conexionTitle, body: COPY.errores.conexionBody };
+      return {
+        title: COPY.errores.conexionTitle,
+        body: COPY.errores.conexionBody,
+      };
     default:
-      return { title: COPY.errores.desconocidoTitle, body: COPY.errores.desconocidoBody };
+      return {
+        title: COPY.errores.desconocidoTitle,
+        body: COPY.errores.desconocidoBody,
+      };
   }
 }

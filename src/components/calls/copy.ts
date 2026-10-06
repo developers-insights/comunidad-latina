@@ -67,11 +67,23 @@ export const COPY = {
     anadir: "Añadir",
     anadirAria: "Añadir personas a la llamada",
     chat: "Chat",
-    chatAria: "Abrir el chat en otra pestaña",
+    chatAria: "Abrir el chat",
+    cerrarChatAria: "Cerrar el chat",
+    chatNoLeidos: (n: number) =>
+      n === 1 ? "Abrir el chat, 1 mensaje nuevo" : `Abrir el chat, ${n} mensajes nuevos`,
     finalizar: "Finalizar",
     finalizarAria: "Finalizar la llamada",
     atender: "Atender",
     rechazar: "Rechazar",
+  },
+
+  chat: {
+    titulo: "Chat",
+    conPersona: (nombre: string) => `Chat con ${nombre}`,
+    delGrupo: "Mensajes del grupo",
+    privado: "Conversación privada",
+    cerrar: "Cerrar el chat",
+    regionLabel: "Chat de la llamada",
   },
 
   agregar: {

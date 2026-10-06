@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
-import { esEstadoDeLlamada, KINDS, type KindDeLlamada } from "@/lib/calls/tipos";
+import {
+  esEstadoDeLlamada,
+  KINDS,
+  type KindDeLlamada,
+} from "@/lib/calls/tipos";
 import { PantallaDeLlamada } from "@/components/calls/pantalla-de-llamada";
+import { EsqueletoDelChat } from "@/components/calls/chat-en-llamada";
+import { HiloDeGrupo } from "@/components/messaging/hilo-de-grupo";
+import { HiloDirecto } from "@/components/messaging/hilo-directo";
 import { COPY } from "@/components/calls/copy";
 import { conversacionEntre, getCandidatos, getLlamada } from "../queries";
 import { invitarALlamadaAction, terminarLlamadaAction } from "../actions";
@@ -15,7 +23,8 @@ export const metadata: Metadata = { title: COPY.seccion.title };
  */
 export const dynamic = "force-dynamic";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * /llamadas/[id] — la pantalla de llamada.
@@ -40,16 +49,23 @@ export default async function LlamadaPage({
   const [{ id }, { agregar }] = await Promise.all([params, searchParams]);
   if (!UUID_RE.test(id)) notFound();
 
-  const [user, supabase] = await Promise.all([getCurrentUser(), createClient()]);
+  const [user, supabase] = await Promise.all([
+    getCurrentUser(),
+    createClient(),
+  ]);
   if (!user) redirect("/entrar");
 
   const llamada = await getLlamada(supabase, id);
   if (!llamada) notFound();
 
-  const kind: KindDeLlamada = (KINDS as readonly string[]).includes(llamada.kind)
+  const kind: KindDeLlamada = (KINDS as readonly string[]).includes(
+    llamada.kind,
+  )
     ? (llamada.kind as KindDeLlamada)
     : "audio";
-  const estado = esEstadoDeLlamada(llamada.status) ? llamada.status : "terminada";
+  const estado = esEstadoDeLlamada(llamada.status)
+    ? llamada.status
+    : "terminada";
 
   const candidatos = await getCandidatos(supabase, {
     userId: user.id,
@@ -57,12 +73,24 @@ export default async function LlamadaPage({
   });
 
   const otro = llamada.personas.find((p) => p.id !== user.id) ?? null;
-  const conversacion = otro && !llamada.groupId ? await conversacionEntre(supabase, user.id, otro.id) : null;
-  const hrefDelChat = llamada.groupId
-    ? `/mensajes/grupos/${llamada.groupId}`
-    : conversacion
-      ? `/mensajes/${conversacion}`
+  const conversacion =
+    otro && !llamada.groupId
+      ? await conversacionEntre(supabase, user.id, otro.id)
       : null;
+  /**
+   * El hilo se renderiza ACÁ y viaja como prop a la pantalla, que lo muestra en
+   * un panel sin navegar (navegar corta la llamada). Va en `Suspense`: la
+   * llamada no espera a que carguen doscientos mensajes para empezar a sonar.
+   */
+  const chat = llamada.groupId ? (
+    <Suspense fallback={<EsqueletoDelChat />}>
+      <HiloDeGrupo id={llamada.groupId} variante="llamada" />
+    </Suspense>
+  ) : conversacion ? (
+    <Suspense fallback={<EsqueletoDelChat />}>
+      <HiloDirecto id={conversacion} variante="llamada" />
+    </Suspense>
+  ) : null;
 
   const yo = llamada.personas.find((p) => p.id === user.id);
 
@@ -81,10 +109,14 @@ export default async function LlamadaPage({
       personas={llamada.personas}
       soyQuienLlama={llamada.iniciadaPor === user.id}
       grupoNombre={llamada.grupo?.name ?? null}
-      hrefDelChat={hrefDelChat}
+      chat={chat}
+      chatCon={llamada.groupId ? null : (otro?.displayName ?? null)}
       candidatos={candidatos}
       abrirAgregar={agregar === "1"}
-      acciones={{ terminar: terminarLlamadaAction, invitar: invitarALlamadaAction }}
+      acciones={{
+        terminar: terminarLlamadaAction,
+        invitar: invitarALlamadaAction,
+      }}
     />
   );
 }

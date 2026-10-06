@@ -92,3 +92,129 @@
     transform: scale(1.25);
   }
 }
+
+/*
+ * El panel de chat. En el teléfono sube desde abajo como una hoja; desde 64rem
+ * (el `lg` de Tailwind) entra deslizándose desde la derecha. La salida es la
+ * misma curva al revés y más corta: cerrar tiene que sentirse más rápido que
+ * abrir. Al terminar la salida, el componente le pone `hidden`.
+ */
+@keyframes cl-chat-sube {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes cl-chat-baja {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+
+@keyframes cl-chat-entra-lado {
+  from {
+    opacity: 0;
+    transform: translate3d(28px, 0, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cl-chat-sale-lado {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(28px, 0, 0) scale(0.98);
+  }
+}
+
+@keyframes cl-velo-entra {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cl-velo-sale {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.chatEntra {
+  animation: cl-chat-sube 380ms var(--ease-out-premium) both;
+}
+
+.chatSale {
+  animation: cl-chat-baja 220ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.veloEntra {
+  animation: cl-velo-entra 300ms var(--ease-out-premium) both;
+}
+
+.veloSale {
+  animation: cl-velo-sale 220ms ease-in both;
+}
+
+@media (min-width: 64rem) {
+  .chatEntra {
+    animation: cl-chat-entra-lado 340ms var(--ease-out-premium) both;
+  }
+
+  .chatSale {
+    animation: cl-chat-sale-lado 200ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatEntra,
+  .chatSale,
+  .veloEntra,
+  .veloSale {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* El contador del chat aparece con un pop corto, una vez por cambio. */
+@keyframes cl-insignia {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  to {
+    transform: none;
+  }
+}
+
+.insignia {
+  animation: cl-insignia 320ms var(--ease-out-premium) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .insignia {
+    animation: none;
+  }
+}
