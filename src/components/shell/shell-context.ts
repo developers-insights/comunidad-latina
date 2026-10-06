@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId, getCurrentUser } from "@/lib/supabase/server";
 import { isStaffRole } from "@/app/admin/guard";
 
 export interface ShellContext {
@@ -28,17 +28,18 @@ const EMPTY: ShellContext = { user: null, unread: 0, isStaff: false };
  */
 export const getShellContext = cache(async (): Promise<ShellContext> => {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return EMPTY;
+    const [supabase, userId] = await Promise.all([createClient(), getAuthUserId()]);
+    if (!userId) return EMPTY;
 
-    const [{ data: profile }, { count, error }] = await Promise.all([
+    // El id sale del JWT verificado local para no serializar Auth → DB. El
+    // getUser() de red sigue, pero EN PARALELO: `isStaff` necesita el rol
+    // revalidado contra Auth, y una sesión revocada sigue cayendo a EMPTY.
+    const [user, { data: profile }, { count, error }] = await Promise.all([
+      getCurrentUser(),
       supabase
         .from("profiles")
         .select("display_name, avatar_url")
-        .eq("id", user.id)
+        .eq("id", userId)
         .maybeSingle(),
       supabase
         .from("notifications")
@@ -53,6 +54,7 @@ export const getShellContext = cache(async (): Promise<ShellContext> => {
         // el punto se quedaba hasta que expirara la fila, 60 días después.
         .is("dismissed_at", null),
     ]);
+    if (!user) return EMPTY;
 
     return {
       user: {

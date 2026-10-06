@@ -54,16 +54,16 @@ function isOptimizableSrc(src: string): boolean {
 export async function Header({ tenant, className }: { tenant: Tenant; className?: string }) {
   // `cache()`-eada por request y compartida con <HeaderActions>: no agrega
   // consulta, sólo decide quién se queda con el ancho a 375px.
-  const zonaActiva = await getZonaActiva();
-  const hayZona = zonaActiva.label !== null;
   // La identidad activa se resuelve en el SERVIDOR (0103): el cliente no elige
   // con qué nombre publica, solo pide el cambio. Las tres lecturas están
   // `cache()`-eadas por request, así que Ajustes las reusa sin repetir consultas.
-  const [menu, negocios, identidad] = await Promise.all([
+  const [zonaActiva, menu, negocios, identidad] = await Promise.all([
+    getZonaActiva(),
     getShellContext(),
     listarIdentidadesDeNegocio(),
     getIdentidadActiva(),
   ]);
+  const hayZona = zonaActiva.label !== null;
   /**
    * ¿Se está actuando como un negocio? Desde el 2026-09-03 eso cambia la
    * esquina derecha entera: el control de identidad deja de ser un círculo de

@@ -321,6 +321,20 @@ const nextConfig: NextConfig = {
   // sideEffects:false) y acelera dev/HMR. Aditivo: no toca turbopack:{} ni el
   // pipeline Serwist/Sentry. Ref: docs/.../optimizePackageImports.md
   experimental: {
+    /**
+     * Cache del router en el navegador. Con el default de Next 16 (`dynamic: 0`)
+     * volver a una pestaña que se vio hace 5 segundos (feed → mensajes → feed)
+     * pedía la página entera otra vez al servidor. 30 s es lo que Next 14 traía
+     * de fábrica: alcanza para que ir y volver entre pestañas sea instantáneo y
+     * es corto para que nada se vea viejo. Lo que cambia en vivo (bandeja,
+     * notificaciones, llamadas) se parchea por Realtime encima de lo cacheado, y
+     * toda server action que llama `revalidatePath`/`refresh` invalida este
+     * cache sola — no hay que acordarse de nada al escribir una mutación.
+     */
+    staleTimes: {
+      dynamic: 30,
+      static: 300,
+    },
     optimizePackageImports: [
       "@phosphor-icons/react",
       "@phosphor-icons/react/dist/ssr",
