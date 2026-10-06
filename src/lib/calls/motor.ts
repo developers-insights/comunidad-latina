@@ -38,6 +38,41 @@ import type { KindDeLlamada } from "./tipos";
 
 const SOLO_DEMASIADO_MS = 60_000;
 
+/**
+ * Tope para pasar de "Conectando…" a adentro del canal. Sin tope, un `join()`
+ * que nunca resolvía dejaba a la persona mirando "Conectando…" para siempre,
+ * sin error y sin forma de reintentar (2026-10-06).
+ */
+const CONEXION_MAXIMA_MS = 20_000;
+
+type EtapaDeConexion = "token" | "sdk" | "join" | "medios" | "publicar";
+
+function codigoDeError(error: unknown): string {
+  if (error && typeof error === "object") {
+    const e = error as { code?: unknown; name?: unknown; message?: unknown };
+    const partes = [e.code, e.name, e.message].filter((x) => typeof x === "string");
+    if (partes.length > 0) return partes.join(" · ").slice(0, 120);
+  }
+  return String(error).slice(0, 120);
+}
+
+/** Ver api/llamadas/diagnostico. Beacon: sobrevive aunque la persona se vaya. */
+function reportar(
+  callId: string,
+  etapa: EtapaDeConexion | "conectado" | "desconectado",
+  codigo?: string,
+  ms?: number,
+): void {
+  try {
+    const cuerpo = new Blob([JSON.stringify({ callId, etapa, codigo, ms })], {
+      type: "application/json",
+    });
+    navigator.sendBeacon?.("/api/llamadas/diagnostico", cuerpo);
+  } catch {
+    // Diagnóstico: si no sale, no puede romper la llamada.
+  }
+}
+
 export type FaseDeLlamada =
   /** Todavía no tocó nada: el motor está dormido. */
   | "en-espera"
@@ -120,6 +155,8 @@ export function useMotorDeLlamada(opciones: {
   const camaraRef = useRef<ICameraVideoTrack | null>(null);
   const cerradoRef = useRef(false);
   const arrancadoRef = useRef(false);
+  const abortadoRef = useRef(false);
+  const etapaRef = useRef<EtapaDeConexion>("token");
   const alCerrarRef = useRef(alCerrar);
   useEffect(() => {
     alCerrarRef.current = alCerrar;
@@ -161,6 +198,25 @@ export function useMotorDeLlamada(opciones: {
     alCerrarRef.current?.(motivo);
   }, []);
 
+  /** Suelta pistas y canal sin terminar la llamada en la base. */
+  const soltarAgora = useCallback(() => {
+    const cliente = clienteRef.current;
+    clienteRef.current = null;
+    for (const pista of [micRef.current, camaraRef.current]) {
+      try {
+        pista?.stop();
+        pista?.close();
+      } catch {
+        // Ya cerrada: el objetivo era que no quede viva.
+      }
+    }
+    micRef.current = null;
+    camaraRef.current = null;
+    setVideoLocal(null);
+    setRemotos([]);
+    void cliente?.leave().catch(() => undefined);
+  }, []);
+
   // El handler de `user-published` se registra UNA vez y necesita leer el valor
   // VIGENTE del sonido, no el que había cuando se registró.
   const sonidoApagadoRef = useRef(sonidoApagado);
@@ -180,19 +236,52 @@ export function useMotorDeLlamada(opciones: {
     }
 
     setFase("preparando");
+    const inicio = Date.now();
+    const sigue = () => !cerradoRef.current && !abortadoRef.current;
+
+    /**
+     * Si no entra al canal a tiempo: se avisa con la etapa donde quedó, se
+     * suelta Agora y se muestra el error con "Reintentar". NO se llama a
+     * `colgar`: eso termina la llamada en la base y saca a la persona de la
+     * pantalla, y lo que corresponde es dejarla reintentar.
+     */
+    const tope = window.setTimeout(() => {
+      if (!sigue()) return;
+      abortadoRef.current = true;
+      reportar(callId, etapaRef.current, "timeout", Date.now() - inicio);
+      soltarAgora();
+      setError({ motivo: "conexion" });
+      setFase("error");
+    }, CONEXION_MAXIMA_MS);
+    const llegoAlCanal = () => window.clearTimeout(tope);
 
     void (async () => {
       let credenciales: Credenciales;
+      etapaRef.current = "token";
       try {
         credenciales = await pedirCredenciales(callId);
-      } catch {
+      } catch (e) {
+        llegoAlCanal();
+        if (!sigue()) return;
+        reportar(callId, "token", codigoDeError(e), Date.now() - inicio);
         setError({ motivo: "token" });
         setFase("error");
         return;
       }
 
-      const AgoraRTC = await cargarAgora();
-      if (cerradoRef.current) return;
+      etapaRef.current = "sdk";
+      let AgoraRTC: Awaited<ReturnType<typeof cargarAgora>>;
+      try {
+        AgoraRTC = await cargarAgora();
+      } catch (e) {
+        llegoAlCanal();
+        if (!sigue()) return;
+        reportar(callId, "sdk", codigoDeError(e), Date.now() - inicio);
+        setError({ motivo: "conexion" });
+        setFase("error");
+        return;
+      }
+      if (!sigue()) return;
 
       const cliente = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
       clienteRef.current = cliente;
@@ -218,11 +307,26 @@ export function useMotorDeLlamada(opciones: {
       cliente.on("user-joined", () => refrescarRemotos(cliente, setRemotos));
       cliente.on("user-left", () => refrescarRemotos(cliente, setRemotos));
 
-      cliente.on("connection-state-change", (estado: ConnectionState) => {
-        if (cerradoRef.current) return;
-        if (estado === "RECONNECTING") setFase("reconectando");
-        else if (estado === "CONNECTED") setFase("en-linea");
-      });
+      cliente.on(
+        "connection-state-change",
+        (estado: ConnectionState, _anterior: ConnectionState, motivo?: string) => {
+          if (!sigue()) return;
+          if (estado === "RECONNECTING") setFase("reconectando");
+          else if (estado === "CONNECTED") {
+            llegoAlCanal();
+            setFase("en-linea");
+          } else if (estado === "DISCONNECTED" && motivo && motivo !== "LEAVE") {
+            // Agora nos sacó del canal (UID_BANNED, CHANNEL_BANNED, otra pestaña
+            // que entró con el mismo usuario…). Antes esto no se miraba y la
+            // pantalla seguía como si nada.
+            abortadoRef.current = true;
+            reportar(callId, "desconectado", motivo, Date.now() - inicio);
+            soltarAgora();
+            setError({ motivo: "conexion" });
+            setFase("error");
+          }
+        },
+      );
 
       /**
        * El token vence en minutos (ver token-de-agora.ts). Agora avisa 30 s
@@ -242,6 +346,7 @@ export function useMotorDeLlamada(opciones: {
         })();
       });
 
+      etapaRef.current = "join";
       try {
         await cliente.join(
           credenciales.appId,
@@ -249,19 +354,23 @@ export function useMotorDeLlamada(opciones: {
           credenciales.token,
           credenciales.uid,
         );
-      } catch {
-        if (!cerradoRef.current) {
+      } catch (e) {
+        llegoAlCanal();
+        if (sigue()) {
+          reportar(callId, "join", codigoDeError(e), Date.now() - inicio);
           setError({ motivo: "conexion" });
           setFase("error");
         }
         return;
       }
+      llegoAlCanal();
 
-      if (cerradoRef.current) {
+      if (!sigue()) {
         void cliente.leave().catch(() => undefined);
         return;
       }
 
+      etapaRef.current = "medios";
       try {
         const mic = await AgoraRTC.createMicrophoneAudioTrack({ AEC: true, ANS: true });
         micRef.current = mic;
@@ -278,9 +387,11 @@ export function useMotorDeLlamada(opciones: {
           setCamaraApagada(false);
         }
 
-        if (cerradoRef.current) return;
+        if (!sigue()) return;
+        etapaRef.current = "publicar";
         await cliente.publish(publicar);
       } catch (e) {
+        reportar(callId, etapaRef.current, codigoDeError(e), Date.now() - inicio);
         // Entró al canal pero no puede publicar: se avisa y se cierra, en vez de
         // dejarla adentro de una sala donde nadie la oye y el minuto se cobra.
         setError({ motivo: motivoSinMedios(e) });
@@ -289,12 +400,14 @@ export function useMotorDeLlamada(opciones: {
         return;
       }
 
-      if (!cerradoRef.current) {
+      if (sigue()) {
         setFase("en-linea");
         refrescarRemotos(cliente, setRemotos);
+        const ms = Date.now() - inicio;
+        if (ms > 8_000) reportar(callId, "conectado", "lento", ms);
       }
     })();
-  }, [callId, kind, colgar]);
+  }, [callId, kind, colgar, soltarAgora]);
 
   const alternarMic = useCallback(() => {
     const mic = micRef.current;

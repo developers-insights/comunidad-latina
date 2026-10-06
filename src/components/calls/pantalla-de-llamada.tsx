@@ -86,8 +86,17 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
       // `ended_at` se escribe SIEMPRE, se haya salido como se haya salido. Es lo
       // único que distingue una llamada que terminó de una que quedó colgada, y
       // de eso depende que la bandeja pueda resumirla.
+      if (motivo === "sali-de-la-pagina") {
+        // Saliendo de la página una server action se aborta en vuelo y la
+        // llamada quedaba abierta en la base. Ver api/llamadas/terminar.
+        const cuerpo = new Blob([JSON.stringify({ callId })], { type: "application/json" });
+        if (!navigator.sendBeacon?.("/api/llamadas/terminar", cuerpo)) {
+          void acciones.terminar({ callId });
+        }
+        return;
+      }
       void acciones.terminar({ callId });
-      if (motivo !== "sali-de-la-pagina") router.replace("/llamadas");
+      router.replace("/llamadas");
     },
     [acciones, callId, router],
   );

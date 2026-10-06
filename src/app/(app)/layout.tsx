@@ -21,6 +21,9 @@ import { InternalHistoryTracker } from "@/components/shell/internal-history-trac
 import { PresenceBeat } from "@/components/messaging/presence-beat";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { isMuxConfigured } from "@/lib/config/services";
+import { getAuthUserId } from "@/lib/supabase/server";
+import { VigilanteDeLlamadas } from "@/components/calls/vigilante";
+import { atenderLlamadaAction, rechazarLlamadaAction } from "./llamadas/actions";
 
 /**
  * Shell de la app autenticada: Header + contenido mobile-first centrado + BottomNav.
@@ -34,7 +37,7 @@ import { isMuxConfigured } from "@/lib/config/services";
  * la trata como activa).
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const [tenant, shell, cara, viewer] = await Promise.all([
+  const [tenant, shell, cara, viewer, viewerId] = await Promise.all([
     getTenant(),
     getShellContext(),
     /**
@@ -56,6 +59,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
      * fecha no vuelven a tocar la DB.
      */
     getViewerAccount(),
+    getAuthUserId(),
   ]);
 
   if (viewer?.accountStatus === "banned") {
@@ -185,6 +189,15 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         unread={shell.unread}
       />
       <InstallPrompt />
+      {/* El timbre va en el shell y no en /llamadas (2026-10-06): montado sólo
+          allá, una llamada a alguien que estaba en el feed o en un chat no sonaba
+          nunca y quedaba "perdida" sin que nadie pidiera token. */}
+      {viewerId && (
+        <VigilanteDeLlamadas
+          miId={viewerId}
+          acciones={{ atender: atenderLlamadaAction, rechazar: rechazarLlamadaAction }}
+        />
+      )}
     </div>
     </FirmaActivaProvider>
     </PostComposerHost>
