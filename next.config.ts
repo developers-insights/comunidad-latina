@@ -176,7 +176,14 @@ const csp = [
   // Sin estos tres, el video por Mux no reproduce NI sube: falla en el
   // navegador, con la API andando perfecto y sin un solo error del lado del
   // servidor. Es el modo de falla más caro de diagnosticar que tiene el CSP.
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://images.pexels.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com https://stream.mux.com https://storage.mux.com https://image.mux.com https://accounts.google.com/gsi/",
+  // Agora (llamadas): el SDK abre su gateway por wss a `*.edge.agora.io` /
+  // `*.edge.sd-rtn.com` —a veces en el puerto 4702, por eso el `:*`; un host
+  // sin puerto en CSP sólo matchea el 443— y manda stats/logs por https a los
+  // mismos dominios. Sin estas cuatro entradas `join()` reintenta para siempre
+  // sin lanzar error: la llamada se queda en "Conectando…" en los dos lados
+  // (pasó el 2026-10-06; el diagnóstico decía `etapa: join, timeout`).
+  // El audio/video viaja por RTCPeerConnection, que CSP no gobierna.
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://images.pexels.com https://*.ingest.sentry.io https://*.sentry.io https://api.stripe.com https://stream.mux.com https://storage.mux.com https://image.mux.com https://accounts.google.com/gsi/ https://*.agora.io:* https://*.sd-rtn.com:* wss://*.agora.io:* wss://*.sd-rtn.com:*",
   "frame-src https://js.stripe.com https://hooks.stripe.com https://accounts.google.com/gsi/",
   "worker-src 'self' blob:",
   "base-uri 'self'",
