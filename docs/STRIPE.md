@@ -3,12 +3,63 @@
 Guía para dejar Comunidad Latina cobrando en **modo de prueba**, de punta a punta,
 sin tocar código. Está escrita para seguirla paso por paso.
 
-Hoy el sistema está **construido y probado, pero apagado**: faltan las claves. Sin
-ellas, cada pantalla que cobra muestra "Muy pronto" en vez de romperse. Cuando
-cargues las dos variables de abajo, las siete pantallas se encienden solas.
+En una computadora con `.env.local` cargado, el sistema **ya está encendido y ya
+cobró**: cuatro de los siete cobros se ejecutaron de punta a punta contra la cuenta
+sandbox, con el beneficio activándose solo. El detalle, con fecha y fila de la
+base, está en la §0 de acá abajo. Donde falten las claves, cada pantalla que cobra
+muestra "Muy pronto" en vez de romperse.
 
 > **Nada de lo que sigue cobra plata de verdad** mientras uses claves que empiezan
 > con `sk_test_`. Las tarjetas de prueba son de mentira y el dinero no existe.
+
+---
+
+## 0. Qué se probó de verdad, y cuándo
+
+Esta sección es el **registro de los pagos que existieron**, no de los que
+deberían funcionar. Todo contra la cuenta sandbox `Comunidad Latina LLC`
+(`acct_1U3dFI2X1brDHqdL`) con claves `sk_test_`: ninguna de estas líneas movió un
+centavo real.
+
+| Fecha | Producto | Modo | Monto | Se activó |
+|---|---|---|---|---|
+| 2026-08-31 | Verificación de documento (Identity) | por uso | — | `profiles.identity_verified = true` |
+| 2026-09-01 | Check azul · Personal | suscripción | 6,99 USD | `verification_subscriptions.status = 'active'` |
+| 2026-09-01 | Presencia Verificada · Prioridad mensual | suscripción | 29,00 USD | `business_accounts`: `plan='destacado'`, `plan_status='active'`, `verified_presence=true` |
+| 2026-09-04 | Impulso de aviso · 7 días, alcance "tu zona" | pago único | 10,00 USD | `boosts.status = 'active'` |
+
+Las diez filas de `payment_events` están en `processed = true` y **ninguna** tiene
+`error`. No hay un solo "NO se concede" en los logs.
+
+### El impulso del 2026-09-04, paso por paso
+
+Es el único de los cuatro que se corrió con el detalle anotado, así que sirve de
+patrón para las próximas pruebas:
+
+1. `stripe listen --forward-to localhost:3010/api/webhooks/stripe` con el mismo
+   `whsec_` que tiene `.env.local`.
+2. `/impulsar/{aviso}` → "Impulsar por 7 días", alcance "Tu zona".
+3. Tarjeta `4242 4242 4242 4242`, vencimiento `12/34`, CVC `123`.
+4. Stripe emitió cinco eventos (`charge.succeeded`, `payment_intent.created`,
+   `payment_intent.succeeded`, `checkout.session.completed`, `charge.updated`) y
+   **los cinco** volvieron **200**.
+5. En la base: `boosts` con `status='active'`, `amount_cents=1000`,
+   `stripe_checkout_session_id='cs_test_a1xfv5…'`, `starts_at`/`ends_at` puestos
+   por el webhook, `origin='compra'`, `scope='local'`.
+6. Una — y solo una — notificación: *"¡Tu impulso ya está activo!"*, con `href`
+   apuntando a `/empleos/{id}`. El mapeo de los 7 `kind` de aviso a su ruta
+   (`listingViewHref`) quedó comprobado en vivo sobre un `kind='job'`, que es de
+   los que la copia vieja del webhook no cubría.
+7. **Idempotencia, probada de verdad:** `stripe events resend` del mismo
+   `checkout.session.completed`. Respondió 200 otra vez y **nada se movió**: un
+   solo boost, una sola notificación, `boosts.updated_at` y
+   `payment_events.claimed_at` idénticos.
+
+**Lo que esa prueba midió y conviene saber:** el endpoint tardó **~600 ms de
+código de aplicación** por evento (más el arranque en frío de `next dev`). El
+objetivo declarado en el código es "<200 ms". No es un problema hoy —Stripe espera
+bastante más antes de reintentar— pero el número real no es el que dice el
+comentario, y en producción hay que volver a medirlo.
 
 ---
 
@@ -218,9 +269,13 @@ Después de **cada** pago de prueba, chequeá las tres cosas. Que la pantalla di
      azul ya está activo", etc.) y el beneficio se ve.
 
 **La prueba que más importa, y que no es obvia:** en Stripe, en la lista de eventos
-del endpoint, tocá un evento ya entregado y usá **Resend**. Todo tiene que quedar
-exactamente igual que antes: el mismo beneficio, **una sola** notificación y **una
-sola** línea de auditoría. Si llega un segundo aviso, algo se rompió.
+del endpoint, tocá un evento ya entregado y usá **Resend** (o, desde la terminal,
+`stripe events resend evt_…`). Todo tiene que quedar exactamente igual que antes:
+el mismo beneficio, **una sola** notificación y **una sola** línea de auditoría. Si
+llega un segundo aviso, algo se rompió.
+
+> Esta prueba ya se hizo con datos reales de Stripe el 2026-09-04, sobre el
+> `checkout.session.completed` del impulso: respondió 200 y no se movió nada (§0).
 
 Un pago que se acredita dos veces es el error más caro de este sistema, así que
 conviene saber que hay **dos** defensas distintas y que el Resend sólo ejercita la
@@ -293,11 +348,26 @@ Nunca se pierde el rastro de un cobro.
 
 Honestidad sobre los límites de lo entregado:
 
-- **Nunca se ejecutó un pago real ni de prueba.** El proyecto no tuvo jamás una
-  clave de Stripe. Todo lo verificado son tests automáticos contra nuestro lado del
-  contrato (firma real con el mismo HMAC de Stripe, correlación de montos,
-  idempotencia). El primer pago de prueba que hagas es el primero de la historia
-  del proyecto.
+- **Nunca se ejecutó un pago con plata de verdad.** Los cuatro cobros de la §0 son
+  todos de prueba (`sk_test_`). Sigue sin correrse una sola transacción `sk_live_`,
+  y por lo tanto sin comprobarse nada del camino real: comisiones, payout a la
+  cuenta bancaria, ni el endpoint de webhook LIVE (que es otro, con otro `whsec_`).
+- **Faltan tres de los siete cobros:** campaña de post (`post_promotions`), aviso
+  premium (`listing_premiums`) y membresía de tienda (`store_memberships`). Las dos
+  últimas tablas están **vacías**; las filas que hay en `post_promotions` tienen
+  `stripe_checkout_session_id` en `null` — son del modo demostración, de antes de
+  que existiera la clave. El Checkout de la membresía **sí se abre bien** contra la
+  API real (sesión `cs_test_…` creada, "Suscribirse a Membresía de tienda ·
+  10,00 US$ por mes"); lo que no se hizo es completarle el pago.
+- **La baja no se probó nunca.** Cancelar una suscripción de prueba desde el
+  dashboard y ver que `customer.subscription.deleted` apague el beneficio sigue
+  pendiente, y es —como dice la §5— el camino que más caro sale si falla, porque
+  nadie reclama cuando le siguen dando algo gratis. Es la siguiente prueba a hacer.
+- **No se sabe qué tiene Vercel.** `vercel whoami` responde **"Not authorized"**
+  desde la máquina de desarrollo, así que no se pudo leer si el proyecto publicado
+  tiene `STRIPE_SECRET_KEY` y `STRIPE_WEBHOOK_SECRET`, ni con qué valores. Todo lo
+  de la §0 pasó en `localhost` con `stripe listen`. Hay que mirarlo entrando al
+  panel de Vercel.
 - **Un checkout abandonado deja una fila `pending_payment`** en `boosts` /
   `post_promotions` que nadie limpia automáticamente. No cobra ni entrega nada, pero
   ensucia. No están suscritos `checkout.session.expired` ni
@@ -311,8 +381,14 @@ Honestidad sobre los límites de lo entregado:
 - **Los precios no son productos de Stripe.** Cada pago se crea con el monto leído
   de `tenant_prices` en el momento. Funciona y permite precio por comunidad, pero el
   dashboard de Stripe no muestra un catálogo de productos.
-- **No hay facturas ni comprobantes fiscales.** Stripe manda su propio recibo por
-  correo si lo activás en el dashboard (Settings → Customer emails).
+- **No hay facturas ni comprobantes fiscales, y el recibo de Stripe está apagado.**
+  No existe una función propia de facturación: lo único posible hoy es el recibo
+  automático que manda Stripe, y **no está configurado**. Comprobado sobre el cobro
+  del 2026-09-04: el `charge` quedó con `receipt_email: null` y
+  `receipt_number: null` — o sea, Stripe no mandó ningún correo. Sí existe siempre
+  un `receipt_url` (la página de recibo hospedada por Stripe), pero hoy nadie se la
+  muestra a quien pagó. Para encenderlo: dashboard → **Settings → Customer emails →
+  Successful payments**. Es una casilla, no un desarrollo.
 - **No hay impuestos** (Stripe Tax no está configurado).
 - **Doble compra:** si alguien abre el pago dos veces y completa los dos, paga dos
   veces. Las suscripciones no bloquean eso hoy.
