@@ -6,7 +6,7 @@ import { AssistantChat } from "@/components/assistant";
 import { ASSISTANT_COPY as COPY } from "@/components/assistant/copy";
 import { ProximamentePremium } from "@/components/ui";
 import { isOpenAIConfigured } from "@/lib/config/services";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import {
   ANON_COOKIE,
@@ -39,9 +39,7 @@ export default async function AsistentePage() {
     createClient(),
     cookies(),
   ]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   // Ciudad del tenant para el título hiperlocal (fallback: nombre del tenant).
   let cityLabel = tenant.name;
@@ -56,7 +54,7 @@ export default async function AsistentePage() {
     // sin DB seguimos con el nombre — jamás bloquear la pantalla por esto
   }
 
-  const isAnon = !user;
+  const isAnon = !userId;
   const initialAnonRemaining = isAnon
     ? anonRemaining(cookieStore.get(ANON_COOKIE)?.value ?? null)
     : null;

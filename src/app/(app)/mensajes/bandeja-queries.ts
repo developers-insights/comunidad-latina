@@ -4,6 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
 import { visiblesParaMi } from "@/lib/messaging/solicitud-descartada";
 import {
+  leerPresencia,
+  presenciaVisible,
+  type EstadoDePresencia,
+} from "@/lib/messaging/presencia";
+import {
   agruparPorPersona,
   type ConversacionLite,
   type UltimoMensaje,
@@ -70,6 +75,8 @@ export type Bandeja = {
   totalNoLeidos: number;
   /** `false` cuando `conversation_reads` todavía no existe: sin contadores. */
   hayLecturas: boolean;
+  /** Ya resuelta a lo que se pinta; sin entrada = no se dibuja el renglón. */
+  presencias: Record<string, EstadoDePresencia>;
 };
 
 /**
@@ -216,6 +223,14 @@ export async function leerBandejaDePersonas({
 }): Promise<Bandeja> {
   const supabase = await createClient();
 
+  /**
+   * DOS VIAJES EN SERIE, NO CINCO. Los no leídos salen de una RPC que no
+   * necesita saber qué conversaciones hay, así que viajan junto con ellas; y
+   * todo lo que sí depende de la lista (mensajes, presencia, amigos) sale en
+   * una sola tanda después. La presencia se pide por persona, y la persona se
+   * deduce de la conversación sin esperar a los mensajes.
+   */
+  const noLeidosDeLaBase = leerNoLeidosDeLaBase(supabase);
   const { data: conversacionesData, error } = await supabase
     .from("conversations")
     .select(CONVERSACION_COLUMNS)
@@ -225,7 +240,7 @@ export async function leerBandejaDePersonas({
 
   if (error) {
     console.warn("[mensajes] no se pudo leer la bandeja", { code: error.code });
-    return { filas: [], totalNoLeidos: 0, hayLecturas: false };
+    return { filas: [], totalNoLeidos: 0, hayLecturas: false, presencias: {} };
   }
 
   const todas = visiblesParaMi(
@@ -240,13 +255,20 @@ export async function leerBandejaDePersonas({
   );
 
   if (conversaciones.length === 0) {
-    return { filas: [], totalNoLeidos: 0, hayLecturas: true };
+    return { filas: [], totalNoLeidos: 0, hayLecturas: true, presencias: {} };
   }
 
   const ids = conversaciones.map((c) => c.id);
-  const [mensajes, desdeLaBase] = await Promise.all([
+  const personaIds = [
+    ...new Set(
+      conversaciones.map((c) => (c.created_by === miId ? c.counterpart_id : c.created_by)),
+    ),
+  ];
+  const [mensajes, desdeLaBase, presenciaCruda, amigos] = await Promise.all([
     leerMensajesRecientes(supabase, ids),
-    leerNoLeidosDeLaBase(supabase),
+    noLeidosDeLaBase,
+    leerPresencia(supabase, personaIds),
+    filtro === "amigos" ? leerAmigos(supabase, miId, personaIds) : Promise.resolve(null),
   ]);
 
   const ultimoPorConversacion = new Map<string, MensajeDeBandeja>();
@@ -281,10 +303,7 @@ export async function leerBandejaDePersonas({
     miId,
   );
 
-  const amigos =
-    filtro === "amigos"
-      ? await leerAmigos(supabase, miId, hilos.map((h) => h.personaId))
-      : null;
+  const estadoPorConversacion = new Map(conversaciones.map((c) => [c.id, c.status]));
 
   const filas: FilaDeBandeja[] = hilos.map((hilo) => {
     const ultimo = ultimoPorConversacion.get(hilo.conversacionPrincipalId) ?? null;
@@ -307,6 +326,7 @@ export async function leerBandejaDePersonas({
         ajenas.get(hilo.conversacionPrincipalId) ?? null,
       ),
       esAmigo: amigos ? amigos.has(hilo.personaId) : null,
+      aceptada: estadoPorConversacion.get(hilo.conversacionPrincipalId) === "accepted",
     };
   });
 
@@ -319,7 +339,14 @@ export async function leerBandejaDePersonas({
 
   const totalNoLeidos = filas.reduce((suma, fila) => suma + fila.noLeidos, 0);
 
-  return { filas: filtradas, totalNoLeidos, hayLecturas };
+  const ahora = new Date();
+  const presencias: Record<string, EstadoDePresencia> = {};
+  for (const fila of filtradas) {
+    const visible = presenciaVisible(presenciaCruda.get(fila.personaId), ahora);
+    if (visible) presencias[fila.personaId] = visible;
+  }
+
+  return { filas: filtradas, totalNoLeidos, hayLecturas, presencias };
 }
 
 /* ========================================================================== */
@@ -359,7 +386,14 @@ export async function contarSolicitudesPendientes(miId: string): Promise<number>
   }
 }
 
-/** Las solicitudes recibidas, de la más nueva a la más vieja. */
+/**
+ * Las solicitudes recibidas, de la más nueva a la más vieja.
+ *
+ * El primer mensaje de cada una viaja EMBEBIDO en la misma consulta (uno por
+ * conversación, el más viejo): antes era un segundo viaje en serie, y con un
+ * `limit(200)` compartido entre todas, una solicitud con muchos mensajes podía
+ * dejar a las demás sin su texto.
+ */
 export async function leerSolicitudes(miId: string): Promise<SolicitudPendiente[]> {
   const supabase = await createClient();
 
@@ -368,11 +402,15 @@ export async function leerSolicitudes(miId: string): Promise<SolicitudPendiente[
     .select(
       `id, created_at, created_by,
        listing:listings(id, title),
-       creator:profiles!conversations_created_by_fkey(id, display_name, avatar_url)`,
+       creator:profiles!conversations_created_by_fkey(id, display_name, avatar_url),
+       primeros:messages(body, created_at)`,
     )
     .eq("counterpart_id", miId)
     .eq("status", "pending")
     .order("created_at", { ascending: false })
+    // Con el embed aliasado, PostgREST lo nombra por el ALIAS (`primeros.order`).
+    .order("created_at", { referencedTable: "primeros", ascending: true })
+    .limit(1, { referencedTable: "primeros" })
     .limit(50);
 
   if (error) {
@@ -386,28 +424,8 @@ export async function leerSolicitudes(miId: string): Promise<SolicitudPendiente[
     created_by: string;
     listing: { id: string; title: string } | null;
     creator: { id: string; display_name: string; avatar_url: string | null } | null;
+    primeros: { body: string; created_at: string }[] | null;
   }[];
-
-  if (filas.length === 0) return [];
-
-  // El primer mensaje de cada solicitud en UNA consulta, no una por fila. Puede
-  // no haber ninguno: hasta que se acepta, el hilo suele estar vacío.
-  const { data: mensajesData } = await supabase
-    .from("messages")
-    .select("conversation_id, body, created_at")
-    .in(
-      "conversation_id",
-      filas.map((fila) => fila.id),
-    )
-    .order("created_at", { ascending: true })
-    .limit(200);
-
-  const primero = new Map<string, string>();
-  for (const mensaje of (mensajesData ?? []) as { conversation_id: string; body: string }[]) {
-    if (!primero.has(mensaje.conversation_id)) {
-      primero.set(mensaje.conversation_id, mensaje.body);
-    }
-  }
 
   return filas.map((fila) => ({
     conversationId: fila.id,
@@ -416,6 +434,6 @@ export async function leerSolicitudes(miId: string): Promise<SolicitudPendiente[
     avatarUrl: fila.creator?.avatar_url ?? null,
     avisoTitulo: fila.listing?.title ?? null,
     creadaEn: fila.created_at,
-    primerMensaje: primero.get(fila.id) ?? null,
+    primerMensaje: fila.primeros?.[0]?.body ?? null,
   }));
 }

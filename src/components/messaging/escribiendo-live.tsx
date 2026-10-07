@@ -22,6 +22,11 @@ import {
   esTopicoDeEscritura,
   resolverQuienEscribe,
 } from "@/lib/messaging/escribiendo";
+import {
+  EVENTO_MENSAJE,
+  esAvisoDeMensaje,
+  type AvisoDeMensaje,
+} from "@/lib/messaging/en-vivo";
 import { COPY } from "./copy";
 
 /**
@@ -57,11 +62,20 @@ import { COPY } from "./copy";
  * — el mismo silencio que describe `lib/calls/vigilancia.ts`.
  */
 
+/**
+ * Lo que oye quien escucha mensajes del canal. `conectado` llega con cada
+ * (re)suscripción: lo que se escribió mientras el socket estaba caído no tuvo
+ * timbre, y ese es el momento de ir a buscarlo.
+ */
+export type SenalDelHilo = AvisoDeMensaje | { tipo: "conectado" };
+export type OyenteDelHilo = (topico: string, senal: SenalDelHilo) => void;
+
 interface Contexto {
   /** Ids activos por tópico, en orden de llegada. */
   porTopico: Readonly<Record<string, string[]>>;
   principal: string | null;
   avisar: (activo: boolean, topico?: string) => void;
+  escuchar: (oyente: OyenteDelHilo) => () => void;
 }
 
 const EscribiendoContext = createContext<Contexto | null>(null);
@@ -78,6 +92,7 @@ export function EscribiendoProvider({ topicos, miId, children }: EscribiendoProv
   const canalesRef = useRef<Map<string, RealtimeChannel>>(new Map());
   const relojesRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const ultimoAvisoRef = useRef<Map<string, { cuando: number; activo: boolean }>>(new Map());
+  const oyentesRef = useRef<Set<OyenteDelHilo>>(new Set());
 
   /**
    * La lista se identifica por su CONTENIDO y no por identidad de objeto: sin
@@ -86,7 +101,8 @@ export function EscribiendoProvider({ topicos, miId, children }: EscribiendoProv
    */
   const clave = useMemo(() => {
     const validos = topicos.filter(esTopicoDeEscritura).slice(0, MAX_HILOS_ESCUCHADOS);
-    return [...new Set(validos)].join("|");
+    // Ordenada: que la bandeja se reordene no puede reabrir todos los canales.
+    return [...new Set(validos)].sort().join("|");
   }, [topicos]);
 
   const principal = clave ? clave.split("|")[0] : null;
@@ -139,6 +155,11 @@ export function EscribiendoProvider({ topicos, miId, children }: EscribiendoProv
       });
     };
 
+    const repartir = (topico: string, senal: SenalDelHilo) => {
+      if (!vivo) return;
+      for (const oyente of oyentesRef.current) oyente(topico, senal);
+    };
+
     for (const topico of lista) {
       const canal = supabase.channel(topico, {
         config: { private: true, broadcast: { self: false } },
@@ -146,13 +167,28 @@ export function EscribiendoProvider({ topicos, miId, children }: EscribiendoProv
       canal.on("broadcast", { event: EVENTO_ESCRIBIENDO }, (mensaje) =>
         recibir(topico, (mensaje as { payload?: unknown }).payload),
       );
+      canal.on("broadcast", { event: EVENTO_MENSAJE }, (mensaje) => {
+        const payload = (mensaje as { payload?: unknown }).payload;
+        if (esAvisoDeMensaje(payload)) repartir(topico, payload);
+      });
       canales.set(topico, canal);
     }
 
     void (async () => {
-      await supabase.realtime.setAuth().catch(() => undefined);
+      await supabase.realtime.setAuth().catch((error: unknown) => {
+        console.warn("[mensajes] setAuth de Realtime falló", {
+          message: error instanceof Error ? error.message : "error desconocido",
+        });
+      });
       if (!vivo) return;
-      for (const canal of canales.values()) canal.subscribe();
+      for (const [topico, canal] of canales) {
+        canal.subscribe((estado) => {
+          if (estado === "SUBSCRIBED") repartir(topico, { tipo: "conectado" });
+          else if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT") {
+            console.warn("[mensajes] el canal del hilo no conectó", { estado });
+          }
+        });
+      }
     })();
 
     return () => {
@@ -199,9 +235,16 @@ export function EscribiendoProvider({ topicos, miId, children }: EscribiendoProv
     [clave, miId],
   );
 
+  const escuchar = useCallback((oyente: OyenteDelHilo) => {
+    oyentesRef.current.add(oyente);
+    return () => {
+      oyentesRef.current.delete(oyente);
+    };
+  }, []);
+
   const valor = useMemo<Contexto>(
-    () => ({ porTopico, principal, avisar }),
-    [porTopico, principal, avisar],
+    () => ({ porTopico, principal, avisar, escuchar }),
+    [porTopico, principal, avisar, escuchar],
   );
 
   return <EscribiendoContext.Provider value={valor}>{children}</EscribiendoContext.Provider>;
@@ -232,6 +275,24 @@ const VACIO: string[] = [];
 export function useAvisoDeEscritura(): (activo: boolean) => void {
   const ctx = useContext(EscribiendoContext);
   return useCallback((activo: boolean) => ctx?.avisar(activo), [ctx]);
+}
+
+/**
+ * Los timbres de mensaje de todos los tópicos del provider. Los toca el
+ * servidor después de cada insert (`lib/messaging/timbre.ts`); acá sólo se
+ * reparten. Fuera del provider —conversación sin aceptar— no llega nada.
+ */
+export function useSenalesDelHilo(oyente: OyenteDelHilo): void {
+  const ctx = useContext(EscribiendoContext);
+  const escuchar = ctx?.escuchar;
+  const oyenteRef = useRef(oyente);
+  useEffect(() => {
+    oyenteRef.current = oyente;
+  }, [oyente]);
+  useEffect(() => {
+    if (!escuchar) return;
+    return escuchar((topico, senal) => oyenteRef.current(topico, senal));
+  }, [escuchar]);
 }
 
 /* -------------------------------------------------------------------------- */

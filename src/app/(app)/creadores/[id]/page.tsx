@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -8,7 +9,7 @@ import {
   Storefront,
 } from "@phosphor-icons/react/dist/ssr";
 import { z } from "zod";
-import { Avatar, BezelCard, CardMedia, buttonVariants } from "@/components/ui";
+import { Avatar, BezelCard, CardMedia, Skeleton, buttonVariants } from "@/components/ui";
 import { InsigniaDePerfil } from "@/components/verificacion/check-azul";
 import {
   PublisherTrust,
@@ -29,7 +30,7 @@ import {
   parseGigAttrs,
   type ApplicationCreator,
 } from "@/components/creators";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { leerCheckAzul, leerChecksAzules } from "@/lib/verificacion/read";
 import { cn } from "@/lib/utils";
@@ -41,22 +42,22 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: gig } = await supabase
-    .from("listings")
-    .select(
-      "id, tenant_id, kind, title, description, price_amount, price_currency, price_period, area_label, photos, attrs, status, created_by, publisher_name",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const supabase = await createClient();
+  const [tenant, userId, { data: gig }] = await Promise.all([
+    getTenant(),
+    getAuthUserId(),
+    supabase
+      .from("listings")
+      .select(
+        "id, tenant_id, kind, title, description, price_amount, price_currency, price_period, area_label, photos, attrs, status, created_by, publisher_name",
+      )
+      .eq("id", id)
+      .maybeSingle(),
+  ]);
 
   if (!gig || gig.kind !== "creator_gig") notFound();
 
-  const isOwner = Boolean(user && gig.created_by === user.id);
+  const isOwner = Boolean(userId && gig.created_by === userId);
   if (gig.status !== "published" && !isOwner) notFound();
 
   const attrs = parseGigAttrs(gig.attrs);
@@ -215,17 +216,19 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
         </section>
       )}
 
-      {/* Zona de acción */}
-      {isOwner ? (
-        <OwnerApplications
-          gigId={gig.id}
-          gigTitle={gig.title}
-          gigBudgetCents={dollarsToCents(gig.price_amount ?? 0)}
-          isPending={gig.status !== "published"}
-        />
-      ) : (
-        <ApplicantAction gigId={gig.id} userId={user?.id ?? null} />
-      )}
+      {/* Zona de acción: streamea, la ficha del gig no la espera. */}
+      <Suspense fallback={<Skeleton className="h-12 w-full rounded-full" />}>
+        {isOwner ? (
+          <OwnerApplications
+            gigId={gig.id}
+            gigTitle={gig.title}
+            gigBudgetCents={dollarsToCents(gig.price_amount ?? 0)}
+            isPending={gig.status !== "published"}
+          />
+        ) : (
+          <ApplicantAction gigId={gig.id} userId={userId} />
+        )}
+      </Suspense>
     </div>
   );
 }

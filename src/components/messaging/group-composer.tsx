@@ -40,7 +40,13 @@ import { VoiceRecorder } from "./voice-recorder";
  * `attach-menu.tsx`): ahí la lógica es idéntica y son ciento cincuenta líneas
  * con subidas y archivos huérfanos de por medio, no cuarenta de textarea.
  */
-export function GroupComposer({ groupId }: { groupId: string }) {
+export function GroupComposer({
+  groupId,
+  refrescarAlEnviar = false,
+}: {
+  groupId: string;
+  refrescarAlEnviar?: boolean;
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const [valor, setValor] = useState("");
@@ -183,7 +189,12 @@ export function GroupComposer({ groupId }: { groupId: string }) {
         } catch {
           // sin soporte: nada que hacer
         }
-        router.refresh();
+        /**
+         * En la página, `revalidatePath` de la action ya trae el hilo nuevo en
+         * la misma respuesta: refrescar acá era renderizarlo dos veces. La
+         * llamada vive en otra ruta y esa revalidación no la alcanza.
+         */
+        if (refrescarAlEnviar) router.refresh();
         return;
       }
 

@@ -7,7 +7,7 @@ import {
   fetchCommentThreadPage,
   filterBlockedComments,
 } from "@/components/feed/comment-thread";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { timeAgo } from "@/lib/utils";
 import { authorViewOf, fetchAuthorViews, fetchBlockedIds } from "../queries";
@@ -103,31 +103,30 @@ export async function fetchOlderCommentsAction(input: {
   const olderThan = decodeCursor(input.cursor);
   if (!olderThan) return { ok: false };
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const viewerId = user?.id ?? null;
+  const [tenant, supabase, viewerId] = await Promise.all([
+    getTenant(),
+    createClient(),
+    getAuthUserId(),
+  ]);
 
   // Una fila por su clave primaria, con la MISMA RLS que usa la página para
   // decidir entre renderizar o notFound(). Es el chequeo de visibilidad del
-  // docblock de arriba.
-  const { data: postRow } = await supabase
-    .from("posts")
-    .select("id")
-    .eq("id", input.postId)
-    .maybeSingle();
+  // docblock de arriba. Corre en paralelo con el hilo y los bloqueados, pero
+  // nada de eso sale de acá si el post no es visible: la respuesta espera al
+  // chequeo antes de devolver una sola fila.
+  const [{ data: postRow }, result, blocked] = await Promise.all([
+    supabase.from("posts").select("id").eq("id", input.postId).maybeSingle(),
+    fetchCommentThreadPage(supabase, {
+      postId: input.postId,
+      tenantId: tenant.id,
+      olderThan,
+      pageSize: COMMENT_THREAD_PAGE_SIZE.detail,
+    }),
+    fetchBlockedIds(supabase, viewerId),
+  ]);
   if (!postRow) return { ok: false };
-
-  const result = await fetchCommentThreadPage(supabase, {
-    postId: input.postId,
-    tenantId: tenant.id,
-    olderThan,
-    pageSize: COMMENT_THREAD_PAGE_SIZE.detail,
-  });
   if (!result.ok) return { ok: false };
 
-  const blocked = await fetchBlockedIds(supabase, viewerId);
   const rows = filterBlockedComments(result.page.rows, blocked);
 
   const authors = await fetchAuthorViews(

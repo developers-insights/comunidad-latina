@@ -5,7 +5,7 @@ import { EmptyState, SectionHeading, Skeleton, buttonVariants } from "@/componen
 import { COPY } from "@/components/empleos/copy";
 import { MyApplicationCard } from "@/components/empleos/my-application-card";
 import { isTerminalStatus } from "@/lib/empleos/application-status";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import { fetchMyApplications } from "../queries";
@@ -54,12 +54,9 @@ export default async function MisAplicacionesPage({
 // ---------------------------------------------------------------------------
 
 async function Content({ filter }: { filter: Filter }) {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [tenant, userId] = await Promise.all([getTenant(), getAuthUserId()]);
 
-  if (!user) {
+  if (!userId) {
     return (
       <>
         <Header />
@@ -80,7 +77,7 @@ async function Content({ filter }: { filter: Filter }) {
     );
   }
 
-  const all = await fetchMyApplications({ tenantId: tenant.id, viewerId: user.id });
+  const all = await fetchMyApplications({ tenantId: tenant.id, viewerId: userId });
   const applications = all.filter((application) => {
     if (filter === "en-curso") return !isTerminalStatus(application.status);
     if (filter === "cerradas") return isTerminalStatus(application.status);

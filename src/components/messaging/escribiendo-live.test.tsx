@@ -82,6 +82,8 @@ import {
   QuienEscribe,
   RenglonEnVivo,
   useAvisoDeEscritura,
+  useSenalesDelHilo,
+  type SenalDelHilo,
 } from "./escribiendo-live";
 import {
   EVENTO_ESCRIBIENDO,
@@ -392,5 +394,46 @@ describe("la fila de la bandeja", () => {
     llega(otro, { de: ANA, activo: true });
     expect(screen.getByText("resumen del primero")).toBeTruthy();
     expect(screen.queryByText("Está escribiendo…")).toBeNull();
+  });
+});
+
+describe("el timbre de mensajes", () => {
+  function Oyente({ oir }: { oir: (topico: string, senal: SenalDelHilo) => void }) {
+    useSenalesDelHilo(oir);
+    return null;
+  }
+
+  function llegaMensaje(topico: string, payload: unknown) {
+    const canal = realtime.canales.find((c) => c.topico === topico);
+    if (!canal) throw new Error(`no hay canal para ${topico}`);
+    act(() => {
+      // El canal tiene dos escuchas: la de "escribiendo" y la de "mensaje".
+      canal.escuchas[1]({ payload });
+    });
+  }
+
+  it("viaja por el MISMO canal: no abre uno más por hilo", async () => {
+    await montar(
+      <EscribiendoProvider miId={YO} topicos={[TOPICO]}>
+        <Oyente oir={() => undefined} />
+      </EscribiendoProvider>,
+    );
+    expect(realtime.canales).toHaveLength(1);
+    expect(realtime.canales[0].escuchas).toHaveLength(2);
+  });
+
+  it("reparte el aviso válido con su tópico y descarta la basura", async () => {
+    const oir = vi.fn();
+    await montar(
+      <EscribiendoProvider miId={YO} topicos={[TOPICO]}>
+        <Oyente oir={oir} />
+      </EscribiendoProvider>,
+    );
+
+    llegaMensaje(TOPICO, { de: ANA, tipo: "nuevo" });
+    llegaMensaje(TOPICO, { de: ANA, body: "texto inyectado" });
+
+    expect(oir).toHaveBeenCalledTimes(1);
+    expect(oir).toHaveBeenCalledWith(TOPICO, { de: ANA, tipo: "nuevo" });
   });
 });

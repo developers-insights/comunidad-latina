@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   limit: vi.fn(() => ({ ok: true, remaining: 10, retryAfterMs: 0 })),
 }));
 
+vi.mock("@/lib/messaging/timbre", () => ({ tocarTimbre: vi.fn() }));
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
 vi.mock("@/lib/rate-limit", () => ({ limit: mocks.limit, HOUR_MS: 3_600_000 }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));

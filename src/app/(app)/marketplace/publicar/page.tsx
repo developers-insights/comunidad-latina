@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ShieldCheck, SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/marketplace";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { PublishForm } from "./publish-form";
 
@@ -10,11 +10,9 @@ export const metadata = { title: "Publicar producto" };
 
 export default async function MarketplacePublicarPage() {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user) {
+  if (!userId) {
     return (
       <EmptyState
         icon={<SignIn />}
@@ -48,10 +46,10 @@ export default async function MarketplacePublicarPage() {
       .select("id, title")
       .eq("tenant_id", tenant.id)
       .eq("kind", "business")
-      .eq("created_by", user.id)
+      .eq("created_by", userId)
       .eq("status", "published")
       .order("created_at", { ascending: false }),
-    supabase.from("profiles").select("identity_verified").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("identity_verified").eq("id", userId).maybeSingle(),
   ]);
 
   // GATE DE IDENTIDAD (spec cliente: "todos los vendedores deben completar la

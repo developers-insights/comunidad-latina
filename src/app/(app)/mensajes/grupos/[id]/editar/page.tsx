@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { COPY } from "@/components/messaging/copy";
 import { GroupForm } from "@/components/messaging/group-form";
 import {
@@ -31,10 +31,10 @@ export default async function EditarGrupoPage({
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const user = await getCurrentUser();
-  if (!user) redirect("/entrar");
+  const userId = await getAuthUserId();
+  if (!userId) redirect("/entrar");
 
-  const grupo = await obtenerGrupo(id, user.id);
+  const grupo = await obtenerGrupo(id, userId);
   if (!grupo) notFound();
   if (!administra(grupo.miRol)) redirect(`/mensajes/grupos/${grupo.id}/info`);
 

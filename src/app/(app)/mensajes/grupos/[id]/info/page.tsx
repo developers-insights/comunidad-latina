@@ -8,7 +8,7 @@ import {
   PencilSimple,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
-import { getCurrentUser } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { Avatar, Banner, Chip, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/messaging/copy";
@@ -56,10 +56,10 @@ export default async function InfoDelGrupoPage({
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const user = await getCurrentUser();
-  if (!user) redirect("/entrar");
+  const userId = await getAuthUserId();
+  if (!userId) redirect("/entrar");
 
-  const grupo = await obtenerGrupo(id, user.id);
+  const grupo = await obtenerGrupo(id, userId);
   if (!grupo) notFound();
 
   // La info del grupo es para quien está adentro. Quien no es miembro va al
@@ -190,7 +190,7 @@ export default async function InfoDelGrupoPage({
         </h2>
         <GroupMemberList
           groupId={grupo.id}
-          miId={user.id}
+          miId={userId}
           miRol={grupo.miRol}
           miembros={miembros.map((miembro) => ({
             profileId: miembro.profileId,

@@ -29,6 +29,11 @@ const mocks = vi.hoisted(() => ({
   validarVideoDeAviso: vi.fn(),
 }));
 
+vi.mock("next/cache", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/cache")>()),
+  refresh: vi.fn(),
+}));
+
 vi.mock("@/lib/media/listing-video-server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/media/listing-video-server")>()),
   validarVideoDeAviso: mocks.validarVideoDeAviso,

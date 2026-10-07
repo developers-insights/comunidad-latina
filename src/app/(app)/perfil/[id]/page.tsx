@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChatCircle } from "@phosphor-icons/react/dist/ssr";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui";
@@ -51,21 +51,15 @@ export default async function PerfilPublicoPage({
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
 
-  const [tenant, supabase, sp, viewerZone] = await Promise.all([
+  const [tenant, supabase, sp, viewerId] = await Promise.all([
     getTenant(),
     createClient(),
     searchParams,
-    // "Miembro desde" se formatea con el reloj de QUIEN MIRA, no con el de la
-    // comunidad: alguien en Los Ángeles viendo un alta del 1 de marzo a las
-    // 02:00 UTC tiene que leer "febrero", que es cuando pasó para él.
-    getViewerTimeZone(),
+    getAuthUserId(),
   ]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   // Tu propio perfil vive en /perfil (con edición y cuenta).
-  if (user?.id === id) redirect("/perfil");
+  if (viewerId === id) redirect("/perfil");
 
   /**
    * `profile_card()` Y NO UNA LECTURA DE `profiles`.
@@ -89,13 +83,63 @@ export default async function PerfilPublicoPage({
    * chequea, `trust` quedaba `null` y la página mostraba score 0 y el nivel más
    * bajo a CUALQUIER visitante sin sesión — un valor falso, no un badge ausente.
    */
-  const [card, { data: trust }] = await Promise.all([
+  //
+  // Conversación previa + contadores + ¿ya lo sigo? + check azul van en el
+  // MISMO Promise.all que la ficha: ninguno depende de ella (todo sale del id de
+  // la URL), y esperarla antes era un viaje entero en serie. Si el perfil no
+  // existe se pagaron consultas de más, pero un 404 es el caso raro.
+  //
+  // CONVERSACIÓN: ver perfil NO implica tener sesión (la policy es pública):
+  // para quien mira sin cuenta, `conversations` no devuelve nada por su propia
+  // RLS y el CTA cae solo en el de "entrar para escribir".
+  //
+  // SEGUIMIENTO: mismo criterio EXACTO que /creadores/perfil/[id] — sin
+  // sesión no hay con qué resolver "¿lo sigo?", así que ni se pregunta;
+  // `FollowButton` ya sabe abrir la puerta de entrar si alguien sin cuenta
+  // toca "Seguir".
+  //
+  // CHECK AZUL (0101): sale de `profiles.verified_badge`, el espejo público que
+  // mantiene el trigger de la suscripción. NO de `profile_card`: esa RPC
+  // devuelve la ficha filtrada por privacidad, y la insignia no es un dato
+  // privado —es lo que ve cualquiera al lado del nombre—.
+  const [
+    card,
+    { data: trust },
+    viewerZone,
+    { data: existingConversation },
+    counts,
+    { data: existingFollow },
+    checkAzul,
+  ] = await Promise.all([
     fetchProfileCard(supabase, id),
     supabase
       .from("trust_scores")
       .select("score, level, signals")
       .eq("profile_id", id)
       .maybeSingle(),
+    // "Miembro desde" se formatea con el reloj de QUIEN MIRA, no con el de la
+    // comunidad: alguien en Los Ángeles viendo un alta del 1 de marzo a las
+    // 02:00 UTC tiene que leer "febrero", que es cuando pasó para él.
+    getViewerTimeZone(),
+    supabase
+      .from("conversations")
+      .select("id, status, created_at")
+      .or(`created_by.eq.${id},counterpart_id.eq.${id}`)
+      .neq("status", "blocked")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    fetchProfileCounts(supabase, { tenantId: tenant.id, profileId: id }),
+    viewerId
+      ? supabase
+          .from("follows")
+          .select("target_id")
+          .eq("follower_id", viewerId)
+          .eq("target_kind", "profile")
+          .eq("target_id", id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    leerCheckAzul(supabase, id),
   ]);
 
   if (!card) {
@@ -116,38 +160,6 @@ export default async function PerfilPublicoPage({
   const cursor = decodeCursor(firstValue(sp.fotos) || undefined);
   const tab = parseProfileTab(firstValue(sp.t) || undefined);
 
-  // Conversación previa + contadores + ¿ya lo sigo? Las tres son independientes
-  // entre sí, así que van juntas y no una atrás de la otra.
-  //
-  // CONVERSACIÓN: ver perfil NO implica tener sesión (la policy es pública):
-  // para quien mira sin cuenta, `conversations` no devuelve nada por su propia
-  // RLS y el CTA cae solo en el de "entrar para escribir".
-  //
-  // SEGUIMIENTO: mismo criterio EXACTO que /creadores/perfil/[id] — sin
-  // `user` no hay sesión con la que resolver "¿lo sigo?", así que ni se
-  // pregunta; `FollowButton` ya sabe abrir la puerta de entrar si alguien sin
-  // cuenta toca "Seguir".
-  const [{ data: existingConversation }, counts, { data: existingFollow }] = await Promise.all([
-    supabase
-      .from("conversations")
-      .select("id, status, created_at")
-      .or(`created_by.eq.${id},counterpart_id.eq.${id}`)
-      .neq("status", "blocked")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    fetchProfileCounts(supabase, { tenantId: tenant.id, profileId: id }),
-    user
-      ? supabase
-          .from("follows")
-          .select("target_id")
-          .eq("follower_id", user.id)
-          .eq("target_kind", "profile")
-          .eq("target_id", id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-  ]);
-
   const score = trust?.score ?? 0;
   const level = normalizeTrustLevel(trust?.level, score);
   const signals = trustSignalsFrom(trust?.signals ?? null, card.identityVerified);
@@ -160,13 +172,6 @@ export default async function PerfilPublicoPage({
     [country, card.city, card.areaLabel].filter(Boolean).join(" · ") || null;
   const base = `/perfil/${id}`;
   const memberSince = memberSinceLabel(card.createdAt, tenant.locale, viewerZone ?? undefined);
-
-  // El check azul (0101) sale de `profiles.verified_badge`, el espejo público
-  // que mantiene el trigger de la suscripción. NO de `profile_card`: esa RPC
-  // devuelve la ficha filtrada por privacidad, y la insignia no es un dato
-  // privado —es lo que ve cualquiera al lado del nombre—, así que meterla ahí
-  // habría sido cambiar la firma de la función para nada.
-  const checkAzul = await leerCheckAzul(supabase, card.id);
 
   return (
     <div className="flex flex-col gap-6">
@@ -205,7 +210,7 @@ export default async function PerfilPublicoPage({
         // cada uno a todo el ancho como el CTA principal.
         //
         // SIN chequeo de "es mi perfil": esta página YA redirige a /perfil más
-        // arriba en cuanto `user?.id === id`, así que todo lo que se renderiza
+        // arriba en cuanto `viewerId === id`, así que todo lo que se renderiza
         // de acá para abajo es, por construcción, el perfil de OTRA persona.
         actions={
           <>

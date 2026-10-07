@@ -2,7 +2,6 @@ import "server-only";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createServerClient } from "@supabase/ssr";
-import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import type { Database, Tables } from "@/lib/types/database.types";
 import { GUIDE_COVERS } from "./copy";
@@ -166,6 +165,62 @@ function photoPublicUrl(path: string | undefined): string | null {
 }
 
 /**
+ * La landing la ven SOLO visitantes sin sesión (el proxy manda al feed a quien
+ * tiene una), así que leer con el cliente anon sin cookies devuelve lo mismo que
+ * el cliente con cookies y permite cachearlo entre requests: eran dos viajes a
+ * la base en serie en cada visita a `/`. 120 s porque una propiedad recién
+ * publicada tiene que aparecer pronto en la vidriera.
+ */
+const fetchRecentPropertiesCached = unstable_cache(
+  async (tenantId: string, limit: number): Promise<ListingMiniData[]> => {
+    const supabase = anonGuidesClient();
+    if (!supabase) return [];
+    const { data, error } = await supabase
+      .from("listings")
+      .select(
+        "id,title,price_amount,price_currency,price_period,area_label,photos,publisher_kind",
+      )
+      .eq("tenant_id", tenantId)
+      .eq("kind", "property")
+      .eq("status", "published")
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .limit(limit);
+    if (error || !data || data.length === 0) return [];
+
+    const ids = data.map((row) => row.id);
+    const verificationByListing = new Map<string, { registry: string; checkedAt: string }>();
+    const { data: checks } = await supabase
+      .from("verification_checks")
+      .select("subject_id,registry,checked_at")
+      .eq("subject_kind", "listing")
+      .eq("result", "found_active")
+      .in("subject_id", ids);
+    for (const check of checks ?? []) {
+      if (check.subject_id && !verificationByListing.has(check.subject_id)) {
+        verificationByListing.set(check.subject_id, {
+          registry: check.registry,
+          checkedAt: check.checked_at,
+        });
+      }
+    }
+
+    return data.map((row) => ({
+      id: row.id,
+      title: row.title,
+      priceAmount: row.price_amount,
+      priceCurrency: row.price_currency,
+      pricePeriod: row.price_period,
+      areaLabel: row.area_label,
+      photoUrl: photoPublicUrl(row.photos?.[0]),
+      publisherKind: row.publisher_kind,
+      verification: verificationByListing.get(row.id) ?? null,
+    }));
+  },
+  ["recent-properties"],
+  { revalidate: 120, tags: ["listings"] },
+);
+
+/**
  * Propiedades published recientes del tenant + su verificación found_active
  * (si existe — si no, AUSENCIA de banda, jamás un badge negativo §11).
  */
@@ -173,47 +228,7 @@ export const fetchRecentProperties = cache(
   async (limit = 4): Promise<ListingMiniData[]> => {
     try {
       const tenant = await getTenant();
-      const supabase = await createClient();
-      const { data, error } = await supabase
-        .from("listings")
-        .select(
-          "id,title,price_amount,price_currency,price_period,area_label,photos,publisher_kind",
-        )
-        .eq("tenant_id", tenant.id)
-        .eq("kind", "property")
-        .eq("status", "published")
-        .order("published_at", { ascending: false, nullsFirst: false })
-        .limit(limit);
-      if (error || !data || data.length === 0) return [];
-
-      const ids = data.map((row) => row.id);
-      const verificationByListing = new Map<string, { registry: string; checkedAt: string }>();
-      const { data: checks } = await supabase
-        .from("verification_checks")
-        .select("subject_id,registry,checked_at")
-        .eq("subject_kind", "listing")
-        .eq("result", "found_active")
-        .in("subject_id", ids);
-      for (const check of checks ?? []) {
-        if (check.subject_id && !verificationByListing.has(check.subject_id)) {
-          verificationByListing.set(check.subject_id, {
-            registry: check.registry,
-            checkedAt: check.checked_at,
-          });
-        }
-      }
-
-      return data.map((row) => ({
-        id: row.id,
-        title: row.title,
-        priceAmount: row.price_amount,
-        priceCurrency: row.price_currency,
-        pricePeriod: row.price_period,
-        areaLabel: row.area_label,
-        photoUrl: photoPublicUrl(row.photos?.[0]),
-        publisherKind: row.publisher_kind,
-        verification: verificationByListing.get(row.id) ?? null,
-      }));
+      return await fetchRecentPropertiesCached(tenant.id, limit);
     } catch {
       return [];
     }

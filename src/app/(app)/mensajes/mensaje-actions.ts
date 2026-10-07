@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { tocarTimbre } from "@/lib/messaging/timbre";
 import { z } from "zod";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { moderateText } from "@/lib/moderation";
@@ -163,7 +164,7 @@ export async function reaccionarAMensajeAction(input: {
 }): Promise<AccionDeMensajeResult> {
   const parsed = reaccionSchema.safeParse(input);
   if (!parsed.success) return { ok: false, code: "invalid" };
-  const { ambito, mensajeId, kind } = parsed.data;
+  const { ambito, mensajeId, hiloId, kind } = parsed.data;
 
   const guard = await requireTenantMatch();
   if (!guard.ok) {
@@ -197,7 +198,10 @@ export async function reaccionarAMensajeAction(input: {
     return { ok: false, code: "error" };
   }
 
-  if (kind === null) return { ok: true };
+  if (kind === null) {
+    tocarTimbre(supabase, { ambito, id: hiloId }, user.id, "cambio");
+    return { ok: true };
+  }
 
   const { error } = await cliente.from("reactions").insert({
     tenant_id: tenant.id,
@@ -222,12 +226,12 @@ export async function reaccionarAMensajeAction(input: {
   /**
    * SIN `revalidatePath` A PROPÓSITO.
    *
-   * La pastilla ya se pintó de forma optimista y el hilo se refresca solo
-   * (`ThreadRefresh` / `GroupLive`). Revalidar acá volvería a renderizar la
-   * conversación entera en cada toque de emoji — el costo de un hilo completo
-   * para mover un número de 2 a 3, en la pantalla por la que ya hay un reclamo
-   * de lentitud. Editar y eliminar SÍ revalidan: ahí cambia el contenido.
+   * La pastilla ya se pintó de forma optimista; del otro lado se entera por el
+   * timbre (`HiloEnVivo`). Revalidar acá volvería a renderizar la conversación
+   * entera en cada toque de emoji — el costo de un hilo completo para mover un
+   * número de 2 a 3. Editar y eliminar SÍ revalidan: ahí cambia el contenido.
    */
+  tocarTimbre(supabase, { ambito, id: hiloId }, user.id, "cambio");
   return { ok: true };
 }
 
@@ -290,6 +294,7 @@ export async function editarMensajeAction(input: {
   // Cero filas y sin error = la policy no me dejó ver la fila para tocarla.
   if (count === 0) return { ok: false, code: "forbidden" };
 
+  tocarTimbre(supabase, { ambito, id: hiloId }, user.id, "cambio");
   revalidatePath(rutaDelHilo(ambito, hiloId));
   return { ok: true };
 }
@@ -356,6 +361,7 @@ export async function eliminarMensajeAction(input: {
    */
   if (count === 0) return { ok: false, code: "forbidden" };
 
+  tocarTimbre(supabase, { ambito: "directo", id: hiloId }, user.id, "cambio");
   revalidatePath(rutaDelHilo("directo", hiloId));
   return { ok: true };
 }

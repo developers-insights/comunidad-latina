@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import {
   GRUPO_COLUMNS,
@@ -121,8 +122,11 @@ export async function listarGruposPublicos(options: {
  * Un grupo con mi rol adentro. Devuelve null cuando la RLS no lo deja ver —
  * que es el mismo resultado que "no existe", y así tiene que ser: distinguirlos
  * confirmaría la existencia de grupos privados ajenos.
+ *
+ * `cache()`: la página lo pide para decidir el `notFound()` antes de su
+ * `Suspense` y el hilo lo vuelve a pedir adentro; es la misma promesa.
  */
-export async function obtenerGrupo(
+export const obtenerGrupo = cache(async function obtenerGrupo(
   groupId: string,
   profileId: string,
 ): Promise<GrupoConMiRol | null> {
@@ -143,7 +147,7 @@ export async function obtenerGrupo(
     ...(grupo as unknown as GrupoRow),
     miRol: ((membresia as { role: RolEnGrupo } | null)?.role ?? null),
   };
-}
+});
 
 /** La lista de miembros. Sólo la devuelve la base si soy uno de ellos. */
 export async function listarMiembros(groupId: string): Promise<MiembroDeGrupo[]> {
@@ -266,7 +270,7 @@ export async function contarMiembrosEnLinea(groupId: string): Promise<number> {
  * (`messages_delete`, 0006). Dos chats de la misma app no pueden borrar de dos
  * maneras distintas; el día que uno estrene lápida, la estrenan los dos.
  */
-export async function listarMensajesDelGrupo(
+export const listarMensajesDelGrupo = cache(async function listarMensajesDelGrupo(
   groupId: string,
 ): Promise<MensajeDeGrupoRow[]> {
   const supabase = supabaseSinTiparGrupos(await createClient());
@@ -285,7 +289,7 @@ export async function listarMensajesDelGrupo(
   }
 
   return ((data ?? []) as unknown as MensajeDeGrupoRow[]).slice().reverse();
-}
+});
 
 /**
  * Nombre y foto de cada autor, en UNA consulta.

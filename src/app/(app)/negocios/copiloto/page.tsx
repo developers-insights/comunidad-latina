@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { MagicWand, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, ProximamentePremium, buttonVariants } from "@/components/ui";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { isOpenAIConfigured } from "@/lib/config/services";
 import { cn } from "@/lib/utils";
@@ -31,11 +31,9 @@ const COPY = {
 
 export default async function CopilotoPage() {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user) {
+  if (!userId) {
     redirect("/entrar?next=/negocios/copiloto");
   }
 
@@ -46,14 +44,14 @@ export default async function CopilotoPage() {
       .from("business_accounts")
       .select("id")
       .eq("tenant_id", tenant.id)
-      .eq("owner_id", user.id)
+      .eq("owner_id", userId)
       .limit(1)
       .maybeSingle(),
     supabase
       .from("listings")
       .select("id, title, description")
       .eq("tenant_id", tenant.id)
-      .eq("created_by", user.id)
+      .eq("created_by", userId)
       .in("kind", ["business", "professional"])
       .order("created_at", { ascending: false })
       .limit(10),

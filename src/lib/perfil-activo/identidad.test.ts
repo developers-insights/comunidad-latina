@@ -17,12 +17,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
-  getCurrentUser: vi.fn(),
+  getAuthUserId: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: mocks.createClient,
-  getCurrentUser: mocks.getCurrentUser,
+  getAuthUserId: mocks.getAuthUserId,
 }));
 
 import { getIdentidadActiva, listarIdentidadesDeNegocio, puedePublicar } from "./identidad";
@@ -73,8 +73,8 @@ function supabaseFalso(options: {
 function montar(options: Parameters<typeof supabaseFalso>[0] & { sesion?: boolean }) {
   const supabase = supabaseFalso(options);
   mocks.createClient.mockResolvedValue(supabase);
-  mocks.getCurrentUser.mockResolvedValue(
-    options.sesion === false ? null : { id: USUARIO },
+  mocks.getAuthUserId.mockResolvedValue(
+    options.sesion === false ? null : USUARIO,
   );
   return supabase;
 }
@@ -127,7 +127,7 @@ describe("getIdentidadActiva", () => {
 
   it("si la base falla, cae al perfil personal en vez de tirar la pantalla", async () => {
     mocks.createClient.mockRejectedValue(new Error("sin red"));
-    mocks.getCurrentUser.mockResolvedValue({ id: USUARIO });
+    mocks.getAuthUserId.mockResolvedValue(USUARIO);
 
     await expect(getIdentidadActiva()).resolves.toEqual({ tipo: "personal" });
   });

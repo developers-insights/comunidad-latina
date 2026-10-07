@@ -8,7 +8,7 @@ import {
   disputeStatusMeta,
   untypedSupabase,
 } from "@/lib/integrity/disputes";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { ReclamoForm } from "./reclamo-form";
 
@@ -51,10 +51,8 @@ export default async function ReclamarContenidoPage({ params }: { params: Params
   if (!UUID_RE.test(assetId)) notFound();
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect(`/entrar?next=/contenido/reclamar/${assetId}`);
+  const userId = await getAuthUserId();
+  if (!userId) redirect(`/entrar?next=/contenido/reclamar/${assetId}`);
 
   // RLS: sólo devuelve fila si soy el uploader (o staff). Ver la nota de arriba.
   const { data: visibleAsset, error: assetError } = await supabase
@@ -66,7 +64,7 @@ export default async function ReclamarContenidoPage({ params }: { params: Params
   if (assetError) {
     console.error("[reclamo] no se pudo leer el asset:", assetError.message);
   }
-  const isOwnContent = visibleAsset?.uploader_id === user.id;
+  const isOwnContent = visibleAsset?.uploader_id === userId;
 
   // Un reclamo VIVO mío sobre este contenido. La policy de SELECT de
   // content_disputes deja al reclamante ver los suyos, así que va con el cliente
@@ -75,7 +73,7 @@ export default async function ReclamarContenidoPage({ params }: { params: Params
     .from("content_disputes")
     .select("id, status, created_at")
     .eq("asset_id", assetId)
-    .eq("claimant_id", user.id)
+    .eq("claimant_id", userId)
     .in("status", [...LIVE_DISPUTE_STATUSES])
     .order("created_at", { ascending: false })
     .limit(1);

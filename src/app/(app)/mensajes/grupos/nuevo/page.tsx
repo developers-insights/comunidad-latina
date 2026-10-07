@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { COPY } from "@/components/messaging/copy";
 import { GroupForm } from "@/components/messaging/group-form";
 
@@ -15,8 +15,8 @@ export const metadata: Metadata = { title: COPY.groups.createTitle };
  * vuelve a la lista, que es justo el reclamo del punto 3 del feedback.
  */
 export default async function NuevoGrupoPage() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/entrar");
+  const userId = await getAuthUserId();
+  if (!userId) redirect("/entrar");
 
   return (
     <>

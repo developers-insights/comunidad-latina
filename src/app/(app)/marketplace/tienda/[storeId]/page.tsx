@@ -85,11 +85,9 @@ async function TiendaContent({ storeId }: { storeId: string }) {
 
   if (!store || store.tenant_id !== tenant.id) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  const isOwner = Boolean(user && store.created_by === user.id);
+  const isOwner = Boolean(userId && store.created_by === userId);
 
   // MEMBRESÍA VENCIDA O CANCELADA ⇒ la vidriera no se muestra (§7).
   //
@@ -129,12 +127,12 @@ async function TiendaContent({ storeId }: { storeId: string }) {
       .eq("tenant_id", tenant.id)
       .eq("target_kind", "listing")
       .eq("target_id", storeId),
-    user
+    userId
       ? supabase
           .from("follows")
           .select("id")
           .eq("tenant_id", tenant.id)
-          .eq("follower_id", user.id)
+          .eq("follower_id", userId)
           .eq("target_kind", "listing")
           .eq("target_id", storeId)
           .maybeSingle()
@@ -147,7 +145,7 @@ async function TiendaContent({ storeId }: { storeId: string }) {
     // Calificaciones (listing_review_stats, 0093): la tienda ES un listing
     // kind='business', así que reusa el mismo lector que ya usan Negocios y
     // Profesionales — sin escribir una consulta nueva para lo mismo.
-    fetchResenasDeAviso(supabase, storeId, user?.id ?? null),
+    fetchResenasDeAviso(supabase, storeId, userId),
   ]);
 
   if (error) {
@@ -239,7 +237,7 @@ async function TiendaContent({ storeId }: { storeId: string }) {
           </h2>
           <InlineMessageCta
             listingId={store.id}
-            isLoggedIn={Boolean(user)}
+            isLoggedIn={Boolean(userId)}
             nextPath={`/marketplace/tienda/${store.id}`}
             label={COPY.store.messageCta}
             placeholder={COPY.store.messagePlaceholder}

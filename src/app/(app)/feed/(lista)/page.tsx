@@ -20,14 +20,14 @@ import { FeedModeToggle } from "@/components/feed/feed-mode-toggle";
 import { FeedList } from "@/components/feed/feed-list";
 import { PullToRefresh } from "@/components/feed/pull-to-refresh";
 import { ParaVos, ParaVosSkeleton } from "@/components/matching";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { ZonaVacia } from "@/components/zona";
 import { resolverVistaZona } from "@/lib/zona/server";
 import { getCaraActiva } from "@/lib/perfil-activo/cara";
 import { getShellContext } from "@/components/shell/shell-context";
 import { FeedAlert } from "../alert-banner";
-import { fetchFeedPageAction } from "../load-more";
+import { fetchFeedPageAction, type FeedPageResult } from "../load-more";
 
 export const metadata = { title: "Feed" };
 
@@ -131,11 +131,6 @@ async function FeedHeaderWithArea() {
 // ---------------------------------------------------------------------------
 
 async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: string }) {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   /**
    * La cara con la que se va a publicar, no la de la persona. Acá había una
    * consulta propia a `profiles` con el comentario «publica siempre como sí
@@ -143,15 +138,26 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
    * seguía mostrando el nombre y la foto personales mientras el header ya
    * mostraba el negocio. Una sola fuente ahora — ver @/lib/perfil-activo/cara.
    */
-  const cara = user ? await getCaraActiva() : null;
   /**
    * El saludo usa a la PERSONA, no la cara activa: `cara.displayName` pasa a
    * ser el nombre del NEGOCIO mientras se actúa como uno (ver cara.ts), y
    * "Buenos días, Pizzería El Sol" no es una bienvenida. `getShellContext`
    * está cache()-eada por request — el Header ya la pidió, así que esto no
    * agrega una consulta.
+   *
+   * Todo en un solo Promise.all, la primera página del feed incluida: antes la
+   * pedía <FeedRoot> recién cuando esto terminaba, un viaje entero después.
+   * Sin sesión, cara y shell caen a sus defaults sin tocar la red.
    */
-  const shell = user ? await getShellContext() : null;
+  const [tenant, viewerId, caraActiva, shellContext, pagina] = await Promise.all([
+    getTenant(),
+    getAuthUserId(),
+    getCaraActiva(),
+    getShellContext(),
+    fetchFeedPageAction({ tab, cursor: cursorRaw || null }),
+  ]);
+  const cara = viewerId ? caraActiva : null;
+  const shell = viewerId ? shellContext : null;
   // "Tu cuenta" es el reservado de `getShellContext` cuando el perfil no tiene
   // `display_name`: no es un nombre real, así que el saludo cae al genérico.
   const viewerFirstName =
@@ -167,7 +173,7 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
     <PullToRefresh className="mt-4 flex flex-col gap-4">
       {tab === "para-ti" ? (
         <>
-          {user ? (
+          {viewerId ? (
             // gap-1.5 propio (no el gap-4 del stack de afuera): el saludo
             // presenta a la tarjeta de abajo, son una sola unidad visual.
             <div className="flex flex-col gap-1.5">
@@ -189,12 +195,12 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
           <FeedRoot
             tab={tab}
             tenantId={tenant.id}
-            viewerId={user?.id ?? null}
-            cursorRaw={cursorRaw}
+            viewerId={viewerId}
+            pagina={pagina}
             intercalado={
-              user && isFirstPage ? (
+              viewerId && isFirstPage ? (
                 <Suspense fallback={<ParaVosSkeleton />}>
-                  <ParaVos userId={user.id} />
+                  <ParaVos userId={viewerId} />
                 </Suspense>
               ) : null
             }
@@ -204,8 +210,8 @@ async function FeedContent({ tab, cursorRaw }: { tab: FeedTabId; cursorRaw: stri
         <FeedRoot
           tab={tab}
           tenantId={tenant.id}
-          viewerId={user?.id ?? null}
-          cursorRaw={cursorRaw}
+          viewerId={viewerId}
+          pagina={pagina}
         />
       )}
     </PullToRefresh>
@@ -221,20 +227,17 @@ async function FeedRoot({
   tab,
   tenantId,
   viewerId,
-  cursorRaw,
+  pagina: { items, nextCursor },
   intercalado,
 }: {
   tab: FeedTabId;
   tenantId: string;
   viewerId: string | null;
-  cursorRaw: string;
+  pagina: FeedPageResult;
   /** Bloque que se intercala después de las primeras publicaciones. */
   intercalado?: ReactNode;
 }) {
-  const [{ items, nextCursor }, vistaZona] = await Promise.all([
-    fetchFeedPageAction({ tab, cursor: cursorRaw || null }),
-    resolverVistaZona(tenantId, null),
-  ]);
+  const vistaZona = await resolverVistaZona(tenantId, null);
 
   /**
    * EL VACÍO DE UNA ZONA NO ES EL VACÍO DEL FEED.

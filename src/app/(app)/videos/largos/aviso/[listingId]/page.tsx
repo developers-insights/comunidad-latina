@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, MapPin } from "@phosphor-icons/react/dist/ssr";
 import { buttonVariants } from "@/components/ui";
 import { SectionTopBar } from "@/components/shell";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { formatDuration } from "@/lib/media/video-policy";
 import { cn } from "@/lib/utils";
@@ -25,10 +25,8 @@ export default async function AvisoVideoLargoPage({
   if (!UUID_RE.test(listingId)) notFound();
 
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const viewerId = user?.id ?? null;
+  const userId = await getAuthUserId();
+  const viewerId = userId;
 
   const [aviso, mas] = await Promise.all([
     fetchAvisoConVideoLargo({ supabase, tenantId: tenant.id, viewerId, listingId, locale: tenant.locale }),

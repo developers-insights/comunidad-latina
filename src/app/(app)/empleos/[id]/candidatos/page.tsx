@@ -7,7 +7,7 @@ import { COPY } from "@/components/empleos/copy";
 import { CandidateCard } from "@/components/empleos/candidate-card";
 import { parseJobAttrs } from "@/components/empleos/helpers";
 import { isTerminalStatus } from "@/lib/empleos/application-status";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import { fetchJobCandidates } from "../../queries";
@@ -72,13 +72,11 @@ export default async function CandidatosPage({
 
   if (!listing || listing.tenant_id !== tenant.id) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   // El dueño, y solo el dueño. Sin rama por rol: quien publicó el aviso es el
   // destinatario de las postulaciones, y esa es toda la regla.
-  if (!user || listing.created_by !== user.id) {
+  if (!userId || listing.created_by !== userId) {
     return (
       <>
         <EmptyState
@@ -102,7 +100,7 @@ export default async function CandidatosPage({
   const { candidates, openCount } = await fetchJobCandidates({
     jobId: listing.id,
     tenantId: tenant.id,
-    viewerId: user.id,
+    viewerId: userId,
     questions,
   });
 

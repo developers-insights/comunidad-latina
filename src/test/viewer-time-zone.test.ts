@@ -115,17 +115,15 @@ describe("getViewerFormatDate: la elección de la persona manda", () => {
     const eq = vi.fn(() => ({ maybeSingle }));
     const select = vi.fn(() => ({ eq }));
     const from = vi.fn(() => ({ select }));
-    const getUser = vi.fn(async () => ({
-      data: { user: userId ? { id: userId } : null },
-      error: null,
-    }));
-    return { auth: { getUser }, from };
+    return { from, userId };
   }
 
   async function formatterFor(timezone: string | null) {
     vi.resetModules();
-    const createClient = vi.fn(async () => stubSupabase(timezone === null ? null : "u1", timezone));
-    vi.doMock("@/lib/supabase/server", () => ({ createClient }));
+    const stub = stubSupabase(timezone === null ? null : "u1", timezone);
+    const createClient = vi.fn(async () => stub);
+    const getAuthUserId = vi.fn(async () => stub.userId);
+    vi.doMock("@/lib/supabase/server", () => ({ createClient, getAuthUserId }));
     const { getViewerFormatDate } = await import("@/lib/time/viewer-zone");
     return getViewerFormatDate();
   }

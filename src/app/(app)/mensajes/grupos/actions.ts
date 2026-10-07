@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { tocarTimbre } from "@/lib/messaging/timbre";
 import { z } from "zod";
 import { DAY_MS, HOUR_MS, limit } from "@/lib/rate-limit";
 import { moderateText } from "@/lib/moderation";
@@ -754,6 +755,8 @@ export async function enviarMensajeAlGrupoAction(input: {
     return { ok: false, code: error.code === "42501" ? "forbidden" : "error" };
   }
 
+  tocarTimbre(supabase, { ambito: "grupo", id: parsed.data.groupId }, user.id, "nuevo");
+
   await avisarAlGrupo({
     sinTipar,
     tenantId: tenant.id,
@@ -874,6 +877,7 @@ export async function borrarMensajeDeGrupoAction(input: {
   }
   if (count === 0) return { ok: false, code: "forbidden" };
 
+  tocarTimbre(guard.supabase, { ambito: "grupo", id: grupo.data }, guard.user.id, "cambio");
   revalidatePath(`/mensajes/grupos/${grupo.data}`);
   return { ok: true, groupId: grupo.data };
 }

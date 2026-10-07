@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { DEFAULT_TIME_ZONE, formatDate, type FormatDateOptions } from "@/lib/utils";
 
 /**
@@ -45,11 +45,12 @@ export interface ViewerAccount {
 }
 
 export const getViewerAccount = cache(async (): Promise<ViewerAccount | null> => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  // getAuthUserId (JWT verificado local) y no getUser(): este id sólo elige qué
+  // fila leer, y el estado de la sanción sale de la DB. Con una sesión revocada
+  // el gate sigue viendo `banned` hasta que el token expira — más estricto que
+  // antes, cuando getUser() devolvía null y la cuenta pasaba como anónima.
+  const [supabase, userId] = await Promise.all([createClient(), getAuthUserId()]);
+  if (!userId) return null;
 
   // Lista explícita de columnas: `profiles` es pública y `select("*")` acá
   // arrastraría rol, verificación de identidad y datos de contacto para pintar
@@ -57,11 +58,11 @@ export const getViewerAccount = cache(async (): Promise<ViewerAccount | null> =>
   const { data } = await supabase
     .from("profiles")
     .select("timezone, account_status, suspended_until")
-    .eq("id", user.id)
+    .eq("id", userId)
     .maybeSingle();
 
   return {
-    id: user.id,
+    id: userId,
     timezone: data?.timezone ?? null,
     accountStatus: data?.account_status ?? null,
     suspendedUntil: data?.suspended_until ?? null,

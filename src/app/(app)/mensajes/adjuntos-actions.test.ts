@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   createNotification: vi.fn(async () => ({ ok: true as const })),
 }));
 
+vi.mock("@/lib/messaging/timbre", () => ({ tocarTimbre: vi.fn() }));
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
 vi.mock("@/lib/rate-limit", () => ({
   limit: mocks.limit,

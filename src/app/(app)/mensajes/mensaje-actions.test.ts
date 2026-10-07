@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => ({
   borrarMensajeDeGrupoAction: vi.fn(async () => ({ ok: true as const })),
 }));
 
+const timbre = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/messaging/timbre", () => ({ tocarTimbre: timbre }));
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
 vi.mock("@/lib/rate-limit", () => ({
   limit: mocks.limit,
@@ -300,6 +302,22 @@ describe("reaccionarAMensajeAction", () => {
     });
 
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("toca el timbre del hilo con `cambio`: del otro lado se enteran sin sondeo", async () => {
+    guardOk(crearStub());
+    timbre.mockClear();
+
+    await reaccionarAMensajeAction({
+      ambito: "grupo",
+      mensajeId: MENSAJE_ID,
+      hiloId: HILO_ID,
+      kind: "❤️",
+    });
+
+    expect(timbre).toHaveBeenCalledTimes(1);
+    expect(timbre.mock.calls[0][1]).toEqual({ ambito: "grupo", id: HILO_ID });
+    expect(timbre.mock.calls[0][3]).toBe("cambio");
   });
 
   it("respeta el techo por persona", async () => {

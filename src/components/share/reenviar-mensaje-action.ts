@@ -5,6 +5,7 @@ import { z } from "zod";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
+import { tocarTimbre } from "@/lib/messaging/timbre";
 import {
   CHAT_MEDIA_BUCKET,
   KINDS_DE_MENSAJE,
@@ -191,6 +192,11 @@ export async function reenviarMensajeAction(
   }
 
   if (enviados === 0) return { ok: false, code: "error" };
+
+  for (const id of conversacionesTocadas) {
+    tocarTimbre(supabase, { ambito: "directo", id }, user.id, "nuevo");
+  }
+  for (const id of gruposTocados) tocarTimbre(supabase, { ambito: "grupo", id }, user.id, "nuevo");
 
   revalidatePath("/mensajes");
   for (const id of conversacionesTocadas) revalidatePath(`/mensajes/${id}`);

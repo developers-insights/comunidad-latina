@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CaretRight, Info, LockKey } from "@phosphor-icons/react/dist/ssr";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate, getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { cn, DEFAULT_LOCALE, DEFAULT_TIME_ZONE } from "@/lib/utils";
@@ -14,7 +14,7 @@ import {
 } from "@/components/messaging/escribiendo-live";
 import { GroupComposer } from "@/components/messaging/group-composer";
 import { GroupJoinButton } from "@/components/messaging/group-join-button";
-import { GroupLive } from "@/components/messaging/group-live";
+import { HiloEnVivo } from "@/components/messaging/hilo-en-vivo";
 import {
   GroupMessageBubble,
   type GroupMessageMensaje,
@@ -29,7 +29,7 @@ import {
 } from "@/components/messaging/reply-quote";
 import { resumenDeMensaje } from "@/components/messaging/helpers-de-mensaje";
 import { ScrollAnchor } from "@/components/messaging/scroll-anchor";
-import { MensajesEnVuelo } from "@/components/messaging/en-vuelo";
+import { EnVueloSiFalta, MensajesEnVuelo } from "@/components/messaging/en-vuelo";
 import { CLASE_PIE_EN_LLAMADA } from "@/components/messaging/clases-en-llamada";
 import {
   SharedCard,
@@ -93,13 +93,26 @@ export async function HiloDeGrupo({
 }) {
   const enLlamada = variante === "llamada";
 
-  const user = await getCurrentUser();
-  if (!user) {
+  /**
+   * Los mensajes se piden ANTES de saber si soy miembro: la policy de la 0133
+   * no se los devuelve a quien no lo es, así que adelantarlos no muestra nada
+   * de más y le saca un viaje entero al camino del miembro, que es el que
+   * importa. Todo lo que no depende de nadie arranca también acá.
+   */
+  const mensajesP = listarMensajesDelGrupo(id);
+  const supabaseP = createClient();
+  const tenantP = getTenant();
+  const zonaP = getViewerTimeZone();
+  const formatoP = getViewerFormatDate();
+  const emojisP = readCommunityEmojiCatalog();
+
+  const userId = await getAuthUserId();
+  if (!userId) {
     if (enLlamada) return null;
-    redirect("/entrar");
+    redirect(`/entrar?next=/mensajes/grupos/${id}`);
   }
 
-  const grupo = await obtenerGrupo(id, user.id);
+  const grupo = await obtenerGrupo(id, userId);
   if (!grupo) {
     if (enLlamada) return null;
     notFound();
@@ -108,22 +121,18 @@ export async function HiloDeGrupo({
   const soyMiembro = grupo.miRol !== null;
   const cerrado = grupo.status === "closed";
   const administro = grupo.miRol === "owner" || grupo.miRol === "admin";
-  const [enLinea, solicitudPendiente] = await Promise.all([
-    soyMiembro ? contarMiembrosEnLinea(grupo.id) : Promise.resolve(0),
-    !soyMiembro && grupo.visibility === "request"
-      ? tengoSolicitudPendiente(grupo.id, user.id)
-      : Promise.resolve(false),
-  ]);
-  const resumenMiembros = soyMiembro
-    ? `${miembrosLabel(grupo.member_count)} · ${COPY.groups.onlineMembers(enLinea)}`
-    : miembrosLabel(grupo.member_count);
+  const enLineaP = soyMiembro ? contarMiembrosEnLinea(grupo.id) : Promise.resolve(0);
+  const resumenDe = (enLinea: number) =>
+    soyMiembro
+      ? `${miembrosLabel(grupo.member_count)} · ${COPY.groups.onlineMembers(enLinea)}`
+      : miembrosLabel(grupo.member_count);
 
   /**
    * FUNCIÓN Y NO CONSTANTE: las dos ramas de la pantalla lo montan, pero sólo
    * la de miembro tiene el mapa de nombres —se arma más abajo, después de leer
    * los mensajes— y sólo ella está adentro del canal de escritura.
    */
-  const encabezado = (nombres?: Record<string, string>) => (
+  const encabezado = (resumenMiembros: string, nombres?: Record<string, string>) => (
     <>
       {/* La salida del grupo, igual que en el resto de la app. Va adentro del
           encabezado porque las dos ramas de esta pantalla —miembro y no
@@ -183,9 +192,11 @@ export async function HiloDeGrupo({
   // ── No soy miembro: la ficha y la puerta, no la conversación ──────────────
   if (!soyMiembro) {
     if (enLlamada) return null;
+    const solicitudPendiente =
+      grupo.visibility === "request" ? await tengoSolicitudPendiente(grupo.id, userId) : false;
     return (
       <div className="flex flex-col gap-5">
-        {encabezado()}
+        {encabezado(resumenDe(0))}
         {grupo.description && (
           <p className="text-sm leading-relaxed text-foreground-secondary">
             {grupo.description}
@@ -208,8 +219,6 @@ export async function HiloDeGrupo({
     );
   }
 
-  const mensajes = await listarMensajesDelGrupo(grupo.id);
-
   const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const origenesPropios = [sitio].filter(Boolean);
 
@@ -226,49 +235,48 @@ export async function HiloDeGrupo({
     return enlaceInternoDelCuerpo(mensaje.body, { origenesPropios });
   };
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-
   /**
-   * TODO LO QUE FALTA PARA PINTAR EL HILO, EN PARALELO.
-   *
-   * Ninguna de las seis depende de otra. `perfilesDeAutores` incluye MI id: el
+   * Lo que depende de los mensajes sale apenas llegan ellos, sin esperar al
+   * conteo de "en línea" ni a nada más. `perfilesDeAutores` incluye MI id: el
    * "quién reaccionó" optimista necesita mi nombre y pedirlo aparte sería un
    * viaje más por una columna que esa consulta ya trae.
    */
+  const derivadosP = Promise.all([mensajesP, supabaseP, tenantP]).then(
+    ([lista, supabase, tenant]) =>
+      Promise.all([
+        perfilesDeAutores([...lista.map((m) => m.sender_id), userId]),
+        leerReaccionesDeMensajes(
+          supabase,
+          "grupo",
+          lista.map((m) => m.id),
+          userId,
+        ),
+        resolverCompartidos(
+          supabase,
+          lista
+            .map(compartidoDelMensaje)
+            .filter((item): item is EnlaceInterno => item !== null),
+          { locale: tenant.locale },
+        ),
+        firmarAdjuntosDelHilo(
+          lista
+            .map((mensaje) => mensaje.adjunto?.path)
+            .filter(
+              (path): path is string => typeof path === "string" && path.length > 0,
+            ),
+        ),
+      ]),
+  );
+
   const [
-    autores,
-    reaccionesPorMensaje,
-    compartidos,
-    firmas,
+    mensajes,
+    [autores, reaccionesPorMensaje, compartidos, firmas],
+    enLinea,
     viewerZone,
     formatDate,
     emojiCatalog,
-  ] = await Promise.all([
-    perfilesDeAutores([...mensajes.map((m) => m.sender_id), user.id]),
-    leerReaccionesDeMensajes(
-      supabase,
-      "grupo",
-      mensajes.map((m) => m.id),
-      user.id,
-    ),
-    resolverCompartidos(
-      supabase,
-      mensajes
-        .map(compartidoDelMensaje)
-        .filter((item): item is EnlaceInterno => item !== null),
-      { locale: tenant.locale },
-    ),
-    firmarAdjuntosDelHilo(
-      mensajes
-        .map((mensaje) => mensaje.adjunto?.path)
-        .filter(
-          (path): path is string => typeof path === "string" && path.length > 0,
-        ),
-    ),
-    getViewerTimeZone(),
-    getViewerFormatDate(),
-    readCommunityEmojiCatalog(),
-  ]);
+  ] = await Promise.all([mensajesP, derivadosP, enLineaP, zonaP, formatoP, emojisP]);
+  const resumenMiembros = resumenDe(enLinea);
 
   /**
    * LA HORA DE UN MENSAJE ES LA HORA DE QUIEN LO LEE. Mismo criterio (y misma
@@ -283,7 +291,7 @@ export async function HiloDeGrupo({
 
   const nombreDe = (senderId: string) =>
     autores.get(senderId)?.displayName ?? "Miembro de la comunidad";
-  const nombrePropio = nombreDe(user.id);
+  const nombrePropio = nombreDe(userId);
 
   /**
    * La cita se resuelve contra los mensajes YA cargados, sin consulta extra. Si
@@ -298,7 +306,7 @@ export async function HiloDeGrupo({
     return {
       id: original.id,
       autorNombre: nombreDe(original.sender_id),
-      esPropio: original.sender_id === user.id,
+      esPropio: original.sender_id === userId,
       resumen: resumenDeMensaje(
         original.kind ?? "texto",
         original.body,
@@ -322,9 +330,10 @@ export async function HiloDeGrupo({
 
   return (
     <EscribiendoProvider
-      miId={user.id}
+      miId={userId}
       topicos={cerrado ? [] : [topicoDeGrupo(grupo.id)]}
     >
+      <EnVueloSiFalta>
       <div
         className={
           enLlamada
@@ -332,7 +341,14 @@ export async function HiloDeGrupo({
             : "flex min-h-[calc(100dvh-10rem)] flex-col"
         }
       >
-        <GroupLive />
+        <HiloEnVivo
+          ambito="grupo"
+          hiloId={grupo.id}
+          miId={userId}
+          ultimoCreadoEn={mensajes.at(-1)?.created_at ?? null}
+          nombres={nombresDeAutores}
+          marcarLeido={!enLlamada}
+        />
 
         {enLlamada ? (
           <p className="px-4 pt-3 text-xs text-foreground-muted">
@@ -346,7 +362,7 @@ export async function HiloDeGrupo({
           </p>
         ) : (
           <>
-            {encabezado(nombresDeAutores)}
+            {encabezado(resumenMiembros, nombresDeAutores)}
 
             {/* Nota TTL: minimización §5.4 comunicada como lo que es, una promesa. */}
             <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-foreground-muted">
@@ -383,7 +399,7 @@ export async function HiloDeGrupo({
               const mostrarAutor =
                 mostrarDia || previo?.sender_id !== mensaje.sender_id;
 
-              const isOwn = mensaje.sender_id === user.id;
+              const isOwn = mensaje.sender_id === userId;
               const kind = mensaje.kind ?? "texto";
               const compartido = compartidoDelMensaje(mensaje);
               const resuelto = compartido
@@ -478,14 +494,15 @@ export async function HiloDeGrupo({
               />
             )}
 
-            {enLlamada && (
-              <MensajesEnVuelo
-                mensajes={mensajes.map((mensaje) => ({
-                  id: mensaje.id,
-                  propio: mensaje.sender_id === user.id,
-                }))}
-              />
-            )}
+            <MensajesEnVuelo
+              conAutor
+              mensajes={mensajes.map((mensaje) => ({
+                id: mensaje.id,
+                propio: mensaje.sender_id === userId,
+                body: mensaje.body,
+                created_at: mensaje.created_at,
+              }))}
+            />
           </div>
 
           {cerrado ? (
@@ -503,11 +520,12 @@ export async function HiloDeGrupo({
                   : "sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 -mx-1 bg-canvas/95 px-1 pb-2 pt-1 backdrop-blur-sm"
               }
             >
-              <GroupComposer groupId={grupo.id} />
+              <GroupComposer groupId={grupo.id} refrescarAlEnviar={enLlamada} />
             </div>
           )}
         </ResponderProvider>
       </div>
+      </EnVueloSiFalta>
     </EscribiendoProvider>
   );
 }

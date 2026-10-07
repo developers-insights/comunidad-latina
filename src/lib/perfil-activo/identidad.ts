@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { listingPhotoUrl } from "@/components/listings/helpers";
 
 /**
@@ -169,11 +169,12 @@ export const listarIdentidadesDeNegocio = cache(
     try {
       // Sin sesión no hay identidad que elegir: la RPC devolvería vacío igual,
       // pero el header lo pregunta en CADA request y esto ahorra el viaje a la
-      // base en todas las pantallas públicas.
-      const user = await getCurrentUser();
-      if (!user) return [];
+      // base en todas las pantallas públicas. Alcanza con el JWT verificado
+      // local: la RPC resuelve la membresía con auth.uid() del mismo token, y
+      // las actions que escriben ya pasaron por requireTenantMatch (getUser).
+      const [supabase, userId] = await Promise.all([createClient(), getAuthUserId()]);
+      if (!userId) return [];
 
-      const supabase = await createClient();
       const { data, error } = await clienteSinTipar(supabase).rpc(
         "identidades_disponibles",
       );
@@ -196,14 +197,14 @@ export const listarIdentidadesDeNegocio = cache(
  */
 export const getIdentidadActiva = cache(async (): Promise<IdentidadActiva> => {
   try {
-    const [supabase, user] = await Promise.all([createClient(), getCurrentUser()]);
-    if (!user) return IDENTIDAD_PERSONAL;
+    const [supabase, userId] = await Promise.all([createClient(), getAuthUserId()]);
+    if (!userId) return IDENTIDAD_PERSONAL;
 
     const [{ data: fila }, disponibles] = await Promise.all([
       clienteSinTipar(supabase)
         .from("active_identities")
         .select("business_id")
-        .eq("profile_id", user.id)
+        .eq("profile_id", userId)
         .maybeSingle(),
       listarIdentidadesDeNegocio(),
     ]);

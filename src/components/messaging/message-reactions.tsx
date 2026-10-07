@@ -88,10 +88,10 @@ export function ReaccionesProvider({
 
   /**
    * Cuántas escrituras hay en vuelo. Mientras haya alguna, lo que llega del
-   * servidor se ignora: el hilo se refresca solo cada 15 segundos
-   * (`ThreadRefresh`) y ese refresco puede traer la foto ANTERIOR al toque que
-   * todavía está viajando. Sin este freno, la pastilla se pintaba, el poll la
-   * borraba, y la respuesta del servidor la volvía a pintar — un parpadeo que
+   * servidor se ignora: el hilo se refresca solo cuando llega un timbre
+   * (`HiloEnVivo`) y ese refresco puede traer la foto ANTERIOR al toque que
+   * todavía está viajando. Sin este freno, la pastilla se pintaba, el refresco
+   * la borraba, y la respuesta del servidor la volvía a pintar — un parpadeo que
    * parece un bug de la app y es una carrera.
    *
    * Va en ESTADO y no en un ref porque se lee durante el render, y un ref leído

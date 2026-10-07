@@ -46,7 +46,7 @@ import { ResenaForm, ResenasLista, ResumenPuntajeCard } from "@/components/resen
 // `server-only` al bundle de sus consumidores cliente (ver su encabezado).
 import { fetchResenasDeAviso } from "@/components/resenas/queries";
 import { RESENAS_COPY, puedeOfrecerseElFormulario } from "@/lib/resenas";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
@@ -85,30 +85,30 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-
-  const { data: listing } = await supabase
-    .from("listings")
-    .select(
-      // tier + los 3 CTAs de Profesionales (MODULE_CTAS.professional): reservar
-      // cita, llamar y WhatsApp.
-      "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, created_at, tier, cta_booking_url, cta_phone, cta_whatsapp",
-    )
-    .eq("id", id)
-    .eq("kind", "professional")
-    .maybeSingle();
+  const supabase = await createClient();
+  const [tenant, { data: listing }, userId] = await Promise.all([
+    getTenant(),
+    supabase
+      .from("listings")
+      .select(
+        // tier + los 3 CTAs de Profesionales (MODULE_CTAS.professional): reservar
+        // cita, llamar y WhatsApp.
+        "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, created_at, tier, cta_booking_url, cta_phone, cta_whatsapp",
+      )
+      .eq("id", id)
+      .eq("kind", "professional")
+      .maybeSingle(),
+    getAuthUserId(),
+  ]);
 
   // RLS ya limita qué filas existen para este usuario (published | propias | staff).
   if (!listing || listing.tenant_id !== tenant.id) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   // ---------------------------------------------------------------------
   // Verificación vinculada (regla estricta: SOLO found_active → banda;
   // sin check → ausencia, jamás un negativo) + seguidores (0023, solo si
-  // hay dueño con cuenta) — independientes, en paralelo.
+  // hay dueño con cuenta) + publicador + la zona de quien mira —
+  // independientes, en UNA tanda.
   // ---------------------------------------------------------------------
   const [
     { data: checks },
@@ -116,6 +116,8 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
     myFollowResult,
     savedListingIds,
     resenas,
+    formatDate,
+    publicador,
   ] = await Promise.all([
     supabase
       .from("verification_checks")
@@ -134,19 +136,43 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
           .eq("target_kind", "listing")
           .eq("target_id", listing.id)
       : Promise.resolve({ count: 0 }),
-    listing.created_by && user
+    listing.created_by && userId
       ? supabase
           .from("follows")
           .select("id")
           .eq("tenant_id", tenant.id)
           .eq("target_kind", "listing")
           .eq("target_id", listing.id)
-          .eq("follower_id", user.id)
+          .eq("follower_id", userId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     // Guardado del viewer para este aviso (sin sesión resuelve vacío al instante).
-    fetchViewerSavedListingIds(supabase, user?.id ?? null, [listing.id]),
-    fetchResenasDeAviso(supabase, listing.id, user?.id ?? null),
+    fetchViewerSavedListingIds(supabase, userId, [listing.id]),
+    fetchResenasDeAviso(supabase, listing.id, userId),
+    getViewerFormatDate(),
+    listing.created_by
+      ? Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, display_name, avatar_url, identity_verified")
+            .eq("id", listing.created_by)
+            .maybeSingle(),
+          supabase
+            .from("trust_scores")
+            .select("score, level, signals")
+            .eq("profile_id", listing.created_by)
+            .maybeSingle(),
+          supabase
+            .from("listings")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", tenant.id)
+            .eq("created_by", listing.created_by)
+            .eq("status", "published"),
+          // profiles_private.languages (0062) sólo lo abre profile_card() (0063) —
+          // ver el comentario largo de lib/profesionales/languages.ts.
+          fetchLanguagesByProfile(supabase, [listing.created_by]),
+        ])
+      : null,
   ]);
 
   /**
@@ -155,7 +181,6 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
    * fija de la comunidad fecha la verificación un día antes para quien mira
    * desde la costa oeste. Va con el reloj de quien lee.
    */
-  const formatDate = await getViewerFormatDate();
   const check = checks?.[0];
   const verification: VerificationView | null = check
     ? {
@@ -173,29 +198,9 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
   // Idiomas (spec cliente) — fuera del `if` de abajo porque la sección que los
   // dibuja va aparte de la card del publicador, más arriba en la página.
   let languages: string[] = [];
-  if (listing.created_by) {
+  if (listing.created_by && publicador) {
     const [{ data: profile }, { data: trust }, { count: publishedCount }, languagesByProfile] =
-      await Promise.all([
-        supabase
-          .from("profiles")
-          .select("id, display_name, avatar_url, identity_verified")
-          .eq("id", listing.created_by)
-          .maybeSingle(),
-        supabase
-          .from("trust_scores")
-          .select("score, level, signals")
-          .eq("profile_id", listing.created_by)
-          .maybeSingle(),
-        supabase
-          .from("listings")
-          .select("id", { count: "exact", head: true })
-          .eq("tenant_id", tenant.id)
-          .eq("created_by", listing.created_by)
-          .eq("status", "published"),
-        // profiles_private.languages (0062) sólo lo abre profile_card() (0063) —
-        // ver el comentario largo de lib/profesionales/languages.ts.
-        fetchLanguagesByProfile(supabase, [listing.created_by]),
-      ]);
+      publicador;
     languages = languagesByProfile.get(listing.created_by) ?? [];
 
     const displayName = profile?.display_name ?? C.communityMember;
@@ -257,7 +262,7 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
   }
 
   const attrs = parseProfessionalAttrs(listing.attrs);
-  const isOwner = Boolean(user && listing.created_by === user.id);
+  const isOwner = Boolean(userId && listing.created_by === userId);
 
   // Cierre (0117): mismo criterio que propiedades/[id] — `listings_select`
   // deja pasar `closed` por su rama pública. Profesionales cierra siempre con
@@ -412,7 +417,7 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
           tier={listing.tier}
           subject={listing.title}
           showChat={false}
-          isLoggedIn={Boolean(user)}
+          isLoggedIn={Boolean(userId)}
           values={{
             booking: listing.cta_booking_url,
             phone: listing.cta_phone,
@@ -452,7 +457,7 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
           <ResumenPuntajeCard resumen={resenas.resumen} reparto={resenas.reparto} />
 
           {puedeOfrecerseElFormulario({
-            usuarioId: user?.id ?? null,
+            usuarioId: userId,
             publicadoPor: listing.created_by,
             administraElAviso: resenas.administraElAviso,
             estadoDelAviso: listing.status,
@@ -462,8 +467,8 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
             listingId={listing.id}
             resenas={resenas.resenas}
             puedeResponder={resenas.administraElAviso}
-            hayCuenta={Boolean(user)}
-            puedeEscribir={Boolean(user) && !resenas.administraElAviso && !isOwner}
+            hayCuenta={Boolean(userId)}
+            puedeEscribir={Boolean(userId) && !resenas.administraElAviso && !isOwner}
           />
         </div>
       </section>
@@ -475,7 +480,7 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
         <DirectoryContactCta
           listingId={listing.id}
           returnPath={`/profesionales/${listing.id}`}
-          isLoggedIn={Boolean(user)}
+          isLoggedIn={Boolean(userId)}
           isExternal={!listing.created_by}
           externalName={listing.publisher_name}
         />

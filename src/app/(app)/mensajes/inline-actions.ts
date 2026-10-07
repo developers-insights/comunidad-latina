@@ -13,6 +13,7 @@ import { getRecipientEmail } from "@/lib/email/recipients";
 import { leadReceivedEmail } from "@/lib/email/templates";
 import { COPY } from "@/components/listings/copy";
 import { sigueDescartada } from "@/lib/messaging/solicitud-descartada";
+import { tocarTimbre } from "@/lib/messaging/timbre";
 
 /**
  * Mensaje INLINE desde una publicación (marketplace/eventos): crea —o reutiliza—
@@ -205,6 +206,7 @@ export async function sendListingMessageAction(input: {
   // afirmar un alta nueva sobre una conversación que ya existía.
   let reused: boolean | undefined;
   let estabaDescartada = false;
+  let estabaAceptada = false;
   try {
     const { data: prior } = await supabase
       .from("conversations")
@@ -215,6 +217,7 @@ export async function sendListingMessageAction(input: {
       .maybeSingle();
     reused = Boolean(prior);
     estabaDescartada = sigueDescartada(prior?.status);
+    estabaAceptada = prior?.status === "accepted";
   } catch {
     reused = undefined;
   }
@@ -271,6 +274,12 @@ export async function sendListingMessageAction(input: {
       message:
         "Enviamos tu solicitud, pero el mensaje no se pudo adjuntar. Podés escribirle desde Mensajes.",
     };
+  }
+
+  // Sólo una charla ya aceptada tiene canal: la 0148 niega el tópico de una
+  // pendiente, y `request_contact` no cambia el estado de una aceptada.
+  if (estabaAceptada) {
+    tocarTimbre(supabase, { ambito: "directo", id: conversationId }, user.id, "nuevo");
   }
 
   /**

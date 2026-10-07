@@ -263,20 +263,24 @@ async function InboxList({ query, userId }: { query: InboxQuery; userId: string 
   const rows = (notificationsData ?? []) as NotificationRow[];
   const broadcasts = (broadcastsData ?? []) as BroadcastRow[];
 
+  // Acuses de broadcast y solicitudes de avisos dependen de tandas distintas
+  // (broadcasts y filas) pero no entre sí: van juntos.
+  const [{ data: receiptsData, error: receiptsError }, solicitudes] = await Promise.all([
+    broadcasts.length > 0
+      ? supabase
+          .from("broadcast_receipts")
+          .select("broadcast_id")
+          .eq("profile_id", userId)
+          .in(
+            "broadcast_id",
+            broadcasts.map((b) => b.id),
+          )
+      : Promise.resolve({ data: [] as { broadcast_id: string }[], error: null }),
+    leerSolicitudesDeAvisos(supabase, userId, rows),
+  ]);
+
   let pendingBroadcasts: BroadcastCardData[] = [];
   if (broadcasts.length > 0) {
-    // El filtro por dueño NO es redundante con la RLS: `broadcast_receipts` se
-    // lee con `profile_id = auth.uid() OR is_global_admin()`, así que sin esto
-    // un global_admin se trae los acuses de TODA la comunidad y cualquier
-    // broadcast que otro ya cerró le desaparece a él sin haberlo visto.
-    const { data: receiptsData, error: receiptsError } = await supabase
-      .from("broadcast_receipts")
-      .select("broadcast_id")
-      .eq("profile_id", userId)
-      .in(
-        "broadcast_id",
-        broadcasts.map((b) => b.id),
-      );
     // Sin acuses no se esconde nada: un broadcast ya cerrado vuelve a aparecer.
     // Molesto, no grave — pero queda en el log para que no parezca un capricho.
     if (receiptsError) {
@@ -291,7 +295,6 @@ async function InboxList({ query, userId }: { query: InboxQuery; userId: string 
       .map((b) => ({ id: b.id, title: b.title, body: b.body, ctaUrl: b.cta_url }));
   }
 
-  const solicitudes = await leerSolicitudesDeAvisos(supabase, userId, rows);
   const now = new Date();
   const items = rows.map((row) => toItem(row, now, solicitudes.get(row.id) ?? null));
 

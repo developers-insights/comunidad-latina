@@ -22,6 +22,7 @@ import { PresenceBeat } from "@/components/messaging/presence-beat";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { isMuxConfigured } from "@/lib/config/services";
 import { getAuthUserId } from "@/lib/supabase/server";
+import { getZonaActiva } from "@/lib/zona/server";
 import { VigilanteDeLlamadas } from "@/components/calls/vigilante";
 import { atenderLlamadaAction, rechazarLlamadaAction } from "./llamadas/actions";
 
@@ -37,6 +38,10 @@ import { atenderLlamadaAction, rechazarLlamadaAction } from "./llamadas/actions"
  * la trata como activa).
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
+  // Precarga: el Header recién arranca cuando este Promise.all resuelve, y sin
+  // esto la zona (cookie + a veces `profiles.area_label`) sería un viaje más en
+  // serie. cache() la memoiza, así que el Header recibe la misma promesa.
+  void getZonaActiva();
   const [tenant, shell, cara, viewer, viewerId] = await Promise.all([
     getTenant(),
     getShellContext(),

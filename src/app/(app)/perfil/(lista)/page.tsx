@@ -7,7 +7,7 @@ import {
   PencilSimple,
   ShieldCheck,
 } from "@phosphor-icons/react/dist/ssr";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { BezelCard, buttonVariants } from "@/components/ui";
 import { TrustScoreCard } from "@/components/trust";
@@ -67,18 +67,21 @@ export default async function PerfilPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const [tenant, supabase, sp, viewerZone] = await Promise.all([
-    getTenant(),
-    createClient(),
-    searchParams,
-    // La zona que la persona eligió en Ajustes (0067). Todas las fechas de esta
-    // pantalla se formatean con ella.
-    getViewerTimeZone(),
-  ]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/entrar?next=/perfil");
+  const [tenant, supabase, sp, viewerZone, userId, identidadActiva, negociosDisponibles] =
+    await Promise.all([
+      getTenant(),
+      createClient(),
+      searchParams,
+      // La zona que la persona eligió en Ajustes (0067). Todas las fechas de esta
+      // pantalla se formatean con ella.
+      getViewerTimeZone(),
+      getAuthUserId(),
+      // La bifurcación de abajo, pedida YA: las dos lecturas sólo dependen de la
+      // sesión y están `cache()`-eadas con el header, así que arrancan juntas.
+      getIdentidadActiva(),
+      listarIdentidadesDeNegocio(),
+    ]);
+  if (!userId) redirect("/entrar?next=/perfil");
 
   const cursor = decodeCursor(firstValue(sp.fotos) || undefined);
   const tab = parseProfileTab(firstValue(sp.t) || undefined);
@@ -93,11 +96,6 @@ export default async function PerfilPage({
    * Las dos lecturas están `cache()`-eadas y el header ya las pidió en este
    * mismo request: no agregan viaje a la base.
    */
-  const [identidadActiva, negociosDisponibles] = await Promise.all([
-    getIdentidadActiva(),
-    listarIdentidadesDeNegocio(),
-  ]);
-
   if (identidadActiva.tipo === "negocio") {
     const [shell, datosDelNegocio] = await Promise.all([
       getShellContext(),
@@ -139,15 +137,15 @@ export default async function PerfilPage({
    * (no se le concede a `anon` a propósito, 0067) y sólo la usa el propio
    * usuario para formatear sus fechas.
    */
-  const [card, { data: trust }, counts, { count: contractsCount }] =
+  const [card, { data: trust }, counts, { count: contractsCount }, checkAzul] =
     await Promise.all([
-      fetchProfileCard(supabase, user.id),
+      fetchProfileCard(supabase, userId),
       supabase
         .from("trust_scores")
         .select("score, level, signals")
-        .eq("profile_id", user.id)
+        .eq("profile_id", userId)
         .maybeSingle(),
-      fetchProfileCounts(supabase, { tenantId: tenant.id, profileId: user.id }),
+      fetchProfileCounts(supabase, { tenantId: tenant.id, profileId: userId }),
       // Acceso a "Mis contratos" (pedido cliente 26/7, movido del nav de
       // Creadores): solo se muestra si el usuario tiene algo que ver ahí — como
       // cliente o como creador — para no ofrecerle a cualquiera un atajo vacío.
@@ -155,7 +153,13 @@ export default async function PerfilPage({
         .from("gig_contracts")
         .select("*", { count: "exact", head: true })
         .eq("tenant_id", tenant.id)
-        .or(`client_id.eq.${user.id},creator_id.eq.${user.id}`),
+        .or(`client_id.eq.${userId},creator_id.eq.${userId}`),
+      // El check azul (0101) sale de `profiles.verified_badge`, el espejo público
+      // que mantiene el trigger de la suscripción. NO de `profile_card`: esa RPC
+      // devuelve la ficha filtrada por privacidad, y la insignia no es un dato
+      // privado —es lo que ve cualquiera al lado del nombre—, así que meterla ahí
+      // habría sido cambiar la firma de la función para nada.
+      leerCheckAzul(supabase, userId),
     ]);
 
   // Cuenta sin perfil (edge raro) → que complete el onboarding.
@@ -171,12 +175,6 @@ export default async function PerfilPage({
   const memberSince = memberSinceLabel(card.createdAt, tenant.locale, viewerZone ?? undefined);
   const missing = missingProfileFields(card);
 
-  // El check azul (0101) sale de `profiles.verified_badge`, el espejo público
-  // que mantiene el trigger de la suscripción. NO de `profile_card`: esa RPC
-  // devuelve la ficha filtrada por privacidad, y la insignia no es un dato
-  // privado —es lo que ve cualquiera al lado del nombre—, así que meterla ahí
-  // habría sido cambiar la firma de la función para nada.
-  const checkAzul = await leerCheckAzul(supabase, card.id);
 
   // Mismo gate que Ajustes: si la comunidad tiene Negocios apagado o "muy
   // pronto", la puerta no se pinta — ofrecer un atajo a una ruta que 404 o que
@@ -283,7 +281,7 @@ export default async function PerfilPage({
       <ProfileTabSection
         supabase={supabase}
         tenantId={tenant.id}
-        profileId={user.id}
+        profileId={userId}
         baseHref="/perfil"
         tab={tab}
         counts={counts}

@@ -16,7 +16,7 @@ import {
   leerPerfilesPatrocinados,
   registrarImpresionesDePerfil,
 } from "@/app/(app)/impulsar/perfil-creador/patrocinados";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { leerChecksAzules } from "@/lib/verificacion/read";
 import { cn } from "@/lib/utils";
@@ -35,9 +35,7 @@ export default function BuscarCreadoresPage() {
 
 async function DirectoryContent() {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   const [{ data: rows, error }, patrocinados] = await Promise.all([
     supabase
@@ -86,16 +84,16 @@ async function DirectoryContent() {
     profileIds.length > 0
       ? supabase.from("profiles").select("id, display_name, avatar_url, identity_verified").in("id", profileIds)
       : Promise.resolve({ data: [] as never[] }),
-    user && profileIds.length > 0
+    userId && profileIds.length > 0
       ? supabase
           .from("follows")
           .select("target_id")
-          .eq("follower_id", user.id)
+          .eq("follower_id", userId)
           .eq("target_kind", "profile")
           .in("target_id", profileIds)
       : Promise.resolve({ data: [] as { target_id: string }[] }),
-    user
-      ? supabase.from("creator_profiles").select("profile_id").eq("profile_id", user.id).maybeSingle()
+    userId
+      ? supabase.from("creator_profiles").select("profile_id").eq("profile_id", userId).maybeSingle()
       : Promise.resolve({ data: null }),
     leerChecksAzules(supabase, profileIds),
   ]);
@@ -124,7 +122,7 @@ async function DirectoryContent() {
       completedJobs: row.completed_jobs,
       available: row.available,
       initialFollowing: following.has(row.profile_id),
-      isSelf: user ? row.profile_id === user.id : false,
+      isSelf: userId ? row.profile_id === userId : false,
     };
   });
 

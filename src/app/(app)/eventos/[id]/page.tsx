@@ -50,7 +50,7 @@ import {
   readEventDetails,
   resolveEventTicketsUrl,
 } from "@/lib/eventos/detalles";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
@@ -89,36 +89,31 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const [tenant, supabase, viewerZone] = await Promise.all([
+  const supabase = await createClient();
+  const [tenant, { data: listing }, userId] = await Promise.all([
     getTenant(),
-    createClient(),
-    // La hora del evento se cuenta con el reloj de quien lo lee, no con el del
-    // server (ver `eventDateParts`).
-    getViewerTimeZone(),
+    supabase
+      .from("listings")
+      .select(
+        // tier + los 2 CTAs de Eventos (MODULE_CTAS.event): comprar boletos y
+        // cómo llegar. Van en la misma fila — por eso son columnas (0048).
+        "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, created_at, tier, cta_tickets_url, cta_address",
+      )
+      .eq("id", id)
+      .eq("kind", "event")
+      .maybeSingle(),
+    getAuthUserId(),
   ]);
-
-  const { data: listing } = await supabase
-    .from("listings")
-    .select(
-      // tier + los 2 CTAs de Eventos (MODULE_CTAS.event): comprar boletos y
-      // cómo llegar. Van en la misma fila — por eso son columnas (0048).
-      "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, created_at, tier, cta_tickets_url, cta_address",
-    )
-    .eq("id", id)
-    .eq("kind", "event")
-    .maybeSingle();
 
   // RLS ya limita qué filas existen para este usuario (published | propias | staff).
   if (!listing || listing.tenant_id !== tenant.id) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   // ---------------------------------------------------------------------
   // Interés (reactions like/listing) + seguidores (0023, solo si hay dueño
   // con cuenta — una entidad sin cuenta no publica novedades) + Novedades
-  // (posts.entity_listing_id) — todo independiente, en paralelo.
+  // (posts.entity_listing_id) + publicador + guardado + la zona de quien lee
+  // (la hora del evento se cuenta con SU reloj, ver `eventDateParts`) — todo
+  // independiente, en UNA tanda.
   // ---------------------------------------------------------------------
   const [
     { count: interestedCount },
@@ -126,6 +121,9 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
     { count: followerCount },
     myFollowResult,
     postsResult,
+    publicador,
+    initialSaved,
+    viewerZone,
   ] = await Promise.all([
     supabase
       .from("reactions")
@@ -134,14 +132,14 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
       .eq("subject_kind", "listing")
       .eq("subject_id", listing.id)
       .eq("kind", "like"),
-    user
+    userId
       ? supabase
           .from("reactions")
           .select("id")
           .eq("tenant_id", tenant.id)
           .eq("subject_kind", "listing")
           .eq("subject_id", listing.id)
-          .eq("profile_id", user.id)
+          .eq("profile_id", userId)
           .eq("kind", "like")
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -153,14 +151,14 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           .eq("target_kind", "listing")
           .eq("target_id", listing.id)
       : Promise.resolve({ count: 0 }),
-    listing.created_by && user
+    listing.created_by && userId
       ? supabase
           .from("follows")
           .select("id")
           .eq("tenant_id", tenant.id)
           .eq("target_kind", "listing")
           .eq("target_id", listing.id)
-          .eq("follower_id", user.id)
+          .eq("follower_id", userId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     supabase
@@ -171,6 +169,23 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
       .eq("status", "published")
       .order("created_at", { ascending: false })
       .limit(3),
+    listing.created_by
+      ? Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, display_name, avatar_url, identity_verified")
+            .eq("id", listing.created_by)
+            .maybeSingle(),
+          supabase
+            .from("trust_scores")
+            .select("score, level, signals")
+            .eq("profile_id", listing.created_by)
+            .maybeSingle(),
+        ])
+      : null,
+    // ¿Ya lo guardé? (`saves`, 0038 — false si la migración todavía no corrió.)
+    fetchListingSaved(supabase, tenant.id, listing.id, userId),
+    getViewerTimeZone(),
   ]);
 
   // Mini-cards de Novedades: primera foto de media (si hay) + body truncado
@@ -189,19 +204,8 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   // Publicador (organiza): perfil + trust score, o fuente externa
   // ---------------------------------------------------------------------
   let publisherCard: React.ReactNode = null;
-  if (listing.created_by) {
-    const [{ data: profile }, { data: trust }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, display_name, avatar_url, identity_verified")
-        .eq("id", listing.created_by)
-        .maybeSingle(),
-      supabase
-        .from("trust_scores")
-        .select("score, level, signals")
-        .eq("profile_id", listing.created_by)
-        .maybeSingle(),
-    ]);
+  if (publicador) {
+    const [{ data: profile }, { data: trust }] = publicador;
 
     const displayName = profile?.display_name ?? "Miembro de la comunidad";
     publisherCard = (
@@ -251,7 +255,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
     ? eventDateParts(attrs.startsAt, tenant.locale, viewerZone ?? undefined)
     : null;
   const venue = attrs.venueArea ?? listing.area_label;
-  const isOwner = Boolean(user && listing.created_by === user.id);
+  const isOwner = Boolean(userId && listing.created_by === userId);
 
   // Cierre (0117): mismo criterio que propiedades/[id] — `listings_select`
   // deja pasar `closed` por su rama pública. Eventos cierra siempre con el
@@ -316,9 +320,6 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
       value: EVENT_DETAILS_COPY.capacityValue(details.capacity),
     });
   }
-
-  // ¿Ya lo guardé? (`saves`, 0038 — false si la migración todavía no corrió.)
-  const initialSaved = await fetchListingSaved(supabase, tenant.id, listing.id, user?.id);
 
   return (
     <div className="pb-28">
@@ -491,7 +492,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           kind={listing.kind}
           tier={listing.tier}
           subject={listing.title}
-          isLoggedIn={Boolean(user)}
+          isLoggedIn={Boolean(userId)}
           values={{
             tickets: listing.cta_tickets_url,
             directions: listing.cta_address,
@@ -557,7 +558,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           {listing.created_by && !isOwner && !isClosed && (
             <InlineMessageCta
               listingId={listing.id}
-              isLoggedIn={Boolean(user)}
+              isLoggedIn={Boolean(userId)}
               nextPath={`/eventos/${listing.id}`}
               className="mt-3"
             />
@@ -624,7 +625,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
         <EventActions
           eventId={listing.id}
           eventTitle={listing.title}
-          isLoggedIn={Boolean(user)}
+          isLoggedIn={Boolean(userId)}
           initialInterested={Boolean(myReactionResult.data)}
           initialCount={interestedCount ?? 0}
         />

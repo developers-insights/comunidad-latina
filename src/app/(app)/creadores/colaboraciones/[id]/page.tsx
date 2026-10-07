@@ -39,7 +39,7 @@ import { PARTY_CONTRACT_COLUMNS, type PartyContract } from "@/lib/creators/contr
 import { displayNameFromPath } from "@/lib/creators/delivery-files";
 import { payoutReadiness } from "@/lib/creators/gig-payments";
 import { formatJobCode } from "@/lib/creators/job-code";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -77,10 +77,8 @@ export default async function ContractDetailPage({
 
   const [tenant, typed] = await Promise.all([getTenant(), createClient()]);
   const supabase = typed as unknown as SupabaseClient;
-  const {
-    data: { user },
-  } = await typed.auth.getUser();
-  if (!user) redirect(`/entrar?next=${encodeURIComponent(`/creadores/colaboraciones/${id}`)}`);
+  const userId = await getAuthUserId();
+  if (!userId) redirect(`/entrar?next=${encodeURIComponent(`/creadores/colaboraciones/${id}`)}`);
 
   const { data: raw } = await supabase.from("gig_contracts").select(DETAIL_COLUMNS).eq("id", id).maybeSingle();
   const contract = raw as DetailContract | null;
@@ -88,7 +86,7 @@ export default async function ContractDetailPage({
   const status = asContractStatus(contract.status);
   if (!status) notFound();
 
-  const role = roleOf(user.id, contract);
+  const role = roleOf(userId, contract);
   if (role === "other") notFound();
   const counterpartId = role === "client" ? contract.creator_id : contract.client_id;
 
@@ -127,7 +125,7 @@ export default async function ContractDetailPage({
             .from("connected_accounts")
             .select("stripe_account_id, capabilities")
             .eq("owner_type", "creator")
-            .eq("owner_ref", user.id)
+            .eq("owner_ref", userId)
             .maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
@@ -166,7 +164,7 @@ export default async function ContractDetailPage({
   const history: HistoryEntry[] = [...events].reverse().map((e) => ({
     id: e.id,
     kind: e.kind,
-    actorLabel: e.actor_id === null ? FLOW_COPY.history.system : e.actor_id === user.id ? FLOW_COPY.history.you : nameOf(e.actor_id),
+    actorLabel: e.actor_id === null ? FLOW_COPY.history.system : e.actor_id === userId ? FLOW_COPY.history.you : nameOf(e.actor_id),
     note: e.note,
     atLabel: when(e.created_at) ?? "",
   }));
@@ -175,7 +173,7 @@ export default async function ContractDetailPage({
   const lastEdit = [...events].reverse().find((e) => e.kind === "terms_edited" || e.kind === "accepted") ?? null;
   const lastChangeRequest =
     lastRequest?.note && (!lastEdit || lastEdit.created_at < lastRequest.created_at)
-      ? { note: lastRequest.note, byYou: lastRequest.actor_id === user.id }
+      ? { note: lastRequest.note, byYou: lastRequest.actor_id === userId }
       : null;
   const lastRevision = [...events].reverse().find((e) => e.kind === "revision_requested")?.note ?? null;
 
@@ -245,7 +243,7 @@ export default async function ContractDetailPage({
   );
 
   const reviews = (reviewsRes.data ?? []) as { id: string; reviewer_id: string; rating: number; body: string | null }[];
-  const myReview = reviews.find((r) => r.reviewer_id === user.id) ?? null;
+  const myReview = reviews.find((r) => r.reviewer_id === userId) ?? null;
   const theirReview = reviews.find((r) => r.reviewer_id === counterpartId) ?? null;
 
   function releaseState(): ReleaseState {

@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/utils";
 import {
   isNotificationCategory,
@@ -52,10 +52,8 @@ export async function getPanelDeCampanaAction(
   tabPedida?: string,
 ): Promise<PanelDeCampanaResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false };
+  const userId = await getAuthUserId();
+  if (!userId) return { ok: false };
 
   const tab = parseTab(tabPedida);
   const nowIso = new Date().toISOString();
@@ -107,7 +105,7 @@ export async function getPanelDeCampanaAction(
   }
 
   const filas = data ?? [];
-  const solicitudes = await leerSolicitudesDeAvisos(supabase, user.id, filas);
+  const solicitudes = await leerSolicitudesDeAvisos(supabase, userId, filas);
 
   const now = new Date();
   const items: NotificationPanelItem[] = filas.map((row) => ({

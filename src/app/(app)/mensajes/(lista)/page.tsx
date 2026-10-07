@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient, getAuthUserId } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/messaging/copy";
+import { BandejaEnVivo } from "@/components/messaging/bandeja-en-vivo";
 import { InboxFiltros } from "@/components/messaging/inbox-filtros";
-import { InboxRow } from "@/components/messaging/inbox-row";
 import { InboxSearch } from "@/components/messaging/inbox-search";
 import { InboxTabs } from "@/components/messaging/inbox-tabs";
+import { RefrescoEnVivo } from "@/components/notifications/refresco-en-vivo";
 import { parseFiltroDePersonas, type FiltroDePersonas } from "@/lib/messaging/bandeja";
-import { leerPresencia, presenciaVisible } from "@/lib/messaging/presencia";
 import { topicoDeDirecto } from "@/lib/messaging/escribiendo";
 import { EscribiendoProvider } from "@/components/messaging/escribiendo-live";
 import { leerBandejaDePersonas } from "../bandeja-queries";
@@ -34,6 +34,9 @@ export const metadata: Metadata = { title: COPY.inbox.title };
  * · **La fila dice qué pasó**: "Nota de voz · 0:24", "Foto", el contador sin
  *   leer y el tilde de leído. Ver `inbox-row.tsx`.
  *
+ * · **En vivo**: la lista la parchea `BandejaEnVivo` cuando suena el timbre de
+ *   una conversación; el servidor no se vuelve a llamar por cada mensaje.
+ *
  * RLS ya limita a conversaciones donde soy `created_by` o `counterpart`;
  * `blocked` se filtra en la consulta (ignorar = desaparece sin drama).
  */
@@ -46,38 +49,25 @@ export default async function MensajesPage({
   if (!userId) redirect("/entrar?next=/mensajes");
 
   const filtro = parseFiltroDePersonas(sp.filtro);
-  const [{ filas, totalNoLeidos, hayLecturas }, supabase] = await Promise.all([
-    leerBandejaDePersonas({ miId: userId, filtro }),
-    createClient(),
-  ]);
+  const { filas, totalNoLeidos, hayLecturas, presencias } = await leerBandejaDePersonas({
+    miId: userId,
+    filtro,
+  });
 
-  /**
-   * LA PRESENCIA VIAJA CON LA BANDEJA, NO DESPUÉS.
-   *
-   * Se resuelve en el servidor y baja pintada: la fila no monta un efecto para
-   * ir a buscar quién está en línea, así que la lista no aparece primero muda y
-   * se completa un segundo más tarde. La reconciliación la hace el refresco que
-   * la pantalla ya tenía, no un viaje propio.
-   */
-  const presencias = await leerPresencia(
-    supabase,
-    filas.map((fila) => fila.personaId),
-  );
-
-  const ahora = new Date();
   const vacio = VACIOS[hayLecturas ? filtro : "todos"];
 
   return (
     /**
-     * "Está escribiendo…" en la bandeja: un canal por conversación, y el
-     * provider corta en `MAX_HILOS_ESCUCHADOS`. Se escuchan las de arriba
-     * —las más recientes— porque cada tópico es una autorización contra
-     * `realtime.messages` y abrir una por fila convierte una pantalla de
-     * lectura en decenas de chequeos. El resto de las filas se lee igual.
+     * "Está escribiendo…" y el timbre de mensajes comparten canal: uno por
+     * conversación, cortado en `MAX_HILOS_ESCUCHADOS`. Se escuchan las de
+     * arriba —las más recientes— porque cada tópico es una autorización contra
+     * `realtime.messages`. Sólo las aceptadas: la 0148 niega el resto.
      */
     <EscribiendoProvider
       miId={userId}
-      topicos={filas.map((fila) => topicoDeDirecto(fila.conversacionPrincipalId))}
+      topicos={filas
+        .filter((fila) => fila.aceptada)
+        .map((fila) => topicoDeDirecto(fila.conversacionPrincipalId))}
     >
       <h1 className="mb-5 font-display text-2xl font-bold tracking-tight text-foreground">
         {COPY.inbox.title}
@@ -94,42 +84,41 @@ export default async function MensajesPage({
       {/* Sin `conversation_reads` no hay forma honesta de decir qué está sin
           leer, así que el chip no se dibuja. Prometer un filtro que devuelve
           siempre cero es peor que no ofrecerlo. */}
-      <InboxFiltros
-        activo={filtro}
-        noLeidos={totalNoLeidos}
-        ocultarNoLeidos={!hayLecturas}
-      />
-
       {filas.length === 0 ? (
-        <EmptyState
-          illustration={filtro === "todos" ? "/images/empty-state-search.png" : undefined}
-          title={vacio.title}
-          message={vacio.message}
-          action={
-            filtro === "todos" ? undefined : (
-              <Link
-                href="/mensajes"
-                className={buttonVariants({ variant: "secondary", size: "md" })}
-              >
-                {COPY.inbox.resetFilter}
-              </Link>
-            )
-          }
-        />
+        <>
+          <RefrescoEnVivo userId={userId} canal="bandeja-vacia" />
+          <InboxFiltros
+            activo={filtro}
+            noLeidos={totalNoLeidos}
+            ocultarNoLeidos={!hayLecturas}
+          />
+          <EmptyState
+            illustration={filtro === "todos" ? "/images/empty-state-search.png" : undefined}
+            title={vacio.title}
+            message={vacio.message}
+            action={
+              filtro === "todos" ? undefined : (
+                <Link
+                  href="/mensajes"
+                  className={buttonVariants({ variant: "secondary", size: "md" })}
+                >
+                  {COPY.inbox.resetFilter}
+                </Link>
+              )
+            }
+          />
+        </>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {filas.map((fila) => (
-            <InboxRow
-              key={fila.personaId}
-              fila={fila}
-              miId={userId}
-              ahora={ahora}
-              presencia={
-                presenciaVisible(presencias.get(fila.personaId), ahora) ?? undefined
-              }
-            />
-          ))}
-        </ul>
+        <BandejaEnVivo
+          filasIniciales={filas}
+          presencias={presencias}
+          miId={userId}
+          ahoraIso={new Date().toISOString()}
+          filtro={filtro}
+          totalNoLeidos={totalNoLeidos}
+          ocultarNoLeidos={!hayLecturas}
+          precargadas={3}
+        />
       )}
     </EscribiendoProvider>
   );

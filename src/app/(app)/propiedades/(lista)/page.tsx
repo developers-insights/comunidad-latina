@@ -359,7 +359,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
     ...new Set(orderedRows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
   ];
 
-  const [checksResult, profilesResult, trustResult, zonesResult, videos] = await Promise.all([
+  const [checksResult, profilesResult, trustResult, zonesResult, videos, formatDate] = await Promise.all([
     listingIds.length > 0
       ? supabase
           .from("verification_checks")
@@ -395,6 +395,7 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
           .not("area_label", "is", null)
           .limit(200),
     fetchListingVideos(supabase, listingIds),
+    getViewerFormatDate(),
   ]);
 
   // Sólo el check MÁS RECIENTE por sujeto decide (viene ordenado checked_at desc).
@@ -404,9 +405,9 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
    * `verification_checks.checked_at` es `timestamptz` (0005), o sea un INSTANTE:
    * el momento en que se consultó el registro oficial. Formatearlo en la zona
    * fija de la comunidad fecha la verificación un día antes para quien mira
-   * desde la costa oeste. Va con el reloj de quien lee.
+   * desde la costa oeste. Va con el reloj de quien lee (`formatDate`, pedido
+   * en la tanda de arriba).
    */
-  const formatDate = await getViewerFormatDate();
   const verificationByListing = new Map<string, VerificationView>();
   const latestCheckSeen = new Set<string>();
   for (const check of checksResult.data ?? []) {

@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   adminThrows: { value: true },
 }));
 
+vi.mock("@/lib/messaging/timbre", () => ({ tocarTimbre: vi.fn() }));
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
 vi.mock("@/lib/rate-limit", () => ({ limit: mocks.limit, HOUR_MS: 3_600_000 }));
 vi.mock("@/lib/moderation", () => ({ moderateText: mocks.moderateText }));
