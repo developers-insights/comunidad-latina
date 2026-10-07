@@ -329,7 +329,13 @@ const nextConfig: NextConfig = {
      * es corto para que nada se vea viejo. Lo que cambia en vivo (bandeja,
      * notificaciones, llamadas) se parchea por Realtime encima de lo cacheado, y
      * toda server action que llama `revalidatePath`/`refresh` invalida este
-     * cache sola — no hay que acordarse de nada al escribir una mutación.
+     * cache sola.
+     *
+     * ⚠️ Lo que NO lo invalida: escrituras hechas desde el navegador con el
+     * cliente de Supabase (el "me gusta" de las cards) y los route handlers. Una
+     * mutación nueva que tenga que verse al volver a otra pantalla va por server
+     * action con `revalidatePath` o `refresh()` (ver las de publicar), no por
+     * un fetch suelto — si no, hasta 30 s se ve la versión de antes.
      */
     staleTimes: {
       dynamic: 30,

@@ -101,7 +101,8 @@ export function EscribiendoProvider({ topicos, miId, children }: EscribiendoProv
    */
   const clave = useMemo(() => {
     const validos = topicos.filter(esTopicoDeEscritura).slice(0, MAX_HILOS_ESCUCHADOS);
-    return [...new Set(validos)].join("|");
+    // Ordenada: que la bandeja se reordene no puede reabrir todos los canales.
+    return [...new Set(validos)].sort().join("|");
   }, [topicos]);
 
   const principal = clave ? clave.split("|")[0] : null;

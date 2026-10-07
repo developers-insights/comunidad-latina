@@ -408,8 +408,9 @@ export async function leerSolicitudes(miId: string): Promise<SolicitudPendiente[
     .eq("counterpart_id", miId)
     .eq("status", "pending")
     .order("created_at", { ascending: false })
-    .order("created_at", { referencedTable: "messages", ascending: true })
-    .limit(1, { referencedTable: "messages" })
+    // Con el embed aliasado, PostgREST lo nombra por el ALIAS (`primeros.order`).
+    .order("created_at", { referencedTable: "primeros", ascending: true })
+    .limit(1, { referencedTable: "primeros" })
     .limit(50);
 
   if (error) {

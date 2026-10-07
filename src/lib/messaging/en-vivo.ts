@@ -8,15 +8,15 @@
  *
  * ─── EL AVISO ES UN TIMBRE, NO EL MENSAJE ───────────────────────────────────
  * Viaja por el MISMO canal privado del "está escribiendo…" (0148), con otro
- * evento. Lo emite el navegador de quien escribió, así que su contenido no se
- * pinta nunca: quien lo recibe va a buscar los mensajes nuevos a la base, con
- * su propia sesión, y la RLS decide qué le llega. Un aviso falso cuesta una
- * consulta que vuelve vacía; no puede hacer aparecer un mensaje que no existe.
+ * evento. Lo emite el SERVIDOR después del insert (`timbre.ts`), con la sesión
+ * de quien escribió. Igual su contenido no se pinta nunca: quien lo recibe va a
+ * buscar los mensajes nuevos a la base con su propia sesión, y la RLS decide
+ * qué le llega. Un aviso falso cuesta una consulta que vuelve vacía; no puede
+ * hacer aparecer un mensaje que no existe.
  *
  * ⚠️ `messages` y `chat_group_messages` NO están en la publicación
- * `supabase_realtime` (verificado contra la base el 2026-10-06). Si algún día
- * un trigger de la base emite este mismo evento en este mismo tópico, el
- * cliente no cambia: el payload sigue siendo sólo el timbre.
+ * `supabase_realtime` (verificado contra la base el 2026-10-06): por eso el
+ * timbre y no `postgres_changes`.
  */
 
 import {
