@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { listingViewHref } from "@/lib/monetization/href";
 import { firstPhotoUrl } from "@/components/listings";
@@ -103,11 +103,9 @@ const PESO: Record<EstadoVencimiento["estado"], number> = {
 
 export async function fetchMisPublicaciones(): Promise<MisPublicaciones> {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user || !tenant) return VACIO;
+  if (!userId || !tenant) return VACIO;
 
   const sinTipar = supabaseSinTiparListings(supabase);
 
@@ -116,7 +114,7 @@ export async function fetchMisPublicaciones(): Promise<MisPublicaciones> {
       .from("listings")
       .select(PUBLICACION_COLUMNS)
       .eq("tenant_id", tenant.id)
-      .eq("created_by", user.id)
+      .eq("created_by", userId)
       .order("created_at", { ascending: false })
       .limit(200),
     sinTipar

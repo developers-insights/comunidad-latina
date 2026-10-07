@@ -4,7 +4,7 @@ import { Badge, BezelCard, EmptyState, buttonVariants } from "@/components/ui";
 import { CreatorTermsAccept } from "@/components/creators/creator-terms-accept";
 import { COPY as CREATORS_COPY } from "@/components/creators";
 import { CREATOR_TERMS, creatorTermsState } from "@/lib/creators/terms";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 
 export const metadata = { title: "Términos de creador" };
@@ -35,11 +35,9 @@ const COPY = {
 
 export default async function TerminosCreadorPage() {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user) {
+  if (!userId) {
     return (
       <EmptyState
         icon={<SignIn />}
@@ -61,7 +59,7 @@ export default async function TerminosCreadorPage() {
   const { data: creator } = await supabase
     .from("creator_profiles")
     .select("creator_terms_accepted_at, creator_terms_version")
-    .eq("profile_id", user.id)
+    .eq("profile_id", userId)
     .maybeSingle();
 
   const acceptance = {

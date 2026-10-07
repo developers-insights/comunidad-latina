@@ -10,7 +10,7 @@ import {
   type CreatorProfileInitial,
 } from "@/components/creators";
 import { PAYOUT_COPY } from "@/components/creators/flow-copy";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getCreatorCommission } from "@/lib/creators/commission";
 import { getTenant } from "@/lib/tenant/resolve";
 import { fetchCreatorRequirements, fetchServicePackages } from "./queries";
@@ -19,11 +19,9 @@ export const metadata = { title: "Mi perfil de creador" };
 
 export default async function MiPerfilCreadorPage() {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user) {
+  if (!userId) {
     return (
       <EmptyState
         icon={<SignIn />}
@@ -50,10 +48,10 @@ export default async function MiPerfilCreadorPage() {
     supabase
       .from("creator_profiles")
       .select("headline, bio, skills, rate_hint, available, portfolio_photos")
-      .eq("profile_id", user.id)
+      .eq("profile_id", userId)
       .maybeSingle(),
-    supabase.from("profiles").select("created_at").eq("id", user.id).maybeSingle(),
-    fetchServicePackages(supabase, user.id, { activeOnly: false }),
+    supabase.from("profiles").select("created_at").eq("id", userId).maybeSingle(),
+    fetchServicePackages(supabase, userId, { activeOnly: false }),
     getCreatorCommission(supabase),
   ]);
 
@@ -61,7 +59,7 @@ export default async function MiPerfilCreadorPage() {
   const stats = await fetchCreatorRequirements(
     supabase,
     tenant.id,
-    user.id,
+    userId,
     profile?.created_at ?? null,
   );
 
@@ -130,7 +128,7 @@ export default async function MiPerfilCreadorPage() {
         className="mb-6"
       />
 
-      <CreatorProfileForm tenantId={tenant.id} userId={user.id} initial={initial} />
+      <CreatorProfileForm tenantId={tenant.id} userId={userId} initial={initial} />
 
       {/*
         PAQUETES DE SERVICIO (0102). Va DESPUÉS del formulario de perfil y no

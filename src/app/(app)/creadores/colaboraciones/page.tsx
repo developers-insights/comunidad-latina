@@ -12,7 +12,7 @@ import {
 } from "@/components/creators";
 import { JobCodeSearch } from "@/components/creators/job-code-search";
 import { formatJobCode, matchesJobCode } from "@/lib/creators/job-code";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import { SectionTopBar } from "@/components/shell";
@@ -55,13 +55,11 @@ interface ContractRow {
 
 async function ContractsContent({ searchParams }: { searchParams: SearchParams }) {
   const [tenant, supabase, sp] = await Promise.all([getTenant(), createClient(), searchParams]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   const rawCode = typeof sp.codigo === "string" ? sp.codigo : undefined;
 
-  if (!user) {
+  if (!userId) {
     return (
       <>
         <Header />
@@ -92,7 +90,7 @@ async function ContractsContent({ searchParams }: { searchParams: SearchParams }
     // El `.or()` de membresía se queda: la RLS deja ver a las partes Y AL STAFF
     // (0024), así que sin este filtro un moderador vería en SU lista las
     // colaboraciones ajenas.
-    .or(`client_id.eq.${user.id},creator_id.eq.${user.id}`)
+    .or(`client_id.eq.${userId},creator_id.eq.${userId}`)
     .order("created_at", { ascending: false });
 
   /**
@@ -115,7 +113,7 @@ async function ContractsContent({ searchParams }: { searchParams: SearchParams }
    */
   const rows = (contracts ?? []).filter((row) => !searching || matchesJobCode(row, rawCode));
   const counterpartIds = [
-    ...new Set(rows.map((row) => (row.client_id === user.id ? row.creator_id : row.client_id))),
+    ...new Set(rows.map((row) => (row.client_id === userId ? row.creator_id : row.client_id))),
   ];
   const { data: profiles } = counterpartIds.length
     ? await supabase.from("profiles").select("id, display_name").in("id", counterpartIds)
@@ -125,7 +123,7 @@ async function ContractsContent({ searchParams }: { searchParams: SearchParams }
   const asClient: ContractRow[] = [];
   const asCreator: ContractRow[] = [];
   for (const row of rows) {
-    const iAmClient = row.client_id === user.id;
+    const iAmClient = row.client_id === userId;
     const counterpartId = iAmClient ? row.creator_id : row.client_id;
     const entry: ContractRow = {
       id: row.id,

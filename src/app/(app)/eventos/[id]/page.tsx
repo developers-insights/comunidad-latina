@@ -50,7 +50,7 @@ import {
   readEventDetails,
   resolveEventTicketsUrl,
 } from "@/lib/eventos/detalles";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
@@ -111,9 +111,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   // RLS ya limita qué filas existen para este usuario (published | propias | staff).
   if (!listing || listing.tenant_id !== tenant.id) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   // ---------------------------------------------------------------------
   // Interés (reactions like/listing) + seguidores (0023, solo si hay dueño
@@ -134,14 +132,14 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
       .eq("subject_kind", "listing")
       .eq("subject_id", listing.id)
       .eq("kind", "like"),
-    user
+    userId
       ? supabase
           .from("reactions")
           .select("id")
           .eq("tenant_id", tenant.id)
           .eq("subject_kind", "listing")
           .eq("subject_id", listing.id)
-          .eq("profile_id", user.id)
+          .eq("profile_id", userId)
           .eq("kind", "like")
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -153,14 +151,14 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           .eq("target_kind", "listing")
           .eq("target_id", listing.id)
       : Promise.resolve({ count: 0 }),
-    listing.created_by && user
+    listing.created_by && userId
       ? supabase
           .from("follows")
           .select("id")
           .eq("tenant_id", tenant.id)
           .eq("target_kind", "listing")
           .eq("target_id", listing.id)
-          .eq("follower_id", user.id)
+          .eq("follower_id", userId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     supabase
@@ -251,7 +249,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
     ? eventDateParts(attrs.startsAt, tenant.locale, viewerZone ?? undefined)
     : null;
   const venue = attrs.venueArea ?? listing.area_label;
-  const isOwner = Boolean(user && listing.created_by === user.id);
+  const isOwner = Boolean(userId && listing.created_by === userId);
 
   // Cierre (0117): mismo criterio que propiedades/[id] — `listings_select`
   // deja pasar `closed` por su rama pública. Eventos cierra siempre con el
@@ -318,7 +316,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
   }
 
   // ¿Ya lo guardé? (`saves`, 0038 — false si la migración todavía no corrió.)
-  const initialSaved = await fetchListingSaved(supabase, tenant.id, listing.id, user?.id);
+  const initialSaved = await fetchListingSaved(supabase, tenant.id, listing.id, userId);
 
   return (
     <div className="pb-28">
@@ -491,7 +489,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           kind={listing.kind}
           tier={listing.tier}
           subject={listing.title}
-          isLoggedIn={Boolean(user)}
+          isLoggedIn={Boolean(userId)}
           values={{
             tickets: listing.cta_tickets_url,
             directions: listing.cta_address,
@@ -557,7 +555,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           {listing.created_by && !isOwner && !isClosed && (
             <InlineMessageCta
               listingId={listing.id}
-              isLoggedIn={Boolean(user)}
+              isLoggedIn={Boolean(userId)}
               nextPath={`/eventos/${listing.id}`}
               className="mt-3"
             />
@@ -624,7 +622,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
         <EventActions
           eventId={listing.id}
           eventTitle={listing.title}
-          isLoggedIn={Boolean(user)}
+          isLoggedIn={Boolean(userId)}
           initialInterested={Boolean(myReactionResult.data)}
           initialCount={interestedCount ?? 0}
         />

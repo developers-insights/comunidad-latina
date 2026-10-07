@@ -44,7 +44,7 @@ import {
 import { fetchListingSaved } from "@/components/marketplace/engagement-queries";
 import { visibleCtasFor } from "@/lib/monetization/tier";
 import { VENCIMIENTO_COPY, isClosedReason } from "@/lib/listings";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
@@ -112,14 +112,12 @@ export default async function ProductoDetallePage({ params }: { params: Params }
 
   if (!product || product.tenant_id !== tenant.id) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   const attrs = parseProductAttrs(product.attrs);
   const priceLabel = formatProductPrice(product.price_amount, product.price_currency, tenant.locale);
   const photos = (product.photos ?? []).map(listingPhotoUrl);
-  const isOwner = Boolean(user && product.created_by === user.id);
+  const isOwner = Boolean(userId && product.created_by === userId);
 
   // Cierre (0117): mismo criterio que propiedades/[id] — `listings_select`
   // deja pasar `closed` por su rama pública, así que esta página también
@@ -141,7 +139,7 @@ export default async function ProductoDetallePage({ params }: { params: Params }
   // (listings.comment_count, mantenido por trigger); "¿ya lo guardé?" es una
   // lectura propia del visitante y degrada a false — ver engagement-queries.
   const commentCount = Math.max(0, product.comment_count ?? 0);
-  const initialSaved = await fetchListingSaved(supabase, tenant.id, product.id, user?.id);
+  const initialSaved = await fetchListingSaved(supabase, tenant.id, product.id, userId);
 
   // ---------------------------------------------------------------------
   // Quién vende. Con tienda: nombre/zona/foto + seguidores + trust del dueño +
@@ -181,12 +179,12 @@ export default async function ProductoDetallePage({ params }: { params: Params }
           .eq("tenant_id", tenant.id)
           .eq("target_kind", "listing")
           .eq("target_id", storeId),
-        user
+        userId
           ? supabase
               .from("follows")
               .select("id")
               .eq("tenant_id", tenant.id)
-              .eq("follower_id", user.id)
+              .eq("follower_id", userId)
               .eq("target_kind", "listing")
               .eq("target_id", storeId)
               .maybeSingle()
@@ -476,7 +474,7 @@ export default async function ProductoDetallePage({ params }: { params: Params }
           <section className="mt-6">
             <InlineMessageCta
               listingId={product.id}
-              isLoggedIn={Boolean(user)}
+              isLoggedIn={Boolean(userId)}
               nextPath={`/marketplace/${product.id}`}
             />
           </section>

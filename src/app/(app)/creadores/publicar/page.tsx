@@ -2,18 +2,16 @@ import Link from "next/link";
 import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COPY, GigPublishForm } from "@/components/creators";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 
 export const metadata = { title: "Publicar un trabajo" };
 
 export default async function PublicarGigPage() {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user) {
+  if (!userId) {
     return (
       <EmptyState
         icon={<SignIn />}

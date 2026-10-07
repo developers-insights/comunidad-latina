@@ -49,7 +49,7 @@ import {
   readJobDetails,
   workDayLabel,
 } from "@/lib/empleos/detalles";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { VENCIMIENTO_COPY, isClosedReason } from "@/lib/listings";
@@ -113,9 +113,7 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
   // RLS ya limita qué filas existen para este usuario (published | propias | staff).
   if (!listing || listing.tenant_id !== tenant.id) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   /**
    * SERVICIO → otra pantalla, desde acá.
@@ -127,12 +125,12 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
    * URL canónica, el guardado, el escudo anti-estafa— ya pasó.
    */
   if (listing.kind === "service") {
-    const savedService = await fetchListingSaved(supabase, tenant.id, listing.id, user?.id);
+    const savedService = await fetchListingSaved(supabase, tenant.id, listing.id, userId);
     return (
       <ServiceDetail
         listing={listing}
         locale={tenant.locale}
-        viewerId={user?.id ?? null}
+        viewerId={userId}
         initialSaved={savedService}
         photoUrls={(listing.photos ?? []).map(listingPhotoUrl)}
       />
@@ -140,7 +138,7 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
   }
 
   const attrs = parseJobAttrs(listing.attrs);
-  const isOwner = Boolean(user && listing.created_by === user.id);
+  const isOwner = Boolean(userId && listing.created_by === userId);
 
   // Cierre (0117): mismo criterio que propiedades/[id] — `listings_select`
   // deja pasar `closed` por su rama pública, así que esta página también
@@ -245,7 +243,7 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
   }
 
   // ¿Ya lo guardé? (`saves`, 0038 — false si la migración todavía no corrió.)
-  const initialSaved = await fetchListingSaved(supabase, tenant.id, listing.id, user?.id);
+  const initialSaved = await fetchListingSaved(supabase, tenant.id, listing.id, userId);
 
   // -------------------------------------------------------------------------
   // Quién ofrece el trabajo: perfil con Trust Score, o fuente externa atribuida
@@ -268,12 +266,12 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
     const displayName = profile?.display_name ?? C.fallbackPublisher;
     publisherCard = (
       <BezelCard coreClassName="flex items-center gap-3 p-4">
-        <ProfileLink profileId={profile?.id} name={displayName} viewerId={user?.id} variant="avatar" duplicate>
+        <ProfileLink profileId={profile?.id} name={displayName} viewerId={userId} variant="avatar" duplicate>
           <Avatar src={profile?.avatar_url} name={displayName} size="lg" />
         </ProfileLink>
         <div className="min-w-0">
           <p className="flex min-w-0 font-display text-base font-bold text-foreground">
-            <ProfileLink profileId={profile?.id} name={displayName} viewerId={user?.id}>
+            <ProfileLink profileId={profile?.id} name={displayName} viewerId={userId}>
               <span className="truncate">{displayName}</span>
             </ProfileLink>
           </p>
@@ -445,7 +443,7 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
           ) : (
             <ApplicantAction
               jobId={listing.id}
-              userId={user?.id ?? null}
+              userId={userId}
               questions={attrs.questions}
             />
           )}

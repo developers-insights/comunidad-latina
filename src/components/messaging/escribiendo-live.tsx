@@ -26,7 +26,6 @@ import {
   EVENTO_MENSAJE,
   esAvisoDeMensaje,
   type AvisoDeMensaje,
-  type TipoDeAviso,
 } from "@/lib/messaging/en-vivo";
 import { COPY } from "./copy";
 
@@ -76,7 +75,6 @@ interface Contexto {
   porTopico: Readonly<Record<string, string[]>>;
   principal: string | null;
   avisar: (activo: boolean, topico?: string) => void;
-  avisarMensaje: (tipo: TipoDeAviso, topico?: string) => void;
   escuchar: (oyente: OyenteDelHilo) => () => void;
 }
 
@@ -236,21 +234,6 @@ export function EscribiendoProvider({ topicos, miId, children }: EscribiendoProv
     [clave, miId],
   );
 
-  const avisarMensaje = useCallback(
-    (tipo: TipoDeAviso, topico?: string) => {
-      const destino = topico ?? (clave ? clave.split("|")[0] : null);
-      if (!destino || !miId) return;
-      const canal = canalesRef.current.get(destino);
-      if (!canal) return;
-      void canal
-        .send({ type: "broadcast", event: EVENTO_MENSAJE, payload: { de: miId, tipo } })
-        .then((estado) => {
-          if (estado !== "ok") console.warn("[mensajes] el aviso de mensaje no salió", { estado });
-        });
-    },
-    [clave, miId],
-  );
-
   const escuchar = useCallback((oyente: OyenteDelHilo) => {
     oyentesRef.current.add(oyente);
     return () => {
@@ -259,8 +242,8 @@ export function EscribiendoProvider({ topicos, miId, children }: EscribiendoProv
   }, []);
 
   const valor = useMemo<Contexto>(
-    () => ({ porTopico, principal, avisar, avisarMensaje, escuchar }),
-    [porTopico, principal, avisar, avisarMensaje, escuchar],
+    () => ({ porTopico, principal, avisar, escuchar }),
+    [porTopico, principal, avisar, escuchar],
   );
 
   return <EscribiendoContext.Provider value={valor}>{children}</EscribiendoContext.Provider>;
@@ -294,16 +277,10 @@ export function useAvisoDeEscritura(): (activo: boolean) => void {
 }
 
 /**
- * Lo que llama quien acaba de cambiar el hilo (enviar, editar, borrar,
- * reaccionar) para que del otro lado se enteren ya. Fuera del provider no hace
- * nada: la variante sin canal es la conversación sin aceptar.
+ * Los timbres de mensaje de todos los tópicos del provider. Los toca el
+ * servidor después de cada insert (`lib/messaging/timbre.ts`); acá sólo se
+ * reparten. Fuera del provider —conversación sin aceptar— no llega nada.
  */
-export function useAvisoDeMensaje(): (tipo: TipoDeAviso) => void {
-  const ctx = useContext(EscribiendoContext);
-  return useCallback((tipo: TipoDeAviso) => ctx?.avisarMensaje(tipo), [ctx]);
-}
-
-/** Se suscribe a los timbres de mensaje de todos los tópicos del provider. */
 export function useSenalesDelHilo(oyente: OyenteDelHilo): void {
   const ctx = useContext(EscribiendoContext);
   const escuchar = ctx?.escuchar;

@@ -3,7 +3,7 @@ import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { ReglasDeAyuda } from "@/components/comunidad";
 import { COMUNIDAD_COPY, isHelpTopic, type HelpTopic } from "@/lib/comunidad";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { PedidoForm } from "./pedido-form";
 
 export const metadata = { title: "Escribir un pedido" };
@@ -46,11 +46,9 @@ export default async function EscribirPedidoPage({
   searchParams: SearchParams;
 }) {
   const [supabase, sp] = await Promise.all([createClient(), searchParams]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user) {
+  if (!userId) {
     return (
       <EmptyState
         icon={<SignIn />}

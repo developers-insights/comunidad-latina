@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import { VIDEOS_COPY } from "../../copy";
@@ -43,10 +43,8 @@ export default async function LongVideoPage({
   if (!UUID_RE.test(id)) notFound();
 
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const viewerId = user?.id ?? null;
+  const userId = await getAuthUserId();
+  const viewerId = userId;
 
   const post = await fetchLongVideoById({
     supabase,

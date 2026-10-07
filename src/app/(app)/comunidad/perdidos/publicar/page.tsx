@@ -2,7 +2,7 @@ import Link from "next/link";
 import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COMUNIDAD_COPY } from "@/lib/comunidad";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { CasoPublishForm } from "./publish-form";
 
@@ -22,11 +22,9 @@ const RUTA = "/comunidad/perdidos/publicar";
  */
 export default async function PublicarCasoPage() {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user) {
+  if (!userId) {
     return (
       <EmptyState
         icon={<SignIn />}

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SignIn } from "@phosphor-icons/react/dist/ssr";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { Banner } from "@/components/ui";
 import {
@@ -47,10 +47,8 @@ async function getConversationOptions(): Promise<{
   options: ConversationOption[];
 }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { authenticated: false, options: [] };
+  const userId = await getAuthUserId();
+  if (!userId) return { authenticated: false, options: [] };
 
   // RLS: solo devuelve conversaciones donde soy participante.
   const { data: rows, error } = await supabase
@@ -79,7 +77,7 @@ async function getConversationOptions(): Promise<{
       .from("messages")
       .select("id, conversation_id, sender_id, created_at")
       .in("conversation_id", conversationIds)
-      .neq("sender_id", user.id)
+      .neq("sender_id", userId)
       .order("created_at", { ascending: false })
       .limit(60);
 
@@ -99,7 +97,7 @@ async function getConversationOptions(): Promise<{
   const formatDate = await getViewerFormatDate();
 
   const options: ConversationOption[] = conversations.map((row) => {
-    const other = row.created_by === user.id ? row.counterpart : row.creator;
+    const other = row.created_by === userId ? row.counterpart : row.creator;
     return {
       conversationId: row.id,
       label: other?.display_name ?? "Alguien de la comunidad",

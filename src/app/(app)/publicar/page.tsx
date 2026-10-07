@@ -3,7 +3,7 @@ import { SignIn, Storefront } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/listings";
 import { moduleAvailability } from "@/components/shell/module-access";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import {
@@ -69,11 +69,9 @@ export default async function PublicarPage({
   const requestedKind = parseInitialKind(sp.kind);
   const initialKind =
     requestedKind && allowedKinds.includes(requestedKind) ? requestedKind : null;
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user) {
+  if (!userId) {
     // Conserva el ?kind= a través del login (si no, el preselect se pierde
     // apenas el usuario anónimo tiene que entrar primero).
     const next = initialKind ? `/publicar?kind=${initialKind}` : "/publicar";

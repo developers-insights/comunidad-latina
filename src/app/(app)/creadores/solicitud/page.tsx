@@ -6,7 +6,7 @@ import { CreatorRequestForm } from "@/components/creators/creator-request-form";
 import { COPY as CREATORS_COPY } from "@/components/creators";
 import { configFromRow, evaluateEligibility } from "@/lib/creators/eligibility";
 import { creatorTermsState } from "@/lib/creators/terms";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { fetchEligibilityConfigRow, fetchOwnCreatorFacts } from "./queries";
 
@@ -68,11 +68,9 @@ const STATUS_NOTICE: Record<string, { title: string; body: string }> = {
 
 export default async function SolicitudCreadorPage() {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user) {
+  if (!userId) {
     return (
       <EmptyState
         icon={<SignIn />}
@@ -93,7 +91,7 @@ export default async function SolicitudCreadorPage() {
 
   const [configRow, facts] = await Promise.all([
     fetchEligibilityConfigRow(supabase, tenant.id),
-    fetchOwnCreatorFacts(supabase, tenant.id, user.id),
+    fetchOwnCreatorFacts(supabase, tenant.id, userId),
   ]);
 
   const config = configFromRow(configRow);

@@ -9,24 +9,32 @@ import {
   useRef,
   useState,
 } from "react";
+import { cn } from "@/lib/utils";
+import {
+  sumarEntrantes as combinarEntrantes,
+  textoDeEntrante,
+  type MensajeEntrante,
+} from "@/lib/messaging/en-vivo";
 import { COPY } from "./copy";
 
 /**
- * MENSAJES EN VUELO — envío optimista y aviso de mensajes nuevos.
+ * MENSAJES EN VUELO — lo que se ve antes de que el servidor vuelva a pintar.
  *
- * Lo usa el chat que vive adentro de la pantalla de llamada. Ahí cada envío
- * espera la server action y después un `router.refresh()` de la página ENTERA
- * de la llamada; sin burbuja optimista, el mensaje tardaba un segundo largo en
- * aparecer y parecía que no había salido.
+ * Dos cosas viven acá y por el mismo motivo (el hilo es un Server Component y
+ * re-renderizarlo cuesta un viaje entero):
  *
- * Las server actions no devuelven el id del mensaje creado, así que la burbuja
- * en vuelo no se puede casar por id: se retira en orden (FIFO) a medida que
- * aparecen mensajes PROPIOS que no estaban en la lista anterior. El
- * temporizador de `confirmar` es la red por si el refresco no trae el mensaje
- * (por ejemplo, el hilo ya estaba en su tope de mensajes cargados).
+ *  · PENDIENTES: lo que acabo de mandar. Aparece en el mismo frame del Enter;
+ *    si la action falla, el composer lo retira y devuelve el texto al campo.
+ *  · ENTRANTES: lo que llegó por el timbre (`hilo-en-vivo.tsx`) y ya se leyó
+ *    de la base, pero todavía no volvió en el render del servidor.
  *
- * Fuera del provider todo esto es inerte: `useEnvioOptimista()` da `null` y el
- * composer se comporta como en la página del hilo.
+ * Las server actions no devuelven el id del mensaje creado, así que una
+ * pendiente no se casa por id: se retira en orden (FIFO) a medida que aparecen
+ * mensajes PROPIOS nuevos, vengan del servidor o del timbre. El temporizador de
+ * `confirmar` es la red por si ninguno de los dos lo trae.
+ *
+ * Lo montan el hilo de la página y el chat de la llamada; fuera del provider
+ * todo esto es inerte y el composer espera como siempre.
  */
 
 export interface MensajeEnVuelo {
@@ -36,10 +44,12 @@ export interface MensajeEnVuelo {
 
 interface EnVueloCtx {
   pendientes: MensajeEnVuelo[];
+  entrantes: MensajeEntrante[];
   agregar: (body: string) => string;
   confirmar: (tempId: string) => void;
   quitar: (tempId: string) => void;
   reportar: (mensajes: { id: string; propio: boolean }[]) => void;
+  recibir: (mensajes: MensajeEntrante[]) => void;
 }
 
 const Ctx = createContext<EnVueloCtx | null>(null);
@@ -55,7 +65,9 @@ export function EnVueloProvider({
   onNuevosAjenos?: (cantidad: number) => void;
 }) {
   const [pendientes, setPendientes] = useState<MensajeEnVuelo[]>([]);
-  const conocidos = useRef<Set<string> | null>(null);
+  const [entrantes, setEntrantes] = useState<MensajeEntrante[]>([]);
+  const delServidor = useRef<Set<string> | null>(null);
+  const vistos = useRef(new Set<string>());
   const contador = useRef(0);
   const temporizadores = useRef(new Map<string, number>());
   const alNuevos = useRef(onNuevosAjenos);
@@ -90,40 +102,60 @@ export function EnVueloProvider({
     [quitar],
   );
 
+  /** Lo nuevo de verdad: retira pendientes propias y avisa las ajenas. */
+  const contar = useCallback((mensajes: { id: string; propio: boolean }[]) => {
+    const nuevos = mensajes.filter((m) => !vistos.current.has(m.id));
+    if (nuevos.length === 0) return;
+    for (const m of nuevos) vistos.current.add(m.id);
+
+    const propios = nuevos.filter((m) => m.propio).length;
+    const ajenos = nuevos.length - propios;
+    if (propios > 0) {
+      setPendientes((lista) => {
+        for (const p of lista.slice(0, propios)) {
+          const id = temporizadores.current.get(p.tempId);
+          if (id !== undefined) window.clearTimeout(id);
+          temporizadores.current.delete(p.tempId);
+        }
+        return lista.slice(propios);
+      });
+    }
+    if (ajenos > 0) alNuevos.current?.(ajenos);
+  }, []);
+
   const reportar = useCallback(
     (mensajes: { id: string; propio: boolean }[]) => {
-      // El primer reporte es la línea de base: lo que ya estaba al abrir la
-      // llamada no es "nuevo" y no debe prender el contador.
-      if (conocidos.current === null) {
-        conocidos.current = new Set(mensajes.map((m) => m.id));
+      const ids = new Set(mensajes.map((m) => m.id));
+      // El primer reporte es la línea de base: lo que ya estaba al abrir el
+      // hilo no es "nuevo" y no debe prender ningún contador.
+      if (delServidor.current === null) {
+        delServidor.current = ids;
+        for (const id of ids) vistos.current.add(id);
         return;
       }
-      const vistos = conocidos.current;
-      const nuevos = mensajes.filter((m) => !vistos.has(m.id));
-      if (nuevos.length === 0) return;
-      for (const m of nuevos) vistos.add(m.id);
-
-      const propios = nuevos.filter((m) => m.propio).length;
-      const ajenos = nuevos.length - propios;
-      if (propios > 0) {
-        setPendientes((lista) => {
-          const salen = lista.slice(0, propios);
-          for (const p of salen) {
-            const id = temporizadores.current.get(p.tempId);
-            if (id !== undefined) window.clearTimeout(id);
-            temporizadores.current.delete(p.tempId);
-          }
-          return lista.slice(propios);
-        });
-      }
-      if (ajenos > 0) alNuevos.current?.(ajenos);
+      delServidor.current = ids;
+      contar(mensajes);
+      setEntrantes((lista) =>
+        lista.some((m) => ids.has(m.id)) ? lista.filter((m) => !ids.has(m.id)) : lista,
+      );
     },
-    [],
+    [contar],
+  );
+
+  const recibir = useCallback(
+    (mensajes: MensajeEntrante[]) => {
+      const conocidos = delServidor.current ?? new Set<string>();
+      const nuevos = mensajes.filter((m) => !conocidos.has(m.id));
+      if (nuevos.length === 0) return;
+      contar(nuevos.map((m) => ({ id: m.id, propio: m.propio })));
+      setEntrantes((lista) => combinarEntrantes(lista, nuevos, conocidos));
+    },
+    [contar],
   );
 
   const valor = useMemo(
-    () => ({ pendientes, agregar, confirmar, quitar, reportar }),
-    [pendientes, agregar, confirmar, quitar, reportar],
+    () => ({ pendientes, entrantes, agregar, confirmar, quitar, reportar, recibir }),
+    [pendientes, entrantes, agregar, confirmar, quitar, reportar, recibir],
   );
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
@@ -136,15 +168,22 @@ export function useEnvioOptimista() {
     : null;
 }
 
+/** Para `hilo-en-vivo.tsx`: entrega lo que el timbre trajo de la base. */
+export function useRecibirEntrantes(): ((mensajes: MensajeEntrante[]) => void) | null {
+  return useContext(Ctx)?.recibir ?? null;
+}
+
 /**
- * Va al final de la lista del hilo: reporta qué mensajes hay (para el contador
- * de no leídos y para retirar las burbujas en vuelo) y pinta las que todavía
- * no volvieron del servidor.
+ * Va al final de la lista del hilo: reporta qué mensajes pintó el servidor y
+ * dibuja lo que todavía no volvió de él.
  */
 export function MensajesEnVuelo({
   mensajes,
+  conAutor = false,
 }: {
   mensajes: { id: string; propio: boolean }[];
+  /** En un grupo, la burbuja ajena dice de quién es. */
+  conAutor?: boolean;
 }) {
   const ctx = useContext(Ctx);
   const reportar = ctx?.reportar;
@@ -157,20 +196,23 @@ export function MensajesEnVuelo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firma, reportar]);
 
-  const cantidad = ctx?.pendientes.length ?? 0;
+  const cantidad = (ctx?.pendientes.length ?? 0) + (ctx?.entrantes.length ?? 0);
   const finRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (cantidad === 0) return;
-    const scroller = finRef.current?.closest<HTMLElement>(
-      "[data-chat-scroller]",
-    );
-    scroller?.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+    const fin = finRef.current;
+    const scroller = fin?.closest<HTMLElement>("[data-chat-scroller]");
+    if (scroller) scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+    else fin?.scrollIntoView?.({ block: "end", behavior: "smooth" });
   }, [cantidad]);
 
   if (!ctx || cantidad === 0) return null;
 
   return (
     <>
+      {ctx.entrantes.map((m) => (
+        <BurbujaEntrante key={m.id} mensaje={m} conAutor={conAutor} />
+      ))}
       {ctx.pendientes.map((p) => (
         <div key={p.tempId} className="flex justify-end" data-en-vuelo="true">
           <div className="max-w-[80%] rounded-2xl rounded-br-md bg-brand-tint px-4 py-2.5 text-foreground opacity-75">
@@ -185,5 +227,58 @@ export function MensajesEnVuelo({
       ))}
       <div ref={finRef} aria-hidden="true" />
     </>
+  );
+}
+
+const HORA = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
+
+/**
+ * La burbuja provisoria: el texto como llegó, o el resumen ("Foto") cuando es
+ * un adjunto, hasta que el refresco traiga la de verdad con su menú, sus
+ * reacciones y la imagen firmada.
+ */
+function BurbujaEntrante({
+  mensaje,
+  conAutor,
+}: {
+  mensaje: MensajeEntrante;
+  conAutor: boolean;
+}) {
+  const { texto, esResumen } = textoDeEntrante(mensaje);
+  const fecha = new Date(mensaje.created_at);
+  return (
+    <div
+      className={cn("flex", mensaje.propio ? "justify-end" : "justify-start")}
+      data-entrante="true"
+    >
+      <div
+        className={cn(
+          "max-w-[80%] rounded-2xl px-4 py-2.5 text-foreground",
+          mensaje.propio ? "rounded-br-md bg-brand-tint" : "rounded-bl-md bg-surface-subtle",
+        )}
+      >
+        {conAutor && !mensaje.propio && mensaje.autorNombre && (
+          <p className="mb-0.5 truncate text-xs font-semibold text-foreground-secondary">
+            {mensaje.autorNombre}
+          </p>
+        )}
+        <p
+          className={cn(
+            "whitespace-pre-wrap break-words text-sm leading-relaxed",
+            esResumen && "italic text-foreground-secondary",
+          )}
+        >
+          {texto}
+        </p>
+        <p
+          className={cn(
+            "mt-1 text-[10px] text-foreground-secondary",
+            mensaje.propio ? "text-right" : "text-left",
+          )}
+        >
+          {Number.isNaN(fecha.getTime()) ? "" : HORA.format(fecha)}
+        </p>
+      </div>
+    </div>
   );
 }

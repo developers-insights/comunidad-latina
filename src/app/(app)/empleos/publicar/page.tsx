@@ -2,7 +2,7 @@ import Link from "next/link";
 import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/empleos/copy";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { requireIdentidadVerificada } from "@/lib/verificacion/gate";
 import { PublishRouter } from "./publish-router";
@@ -29,11 +29,9 @@ const C = COPY.publish;
  */
 export default async function PublicarEmpleoPage() {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
-  if (!user) {
+  if (!userId) {
     return (
       <>
         {/* Sin sesión también hay que poder salir. La barra la monta acá esta
@@ -81,7 +79,7 @@ export default async function PublicarEmpleoPage() {
     .from("listings")
     .select("id, title")
     .eq("tenant_id", tenant.id)
-    .eq("created_by", user.id)
+    .eq("created_by", userId)
     .eq("kind", "business")
     .eq("status", "published")
     .order("title")

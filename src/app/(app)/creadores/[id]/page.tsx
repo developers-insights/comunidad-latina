@@ -29,7 +29,7 @@ import {
   parseGigAttrs,
   type ApplicationCreator,
 } from "@/components/creators";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { leerCheckAzul, leerChecksAzules } from "@/lib/verificacion/read";
 import { cn } from "@/lib/utils";
@@ -42,9 +42,7 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
   if (!z.uuid().safeParse(id).success) notFound();
 
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   const { data: gig } = await supabase
     .from("listings")
@@ -56,7 +54,7 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
 
   if (!gig || gig.kind !== "creator_gig") notFound();
 
-  const isOwner = Boolean(user && gig.created_by === user.id);
+  const isOwner = Boolean(userId && gig.created_by === userId);
   if (gig.status !== "published" && !isOwner) notFound();
 
   const attrs = parseGigAttrs(gig.attrs);
@@ -224,7 +222,7 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
           isPending={gig.status !== "published"}
         />
       ) : (
-        <ApplicantAction gigId={gig.id} userId={user?.id ?? null} />
+        <ApplicantAction gigId={gig.id} userId={userId} />
       )}
     </div>
   );

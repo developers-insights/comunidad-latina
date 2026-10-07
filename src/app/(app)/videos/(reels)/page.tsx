@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { VideoCategoryMenu } from "../category-menu";
 import {
@@ -80,14 +80,12 @@ async function ReelsContent({
   q: string | null;
 }) {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   const page = await fetchVideoReelsPage({
     supabase,
     tenantId: tenant.id,
-    viewerId: user?.id ?? null,
+    viewerId: userId,
     scope,
     category: categoryFilterValue(category),
     q,
@@ -100,7 +98,7 @@ async function ReelsContent({
     <VideoReels
       key={`${scope}|${category ?? ""}|${q ?? ""}`}
       tenantId={tenant.id}
-      viewerId={user?.id ?? null}
+      viewerId={userId}
       scope={scope}
       category={category}
       q={q}

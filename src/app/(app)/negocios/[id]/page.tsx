@@ -33,7 +33,7 @@ import { fetchPuestosDelNegocio } from "@/lib/negocios/empleos";
 import { fetchEventosDelNegocio } from "@/lib/negocios/eventos";
 import { EventosDelNegocio, EVENTOS_DEL_NEGOCIO_TITULO } from "@/components/negocios/eventos-del-negocio";
 import { puedeOfrecerseElFormulario } from "@/lib/resenas";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
@@ -159,9 +159,7 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
   // staff). El chequeo de tenant es el cinturón sobre los tirantes.
   if (!listing || listing.tenant_id !== tenant.id) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   // Seguidores + publicaciones del negocio + guardado: independientes, en
   // paralelo. Ninguna es bloqueante — si alguna falla, la sección cae a vacío.
@@ -183,14 +181,14 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
             .eq("target_kind", "listing")
             .eq("target_id", listing.id)
         : Promise.resolve({ count: 0 }),
-      listing.created_by && user
+      listing.created_by && userId
         ? supabase
             .from("follows")
             .select("id")
             .eq("tenant_id", tenant.id)
             .eq("target_kind", "listing")
             .eq("target_id", listing.id)
-            .eq("follower_id", user.id)
+            .eq("follower_id", userId)
             .maybeSingle()
         : Promise.resolve({ data: null }),
       supabase
@@ -201,10 +199,10 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
         .eq("status", "published")
         .order("created_at", { ascending: false })
         .limit(4),
-      fetchListingSaved(supabase, tenant.id, listing.id, user?.id),
+      fetchListingSaved(supabase, tenant.id, listing.id, userId),
       // Reseñas: resumen + página + si administro este aviso. Tolerante a
       // errores por dentro — si algo falla, la sección cae a vacío como el resto.
-      fetchResenasDeAviso(supabase, listing.id, user?.id ?? null),
+      fetchResenasDeAviso(supabase, listing.id, userId),
       // Puestos abiertos (0107). Tolerante también: en un entorno sin la
       // migración aplicada devuelve [] y la sección no se dibuja.
       fetchPuestosDelNegocio(supabase, {
@@ -304,7 +302,7 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
   }
 
   const categoryLabel = businessCategoryLabel(businessCategoryOf(listing.attrs));
-  const isOwner = Boolean(user && listing.created_by === user.id);
+  const isOwner = Boolean(userId && listing.created_by === userId);
   // La PORTADA (0127) abre el hero: es la foto que el negocio eligió como su
   // banner, y por eso va antes que la galería del aviso —que no se pierde,
   // queda detrás en el mismo carrusel—. Sin portada, todo sigue igual que antes.
@@ -451,12 +449,12 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
             }}
             subject={listing.title}
             showChat={false}
-            isLoggedIn={Boolean(user)}
+            isLoggedIn={Boolean(userId)}
           />
           {listing.created_by && !isOwner ? (
             <InlineMessageCta
               listingId={listing.id}
-              isLoggedIn={Boolean(user)}
+              isLoggedIn={Boolean(userId)}
               nextPath={`/negocios/${listing.id}`}
               label={C.messageLabel}
               placeholder={C.messagePlaceholder}
@@ -628,7 +626,7 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
           <ResumenPuntajeCard resumen={resenas.resumen} reparto={resenas.reparto} />
 
           {puedeOfrecerseElFormulario({
-            usuarioId: user?.id ?? null,
+            usuarioId: userId,
             publicadoPor: listing.created_by,
             administraElAviso: resenas.administraElAviso,
             estadoDelAviso: listing.status,
@@ -638,8 +636,8 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
             listingId={listing.id}
             resenas={resenas.resenas}
             puedeResponder={resenas.administraElAviso}
-            hayCuenta={Boolean(user)}
-            puedeEscribir={Boolean(user) && !resenas.administraElAviso && !isOwner}
+            hayCuenta={Boolean(userId)}
+            puedeEscribir={Boolean(userId) && !resenas.administraElAviso && !isOwner}
           />
         </div>
       </section>

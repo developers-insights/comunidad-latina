@@ -3,7 +3,7 @@ import Link from "next/link";
 import { FilmSlate } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, Skeleton, buttonVariants } from "@/components/ui";
 import { ModuleSearchBar } from "@/components/search";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -95,16 +95,14 @@ async function LongVideosContent({
   q: string | null;
 }) {
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   const conAvisos = category === ALL_CATEGORIES && !q;
   const [page, avisos] = await Promise.all([
     fetchLongVideosPage({
       supabase,
       tenantId: tenant.id,
-      viewerId: user?.id ?? null,
+      viewerId: userId,
       category: categoryFilterValue(category),
       q,
       cursor: null,
@@ -114,7 +112,7 @@ async function LongVideosContent({
       ? fetchAvisosConVideoLargo({
           supabase,
           tenantId: tenant.id,
-          viewerId: user?.id ?? null,
+          viewerId: userId,
           locale: tenant.locale,
         })
       : Promise.resolve([]),

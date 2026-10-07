@@ -29,7 +29,7 @@ import { PREFS_COPY } from "@/components/notifications";
 import { DeleteAccount } from "@/components/auth/delete-account";
 import { getShellContext } from "@/components/shell/shell-context";
 import { moduleAvailability } from "@/components/shell/module-access";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId, getCurrentUser } from "@/lib/supabase/server";
 import { isPhoneVerificationEnabled } from "@/lib/config/services";
 import {
   getIdentidadActiva,
@@ -67,16 +67,17 @@ export const metadata = { title: COPY.title };
  * queda la invitación a entrar en vez de un 404 en una pestaña fija de la barra.
  */
 export default async function AjustesPage() {
-  const [shell, supabase, tenant, negocios, identidad] = await Promise.all([
+  const [shell, supabase, tenant, negocios, identidad, userId, user] = await Promise.all([
     getShellContext(),
     createClient(),
     getTenant(),
     listarIdentidadesDeNegocio(),
     getIdentidadActiva(),
+    getAuthUserId(),
+    // Sólo por el mail del bloque de sesión: corre en paralelo y `cache()` lo
+    // comparte con getShellContext, así que no agrega viaje.
+    getCurrentUser(),
   ]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   // Las dos filas nuevas llevan a módulos que la comunidad puede tener
   // apagados: ofrecer un enlace a una pantalla que devuelve 404 es peor que no
@@ -90,7 +91,7 @@ export default async function AjustesPage() {
   let timeZone: string | null = null;
   let phoneVerified = false;
   let checkAzul = false;
-  if (user) {
+  if (userId) {
     // Lista explícita: `profiles` es pública y un `*` acá traería rol, estado de
     // cuenta y sanciones para pintar tres filas de ajustes.
     //
@@ -102,9 +103,9 @@ export default async function AjustesPage() {
       supabase
         .from("profiles")
         .select("identity_verified, timezone, phone_verified")
-        .eq("id", user.id)
+        .eq("id", userId)
         .maybeSingle(),
-      leerCheckAzul(supabase, user.id),
+      leerCheckAzul(supabase, userId),
     ]);
     identityVerified = Boolean(data?.identity_verified);
     timeZone = data?.timezone ?? null;

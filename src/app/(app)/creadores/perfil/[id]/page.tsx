@@ -20,7 +20,7 @@ import {
   ServicePackages,
   creatorPhotoUrl,
 } from "@/components/creators";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { leerCheckAzul } from "@/lib/verificacion/read";
 import { cn, formatDate } from "@/lib/utils";
@@ -45,12 +45,10 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
   if (!z.uuid().safeParse(id).success) notFound();
 
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await getAuthUserId();
 
   // Mi propio perfil se edita en /creadores/perfil.
-  if (user?.id === id) redirect("/creadores/perfil");
+  if (userId === id) redirect("/creadores/perfil");
 
   const [
     { data: creator },
@@ -118,16 +116,16 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
   // chat que la otra persona cortó sería empujar a alguien contra una puerta
   // cerrada.
   const [{ data: existingFollow }, { data: existingConversation }] = await Promise.all([
-    user
+    userId
       ? supabase
           .from("follows")
           .select("target_id")
-          .eq("follower_id", user.id)
+          .eq("follower_id", userId)
           .eq("target_kind", "profile")
           .eq("target_id", id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
-    user
+    userId
       ? supabase
           .from("conversations")
           .select("id, status, created_at")
@@ -195,7 +193,7 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
           {creator.available ? COPY.directory.available : COPY.directory.unavailable}
         </span>
 
-        {user?.id !== id && (
+        {userId !== id && (
           <FollowButton targetKind="profile" targetId={id} initialFollowing={Boolean(existingFollow)} size="sm" />
         )}
       </section>
@@ -226,7 +224,7 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
       </section>
 
       {/* CTA: proponer un trabajo directo (contrato con gig_id null) */}
-      {user ? (
+      {userId ? (
         <div className="flex flex-col gap-1.5">
           <ContractForm
             creatorId={id}
@@ -345,7 +343,7 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
         packages={servicePackages}
         creatorId={id}
         creatorName={displayName}
-        isAuthenticated={Boolean(user)}
+        isAuthenticated={Boolean(userId)}
       />
 
       {portfolio.length > 0 && (
@@ -378,7 +376,7 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
                   <div className="flex items-center gap-2.5">
                     <ProfileLink
                       profileId={reviewer?.id ?? null}
-                      viewerId={user?.id ?? null}
+                      viewerId={userId}
                       name={reviewer?.display_name ?? "Alguien de la comunidad"}
                       variant="avatar"
                       duplicate
@@ -389,7 +387,7 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
                       <p className="flex min-w-0 text-sm font-semibold text-foreground">
                         <ProfileLink
                           profileId={reviewer?.id ?? null}
-                          viewerId={user?.id ?? null}
+                          viewerId={userId}
                           name={reviewer?.display_name ?? "Alguien de la comunidad"}
                         >
                           <span className="truncate">{reviewer?.display_name ?? "Alguien de la comunidad"}</span>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CloudSlash } from "@phosphor-icons/react/dist/ssr";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { Banner, buttonVariants } from "@/components/ui";
 import { decodeCursor } from "@/components/listings";
@@ -40,15 +40,13 @@ export default async function GuardadosPage({
   searchParams: SearchParams;
 }) {
   const [tenant, supabase, sp] = await Promise.all([getTenant(), createClient(), searchParams]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/entrar?next=/perfil/guardados");
+  const userId = await getAuthUserId();
+  if (!userId) redirect("/entrar?next=/perfil/guardados");
 
   const cursor = decodeCursor(firstValue(sp.cursor) || undefined);
   const result = await fetchSavedItems(supabase, {
     tenantId: tenant.id,
-    viewerId: user.id,
+    viewerId: userId,
     cursor,
   });
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Prohibit } from "@phosphor-icons/react/dist/ssr";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { Avatar, EmptyState } from "@/components/ui";
 import { UnblockButton } from "./unblock-button";
 
@@ -32,10 +32,8 @@ type BlockedRow = {
  */
 export default async function BloqueadosPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/entrar?next=/perfil/bloqueados");
+  const userId = await getAuthUserId();
+  if (!userId) redirect("/entrar?next=/perfil/bloqueados");
 
   const { data, error } = await supabase
     .from("user_blocks")
