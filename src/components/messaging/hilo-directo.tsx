@@ -456,6 +456,8 @@ export async function HiloDirecto({
               mensajes={messages.map((message) => ({
                 id: message.id,
                 propio: message.sender_id === userId,
+                body: message.body,
+                created_at: message.created_at,
               }))}
             />
           </div>

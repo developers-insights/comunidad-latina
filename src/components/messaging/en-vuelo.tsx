@@ -11,9 +11,12 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 import {
+  entrantesSinCubrir,
+  retirarPendientes,
   sumarEntrantes as combinarEntrantes,
   textoDeEntrante,
   type MensajeEntrante,
+  type MensajeReportado,
 } from "@/lib/messaging/en-vivo";
 import { COPY } from "./copy";
 
@@ -29,9 +32,9 @@ import { COPY } from "./copy";
  *    de la base, pero todavía no volvió en el render del servidor.
  *
  * Las server actions no devuelven el id del mensaje creado, así que una
- * pendiente no se casa por id: se retira en orden (FIFO) a medida que aparecen
- * mensajes PROPIOS nuevos, vengan del servidor o del timbre. El temporizador de
- * `confirmar` es la red por si ninguno de los dos lo trae.
+ * pendiente no se casa por id: se retira cuando aparece un mensaje PROPIO nuevo
+ * con el mismo texto, venga del servidor o del timbre (`retirarPendientes`). El
+ * temporizador de `confirmar` es la red por si ninguno de los dos lo trae.
  *
  * Lo montan el hilo de la página y el chat de la llamada; fuera del provider
  * todo esto es inerte y el composer espera como siempre.
@@ -48,7 +51,7 @@ interface EnVueloCtx {
   agregar: (body: string) => string;
   confirmar: (tempId: string) => void;
   quitar: (tempId: string) => void;
-  reportar: (mensajes: { id: string; propio: boolean }[]) => void;
+  reportar: (mensajes: MensajeReportado[]) => void;
   recibir: (mensajes: MensajeEntrante[]) => void;
 }
 
@@ -103,28 +106,29 @@ export function EnVueloProvider({
   );
 
   /** Lo nuevo de verdad: retira pendientes propias y avisa las ajenas. */
-  const contar = useCallback((mensajes: { id: string; propio: boolean }[]) => {
+  const contar = useCallback((mensajes: MensajeReportado[]) => {
     const nuevos = mensajes.filter((m) => !vistos.current.has(m.id));
     if (nuevos.length === 0) return;
     for (const m of nuevos) vistos.current.add(m.id);
 
-    const propios = nuevos.filter((m) => m.propio).length;
-    const ajenos = nuevos.length - propios;
-    if (propios > 0) {
+    const propios = nuevos.filter((m) => m.propio);
+    const ajenos = nuevos.length - propios.length;
+    if (propios.length > 0) {
       setPendientes((lista) => {
-        for (const p of lista.slice(0, propios)) {
+        const { quedan, salen } = retirarPendientes(lista, propios);
+        for (const p of salen) {
           const id = temporizadores.current.get(p.tempId);
           if (id !== undefined) window.clearTimeout(id);
           temporizadores.current.delete(p.tempId);
         }
-        return lista.slice(propios);
+        return salen.length === 0 ? lista : quedan;
       });
     }
     if (ajenos > 0) alNuevos.current?.(ajenos);
   }, []);
 
   const reportar = useCallback(
-    (mensajes: { id: string; propio: boolean }[]) => {
+    (mensajes: MensajeReportado[]) => {
       const ids = new Set(mensajes.map((m) => m.id));
       // El primer reporte es la línea de base: lo que ya estaba al abrir el
       // hilo no es "nuevo" y no debe prender ningún contador.
@@ -135,9 +139,10 @@ export function EnVueloProvider({
       }
       delServidor.current = ids;
       contar(mensajes);
-      setEntrantes((lista) =>
-        lista.some((m) => ids.has(m.id)) ? lista.filter((m) => !ids.has(m.id)) : lista,
-      );
+      setEntrantes((lista) => {
+        const quedan = entrantesSinCubrir(lista, mensajes);
+        return quedan.length === lista.length ? lista : quedan;
+      });
     },
     [contar],
   );
@@ -147,7 +152,7 @@ export function EnVueloProvider({
       const conocidos = delServidor.current ?? new Set<string>();
       const nuevos = mensajes.filter((m) => !conocidos.has(m.id));
       if (nuevos.length === 0) return;
-      contar(nuevos.map((m) => ({ id: m.id, propio: m.propio })));
+      contar(nuevos.map((m) => ({ id: m.id, propio: m.propio, body: m.body })));
       setEntrantes((lista) => combinarEntrantes(lista, nuevos, conocidos));
     },
     [contar],
@@ -191,7 +196,7 @@ export function MensajesEnVuelo({
   mensajes,
   conAutor = false,
 }: {
-  mensajes: { id: string; propio: boolean }[];
+  mensajes: MensajeReportado[];
   /** En un grupo, la burbuja ajena dice de quién es. */
   conAutor?: boolean;
 }) {

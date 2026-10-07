@@ -29,6 +29,11 @@ import { useRecibirEntrantes } from "./en-vuelo";
  */
 
 const PAUSA_REFRESCO_MS = 1_200;
+/**
+ * Marcar leído es una server action: comparten cola con el envío y un techo de
+ * 600 por hora. En un grupo activo, una por tanda lo agotaba en silencio.
+ */
+const INTERVALO_LECTURA_MS = 5_000;
 const TOPE_POR_TANDA = 50;
 const AUTOR_GENERICO = "Miembro de la comunidad";
 
@@ -65,6 +70,8 @@ export function HiloEnVivo({
   const enCurso = useRef(false);
   const otraVez = useRef(false);
   const reloj = useRef<number | null>(null);
+  const ultimaLectura = useRef(0);
+  const lecturaPendiente = useRef<number | null>(null);
   const nombresRef = useRef(nombres);
 
   useEffect(() => {
@@ -74,8 +81,9 @@ export function HiloEnVivo({
     nombresRef.current = nombres;
   }, [nombres]);
 
-  const leer = useCallback(() => {
-    if (!marcarLeido || document.visibilityState !== "visible") return;
+  const marcarAhora = useCallback(() => {
+    if (document.visibilityState !== "visible") return;
+    ultimaLectura.current = Date.now();
     const accion =
       ambito === "directo"
         ? marcarConversacionLeidaAction({ conversationId: hiloId })
@@ -85,7 +93,21 @@ export function HiloEnVivo({
         console.warn("[mensajes] no se pudo marcar como leído", { code: resultado.code });
       }
     });
-  }, [ambito, hiloId, marcarLeido]);
+  }, [ambito, hiloId]);
+
+  /** Como mucho una cada `INTERVALO_LECTURA_MS`, y una última al cerrar la ráfaga. */
+  const leer = useCallback(() => {
+    if (!marcarLeido || lecturaPendiente.current !== null) return;
+    const espera = INTERVALO_LECTURA_MS - (Date.now() - ultimaLectura.current);
+    if (espera <= 0) {
+      marcarAhora();
+      return;
+    }
+    lecturaPendiente.current = window.setTimeout(() => {
+      lecturaPendiente.current = null;
+      marcarAhora();
+    }, espera);
+  }, [marcarLeido, marcarAhora]);
 
   const programarRefresco = useCallback(() => {
     if (reloj.current !== null) window.clearTimeout(reloj.current);
@@ -155,8 +177,18 @@ export function HiloEnVivo({
   }, [ambito, hiloId, miId, recibir, leer, programarRefresco]);
 
   useSenalesDelHilo((_topico, senal) => {
-    if (senal.tipo === "cambio") programarRefresco();
-    else void traer();
+    if (senal.tipo === "cambio") {
+      programarRefresco();
+      return;
+    }
+    void traer();
+    /**
+     * Al conectar, además, un refresco agrupado: el hilo pudo venir del cache
+     * del router (prefetch de la bandeja, hasta 300 s) y las ediciones,
+     * borrados y reacciones de ese lapso no tienen otra forma de llegar. Se
+     * pinta primero lo cacheado y después se reconcilia.
+     */
+    if (senal.tipo === "conectado") programarRefresco();
   });
 
   useEffect(() => {
@@ -173,6 +205,10 @@ export function HiloEnVivo({
     return () => {
       document.removeEventListener("visibilitychange", alVolver);
       if (reloj.current !== null) window.clearTimeout(reloj.current);
+      if (lecturaPendiente.current !== null) {
+        window.clearTimeout(lecturaPendiente.current);
+        lecturaPendiente.current = null;
+      }
     };
   }, [traer, leer]);
 

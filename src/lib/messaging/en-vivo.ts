@@ -196,3 +196,54 @@ export function textoDeEntrante(mensaje: MensajeEntrante): {
   });
   return { texto: resumen.texto, esResumen: resumen.icono !== null };
 }
+
+/** Un mensaje tal como lo reporta el render del servidor o el timbre. */
+export interface MensajeReportado {
+  id: string;
+  propio: boolean;
+  body?: string;
+  created_at?: string;
+}
+
+/**
+ * Qué burbujas "Enviando…" ya tienen su mensaje real.
+ *
+ * Por TEXTO y no por orden: si la primera falló y la segunda salió, retirar la
+ * primera de la cola dejaría a la vista la que no existe y borraría la que sí.
+ * Sin texto para comparar (quien reporta no lo mandó) se cae al orden de envío.
+ */
+export function retirarPendientes<P extends { tempId: string; body: string }>(
+  pendientes: readonly P[],
+  propios: readonly MensajeReportado[],
+): { quedan: P[]; salen: P[] } {
+  const quedan = [...pendientes];
+  const salen: P[] = [];
+  for (const propio of propios) {
+    const indice =
+      propio.body === undefined
+        ? quedan.length > 0
+          ? 0
+          : -1
+        : quedan.findIndex((p) => p.body.trim() === propio.body!.trim());
+    if (indice === -1) continue;
+    salen.push(...quedan.splice(indice, 1));
+  }
+  return { quedan, salen };
+}
+
+/**
+ * Las provisorias que el servidor ya cubrió: las que trajo por id y también las
+ * que quedaron detrás de su último mensaje sin aparecer — un mensaje de grupo
+ * borrado entre el timbre y el refresco no vuelve nunca, y sin esto la burbuja
+ * provisoria quedaba colgada.
+ */
+export function entrantesSinCubrir(
+  entrantes: readonly MensajeEntrante[],
+  delServidor: readonly MensajeReportado[],
+): MensajeEntrante[] {
+  const ids = new Set(delServidor.map((m) => m.id));
+  let ultimo: string | null = null;
+  for (const m of delServidor) if (m.created_at) ultimo = masReciente(ultimo, m.created_at);
+  const corte = ultimo ? tiempo(ultimo) : Number.NEGATIVE_INFINITY;
+  return entrantes.filter((m) => !ids.has(m.id) && tiempo(m.created_at) > corte);
+}

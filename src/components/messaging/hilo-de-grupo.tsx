@@ -499,6 +499,8 @@ export async function HiloDeGrupo({
               mensajes={mensajes.map((mensaje) => ({
                 id: mensaje.id,
                 propio: mensaje.sender_id === userId,
+                body: mensaje.body,
+                created_at: mensaje.created_at,
               }))}
             />
           </div>
