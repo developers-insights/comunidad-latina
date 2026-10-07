@@ -307,14 +307,16 @@ export function DetailScreenSkeleton({
   gallery = "photo",
   facts = 3,
   action = true,
+  topBar = true,
 }: {
   gallery?: "photo" | "hero" | "none";
   facts?: number;
   action?: boolean;
+  topBar?: boolean;
 }) {
   return (
     <SkeletonScreen className="pb-24">
-      <TopBarSkeleton withTitle />
+      {topBar && <TopBarSkeleton withTitle />}
       {gallery === "photo" && <Skeleton className="aspect-[4/3] w-full rounded-xl" />}
       {gallery === "hero" && <Skeleton className="aspect-video w-full rounded-xl" />}
       <Skeleton className={cn("h-7 w-4/5", gallery === "none" ? "mt-1" : "mt-4")} />
@@ -424,18 +426,26 @@ export function PostDetailSkeleton() {
 }
 
 /** Conversación (directa o de grupo): encabezado, burbujas alternadas y caja de escribir. */
-export function ChatScreenSkeleton({ group = false }: { group?: boolean }) {
+export function ChatScreenSkeleton({
+  group = false,
+  header = true,
+}: {
+  group?: boolean;
+  header?: boolean;
+}) {
   const widths = ["w-3/5", "w-2/5", "w-4/5", "w-1/2", "w-2/3"];
   return (
     <SkeletonScreen className="flex min-h-[70dvh] flex-col">
-      <div className="-mx-4 -mt-4 flex min-h-14 items-center gap-3 border-b border-border-subtle px-4">
-        <Skeleton className="size-8 shrink-0 rounded-full" />
-        <Skeleton className={cn("size-10 shrink-0 rounded-full", group && "rounded-xl")} />
-        <div className="flex-1">
-          <Skeleton className="h-4 w-36" />
-          <Skeleton className="mt-1.5 h-3 w-20" />
+      {header && (
+        <div className="-mx-4 -mt-4 flex min-h-14 items-center gap-3 border-b border-border-subtle px-4">
+          <Skeleton className="size-8 shrink-0 rounded-full" />
+          <Skeleton className={cn("size-10 shrink-0 rounded-full", group && "rounded-xl")} />
+          <div className="flex-1">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="mt-1.5 h-3 w-20" />
+          </div>
         </div>
-      </div>
+      )}
       <div className="flex flex-1 flex-col gap-3 py-4">
         {widths.map((width, index) => (
           <Skeleton

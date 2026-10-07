@@ -1,9 +1,9 @@
-import { cache } from "react";
+import { Suspense, cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Megaphone } from "@phosphor-icons/react/dist/ssr";
-import { Banner, EmptyState, buttonVariants } from "@/components/ui";
+import { Banner, EmptyState, Skeleton, buttonVariants } from "@/components/ui";
 import {
   COPY,
   CommentComposer,
@@ -15,12 +15,13 @@ import {
 // Import por path directo (el barrel del feed es de otro agente): el item del
 // comentario es fuente única compartida con la hoja del feed.
 import { CommentItem } from "@/components/feed/comment-item";
+import { PostCardSkeleton } from "@/components/feed/skeletons";
 import { CommentMenu } from "@/components/feed/comment-menu";
 import { COMMENT_THREAD_COPY } from "@/components/feed/helpers";
 import { COMMENT_THREAD_PAGE_SIZE } from "@/components/feed/comment-thread";
 import { decodeCursor, encodeCursor } from "@/components/listings";
 import { ThreadPager } from "./thread-pager";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { timeAgo } from "@/lib/utils";
@@ -159,11 +160,11 @@ export default async function PostDetailPage({
     typeof sp[OLDER_PARAM] === "string" ? sp[OLDER_PARAM] : undefined,
   );
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const viewerId = user?.id ?? null;
+  const [tenant, supabase, viewerId] = await Promise.all([
+    getTenant(),
+    createClient(),
+    getAuthUserId(),
+  ]);
 
   // RLS decide la visibilidad: published para todos; pending/removed solo
   // para el autor y staff del tenant.
@@ -184,155 +185,15 @@ export default async function PostDetailPage({
   if (!postRow) notFound();
 
   const post = postRow as PostRow;
-
-  // Comentarios published del hilo. Se LEEN descendentes (los más nuevos
-  // primero) y se pintan ascendentes: así la tanda que siempre está garantizada
-  // es la de la conversación viva, y "ver anteriores" va hacia atrás con keyset
-  // — nunca un OFFSET, que en un hilo que crece mientras se lee repite y
-  // saltea filas.
-  //
-  // `tenant_id` va en el WHERE aunque el `post_id` ya sea único: es la columna
-  // LÍDER de `comments_post_thread_idx (tenant_id, post_id, created_at, id)`, y
-  // la policy no lo aporta como qual (lo tiene dentro de un OR, y un OR no se
-  // convierte en condición de índice). Sin él el plan cae a `comments_post_fk_idx`
-  // + Sort en memoria: leer y ordenar los 5.000 comentarios de un hilo para
-  // devolver 200, en cada apertura. Verificado con EXPLAIN: con tenant_id es
-  // "Index Scan Backward using comments_post_thread_idx" y sin Sort.
-  let commentsQuery = supabase
-    .from("comments")
-    .select("id, body, created_at, author_id, entity_listing_id, status")
-    .eq("tenant_id", tenant.id)
-    .eq("post_id", post.id)
-    .eq("status", "published")
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    // +1 para saber si HAY tanda anterior sin pagar una segunda consulta.
-    .limit(COMMENTS_PAGE_SIZE + 1);
-
-  if (olderThan) {
-    commentsQuery = commentsQuery.or(
-      `created_at.lt."${olderThan.createdAt}",and(created_at.eq."${olderThan.createdAt}",id.lt."${olderThan.id}")`,
-    );
-  }
-
-  const { data: commentRows, error: commentsError } = await commentsQuery;
-  if (commentsError) {
-    console.warn("[feed] query del hilo falló", { code: commentsError.code });
-  }
-
-  const fetched = commentRows ?? [];
-  const pageRows = fetched.slice(0, COMMENTS_PAGE_SIZE);
-  const hasOlder = fetched.length > COMMENTS_PAGE_SIZE;
-  // El cursor sale de la última fila LEÍDA, no de la última visible: si el
-  // filtro de bloqueados de abajo se come la más vieja, la tanda siguiente
-  // tiene que arrancar igual donde terminó ésta.
-  const oldestRow = pageRows[pageRows.length - 1];
-  // Cursor pelado, ya no un href: la tanda anterior la pide la isla cliente por
-  // server action y la URL de la publicación no se toca.
-  const olderCursor =
-    hasOlder && oldestRow
-      ? encodeCursor(oldestRow.created_at, oldestRow.id)
-      : null;
-
-  // Filtro barato en memoria (§ contrato bloqueo): sin comentarios de gente
-  // que el viewer bloqueó. Un solo select liviano, reutilizado del módulo FEED.
-  const blockedIds = await fetchBlockedIds(supabase, viewerId);
-  const comments = pageRows
-    .filter((comment) => !comment.author_id || !blockedIds.has(comment.author_id))
-    // De vuelta a ascendente: la LECTURA del hilo no cambia (el más viejo
-    // arriba), sólo cambió qué tanda se trae.
-    .reverse();
-
-  // Batch: autores del post + comentarios, y estado de like del viewer.
-  const authorIds = [
-    post.author_id,
-    ...comments.map((comment) => comment.author_id),
-  ].filter((value): value is string => Boolean(value));
-
   const now = new Date();
-  const [
-    authors,
-    likedIds,
-    savedIds,
-    pollByPostId,
-    entityById,
-    promoResult,
-    promotions,
-    tagged,
-    musicByPostId,
-    creditByPostId,
-  ] =
-    await Promise.all([
-      fetchAuthorViews(supabase, authorIds),
-      fetchViewerLikes(supabase, viewerId, [post.id]),
-      fetchViewerSaves(supabase, viewerId, [post.id]),
-      // Solo las preguntas pueden tener encuesta (0041): en un post común la
-      // query ni sale.
-      post.kind === "question"
-        ? fetchPostPolls(supabase, viewerId, [post.id])
-        : Promise.resolve(new Map<string, PostPollView>()),
-      // Las fichas del post Y las de los comentarios firmados por un negocio
-      // (0116), en la MISMA consulta: un hilo donde tres comentarios son del
-      // mismo local no puede costar tres viajes, y separar las dos listas sólo
-      // serviría para pedir dos veces la misma fila.
-      fetchEntityViews(supabase, [
-        ...(post.entity_listing_id ? [post.entity_listing_id] : []),
-        ...comments
-          .map((comment) => comment.entity_listing_id)
-          .filter((id): id is string => Boolean(id)),
-      ]),
-      // Campaña activa del post: público sabe que es "Publicidad"; solo el autor
-      // ve hasta cuándo (badge más abajo). Sigue siendo la fuente de isPromoted.
-      supabase
-        .from("post_promotions")
-        .select("ends_at")
-        .eq("post_id", post.id)
-        .eq("status", "active")
-        .gt("ends_at", now.toISOString())
-        .order("ends_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      // Solo para el teléfono del CTA de WhatsApp: cta_whatsapp (0038) no está
-      // en database.types.ts y el helper ya resuelve el cast + el respaldo si la
-      // columna todavía no existe. Query chica (single-community) y en paralelo.
-      fetchActivePromotions(supabase, tenant.id),
-      // Etiquetados de ESTA publicación (0089).
-      fetchTagsForPost(supabase, post.id),
-      // Música de ESTA publicación (0090). Batch de un solo id, mismo helper
-      // que usa el feed — una sola fuente de verdad para el mapeo.
-      fetchPostMusic(supabase, [post.id]),
-      // Derechos y fuente de la foto (0146). Mismo helper que el feed, batch de
-      // un solo id — una sola fuente de verdad para el mapeo.
-      fetchPhotoCredits(supabase, [post.id]),
-    ]);
-
-  const entity = post.entity_listing_id
-    ? (entityById.get(post.entity_listing_id) ?? null)
-    : null;
-  const promoEndsAt = promoResult.data?.ends_at ?? null;
-  const isPromoted = Boolean(promoEndsAt);
   const isAuthor = Boolean(viewerId && post.author_id === viewerId);
-
-  // "Tu campaña llega hasta el …": es plata, y el día que se lee tiene que ser
-  // el día del reloj de quien la pagó, no el de la costa este por decreto.
-  const formatDate = await getViewerFormatDate();
-
-  const postModel = toPostCardModel(post, authors, likedIds, now, {
-    entity,
-    isPromoted,
-    savedByViewer: savedIds.has(post.id),
-    poll: pollByPostId.get(post.id) ?? null,
-    ctaWhatsapp: isPromoted
-      ? (promotions.whatsappByPostId.get(post.id) ?? null)
-      : null,
-    taggedPeople: tagged,
-    music: musicByPostId.get(post.id) ?? null,
-    photoCredit: creditByPostId.get(post.id) ?? null,
-  });
   const isPublished = post.status === "published";
   /** Comentarios cerrados por su autor (0097). Vale también para él. */
   const commentsLocked = Boolean(post.comments_locked_at);
 
+  // Esta ruta no tiene loading.tsx (taparía el 404 de verdad), así que lo único
+  // que se espera antes de responder es la fila del post: la card y el hilo
+  // llegan por streaming, cada uno con su propio viaje.
   return (
     <>
       <div className="mb-4 flex items-center justify-between gap-2">
@@ -356,55 +217,16 @@ export default async function PostDetailPage({
         </Banner>
       )}
 
-      {/* Estado de campaña — solo el autor ve hasta cuándo (feedback 2026-07-19). */}
-      {isAuthor && promoEndsAt && (
-        <Banner
-          variant="info"
-          className="mb-4 rounded-lg"
-          icon={<Megaphone size={20} weight="fill" className="text-brand" />}
-        >
-          {COPY.post.campaignActiveBadge(
-            formatDate(promoEndsAt, { locale: tenant.locale, style: "long" }),
-          )}
-        </Banner>
-      )}
-
-      <PostCard
-        post={postModel}
-        tenantId={tenant.id}
-        viewerId={viewerId}
-        isDetail
-        // El reel vertical infinito existe SÓLO en /feed y /videos. Acá se ve UNA
-        // publicación —y se llega desde el perfil de alguien o desde las
-        // novedades de un evento—, así que tocar el video lo abre a pantalla
-        // completa y el "atrás" devuelve a donde estabas, en vez de mandarte a
-        // scrollear videos ajenos (feedback cliente 2026-07-27). El valor es el
-        // NO_REEL_SCOPE de components/feed/card-video.tsx (literal acá porque
-        // esto es un server component y ese módulo es "use client").
-        videoScope="sin-reel"
-        menu={
-          <PostMenu
-            postId={post.id}
-            authorId={post.author_id}
-            viewerId={viewerId}
-            // Sin estos datos el menú no podía ofrecer editar (necesita el texto
-            // de partida) ni nombrar lo que se pierde al eliminar. Ya viajaban
-            // en la fila; sólo faltaba pasarlos.
-            postBody={post.body}
-            postStatus={post.status}
-            hasMedia={post.media.length > 0}
-            media={post.media}
-            music={musicByPostId.get(post.id) ?? null}
-            commentCount={post.comment_count}
-            likeCount={post.like_count}
-            pinnedAt={post.pinned_at}
-            hiddenAt={post.hidden_at}
-            commentsLockedAt={post.comments_locked_at}
-            // Al eliminar hay que SALIR: esta página deja de existir.
-            redirectAfterDelete="/feed"
-          />
-        }
-      />
+      <Suspense fallback={<PostCardSkeleton />}>
+        <PostSection
+          post={post}
+          tenantId={tenant.id}
+          locale={tenant.locale}
+          viewerId={viewerId}
+          isAuthor={isAuthor}
+          now={now}
+        />
+      </Suspense>
 
       <section aria-label={COPY.comments.title} className="mt-6">
         <h2 className="font-display text-lg font-bold text-foreground">
@@ -414,71 +236,16 @@ export default async function PostDetailPage({
           </span>
         </h2>
 
-        {/* El hilo y su paginación EN EL LUGAR (2026-08-20). La tanda anterior
-            ya no es una navegación: la isla la pide por server action y la
-            pega arriba conservando el punto de lectura. Los `<li>` de ESTA
-            tanda se siguen renderizando acá, en el servidor, y bajan como
-            children — llegan en el HTML, así que el deep link, el compartir y
-            el SEO quedan exactamente igual que antes. */}
-        <ThreadPager
-          postId={post.id}
-          viewerId={viewerId}
-          postAuthorId={post.author_id}
-          initialOlderCursor={olderCursor}
-          hasInitialComments={comments.length > 0}
-          // El vacío honesto es sólo el del hilo SIN cursor. Una tanda vacía
-          // más atrás no significa "nadie comentó todavía": significa que ahí
-          // se terminó el hilo, y para eso está el link de volver al final.
-          emptyState={
-            olderThan ? undefined : (
-              <EmptyState
-                className="py-8"
-                title={COPY.comments.emptyTitle}
-                message={COPY.comments.emptyMessage}
-              />
-            )
-          }
-        >
-          {comments.map((comment) => {
-            const author = authorViewOf(authors, comment.author_id);
-            // Borran su autor y quien publicó (0097). Esto NO es el permiso
-            // —lo decide la policy `comments_delete` y la server action lee
-            // cuántas filas volvieron—: es para no ofrecer un menú que va a
-            // rebotar.
-            const isOwnComment = Boolean(viewerId && comment.author_id === viewerId);
-            const canDelete = isOwnComment || isAuthor;
-            // Firmado por un negocio: se muestra el negocio. Si la ficha ya no
-            // resuelve (se despublicó), vuelve a verse a nombre de la persona
-            // que lo escribió — que es quien lo escribió.
-            const fichaDelComentario = comment.entity_listing_id
-              ? entityById.get(comment.entity_listing_id)
-              : undefined;
-            const comentarioEntity = fichaDelComentario
-              ? {
-                  nombre: fichaDelComentario.title,
-                  avatarUrl: fichaDelComentario.photoUrl ?? null,
-                }
-              : null;
-            return (
-              <CommentItem
-                key={comment.id}
-                author={author}
-                entity={comentarioEntity}
-                body={comment.body}
-                timeAgoLabel={timeAgo(comment.created_at, now)}
-                menu={
-                  canDelete ? (
-                    <CommentMenu
-                      commentId={comment.id}
-                      authorName={comentarioEntity?.nombre ?? author.displayName}
-                      isOwnComment={isOwnComment}
-                    />
-                  ) : undefined
-                }
-              />
-            );
-          })}
-        </ThreadPager>
+        <Suspense fallback={<CommentsSkeleton />}>
+          <CommentsThread
+            post={post}
+            tenantId={tenant.id}
+            viewerId={viewerId}
+            isAuthor={isAuthor}
+            olderThan={olderThan}
+            now={now}
+          />
+        </Suspense>
 
         {/* Única navegación que queda en el hilo, y sólo para quien entró por
             un `?antes=` heredado (ver el docblock de OLDER_PARAM): abajo está la
@@ -519,5 +286,327 @@ export default async function PostDetailPage({
         )}
       </section>
     </>
+  );
+}
+
+async function PostSection({
+  post,
+  tenantId,
+  locale,
+  viewerId,
+  isAuthor,
+  now,
+}: {
+  post: PostRow;
+  tenantId: string;
+  locale: string;
+  viewerId: string | null;
+  isAuthor: boolean;
+  now: Date;
+}) {
+  const supabase = await createClient();
+  const [
+    authors,
+    likedIds,
+    savedIds,
+    pollByPostId,
+    entityById,
+    promoResult,
+    promotions,
+    tagged,
+    musicByPostId,
+    creditByPostId,
+    // "Tu campaña llega hasta el …": es plata, y el día que se lee tiene que ser
+    // el día del reloj de quien la pagó, no el de la costa este por decreto.
+    formatDate,
+  ] =
+    await Promise.all([
+      fetchAuthorViews(supabase, post.author_id ? [post.author_id] : []),
+      fetchViewerLikes(supabase, viewerId, [post.id]),
+      fetchViewerSaves(supabase, viewerId, [post.id]),
+      // Solo las preguntas pueden tener encuesta (0041): en un post común la
+      // query ni sale.
+      post.kind === "question"
+        ? fetchPostPolls(supabase, viewerId, [post.id])
+        : Promise.resolve(new Map<string, PostPollView>()),
+      fetchEntityViews(supabase, post.entity_listing_id ? [post.entity_listing_id] : []),
+      // Campaña activa del post: público sabe que es "Publicidad"; solo el autor
+      // ve hasta cuándo (badge más abajo). Sigue siendo la fuente de isPromoted.
+      supabase
+        .from("post_promotions")
+        .select("ends_at")
+        .eq("post_id", post.id)
+        .eq("status", "active")
+        .gt("ends_at", now.toISOString())
+        .order("ends_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      // Solo para el teléfono del CTA de WhatsApp: cta_whatsapp (0038) no está
+      // en database.types.ts y el helper ya resuelve el cast + el respaldo si la
+      // columna todavía no existe. Query chica (single-community) y en paralelo.
+      fetchActivePromotions(supabase, tenantId),
+      // Etiquetados de ESTA publicación (0089).
+      fetchTagsForPost(supabase, post.id),
+      // Música de ESTA publicación (0090). Batch de un solo id, mismo helper
+      // que usa el feed — una sola fuente de verdad para el mapeo.
+      fetchPostMusic(supabase, [post.id]),
+      // Derechos y fuente de la foto (0146). Mismo helper que el feed, batch de
+      // un solo id — una sola fuente de verdad para el mapeo.
+      fetchPhotoCredits(supabase, [post.id]),
+      getViewerFormatDate(),
+    ]);
+
+  const entity = post.entity_listing_id
+    ? (entityById.get(post.entity_listing_id) ?? null)
+    : null;
+  const promoEndsAt = promoResult.data?.ends_at ?? null;
+  const isPromoted = Boolean(promoEndsAt);
+
+  const postModel = toPostCardModel(post, authors, likedIds, now, {
+    entity,
+    isPromoted,
+    savedByViewer: savedIds.has(post.id),
+    poll: pollByPostId.get(post.id) ?? null,
+    ctaWhatsapp: isPromoted
+      ? (promotions.whatsappByPostId.get(post.id) ?? null)
+      : null,
+    taggedPeople: tagged,
+    music: musicByPostId.get(post.id) ?? null,
+    photoCredit: creditByPostId.get(post.id) ?? null,
+  });
+
+  return (
+    <>
+      {/* Estado de campaña — solo el autor ve hasta cuándo (feedback 2026-07-19). */}
+      {isAuthor && promoEndsAt && (
+        <Banner
+          variant="info"
+          className="mb-4 rounded-lg"
+          icon={<Megaphone size={20} weight="fill" className="text-brand" />}
+        >
+          {COPY.post.campaignActiveBadge(
+            formatDate(promoEndsAt, { locale, style: "long" }),
+          )}
+        </Banner>
+      )}
+
+      <PostCard
+        post={postModel}
+        tenantId={tenantId}
+        viewerId={viewerId}
+        isDetail
+        // El reel vertical infinito existe SÓLO en /feed y /videos. Acá se ve UNA
+        // publicación —y se llega desde el perfil de alguien o desde las
+        // novedades de un evento—, así que tocar el video lo abre a pantalla
+        // completa y el "atrás" devuelve a donde estabas, en vez de mandarte a
+        // scrollear videos ajenos (feedback cliente 2026-07-27). El valor es el
+        // NO_REEL_SCOPE de components/feed/card-video.tsx (literal acá porque
+        // esto es un server component y ese módulo es "use client").
+        videoScope="sin-reel"
+        menu={
+          <PostMenu
+            postId={post.id}
+            authorId={post.author_id}
+            viewerId={viewerId}
+            // Sin estos datos el menú no podía ofrecer editar (necesita el texto
+            // de partida) ni nombrar lo que se pierde al eliminar. Ya viajaban
+            // en la fila; sólo faltaba pasarlos.
+            postBody={post.body}
+            postStatus={post.status}
+            hasMedia={post.media.length > 0}
+            media={post.media}
+            music={musicByPostId.get(post.id) ?? null}
+            commentCount={post.comment_count}
+            likeCount={post.like_count}
+            pinnedAt={post.pinned_at}
+            hiddenAt={post.hidden_at}
+            commentsLockedAt={post.comments_locked_at}
+            // Al eliminar hay que SALIR: esta página deja de existir.
+            redirectAfterDelete="/feed"
+          />
+        }
+      />
+    </>
+  );
+}
+
+async function CommentsThread({
+  post,
+  tenantId,
+  viewerId,
+  isAuthor,
+  olderThan,
+  now,
+}: {
+  post: PostRow;
+  tenantId: string;
+  viewerId: string | null;
+  isAuthor: boolean;
+  olderThan: ReturnType<typeof decodeCursor>;
+  now: Date;
+}) {
+  const supabase = await createClient();
+
+  // Comentarios published del hilo. Se LEEN descendentes (los más nuevos
+  // primero) y se pintan ascendentes: así la tanda que siempre está garantizada
+  // es la de la conversación viva, y "ver anteriores" va hacia atrás con keyset
+  // — nunca un OFFSET, que en un hilo que crece mientras se lee repite y
+  // saltea filas.
+  //
+  // `tenant_id` va en el WHERE aunque el `post_id` ya sea único: es la columna
+  // LÍDER de `comments_post_thread_idx (tenant_id, post_id, created_at, id)`, y
+  // la policy no lo aporta como qual (lo tiene dentro de un OR, y un OR no se
+  // convierte en condición de índice). Sin él el plan cae a `comments_post_fk_idx`
+  // + Sort en memoria: leer y ordenar los 5.000 comentarios de un hilo para
+  // devolver 200, en cada apertura. Verificado con EXPLAIN: con tenant_id es
+  // "Index Scan Backward using comments_post_thread_idx" y sin Sort.
+  let commentsQuery = supabase
+    .from("comments")
+    .select("id, body, created_at, author_id, entity_listing_id, status")
+    .eq("tenant_id", tenantId)
+    .eq("post_id", post.id)
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    // +1 para saber si HAY tanda anterior sin pagar una segunda consulta.
+    .limit(COMMENTS_PAGE_SIZE + 1);
+
+  if (olderThan) {
+    commentsQuery = commentsQuery.or(
+      `created_at.lt."${olderThan.createdAt}",and(created_at.eq."${olderThan.createdAt}",id.lt."${olderThan.id}")`,
+    );
+  }
+
+  // Filtro barato en memoria (§ contrato bloqueo): sin comentarios de gente
+  // que el viewer bloqueó. Un solo select liviano, reutilizado del módulo FEED,
+  // en paralelo con el hilo porque no depende de él.
+  const [{ data: commentRows, error: commentsError }, blockedIds] = await Promise.all([
+    commentsQuery,
+    fetchBlockedIds(supabase, viewerId),
+  ]);
+  if (commentsError) {
+    console.warn("[feed] query del hilo falló", { code: commentsError.code });
+  }
+
+  const fetched = commentRows ?? [];
+  const pageRows = fetched.slice(0, COMMENTS_PAGE_SIZE);
+  const hasOlder = fetched.length > COMMENTS_PAGE_SIZE;
+  // El cursor sale de la última fila LEÍDA, no de la última visible: si el
+  // filtro de bloqueados de abajo se come la más vieja, la tanda siguiente
+  // tiene que arrancar igual donde terminó ésta.
+  const oldestRow = pageRows[pageRows.length - 1];
+  // Cursor pelado, ya no un href: la tanda anterior la pide la isla cliente por
+  // server action y la URL de la publicación no se toca.
+  const olderCursor =
+    hasOlder && oldestRow
+      ? encodeCursor(oldestRow.created_at, oldestRow.id)
+      : null;
+
+  const comments = pageRows
+    .filter((comment) => !comment.author_id || !blockedIds.has(comment.author_id))
+    // De vuelta a ascendente: la LECTURA del hilo no cambia (el más viejo
+    // arriba), sólo cambió qué tanda se trae.
+    .reverse();
+
+  // Las fichas de los comentarios firmados por un negocio (0116) van en UNA
+  // consulta: un hilo donde tres comentarios son del mismo local no puede
+  // costar tres viajes.
+  const [authors, entityById] = await Promise.all([
+    fetchAuthorViews(
+      supabase,
+      comments
+        .map((comment) => comment.author_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+    fetchEntityViews(
+      supabase,
+      comments
+        .map((comment) => comment.entity_listing_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ]);
+
+  return (
+    // El hilo y su paginación EN EL LUGAR (2026-08-20). La tanda anterior ya no
+    // es una navegación: la isla la pide por server action y la pega arriba
+    // conservando el punto de lectura. Los `<li>` de ESTA tanda se siguen
+    // renderizando acá, en el servidor, y bajan como children — llegan en el
+    // HTML, así que el deep link, el compartir y el SEO quedan exactamente
+    // igual que antes.
+    <ThreadPager
+      postId={post.id}
+      viewerId={viewerId}
+      postAuthorId={post.author_id}
+      initialOlderCursor={olderCursor}
+      hasInitialComments={comments.length > 0}
+      // El vacío honesto es sólo el del hilo SIN cursor. Una tanda vacía
+      // más atrás no significa "nadie comentó todavía": significa que ahí
+      // se terminó el hilo, y para eso está el link de volver al final.
+      emptyState={
+        olderThan ? undefined : (
+          <EmptyState
+            className="py-8"
+            title={COPY.comments.emptyTitle}
+            message={COPY.comments.emptyMessage}
+          />
+        )
+      }
+    >
+      {comments.map((comment) => {
+        const author = authorViewOf(authors, comment.author_id);
+        // Borran su autor y quien publicó (0097). Esto NO es el permiso
+        // —lo decide la policy `comments_delete` y la server action lee
+        // cuántas filas volvieron—: es para no ofrecer un menú que va a
+        // rebotar.
+        const isOwnComment = Boolean(viewerId && comment.author_id === viewerId);
+        const canDelete = isOwnComment || isAuthor;
+        // Firmado por un negocio: se muestra el negocio. Si la ficha ya no
+        // resuelve (se despublicó), vuelve a verse a nombre de la persona
+        // que lo escribió — que es quien lo escribió.
+        const fichaDelComentario = comment.entity_listing_id
+          ? entityById.get(comment.entity_listing_id)
+          : undefined;
+        const comentarioEntity = fichaDelComentario
+          ? {
+              nombre: fichaDelComentario.title,
+              avatarUrl: fichaDelComentario.photoUrl ?? null,
+            }
+          : null;
+        return (
+          <CommentItem
+            key={comment.id}
+            author={author}
+            entity={comentarioEntity}
+            body={comment.body}
+            timeAgoLabel={timeAgo(comment.created_at, now)}
+            menu={
+              canDelete ? (
+                <CommentMenu
+                  commentId={comment.id}
+                  authorName={comentarioEntity?.nombre ?? author.displayName}
+                  isOwnComment={isOwnComment}
+                />
+              ) : undefined
+            }
+          />
+        );
+      })}
+    </ThreadPager>
+  );
+}
+
+function CommentsSkeleton() {
+  return (
+    <div aria-busy="true" className="mt-4 flex flex-col gap-4">
+      {Array.from({ length: 3 }, (_, index) => (
+        <div key={index} className="flex gap-3">
+          <Skeleton className="size-8 shrink-0 rounded-full" />
+          <div className="flex-1">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="mt-2 h-4 w-4/5" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
