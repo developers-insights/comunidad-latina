@@ -25,6 +25,11 @@ const mocks = vi.hoisted(() => ({
   registerUploadedMedia: vi.fn(),
 }));
 
+vi.mock("next/cache", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/cache")>()),
+  refresh: vi.fn(),
+}));
+
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
 vi.mock("@/lib/rate-limit", () => ({
   DAY_MS: 86_400_000,

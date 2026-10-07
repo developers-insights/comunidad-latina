@@ -5,7 +5,7 @@ import { EmptyState, SectionHeading, Skeleton, buttonVariants } from "@/componen
 import { COPY } from "@/components/empleos/copy";
 import { MyApplicationCard } from "@/components/empleos/my-application-card";
 import { isTerminalStatus } from "@/lib/empleos/application-status";
-import { createClient, getAuthUserId } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import { fetchMyApplications } from "../queries";
@@ -54,8 +54,7 @@ export default async function MisAplicacionesPage({
 // ---------------------------------------------------------------------------
 
 async function Content({ filter }: { filter: Filter }) {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const userId = await getAuthUserId();
+  const [tenant, userId] = await Promise.all([getTenant(), getAuthUserId()]);
 
   if (!userId) {
     return (

@@ -4,7 +4,7 @@ import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { RegistroAbierto } from "@/components/comunidad";
 import { COMUNIDAD_COPY, type RegistrationKind } from "@/lib/comunidad";
-import { createClient, getAuthUserId } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { fetchRegistroAbierto } from "./queries";
 
@@ -52,7 +52,6 @@ export async function PantallaDeRegistro({
   aviso?: ReactNode;
   children: ReactNode;
 }) {
-  const supabase = await createClient();
   const userId = await getAuthUserId();
 
   const cabecera = (

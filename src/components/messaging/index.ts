@@ -23,7 +23,6 @@ export { GroupCard } from "./group-card";
 export { GroupComposer } from "./group-composer";
 export { GroupForm, type GrupoEditable } from "./group-form";
 export { GroupJoinButton } from "./group-join-button";
-export { GroupLive } from "./group-live";
 export {
   GroupDangerActions,
   GroupInvite,
@@ -99,7 +98,6 @@ export {
   ThreadListingCard,
   type ThreadListingCardProps,
 } from "./thread-listing-card";
-export { ThreadRefresh } from "./thread-refresh";
 export { toTrustLevel, toTrustProps, buildTrustSignals } from "./trust";
 export { VoicePlayer, type VoicePlayerProps } from "./voice-player";
 export { VoiceRecorder, type GrabacionLista } from "./voice-recorder";

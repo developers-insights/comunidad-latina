@@ -2,14 +2,13 @@ import Link from "next/link";
 import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COPY, GigPublishForm } from "@/components/creators";
-import { createClient, getAuthUserId } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 
 export const metadata = { title: "Publicar un trabajo" };
 
 export default async function PublicarGigPage() {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const userId = await getAuthUserId();
+  const [tenant, userId] = await Promise.all([getTenant(), getAuthUserId()]);
 
   if (!userId) {
     return (

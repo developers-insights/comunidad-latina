@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { clientIpFromHeaders, limit } from "@/lib/rate-limit";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
 import { visiblesParaMi } from "@/lib/messaging/solicitud-descartada";
 
@@ -234,15 +234,13 @@ export async function GET(request: Request) {
     );
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Lectura: el JWT verificado local alcanza y ahorra un viaje a Auth por tecla.
+  const [supabase, userId] = await Promise.all([createClient(), getAuthUserId()]);
 
   // Sin sesión no hay a quién mandarle nada. 200 con lista vacía y no 401: el
   // panel de compartir se puede abrir sin cuenta —el bloque de "compartir
   // afuera" funciona igual— y un 401 acá lo pintaría como un error.
-  if (!user) return NextResponse.json({ ...VACIO, query });
+  if (!userId) return NextResponse.json({ ...VACIO, query });
 
   const sinTipar = supabaseSinTiparGrupos(supabase);
 
@@ -264,8 +262,8 @@ export async function GET(request: Request) {
               (fila) => aPersona(fila, fila.area_label),
             );
           })
-      : personasRecientes(supabase, user.id),
-    misGrupos(sinTipar, user.id, buscando ? query : null),
+      : personasRecientes(supabase, userId),
+    misGrupos(sinTipar, userId, buscando ? query : null),
   ]);
 
   return NextResponse.json({

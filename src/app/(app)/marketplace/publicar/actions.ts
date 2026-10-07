@@ -1,5 +1,6 @@
 "use server";
 
+import { refresh } from "next/cache";
 import { z } from "zod";
 import { DAY_MS, limit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -361,5 +362,6 @@ export async function finalizeProduct(rawInput: {
     origen: "marketplace",
   });
 
+  refresh();
   return { ok: true, status: finalStatus };
 }

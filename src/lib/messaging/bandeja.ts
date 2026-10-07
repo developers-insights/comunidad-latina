@@ -184,6 +184,11 @@ export type FilaDeBandeja = HiloDePersona & {
   leidoPorElOtro: boolean;
   /** Sumado sólo cuando el filtro lo necesita; `null` significa "no se preguntó". */
   esAmigo: boolean | null;
+  /**
+   * La conversación que abre la fila está aceptada. Sólo esas tienen canal en
+   * vivo: la policy de la 0148 niega el tópico de una pendiente.
+   */
+  aceptada: boolean;
 };
 
 /* ========================================================================== */

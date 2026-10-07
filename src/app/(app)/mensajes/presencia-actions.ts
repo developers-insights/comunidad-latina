@@ -9,8 +9,8 @@ import { requireTenantMatch } from "@/lib/tenant/guard";
  * SIN `revalidatePath` A PROPÓSITO. Es un latido que corre una vez por minuto
  * mientras la app está abierta: revalidar acá volvería a renderizar la pantalla
  * entera cada sesenta segundos para mover un timestamp que ni siquiera es el
- * que se está mirando. Las pantallas ya se refrescan solas (`ThreadRefresh`) y
- * es ahí donde la presencia ajena se reconcilia.
+ * que se está mirando. La presencia ajena se reconcilia cuando la pantalla
+ * vuelve a pedirse (un mensaje nuevo, volver a la pestaña).
  *
  * Nunca lanza y nunca informa el motivo: quien la llama no puede hacer nada con
  * el error, y un toast de "no pudimos marcar tu presencia" sería ruido por algo

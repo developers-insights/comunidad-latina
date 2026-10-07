@@ -35,9 +35,8 @@ import { InboxRowLink } from "./inbox-row-link";
  * eso no es una versión pobre del dato sino un dato falso. Con la 0143 el
  * proyecto tiene Realtime y el aviso llega en el momento o no llega.
  *
- * Server Component: lo único cliente es el enlace —que además deja anotada la
- * lectura, ver `inbox-row-link.tsx`— y `RenglonEnVivo`, que tapa el resumen
- * mientras alguien teclea del otro lado.
+ * La pinta `BandejaEnVivo`, que la parchea en memoria cuando llega un mensaje
+ * (resumen, hora, contador y orden) sin volver a pedir la bandeja.
  */
 
 const ICONO: Record<IconoDeResumen, React.ComponentType<{ size?: number; weight?: "fill" | "bold" | "regular" }>> = {
@@ -55,11 +54,15 @@ export function InboxRow({
   miId,
   ahora,
   presencia,
+  precargar = false,
+  onAbrir,
 }: {
   fila: FilaDeBandeja;
   miId: string;
   ahora: Date;
   presencia?: EstadoDePresencia;
+  precargar?: boolean;
+  onAbrir?: () => void;
 }) {
   const nombre = fila.persona?.display_name ?? "Miembro de la comunidad";
   const sinLeer = fila.noLeidos > 0;
@@ -70,8 +73,8 @@ export function InboxRow({
     <li className="rounded-lg border border-border-subtle bg-surface shadow-xs">
       <InboxRowLink
         href={`/mensajes/${fila.conversacionPrincipalId}`}
-        conversationId={fila.conversacionPrincipalId}
-        marcarLeida={sinLeer}
+        precargar={precargar}
+        onAbrir={onAbrir}
         className={cn(
           "flex items-start gap-3 rounded-lg p-4",
           "transition-colors duration-(--duration-fast) ease-(--ease-out-premium)",

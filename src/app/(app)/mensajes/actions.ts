@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { tocarTimbre } from "@/lib/messaging/timbre";
 import { z } from "zod";
 import { DAY_MS, HOUR_MS, limit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
@@ -171,6 +172,8 @@ export async function sendMessageAction(input: {
       ...(replyTo ? { reply_to: replyTo } : {}),
     });
   if (insertError) return { ok: false, code: "error" };
+
+  tocarTimbre(supabase, { ambito: "directo", id: conversationId }, user.id, "nuevo");
 
   // Aviso a la contraparte (best-effort, §12): la conversación ya está
   // accepted (validado arriba). El insert de notifications es solo del

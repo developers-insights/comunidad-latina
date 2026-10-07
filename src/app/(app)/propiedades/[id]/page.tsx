@@ -42,7 +42,7 @@ import {
 // Los guardados (tabla `saves`, polimórfica) los lee el módulo FEED, que es su
 // dueño: así la query vive una sola vez y no se duplica por vertical.
 import { fetchViewerSavedListingIds } from "@/app/(app)/feed/queries";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { VENCIMIENTO_COPY, isClosedReason } from "@/lib/listings";
@@ -110,27 +110,23 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const [tenant, supabase, { data: listing }] = await Promise.all([
+  const [tenant, supabase, { data: listing }, userId] = await Promise.all([
     getTenant(),
     createClient(),
     fetchListingById(id),
+    getAuthUserId(),
   ]);
 
   // RLS ya limita qué filas existen para este usuario (published | propias | staff).
   if (!listing || listing.tenant_id !== tenant.id) notFound();
 
   // ---------------------------------------------------------------------
-  // getUser() y la verificación vinculada son independientes → en paralelo.
-  // Verificación (regla estricta: SOLO found_active → banda; sin check →
-  // ausencia, jamás un negativo).
+  // Todo lo que depende sólo del aviso va en UNA tanda: verificación (regla
+  // estricta: SOLO found_active → banda; sin check → ausencia, jamás un
+  // negativo), guardado del viewer (sin sesión resuelve vacío al instante),
+  // la zona de quien mira y el publicador. Antes eran cuatro viajes en serie.
   // ---------------------------------------------------------------------
-  const [
-    {
-      data: { user },
-    },
-    { data: checks },
-  ] = await Promise.all([
-    supabase.auth.getUser(),
+  const [{ data: checks }, savedListingIds, formatDate, publicador] = await Promise.all([
     supabase
       .from("verification_checks")
       .select("registry, registry_url, license_number, checked_at")
@@ -140,11 +136,29 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
       .eq("result", "found_active")
       .order("checked_at", { ascending: false })
       .limit(1),
-  ]);
-
-  // Guardado del viewer para este aviso (sin sesión resuelve vacío al instante).
-  const savedListingIds = await fetchViewerSavedListingIds(supabase, user?.id ?? null, [
-    listing.id,
+    fetchViewerSavedListingIds(supabase, userId, [listing.id]),
+    getViewerFormatDate(),
+    listing.created_by
+      ? Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, display_name, avatar_url, identity_verified")
+            .eq("id", listing.created_by)
+            .maybeSingle(),
+          supabase
+            .from("trust_scores")
+            .select("score, level, signals")
+            .eq("profile_id", listing.created_by)
+            .maybeSingle(),
+          supabase
+            .from("listings")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", tenant.id)
+            .eq("created_by", listing.created_by)
+            .eq("kind", "property")
+            .eq("status", "published"),
+        ])
+      : null,
   ]);
 
   /**
@@ -153,7 +167,6 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
    * fija de la comunidad fecha la verificación un día antes para quien mira
    * desde la costa oeste. Va con el reloj de quien lee.
    */
-  const formatDate = await getViewerFormatDate();
   const check = checks?.[0];
   const verification: VerificationView | null = check
     ? {
@@ -168,26 +181,8 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
   // Publicador: perfil + trust score + cuántas propiedades publicó
   // ---------------------------------------------------------------------
   let publisherCard: React.ReactNode = null;
-  if (listing.created_by) {
-    const [{ data: profile }, { data: trust }, { count: publishedCount }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, display_name, avatar_url, identity_verified")
-        .eq("id", listing.created_by)
-        .maybeSingle(),
-      supabase
-        .from("trust_scores")
-        .select("score, level, signals")
-        .eq("profile_id", listing.created_by)
-        .maybeSingle(),
-      supabase
-        .from("listings")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenant.id)
-        .eq("created_by", listing.created_by)
-        .eq("kind", "property")
-        .eq("status", "published"),
-    ]);
+  if (publicador) {
+    const [{ data: profile }, { data: trust }, { count: publishedCount }] = publicador;
 
     const displayName = profile?.display_name ?? COPY.list.communityMember;
     publisherCard = (
@@ -253,7 +248,7 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
     tenant.locale,
   );
   const photos = (listing.photos ?? []).map(listingPhotoUrl);
-  const isOwner = Boolean(user && listing.created_by === user.id);
+  const isOwner = Boolean(userId && listing.created_by === userId);
 
   // Cierre (0117): `listings_select` extiende su rama pública a
   // `status in ('published', 'closed')` para que el link guardado no dé 404
@@ -441,7 +436,7 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
           tier={listing.tier}
           subject={listing.title}
           showChat={false}
-          isLoggedIn={Boolean(user)}
+          isLoggedIn={Boolean(userId)}
           values={{
             phone: listing.cta_phone,
             whatsapp: listing.cta_whatsapp,
@@ -527,7 +522,7 @@ export default async function PropiedadDetallePage({ params }: { params: Params 
       {!isClosed && (
         <ContactCta
           listingId={listing.id}
-          isLoggedIn={Boolean(user)}
+          isLoggedIn={Boolean(userId)}
           isExternal={!listing.created_by}
           externalName={listing.publisher_name}
         />

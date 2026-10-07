@@ -1,8 +1,9 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { MapPin, PencilSimple, SealCheck, Storefront } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, Badge, Banner, BezelCard, Chip, buttonVariants } from "@/components/ui";
+import { Avatar, Badge, Banner, BezelCard, Chip, Skeleton, buttonVariants } from "@/components/ui";
 import {
   firstPhotoUrl,
   DetailTopBar,
@@ -136,41 +137,67 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
 
-  const [tenant, supabase, viewerZone] = await Promise.all([
+  const supabase = await createClient();
+  const [tenant, { data: listing }, userId] = await Promise.all([
     getTenant(),
-    createClient(),
-    // Sólo para formatear la fecha de "Próximos eventos" en la zona de quien
-    // mira, igual que en /perfil/[id]. `getTenant`/`getViewerAccount` ya son
-    // cache() de React: si el layout de (app) la pidió antes, esto no repite
-    // la consulta a `profiles`.
-    getViewerTimeZone(),
+    supabase
+      .from("listings")
+      .select(
+        "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, store_verified, tier, cta_phone, cta_whatsapp, cta_website, cta_address, created_at",
+      )
+      .eq("id", id)
+      .eq("kind", "business")
+      .maybeSingle(),
+    getAuthUserId(),
   ]);
-
-  const { data: listing } = await supabase
-    .from("listings")
-    .select(
-      "id, tenant_id, kind, title, description, attrs, area_label, photos, status, created_by, publisher_name, store_verified, tier, cta_phone, cta_whatsapp, cta_website, cta_address, created_at",
-    )
-    .eq("id", id)
-    .eq("kind", "business")
-    .maybeSingle();
 
   // RLS ya limita qué filas existen para este usuario (published | propias |
   // staff). El chequeo de tenant es el cinturón sobre los tirantes.
   if (!listing || listing.tenant_id !== tenant.id) notFound();
 
-  const userId = await getAuthUserId();
+  // Lo de abajo de la página (dueño, publicaciones, puestos, eventos) arranca
+  // YA, junto con lo de arriba, pero no se espera acá: cada sección lo recibe
+  // como promesa adentro de un <Suspense> y la página responde apenas está lo
+  // que se ve primero. Esta ruta no tiene loading.tsx (taparía el 404).
+  const duenoPromise = listing.created_by
+    ? fetchDuenoDelNegocio(supabase, listing.created_by)
+    : null;
+  const postsPromise = supabase
+    .from("posts")
+    .select("id, body, media, created_at")
+    .eq("tenant_id", tenant.id)
+    .eq("entity_listing_id", listing.id)
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+    .limit(4);
+  const agendaPromise = Promise.all([
+    // Puestos abiertos (0107). Tolerante también: en un entorno sin la
+    // migración aplicada devuelve [] y la sección no se dibuja.
+    fetchPuestosDelNegocio(supabase, {
+      tenantId: tenant.id,
+      businessListingId: listing.id,
+    }),
+    // Próximos eventos. A diferencia de los puestos, SIN FK: se cruzan por
+    // `created_by` (mismo publicador que la ficha) — ver el docblock de
+    // `lib/negocios/eventos.ts` para el porqué. La zona de quien mira formatea
+    // la fecha, igual que en /perfil/[id]; está cache()-eada con el layout.
+    getViewerTimeZone().then((viewerZone) =>
+      fetchEventosDelNegocio(supabase, {
+        tenantId: tenant.id,
+        createdBy: listing.created_by,
+        locale: tenant.locale,
+        timeZone: viewerZone ?? DEFAULT_TIME_ZONE,
+      }),
+    ),
+  ]);
 
-  // Seguidores + publicaciones del negocio + guardado: independientes, en
-  // paralelo. Ninguna es bloqueante — si alguna falla, la sección cae a vacío.
+  // Seguidores + guardado + reseñas + página: lo que pinta la parte de arriba,
+  // en paralelo. Ninguna es bloqueante — si alguna falla, la sección cae a vacío.
   const [
     { count: followerCount },
     myFollowResult,
-    postsResult,
     initialSaved,
     resenas,
-    puestos,
-    eventos,
     pagina,
   ] = await Promise.all([
       listing.created_by
@@ -191,98 +218,26 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
             .eq("follower_id", userId)
             .maybeSingle()
         : Promise.resolve({ data: null }),
-      supabase
-        .from("posts")
-        .select("id, body, media, created_at")
-        .eq("tenant_id", tenant.id)
-        .eq("entity_listing_id", listing.id)
-        .eq("status", "published")
-        .order("created_at", { ascending: false })
-        .limit(4),
       fetchListingSaved(supabase, tenant.id, listing.id, userId),
       // Reseñas: resumen + página + si administro este aviso. Tolerante a
       // errores por dentro — si algo falla, la sección cae a vacío como el resto.
       fetchResenasDeAviso(supabase, listing.id, userId),
-      // Puestos abiertos (0107). Tolerante también: en un entorno sin la
-      // migración aplicada devuelve [] y la sección no se dibuja.
-      fetchPuestosDelNegocio(supabase, {
-        tenantId: tenant.id,
-        businessListingId: listing.id,
-      }),
-      // Próximos eventos. A diferencia de los puestos, SIN FK: se cruzan por
-      // `created_by` (mismo publicador que la ficha) — ver el docblock de
-      // `lib/negocios/eventos.ts` para el porqué. `listing.created_by` es el
-      // de esta ficha, no el de ningún evento.
-      fetchEventosDelNegocio(supabase, {
-        tenantId: tenant.id,
-        createdBy: listing.created_by,
-        locale: tenant.locale,
-        timeZone: viewerZone ?? DEFAULT_TIME_ZONE,
-      }),
       // Servicios, logo y portada (0127). Consulta propia y tolerante: en un
       // entorno sin esa migración devuelve todo vacío y la página se ve igual
       // que antes, en vez de caerse entera por un `column does not exist`.
       fetchPaginaDeNegocio(supabase, listing.id),
     ]);
 
-  const posts = (postsResult.data ?? []).map((post) => {
-    const firstMedia = post.media.find((path) => path && path.trim().length > 0);
-    return {
-      id: post.id,
-      body: post.body,
-      photoUrl: firstMedia ? listingPhotoUrl(firstMedia) : null,
-      timeAgoLabel: timeAgo(post.created_at),
-    };
-  });
-
   // Dueño: perfil + Trust Score. Un negocio de fuente externa (seed/API) no
   // tiene cuenta detrás, y entonces no hay perfil al que ir.
-  let ownerName: string | null = null;
   let ownerCard: React.ReactNode = null;
-  if (listing.created_by) {
-    const [{ data: profile }, { data: trust }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, display_name, avatar_url, identity_verified")
-        .eq("id", listing.created_by)
-        .maybeSingle(),
-      supabase
-        .from("trust_scores")
-        .select("score, level, signals")
-        .eq("profile_id", listing.created_by)
-        .maybeSingle(),
-    ]);
-
-    ownerName = profile?.display_name ?? listing.publisher_name ?? null;
-    const displayName = ownerName ?? "Miembro de la comunidad";
+  if (duenoPromise) {
     ownerCard = (
-      <BezelCard coreClassName="flex items-center gap-3 p-4">
-        <ProfileLink profileId={profile?.id ?? null} name={displayName} variant="avatar" duplicate>
-          <Avatar src={profile?.avatar_url} name={displayName} size="lg" />
-        </ProfileLink>
-        <div className="min-w-0">
-          <p className="flex min-w-0 font-display text-base font-bold text-foreground">
-            <ProfileLink profileId={profile?.id ?? null} name={displayName}>
-              <span className="truncate">{displayName}</span>
-            </ProfileLink>
-          </p>
-          {/* El desglose del score ofrece "Ver el perfil de…" (call 29/7,
-              1:02:24). `profileId` sale del perfil REAL, no de created_by, para
-              no linkear a una fila que RLS no dejó leer. */}
-          <PublisherTrust
-            displayName={displayName}
-            firstName={firstNameOf(displayName)}
-            score={trust?.score ?? 0}
-            level={toTrustLevel(trust?.level)}
-            signals={buildTrustSignals(trust?.signals ?? {}, profile?.identity_verified ?? false)}
-            size="inline"
-            profileId={profile?.id ?? null}
-          />
-        </div>
-      </BezelCard>
+      <Suspense fallback={<OwnerCardSkeleton />}>
+        <DuenoCard duenoPromise={duenoPromise} publisherName={listing.publisher_name} />
+      </Suspense>
     );
   } else if (listing.publisher_name) {
-    ownerName = listing.publisher_name;
     ownerCard = (
       <BezelCard coreClassName="flex items-center gap-3 p-4">
         <span
@@ -546,76 +501,14 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
       {/* PUBLICACIONES del negocio: lo que separa un perfil de una ficha. */}
       <section className="mt-6">
         <SectionTitle>{C.postsTitle}</SectionTitle>
-        {posts.length > 0 ? (
-          <ul className="flex flex-col gap-3">
-            {posts.map((post) => (
-              <li key={post.id}>
-                {/* La publicación se abre en una HOJA, sin salir del negocio
-                    (feedback cliente 2026-08-20: "mientras menos pasos
-                    mejor"). Quien está mirando una ficha vino a conocer el
-                    negocio: mandarlo a /feed/[id] por leer una novedad lo
-                    sacaba de esa lectura y el "atrás" lo devolvía arriba de
-                    todo. `PostSheetTrigger` es un client component chiquito —
-                    esta página sigue siendo server. */}
-                <PostSheetTrigger
-                  postId={post.id}
-                  className="flex items-center gap-3 rounded-lg border border-border-subtle bg-surface p-3 transition-colors duration-(--duration-fast) hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
-                >
-                  {post.photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- miniatura del bucket público, sin optimizador
-                    <img
-                      src={post.photoUrl}
-                      alt=""
-                      className="size-14 shrink-0 rounded-md object-cover"
-                    />
-                  ) : (
-                    <span
-                      aria-hidden="true"
-                      className="flex size-14 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-foreground-muted"
-                    >
-                      <Storefront size={22} />
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1">
-                    <span className="line-clamp-2 text-sm text-foreground">
-                      {post.body || "Foto o video"}
-                    </span>
-                    <span className="mt-1 block text-xs text-foreground-muted">
-                      {post.timeAgoLabel}
-                    </span>
-                  </span>
-                </PostSheetTrigger>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <SectionEmpty icon={<Storefront size={20} />}>{C.postsEmpty}</SectionEmpty>
-        )}
+        <Suspense fallback={<PostsSkeleton />}>
+          <PublicacionesDelNegocio postsPromise={postsPromise} />
+        </Suspense>
       </section>
 
-      {/* PUESTOS ABIERTOS (0107). Va DESPUÉS de las publicaciones y ANTES de
-          las reseñas: quien llegó hasta acá ya sabe qué hace el negocio, y una
-          vacante es una llamada a la acción — no puede quedar debajo de una
-          lista de reseñas que puede medir dos pantallas. Sin puestos abiertos
-          la sección entera no existe (el componente devuelve null): "este
-          negocio no está contratando" no le sirve a nadie. */}
-      {puestos.length > 0 && (
-        <section className="mt-6">
-          <SectionTitle>{EMPLEOS_DEL_NEGOCIO_TITULO}</SectionTitle>
-          <EmpleosDelNegocio puestos={puestos} />
-        </section>
-      )}
-
-      {/* PRÓXIMOS EVENTOS (requisito del cliente: un evento publicado tiene
-          que verse en la página de su organizador). Mismo criterio que los
-          puestos: sin eventos vigentes, la sección entera no existe — "este
-          negocio no tiene eventos" no le sirve a nadie. */}
-      {eventos.length > 0 && (
-        <section className="mt-6">
-          <SectionTitle>{EVENTOS_DEL_NEGOCIO_TITULO}</SectionTitle>
-          <EventosDelNegocio eventos={eventos} />
-        </section>
-      )}
+      <Suspense fallback={null}>
+        <AgendaDelNegocio agendaPromise={agendaPromise} />
+      </Suspense>
 
       {/* RESEÑAS (0093). El formulario se ofrece SOLO a quien la base va a
           dejar escribir: sin sesión no aparece, y al dueño ni a su equipo
@@ -642,5 +535,191 @@ export default async function NegocioPerfilPage({ params }: { params: Params }) 
         </div>
       </section>
     </div>
+  );
+}
+
+type NegocioSupabase = Awaited<ReturnType<typeof createClient>>;
+
+async function fetchDuenoDelNegocio(supabase: NegocioSupabase, ownerId: string) {
+  const [{ data: profile }, { data: trust }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, display_name, avatar_url, identity_verified")
+      .eq("id", ownerId)
+      .maybeSingle(),
+    supabase
+      .from("trust_scores")
+      .select("score, level, signals")
+      .eq("profile_id", ownerId)
+      .maybeSingle(),
+  ]);
+  return { profile, trust };
+}
+
+async function DuenoCard({
+  duenoPromise,
+  publisherName,
+}: {
+  duenoPromise: ReturnType<typeof fetchDuenoDelNegocio>;
+  publisherName: string | null;
+}) {
+  const { profile, trust } = await duenoPromise;
+  const displayName = profile?.display_name ?? publisherName ?? "Miembro de la comunidad";
+  return (
+    <BezelCard coreClassName="flex items-center gap-3 p-4">
+      <ProfileLink profileId={profile?.id ?? null} name={displayName} variant="avatar" duplicate>
+        <Avatar src={profile?.avatar_url} name={displayName} size="lg" />
+      </ProfileLink>
+      <div className="min-w-0">
+        <p className="flex min-w-0 font-display text-base font-bold text-foreground">
+          <ProfileLink profileId={profile?.id ?? null} name={displayName}>
+            <span className="truncate">{displayName}</span>
+          </ProfileLink>
+        </p>
+        {/* El desglose del score ofrece "Ver el perfil de…" (call 29/7,
+            1:02:24). `profileId` sale del perfil REAL, no de created_by, para
+            no linkear a una fila que RLS no dejó leer. */}
+        <PublisherTrust
+          displayName={displayName}
+          firstName={firstNameOf(displayName)}
+          score={trust?.score ?? 0}
+          level={toTrustLevel(trust?.level)}
+          signals={buildTrustSignals(trust?.signals ?? {}, profile?.identity_verified ?? false)}
+          size="inline"
+          profileId={profile?.id ?? null}
+        />
+      </div>
+    </BezelCard>
+  );
+}
+
+function OwnerCardSkeleton() {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-border-subtle bg-surface p-4">
+      <Skeleton className="size-12 shrink-0 rounded-full" />
+      <div className="flex-1">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="mt-2 h-3 w-20" />
+      </div>
+    </div>
+  );
+}
+
+async function PublicacionesDelNegocio({
+  postsPromise,
+}: {
+  postsPromise: PromiseLike<{ data: { id: string; body: string; media: string[]; created_at: string }[] | null }>;
+}) {
+  const { data } = await postsPromise;
+  const posts = (data ?? []).map((post) => {
+    const firstMedia = post.media.find((path) => path && path.trim().length > 0);
+    return {
+      id: post.id,
+      body: post.body,
+      photoUrl: firstMedia ? listingPhotoUrl(firstMedia) : null,
+      timeAgoLabel: timeAgo(post.created_at),
+    };
+  });
+  if (posts.length === 0) {
+    return <SectionEmpty icon={<Storefront size={20} />}>{C.postsEmpty}</SectionEmpty>;
+  }
+  return (
+    <ul className="flex flex-col gap-3">
+      {posts.map((post) => (
+        <li key={post.id}>
+          {/* La publicación se abre en una HOJA, sin salir del negocio
+              (feedback cliente 2026-08-20: "mientras menos pasos
+              mejor"). Quien está mirando una ficha vino a conocer el
+              negocio: mandarlo a /feed/[id] por leer una novedad lo
+              sacaba de esa lectura y el "atrás" lo devolvía arriba de
+              todo. `PostSheetTrigger` es un client component chiquito —
+              esta página sigue siendo server. */}
+          <PostSheetTrigger
+            postId={post.id}
+            className="flex items-center gap-3 rounded-lg border border-border-subtle bg-surface p-3 transition-colors duration-(--duration-fast) hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-focus-ring"
+          >
+            {post.photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- miniatura del bucket público, sin optimizador
+              <img
+                src={post.photoUrl}
+                alt=""
+                className="size-14 shrink-0 rounded-md object-cover"
+              />
+            ) : (
+              <span
+                aria-hidden="true"
+                className="flex size-14 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-foreground-muted"
+              >
+                <Storefront size={22} />
+              </span>
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="line-clamp-2 text-sm text-foreground">
+                {post.body || "Foto o video"}
+              </span>
+              <span className="mt-1 block text-xs text-foreground-muted">
+                {post.timeAgoLabel}
+              </span>
+            </span>
+          </PostSheetTrigger>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PostsSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      {Array.from({ length: 2 }, (_, index) => (
+        <div
+          key={index}
+          className="flex items-center gap-3 rounded-lg border border-border-subtle bg-surface p-3"
+        >
+          <Skeleton className="size-14 shrink-0 rounded-md" />
+          <div className="flex-1">
+            <Skeleton className="h-4 w-4/5" />
+            <Skeleton className="mt-2 h-3 w-16" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+async function AgendaDelNegocio({
+  agendaPromise,
+}: {
+  agendaPromise: Promise<
+    [Awaited<ReturnType<typeof fetchPuestosDelNegocio>>, Awaited<ReturnType<typeof fetchEventosDelNegocio>>]
+  >;
+}) {
+  const [puestos, eventos] = await agendaPromise;
+  return (
+    <>
+      {/* PUESTOS ABIERTOS (0107). Va DESPUÉS de las publicaciones y ANTES de
+          las reseñas: quien llegó hasta acá ya sabe qué hace el negocio, y una
+          vacante es una llamada a la acción — no puede quedar debajo de una
+          lista de reseñas que puede medir dos pantallas. Sin puestos abiertos
+          la sección entera no existe (el componente devuelve null): "este
+          negocio no está contratando" no le sirve a nadie. */}
+      {puestos.length > 0 && (
+        <section className="mt-6">
+          <SectionTitle>{EMPLEOS_DEL_NEGOCIO_TITULO}</SectionTitle>
+          <EmpleosDelNegocio puestos={puestos} />
+        </section>
+      )}
+
+      {/* PRÓXIMOS EVENTOS (requisito del cliente: un evento publicado tiene
+          que verse en la página de su organizador). Mismo criterio que los
+          puestos: sin eventos vigentes, la sección entera no existe — "este
+          negocio no tiene eventos" no le sirve a nadie. */}
+      {eventos.length > 0 && (
+        <section className="mt-6">
+          <SectionTitle>{EVENTOS_DEL_NEGOCIO_TITULO}</SectionTitle>
+          <EventosDelNegocio eventos={eventos} />
+        </section>
+      )}
+    </>
   );
 }

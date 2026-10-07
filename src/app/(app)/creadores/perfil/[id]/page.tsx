@@ -100,14 +100,9 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
   // Nombres de quienes reseñaron. Sólo las 3 columnas que se pintan: el nombre
   // y la foto de quien reseñó son públicos, el resto de `profiles` no tiene por
   // qué viajar a una página abierta (misma regla que en /perfil/[id]).
-  const reviewerIds = [...new Set((reviews ?? []).map((r) => r.reviewer_id))];
-  const { data: reviewers } = reviewerIds.length
-    ? await supabase.from("profiles").select("id, display_name, avatar_url").in("id", reviewerIds)
-    : { data: [] as { id: string; display_name: string; avatar_url: string | null }[] };
-  const reviewerById = new Map((reviewers ?? []).map((r) => [r.id, r]));
-
-  // Seguimiento + conversación previa. Las dos consultas dependen de la sesión y
-  // no dependen entre sí, así que van juntas y no una atrás de la otra.
+  //
+  // Seguimiento + conversación previa van en la MISMA tanda que los nombres: las
+  // tres consultas son independientes entre sí.
   //
   // CONVERSACIÓN: mismo criterio EXACTO que /perfil/[id] — la RLS de
   // `conversations` sólo devuelve los hilos de quien mira, así que para un
@@ -115,7 +110,11 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
   // Se excluyen los hilos bloqueados: ofrecer "seguí la conversación" hacia un
   // chat que la otra persona cortó sería empujar a alguien contra una puerta
   // cerrada.
-  const [{ data: existingFollow }, { data: existingConversation }] = await Promise.all([
+  const reviewerIds = [...new Set((reviews ?? []).map((r) => r.reviewer_id))];
+  const [{ data: reviewers }, { data: existingFollow }, { data: existingConversation }] = await Promise.all([
+    reviewerIds.length
+      ? supabase.from("profiles").select("id, display_name, avatar_url").in("id", reviewerIds)
+      : Promise.resolve({ data: [] as { id: string; display_name: string; avatar_url: string | null }[] }),
     userId
       ? supabase
           .from("follows")
@@ -136,6 +135,7 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
+  const reviewerById = new Map((reviewers ?? []).map((r) => [r.id, r]));
 
   const portfolio = creator.portfolio_photos ?? [];
 

@@ -1,6 +1,7 @@
 "use server";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { refresh } from "next/cache";
 import { z } from "zod";
 import { DAY_MS, limit } from "@/lib/rate-limit";
 import { isVisionConfigured } from "@/lib/config/services";
@@ -493,6 +494,7 @@ async function finalizeEmpleosListing(
     origen: "empleos",
   });
 
+  refresh();
   return { ok: true, status };
 }
 

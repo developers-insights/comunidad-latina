@@ -2,7 +2,7 @@ import Link from "next/link";
 import { SignIn } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COMUNIDAD_COPY } from "@/lib/comunidad";
-import { createClient, getAuthUserId } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { CasoPublishForm } from "./publish-form";
 
@@ -21,8 +21,7 @@ const RUTA = "/comunidad/perdidos/publicar";
  * después.
  */
 export default async function PublicarCasoPage() {
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const userId = await getAuthUserId();
+  const [tenant, userId] = await Promise.all([getTenant(), getAuthUserId()]);
 
   if (!userId) {
     return (

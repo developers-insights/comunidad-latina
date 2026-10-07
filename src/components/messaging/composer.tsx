@@ -38,7 +38,13 @@ const MAX_LENGTH = 2000;
  *
  * Enter envía y Shift+Enter salta de línea, como antes.
  */
-export function Composer({ conversationId }: { conversationId: string }) {
+export function Composer({
+  conversationId,
+  refrescarAlEnviar = false,
+}: {
+  conversationId: string;
+  refrescarAlEnviar?: boolean;
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const [value, setValue] = useState("");
@@ -187,7 +193,12 @@ export function Composer({ conversationId }: { conversationId: string }) {
         } catch {
           // sin soporte: nada que hacer
         }
-        router.refresh();
+        /**
+         * En la página, `revalidatePath` de la action ya trae el hilo nuevo en
+         * la misma respuesta: refrescar acá era renderizarlo dos veces. La
+         * llamada vive en otra ruta y esa revalidación no la alcanza.
+         */
+        if (refrescarAlEnviar) router.refresh();
       } else if (result.code === "flagged") {
         toast({
           title: COPY.composer.flaggedTitle,

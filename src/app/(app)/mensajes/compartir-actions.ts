@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { tocarTimbre } from "@/lib/messaging/timbre";
 import { z } from "zod";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { moderateText } from "@/lib/moderation";
@@ -380,6 +381,11 @@ export async function compartirEnChatAction(input: {
   const fallidos = destinos.length - enviados;
 
   if (enviados === 0) return { ok: false, code: "error" };
+
+  for (const id of conversacionesTocadas) {
+    tocarTimbre(supabase, { ambito: "directo", id }, user.id, "nuevo");
+  }
+  for (const id of gruposTocados) tocarTimbre(supabase, { ambito: "grupo", id }, user.id, "nuevo");
 
   revalidatePath("/mensajes");
   for (const id of conversacionesTocadas) revalidatePath(`/mensajes/${id}`);

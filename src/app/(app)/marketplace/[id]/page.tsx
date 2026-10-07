@@ -139,7 +139,9 @@ export default async function ProductoDetallePage({ params }: { params: Params }
   // (listings.comment_count, mantenido por trigger); "¿ya lo guardé?" es una
   // lectura propia del visitante y degrada a false — ver engagement-queries.
   const commentCount = Math.max(0, product.comment_count ?? 0);
-  const initialSaved = await fetchListingSaved(supabase, tenant.id, product.id, userId);
+  // Arranca ya y se espera recién abajo: no depende de quién vende, así que
+  // corre en paralelo con la tienda/el perfil en vez de sumarse en serie.
+  const initialSavedPromise = fetchListingSaved(supabase, tenant.id, product.id, userId);
 
   // ---------------------------------------------------------------------
   // Quién vende. Con tienda: nombre/zona/foto + seguidores + trust del dueño +
@@ -295,6 +297,8 @@ export default async function ProductoDetallePage({ params }: { params: Params }
   if (storeOff && !isOwner) {
     return <StoreOffNotice isOwner={false} />;
   }
+
+  const initialSaved = await initialSavedPromise;
 
   // "Comprar": el botón EXISTE sólo si el módulo lo ofrece, el tier lo habilita
   // y hay URL cargada. La regla la resuelve `visibleCtasFor` (src/lib/

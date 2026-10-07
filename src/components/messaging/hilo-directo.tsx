@@ -1,12 +1,15 @@
 import { notFound, redirect } from "next/navigation";
 import { LockKey } from "@phosphor-icons/react/dist/ssr";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerFormatDate, getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { cn, DEFAULT_LOCALE, DEFAULT_TIME_ZONE } from "@/lib/utils";
 import { Banner } from "@/components/ui";
-import type { Adjunto } from "@/lib/messaging/adjuntos";
-import { supabaseSinTiparMensajes } from "@/lib/messaging/adjuntos";
+import {
+  leerConversacion,
+  leerMensajesDelHilo,
+  type MensajeDelHilo,
+} from "@/lib/messaging/hilo-queries";
 import { leerReaccionesDeMensajes } from "@/lib/messaging/reacciones";
 import { leerPresencia, presenciaVisible } from "@/lib/messaging/presencia";
 import { topicoDeDirecto } from "@/lib/messaging/escribiendo";
@@ -29,11 +32,12 @@ import {
 } from "@/components/messaging/reply-quote";
 import { resumenDeMensaje } from "@/components/messaging/helpers-de-mensaje";
 import { ScrollAnchor } from "@/components/messaging/scroll-anchor";
-import { MensajesEnVuelo } from "@/components/messaging/en-vuelo";
+import { EnVueloSiFalta, MensajesEnVuelo } from "@/components/messaging/en-vuelo";
+import { HiloEnVivo } from "@/components/messaging/hilo-en-vivo";
+import { RefrescoEnVivo } from "@/components/notifications/refresco-en-vivo";
 import { CLASE_PIE_EN_LLAMADA } from "@/components/messaging/clases-en-llamada";
 import { ThreadHeader } from "@/components/messaging/thread-header";
 import { ThreadListingCard } from "@/components/messaging/thread-listing-card";
-import { ThreadRefresh } from "@/components/messaging/thread-refresh";
 import {
   SharedCard,
   claveCompartido,
@@ -47,51 +51,7 @@ import {
 import { toTrustProps } from "@/components/messaging/trust";
 import { sigueDescartada } from "@/lib/messaging/solicitud-descartada";
 
-type ProfileLite = {
-  id: string;
-  display_name: string;
-  avatar_url: string | null;
-  identity_verified: boolean;
-};
-
-type ConversationRow = {
-  id: string;
-  status: string;
-  created_at: string;
-  created_by: string;
-  counterpart_id: string;
-  listing: {
-    id: string;
-    title: string;
-    kind: string;
-    photos: string[] | null;
-    price_amount: number | null;
-    price_currency: string | null;
-    price_period: string | null;
-  } | null;
-  creator: ProfileLite | null;
-  counterpart: ProfileLite | null;
-};
-
-/**
- * La fila tal como la devuelve la consulta de abajo. Las columnas de la 0136
- * son OPCIONALES en el tipo a propósito: mientras esa migración no esté
- * aplicada en un entorno, no vienen y el hilo se sigue leyendo como texto.
- */
-type MessageRow = {
-  id: string;
-  sender_id: string;
-  body: string;
-  created_at: string;
-  kind?: string | null;
-  reply_to?: string | null;
-  editado_at?: string | null;
-  deleted_at?: string | null;
-  compartido_kind?: string | null;
-  compartido_id?: string | null;
-  adjunto?: Adjunto | null;
-  ubicacion?: { lat: number; lng: number; etiqueta?: string } | null;
-};
+type MessageRow = MensajeDelHilo;
 
 /** Los `kind` que traen algo para pintar además del texto (0136 §2.2). */
 const KINDS_CON_MEDIA = new Set([
@@ -120,33 +80,32 @@ export async function HiloDirecto({
 }) {
   const enLlamada = variante === "llamada";
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  /**
+   * TODO ARRANCA A LA VEZ y cada lectura espera sólo lo que necesita: la
+   * confianza y la presencia, a la otra persona (sale de la conversación);
+   * reacciones, firmas y tarjetas, a los mensajes. Eran cinco viajes en fila
+   * (getUser → conversación → mensajes → derivados); el camino más largo ahora
+   * es de dos. `getAuthUserId` verifica el JWT local: esto es lectura, y las
+   * actions que escriben siguen pidiendo `getUser`.
+   */
+  const supabaseP = createClient();
+  const tenantP = getTenant();
+  const mensajesP = leerMensajesDelHilo(id);
+  const zonaP = getViewerTimeZone();
+  const formatoP = getViewerFormatDate();
+  const emojisP = readCommunityEmojiCatalog();
+
+  const [userId, conversation] = await Promise.all([getAuthUserId(), leerConversacion(id)]);
+  if (!userId) {
     if (enLlamada) return null;
-    redirect("/entrar");
+    redirect(`/entrar?next=/mensajes/${id}`);
   }
-
-  const { data } = await supabase
-    .from("conversations")
-    .select(
-      `id, status, created_at, created_by, counterpart_id,
-       listing:listings(id, title, kind, photos, price_amount, price_currency, price_period),
-       creator:profiles!conversations_created_by_fkey(id, display_name, avatar_url, identity_verified),
-       counterpart:profiles!conversations_counterpart_id_fkey(id, display_name, avatar_url, identity_verified)`,
-    )
-    .eq("id", id)
-    .maybeSingle();
-
-  const conversation = data as unknown as ConversationRow | null;
   if (!conversation) {
     if (enLlamada) return null;
     notFound();
   }
 
-  const iAmCreator = conversation.created_by === user.id;
+  const iAmCreator = conversation.created_by === userId;
   const other = iAmCreator ? conversation.counterpart : conversation.creator;
   const otherName = other?.display_name ?? "Miembro de la comunidad";
   const otherFirstName = otherName.split(/\s+/)[0] ?? otherName;
@@ -155,45 +114,6 @@ export async function HiloDirecto({
   // consulta que ya trae los dos perfiles: no cuesta un viaje extra.
   const nombrePropio = yo?.display_name ?? COPY.acciones.vos;
 
-  const [{ data: trustRow }, { data: messagesData }] = await Promise.all([
-    other
-      ? supabase
-          .from("trust_scores")
-          .select("score, level, signals")
-          .eq("profile_id", other.id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    // `supabaseSinTiparMensajes` porque `database.types.ts` se regenera a mano
-    // y todavía no conoce las columnas de la 0136. La forma real de la fila la
-    // fija `MessageRow`; cuando los tipos se regeneren, este escape se borra.
-    supabaseSinTiparMensajes(supabase)
-      .from("messages")
-      .select(
-        "id, sender_id, body, created_at, kind, reply_to, editado_at, deleted_at, compartido_kind, compartido_id, adjunto, ubicacion",
-      )
-      .eq("conversation_id", conversation.id)
-      .order("created_at", { ascending: true })
-      .limit(200),
-  ]);
-
-  const messages = (messagesData ?? []) as MessageRow[];
-  const trust = toTrustProps(trustRow, other?.identity_verified ?? false);
-
-  /**
-   * LAS TARJETAS DEL HILO, RESUELTAS DE UNA SOLA VEZ.
-   *
-   * Un mensaje puede traer una publicación adentro por dos caminos, y los dos
-   * terminan en el mismo par `{kind, id}`:
-   *
-   *  · lo mandaron desde el panel de Compartir → viene en `compartido_kind` /
-   *    `compartido_id` (0136);
-   *  · alguien PEGÓ el link a mano → `enlaceInternoDelCuerpo` lo reconoce, pero
-   *    SÓLO si es un enlace de este sitio y el cuerpo es el enlace y nada más.
-   *
-   * `resolverCompartidos` agrupa por TABLA, así que doscientos mensajes con
-   * tarjeta cuestan cuatro consultas y no doscientas. Se pide una sola vez, acá,
-   * y las burbujas leen del mapa.
-   */
   /**
    * Qué contamos como "un enlace nuestro": SÓLO el origin canónico.
    *
@@ -207,6 +127,12 @@ export async function HiloDirecto({
   const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const origenesPropios = [sitio].filter(Boolean);
 
+  /**
+   * Un mensaje puede traer una publicación por dos caminos que terminan en el
+   * mismo par `{kind, id}`: el panel de Compartir (`compartido_kind` /
+   * `compartido_id`, 0136) o un enlace de este sitio PEGADO a mano, que
+   * `enlaceInternoDelCuerpo` reconoce sólo si el cuerpo es el enlace y nada más.
+   */
   const compartidoDelMensaje = (message: MessageRow): EnlaceInterno | null => {
     // Un mensaje bajado no conserva payload (0142): no hay tarjeta que resolver.
     if (message.deleted_at) return null;
@@ -217,47 +143,61 @@ export async function HiloDirecto({
   };
 
   /**
-   * LAS LECTURAS QUE FALTAN, EN PARALELO.
-   *
-   * Ninguna depende del resultado de otra: encadenarlas sería sumar un viaje de
-   * latencia por cada una a la pantalla que más se abre del módulo. La presencia
-   * entra a esta misma tanda —y no a un efecto del cliente— para que el
-   * encabezado se pinte completo de una, sin un "En línea" que aparece tarde.
+   * `resolverCompartidos` agrupa por TABLA: doscientos mensajes con tarjeta
+   * cuestan cuatro consultas y no doscientas. Lo mismo reacciones y firmas.
    */
+  const derivadosP = Promise.all([mensajesP, supabaseP, tenantP]).then(
+    ([lista, supabase, tenant]) =>
+      Promise.all([
+        resolverCompartidos(
+          supabase,
+          lista
+            .map(compartidoDelMensaje)
+            .filter((item): item is EnlaceInterno => item !== null),
+          { locale: tenant.locale },
+        ),
+        leerReaccionesDeMensajes(
+          supabase,
+          "directo",
+          lista.map((message) => message.id),
+          userId,
+        ),
+        firmarAdjuntosDelHilo(
+          lista
+            .map((message) => message.adjunto?.path)
+            .filter(
+              (path): path is string => typeof path === "string" && path.length > 0,
+            ),
+        ),
+      ]),
+  );
+
+  const delOtroP = supabaseP.then((supabase) =>
+    Promise.all([
+      other
+        ? supabase
+            .from("trust_scores")
+            .select("score, level, signals")
+            .eq("profile_id", other.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      // En esta tanda —y no en un efecto del cliente— para que el encabezado se
+      // pinte completo de una, sin un "En línea" que aparece tarde.
+      leerPresencia(supabase, other ? [other.id] : []),
+    ]),
+  );
+
   const [
-    compartidos,
-    reaccionesPorMensaje,
-    firmas,
+    messages,
+    tenant,
+    [compartidos, reaccionesPorMensaje, firmas],
+    [{ data: trustRow }, presencias],
     viewerZone,
     formatDate,
-    presencias,
     emojiCatalog,
-  ] = await Promise.all([
-    resolverCompartidos(
-      supabase,
-      messages
-        .map(compartidoDelMensaje)
-        .filter((item): item is EnlaceInterno => item !== null),
-      { locale: tenant.locale },
-    ),
-    leerReaccionesDeMensajes(
-      supabase,
-      "directo",
-      messages.map((message) => message.id),
-      user.id,
-    ),
-    firmarAdjuntosDelHilo(
-      messages
-        .map((message) => message.adjunto?.path)
-        .filter(
-          (path): path is string => typeof path === "string" && path.length > 0,
-        ),
-    ),
-    getViewerTimeZone(),
-    getViewerFormatDate(),
-    leerPresencia(supabase, other ? [other.id] : []),
-    readCommunityEmojiCatalog(),
-  ]);
+  ] = await Promise.all([mensajesP, tenantP, derivadosP, delOtroP, zonaP, formatoP, emojisP]);
+
+  const trust = toTrustProps(trustRow, other?.identity_verified ?? false);
 
   /**
    * LA HORA DE UN MENSAJE ES LA HORA DE QUIEN LO LEE.
@@ -275,7 +215,7 @@ export async function HiloDirecto({
   });
 
   const nombreDe = (senderId: string) =>
-    senderId === user.id ? nombrePropio : otherName;
+    senderId === userId ? nombrePropio : otherName;
 
   /**
    * LA CITA SE RESUELVE CONTRA LO QUE YA SE CARGÓ, sin una consulta más.
@@ -292,7 +232,7 @@ export async function HiloDirecto({
     return {
       id: original.id,
       autorNombre: nombreDe(original.sender_id),
-      esPropio: original.sender_id === user.id,
+      esPropio: original.sender_id === userId,
       resumen: resumenDeMensaje(
         original.kind ?? "texto",
         original.body,
@@ -319,9 +259,10 @@ export async function HiloDirecto({
      * igual sería pedir una autorización que la base va a negar.
      */
     <EscribiendoProvider
-      miId={user.id}
+      miId={userId}
       topicos={isAccepted ? [topicoDeDirecto(conversation.id)] : []}
     >
+      <EnVueloSiFalta>
       <div
         className={
           enLlamada
@@ -329,7 +270,18 @@ export async function HiloDirecto({
             : "flex min-h-[calc(100dvh-10rem)] flex-col"
         }
       >
-        <ThreadRefresh />
+        <HiloEnVivo
+          ambito="directo"
+          hiloId={conversation.id}
+          miId={userId}
+          ultimoCreadoEn={messages.at(-1)?.created_at ?? null}
+          marcarLeido={!enLlamada}
+        />
+        {/* Sin canal todavía (la 0148 lo niega a una pendiente): quien pidió
+            el contacto se entera de que lo aceptaron por la notificación. */}
+        {isPending && iAmCreator && (
+          <RefrescoEnVivo userId={userId} canal="hilo-pendiente" />
+        )}
 
         {/* En la llamada el panel ya dice con quién se habla y el aviso de
           seguridad se lee una vez, en la página: en 380px eran tres franjas
@@ -407,7 +359,7 @@ export async function HiloDirecto({
               const showDay =
                 !previous || formatDate(previous.created_at) !== dayLabel;
 
-              const isOwn = message.sender_id === user.id;
+              const isOwn = message.sender_id === userId;
               const kind = message.kind ?? "texto";
               const timeLabel = timeFormat.format(new Date(message.created_at));
               const compartido = compartidoDelMensaje(message);
@@ -500,14 +452,12 @@ export async function HiloDirecto({
               />
             )}
 
-            {enLlamada && (
-              <MensajesEnVuelo
-                mensajes={messages.map((message) => ({
-                  id: message.id,
-                  propio: message.sender_id === user.id,
-                }))}
-              />
-            )}
+            <MensajesEnVuelo
+              mensajes={messages.map((message) => ({
+                id: message.id,
+                propio: message.sender_id === userId,
+              }))}
+            />
           </div>
 
           {/* Pie según estado: solo accepted escribe (§9.2) */}
@@ -519,7 +469,7 @@ export async function HiloDirecto({
                   : "sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 -mx-1 bg-canvas/95 px-1 pb-2 pt-1 backdrop-blur-sm"
               }
             >
-              <Composer conversationId={conversation.id} />
+              <Composer conversationId={conversation.id} refrescarAlEnviar={enLlamada} />
             </div>
           )}
         </ResponderProvider>
@@ -552,6 +502,7 @@ export async function HiloDirecto({
           </Banner>
         )}
       </div>
+      </EnVueloSiFalta>
     </EscribiendoProvider>
   );
 }

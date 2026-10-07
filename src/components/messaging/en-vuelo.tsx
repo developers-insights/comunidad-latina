@@ -161,6 +161,16 @@ export function EnVueloProvider({
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
 }
 
+/**
+ * El provider sólo si nadie lo puso antes. El chat de la llamada monta el suyo
+ * —con el contador de no leídos del botón— y el hilo no puede taparlo con otro.
+ */
+export function EnVueloSiFalta({ children }: { children: React.ReactNode }) {
+  const ctx = useContext(Ctx);
+  if (ctx) return <>{children}</>;
+  return <EnVueloProvider>{children}</EnVueloProvider>;
+}
+
 export function useEnvioOptimista() {
   const ctx = useContext(Ctx);
   return ctx

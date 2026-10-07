@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { tocarTimbre } from "@/lib/messaging/timbre";
 import { z } from "zod";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { moderateText } from "@/lib/moderation";
@@ -290,6 +291,7 @@ export async function enviarAdjuntoAction(input: {
       console.warn("[mensajes] no se pudo enviar el adjunto al grupo", { code: error.code });
       return { ok: false, code: error.code === "42501" ? "forbidden" : "error" };
     }
+    tocarTimbre(supabase, { ambito: "grupo", id: destino.groupId }, user.id, "nuevo");
     await avisar({
       tenantId: tenant.id,
       autorId: user.id,
@@ -319,6 +321,7 @@ export async function enviarAdjuntoAction(input: {
     console.warn("[mensajes] no se pudo enviar el adjunto", { code: error.code });
     return { ok: false, code: error.code === "42501" ? "forbidden" : "error" };
   }
+  tocarTimbre(supabase, { ambito: "directo", id: destino.conversationId }, user.id, "nuevo");
 
   await avisar({
     tenantId: conversacion.tenant_id,

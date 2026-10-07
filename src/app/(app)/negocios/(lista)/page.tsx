@@ -53,7 +53,7 @@ import {
 import { fetchBusinessPostsPage } from "@/lib/negocios/publicaciones";
 import { fetchListingRatings } from "@/lib/profesionales/ratings";
 import type { ResumenPuntaje } from "@/lib/resenas";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { resolverVistaZona } from "@/lib/zona/server";
 import { toTrustProps } from "@/lib/trust/signals";
@@ -289,15 +289,8 @@ export default async function NegociosPage({ searchParams }: { searchParams: Sea
 // ---------------------------------------------------------------------------
 
 async function NegociosContent({ filters }: { filters: Filters }) {
-  // createClient() NO hace red (solo lee cookies): lo creamos primero y así
-  // solapamos el round-trip a DB de getTenant() con el de Auth (getUser()).
   const supabase = await createClient();
-  const [
-    tenant,
-    {
-      data: { user },
-    },
-  ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
+  const [tenant, userId] = await Promise.all([getTenant(), getAuthUserId()]);
 
   // La zona de quien mira se resuelve UNA vez y sirve para dos cosas: el filtro
   // "Cerca de mí" y el alcance geográfico de los impulsos (0092). Antes se
@@ -308,7 +301,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
   const vistaZona = await resolverVistaZona(tenant.id, null);
   const viewer = await resolveViewerGeo(supabase, {
     tenantId: tenant.id,
-    userId: user?.id ?? null,
+    userId,
     // La zona ELEGIDA pesa más que la del perfil para el alcance de los
     // impulsos, y `resolveViewerGeo` ya sabe caer al perfil cuando es `null`.
     zoneFilter: vistaZona.zona.label,
@@ -458,8 +451,8 @@ async function NegociosContent({ filters }: { filters: Filters }) {
    * RLS decide; acá sólo se evita ofrecer lo que iba a rebotar.
    */
   const misAvisos = new Set(
-    user
-      ? orderedRows.filter((row) => row.created_by === user.id).map((row) => row.id)
+    userId
+      ? orderedRows.filter((row) => row.created_by === userId).map((row) => row.id)
       : [],
   );
 
@@ -608,7 +601,7 @@ async function NegociosContent({ filters }: { filters: Filters }) {
       </BezelCard>
 
       {/* Entrada al Copiloto de Negocios (módulo MATCHING+COPILOTO) — solo logueados */}
-      {user && (
+      {userId && (
         <BezelCard className="mt-4" coreClassName="flex flex-col gap-3 p-5">
           <div className="flex items-start gap-3">
             <span
@@ -740,9 +733,9 @@ async function NegociosContent({ filters }: { filters: Filters }) {
               apertura: aperturas.get(negocio.id) ?? null,
               acciones,
               puedeRecibirMensajes: Boolean(
-                negocio.created_by && negocio.created_by !== user?.id,
+                negocio.created_by && negocio.created_by !== userId,
               ),
-              isLoggedIn: Boolean(user),
+              isLoggedIn: Boolean(userId),
             };
 
             return boostedIds.has(business.id) ? (
@@ -794,16 +787,11 @@ async function PublicacionesContent({
   cursor: { createdAt: string; id: string } | null;
 }) {
   const supabase = await createClient();
-  const [
-    tenant,
-    {
-      data: { user },
-    },
-  ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
+  const [tenant, userId] = await Promise.all([getTenant(), getAuthUserId()]);
 
   const page = await fetchBusinessPostsPage(supabase, {
     tenantId: tenant.id,
-    viewerId: user?.id ?? null,
+    viewerId: userId,
     cursor,
   });
 
@@ -812,7 +800,7 @@ async function PublicacionesContent({
       className="mt-6"
       posts={page.items}
       tenantId={tenant.id}
-      viewerId={user?.id ?? null}
+      viewerId={userId}
       nextHref={page.nextCursor ? `/negocios?t=publicaciones&pcursor=${page.nextCursor}` : null}
     />
   );
@@ -828,12 +816,7 @@ async function OfertasContent({
   cursor: { expiresAt: string; postId: string } | null;
 }) {
   const supabase = await createClient();
-  const [
-    tenant,
-    {
-      data: { user },
-    },
-  ] = await Promise.all([getTenant(), supabase.auth.getUser()]);
+  const [tenant, userId] = await Promise.all([getTenant(), getAuthUserId()]);
 
   const page = await fetchOfertasVigentes(supabase, {
     tenantId: tenant.id,
@@ -845,11 +828,11 @@ async function OfertasContent({
   // ya están en memoria. Sin esto, cada botón "Guardar" nacería en "no guardada"
   // aunque la persona la hubiera guardado ayer desde el feed.
   const guardadas = new Set<string>();
-  if (user && page.items.length > 0) {
+  if (userId && page.items.length > 0) {
     const { data } = await supabase
       .from("saves")
       .select("subject_id")
-      .eq("profile_id", user.id)
+      .eq("profile_id", userId)
       .eq("subject_kind", "post")
       .in(
         "subject_id",
@@ -862,7 +845,7 @@ async function OfertasContent({
     <OfertasPanel
       className="mt-6"
       ofertas={page.items}
-      viewerId={user?.id ?? null}
+      viewerId={userId}
       guardadas={guardadas}
       nextHref={
         page.nextCursor

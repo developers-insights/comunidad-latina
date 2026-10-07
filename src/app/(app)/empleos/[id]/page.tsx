@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
@@ -14,7 +15,7 @@ import {
   Translate,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, Badge, Banner, BezelCard, buttonVariants } from "@/components/ui";
+import { Avatar, Badge, Banner, BezelCard, Skeleton, buttonVariants } from "@/components/ui";
 import { ProfileLink } from "@/components/social/profile-link";
 import {
   DetailFacts,
@@ -99,21 +100,22 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-
-  const { data: listing } = await supabase
-    .from("listings")
-    .select(
-      "id, tenant_id, kind, title, description, attrs, area_label, work_mode, photos, status, created_by, publisher_name, price_amount, price_currency, price_period",
-    )
-    .eq("id", id)
-    .in("kind", [...EMPLEOS_KINDS])
-    .maybeSingle();
+  const supabase = await createClient();
+  const [tenant, { data: listing }, userId] = await Promise.all([
+    getTenant(),
+    supabase
+      .from("listings")
+      .select(
+        "id, tenant_id, kind, title, description, attrs, area_label, work_mode, photos, status, created_by, publisher_name, price_amount, price_currency, price_period",
+      )
+      .eq("id", id)
+      .in("kind", [...EMPLEOS_KINDS])
+      .maybeSingle(),
+    getAuthUserId(),
+  ]);
 
   // RLS ya limita qué filas existen para este usuario (published | propias | staff).
   if (!listing || listing.tenant_id !== tenant.id) notFound();
-
-  const userId = await getAuthUserId();
 
   /**
    * SERVICIO → otra pantalla, desde acá.
@@ -243,25 +245,31 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
   }
 
   // ¿Ya lo guardé? (`saves`, 0038 — false si la migración todavía no corrió.)
-  const initialSaved = await fetchListingSaved(supabase, tenant.id, listing.id, userId);
+  // En la misma tanda que el publicador: ninguno depende del otro.
+  const [initialSaved, publicador] = await Promise.all([
+    fetchListingSaved(supabase, tenant.id, listing.id, userId),
+    listing.created_by
+      ? Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, display_name, avatar_url, identity_verified")
+            .eq("id", listing.created_by)
+            .maybeSingle(),
+          supabase
+            .from("trust_scores")
+            .select("score, level, signals")
+            .eq("profile_id", listing.created_by)
+            .maybeSingle(),
+        ])
+      : null,
+  ]);
 
   // -------------------------------------------------------------------------
   // Quién ofrece el trabajo: perfil con Trust Score, o fuente externa atribuida
   // -------------------------------------------------------------------------
   let publisherCard: React.ReactNode = null;
-  if (listing.created_by) {
-    const [{ data: profile }, { data: trust }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, display_name, avatar_url, identity_verified")
-        .eq("id", listing.created_by)
-        .maybeSingle(),
-      supabase
-        .from("trust_scores")
-        .select("score, level, signals")
-        .eq("profile_id", listing.created_by)
-        .maybeSingle(),
-    ]);
+  if (publicador) {
+    const [{ data: profile }, { data: trust }] = publicador;
 
     const displayName = profile?.display_name ?? C.fallbackPublisher;
     publisherCard = (
@@ -432,21 +440,23 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
           recibió, sólo corta la entrada de gente nueva. */}
       {(isOwner || !isClosed) && (
         <div className="mt-6">
-          {isOwner ? (
-            <OwnerApplications
-              jobId={listing.id}
-              tenantId={tenant.id}
-              // Cerrado ≠ pendiente: un empleo que el dueño marcó "Cubierto"
-              // no está "en revisión" — el banner de cierre ya lo explica.
-              isPending={!isClosed && listing.status !== "published"}
-            />
-          ) : (
-            <ApplicantAction
-              jobId={listing.id}
-              userId={userId}
-              questions={attrs.questions}
-            />
-          )}
+          <Suspense fallback={<Skeleton className="h-12 w-full rounded-full" />}>
+            {isOwner ? (
+              <OwnerApplications
+                jobId={listing.id}
+                tenantId={tenant.id}
+                // Cerrado ≠ pendiente: un empleo que el dueño marcó "Cubierto"
+                // no está "en revisión" — el banner de cierre ya lo explica.
+                isPending={!isClosed && listing.status !== "published"}
+              />
+            ) : (
+              <ApplicantAction
+                jobId={listing.id}
+                userId={userId}
+                questions={attrs.questions}
+              />
+            )}
+          </Suspense>
         </div>
       )}
     </div>
@@ -472,15 +482,18 @@ async function ApplicantAction({
     );
   }
 
-  const application = await fetchViewerApplication(jobId, userId);
+  // El autocompletado se lee UNA vez, acá, y viaja como props a la hoja: así el
+  // bloque "esto va a ver quien contrata" ya está armado cuando se abre, sin un
+  // spinner adentro del formulario. Va en paralelo con la postulación: si ya se
+  // postuló se tira, pero son dos lecturas chicas contra un viaje en serie.
+  const [application, profile] = await Promise.all([
+    fetchViewerApplication(jobId, userId),
+    fetchApplicantProfilePreview(userId),
+  ]);
   if (application) {
     return <JobApplicationStatus application={application} />;
   }
 
-  // El autocompletado se lee UNA vez, acá, y viaja como props a la hoja: así el
-  // bloque "esto va a ver quien contrata" ya está armado cuando se abre, sin un
-  // spinner adentro del formulario.
-  const profile = await fetchApplicantProfilePreview(userId);
   return <JobApplySheet jobId={jobId} questions={questions} isLoggedIn profile={profile} />;
 }
 

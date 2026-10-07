@@ -13,18 +13,18 @@ import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
  * avanza, nunca retrocede. El contador de la bandeja es "mensajes de la otra
  * persona con `created_at` mayor a esa marca".
  *
- * QUIÉN LLAMA A ESTO. Hoy, la propia bandeja cuando se toca una fila
- * (`InboxRowLink`): abrir el chat desde la lista es el momento en que la
- * persona dice "esto ya lo vi", y es la única superficie que este frente
- * controla. La pantalla del hilo debería llamarla también —se puede llegar
- * desde una notificación o desde un enlace— y eso queda anotado, no hecho: ese
- * archivo es de otro frente.
+ * QUIÉN LLAMA A ESTO: el hilo abierto (`HiloEnVivo`), al montarse y cada vez
+ * que llega un mensaje ajeno con la pestaña a la vista. Se llega a un chat
+ * desde la bandeja, una notificación o un enlace, y los tres tienen que bajar
+ * el contador. La bandeja ya no escribe nada al tocar la fila: sólo baja su
+ * globito en memoria.
  *
  * Si la tabla todavía no existe, la acción devuelve `{ ok: false }` y no pasa
  * nada más: la navegación ya ocurrió y el contador simplemente no baja.
  */
 
 const schema = z.object({ conversationId: z.uuid() });
+const schemaDeGrupo = z.object({ groupId: z.uuid() });
 
 export type MarcarLeidaResult =
   | { ok: true }
@@ -66,5 +66,38 @@ export async function marcarConversacionLeidaAction(input: {
   }
 
   revalidatePath("/mensajes");
+  return { ok: true };
+}
+
+/** Lo mismo para un grupo: la RPC de la 0137 que sólo avanza la marca. */
+export async function marcarGrupoLeidoAction(input: {
+  groupId: string;
+}): Promise<MarcarLeidaResult> {
+  const parsed = schemaDeGrupo.safeParse(input);
+  if (!parsed.success) return { ok: false, code: "invalid" };
+
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    return {
+      ok: false,
+      code: guard.reason === "unauthenticated" ? "unauthenticated" : "error",
+    };
+  }
+
+  if (!limit(`lectura:${guard.user.id}`, 600, HOUR_MS).ok) {
+    return { ok: false, code: "rate-limited" };
+  }
+
+  const { error } = await supabaseSinTiparGrupos(guard.supabase).rpc(
+    "marcar_leido_en_grupo",
+    { p_group_id: parsed.data.groupId },
+  );
+
+  if (error) {
+    console.warn("[grupos] no se pudo marcar el grupo leído", { code: error.code });
+    return { ok: false, code: "error" };
+  }
+
+  revalidatePath("/mensajes/grupos");
   return { ok: true };
 }

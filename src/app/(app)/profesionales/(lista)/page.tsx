@@ -330,33 +330,41 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
     ...new Set(orderedRows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
   ];
 
-  const [checksResult, profilesResult, trustResult, languagesByProfile, ratingsByListing, videos] =
-    await Promise.all([
-      listingIds.length > 0
-        ? supabase
-            .from("verification_checks")
-            .select("subject_id, result, registry, registry_url, license_number, checked_at")
-            .eq("tenant_id", tenant.id)
-            .eq("subject_kind", "listing")
-            .in("subject_id", listingIds)
-            .order("checked_at", { ascending: false })
-        : Promise.resolve({ data: [] as never[] }),
-      publisherIds.length > 0
-        ? supabase
-            .from("profiles")
-            .select("id, display_name, avatar_url, identity_verified")
-            .in("id", publisherIds)
-        : Promise.resolve({ data: [] as never[] }),
-      publisherIds.length > 0
-        ? supabase
-            .from("trust_scores")
-            .select("profile_id, score, level, signals")
-            .in("profile_id", publisherIds)
-        : Promise.resolve({ data: [] as never[] }),
-      fetchLanguagesByProfile(supabase, publisherIds),
-      fetchListingRatings(supabase, listingIds),
-      fetchListingVideos(supabase, listingIds),
-    ]);
+  const [
+    checksResult,
+    profilesResult,
+    trustResult,
+    languagesByProfile,
+    ratingsByListing,
+    videos,
+    formatDate,
+  ] = await Promise.all([
+    listingIds.length > 0
+      ? supabase
+          .from("verification_checks")
+          .select("subject_id, result, registry, registry_url, license_number, checked_at")
+          .eq("tenant_id", tenant.id)
+          .eq("subject_kind", "listing")
+          .in("subject_id", listingIds)
+          .order("checked_at", { ascending: false })
+      : Promise.resolve({ data: [] as never[] }),
+    publisherIds.length > 0
+      ? supabase
+          .from("profiles")
+          .select("id, display_name, avatar_url, identity_verified")
+          .in("id", publisherIds)
+      : Promise.resolve({ data: [] as never[] }),
+    publisherIds.length > 0
+      ? supabase
+          .from("trust_scores")
+          .select("profile_id, score, level, signals")
+          .in("profile_id", publisherIds)
+      : Promise.resolve({ data: [] as never[] }),
+    fetchLanguagesByProfile(supabase, publisherIds),
+    fetchListingRatings(supabase, listingIds),
+    fetchListingVideos(supabase, listingIds),
+    getViewerFormatDate(),
+  ]);
 
   // Sólo el check MÁS RECIENTE por sujeto decide (viene ordenado checked_at desc).
   // Un found_active viejo NO debe pisar a un expired/mismatch posterior: mostramos
@@ -365,9 +373,9 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
    * `verification_checks.checked_at` es `timestamptz` (0005), o sea un INSTANTE:
    * el momento en que se consultó el registro oficial. Formatearlo en la zona
    * fija de la comunidad fecha la verificación un día antes para quien mira
-   * desde la costa oeste. Va con el reloj de quien lee.
+   * desde la costa oeste. Va con el reloj de quien lee (`formatDate`, pedido
+   * en la tanda de arriba).
    */
-  const formatDate = await getViewerFormatDate();
   const verificationByListing = new Map<string, VerificationView>();
   const latestCheckSeen = new Set<string>();
   for (const check of checksResult.data ?? []) {

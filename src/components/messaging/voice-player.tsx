@@ -120,7 +120,7 @@ export function VoicePlayer({
 
   /**
    * ⚠️ LA FIRMA NUEVA DEL MISMO ARCHIVO NO SE LE PASA AL <audio>.
-   * El hilo hace `router.refresh()` cada 15 s y cada vuelta re-firma los
+   * El hilo hace `router.refresh()` con cada mensaje nuevo y cada vuelta re-firma los
    * adjuntos con otro token. Cambiarle la `src` a un <audio> lo recarga: corta
    * lo que suena y NO dispara `pause`, así que el botón quedaba en "Pausar"
    * sobre un audio mudo (reclamo de Nacho, 23/9: "se traba"). La firma nueva

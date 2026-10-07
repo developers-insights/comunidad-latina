@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { EmptyState, NavTabs } from "@/components/ui";
 import { COPY } from "@/components/messaging/copy";
 import { GaleriaLista } from "@/components/messaging/galeria-lista";
@@ -55,10 +55,10 @@ export default async function GaleriaDelGrupoPage({
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   if (!UUID_RE.test(id)) notFound();
 
-  const user = await getCurrentUser();
-  if (!user) redirect("/entrar");
+  const userId = await getAuthUserId();
+  if (!userId) redirect("/entrar");
 
-  const grupo = await obtenerGrupo(id, user.id);
+  const grupo = await obtenerGrupo(id, userId);
   if (!grupo) notFound();
 
   // Mismo criterio que `info`: esto es para quien está adentro. Quien no lo

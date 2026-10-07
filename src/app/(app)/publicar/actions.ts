@@ -1,5 +1,6 @@
 "use server";
 
+import { refresh } from "next/cache";
 import { z } from "zod";
 import { limit, DAY_MS } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -777,5 +778,6 @@ export async function finalizeListing(rawInput: {
     origen: "vivienda",
   });
 
+  refresh();
   return { ok: true, status: finalStatus, kind };
 }

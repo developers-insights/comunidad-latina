@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus } from "@phosphor-icons/react/dist/ssr";
-import { getCurrentUser } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { EmptyState, buttonVariants } from "@/components/ui";
 import { COPY } from "@/components/messaging/copy";
@@ -41,14 +41,14 @@ export default async function GruposPage({
 }: {
   searchParams: Promise<{ tema?: string }>;
 }) {
-  const [{ tema }, user] = await Promise.all([searchParams, getCurrentUser()]);
-  if (!user) redirect("/entrar");
+  const [{ tema }, userId] = await Promise.all([searchParams, getAuthUserId()]);
+  if (!userId) redirect("/entrar");
 
   const categoria = esCategoriaDeGrupo(tema) ? tema : null;
 
   const [mios, solicitudes] = await Promise.all([
-    listarMisGrupos(user.id),
-    listarMisSolicitudes(user.id),
+    listarMisGrupos(userId),
+    listarMisSolicitudes(userId),
   ]);
   const publicos = await listarGruposPublicos({
     categoria,
