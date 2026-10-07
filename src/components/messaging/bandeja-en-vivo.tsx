@@ -99,34 +99,6 @@ export function BandejaEnVivo({
     [],
   );
 
-  const enCurso = useRef(new Set<string>());
-  const otraVez = useRef(new Set<string>());
-
-  /**
-   * Una consulta por conversación a la vez: los timbres que llegan mientras
-   * tanto se juntan en UNA vuelta más. Quien participa de la charla puede tocar
-   * el timbre las veces que quiera; no puede multiplicar las consultas.
-   */
-  const traer = useCallback(
-    async (conversacionId: string) => {
-      if (enCurso.current.has(conversacionId)) {
-        otraVez.current.add(conversacionId);
-        return;
-      }
-      enCurso.current.add(conversacionId);
-      try {
-        do {
-          otraVez.current.delete(conversacionId);
-          await traerUnaVez(conversacionId);
-        } while (otraVez.current.has(conversacionId));
-      } finally {
-        enCurso.current.delete(conversacionId);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-
   const traerUnaVez = useCallback(
     async (conversacionId: string) => {
       const fila = filasRef.current.find((f) => f.conversacionIds.includes(conversacionId));
@@ -166,6 +138,33 @@ export function BandejaEnVivo({
       }));
     },
     [miId, refrescar],
+  );
+
+  const enCurso = useRef(new Set<string>());
+  const otraVez = useRef(new Set<string>());
+
+  /**
+   * Una consulta por conversación a la vez: los timbres que llegan mientras
+   * tanto se juntan en UNA vuelta más. Quien participa de la charla puede tocar
+   * el timbre las veces que quiera; no puede multiplicar las consultas.
+   */
+  const traer = useCallback(
+    async (conversacionId: string) => {
+      if (enCurso.current.has(conversacionId)) {
+        otraVez.current.add(conversacionId);
+        return;
+      }
+      enCurso.current.add(conversacionId);
+      try {
+        do {
+          otraVez.current.delete(conversacionId);
+          await traerUnaVez(conversacionId);
+        } while (otraVez.current.has(conversacionId));
+      } finally {
+        enCurso.current.delete(conversacionId);
+      }
+    },
+    [traerUnaVez],
   );
 
   useSenalesDelHilo((topico, senal) => {

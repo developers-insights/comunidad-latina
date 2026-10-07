@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { FilaDeBandeja, MensajeDeBandeja } from "./bandeja";
 import {
   aplicarMensajesALaBandeja,
+  entrantesSinCubrir,
+  retirarPendientes,
   esAvisoDeMensaje,
   hiloDeTopico,
   marcarFilaLeida,
@@ -220,5 +222,63 @@ describe("entrantes del hilo", () => {
     expect(masReciente("2026-10-06T13:00:00.000Z", "2026-10-06T12:00:00.000Z")).toBe(
       "2026-10-06T13:00:00.000Z",
     );
+  });
+});
+
+describe("retirarPendientes", () => {
+  const p = (tempId: string, body: string) => ({ tempId, body });
+
+  it("retira la pendiente con el MISMO texto, no la primera de la cola", () => {
+    const { quedan, salen } = retirarPendientes(
+      [p("1", "falló"), p("2", "salió")],
+      [{ id: "m", propio: true, body: "salió" }],
+    );
+    expect(salen.map((x) => x.tempId)).toEqual(["2"]);
+    expect(quedan.map((x) => x.tempId)).toEqual(["1"]);
+  });
+
+  it("dos con el mismo texto salen de a una", () => {
+    const { quedan } = retirarPendientes(
+      [p("1", "ok"), p("2", "ok")],
+      [{ id: "m", propio: true, body: " ok " }],
+    );
+    expect(quedan.map((x) => x.tempId)).toEqual(["2"]);
+  });
+
+  it("un texto que no coincide (otra pestaña) no retira nada", () => {
+    const { salen } = retirarPendientes([p("1", "hola")], [{ id: "m", propio: true, body: "chau" }]);
+    expect(salen).toEqual([]);
+  });
+
+  it("sin texto para comparar cae al orden de envío", () => {
+    const { salen } = retirarPendientes([p("1", "a"), p("2", "b")], [{ id: "m", propio: true }]);
+    expect(salen.map((x) => x.tempId)).toEqual(["1"]);
+  });
+});
+
+describe("entrantesSinCubrir", () => {
+  const e = (id: string, created_at: string): MensajeEntrante => ({
+    id,
+    body: id,
+    created_at,
+    kind: null,
+    adjunto: null,
+    propio: false,
+    autorNombre: null,
+  });
+
+  it("retira las que el servidor trajo y las que quedaron detrás de su último mensaje", () => {
+    const quedan = entrantesSinCubrir(
+      [
+        e("traida", "2026-10-06T12:00:01.000Z"),
+        e("borrada", "2026-10-06T12:00:02.000Z"),
+        e("nueva", "2026-10-06T12:00:09.000Z"),
+      ],
+      [
+        { id: "traida", propio: false, created_at: "2026-10-06T12:00:01.000Z" },
+        { id: "otra", propio: false, created_at: "2026-10-06T12:00:05.000Z" },
+      ],
+    );
+    expect(quedan.map((m) => m.id)).toEqual(["nueva"]);
   });
 });
