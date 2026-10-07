@@ -60,10 +60,10 @@ import { esTabSocial, type FeedTabId } from "./helpers";
  *    marcarse: es el "estás acá" de esta pantalla. "Siguiendo" sigue entrando
  *    por el conmutador (`feed-mode-toggle.tsx`), que es donde corresponde — es
  *    un modo del mismo feed, no un módulo.
- *  · Ningún círculo prefetchea. Antes los filtros sí, porque eran esta misma
- *    pantalla; ahora todos llevan a una sección entera, y traerse media app
- *    cada vez que alguien abre el feed sería peor que el toque. Es el mismo
- *    criterio que ya había tomado `ModuleBubble` en /buscar.
+ *  · Los círculos prefetchean con el default de Next. Hasta el 2026-10-06 no
+ *    lo hacían para no traerse media app; desde que cada sección tiene
+ *    `loading.tsx`, el prefetch baja sólo el skeleton (ver el `<Link>` abajo).
+ *    `ModuleBubble` en /buscar sigue el mismo criterio.
  *
  * Lo que NO cambia, y es la regla que sostiene todo esto: **qué círculos se ven
  * lo decide el panel** (`tenants.modules` / `modules_soon`, vía
@@ -353,10 +353,10 @@ function ModuleCircleLink({
   return (
     <Link
       href={circle.href}
-      // Sin prefetch, igual que la burbuja de /buscar: cada círculo lleva a una
-      // SECCIÓN entera, y prefetchear ocho secciones cada vez que alguien abre
-      // el feed le cuesta datos a un público que los cuenta.
-      prefetch={false}
+      // Prefetch automático A PROPÓSITO (antes era `false`): cada sección tiene
+      // `loading.tsx`, así que el prefetch baja sólo el skeleton —1-2 KB
+      // medidos, ~15 KB los ocho círculos— y no la sección entera. Sin él, el
+      // toque quedaba ~1 s sin respuesta esperando al servidor.
       aria-current={isActivePage ? "page" : undefined}
       style={bubbleStyle(circle.accent)}
       className={cn(

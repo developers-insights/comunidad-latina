@@ -69,7 +69,6 @@ export function SquareTile({
     <Link
       href={href}
       onClick={onNavigate}
-      prefetch={false}
       style={bubbleStyle(accent)}
       className={cn(
         bubbleVariants({ tone: "accentSoft", shape: "tile", size: "none", interactive: true }),

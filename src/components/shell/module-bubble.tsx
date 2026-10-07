@@ -59,7 +59,6 @@ export function ModuleBubble({
     <Link
       href={item.href}
       onClick={onNavigate}
-      prefetch={false}
       aria-current={active ? "page" : undefined}
       style={bubbleStyle(item.palette.icon)}
       className={cn(
