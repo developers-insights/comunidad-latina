@@ -15,6 +15,8 @@ import {
   fitAudioTracks,
   maxVideosPerPost,
   parseParallelVideoField,
+  parseVideoAudioField,
+  parseVideoFramesField,
   predictedAudioPcmChars,
 } from "./post-media-limits";
 import { encodeAudioPcm16 } from "./audio-samples";
@@ -181,5 +183,31 @@ describe("parseParallelVideoField — una entrada por video o ninguna", () => {
     expect(parseParallelVideoField("{no", 1, 1_000)).toEqual([null]);
     expect(parseParallelVideoField(null, 1, 1_000)).toEqual([null]);
     expect(parseParallelVideoField(JSON.stringify(["x".repeat(50)]), 1, 10)).toEqual([null]);
+  });
+});
+
+describe("compatibilidad con el composer anterior (un solo video)", () => {
+  it("los fotogramas sueltos de un video se envuelven", () => {
+    const frames = [[1, 2], [3, 4]];
+    expect(parseVideoFramesField(JSON.stringify(frames), 1, 1_000)).toEqual([frames]);
+  });
+
+  it("el formato nuevo con un video se lee tal cual", () => {
+    const perVideo = [[[1, 2]]];
+    expect(parseVideoFramesField(JSON.stringify(perVideo), 1, 1_000)).toEqual(perVideo);
+  });
+
+  it("con varios videos el formato viejo no se adivina", () => {
+    expect(parseVideoFramesField(JSON.stringify([[1], [2]]), 3, 1_000)).toEqual([
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it("la pista en base64 suelta se envuelve; el arreglo nuevo se lee tal cual", () => {
+    expect(parseVideoAudioField("QUFBQQ==", 1, 1_000)).toEqual(["QUFBQQ=="]);
+    expect(parseVideoAudioField(JSON.stringify(["AAAA"]), 1, 1_000)).toEqual(["AAAA"]);
+    expect(parseVideoAudioField("QUFBQQ==", 2, 1_000)).toEqual([null, null]);
   });
 });

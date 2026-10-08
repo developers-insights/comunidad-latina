@@ -22,7 +22,8 @@ import {
   checkPhotoPayload,
   fitAudioTracks,
   maxVideosPerPost,
-  parseParallelVideoField,
+  parseVideoAudioField,
+  parseVideoFramesField,
 } from "@/lib/media/post-media-limits";
 import { isOwnPosterPath, isOwnVideoPath } from "@/lib/media/own-media-path";
 import { parseMediaFilterRef, type MediaFilterRef } from "@/lib/media/photo-filters";
@@ -351,6 +352,11 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   if (videoPaths.length > maxVideosPerPost(isMuxConfigured)) {
     return { ok: false, code: "photo" };
   }
+  // Una ruta repetida pintaría el mismo archivo dos veces y le colgaría dos
+  // huellas distintas al mismo objeto del bucket.
+  if (new Set(videoPaths).size !== videoPaths.length) {
+    return { ok: false, code: "photo" };
+  }
   if (videoPaths.length > 0 && (parsed.data.muxPostDraftId || parsed.data.muxUploadId)) {
     return { ok: false, code: GENERIC_INVALID };
   }
@@ -430,13 +436,13 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // lo decide el pipeline (revisión humana), nunca voltea la publicación. Los
   // extrae el cliente, así que pueden falsearse; el SHA-256 lo calcula siempre
   // el servidor leyendo el archivo real del bucket.
-  const videoFrames = parseParallelVideoField(
+  const videoFrames = parseVideoFramesField(
     formData.get("videoFrames"),
     videoPaths.length,
     MAX_VIDEOS * MAX_VIDEO_FRAMES_JSON_CHARS,
   );
   const videoAudioPcm = fitAudioTracks(
-    parseParallelVideoField(
+    parseVideoAudioField(
       formData.get("videoAudioPcm"),
       videoPaths.length,
       MAX_TOTAL_AUDIO_PCM_CHARS + MAX_VIDEOS * 8,

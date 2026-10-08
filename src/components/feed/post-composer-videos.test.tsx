@@ -190,7 +190,8 @@ describe("PostComposer — varios videos por el bucket", () => {
     await pickVideos(Array.from({ length: MAX_VIDEOS + 2 }, (_, index) => `c-${index}.mp4`));
 
     expect(await screen.findByText(COPY.composer.videoLimit)).toBeTruthy();
-    await waitFor(() => expect(mocks.uploads).toHaveLength(MAX_VIDEOS));
+    expect(screen.getByText(`${MAX_VIDEOS} de ${MAX_VIDEOS} videos`)).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /Quitar video/ })).toHaveLength(MAX_VIDEOS);
   });
 
   it("quitar un video aborta su subida en vuelo", async () => {
@@ -279,6 +280,64 @@ describe("PostComposer — varios videos por el bucket", () => {
     expect(removed).toHaveLength(1);
     expect(removed[0]).toMatch(/poster-/);
     expect(screen.getByRole("button", { name: `${COPY.composer.removeVideo} 1` })).toBeTruthy();
+  });
+});
+
+describe("PostComposer — subidas en carrera, en cola y al salir", () => {
+  it("publicar mientras viaja el prepare de la selección no arranca una segunda subida", async () => {
+    let releasePrepare: (value: unknown) => void = () => {};
+    mocks.prepareMediaUploadAction.mockImplementationOnce(
+      () => new Promise((resolve) => (releasePrepare = resolve)),
+    );
+    mount();
+    await pickVideos(["a.mp4"]);
+
+    fireEvent.click(publishButton());
+    await act(async () => {});
+    expect(mocks.uploads).toHaveLength(0);
+
+    await act(async () => releasePrepare({ ok: true, tenantId: TENANT, userId: USER }));
+    await waitFor(() => expect(mocks.uploads).toHaveLength(1));
+    await act(async () => mocks.uploads[0].resolve(true));
+
+    await waitFor(() => expect(mocks.createPostAction).toHaveBeenCalledTimes(1));
+    expect(mocks.prepareMediaUploadAction).toHaveBeenCalledTimes(1);
+    expect(mocks.uploads).toHaveLength(1);
+    const data = mocks.createPostAction.mock.calls[0][0] as FormData;
+    expect(JSON.parse(String(data.get("videoPaths")))).toEqual([mocks.uploads[0].path]);
+  });
+
+  it("sube de a tres: el resto espera turno", async () => {
+    mount();
+    await pickVideos(["a.mp4", "b.mp4", "c.mp4", "d.mp4", "e.mp4"]);
+
+    await waitFor(() => expect(mocks.uploads).toHaveLength(3));
+    await act(async () => mocks.uploads[0].resolve(true));
+    await waitFor(() => expect(mocks.uploads).toHaveLength(4));
+  });
+
+  it("quitar un video que esperaba turno no lo sube nunca", async () => {
+    mount();
+    await pickVideos(["a.mp4", "b.mp4", "c.mp4", "d.mp4"]);
+    await waitFor(() => expect(mocks.uploads).toHaveLength(3));
+
+    fireEvent.click(screen.getByRole("button", { name: `${COPY.composer.removeVideo} 4` }));
+    await act(async () => mocks.uploads[0].resolve(true));
+    await act(async () => {});
+
+    expect(mocks.uploads).toHaveLength(3);
+  });
+
+  it("al desmontar el host se abortan las subidas y se borra lo que ya subió", async () => {
+    const view = mount();
+    await pickVideos(["a.mp4", "b.mp4"]);
+    await waitFor(() => expect(mocks.uploads).toHaveLength(2));
+    await act(async () => mocks.uploads[0].resolve(true));
+
+    view.unmount();
+
+    expect(mocks.uploads[1].signal?.aborted).toBe(true);
+    await waitFor(() => expect(mocks.storageRemove).toHaveBeenCalledWith([mocks.uploads[0].path]));
   });
 });
 

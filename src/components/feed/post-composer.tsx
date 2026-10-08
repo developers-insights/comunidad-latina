@@ -14,6 +14,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 import { uploadVideoWithProgress } from "@/lib/media/upload-video";
+import { createStallWatchdog, createUploadLimiter } from "@/lib/media/upload-queue";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { CreateMenu, type QuickPostKind } from "@/components/shell/create-menu";
 import { ComposerMenuProvider } from "./composer-context";
@@ -217,6 +218,11 @@ interface VideoFingerprints {
 }
 
 type PrepareMediaUpload = Awaited<ReturnType<typeof prepareMediaUploadAction>>;
+
+/** Subidas simultáneas al bucket; las demás esperan turno sin ocupar red. */
+const MAX_CONCURRENT_VIDEO_UPLOADS = 3;
+/** Sin un evento de progreso en este plazo la subida se da por trabada. */
+const VIDEO_UPLOAD_STALL_MS = 90_000;
 
 export interface PostComposerHostProps {
   /** `tenants.modules` / `modules_soon`: filtran los tiles del menú de crear. */
@@ -429,6 +435,13 @@ export function PostComposerHost({
   const bucketUploadsRef = useRef(new Map<string, BucketUpload>());
   /** Medios ya quitados: una subida que llega tarde no debe arrancar para ellos. */
   const discardedMediaIdsRef = useRef(new Set<string>());
+  /**
+   * Selecciones cuyo `prepareMediaUploadAction` todavía no volvió. Publicar las
+   * espera: si no, no encuentra la subida en el Map, arranca otra para el mismo
+   * video y la primera queda huérfana.
+   */
+  const pendingSelectionsRef = useRef(new Set<Promise<void>>());
+  const uploadLimiterRef = useRef(createUploadLimiter(MAX_CONCURRENT_VIDEO_UPLOADS));
   /** Qué se espera de los videos al publicar, o null. */
   const [videoStatusLabel, setVideoStatusLabel] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -506,6 +519,27 @@ export function PostComposerHost({
   const videoInputRef = useRef<HTMLInputElement>(null);
   /** Id estable de esta sesión: fija la variante de la vista previa del banner. */
   const previewId = useId();
+
+  /**
+   * Si el host se desmonta con un borrador a medio armar (salir del shell de la
+   * app), sus videos ya no se pueden publicar: se abortan y se borran.
+   * `pagehide` NO se usa a propósito: con bfcache la pestaña puede volver con
+   * el borrador intacto apuntando a archivos ya borrados, y un DELETE de
+   * supabase-js no viaja con `keepalive`, así que al cerrar la pestaña se
+   * cortaría igual. Esos quedan huérfanos en el prefijo propio.
+   */
+  useEffect(() => {
+    const uploads = bucketUploadsRef.current;
+    return () => {
+      for (const entry of uploads.values()) {
+        entry.controller.abort();
+        void entry.uploaded.then((ok) => {
+          if (ok) void removeFromPostMedia([entry.path]);
+        });
+      }
+      uploads.clear();
+    };
+  }, []);
 
   /**
    * ---- SUGERENCIA DE TIPO DE PUBLICACIÓN (frente E) ------------------------
@@ -899,17 +933,35 @@ export function PostComposerHost({
     const controller = new AbortController();
     let lastPct = -1;
     patchVideoUpload(item.id, { status: "uploading", pct: 0 });
-    const uploaded = uploadVideoWithProgress(
-      item.file,
-      path,
-      (pct) => {
-        if (pct === lastPct || controller.signal.aborted) return;
-        lastPct = pct;
-        patchVideoUpload(item.id, { status: "uploading", pct });
-      },
-      item.videoContentType ?? item.file.type,
-      controller.signal,
-    );
+    const limiter = uploadLimiterRef.current;
+    const uploaded = (async () => {
+      if (!(await limiter.acquire(controller.signal))) return false;
+      // Un AbortController propio por intento: el watchdog corta el XHR sin
+      // marcar el video como quitado, así queda en error y publicar lo reintenta.
+      const attempt = new AbortController();
+      const forwardAbort = () => attempt.abort();
+      controller.signal.addEventListener("abort", forwardAbort, { once: true });
+      const watchdog = createStallWatchdog(VIDEO_UPLOAD_STALL_MS, () => attempt.abort());
+      watchdog.poke();
+      try {
+        return await uploadVideoWithProgress(
+          item.file,
+          path,
+          (pct) => {
+            watchdog.poke();
+            if (pct === lastPct || controller.signal.aborted) return;
+            lastPct = pct;
+            patchVideoUpload(item.id, { status: "uploading", pct });
+          },
+          item.videoContentType ?? item.file.type,
+          attempt.signal,
+        );
+      } finally {
+        watchdog.stop();
+        controller.signal.removeEventListener("abort", forwardAbort);
+        limiter.release();
+      }
+    })();
     const done = uploaded.then((ok) => {
       if (controller.signal.aborted) return false;
       patchVideoUpload(item.id, ok ? { status: "done", pct: 100 } : { status: "error", pct: 0 });
@@ -932,18 +984,25 @@ export function PostComposerHost({
    * {tenant}/{user} lo dicta el servidor. Si falla, los videos quedan marcados
    * y publicar lo reintenta — ahí sí con el motivo a la vista.
    */
-  async function startBucketUploads(items: PickedMedia[]) {
-    let prepared: PrepareMediaUpload | null = null;
-    try {
-      prepared = await prepareMediaUploadAction();
-    } catch {
-      prepared = null;
-    }
-    for (const item of items) {
-      if (discardedMediaIdsRef.current.has(item.id)) continue;
-      if (prepared?.ok) startBucketUpload(item, prepared, true);
-      else patchVideoUpload(item.id, { status: "error", pct: 0 });
-    }
+  function startBucketUploads(items: PickedMedia[]): Promise<void> {
+    const selection = (async () => {
+      let prepared: PrepareMediaUpload | null = null;
+      try {
+        prepared = await prepareMediaUploadAction();
+      } catch {
+        prepared = null;
+      }
+      for (const item of items) {
+        if (discardedMediaIdsRef.current.has(item.id)) continue;
+        // Publicar pudo haberla arrancado mientras este prepare viajaba.
+        if (bucketUploadsRef.current.has(item.id)) continue;
+        if (prepared?.ok) startBucketUpload(item, prepared, true);
+        else patchVideoUpload(item.id, { status: "error", pct: 0 });
+      }
+    })();
+    pendingSelectionsRef.current.add(selection);
+    void selection.finally(() => pendingSelectionsRef.current.delete(selection));
+    return selection;
   }
 
   /** Aborta la subida y, si el archivo llegó a quedar arriba, lo borra. */
@@ -984,6 +1043,7 @@ export function PostComposerHost({
       );
     };
 
+    await Promise.all([...pendingSelectionsRef.current]);
     const firstPass = await waitAll(
       items.map((item) => bucketUploadsRef.current.get(item.id)?.done ?? Promise.resolve(false)),
     );
@@ -1080,6 +1140,9 @@ export function PostComposerHost({
     if (keepUploads) {
       bucketUploadsRef.current.clear();
     } else {
+      // También los que todavía esperan su prepare: no están en el Map y sin
+      // esta marca su subida arrancaría igual.
+      for (const item of media) if (item.kind === "video") discardBucketUpload(item.id);
       for (const id of [...bucketUploadsRef.current.keys()]) discardBucketUpload(id);
     }
     setVideoStatusLabel(null);

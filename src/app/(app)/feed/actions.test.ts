@@ -1514,6 +1514,30 @@ describe("createPostAction — varios videos en una publicación", () => {
     expect(integrityItems().map((item) => item.audioPcm)).toEqual([half, null, "BBBB"]);
   });
 
+  it("rechaza la misma ruta de video repetida", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(videosForm([videoPath("a"), videoPath("a")]));
+
+    expect(result).toEqual({ ok: false, code: "photo" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("acepta las huellas del composer anterior cuando hay un solo video", async () => {
+    useGuardOk();
+    const frames = [[1, 2, 3]];
+    const data = videosForm([videoPath("a")]);
+    data.set("videoFrames", JSON.stringify(frames));
+    data.set("videoAudioPcm", "QUFBQQ==");
+
+    await createPostAction(data);
+
+    expect(integrityItems()[0]).toMatchObject({
+      videoLumaFrames: frames,
+      audioPcm: "QUFBQQ==",
+    });
+  });
+
   it("el poster acompaña a la publicación con varios videos", async () => {
     const stub = useGuardOk();
     const poster = `${TENANT_ID}/${USER_ID}/poster-abc.jpg`;

@@ -191,3 +191,47 @@ export function parseParallelVideoField(
     return empty;
   }
 }
+
+/**
+ * Fotogramas por video. Además del formato actual (`number[][][]`, uno por
+ * video) acepta el del composer anterior —las matrices de UN video sueltas,
+ * `number[][]`— cuando hay un solo video: una pestaña abierta antes del deploy
+ * no tiene por qué perder la huella.
+ */
+export function parseVideoFramesField(
+  raw: FormDataEntryValue | null,
+  count: number,
+  maxChars: number,
+): unknown[] {
+  if (count === 1 && typeof raw === "string" && raw.length > 0 && raw.length <= maxChars) {
+    try {
+      const decoded: unknown = JSON.parse(raw);
+      if (
+        Array.isArray(decoded) &&
+        Array.isArray(decoded[0]) &&
+        typeof (decoded[0] as unknown[])[0] === "number"
+      ) {
+        return [decoded];
+      }
+    } catch {
+      return [null];
+    }
+  }
+  return parseParallelVideoField(raw, count, maxChars);
+}
+
+/**
+ * Pistas de audio por video. El composer anterior mandaba la pista de su único
+ * video como base64 suelto, que nunca empieza con `[`: con un solo video se
+ * acepta envuelta. El tope por pista lo aplica `fitAudioTracks` después.
+ */
+export function parseVideoAudioField(
+  raw: FormDataEntryValue | null,
+  count: number,
+  maxChars: number,
+): unknown[] {
+  if (count === 1 && typeof raw === "string" && raw.length > 0 && !raw.startsWith("[")) {
+    return [raw];
+  }
+  return parseParallelVideoField(raw, count, maxChars);
+}
