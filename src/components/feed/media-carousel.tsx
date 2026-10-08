@@ -102,7 +102,7 @@ export interface MediaCarouselProps {
    * Toque simple sobre un VIDEO. Sin esto, CardVideo hace lo suyo (abrir el reel
    * de /videos). Con esto manda la card: fuera del feed no hay scroll infinito.
    */
-  onVideoTap?: (index: number) => void;
+  onVideoTap?: (index: number, resumeCard: () => void) => void;
   /** Clases extra de la fila de puntitos (p. ej. subirla sobre el CTA de campaña). */
   dotsClassName?: string;
   /**
@@ -261,7 +261,7 @@ export function MediaCarousel({
                   authorName={authorName}
                   viewCount={viewCount}
                   active={active}
-                  onTap={onVideoTap ? () => onVideoTap(slideIndex) : undefined}
+                  onTap={onVideoTap ? (resumeCard) => onVideoTap(slideIndex, resumeCard) : undefined}
                   // Filtro de ESTA diapositiva (0104), ya resuelto a CSS por el
                   // servidor. Viaja dentro del medio y no como prop del carrusel
                   // porque es una decisión POR ARCHIVO: un post puede traer un
