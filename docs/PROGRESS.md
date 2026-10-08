@@ -1,5 +1,14 @@
 # PROGRESS — Comunidad Latina
 
+## EN PAUSA: música sin superposición + varios videos por publicación (2026-10-08)
+
+Pedido de Manuel: terminar y mergear las dos ramas WIP del 26/08 (`claude/community-feed-music-playback-90c5d0` y `claude/multiple-video-upload-f88c00`). No se mergean tal cual: están 136+ commits atrás y chocan con el feed actual. Se portan al código de hoy, cada una en su worktree:
+
+- **Música** → worktree `.claude/worktrees/agent-a03872a13e1efb91e`, rama `worktree-agent-a03872a13e1efb91e`. Meta: canal de audio único en el feed (música de publicaciones, videos con sonido, reels); al sonar uno, los demás se pausan o se mutean.
+- **Varios videos** → worktree `.claude/worktrees/agent-ad2551256593e9fc2`, rama `worktree-agent-ad2551256593e9fc2`. Meta: hasta `MAX_PHOTOS` videos mezclados con fotos en `posts.media[]` (camino del bucket). **Decisión:** con Mux prendido el tope sigue en 1, porque `posts` guarda un solo video de Mux en columnas propias y multi-video con Mux exigiría una tabla nueva. Mux NO está configurado en producción (no hay env `MUX_*` en Vercel): hoy todo video va al bucket.
+- Rama de integración: `claude/musica-y-varios-videos` (desde `main` `5257db6`). **No mergear a `main` hasta integrar las dos, correr tsc/eslint/vitest/build y probar el preview.**
+- Para retomar: leer el último commit `wip(...)` de cada rama de worktree (dice qué falta, archivo y función), terminar, mergear las dos ramas en `claude/musica-y-varios-videos` y verificar.
+
 ## Velocidad en toda la app (2026-10-06, rama `claude/full-speed-optimization-6545a1`)
 
 - **La causa número uno era geográfica, no de código:** las funciones de Vercel corrían en `iad1` (Virginia, lo dice `x-vercel-id`) y Supabase vive en `us-west-2` (Oregon). Cada viaje a la base cruzaba el país (~70 ms) y una pantalla hace varios en serie. `vercel.json` ahora fija `"regions": ["pdx1"]`. Si alguna vez se muda el proyecto de Supabase, la región de Vercel se muda con él.
