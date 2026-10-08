@@ -434,8 +434,11 @@ const INVENTARIO: Record<string, Entrada> = {
   // La quinta es el tilde del fondo elegido en el selector de fondos de una
   // publicación de texto (0128): va sobre el degradado del propio fondo, que es
   // media por definición. Mismo hook de siempre — el panel entero se esconde.
+  // La sexta es el indicador de subida/error sobre la miniatura de cada video
+  // (varios videos por publicación, 2026-10-08): `bg-media-scrim` sobre el
+  // fotograma, dentro del mismo panel con `cl-print-hide`.
   "src/components/feed/composer-sheet.tsx": {
-    inks: Array<string>(5).fill("text-on-media"),
+    inks: Array<string>(6).fill("text-on-media"),
     cobertura: "cl-print-hide",
   },
   // Insignia de negocio de la tarjeta "¿Qué querés publicar?" (0116): el mismo
