@@ -20,6 +20,7 @@ import { MuxVideoSurface } from "@/components/video/mux-player";
 import { VideoStatusCard } from "@/components/video/video-status-card";
 import { useMuxLiveStatus } from "@/components/video/mux-status-poll";
 import { safePlayMedia, type PlayableMedia } from "@/components/video/playable-media";
+import { useAudioChannelSource } from "@/components/video/use-audio-channel";
 import { useCardLike } from "./card-like-context";
 import { useCardMedia } from "./card-media-context";
 import { useMediaViewer, type ViewerMediaItem } from "./media-viewer";
@@ -355,6 +356,12 @@ export function CardVideo({
   const modo = reproductorFallado
     ? "errored"
     : muxPlaybackMode({ playbackId: muxVivo.playbackId, status: muxVivo.status });
+
+  useAudioChannelSource(videoRef, {
+    silenceBy: "mute",
+    onPreempt: () => postMusic?.soundOff(),
+    attachKey: `${modo}:${muxMontado}`,
+  });
 
   // Dejar de ser el medio activo (el usuario pasó a la foto siguiente del
   // carrusel) pausa YA, sin esperar a que el observer note que salió de vista.

@@ -26,6 +26,7 @@ import {
 import { recordPostViewAction } from "@/app/(app)/feed/engagement-actions";
 import { MuxVideoSurface } from "@/components/video/mux-player";
 import type { PlayableMedia } from "@/components/video/playable-media";
+import { useAudioChannelSource } from "@/components/video/use-audio-channel";
 import type { PostMediaKind } from "./helpers";
 /**
  * El copy del botón "Ver video completo" vive en `./copy` y no en
@@ -607,6 +608,12 @@ export function ViewerVideo({
    */
   const [frenadoEnTope, setFrenadoEnTope] = useState(false);
   const reduceMotion = useReducedMotion();
+
+  useAudioChannelSource(videoRef, {
+    silenceBy: "mute",
+    onPreempt: () => onMutedChange(true),
+    attachKey: `${usaMux}:${muxMontado}`,
+  });
 
   // Reproducir/pausar según visibilidad del slide. Con sonido primero (hubo
   // gesto del usuario); si el navegador lo rechaza, mudo y reintento.

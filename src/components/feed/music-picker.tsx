@@ -11,6 +11,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, Button, Skeleton } from "@/components/ui";
 import { usePrefersReducedMotion } from "@/components/motion";
+import { useAudioChannelSource } from "@/components/video/use-audio-channel";
 import { cn } from "@/lib/utils";
 import {
   MUSIC_CLIP_SECONDS,
@@ -219,6 +220,12 @@ function MusicSheet({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   /** Segundo del recorte desde el que arranca la vuelta actual. */
   const clipStartRef = useRef(0);
+
+  useAudioChannelSource(audioRef, {
+    silenceBy: "pause",
+    onPreempt: () => setPlayingId(null),
+    attachKey: open,
+  });
 
   const tracks = catalog.status === "ready" ? catalog.tracks : [];
   const draft = tracks.find((track) => track.id === draftId) ?? null;
