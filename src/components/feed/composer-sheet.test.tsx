@@ -53,6 +53,7 @@ function mount(overrides: Partial<ComposerSheetProps> = {}) {
     onAddVideo: vi.fn(),
     onRemoveMedia: vi.fn(),
     maxPhotos: 10,
+    maxVideos: 10,
     onSavePhotoEdit: vi.fn(),
     pollEnabled: false,
     onPollChange: vi.fn(),
@@ -558,5 +559,50 @@ describe("ComposerSheet — con el editor abierto, la hoja no se arrastra (feedb
 
     fireEvent.click(screen.getByRole("button", { name: COPY.composer.photoEditor.done }));
     expect(handle()?.className).toContain("cursor-grab");
+  });
+});
+
+describe("ComposerSheet — varios videos", () => {
+  const second: ComposerMediaItem = { ...VIDEO, id: "m3", preview: "blob:video-2" };
+
+  it("cada video tiene su propio Quitar, con su posición", () => {
+    const props = mount({ media: [PHOTO, VIDEO, second] });
+    fireEvent.click(screen.getByRole("button", { name: `${COPY.composer.removeVideo} 3` }));
+    expect(props.onRemoveMedia).toHaveBeenCalledWith("m3");
+  });
+
+  it("muestra el progreso de subida de cada miniatura", () => {
+    mount({
+      media: [
+        { ...VIDEO, upload: { status: "uploading", pct: 40 } },
+        { ...second, upload: { status: "done", pct: 100 } },
+      ],
+    });
+    const bars = screen.getAllByRole("progressbar");
+    expect(bars).toHaveLength(1);
+    expect(bars[0].getAttribute("aria-valuenow")).toBe("40");
+    expect(bars[0].getAttribute("aria-label")).toBe(COPY.composer.videoTileUploading(1));
+  });
+
+  it("una subida fallida se avisa sobre su miniatura", () => {
+    mount({ media: [VIDEO, { ...second, upload: { status: "error", pct: 0 } }] });
+    expect(screen.getByRole("img", { name: COPY.composer.videoTileFailed(2) })).toBeTruthy();
+  });
+
+  it("el contador cuenta los videos contra su tope", () => {
+    mount({ media: [PHOTO, VIDEO, second] });
+    expect(screen.getByText(COPY.composer.compose.mediaCount(1, 2, 10, 10))).toBeTruthy();
+    expect(screen.getByText("1 de 10 fotos · 2 de 10 videos")).toBeTruthy();
+  });
+
+  it("con tope de un video lo explica en vez de ofrecer otro", () => {
+    mount({ media: [VIDEO], maxVideos: 1, canAddVideo: false });
+    expect(screen.getByText(COPY.composer.videoSingleNote)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: COPY.composer.addVideo })).toBeNull();
+  });
+
+  it("muestra qué se espera de los videos al publicar", () => {
+    mount({ media: [VIDEO], isPending: true, videoStatusLabel: "Preparando tu video…" });
+    expect(screen.getByText("Preparando tu video…")).toBeTruthy();
   });
 });

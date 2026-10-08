@@ -14,10 +14,10 @@
  *
  * ─── CÓMO CIERRAN LOS NÚMEROS ──────────────────────────────────────────────
  *
- * Las fotos son lo ÚNICO que viaja por el body de la server action. El video no
- * pasa por acá: sube directo del navegador al bucket por XHR
- * (`prepareMediaUploadAction` + policy 0025), justamente para no chocar con
- * este límite. Por eso el presupuesto de abajo habla sólo de fotos.
+ * Los ARCHIVOS de video no viajan por el body de la server action: suben
+ * directo del navegador al bucket por XHR (`prepareMediaUploadAction` + policy
+ * 0025). Lo único suyo que sí pasa por acá son las huellas que muestrea el
+ * navegador (fotogramas y pista de audio), con su propio presupuesto abajo.
  *
  *  · Al ELEGIR del disco se acepta hasta `MAX_PICKED_PHOTO_BYTES`: es el
  *    archivo crudo de una cámara de teléfono y no tiene sentido rechazarlo,
@@ -33,9 +33,9 @@
  *  · `MAX_TOTAL_PHOTO_BYTES` (10 MB) es el techo del CONJUNTO. Sin él, 10 fotos
  *    de 2 MB serían 20 MB "válidos" que el propio `bodySizeLimit` corta antes
  *    de llegar: una validación que aprueba lo imposible no valida nada.
- *  · `next.config.ts` declara `serverActions.bodySizeLimit: "11mb"` — el total
- *    de arriba más 1 MB de aire para el overhead de multipart (bordes y headers
- *    de cada parte; los docs de Next hablan de 10-20 KB) y el cuerpo de texto.
+ *  · `next.config.ts` declara `serverActions.bodySizeLimit: "14mb"` — el total
+ *    de fotos MÁS el presupuesto de huellas de video (`MAX_TOTAL_AUDIO_PCM_CHARS`
+ *    y los fotogramas), más aire para el overhead de multipart y el texto.
  *    O sea: TODO payload que este módulo bendice puede llegar físicamente, y
  *    nada que llegue puede ser mucho más grande de lo que se bendice.
  *    `post-media-limits.test.ts` verifica esa relación contra el config real.
@@ -44,8 +44,21 @@
 /** Fotos por publicación. El composer y la action leen ESTE número. */
 export const MAX_PHOTOS = 10;
 
-/** Videos por publicación. No viaja por el body: sube directo al bucket. */
-export const MAX_VIDEOS = 1;
+/**
+ * Videos por publicación por el camino del bucket. Mismo número que las fotos:
+ * el carrusel ya los mezcla en cualquier orden.
+ */
+export const MAX_VIDEOS = 10;
+
+/**
+ * Con Mux configurado el tope vuelve a 1: `posts` guarda UN solo video de Mux en
+ * columnas (`mux_upload_id`, `mux_playback_id`…) y su borrador es uno por post.
+ */
+export const MAX_VIDEOS_WITH_MUX = 1;
+
+export function maxVideosPerPost(muxEnabled: boolean): number {
+  return muxEnabled ? MAX_VIDEOS_WITH_MUX : MAX_VIDEOS;
+}
 
 /**
  * Peso máximo de una foto TAL COMO SE ELIGE del disco. SÓLO NAVEGADOR: el
@@ -114,4 +127,67 @@ export function checkPhotoPayload(sizes: readonly number[]): PhotoPayloadCheck {
   const total = sizes.reduce((sum, size) => sum + size, 0);
   if (total > MAX_TOTAL_PHOTO_BYTES) return { ok: false, reason: "total" };
   return { ok: true };
+}
+
+/**
+ * HUELLAS DE LOS VIDEOS (Content Integrity) que sí viajan por el body.
+ *
+ * `MAX_AUDIO_PCM_CHARS` es lo máximo que produce `sampleAudioPcm` (120 s a
+ * 8 kHz, Int16, en base64): algo más grande no salió de nuestro composer.
+ * `MAX_TOTAL_AUDIO_PCM_CHARS` es el techo de TODAS las pistas juntas: alcanza
+ * para un corto entero de 90 s (~1,9 M) y otro más; las pistas se mandan en
+ * orden mientras entren y el resto viaja en null (ese video conserva la huella
+ * de imagen, pierde sólo la de sonido).
+ */
+export const MAX_AUDIO_PCM_CHARS = 2_560_000;
+export const MAX_TOTAL_AUDIO_PCM_CHARS = 3_000_000;
+
+/** Cota de los fotogramas en JSON por video (4 matrices de 32×32, 0-255). */
+export const MAX_VIDEO_FRAMES_JSON_CHARS = 20_000;
+
+const AUDIO_SAMPLE_RATE = 8_000;
+const AUDIO_MAX_SECONDS = 120;
+
+/** Largo en base64 de la pista que va a producir un video de esta duración. */
+export function predictedAudioPcmChars(durationSeconds: number): number {
+  const seconds = Math.min(Math.max(durationSeconds, 0), AUDIO_MAX_SECONDS);
+  const bytes = Math.ceil(seconds * AUDIO_SAMPLE_RATE) * 2;
+  return Math.ceil(bytes / 3) * 4;
+}
+
+/**
+ * Reparte el presupuesto de audio entre las pistas, en orden. Una pista que no
+ * entra queda en null pero no corta a las siguientes: una más corta puede
+ * entrar igual. La usan el composer (antes de mandar) y la action (al recibir).
+ */
+export function fitAudioTracks(tracks: readonly unknown[]): (string | null)[] {
+  let budget = MAX_TOTAL_AUDIO_PCM_CHARS;
+  return tracks.map((track) => {
+    if (typeof track !== "string" || track.length === 0) return null;
+    if (track.length > MAX_AUDIO_PCM_CHARS || track.length > budget) return null;
+    budget -= track.length;
+    return track;
+  });
+}
+
+/**
+ * Lee un arreglo JSON PARALELO a los videos (una entrada por video, en el mismo
+ * orden). Un largo distinto se descarta entero: atribuir una huella al video
+ * equivocado es peor que no tenerla. Ausente o ilegible = todos en null, que el
+ * pipeline lee como "no se analizó".
+ */
+export function parseParallelVideoField(
+  raw: FormDataEntryValue | null,
+  count: number,
+  maxChars: number,
+): unknown[] {
+  const empty = Array.from({ length: count }, () => null);
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > maxChars) return empty;
+  try {
+    const decoded: unknown = JSON.parse(raw);
+    if (!Array.isArray(decoded) || decoded.length !== count) return empty;
+    return decoded;
+  } catch {
+    return empty;
+  }
 }
