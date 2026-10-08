@@ -25,6 +25,7 @@ import {
   type PersonaEnLlamada,
 } from "@/lib/calls/tipos";
 import { useVigilanciaDeLlamada } from "@/lib/calls/vigilancia";
+import { holdAudio } from "@/lib/media/audio-channel";
 import { ChatEnLlamada } from "./chat-en-llamada";
 import { Controles } from "./controles";
 import { COPY } from "./copy";
@@ -158,6 +159,12 @@ export function PantallaDeLlamada(props: PantallaDeLlamadaProps) {
   useVigilanciaDeLlamada(callId, () => router.refresh());
 
   const enLinea = motor.fase === "en-linea" || motor.fase === "reconectando";
+  const ocupaElAudio = enLinea || motor.fase === "preparando";
+
+  useEffect(() => {
+    if (!ocupaElAudio) return;
+    return holdAudio("llamada");
+  }, [ocupaElAudio]);
   const corriendo =
     estado === "en_curso" && startedAt !== null && endedAt === null;
 

@@ -13,6 +13,7 @@ import {
 import { SpeakerHigh, SpeakerSlash } from "@phosphor-icons/react/dist/ssr";
 import { usePrefersReducedMotion } from "@/components/motion";
 import { safePlayMedia } from "@/components/video/playable-media";
+import { useAudioChannelSource } from "@/components/video/use-audio-channel";
 import { cn } from "@/lib/utils";
 import { clipEndSeconds, clampStartSeconds } from "@/lib/media/audio-track";
 import { clipGain, musicTimeFor, resolveAudioMix, type AudioMixState } from "@/lib/media/audio-mix";
@@ -69,6 +70,8 @@ export interface PostMusicState {
   /** El gesto de la persona. Nunca se infiere de un scroll ni de otra card. */
   soundOn: boolean;
   toggleSound: () => void;
+  /** Apaga el gesto: otra fuente de la página tomó el canal de audio. */
+  soundOff: () => void;
   /**
    * Callar la pista sin tocar el gesto: la usa el visor a pantalla completa
    * antes de abrir (arranca con su propio sonido) y el video al pausarse.
@@ -174,6 +177,14 @@ export function PostMusicProvider({
     if (node && puedeSonar) safePlayMedia(node);
   }, [puedeSonar]);
 
+  const soundOff = useCallback(() => setSoundOn(false), [setSoundOn]);
+
+  useAudioChannelSource(audioRef, {
+    silenceBy: "pause",
+    onPreempt: soundOff,
+    attachKey: music,
+  });
+
   /**
    * El `muted` de un elemento de medio es una propiedad del DOM que React no
    * controla desde el JSX: se refleja a mano cada vez que el árbitro cambia de
@@ -239,10 +250,11 @@ export function PostMusicProvider({
       // Con el valor ya resuelto y no con un updater: el dueño del estado puede
       // ser de afuera (el reel), y un `setState(prev => …)` no viaja por un prop.
       toggleSound: () => setSoundOn(!soundOn),
+      soundOff,
       pause,
       resume,
     }),
-    [mix, soundOn, setSoundOn, pause, resume],
+    [mix, soundOn, setSoundOn, soundOff, pause, resume],
   );
 
   return (
@@ -297,6 +309,7 @@ export function PostMusicSpeaker({ className }: { className?: string }) {
         event.stopPropagation();
         music.toggleSound();
       }}
+      aria-pressed={!muted}
       aria-label={
         muted
           ? COPY.post.unmuteVideo
