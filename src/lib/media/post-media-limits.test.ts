@@ -7,8 +7,18 @@ import {
   MAX_PICKED_PHOTO_BYTES,
   MAX_TOTAL_PHOTO_BYTES,
   MAX_VIDEOS,
+  MAX_VIDEOS_WITH_MUX,
+  MAX_AUDIO_PCM_CHARS,
+  MAX_TOTAL_AUDIO_PCM_CHARS,
+  MAX_VIDEO_FRAMES_JSON_CHARS,
   checkPhotoPayload,
+  fitAudioTracks,
+  maxVideosPerPost,
+  parseParallelVideoField,
+  predictedAudioPcmChars,
 } from "./post-media-limits";
+import { encodeAudioPcm16 } from "./audio-samples";
+import { LUMA_SIZE, VIDEO_FRAMES } from "@/lib/integrity/phash";
 
 /**
  * FUENTE ÚNICA DE LOS LÍMITES DE FOTO. Este archivo existe porque el tope de
@@ -84,8 +94,28 @@ describe("los números tienen que cerrar entre sí", () => {
     expect(MAX_TOTAL_PHOTO_BYTES).toBeGreaterThanOrEqual(MAX_PHOTOS * 1024 * 1024);
   });
 
-  it("el video no viaja por acá: sigue siendo 1 y sube directo al bucket", () => {
-    expect(MAX_VIDEOS).toBe(1);
+  it("por el bucket entran tantos videos como fotos; con Mux, uno", () => {
+    expect(MAX_VIDEOS).toBe(MAX_PHOTOS);
+    expect(maxVideosPerPost(false)).toBe(MAX_VIDEOS);
+    expect(maxVideosPerPost(true)).toBe(MAX_VIDEOS_WITH_MUX);
+    expect(MAX_VIDEOS_WITH_MUX).toBe(1);
+  });
+
+  it("el techo por pista es exactamente lo que produce el composer (120 s)", () => {
+    const longest = encodeAudioPcm16(new Float32Array(8_000 * 120));
+    expect(longest.length).toBe(MAX_AUDIO_PCM_CHARS);
+    expect(predictedAudioPcmChars(120)).toBe(MAX_AUDIO_PCM_CHARS);
+    expect(predictedAudioPcmChars(600)).toBe(MAX_AUDIO_PCM_CHARS);
+  });
+
+  it("el presupuesto de audio alcanza para un corto entero de 90 s", () => {
+    expect(MAX_TOTAL_AUDIO_PCM_CHARS).toBeGreaterThanOrEqual(predictedAudioPcmChars(90));
+  });
+
+  it("los fotogramas de un video entran en su cota por video", () => {
+    const frame = Array.from({ length: LUMA_SIZE * LUMA_SIZE }, () => 255);
+    const frames = Array.from({ length: VIDEO_FRAMES }, () => frame);
+    expect(JSON.stringify(frames).length).toBeLessThanOrEqual(MAX_VIDEO_FRAMES_JSON_CHARS);
   });
 
   /**
@@ -106,6 +136,50 @@ describe("los números tienen que cerrar entre sí", () => {
     // Con margen para el overhead de multipart (bordes, headers de cada parte)
     // y para el cuerpo de hasta 2000 caracteres: los docs de Next hablan de
     // 10-20 KB, acá sobra un mundo.
-    expect(limitBytes).toBeGreaterThan(MAX_TOTAL_PHOTO_BYTES + 512 * 1024);
+    const worstPayload =
+      MAX_TOTAL_PHOTO_BYTES +
+      MAX_TOTAL_AUDIO_PCM_CHARS +
+      MAX_VIDEOS * MAX_VIDEO_FRAMES_JSON_CHARS;
+    expect(limitBytes).toBeGreaterThan(worstPayload + 512 * 1024);
+  });
+});
+
+describe("fitAudioTracks — el presupuesto de audio se reparte en orden", () => {
+  const track = (chars: number) => "A".repeat(chars);
+
+  it("manda todas las pistas que entran", () => {
+    const tracks = [track(1_000), track(2_000)];
+    expect(fitAudioTracks(tracks)).toEqual(tracks);
+  });
+
+  it("deja en null la que no entra y sigue probando con las siguientes", () => {
+    const big = track(1_900_000);
+    const small = track(500_000);
+    expect(fitAudioTracks([big, big, small])).toEqual([big, null, small]);
+  });
+
+  it("descarta lo que no es una pista y lo que supera el techo por pista", () => {
+    expect(fitAudioTracks([null, "", 42, track(MAX_AUDIO_PCM_CHARS + 1)])).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+});
+
+describe("parseParallelVideoField — una entrada por video o ninguna", () => {
+  it("devuelve el arreglo cuando el largo coincide con los videos", () => {
+    expect(parseParallelVideoField(JSON.stringify([1, 2]), 2, 1_000)).toEqual([1, 2]);
+  });
+
+  it("un largo distinto se descarta entero", () => {
+    expect(parseParallelVideoField(JSON.stringify([1]), 2, 1_000)).toEqual([null, null]);
+  });
+
+  it("JSON ilegible, ausente o más grande que la cota = todo en null", () => {
+    expect(parseParallelVideoField("{no", 1, 1_000)).toEqual([null]);
+    expect(parseParallelVideoField(null, 1, 1_000)).toEqual([null]);
+    expect(parseParallelVideoField(JSON.stringify(["x".repeat(50)]), 1, 10)).toEqual([null]);
   });
 });
