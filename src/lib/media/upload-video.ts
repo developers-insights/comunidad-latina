@@ -36,7 +36,9 @@ export async function uploadVideoWithProgress(
   path: string,
   onProgress: (pct: number) => void,
   contentType: string,
+  signal?: AbortSignal,
 ): Promise<boolean> {
+  if (signal?.aborted) return false;
   const supabase = createClient();
   const {
     data: { session },
@@ -44,7 +46,7 @@ export async function uploadVideoWithProgress(
   const accessToken = session?.access_token;
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!accessToken || !baseUrl || !anonKey) return false;
+  if (!accessToken || !baseUrl || !anonKey || signal?.aborted) return false;
 
   return new Promise<boolean>((resolve) => {
     const xhr = new XMLHttpRequest();
@@ -64,6 +66,7 @@ export async function uploadVideoWithProgress(
     };
     xhr.onerror = () => resolve(false);
     xhr.onabort = () => resolve(false);
+    signal?.addEventListener("abort", () => xhr.abort(), { once: true });
     xhr.send(file);
   });
 }

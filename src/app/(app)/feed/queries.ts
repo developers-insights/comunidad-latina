@@ -1051,11 +1051,14 @@ export function toPostCardModel(
   // primera FOTO para los consumidores viejos que renderizan <img>.
   const filterCssByPath = mediaFilterCssByPath(row.media_filters);
   /**
-   * Poster del video (0132), ya como URL pública. Una sola por publicación —el
-   * composer acepta un video por post— así que se resuelve una vez y se le
-   * cuelga a la diapositiva de video, sea la del bucket o la de Mux.
+   * Poster del video (0132), ya como URL pública. Una sola columna por
+   * publicación: es el fotograma del PRIMER video (el composer lo captura de
+   * ése). Colgarlo de los demás les pintaría un cuadro que no es suyo.
    */
   const posterUrl = row.video_poster_path ? postMediaUrl(row.video_poster_path) : null;
+  const firstVideoPath = row.media.find(
+    (path) => path && path.trim().length > 0 && mediaKindOf(path) === "video",
+  );
   const media: PostMediaView[] = row.media
     .filter((path) => path && path.trim().length > 0)
     .map((path) => ({
@@ -1064,9 +1067,7 @@ export function toPostCardModel(
       // Se busca por la RUTA guardada, no por posición: quitar una foto de una
       // publicación ya publicada (0097) no puede correrle el filtro al video.
       filterCss: filterCssByPath.get(path),
-      // Sólo al video: una FOTO no espera metadata para pintarse, así que un
-      // poster ahí sería un campo que no significa nada.
-      ...(mediaKindOf(path) === "video" && posterUrl ? { posterUrl } : {}),
+      ...(path === firstVideoPath && posterUrl ? { posterUrl } : {}),
     }));
 
   /**

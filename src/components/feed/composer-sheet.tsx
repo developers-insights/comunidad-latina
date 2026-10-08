@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { CaretDown, Check, Plus, SealCheck, VideoCamera, X } from "@phosphor-icons/react/dist/ssr";
+import {
+  CaretDown,
+  Check,
+  Plus,
+  SealCheck,
+  VideoCamera,
+  WarningCircle,
+  X,
+} from "@phosphor-icons/react/dist/ssr";
 import { BottomSheet, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { formatDuration, type VideoCategory } from "@/lib/media/video-policy";
@@ -76,6 +84,13 @@ export interface ComposerMediaItem {
    * vacío cuando se está editando un video.
    */
   edit?: PhotoEdit;
+  /** Subida anticipada al bucket (sólo videos que no van por Mux). */
+  upload?: ComposerVideoUpload;
+}
+
+export interface ComposerVideoUpload {
+  status: "uploading" | "done" | "error";
+  pct: number;
 }
 
 export interface ComposerSheetProps {
@@ -92,6 +107,8 @@ export interface ComposerSheetProps {
   onRemoveMedia: (id: string) => void;
   /** Cupo máximo de fotos (hoy 10) — sólo para el contador "3 de 10". */
   maxPhotos: number;
+  /** Cupo de videos: 10 por el bucket, 1 con Mux (`maxVideosPerPost`). */
+  maxVideos: number;
   /** Se llama cuando se confirma la edición de una foto ("Listo" en el editor). */
   onSavePhotoEdit: (id: string, edit: PhotoEdit) => void;
   pollEnabled: boolean;
@@ -127,6 +144,8 @@ export interface ComposerSheetProps {
   onCancelVideoUpload?: () => void;
   /** Leyendo la duración del archivo recién elegido (antes de subir nada). */
   measuringVideo?: boolean;
+  /** Qué se espera de los videos al publicar (terminar de subir, huellas). */
+  videoStatusLabel?: string | null;
   /**
    * Horneado de fotos en curso al publicar (recompresión + filtro/texto,
    * SIEMPRE que hay al menos una foto — ver `bake-photo.ts`). `null` = no hay
@@ -527,6 +546,49 @@ const dashedTileClass = cn(
   "disabled:pointer-events-none disabled:opacity-45",
 );
 
+/**
+ * Estado de la subida anticipada sobre la miniatura del video: barra mientras
+ * sube, aviso si falló (se reintenta al publicar), nada cuando ya está arriba.
+ */
+function VideoTileUpload({
+  upload,
+  position,
+}: {
+  upload: ComposerVideoUpload | undefined;
+  position: number;
+}) {
+  if (!upload || upload.status === "done") return null;
+  if (upload.status === "error") {
+    const label = COPY.composer.videoTileFailed(position);
+    return (
+      <span
+        role="img"
+        aria-label={label}
+        title={label}
+        className="pointer-events-none absolute left-1.5 top-1.5 flex size-7 items-center justify-center rounded-full bg-media-scrim text-on-media"
+      >
+        <WarningCircle size={16} weight="fill" aria-hidden="true" />
+      </span>
+    );
+  }
+  const pct = Math.max(0, Math.min(100, Math.round(upload.pct)));
+  return (
+    <div
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct}
+      aria-label={COPY.composer.videoTileUploading(position)}
+      className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-media-scrim"
+    >
+      <div
+        className="h-full bg-brand transition-[width] duration-(--duration-base) ease-(--ease-out-premium)"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
 export function ComposerSheet({
   open,
   onClose,
@@ -540,6 +602,7 @@ export function ComposerSheet({
   onAddVideo,
   onRemoveMedia,
   maxPhotos,
+  maxVideos,
   onSavePhotoEdit,
   pollEnabled,
   onPollChange,
@@ -553,6 +616,7 @@ export function ComposerSheet({
   videoUpload,
   onCancelVideoUpload,
   measuringVideo = false,
+  videoStatusLabel = null,
   bakingProgress = null,
   finishingLabel = null,
   isPending,
@@ -567,7 +631,8 @@ export function ComposerSheet({
   // Ambos exentos del trigger MEDIA_REQUIRED (0023/0043): question y text.
   const exemptFromMedia = isQuestion || isText;
   const photos = media.filter((item) => item.kind === "photo");
-  const hasVideo = media.some((item) => item.kind === "video");
+  const videoCount = media.filter((item) => item.kind === "video").length;
+  const hasVideo = videoCount > 0;
   const hasMedia = media.length > 0;
   const trimmed = body.trim();
 
@@ -821,6 +886,7 @@ export function ComposerSheet({
                               <VideoCamera size={12} weight="fill" aria-hidden="true" />
                               {formatDuration(item.durationSeconds) ?? COPY.composer.videoChip}
                             </span>
+                            <VideoTileUpload upload={item.upload} position={index + 1} />
                           </>
                         )}
                         <button
@@ -830,7 +896,7 @@ export function ComposerSheet({
                           aria-label={
                             item.kind === "photo"
                               ? `${COPY.composer.removePhoto} ${index + 1}`
-                              : COPY.composer.removeVideo
+                              : `${COPY.composer.removeVideo} ${index + 1}`
                           }
                           // Área táctil de 44px con el círculo visible de 36: en una
                           // miniatura de 80px un botón de 44 se come media foto, pero
@@ -882,10 +948,20 @@ export function ComposerSheet({
                   </div>
                 )}
 
-                {/* Cupo discreto — "3 de 10 fotos"; se suma "1 video" si hay. */}
+                {maxVideos === 1 && hasVideo && (
+                  <p className="mt-2 text-xs text-foreground-secondary">
+                    {COPY.composer.videoSingleNote}
+                  </p>
+                )}
+
                 {media.length > 0 && (
                   <p className="mt-2 text-xs text-foreground-muted">
-                    {COPY.composer.compose.mediaCount(photos.length, hasVideo, maxPhotos)}
+                    {COPY.composer.compose.mediaCount(
+                      photos.length,
+                      videoCount,
+                      maxPhotos,
+                      maxVideos,
+                    )}
                   </p>
                 )}
 
@@ -1012,6 +1088,12 @@ export function ComposerSheet({
             {/* Ya se publicó; falta guardar lo que necesitaba el id del post
                 (etiquetas, música). Va acá y no arriba porque es el último
                 tramo de la espera, a un renglón del botón que la disparó. */}
+            {videoStatusLabel && (
+              <p role="status" className="mt-3 shrink-0 text-xs font-medium text-foreground-secondary">
+                {videoStatusLabel}
+              </p>
+            )}
+
             {finishingLabel && (
               <p role="status" className="mt-3 shrink-0 text-xs font-medium text-foreground-secondary">
                 {finishingLabel}
