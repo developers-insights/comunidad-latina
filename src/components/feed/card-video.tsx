@@ -288,6 +288,8 @@ export function CardVideo({
    * bloqueado, así que la tarjeta no puede desmontarse por debajo.
    */
   const [reelAbierto, setReelAbierto] = useState(false);
+  const videosEnLaPublicacion =
+    media?.items.filter((item) => item.kind === "video").length ?? 1;
   /** Duración MEDIDA del archivo (metadata), no la declarada. null = todavía no. */
   const [measuredSeconds, setMeasuredSeconds] = useState<number | null>(null);
   const isPreview = isPreviewTruncated(measuredSeconds);
@@ -379,12 +381,16 @@ export function CardVideo({
   // a mano, igual que antes): acá se refleja lo que decide el árbitro cada vez
   // que el gesto de sonido cambia. Al desmutear también se retoma la
   // reproducción — mismo comportamiento que el toggle de siempre.
+  // Sólo la diapositiva activa puede sonar: el carrusel monta todos los videos,
+  // y uno fuera de pantalla que arrancara con sonido le quitaría el canal al
+  // visible y apagaría el gesto de la publicación entera.
+  const slideMuted = videoMuted || !active;
   useEffect(() => {
     const node = videoRef.current;
     if (!node) return;
-    node.muted = videoMuted;
-    if (!videoMuted) safePlay(node);
-  }, [videoMuted]);
+    node.muted = slideMuted;
+    if (!slideMuted && !reduce) safePlay(node);
+  }, [slideMuted, reduce]);
 
   useEffect(() => {
     // Reduced-motion: no autoplay. El video (y la música) quedan pausados.
@@ -610,6 +616,12 @@ export function CardVideo({
       onTap(resumeAfterViewer);
       return;
     }
+    // El reel arranca en el PRIMER video de la publicación: con varios, tocar
+    // el segundo abriría otro. El visor sí abre en el que se tocó.
+    if (videosEnLaPublicacion > 1) {
+      openViewer();
+      return;
+    }
     // La tarjeta se calla ANTES de abrir: el reel arranca con su propio sonido y
     // dos copias del mismo clip sonando juntas no se le hace a nadie.
     videoRef.current?.pause();
@@ -689,7 +701,7 @@ export function CardVideo({
           playbackId={muxVivo.playbackId}
           mediaRef={videoRef}
           filterCss={filterCss}
-          muted={videoMuted}
+          muted={slideMuted}
           loop
           // El autoplay lo decide el observador de visibilidad de esta tarjeta
           // (60 % + 2 s), igual que con el `<video>`. Dejárselo al reproductor

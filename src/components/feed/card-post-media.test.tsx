@@ -9,6 +9,8 @@ import { CardMediaProvider } from "./card-media-context";
 import { CardPostMedia } from "./card-post-media";
 import { NO_REEL_SCOPE } from "./card-video";
 import { MediaViewerProvider } from "./media-viewer";
+import { installFakeMedia } from "@/components/video/fake-media";
+import { resetAudioChannelForTests } from "@/lib/media/audio-channel";
 import type { PostMediaView, PostMusicView, VideoScopeProp } from "./helpers";
 
 /**
@@ -253,6 +255,46 @@ describe("CardPostMedia: sólo el medio visible reproduce", () => {
     const after = screen.getAllByRole("button", { name: /ver el video/i });
     expect(after[0].getAttribute("tabindex")).toBe("-1");
     expect(after[1].getAttribute("tabindex")).toBe("0");
+  });
+});
+
+describe("CardPostMedia: varios videos en una publicación", () => {
+  let media: ReturnType<typeof installFakeMedia>;
+  beforeEach(() => {
+    media = installFakeMedia();
+  });
+  afterEach(() => {
+    media.restore();
+    resetAudioChannelForTests();
+  });
+
+  it("al pedir sonido suena el video activo, el de al lado no, y el gesto no se apaga", () => {
+    const { container } = renderMedia([VIDEO(1), VIDEO(2)]);
+    const [first, second] = Array.from(container.querySelectorAll("video"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Activar el sonido" }));
+
+    expect(media.isSounding(first)).toBe(true);
+    expect(media.isSounding(second)).toBe(false);
+    expect(second.paused).toBe(true);
+    expect(screen.getByRole("button", { pressed: true })).toBeTruthy();
+  });
+
+  it("tocar el segundo video abre el visor en el segundo, no el reel del primero", () => {
+    const items = [VIDEO(1), VIDEO(2)];
+    const { container } = renderMedia(items);
+
+    swipeTo(container, 1);
+    const taps = screen.getAllByRole("button", { name: /ver el video/i });
+    fireEvent.click(taps[1]);
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(screen.queryByTestId("reel-overlay")).toBeNull();
+    expect(viewerOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ startIndex: 1, postId: POST_ID, items }),
+    );
   });
 });
 
