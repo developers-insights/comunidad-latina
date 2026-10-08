@@ -168,6 +168,23 @@ describe("toPostCardModel", () => {
     expect(foto.posterUrl).toBeUndefined();
   });
 
+  it("con varios videos el poster es sólo del PRIMERO", () => {
+    const model = toPostCardModel(
+      makeRow({
+        media: ["t/u/foto.jpg", "t/u/clip-1.mp4", "t/u/clip-2.mp4"],
+        video_poster_path: "t/u/poster-abc.jpg",
+      }),
+      authors,
+      new Set(),
+      NOW,
+    );
+
+    const [, primero, segundo] = model.media;
+    expect(primero.posterUrl).toContain("post-media/t/u/poster-abc.jpg");
+    expect(segundo.kind).toBe("video");
+    expect(segundo.posterUrl).toBeUndefined();
+  });
+
   it("sin poster el campo no existe: los videos anteriores a la 0132", () => {
     const model = toPostCardModel(
       makeRow({ media: ["t/u/clip.mp4"] }),

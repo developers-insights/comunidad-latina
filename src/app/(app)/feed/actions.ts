@@ -6,7 +6,7 @@ import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getCaraActiva } from "@/lib/perfil-activo/cara";
-import { isVisionConfigured } from "@/lib/config/services";
+import { isMuxConfigured, isVisionConfigured } from "@/lib/config/services";
 import {
   DEFAULT_VIDEO_CATEGORY,
   VIDEO_CATEGORIES,
@@ -16,8 +16,14 @@ import {
 } from "@/lib/media/video-policy";
 import {
   MAX_PHOTOS,
+  MAX_TOTAL_AUDIO_PCM_CHARS,
   MAX_VIDEOS,
+  MAX_VIDEO_FRAMES_JSON_CHARS,
   checkPhotoPayload,
+  fitAudioTracks,
+  maxVideosPerPost,
+  parseVideoAudioField,
+  parseVideoFramesField,
 } from "@/lib/media/post-media-limits";
 import { isOwnPosterPath, isOwnVideoPath } from "@/lib/media/own-media-path";
 import { parseMediaFilterRef, type MediaFilterRef } from "@/lib/media/photo-filters";
@@ -339,10 +345,26 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   } catch {
     return { ok: false, code: "photo" };
   }
+  // Con Mux configurado `posts` guarda un único video en columnas: el tope
+  // vuelve a 1 aunque el archivo haya caído al bucket. Y un post no mezcla los
+  // dos caminos — la tarjeta descarta la diapositiva de Mux si hay video en
+  // `media`, así que uno de los dos se perdería en silencio.
+  if (videoPaths.length > maxVideosPerPost(isMuxConfigured)) {
+    return { ok: false, code: "photo" };
+  }
+  // Una ruta repetida pintaría el mismo archivo dos veces y le colgaría dos
+  // huellas distintas al mismo objeto del bucket.
+  if (new Set(videoPaths).size !== videoPaths.length) {
+    return { ok: false, code: "photo" };
+  }
+  if (videoPaths.length > 0 && (parsed.data.muxPostDraftId || parsed.data.muxUploadId)) {
+    return { ok: false, code: GENERIC_INVALID };
+  }
 
   /**
    * POSTER DEL VIDEO (0132) — la ruta del fotograma que el navegador capturó al
-   * elegir el archivo y subió al mismo prefijo del bucket.
+   * elegir el archivo y subió al mismo prefijo del bucket. Con varios videos es
+   * el del PRIMERO de `posts.media`: la columna es una sola por publicación.
    *
    * OPCIONAL SIEMPRE, y las tres razones por las que puede faltar son legítimas:
    * el navegador no pudo decodificar el archivo, su subida falló (nunca frena la
@@ -409,33 +431,23 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   }
 
   // ---- Insumos de Content Integrity ---------------------------------------
-  // Fotogramas del video muestreados por el navegador (32×32 en gris, ~4 KB).
-  // Ausentes = el video queda sin huella perceptual y va a revisión humana; eso
-  // lo decide el pipeline, no este parseo.
-  let videoFrames: unknown = null;
-  try {
-    const raw = formData.get("videoFrames");
-    if (typeof raw === "string" && raw.length > 0) videoFrames = JSON.parse(raw);
-  } catch {
-    videoFrames = null;
-  }
-
-  /**
-   * PCM mono de la pista de audio (base64 de Int16, 8 kHz). Mismo reparto que
-   * los fotogramas y con la misma advertencia: lo extrae el navegador, así que
-   * un cliente modificado puede falsearlo. No abre un agujero de autoría — el
-   * SHA-256 lo calcula siempre el servidor leyendo el archivo real del bucket.
-   *
-   * El tope de tamaño no es una defensa criptográfica sino de memoria: 120 s a
-   * 8 kHz en base64 son ~2,6 MB, y cualquier cosa mucho mayor que eso no es la
-   * pista de audio de un video corto sino alguien probando qué aguanta.
-   */
-  const MAX_AUDIO_PCM_CHARS = 4_000_000;
-  let videoAudioPcm: unknown = null;
-  const rawAudio = formData.get("videoAudioPcm");
-  if (typeof rawAudio === "string" && rawAudio.length > 0) {
-    videoAudioPcm = rawAudio.length <= MAX_AUDIO_PCM_CHARS ? rawAudio : null;
-  }
+  // Fotogramas y PCM de audio muestreados por el navegador, arreglos PARALELOS
+  // a `videoPaths`. Lo que falta o no cuadra queda en null = "no se analizó" y
+  // lo decide el pipeline (revisión humana), nunca voltea la publicación. Los
+  // extrae el cliente, así que pueden falsearse; el SHA-256 lo calcula siempre
+  // el servidor leyendo el archivo real del bucket.
+  const videoFrames = parseVideoFramesField(
+    formData.get("videoFrames"),
+    videoPaths.length,
+    MAX_VIDEOS * MAX_VIDEO_FRAMES_JSON_CHARS,
+  );
+  const videoAudioPcm = fitAudioTracks(
+    parseVideoAudioField(
+      formData.get("videoAudioPcm"),
+      videoPaths.length,
+      MAX_TOTAL_AUDIO_PCM_CHARS + MAX_VIDEOS * 8,
+    ),
+  );
 
   // Declaración de originalidad y licencia. Si el composer todavía no la manda,
   // `normalizeDeclaration` devuelve "no declaró nada" — que NO es lo mismo que
@@ -488,10 +500,33 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
     if (parsed.data.videoType && parsed.data.videoType !== "short_video") {
       return { ok: false, code: "video", reason: "too-long" };
     }
-    const duration = checkVideoDuration("short_video", parsed.data.durationSeconds);
-    if (!duration.ok) return { ok: false, code: "video", reason: duration.reason };
+    // Una duración por video (`videoDurations`, paralelo a `videoPaths`), y
+    // cada una pasa por la política: los 90 s son por clip. La columna guarda
+    // la MÁS LARGA — la suma haría que tres cortos de 40 s rebotaran contra
+    // `posts_short_video_duration`. Un composer viejo manda `durationSeconds`.
+    const rawDurations = formData.get("videoDurations");
+    let durations: unknown[];
+    if (typeof rawDurations === "string" && rawDurations.length > 0) {
+      try {
+        const decoded: unknown = JSON.parse(rawDurations);
+        durations = Array.isArray(decoded) ? decoded : [];
+      } catch {
+        durations = [];
+      }
+    } else {
+      durations = videoPaths.length === 1 ? [parsed.data.durationSeconds] : [];
+    }
+    if (durations.length !== videoPaths.length) {
+      return { ok: false, code: "video", reason: "unknown" };
+    }
+    let longest = 0;
+    for (const raw of durations) {
+      const duration = checkVideoDuration("short_video", raw);
+      if (!duration.ok) return { ok: false, code: "video", reason: duration.reason };
+      longest = Math.max(longest, duration.seconds);
+    }
     declaredVideoType = "short_video";
-    declaredDuration = duration.seconds;
+    declaredDuration = longest;
     // Categoría opcional con default sensato. Sólo viaja si hay video: una
     // categoría sin video no significa nada y la base lo rechaza (constraint
     // `posts_video_category_needs_video`).
@@ -697,15 +732,15 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   // leen de storage para el SHA-256, y los fotogramas los muestreó el navegador
   // (`sampleVideoLumaFrames`). El porqué de ese reparto —y su límite— está en
   // `src/lib/integrity/video.ts`.
-  for (const path of videoPaths) {
+  videoPaths.forEach((path, index) => {
     integrityItems.push({
       mediaKind: "video",
       storageBucket: "post-media",
       storagePath: path,
-      videoLumaFrames: videoFrames,
-      audioPcm: videoAudioPcm,
+      videoLumaFrames: videoFrames[index],
+      audioPcm: videoAudioPcm[index],
     });
-  }
+  });
 
   // posts.media en el ORDEN en que el usuario eligió los medios.
   const mediaPaths: string[] = buildMediaInOrder(mediaOrder, photoPaths, videoPaths);

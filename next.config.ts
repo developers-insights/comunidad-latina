@@ -353,13 +353,14 @@ const nextConfig: NextConfig = {
      * action y la persona veía un error opaco. Acepta bytes o string tipo
      * '3mb' (`05-config/01-next-config-js/serverActions.md`).
      *
-     * POR QUÉ 11 Y NO OTRO NÚMERO. Las fotos son lo único que viaja por acá —el
-     * video sube directo al bucket por XHR— y su presupuesto vive en
-     * `src/lib/media/post-media-limits.ts`: `MAX_TOTAL_PHOTO_BYTES` = 10 MB
-     * (10 fotos horneadas de hasta ~1 MB), con `MAX_PHOTO_BYTES` = 2 MB por
-     * archivo. Este límite es ese total más 1 MB de aire para el overhead de
-     * multipart (bordes y headers de cada parte: los docs sugieren 10-20 KB) y
-     * el cuerpo de hasta 2000 caracteres.
+     * POR QUÉ 14 Y NO OTRO NÚMERO. El video sube directo al bucket por XHR;
+     * por acá viajan las fotos y las huellas de los videos, con su presupuesto
+     * en `src/lib/media/post-media-limits.ts`: `MAX_TOTAL_PHOTO_BYTES` (10 MB)
+     * + `MAX_TOTAL_AUDIO_PCM_CHARS` (~2,9 MB, pistas de audio de todos los
+     * videos) + los fotogramas (`MAX_VIDEO_FRAMES_JSON_CHARS` por video), más
+     * aire para el overhead de multipart y el cuerpo de hasta 2000 caracteres.
+     * Con 11 MB, 10 fotos + la pista de un solo video ya no entraban y Next
+     * cortaba el request sin un error nuestro.
      *
      * No se sube más "por las dudas": este número es superficie de abuso —el
      * chequeo corre ANTES de la autenticación y del rate limit, así que
@@ -367,12 +368,12 @@ const nextConfig: NextConfig = {
      * que el servidor rechace por peso (`checkPhotoPayload`), no que el
      * transporte sea infinito.
      *
-     * ⚠️ Si cambiás `MAX_TOTAL_PHOTO_BYTES`, cambiá este número: el test
+     * ⚠️ Si cambiás alguno de esos presupuestos, cambiá este número: el test
      * `src/lib/media/post-media-limits.test.ts` lee ESTE archivo y falla si se
      * desincronizan.
      */
     serverActions: {
-      bodySizeLimit: "11mb",
+      bodySizeLimit: "14mb",
     },
   },
 };

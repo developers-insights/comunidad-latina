@@ -1,5 +1,5 @@
 import { SHORT_VIDEO_LIMIT_MESSAGE } from "@/lib/media/video-policy";
-import { MAX_PHOTOS } from "@/lib/media/post-media-limits";
+import { MAX_PHOTOS, MAX_VIDEOS } from "@/lib/media/post-media-limits";
 import { MAX_VIDEO_BYTES } from "@/lib/media/video-upload-limits";
 
 /**
@@ -108,7 +108,7 @@ export const COPY = {
     photoLimit: `Podés subir hasta ${MAX_PHOTOS} fotos por publicación.`,
     /** Contador discreto bajo la grilla: "3 de 10 fotos". */
     photoCount: (count: number, max: number): string => `${count} de ${max} fotos`,
-    // Video (sprint reels): 1 por publicación, MP4/MOV/WebM. El TOPE DE PESO
+    // Video (sprint reels): hasta MAX_VIDEOS por publicación. El TOPE DE PESO
     // (200 MB desde el 2026-09-03) no se escribe acá: sale de `MAX_VIDEO_BYTES`
     // en `@/lib/media/video-upload-limits`, que es el mismo módulo que rechaza
     // el archivo. Un número suelto en el copy es cómo se llega a un aviso que
@@ -126,8 +126,24 @@ export const COPY = {
      * acepta también .mov. Un copy huérfano no molesta hasta el día que alguien
      * lo vuelve a usar y contradice al que manda.
      */
-    videoLimit: "Por ahora va un video por publicación.",
+    videoLimit: `Podés subir hasta ${MAX_VIDEOS} videos por publicación.`,
+    /** Con Mux el tope es uno (ver `maxVideosPerPost`). */
+    videoLimitSingle: "Por ahora va un video por publicación.",
+    videoSingleNote: "Va un video por publicación. Si querés cambiarlo, quitá este primero.",
     videoUploading: (percent: number) => `Subiendo tu video… ${percent}%`,
+    /** Etiqueta accesible de la barra de cada miniatura. */
+    videoTileUploading: (position: number) => `Subiendo el video ${position}`,
+    videoTileFailed: (position: number) =>
+      `No se pudo subir el video ${position}. Lo volvemos a intentar al publicar.`,
+    videoUploadRetryTitle: "No pudimos subir uno de tus videos",
+    videoUploadRetryBody:
+      "Lo volvemos a intentar cuando publiques. Si preferís, quitalo y elegilo de nuevo.",
+    videosFinishingUpload: (done: number, total: number): string =>
+      total > 1
+        ? `Terminando de subir tus videos: ${done} de ${total} listos`
+        : "Terminando de subir tu video…",
+    videosPreparing: (total: number): string =>
+      total > 1 ? "Preparando tus videos…" : "Preparando tu video…",
     videoUploadErrorTitle: "No pudimos subir el video",
     videoUploadErrorBody: "Revisá tu conexión y probá de nuevo en un ratito.",
     /**
@@ -350,10 +366,17 @@ export const COPY = {
        * `maxPhotos` viaja para que el "3 de 10" no quede huérfano del tope
        * real (composer premium 2026-08-11, `MAX_PHOTOS` subió a 10).
        */
-      mediaCount: (photos: number, hasVideo: boolean, maxPhotos: number): string => {
+      mediaCount: (
+        photos: number,
+        videos: number,
+        maxPhotos: number,
+        maxVideos: number,
+      ): string => {
         const parts: string[] = [];
         if (photos > 0) parts.push(`${photos} de ${maxPhotos} fotos`);
-        if (hasVideo) parts.push("1 video");
+        if (videos > 0) {
+          parts.push(maxVideos > 1 ? `${videos} de ${maxVideos} videos` : "1 video");
+        }
         return parts.join(" · ");
       },
 

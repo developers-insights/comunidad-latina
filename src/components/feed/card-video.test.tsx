@@ -307,8 +307,41 @@ describe("CardVideo: un toque abre el REEL, encima del feed", () => {
     });
 
     expect(onTap).toHaveBeenCalledTimes(1);
+    expect(onTap).toHaveBeenCalledWith(expect.any(Function));
     expect(screen.queryByTestId("reel-overlay")).toBeNull();
     expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("con `onTap` propio la tarjeta se pausa antes y retoma con lo que le pasa al visor", () => {
+    const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockImplementation(() => Promise.resolve());
+    let resumeCard: (() => void) | null = null;
+    try {
+      render(
+        <CardVideo
+          src="https://cdn.example.com/clip.mp4"
+          postId={POST_ID}
+          scope="sin-reel"
+          onTap={(resume) => {
+            resumeCard = resume;
+          }}
+        />,
+      );
+      fireEvent.click(tapLayer());
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(pause).toHaveBeenCalled();
+
+      play.mockClear();
+      act(() => resumeCard?.());
+      expect(play).toHaveBeenCalledTimes(1);
+    } finally {
+      pause.mockRestore();
+      play.mockRestore();
+    }
   });
 
   it("pinta el poster mientras el archivo no llegó (nunca un rectángulo vacío)", () => {

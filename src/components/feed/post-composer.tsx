@@ -14,6 +14,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 import { uploadVideoWithProgress } from "@/lib/media/upload-video";
+import { createStallWatchdog, createUploadLimiter } from "@/lib/media/upload-queue";
 import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { CreateMenu, type QuickPostKind } from "@/components/shell/create-menu";
 import { ComposerMenuProvider } from "./composer-context";
@@ -80,9 +81,14 @@ import { MUSIC_COPY } from "./music-copy";
  * contra su propio número.
  */
 import {
+  MAX_AUDIO_PCM_CHARS,
   MAX_PHOTOS,
   MAX_PICKED_PHOTO_BYTES,
+  MAX_TOTAL_AUDIO_PCM_CHARS,
   checkPhotoPayload,
+  fitAudioTracks,
+  maxVideosPerPost,
+  predictedAudioPcmChars,
 } from "@/lib/media/post-media-limits";
 /**
  * FORMATOS DE FOTO: importados, nunca escritos acá — mismo criterio que el
@@ -97,7 +103,11 @@ import {
   type PhotoInputRejection,
 } from "@/lib/media/photo-input";
 import type { TextBackgroundId } from "@/lib/feed/text-backgrounds";
-import { ComposerSheet, type ComposerMode } from "./composer-sheet";
+import {
+  ComposerSheet,
+  type ComposerMode,
+  type ComposerVideoUpload,
+} from "./composer-sheet";
 import {
   DEFAULT_PHOTO_FILTER_ID,
   DEFAULT_PHOTO_FILTER_INTENSITY,
@@ -186,7 +196,33 @@ interface PickedMedia {
    *    cambiaría la huella perceptual a Content Integrity.
    */
   edit?: PhotoEdit;
+  /** Subida anticipada al bucket (videos que no van por Mux). */
+  upload?: ComposerVideoUpload;
 }
+
+interface BucketUpload {
+  path: string;
+  controller: AbortController;
+  /**
+   * Resultado crudo del XHR. Puede ser `true` aunque después se haya abortado
+   * (terminó justo antes): es el que decide si hay un archivo que borrar.
+   */
+  uploaded: Promise<boolean>;
+  /** `false` si falló o se abortó: es el que espera publicar. */
+  done: Promise<boolean>;
+}
+
+interface VideoFingerprints {
+  frames: number[][][];
+  audio: (string | null)[];
+}
+
+type PrepareMediaUpload = Awaited<ReturnType<typeof prepareMediaUploadAction>>;
+
+/** Subidas simultáneas al bucket; las demás esperan turno sin ocupar red. */
+const MAX_CONCURRENT_VIDEO_UPLOADS = 3;
+/** Sin un evento de progreso en este plazo la subida se da por trabada. */
+const VIDEO_UPLOAD_STALL_MS = 90_000;
 
 export interface PostComposerHostProps {
   /** `tenants.modules` / `modules_soon`: filtran los tiles del menú de crear. */
@@ -345,7 +381,8 @@ function ComposerSuggestionChip({
  * un video.
  *
  * SUBIDA DEL VIDEO: directa navegador → bucket post-media (evita el límite de
- * body de las server actions), con progreso real vía XHR. El prefijo
+ * body de las server actions), con progreso real vía XHR, arrancando apenas se
+ * elige cada video (no al publicar). El prefijo
  * {tenant}/{user} del path lo entrega el SERVER (prepareMediaUploadAction) —
  * nunca se confía en el cliente — y la policy 0025 lo re-valida al subir.
  *
@@ -391,6 +428,22 @@ export function PostComposerHost({
   const [muxTicket, setMuxTicket] = useState<MuxUploadTicket | null>(null);
   const [muxSubido, setMuxSubido] = useState(false);
   const muxHandleRef = useRef<MuxUploadHandle | null>(null);
+  /**
+   * Subidas al bucket, por id del medio. Arrancan al ELEGIR el video (no al
+   * publicar) para que corran mientras la persona escribe.
+   */
+  const bucketUploadsRef = useRef(new Map<string, BucketUpload>());
+  /** Medios ya quitados: una subida que llega tarde no debe arrancar para ellos. */
+  const discardedMediaIdsRef = useRef(new Set<string>());
+  /**
+   * Selecciones cuyo `prepareMediaUploadAction` todavía no volvió. Publicar las
+   * espera: si no, no encuentra la subida en el Map, arranca otra para el mismo
+   * video y la primera queda huérfana.
+   */
+  const pendingSelectionsRef = useRef(new Set<Promise<void>>());
+  const uploadLimiterRef = useRef(createUploadLimiter(MAX_CONCURRENT_VIDEO_UPLOADS));
+  /** Qué se espera de los videos al publicar, o null. */
+  const [videoStatusLabel, setVideoStatusLabel] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   /** Hoja de texto abierta y en qué modo (null = cerrada). */
   const [composeMode, setComposeMode] = useState<ComposerMode | null>(null);
@@ -466,6 +519,27 @@ export function PostComposerHost({
   const videoInputRef = useRef<HTMLInputElement>(null);
   /** Id estable de esta sesión: fija la variante de la vista previa del banner. */
   const previewId = useId();
+
+  /**
+   * Si el host se desmonta con un borrador a medio armar (salir del shell de la
+   * app), sus videos ya no se pueden publicar: se abortan y se borran.
+   * `pagehide` NO se usa a propósito: con bfcache la pestaña puede volver con
+   * el borrador intacto apuntando a archivos ya borrados, y un DELETE de
+   * supabase-js no viaja con `keepalive`, así que al cerrar la pestaña se
+   * cortaría igual. Esos quedan huérfanos en el prefijo propio.
+   */
+  useEffect(() => {
+    const uploads = bucketUploadsRef.current;
+    return () => {
+      for (const entry of uploads.values()) {
+        entry.controller.abort();
+        void entry.uploaded.then((ok) => {
+          if (ok) void removeFromPostMedia([entry.path]);
+        });
+      }
+      uploads.clear();
+    };
+  }, []);
 
   /**
    * ---- SUGERENCIA DE TIPO DE PUBLICACIÓN (frente E) ------------------------
@@ -576,7 +650,8 @@ export function PostComposerHost({
   const publicarBloqueado = autoriaBloquea || esperandoSubidaMux;
 
   const photos = media.filter((item) => item.kind === "photo");
-  const video = media.find((item) => item.kind === "video") ?? null;
+  const videos = media.filter((item) => item.kind === "video");
+  const maxVideos = maxVideosPerPost(muxEnabled);
 
   /**
    * Lee el FileList VIVO del input de fotos de forma SÍNCRONA (gotcha de
@@ -676,231 +751,335 @@ export function PostComposerHost({
   }
 
   /**
-   * Mismo patrón síncrono para el video (1 por publicación) y, además, EL TOPE
-   * DE 90 s (spec nº4).
+   * Mismo patrón síncrono que las fotos (el FileList se lee antes del primer
+   * await) y EL TOPE DE 90 s por video (spec nº4), medido acá antes de subir un
+   * byte. Acepta varios archivos hasta `maxVideosPerPost(muxEnabled)`: 10 por el
+   * bucket, 1 con Mux (`posts` guarda un solo video de Mux).
    *
-   * El archivo se MIDE acá, con la metadata del `<video>`, antes de subir un
-   * solo byte: el video va directo del navegador al bucket, así que enterarse
-   * después sería gastarle los datos a la persona para terminar diciéndole que
-   * no. Un video que no se puede medir tampoco entra — sin duración la base
-   * rechaza el INSERT (`posts_video_declaration`), y un error de Postgres no es
-   * un mensaje para nadie.
+   * El orden por archivo evita gastar datos, un viaje al servidor o un borrador
+   * de Mux en un video que se va a rechazar: tipo y peso → duración → recién ahí
+   * el permiso de Mux, que CREA un borrador en la base.
    */
   async function selectVideo(input: HTMLInputElement) {
-    const file = input.files?.[0] ?? null;
+    const files = Array.from(input.files ?? []);
     input.value = "";
-    if (!file) return;
+    if (files.length === 0) return;
 
-    if (video) {
-      toast({ title: COPY.composer.videoLimit, variant: "warning" });
+    const limitMessage =
+      maxVideos > 1 ? COPY.composer.videoLimit : COPY.composer.videoLimitSingle;
+    let slots = maxVideos - videos.length;
+    if (slots <= 0) {
+      toast({ title: limitMessage, variant: "warning" });
       return;
     }
 
-    /**
-     * ---- EL ORDEN DE ESTA FUNCIÓN NO ES CASUAL ---------------------------
-     *
-     * Cada paso está donde está para que nada se gaste al pedo: ni los datos de
-     * la persona, ni un viaje al servidor, ni una fila de borrador en la base.
-     *
-     *   1. ¿Es un video, y entra por peso?   → local, instantáneo.
-     *   2. ¿Cuánto dura?                     → local, un segundo.
-     *   3. ¿Se pasa de los 90 s?             → se rechaza ACÁ.
-     *   4. Recién ahora, el permiso de Mux   → que CREA un borrador en la base.
-     *
-     * Si el permiso se pidiera primero (que es lo natural de escribir), cada
-     * video largo que alguien elige por error dejaría un borrador huérfano
-     * detrás. Con este orden, el borrador se crea sólo para videos que de
-     * verdad se van a subir.
-     */
-
-    /**
-     * PASO 1 — ¿es un video, y entra por peso?
-     *
-     * Con Mux prendido la pregunta es la permisiva ("¿esto es un video?", techo
-     * de 5 GB); sin Mux es la de siempre (mp4/mov/webm, `MAX_VIDEO_BYTES`) y este chequeo ya
-     * es el definitivo. Es la MISMA función en los dos casos — la que también
-     * corre el servidor cuando el archivo va al bucket (`isOwnVideoPath` en
-     * `feed/actions.ts` valida contra el mismo catálogo de extensiones).
-     */
     const rutaProbable: VideoUploadRoute = muxEnabled ? "mux" : "bucket";
-    const chequeoInicial = checkVideoFile(file, rutaProbable);
-    if (!chequeoInicial.ok) {
-      toast({
-        title:
-          chequeoInicial.reason === "type"
-            ? videoWrongTypeMessageFor(rutaProbable)
-            : formatVideoTooBigMessage(file.size, rutaProbable),
-        variant: "warning",
-        duration: 8000,
-      });
-      return;
-    }
-
-    /**
-     * PASO 2 — cuánto dura Y cómo se ve el primer cuadro. Local: el navegador
-     * abre la cabecera del archivo.
-     *
-     * Las dos preguntas van en UNA sola apertura (`readVideoIntro`, 0132): abrir
-     * el archivo es lo caro, y el poster es exactamente lo que hace que el video
-     * no salga en blanco mientras carga en el reel.
-     *
-     * El fotograma se captura SIEMPRE, incluso con Mux prendido, y es a
-     * propósito: la ruta definitiva recién se sabe en el paso 4, y si Mux
-     * contesta 503 el archivo termina en el bucket — que es justamente el caso
-     * que necesita poster. Cuesta un seek sobre un decodificador ya abierto;
-     * descubrir tarde que hacía falta costaría abrirlo de nuevo.
-     */
-    setMeasuringVideo(true);
-    const intro = await readVideoIntro(file);
-    setMeasuringVideo(false);
-    const measured = intro.durationSeconds;
-    const duration = checkVideoDuration("short_video", measured);
-
-    /**
-     * PASO 3 — LOS 90 s SIGUEN VALIENDO IGUAL, y se aplican antes de tocar el
-     * servidor. Es una regla de PRODUCTO, no una limitación técnica: nadie
-     * quiere un video de 40 minutos en el feed. Mux no la afloja.
-     */
-    if (!duration.ok && duration.reason === "too-long") {
-      toast({
-        title: COPY.composer.videoTooLongTitle,
-        description: COPY.composer.videoTooLongBody,
-        variant: "warning",
-        duration: 9000,
-      });
-      return;
-    }
-
-    /**
-     * PASO 4 — ¿POR DÓNDE VIAJA? Con `muxEnabled` en false ni se pregunta: es el
-     * camino de siempre. Con Mux prendido se pide el permiso de subida, y un
-     * 503 —Mux a medias, una clave rotada— devuelve la ruta vieja sin que la
-     * persona se entere de nada.
-     */
+    const accepted: PickedMedia[] = [];
     let ticket: MuxUploadTicket | null = null;
-    if (muxEnabled) {
-      setMeasuringVideo(true);
-      const pedido = await requestMuxUpload();
+    let rejectedLimit = false;
+    /** Un solo aviso, el del primer archivo rechazado. */
+    let rejection: Parameters<typeof toast>[0] | null = null;
+    const fileRejection = (reason: string, file: File, route: VideoUploadRoute) => ({
+      title:
+        reason === "type"
+          ? videoWrongTypeMessageFor(route)
+          : formatVideoTooBigMessage(file.size, route),
+      variant: "warning" as const,
+      duration: 8000,
+    });
+
+    setMeasuringVideo(true);
+    try {
+      for (const file of files) {
+        if (slots <= 0) {
+          rejectedLimit = true;
+          break;
+        }
+        const chequeoInicial = checkVideoFile(file, rutaProbable);
+        if (!chequeoInicial.ok) {
+          rejection ??= fileRejection(chequeoInicial.reason, file, rutaProbable);
+          continue;
+        }
+
+        // Duración y primer cuadro en UNA apertura del archivo. El poster se
+        // captura incluso con Mux: si Mux contesta 503 el archivo cae al bucket,
+        // que es justo el caso que lo necesita.
+        const intro = await readVideoIntro(file);
+        const duration = checkVideoDuration("short_video", intro.durationSeconds);
+        if (!duration.ok && duration.reason === "too-long") {
+          rejection ??= {
+            title: COPY.composer.videoTooLongTitle,
+            description: COPY.composer.videoTooLongBody,
+            variant: "warning",
+            duration: 9000,
+          };
+          continue;
+        }
+
+        // Un 503 de Mux (a medias, clave rotada) devuelve la ruta del bucket sin
+        // que la persona se entere.
+        let route: VideoUploadRoute = "bucket";
+        if (muxEnabled) {
+          const pedido = await requestMuxUpload();
+          if (pedido.ok) {
+            ticket = pedido.ticket;
+            route = "mux";
+          }
+        }
+        const fileCheck = route === rutaProbable ? chequeoInicial : checkVideoFile(file, route);
+        if (!fileCheck.ok) {
+          rejection ??= fileRejection(fileCheck.reason, file, route);
+          continue;
+        }
+        // Por Mux una duración desconocida no frena: la mide Mux y vuelve por el
+        // webhook. Por el bucket sí, porque el `<video>` del feed tampoco va a
+        // poder abrir el archivo que el composer no pudo.
+        if (!duration.ok && route === "bucket") {
+          rejection ??= {
+            title: COPY.composer.videoUnknownDurationTitle,
+            description: COPY.composer.videoUnknownDurationBody,
+            variant: "warning",
+            duration: 8000,
+          };
+          continue;
+        }
+
+        accepted.push({
+          id: crypto.randomUUID(),
+          kind: "video",
+          file,
+          preview: URL.createObjectURL(file),
+          durationSeconds: duration.ok ? duration.seconds : undefined,
+          videoExtension: fileCheck.extension,
+          videoContentType: fileCheck.mimeType,
+          posterBlob: intro.poster,
+          edit: { ...DEFAULT_PHOTO_EDIT },
+        });
+        slots -= 1;
+      }
+    } finally {
       setMeasuringVideo(false);
-      if (pedido.ok) ticket = pedido.ticket;
-    }
-    const route: VideoUploadRoute = ticket ? "mux" : "bucket";
-
-    /**
-     * El chequeo DEFINITIVO, ahora que se sabe la ruta. Sólo puede cambiar algo
-     * cuando `muxEnabled` prometía Mux y el servidor contestó 503: ahí el
-     * archivo vuelve a medirse contra la vara del bucket, que es la que de
-     * verdad lo va a recibir. Un .mkv que iba a andar perfecto por Mux se
-     * rechaza acá, con el mensaje del bucket — que es la verdad de ese momento.
-     */
-    const fileCheck = route === rutaProbable ? chequeoInicial : checkVideoFile(file, route);
-    if (!fileCheck.ok) {
-      toast({
-        title:
-          fileCheck.reason === "type"
-            ? videoWrongTypeMessageFor(route)
-            : formatVideoTooBigMessage(file.size, route),
-        variant: "warning",
-        duration: 8000,
-      });
-      return;
     }
 
-    /**
-     * LA DURACIÓN DESCONOCIDA, que es lo único que la ruta cambia.
-     *
-     * El navegador lee la duración abriendo el archivo con un `<video>`, y por
-     * la ruta de Mux ahora entran formatos que ningún navegador sabe abrir (un
-     * .mkv, un .avi). Rechazarlos por "no pudimos leer la duración" sería
-     * prometer cualquier formato y después rebotarlos a todos por la puerta de
-     * atrás.
-     *
-     * Así que por Mux una duración desconocida NO frena: se sube, y quien mide
-     * de verdad es Mux (`mux_duration_seconds` vuelve por el webhook, y es un
-     * dato mejor que el nuestro porque sale del archivo ya decodificado). Por el
-     * bucket sigue frenando, porque ahí el `<video>` del feed va a tener que
-     * abrir el mismo archivo que el composer no pudo.
-     */
-    if (!duration.ok && route === "bucket") {
-      toast({
-        title: COPY.composer.videoUnknownDurationTitle,
-        description: COPY.composer.videoUnknownDurationBody,
-        variant: "warning",
-        duration: 8000,
-      });
-      return;
+    if (accepted.length > 0) {
+      setMedia((current) => [...current, ...accepted]);
+      openCompose("media");
     }
 
-    setMedia((current) => [
-      ...current,
+    if (ticket && accepted[0]) {
+      startMuxVideoUpload(ticket, accepted[0].file);
+    } else if (accepted.length > 0) {
+      void startBucketUploads(accepted);
+    }
+
+    if (rejectedLimit) {
+      toast({ title: limitMessage, variant: "warning" });
+    } else if (rejection) {
+      toast(rejection);
+    }
+  }
+
+  /**
+   * La subida a Mux arranca al elegir, no al publicar: pueden ser cientos de
+   * megas en 4G y así corren mientras la persona escribe.
+   */
+  function startMuxVideoUpload(ticket: MuxUploadTicket, file: File) {
+    setMuxTicket(ticket);
+    setMuxSubido(false);
+    setVideoUpload({ pct: 0, uploadedBytes: 0, totalBytes: file.size, offline: false });
+    muxHandleRef.current = startMuxUpload(
+      { uploadUrl: ticket.uploadUrl, file },
       {
-        id: crypto.randomUUID(),
-        kind: "video",
-        file,
-        preview: URL.createObjectURL(file),
-        durationSeconds: duration.ok ? duration.seconds : undefined,
-        videoExtension: fileCheck.extension,
-        videoContentType: fileCheck.mimeType,
-        // Puede ser null (códec que el navegador no abre): el video se publica
-        // igual, sin poster, y la superficie cae a su respaldo.
-        posterBlob: intro.poster,
-        // Igual que la foto: el borrador arranca en "sin filtro" apenas se
-        // elige el archivo, así el editor y el envío siempre tienen algo que
-        // leer, se haya abierto el editor o no.
-        edit: { ...DEFAULT_PHOTO_EDIT },
-      },
-    ]);
-    openCompose("media");
-
-    /**
-     * ---- LA SUBIDA ARRANCA ACÁ, NO AL PUBLICAR ---------------------------
-     *
-     * Por la ruta del bucket el video se sube dentro de `submit()`, y con un
-     * archivo chico eso son un par de segundos. Con Mux pueden ser cientos de megas en 4G:
-     * dejarlo para el final significaría que la persona escribe el pie, toca
-     * Publicar, y RECIÉN AHÍ empieza a esperar tres minutos mirando una barra.
-     *
-     * Arrancando acá, la subida corre mientras escribe. Cuando termina de armar
-     * la publicación, lo más probable es que el archivo ya esté arriba y
-     * publicar sea instantáneo. Es el mismo trabajo, movido al único rato en que
-     * la persona no lo está esperando.
-     */
-    if (ticket) {
-      setMuxTicket(ticket);
-      setMuxSubido(false);
-      setVideoUpload({ pct: 0, uploadedBytes: 0, totalBytes: file.size, offline: false });
-      muxHandleRef.current = startMuxUpload(
-        { uploadUrl: ticket.uploadUrl, file },
-        {
-          onProgress: (pct, uploadedBytes) =>
-            setVideoUpload((actual) =>
-              actual ? { ...actual, pct, uploadedBytes, offline: false } : actual,
-            ),
-          onOffline: () =>
-            setVideoUpload((actual) => (actual ? { ...actual, offline: true } : actual)),
-          onOnline: () =>
-            setVideoUpload((actual) => (actual ? { ...actual, offline: false } : actual)),
-          onSuccess: () => {
-            muxHandleRef.current = null;
-            setMuxSubido(true);
-            setVideoUpload(null);
-          },
-          onError: () => {
-            muxHandleRef.current = null;
-            setVideoUpload(null);
-            // No se quita el video del borrador: lo que escribió sigue ahí y
-            // puede volver a intentar quitándolo y eligiéndolo de nuevo. Se le
-            // dice eso, no un código.
-            toast({
-              title: VIDEO_COPY.subida.falloTitulo,
-              description: VIDEO_COPY.subida.falloCuerpo,
-              variant: "danger",
-              duration: 9000,
-            });
-          },
+        onProgress: (pct, uploadedBytes) =>
+          setVideoUpload((actual) =>
+            actual ? { ...actual, pct, uploadedBytes, offline: false } : actual,
+          ),
+        onOffline: () =>
+          setVideoUpload((actual) => (actual ? { ...actual, offline: true } : actual)),
+        onOnline: () =>
+          setVideoUpload((actual) => (actual ? { ...actual, offline: false } : actual)),
+        onSuccess: () => {
+          muxHandleRef.current = null;
+          setMuxSubido(true);
+          setVideoUpload(null);
         },
+        onError: () => {
+          muxHandleRef.current = null;
+          setVideoUpload(null);
+          toast({
+            title: VIDEO_COPY.subida.falloTitulo,
+            description: VIDEO_COPY.subida.falloCuerpo,
+            variant: "danger",
+            duration: 9000,
+          });
+        },
+      },
+    );
+  }
+
+  function patchVideoUpload(id: string, upload: ComposerVideoUpload) {
+    setMedia((current) =>
+      current.map((item) => (item.id === id ? { ...item, upload } : item)),
+    );
+  }
+
+  function startBucketUpload(
+    item: PickedMedia,
+    owner: { tenantId: string; userId: string },
+    notifyOnError: boolean,
+  ): Promise<boolean> {
+    const extension = item.videoExtension ?? "mp4";
+    const path = `${owner.tenantId}/${owner.userId}/video-${crypto.randomUUID()}.${extension}`;
+    const controller = new AbortController();
+    let lastPct = -1;
+    patchVideoUpload(item.id, { status: "uploading", pct: 0 });
+    const limiter = uploadLimiterRef.current;
+    const uploaded = (async () => {
+      if (!(await limiter.acquire(controller.signal))) return false;
+      // Un AbortController propio por intento: el watchdog corta el XHR sin
+      // marcar el video como quitado, así queda en error y publicar lo reintenta.
+      const attempt = new AbortController();
+      const forwardAbort = () => attempt.abort();
+      controller.signal.addEventListener("abort", forwardAbort, { once: true });
+      const watchdog = createStallWatchdog(VIDEO_UPLOAD_STALL_MS, () => attempt.abort());
+      watchdog.poke();
+      try {
+        return await uploadVideoWithProgress(
+          item.file,
+          path,
+          (pct) => {
+            watchdog.poke();
+            if (pct === lastPct || controller.signal.aborted) return;
+            lastPct = pct;
+            patchVideoUpload(item.id, { status: "uploading", pct });
+          },
+          item.videoContentType ?? item.file.type,
+          attempt.signal,
+        );
+      } finally {
+        watchdog.stop();
+        controller.signal.removeEventListener("abort", forwardAbort);
+        limiter.release();
+      }
+    })();
+    const done = uploaded.then((ok) => {
+      if (controller.signal.aborted) return false;
+      patchVideoUpload(item.id, ok ? { status: "done", pct: 100 } : { status: "error", pct: 0 });
+      if (!ok && notifyOnError) {
+        toast({
+          title: COPY.composer.videoUploadRetryTitle,
+          description: COPY.composer.videoUploadRetryBody,
+          variant: "warning",
+          duration: 9000,
+        });
+      }
+      return ok;
+    });
+    bucketUploadsRef.current.set(item.id, { path, controller, uploaded, done });
+    return done;
+  }
+
+  /**
+   * Un solo `prepareMediaUploadAction` por selección: el prefijo
+   * {tenant}/{user} lo dicta el servidor. Si falla, los videos quedan marcados
+   * y publicar lo reintenta — ahí sí con el motivo a la vista.
+   */
+  function startBucketUploads(items: PickedMedia[]): Promise<void> {
+    const selection = (async () => {
+      let prepared: PrepareMediaUpload | null = null;
+      try {
+        prepared = await prepareMediaUploadAction();
+      } catch {
+        prepared = null;
+      }
+      for (const item of items) {
+        if (discardedMediaIdsRef.current.has(item.id)) continue;
+        // Publicar pudo haberla arrancado mientras este prepare viajaba.
+        if (bucketUploadsRef.current.has(item.id)) continue;
+        if (prepared?.ok) startBucketUpload(item, prepared, true);
+        else patchVideoUpload(item.id, { status: "error", pct: 0 });
+      }
+    })();
+    pendingSelectionsRef.current.add(selection);
+    void selection.finally(() => pendingSelectionsRef.current.delete(selection));
+    return selection;
+  }
+
+  /** Aborta la subida y, si el archivo llegó a quedar arriba, lo borra. */
+  function discardBucketUpload(id: string) {
+    discardedMediaIdsRef.current.add(id);
+    const entry = bucketUploadsRef.current.get(id);
+    if (!entry) return;
+    bucketUploadsRef.current.delete(id);
+    entry.controller.abort();
+    void entry.uploaded.then((ok) => {
+      if (ok) void removeFromPostMedia([entry.path]);
+    });
+  }
+
+  /**
+   * Al publicar: espera las subidas en vuelo y reintenta UNA vez las que
+   * fallaron. Devuelve las rutas en el orden de `items`.
+   */
+  async function ensureBucketUploads(
+    items: PickedMedia[],
+  ): Promise<{ ok: true; paths: string[] } | { ok: false; handled: boolean }> {
+    const total = items.length;
+    const waitAll = async (promises: Promise<boolean>[]) => {
+      let done = total - promises.length;
+      setVideoStatusLabel(COPY.composer.videosFinishingUpload(done, total));
+      return Promise.all(
+        promises.map((promise) =>
+          promise.then((ok) => {
+            if (ok) done += 1;
+            setVideoStatusLabel(
+              done === total
+                ? COPY.composer.videosPreparing(total)
+                : COPY.composer.videosFinishingUpload(done, total),
+            );
+            return ok;
+          }),
+        ),
       );
+    };
+
+    await Promise.all([...pendingSelectionsRef.current]);
+    const firstPass = await waitAll(
+      items.map((item) => bucketUploadsRef.current.get(item.id)?.done ?? Promise.resolve(false)),
+    );
+    const failed = items.filter((_, index) => !firstPass[index]);
+
+    if (failed.length > 0) {
+      let prepared: PrepareMediaUpload | null = null;
+      try {
+        prepared = await prepareMediaUploadAction();
+      } catch {
+        prepared = null;
+      }
+      if (!prepared?.ok) {
+        if (prepared?.code === "unauthenticated") {
+          router.push("/entrar?next=/feed");
+          return { ok: false, handled: true };
+        }
+        if (prepared?.code === "tenant-mismatch") {
+          toast({
+            title: TENANT_GUARD_COPY.mismatchTitle,
+            description: prepared.message,
+            variant: "warning",
+            duration: 8000,
+          });
+          return { ok: false, handled: true };
+        }
+        return { ok: false, handled: false };
+      }
+      const owner = prepared;
+      const retry = await waitAll(failed.map((item) => startBucketUpload(item, owner, false)));
+      if (retry.some((ok) => !ok)) return { ok: false, handled: false };
     }
+
+    const paths = items.map((item) => bucketUploadsRef.current.get(item.id)?.path);
+    if (paths.some((path) => !path)) return { ok: false, handled: false };
+    return { ok: true, paths: paths as string[] };
   }
 
   /**
@@ -917,15 +1096,16 @@ export function PostComposerHost({
   }
 
   function removeMedia(id: string) {
-    setMedia((current) => {
-      const found = current.find((item) => item.id === id);
-      if (found) URL.revokeObjectURL(found.preview);
-      // Quitar el video del borrador CORTA su subida. Sin esto, el archivo
-      // seguiría viajando a Mux en segundo plano —gastando los datos de la
-      // persona— por un video que acaba de decidir que no va a publicar.
-      if (found?.kind === "video") cancelMuxUpload();
-      return current.filter((item) => item.id !== id);
-    });
+    const found = media.find((item) => item.id === id);
+    if (!found) return;
+    URL.revokeObjectURL(found.preview);
+    // Quitar un video CORTA su subida: si no, el archivo seguiría viajando
+    // —gastando los datos de la persona— por algo que ya no se va a publicar.
+    if (found.kind === "video") {
+      if (muxTicket) cancelMuxUpload();
+      else discardBucketUpload(id);
+    }
+    setMedia((current) => current.filter((item) => item.id !== id));
   }
 
   /** "Listo" en el editor de foto (`PhotoEditor`): guarda filtro + texto elegidos. */
@@ -941,7 +1121,11 @@ export function PostComposerHost({
     setComposeMode(mode);
   }
 
-  function resetForm() {
+  /**
+   * `keepUploads`: al publicar bien, los videos ya subidos son de la
+   * publicación. En cualquier otro cierre del borrador se abortan y se borran.
+   */
+  function resetForm({ keepUploads = false }: { keepUploads?: boolean } = {}) {
     setBody("");
     setComposeMode(null);
     setPollEnabled(false);
@@ -953,6 +1137,15 @@ export function PostComposerHost({
     // borrador), se corta acá: nada de archivos viajando para una publicación
     // que ya no existe.
     cancelMuxUpload();
+    if (keepUploads) {
+      bucketUploadsRef.current.clear();
+    } else {
+      // También los que todavía esperan su prepare: no están en el Map y sin
+      // esta marca su subida arrancaría igual.
+      for (const item of media) if (item.kind === "video") discardBucketUpload(item.id);
+      for (const id of [...bucketUploadsRef.current.keys()]) discardBucketUpload(id);
+    }
+    setVideoStatusLabel(null);
     // La declaración es de ESTA publicación: arrastrarla a la siguiente pondría
     // una afirmación en boca de alguien que no la hizo sobre otras fotos.
     setDeclaration(EMPTY_DECLARATION_VALUE);
@@ -1033,167 +1226,44 @@ export function PostComposerHost({
     // así que esta función nunca se llama en ese estado.
 
     startTransition(async () => {
-      // ---- 1) Video primero: subida directa al bucket con progreso ---------
-      let videoPath: string | null = null;
-      /**
-       * Ruta del POSTER ya subido (0132), o null si no hubo fotograma o su
-       * subida falló. Se declara al lado del video porque comparten destino,
-       * prefijo y limpieza: si la publicación se cae más abajo, los dos se
-       * borran juntos — un poster huérfano en el bucket no lo referencia nadie.
-       */
+      // ---- 1) Videos: esperar las subidas y sacar las huellas -------------
+      //
+      // Las huellas perceptuales (Content Integrity) se muestrean acá y no en
+      // el servidor porque el servidor nunca abre el video: sacarle fotogramas
+      // pediría ffmpeg en una función serverless. De a un video por vez —son
+      // decodificaciones sobre el hilo principal— y en paralelo a la espera de
+      // las subidas. Si una falla vuelve vacía y el pipeline la lee como "no se
+      // pudo analizar" → revisión humana; nunca frena la publicación.
+      const videoItems = media.filter((item) => item.kind === "video");
+      const muxVideo = muxTicket ? (videoItems[0] ?? null) : null;
+      if (muxVideo && !muxSubido) return;
+
+      const videoPaths: string[] = [];
       let videoPosterPath: string | null = null;
-      /**
-       * Fotogramas para la huella perceptual del video (Content Integrity).
-       *
-       * Se muestrean ACÁ y no en el servidor porque el video se sube DIRECTO al
-       * bucket: el servidor nunca lo tiene abierto, y sacarle fotogramas allá
-       * pediría ffmpeg (~70 MB de binario nativo) en una función serverless. El
-       * navegador ya tiene el decodificador y le sale gratis.
-       *
-       * Son 4 matrices de 32×32 en gris: ~4 KB en el FormData, nada al lado del
-       * video. Si el muestreo falla (códec raro, archivo corrupto) vuelve vacío
-       * y el pipeline lo lee como "no se pudo analizar" → revisión humana. Nunca
-       * frena la publicación.
-       */
-      let videoFrames: number[][] = [];
-      /** PCM mono en base64 de la pista de audio del video. null = no se pudo. */
-      let videoAudioPcm: string | null = null;
-      /**
-       * CON MUX NO HAY NADA QUE SUBIR ACÁ. El archivo ya viajó (o está viajando)
-       * desde que se eligió, así que este tramo se saltea entero: no se pide
-       * prefijo al bucket, no se arma path, no se sube. Lo único que sí se hace
-       * igual es el muestreo para Content Integrity, unas líneas más abajo —
-       * ese trabajo es sobre el archivo que está en memoria y no depende de por
-       * dónde viajó.
-       *
-       * Si la subida todavía no terminó, no se publica: el botón ya está apagado
-       * (`publishBlocked`), y esto es la misma regla del lado de quien envía.
-       */
-      if (video && muxTicket && !muxSubido) return;
+      let fingerprints: VideoFingerprints = { frames: [], audio: [] };
 
-      if (video && !muxTicket) {
-        const prepared = await prepareMediaUploadAction();
-        if (!prepared.ok) {
-          if (prepared.code === "unauthenticated") {
-            router.push("/entrar?next=/feed");
-            return;
-          }
-          if (prepared.code === "tenant-mismatch") {
+      if (videoItems.length > 0 && !muxTicket) {
+        const [uploads, sampled] = await Promise.all([
+          ensureBucketUploads(videoItems),
+          sampleVideoFingerprints(videoItems),
+        ]);
+        setVideoStatusLabel(null);
+        if (!uploads.ok) {
+          if (!uploads.handled) {
             toast({
-              title: TENANT_GUARD_COPY.mismatchTitle,
-              description: prepared.message,
-              variant: "warning",
-              duration: 8000,
+              title: COPY.composer.videoUploadErrorTitle,
+              description: COPY.composer.videoUploadErrorBody,
+              variant: "danger",
             });
-            return;
           }
-          toast({
-            title: COPY.composer.videoUploadErrorTitle,
-            description: COPY.composer.videoUploadErrorBody,
-            variant: "danger",
-          });
           return;
         }
-
-        // `videoExtension` ya salió de `checkVideoFile` en `selectVideo` — no
-        // se vuelve a leer `video.file.type` acá (puede venir vacío en
-        // algunos navegadores para formatos poco comunes; ver
-        // `video-upload-limits.ts`). Todo video en `media` pasó ese chequeo,
-        // así que el campo siempre está.
-        const extension = video.videoExtension ?? "mp4";
-        videoPath = `${prepared.tenantId}/${prepared.userId}/video-${crypto.randomUUID()}.${extension}`;
-        const totalBytes = video.file.size;
-        setVideoUpload({ pct: 0, uploadedBytes: 0, totalBytes, offline: false });
-        // El muestreo va en paralelo con la subida: son dos trabajos
-        // independientes sobre el mismo archivo y encadenarlos le sumaría un
-        // par de segundos a la espera por nada.
-        const [uploaded, frames, audioPcm] = await Promise.all([
-          uploadVideoWithProgress(
-            video.file,
-            videoPath,
-            (pct) =>
-              setVideoUpload({
-                pct,
-                uploadedBytes: Math.round((totalBytes * pct) / 100),
-                totalBytes,
-                // El XHR al bucket es un único request: o va o no va. No hay un
-                // estado "sin conexión" que mostrar porque no hay nada que
-                // retomar — eso es exclusivo de la ruta de Mux.
-                offline: false,
-              }),
-            video.videoContentType ?? video.file.type,
-          ),
-          sampleVideoLumaFrames(video.file),
-          // La pista de audio es una huella independiente de la imagen: quien
-          // recorta el video pero deja el sonido intacto matchea por acá. Va en
-          // el mismo Promise.all porque también es trabajo sobre el archivo que
-          // ya está en memoria, y degrada a null sin romper nada.
-          sampleAudioPcm(video.file),
-        ]);
-        videoFrames = frames;
-        videoAudioPcm = audioPcm ? encodeAudioPcm16(audioPcm) : null;
-        setVideoUpload(null);
-
-        /**
-         * EL POSTER, DESPUÉS DEL VIDEO Y SIN BARRA PROPIA (0132).
-         *
-         * Después: si el video no llegó a subir, subir su poster sería dejar un
-         * archivo que no ilustra nada. Y sin barra porque son decenas de
-         * kilobytes al lado de cientos de megas — un segundo indicador de
-         * progreso para algo que tarda menos que el parpadeo sería ruido.
-         *
-         * NUNCA FRENA LA PUBLICACIÓN. Un poster que no se pudo subir devuelve
-         * `videoPosterPath` en null y el video se pinta como se pintaba antes de
-         * esta feature: con el respaldo de la superficie. Perder el poster es
-         * perder una mejora de carga; abortar la publicación por eso sería
-         * perder la publicación.
-         */
-        if (uploaded && video.posterBlob) {
-          const posterPath = `${prepared.tenantId}/${prepared.userId}/poster-${crypto.randomUUID()}.${VIDEO_POSTER_EXTENSION}`;
-          const { error: posterError } = await createClient()
-            .storage.from("post-media")
-            .upload(posterPath, video.posterBlob, {
-              contentType: VIDEO_POSTER_CONTENT_TYPE,
-              upsert: false,
-            });
-          if (posterError) {
-            console.warn("[feed] no se pudo subir el poster del video", {
-              message: posterError.message,
-            });
-          } else {
-            videoPosterPath = posterPath;
-          }
-        }
-
-        if (!uploaded) {
-          toast({
-            title: COPY.composer.videoUploadErrorTitle,
-            description: COPY.composer.videoUploadErrorBody,
-            variant: "danger",
-          });
-          return;
-        }
-      } else if (video && muxTicket) {
-        /**
-         * CONTENT INTEGRITY TAMBIÉN CON MUX. La huella perceptual se saca del
-         * archivo que está en memoria, no del que quedó en el bucket, así que
-         * este trabajo es idéntico por las dos rutas — y tiene que hacerse, o
-         * los videos que pasen por Mux entrarían al feed sin pasar por el
-         * pipeline que sí revisa a los demás.
-         *
-         * LO QUE CAMBIA: por Mux ahora entran formatos que el navegador no sabe
-         * decodificar (.mkv, .avi). Para esos, el muestreo vuelve vacío y el
-         * pipeline lo lee como "no se pudo analizar" → revisión humana. Es
-         * exactamente el comportamiento que ya tenía para un códec raro; lo
-         * único nuevo es que ahora va a pasar más seguido. Nunca frena la
-         * publicación, que es la regla de siempre.
-         */
-        const [frames, audioPcm] = await Promise.all([
-          sampleVideoLumaFrames(video.file),
-          sampleAudioPcm(video.file),
-        ]);
-        videoFrames = frames;
-        videoAudioPcm = audioPcm ? encodeAudioPcm16(audioPcm) : null;
+        videoPaths.push(...uploads.paths);
+        fingerprints = sampled;
+      } else if (muxVideo) {
+        setVideoStatusLabel(COPY.composer.videosPreparing(1));
+        fingerprints = await sampleVideoFingerprints([muxVideo]);
+        setVideoStatusLabel(null);
       }
 
       // ---- 2) Hornear cada foto: filtro + texto quemados, SIEMPRE recomprimida
@@ -1306,19 +1376,8 @@ export function PostComposerHost({
                   duration: 9000,
                 },
         );
-        // El video ya subido queda huérfano si lo había: se limpia igual que en
-        // cualquier otro corte (best-effort, la policy delete lo permite). El
-        // POSTER va en la misma barrida: solo existe para ese video, así que
-        // dejarlo sería basura que no ilustra nada.
-        if (videoPath) {
-          try {
-            await createClient()
-              .storage.from("post-media")
-              .remove(videoPosterPath ? [videoPath, videoPosterPath] : [videoPath]);
-          } catch {
-            // sin drama: el archivo queda en el prefijo propio, no es visible
-          }
-        }
+        // Los videos ya subidos se quedan: el borrador sigue en pantalla y se
+        // vuelven a usar cuando la persona saque una foto y publique de nuevo.
         return;
       }
 
@@ -1339,6 +1398,32 @@ export function PostComposerHost({
           description: COPY.composer.fontFallbackBody,
           variant: "info",
         });
+      }
+
+      /**
+       * EL POSTER (0132) — sólo del PRIMER video: `posts.video_poster_path` es
+       * una columna por publicación. Se sube recién acá, pasada la guarda de
+       * peso, para no dejar uno huérfano por un corte anterior. Sin barra propia
+       * (son decenas de KB) y NUNCA frena la publicación: sin poster el video se
+       * pinta con el respaldo de siempre.
+       */
+      const firstVideo = videoItems[0];
+      if (videoPaths.length > 0 && firstVideo?.posterBlob) {
+        const owner = videoPaths[0].split("/").slice(0, 2).join("/");
+        const posterPath = `${owner}/poster-${crypto.randomUUID()}.${VIDEO_POSTER_EXTENSION}`;
+        const { error: posterError } = await createClient()
+          .storage.from("post-media")
+          .upload(posterPath, firstVideo.posterBlob, {
+            contentType: VIDEO_POSTER_CONTENT_TYPE,
+            upsert: false,
+          });
+        if (posterError) {
+          console.warn("[feed] no se pudo subir el poster del video", {
+            message: posterError.message,
+          });
+        } else {
+          videoPosterPath = posterPath;
+        }
       }
 
       // ---- 3) Fotos (ya horneadas) + paths por la server action ------------
@@ -1384,101 +1469,53 @@ export function PostComposerHost({
        * archivo no está en el bucket). El cliente no inventa ningún otro campo.
        */
       if (muxTicket) {
+        // ⚠️ CONTRATO CON EL BACKEND: `muxUploadId` y `muxPostDraftId` son los
+        // dos identificadores que devolvió `POST /api/mux/subida`, y
+        // `createPostAction` los ata a la publicación (con `posts.media` vacío:
+        // el archivo no está en el bucket). El filtro va suelto y no como
+        // arreglo porque hay un solo video; sólo `id` e `intensity`, nunca CSS.
         formData.set("muxUploadId", muxTicket.uploadId);
         formData.set("muxPostDraftId", muxTicket.postDraftId);
-        /**
-         * FILTRO DEL VIDEO (0104) por la ruta de Mux: un objeto suelto y no un
-         * arreglo paralelo, porque acá no hay `videoPaths` con los que emparejar
-         * — hay un solo video y su borrador ya tiene id. Mismo criterio de
-         * seguridad que la otra rama: sólo `id` e `intensity`, NUNCA el CSS. El
-         * string de `filter` lo arma el servidor desde el catálogo; mandarlo
-         * desde acá sería dejar que el navegador escriba en el `style` de todo
-         * el que abra la publicación.
-         */
-        const videoEditMux = video?.edit;
-        if (videoEditMux && videoEditMux.filterId !== DEFAULT_PHOTO_FILTER_ID) {
-          formData.set(
-            "muxVideoFilter",
-            JSON.stringify({
-              id: videoEditMux.filterId,
-              intensity: videoEditMux.filterIntensity ?? DEFAULT_PHOTO_FILTER_INTENSITY,
-            }),
-          );
-        }
+        const muxFilter = videoFilterRef(muxVideo?.edit);
+        if (muxFilter) formData.set("muxVideoFilter", JSON.stringify(muxFilter));
         formData.set("videoType", "short_video");
-        // La duración medida por el navegador, SI se pudo medir. Con un .mkv no
-        // se puede, y no pasa nada: `mux_duration_seconds` va a llegar por el
-        // webhook con el número real, que además es mejor que este.
-        if (video?.durationSeconds) {
-          formData.set("durationSeconds", String(video.durationSeconds));
+        // Con un .mkv no se puede medir, y no pasa nada: `mux_duration_seconds`
+        // llega por el webhook con el número real.
+        if (muxVideo?.durationSeconds) {
+          formData.set("durationSeconds", String(muxVideo.durationSeconds));
         }
         formData.set("videoCategory", videoCategory);
-        if (videoFrames.length > 0) {
-          formData.set("videoFrames", JSON.stringify(videoFrames));
+        const muxFrames = fingerprints.frames[0];
+        if (muxFrames && muxFrames.length > 0) {
+          formData.set("videoFrames", JSON.stringify(muxFrames));
         }
-        if (videoAudioPcm) {
-          formData.set("videoAudioPcm", videoAudioPcm);
-        }
-      } else if (videoPath) {
-        formData.set("videoPaths", JSON.stringify([videoPath]));
-        /**
-         * El poster (0132) viaja SÓLO cuando existe. Ausente significa "este
-         * video no tiene fotograma capturado", que es exactamente lo que la
-         * columna guarda en NULL — y lo que ya pasa con los 36 videos que
-         * estaban en el bucket antes de esta feature.
-         *
-         * La ruta la valida el servidor con la misma forma que la del video
-         * (`isOwnPosterPath` en feed/actions.ts): tenant y usuario propios, tres
-         * segmentos, sin traversal. Nunca se confía en que este campo diga la
-         * verdad sólo porque lo escribió el composer.
-         */
-        if (videoPosterPath) {
-          formData.set("videoPosterPath", videoPosterPath);
-        }
-        /**
-         * FILTRO DEL VIDEO (0104) — arreglo PARALELO a `videoPaths`, no un
-         * objeto ya indexado por ruta: la clave la escribe el servidor con los
-         * paths que él mismo validó como propios. Si la mandara el cliente,
-         * podría poner de clave el video de otra persona.
-         *
-         * Viaja SIEMPRE que hay video, incluso en `null` (sin filtro): así el
-         * servidor puede exigir que el largo coincida con los videos recibidos
-         * en vez de adivinar a qué archivo pertenece cada entrada.
-         *
-         * Sólo `id` e `intensity`. NUNCA el CSS: el string de `filter` lo arma
-         * el servidor desde el catálogo — mandarlo desde acá sería dejar que el
-         * navegador escriba en el `style` de todo el que abra la publicación.
-         */
-        const videoEdit = video?.edit;
+        const muxAudio = fingerprints.audio[0];
+        if (muxAudio) formData.set("videoAudioPcm", muxAudio);
+      } else if (videoPaths.length > 0) {
+        // Todo lo que describe a los videos viaja en arreglos PARALELOS a
+        // `videoPaths`: las claves (rutas) las escribe el servidor con los paths
+        // que él mismo validó como propios, y un largo que no coincide se
+        // descarta en vez de adivinar a qué archivo pertenece cada entrada.
+        formData.set("videoPaths", JSON.stringify(videoPaths));
+        if (videoPosterPath) formData.set("videoPosterPath", videoPosterPath);
         formData.set(
           "videoFilters",
-          JSON.stringify([
-            videoEdit && videoEdit.filterId !== DEFAULT_PHOTO_FILTER_ID
-              ? {
-                  id: videoEdit.filterId,
-                  intensity: videoEdit.filterIntensity ?? DEFAULT_PHOTO_FILTER_INTENSITY,
-                }
-              : null,
-          ]),
+          JSON.stringify(videoItems.map((item) => videoFilterRef(item.edit))),
         );
-        // DECLARACIÓN OBLIGATORIA (0046): sin estos dos campos el INSERT rebota
-        // contra `posts_video_declaration`. La duración es la MEDIDA al elegir
-        // el archivo, y el servidor la vuelve a pasar por la misma política.
+        // DECLARACIÓN OBLIGATORIA (0046): una duración MEDIDA por video; el
+        // servidor pasa cada una por la política de 90 s.
         formData.set("videoType", "short_video");
-        if (video?.durationSeconds) {
-          formData.set("durationSeconds", String(video.durationSeconds));
-        }
+        formData.set(
+          "videoDurations",
+          JSON.stringify(videoItems.map((item) => item.durationSeconds ?? null)),
+        );
         formData.set("videoCategory", videoCategory);
-        // Sólo si hay algo que mandar: un array vacío y la ausencia del campo
-        // significan lo mismo para el servidor ("no se pudo analizar"), y así
-        // no viaja un `"[]"` que aparenta ser un análisis hecho.
-        if (videoFrames.length > 0) {
-          formData.set("videoFrames", JSON.stringify(videoFrames));
+        // Sólo si hay algo: un arreglo de vacíos aparentaría un análisis hecho.
+        if (fingerprints.frames.some((frames) => frames.length > 0)) {
+          formData.set("videoFrames", JSON.stringify(fingerprints.frames));
         }
-        // Mismo criterio que los fotogramas: si no se pudo extraer, el campo no
-        // viaja. Un string vacío parecería un análisis hecho que dio nada.
-        if (videoAudioPcm) {
-          formData.set("videoAudioPcm", videoAudioPcm);
+        if (fingerprints.audio.some((track) => track !== null)) {
+          formData.set("videoAudioPcm", JSON.stringify(fingerprints.audio));
         }
       }
       formData.set(
@@ -1601,7 +1638,7 @@ export function PostComposerHost({
         }
         setFinishingLabel(null);
 
-        resetForm();
+        resetForm({ keepUploads: true });
         if (result.status === "published") {
           // `result.entity` lo devuelve `createPostAction` justamente para esto:
           // una publicación firmada por una ficha NO llega a toda la comunidad
@@ -1650,17 +1687,9 @@ export function PostComposerHost({
         return;
       }
 
-      // El post no salió: el video ya subido quedaría huérfano en el prefijo
-      // del usuario — lo limpiamos best-effort (la policy delete lo permite).
-      if (videoPath) {
-        try {
-          await createClient()
-            .storage.from("post-media")
-            .remove(videoPosterPath ? [videoPath, videoPosterPath] : [videoPath]);
-        } catch {
-          // sin drama: el archivo queda en el prefijo propio, no es visible
-        }
-      }
+      // El post no salió. Los videos siguen en el borrador para reintentar; el
+      // poster se vuelve a subir en cada intento, así que éste se borra.
+      if (videoPosterPath) await removeFromPostMedia([videoPosterPath]);
 
       if (result.code === "unauthenticated") {
         router.push("/entrar?next=/feed");
@@ -1784,6 +1813,7 @@ export function PostComposerHost({
          * cualquier video que el teléfono tenga se puede elegir.
          */
         accept={videoAcceptFor(muxEnabled ? "mux" : "bucket")}
+        multiple={!muxEnabled}
         className="sr-only"
         tabIndex={-1}
         aria-hidden="true"
@@ -1811,11 +1841,12 @@ export function PostComposerHost({
         onBodyChange={setBody}
         media={media}
         canAddPhoto={photos.length < MAX_PHOTOS}
-        canAddVideo={!video && !measuringVideo}
+        canAddVideo={videos.length < maxVideos && !measuringVideo}
         onAddPhotos={() => photoInputRef.current?.click()}
         onAddVideo={() => videoInputRef.current?.click()}
         onRemoveMedia={removeMedia}
         maxPhotos={MAX_PHOTOS}
+        maxVideos={maxVideos}
         onSavePhotoEdit={savePhotoEdit}
         pollEnabled={pollEnabled}
         onPollChange={setPollEnabled}
@@ -1828,14 +1859,12 @@ export function PostComposerHost({
         previewId={previewId}
         videoUpload={videoUpload}
         /**
-         * Cancelar sólo existe cuando hay algo que cancelar de verdad: la subida
-         * a Mux corre en segundo plano mientras la persona escribe y se puede
-         * cortar en cualquier momento. La del bucket pasa DENTRO de publicar, en
-         * un único request que no se interrumpe — ahí no se pinta el botón, en
-         * vez de pintar uno que no haría nada.
+         * El panel con Cancelar es sólo de Mux. Las subidas al bucket muestran su
+         * progreso en cada miniatura y se cancelan quitando el video.
          */
         onCancelVideoUpload={muxTicket ? cancelMuxUpload : undefined}
         measuringVideo={measuringVideo}
+        videoStatusLabel={videoStatusLabel}
         bakingProgress={bakingProgress}
         finishingLabel={finishingLabel}
         isPending={isPending}
@@ -1920,3 +1949,46 @@ export function PostComposerHost({
   );
 }
 
+/** Filtro de un video como metadato (0104): sólo `id` e `intensity`, o null. */
+function videoFilterRef(edit: PhotoEdit | undefined) {
+  return edit && edit.filterId !== DEFAULT_PHOTO_FILTER_ID
+    ? { id: edit.filterId, intensity: edit.filterIntensity ?? DEFAULT_PHOTO_FILTER_INTENSITY }
+    : null;
+}
+
+/** Best-effort: el archivo vive en el prefijo propio y la policy de delete lo permite. */
+async function removeFromPostMedia(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  try {
+    await createClient().storage.from("post-media").remove(paths);
+  } catch {
+    // Si falla queda en el prefijo de quien lo subió, invisible para el resto.
+  }
+}
+
+/**
+ * Fotogramas y pista de audio de cada video, en orden. El audio respeta el
+ * presupuesto del body (`MAX_TOTAL_AUDIO_PCM_CHARS`): si por la duración ya se
+ * sabe que una pista no entra, ni se decodifica. `fitAudioTracks` es la MISMA
+ * función que aplica el servidor al recibir.
+ */
+async function sampleVideoFingerprints(items: PickedMedia[]): Promise<VideoFingerprints> {
+  const frames: number[][][] = [];
+  const audio: (string | null)[] = [];
+  let budget = MAX_TOTAL_AUDIO_PCM_CHARS;
+  for (const item of items) {
+    frames.push(await sampleVideoLumaFrames(item.file));
+    const predicted = item.durationSeconds
+      ? predictedAudioPcmChars(item.durationSeconds)
+      : MAX_AUDIO_PCM_CHARS;
+    if (predicted > budget) {
+      audio.push(null);
+      continue;
+    }
+    const samples = await sampleAudioPcm(item.file);
+    const encoded = samples ? encodeAudioPcm16(samples) : null;
+    audio.push(encoded);
+    if (encoded && encoded.length <= budget) budget -= encoded.length;
+  }
+  return { frames, audio: fitAudioTracks(audio) };
+}

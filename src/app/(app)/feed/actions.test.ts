@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   notifyPostComment: vi.fn(),
   notifyPostReaction: vi.fn(),
   puedeFirmarComo: vi.fn(),
+  muxConfigured: false,
 }));
 
 vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMatch }));
@@ -40,7 +41,12 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mocks.createAdminCli
 vi.mock("@/lib/rate-limit", () => ({ limit: mocks.limit, HOUR_MS: 3_600_000 }));
 // Sin Google Vision: es la configuración real de producción hoy — la foto se
 // publica al instante y entra a la cola humana para revisión asíncrona.
-vi.mock("@/lib/config/services", () => ({ isVisionConfigured: false }));
+vi.mock("@/lib/config/services", () => ({
+  isVisionConfigured: false,
+  get isMuxConfigured() {
+    return mocks.muxConfigured;
+  },
+}));
 vi.mock("@/lib/moderation", () => ({
   TIER_AUTO: 1,
   TIER_REVIEW: 2,
@@ -84,6 +90,8 @@ import {
   MAX_PHOTOS,
   MAX_PHOTO_BYTES,
   MAX_TOTAL_PHOTO_BYTES,
+  MAX_VIDEOS,
+  MAX_TOTAL_AUDIO_PCM_CHARS,
 } from "@/lib/media/post-media-limits";
 import {
   PREMIUM_DETAIL_MAX_SECONDS,
@@ -276,6 +284,7 @@ function postForm(input: {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.muxConfigured = false;
   vi.spyOn(console, "warn").mockImplementation(() => {});
   mocks.moderateText.mockResolvedValue({
     flagged: false,
@@ -1308,5 +1317,236 @@ describe("createPostAction — derechos y fuente de la foto", () => {
     expect(
       stub.calls.filter((call) => call.table === "posts" && call.method === "insert"),
     ).toHaveLength(1);
+  });
+});
+
+/* -------------- Varios videos por publicación (camino del bucket) ---------- */
+
+function videoPath(name: string) {
+  return `${TENANT_ID}/${USER_ID}/video-${name}.mp4`;
+}
+
+/** FormData con N videos del bucket, como lo arma el composer de varios videos. */
+function videosForm(
+  paths: string[],
+  extra: {
+    durations?: unknown;
+    frames?: unknown;
+    audio?: unknown;
+  } = {},
+): FormData {
+  const data = new FormData();
+  data.set("body", "");
+  data.set("kind", "post");
+  data.set("videoPaths", JSON.stringify(paths));
+  data.set("videoType", "short_video");
+  data.set("videoCategory", "comunidad");
+  data.set(
+    "videoDurations",
+    JSON.stringify(extra.durations ?? paths.map(() => 30)),
+  );
+  if (extra.frames !== undefined) data.set("videoFrames", JSON.stringify(extra.frames));
+  if (extra.audio !== undefined) data.set("videoAudioPcm", JSON.stringify(extra.audio));
+  return data;
+}
+
+function integrityItems() {
+  const call = mocks.registerUploadedMedia.mock.calls[0]?.[0] as
+    | { items: Array<Record<string, unknown>> }
+    | undefined;
+  return call?.items ?? [];
+}
+
+describe("createPostAction — varios videos en una publicación", () => {
+  it("publica el tope de videos, en el orden elegido y mezclados con fotos", async () => {
+    const stub = useGuardOk();
+    const paths = Array.from({ length: MAX_VIDEOS }, (_, index) => videoPath(String(index)));
+    const data = videosForm(paths);
+    data.append("photos", photo());
+    data.set(
+      "mediaOrder",
+      JSON.stringify(["video", "photo", ...Array.from({ length: MAX_VIDEOS - 1 }, () => "video")]),
+    );
+
+    const result = await createPostAction(data);
+
+    expect(result).toMatchObject({ ok: true, status: "published" });
+    const media = insertedPost(stub)?.media as string[];
+    expect(media).toHaveLength(MAX_VIDEOS + 1);
+    expect(media[0]).toBe(paths[0]);
+    expect(media[1]).toMatch(/post-.*\.jpg$/);
+    expect(media.slice(2)).toEqual(paths.slice(1));
+  });
+
+  it("rechaza un video más allá del tope antes de tocar nada", async () => {
+    const stub = useGuardOk();
+    const paths = Array.from({ length: MAX_VIDEOS + 1 }, (_, index) =>
+      videoPath(String(index)),
+    );
+
+    const result = await createPostAction(videosForm(paths));
+
+    expect(result).toEqual({ ok: false, code: "photo" });
+    expect(insertedPost(stub)).toBeUndefined();
+    expect(mocks.requireTenantMatch).not.toHaveBeenCalled();
+  });
+
+  it("con Mux configurado el tope es UN video, aunque lleguen por el bucket", async () => {
+    mocks.muxConfigured = true;
+    const stub = useGuardOk();
+
+    const result = await createPostAction(videosForm([videoPath("a"), videoPath("b")]));
+
+    expect(result).toEqual({ ok: false, code: "photo" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("con Mux configurado un solo video del bucket sigue publicando", async () => {
+    mocks.muxConfigured = true;
+    const stub = useGuardOk();
+
+    const result = await createPostAction(videosForm([videoPath("a")]));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)?.media).toEqual([videoPath("a")]);
+  });
+
+  it("no mezcla un borrador de Mux con videos del bucket", async () => {
+    const stub = useGuardOk(null, { id: "44444444-4444-4444-8444-444444444444" });
+    const data = videosForm([videoPath("a")]);
+    data.set("muxPostDraftId", "44444444-4444-4444-8444-444444444444");
+    data.set("muxUploadId", "subida-1");
+
+    const result = await createPostAction(data);
+
+    expect(result).toEqual({ ok: false, code: "invalid" });
+    expect(stub.calls.some((call) => call.method === "update")).toBe(false);
+  });
+
+  it("declara la duración MÁS LARGA, no la suma", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      videosForm([videoPath("a"), videoPath("b"), videoPath("c")], {
+        durations: [40, 75, 40],
+      }),
+    );
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)?.duration_seconds).toBe(75);
+  });
+
+  it("cada video pasa por la política de 90 s: uno largo voltea la publicación", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      videosForm([videoPath("a"), videoPath("b")], { durations: [30, 91] }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "video", reason: "too-long" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("sin una duración por video no se publica", async () => {
+    useGuardOk();
+
+    const result = await createPostAction(
+      videosForm([videoPath("a"), videoPath("b")], { durations: [30] }),
+    );
+
+    expect(result).toEqual({ ok: false, code: "video", reason: "unknown" });
+  });
+
+  it("varios videos sin `videoDurations` no se publican aunque venga la duración vieja", async () => {
+    useGuardOk();
+    const data = videosForm([videoPath("a"), videoPath("b")]);
+    data.delete("videoDurations");
+    data.set("durationSeconds", "30");
+
+    const result = await createPostAction(data);
+
+    expect(result).toEqual({ ok: false, code: "video", reason: "unknown" });
+  });
+
+  it("cada video recibe SU huella, en orden", async () => {
+    useGuardOk();
+    const frameA = [[1]];
+    const frameB = [[2]];
+
+    await createPostAction(
+      videosForm([videoPath("a"), videoPath("b")], {
+        frames: [frameA, frameB],
+        audio: ["AAAA", null],
+      }),
+    );
+
+    const items = integrityItems();
+    expect(items.map((item) => item.storagePath)).toEqual([videoPath("a"), videoPath("b")]);
+    expect(items[0]).toMatchObject({ videoLumaFrames: frameA, audioPcm: "AAAA" });
+    expect(items[1]).toMatchObject({ videoLumaFrames: frameB, audioPcm: null });
+  });
+
+  it("huellas con otro largo que los videos se descartan, sin voltear la publicación", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(
+      videosForm([videoPath("a"), videoPath("b")], { frames: [[[1]]], audio: ["AAAA"] }),
+    );
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)).toBeDefined();
+    for (const item of integrityItems()) {
+      expect(item.videoLumaFrames).toBeNull();
+      expect(item.audioPcm).toBeNull();
+    }
+  });
+
+  it("las pistas que no entran en el presupuesto de audio quedan en null", async () => {
+    useGuardOk();
+    const half = "A".repeat(Math.floor(MAX_TOTAL_AUDIO_PCM_CHARS / 2) + 4);
+
+    await createPostAction(
+      videosForm([videoPath("a"), videoPath("b"), videoPath("c")], {
+        audio: [half, half, "BBBB"],
+      }),
+    );
+
+    expect(integrityItems().map((item) => item.audioPcm)).toEqual([half, null, "BBBB"]);
+  });
+
+  it("rechaza la misma ruta de video repetida", async () => {
+    const stub = useGuardOk();
+
+    const result = await createPostAction(videosForm([videoPath("a"), videoPath("a")]));
+
+    expect(result).toEqual({ ok: false, code: "photo" });
+    expect(insertedPost(stub)).toBeUndefined();
+  });
+
+  it("acepta las huellas del composer anterior cuando hay un solo video", async () => {
+    useGuardOk();
+    const frames = [[1, 2, 3]];
+    const data = videosForm([videoPath("a")]);
+    data.set("videoFrames", JSON.stringify(frames));
+    data.set("videoAudioPcm", "QUFBQQ==");
+
+    await createPostAction(data);
+
+    expect(integrityItems()[0]).toMatchObject({
+      videoLumaFrames: frames,
+      audioPcm: "QUFBQQ==",
+    });
+  });
+
+  it("el poster acompaña a la publicación con varios videos", async () => {
+    const stub = useGuardOk();
+    const poster = `${TENANT_ID}/${USER_ID}/poster-abc.jpg`;
+    const data = videosForm([videoPath("a"), videoPath("b")]);
+    data.set("videoPosterPath", poster);
+
+    const result = await createPostAction(data);
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertedPost(stub)?.video_poster_path).toBe(poster);
   });
 });

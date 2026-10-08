@@ -20,6 +20,7 @@ import { MuxVideoSurface } from "@/components/video/mux-player";
 import { VideoStatusCard } from "@/components/video/video-status-card";
 import { useMuxLiveStatus } from "@/components/video/mux-status-poll";
 import { safePlayMedia, type PlayableMedia } from "@/components/video/playable-media";
+import { useAudioChannelSource } from "@/components/video/use-audio-channel";
 import { useCardLike } from "./card-like-context";
 import { useCardMedia } from "./card-media-context";
 import { useMediaViewer, type ViewerMediaItem } from "./media-viewer";
@@ -128,8 +129,11 @@ export interface CardVideoProps {
    *
    * Sin esto el toque también abre el visor —el default dejó de navegar el
    * 2026-08-20—, sólo que armado con lo que la propia tarjeta sabe.
+   *
+   * Recibe con qué retomar la tarjeta al cerrarse el visor: la tarjeta se
+   * pausa antes de llamarlo.
    */
-  onTap?: () => void;
+  onTap?: (resumeCard: () => void) => void;
   className?: string;
   /**
    * FILTRO DE PRESENTACIÓN (0104), ya resuelto a un valor de `filter` de CSS por
@@ -284,6 +288,8 @@ export function CardVideo({
    * bloqueado, así que la tarjeta no puede desmontarse por debajo.
    */
   const [reelAbierto, setReelAbierto] = useState(false);
+  const videosEnLaPublicacion =
+    media?.items.filter((item) => item.kind === "video").length ?? 1;
   /** Duración MEDIDA del archivo (metadata), no la declarada. null = todavía no. */
   const [measuredSeconds, setMeasuredSeconds] = useState<number | null>(null);
   const isPreview = isPreviewTruncated(measuredSeconds);
@@ -356,6 +362,12 @@ export function CardVideo({
     ? "errored"
     : muxPlaybackMode({ playbackId: muxVivo.playbackId, status: muxVivo.status });
 
+  useAudioChannelSource(videoRef, {
+    silenceBy: "mute",
+    onPreempt: () => postMusic?.soundOff(),
+    attachKey: `${modo}:${muxMontado}`,
+  });
+
   // Dejar de ser el medio activo (el usuario pasó a la foto siguiente del
   // carrusel) pausa YA, sin esperar a que el observer note que salió de vista.
   // La MÚSICA no se toca acá: es de la publicación, no de esta diapositiva —
@@ -369,12 +381,16 @@ export function CardVideo({
   // a mano, igual que antes): acá se refleja lo que decide el árbitro cada vez
   // que el gesto de sonido cambia. Al desmutear también se retoma la
   // reproducción — mismo comportamiento que el toggle de siempre.
+  // Sólo la diapositiva activa puede sonar: el carrusel monta todos los videos,
+  // y uno fuera de pantalla que arrancara con sonido le quitaría el canal al
+  // visible y apagaría el gesto de la publicación entera.
+  const slideMuted = videoMuted || !active;
   useEffect(() => {
     const node = videoRef.current;
     if (!node) return;
-    node.muted = videoMuted;
-    if (!videoMuted) safePlay(node);
-  }, [videoMuted]);
+    node.muted = slideMuted;
+    if (!slideMuted && !reduce) safePlay(node);
+  }, [slideMuted, reduce]);
 
   useEffect(() => {
     // Reduced-motion: no autoplay. El video (y la música) quedan pausados.
@@ -595,7 +611,15 @@ export function CardVideo({
     // Quien monta el video puede decidirlo (el detalle de una publicación y los
     // anuncios abren el visor con sus propias diapositivas y su propio tope).
     if (onTap) {
-      onTap();
+      videoRef.current?.pause();
+      postMusic?.pause();
+      onTap(resumeAfterViewer);
+      return;
+    }
+    // El reel arranca en el PRIMER video de la publicación: con varios, tocar
+    // el segundo abriría otro. El visor sí abre en el que se tocó.
+    if (videosEnLaPublicacion > 1) {
+      openViewer();
       return;
     }
     // La tarjeta se calla ANTES de abrir: el reel arranca con su propio sonido y
@@ -677,7 +701,7 @@ export function CardVideo({
           playbackId={muxVivo.playbackId}
           mediaRef={videoRef}
           filterCss={filterCss}
-          muted={videoMuted}
+          muted={slideMuted}
           loop
           // El autoplay lo decide el observador de visibilidad de esta tarjeta
           // (60 % + 2 s), igual que con el `<video>`. Dejárselo al reproductor

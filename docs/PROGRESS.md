@@ -1,5 +1,13 @@
 # PROGRESS — Comunidad Latina
 
+## Música sin superposición + varios videos por publicación (2026-10-08, PR #3)
+
+Portadas al código actual las dos ramas WIP del 26/08 (`claude/community-feed-music-playback-90c5d0`, `claude/multiple-video-upload-f88c00`). No se mergearon tal cual: tenían 136 commits de atraso y chocaban con el feed.
+
+- **Canal de audio único** (`src/lib/media/audio-channel.ts`, `src/components/video/use-audio-channel.ts`). Es un store de módulo, no un contexto, porque el parlante es uno solo. Cada fuente reclama o suelta el canal según los eventos REALES del elemento (`play`, `pause`, `volumechange`, `ended`, `emptied`), no según lo que cree el componente. El volumen no cuenta, porque los desvanecidos de la música lo bajan a 0. Al perder el canal, la música se pausa y el video se mutea. `pantalla-de-llamada.tsx` toma `holdAudio("llamada")` mientras hay llamada. En un carrusel con varios videos solo la diapositiva activa puede sonar, y tocar un video que no es el primero abre el visor en ese video (el reel solo conoce el primero). No se inscriben las notas de voz ni `listing-video.tsx`; una llamada en otra pestaña tampoco frena el feed.
+- **Varios videos** solo por el camino del bucket (`posts.media[]`): hasta 10, igual que fotos. Con Mux el tope sigue en 1 (`maxVideosPerPost(muxEnabled)`) porque `posts` guarda un solo video de Mux en columnas propias; varios con Mux necesitarían una tabla nueva. Mux no está configurado en producción. Cada video sube apenas se elige, con a lo sumo 3 subidas a la vez (`src/lib/media/upload-queue.ts`); una subida sin avance por 90 s se corta y Publicar la reintenta. El servidor valida cada ruta con `isOwnVideoPath`, el tope, los duplicados y cada duración (la columna guarda la más larga). Hay huella por video, el poster es solo el del primero, y `bodySizeLimit` pasó a 14mb.
+- Conocido: los videos elegidos y abandonados al cerrar la pestaña quedan en la carpeta de quien los subió. No se borran en `pagehide` porque con bfcache el borrador vuelve apuntando a archivos ya borrados, y el DELETE no viaja con `keepalive`. Pendiente: un barrido periódico de `video-*` sin publicación.
+
 ## Velocidad en toda la app (2026-10-06, rama `claude/full-speed-optimization-6545a1`)
 
 - **La causa número uno era geográfica, no de código:** las funciones de Vercel corrían en `iad1` (Virginia, lo dice `x-vercel-id`) y Supabase vive en `us-west-2` (Oregon). Cada viaje a la base cruzaba el país (~70 ms) y una pantalla hace varios en serie. `vercel.json` ahora fija `"regions": ["pdx1"]`. Si alguna vez se muda el proyecto de Supabase, la región de Vercel se muda con él.

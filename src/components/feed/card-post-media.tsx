@@ -166,7 +166,7 @@ function PostMediaLayers({
    * VIDEO (lo hacía CardVideo): tocar una foto dejaba la música corriendo
    * detrás del visor.
    */
-  const openViewerAt = (startIndex: number) => {
+  const openViewerAt = (startIndex: number, resumeCard?: () => void) => {
     postMusic?.pause();
     viewer.open({
       items,
@@ -181,7 +181,7 @@ function PostMediaLayers({
        * viven juntos en `ViewerVideo.fullVideoHref`.
        */
       fullVideoHref: isLongVideo({ videoType }) ? `/videos/largos/${postId}` : null,
-      onClose: postMusic ? () => postMusic.resume() : undefined,
+      onClose: resumeCard ?? (postMusic ? () => postMusic.resume() : undefined),
     });
   };
   /**
