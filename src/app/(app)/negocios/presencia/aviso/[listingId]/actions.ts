@@ -12,6 +12,7 @@ import { LISTING_PREMIUM_KIND } from "@/lib/monetization/premium-webhook";
 import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
+import { portalConfigurationId } from "@/lib/stripe/portal";
 import { crearCheckoutSession } from "@/lib/stripe/checkout";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 
@@ -240,7 +241,10 @@ export async function abrirPortalPremiumAviso(input: unknown): Promise<PremiumRe
   }
 
   try {
-    const session = await getStripe().billingPortal.sessions.create({
+    const stripe = getStripe();
+    const configuration = await portalConfigurationId(stripe);
+    const session = await stripe.billingPortal.sessions.create({
+      ...(configuration ? { configuration } : {}),
       customer: premium.stripe_customer_id,
       return_url: `${siteUrl()}/negocios/presencia/aviso/${listingId}`,
     });

@@ -70,7 +70,13 @@ function priceRow(
   };
 }
 
-type CuentaDeNegocio = { id: string; name: string; stripe_customer_id: string | null };
+type CuentaDeNegocio = {
+  id: string;
+  name: string;
+  stripe_customer_id: string | null;
+  plan?: string;
+  plan_status?: string;
+};
 
 const UNA_CUENTA: CuentaDeNegocio[] = [
   { id: "biz-1", name: "Panadería", stripe_customer_id: null },
@@ -288,5 +294,25 @@ describe("iniciarSuscripcion — qué negocio se hace verificado", () => {
 
     expect(result).toMatchObject({ status: "redirect" });
     expect(metadata?.business_account_id).toBe("biz-1");
+  });
+});
+
+describe("iniciarSuscripcion — con un plan ya vigente", () => {
+  it("no abre un segundo Checkout: serían dos suscripciones cobrando a la vez", async () => {
+    const { result } = await cobrar({
+      rows: null,
+      cuentas: [
+        {
+          id: "biz-1",
+          name: "Panadería",
+          stripe_customer_id: "cus_rosa",
+          plan: "basico",
+          plan_status: "active",
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({ status: "error" });
+    expect(mocks.sessionsCreate).not.toHaveBeenCalled();
   });
 });

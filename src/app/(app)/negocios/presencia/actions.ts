@@ -4,10 +4,12 @@ import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
 import { getIdentidadActiva } from "@/lib/perfil-activo/identidad";
 import { getPrice } from "@/lib/pricing/read";
-import { PLANES_PRESENCIA } from "@/lib/stripe";
+import { getStripe, PLANES_PRESENCIA } from "@/lib/stripe";
+import { portalConfigurationId } from "@/lib/stripe/portal";
 import { crearCheckoutSession } from "@/lib/stripe/checkout";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getTenant } from "@/lib/tenant/resolve";
+import { COLUMNAS_CUENTA, elegirCuenta, planVigente, type CuentaPresencia } from "./cuenta";
 
 /** Copy de errores del módulo — cálido, sin jerga técnica. */
 const COPY = {
@@ -22,6 +24,12 @@ const COPY = {
    */
   elegiNegocio:
     "Tenés más de un negocio. Cambiá al perfil del negocio que querés hacer verificado —tocá tu foto arriba a la derecha— y volvé a esta pantalla.",
+  elegiNegocioPortal:
+    "Tenés más de un negocio. Cambiá al perfil del negocio cuyo plan querés ver —tocá tu foto arriba a la derecha— y volvé a esta pantalla.",
+  yaTienePlan:
+    "Este negocio ya tiene un plan activo. Para cambiarlo, tocá «Gestionar o cancelar mi plan».",
+  sinPlan:
+    "Todavía no encontramos un plan pagado para este negocio. Si acabás de pagar, esperá unos minutos y volvé a intentar.",
 } as const;
 
 const suscripcionSchema = z.object({
@@ -119,21 +127,24 @@ export async function iniciarSuscripcion(
 
     const { data: propias } = await supabase
       .from("business_accounts")
-      .select("id, name, stripe_customer_id")
+      .select(COLUMNAS_CUENTA)
       .eq("owner_id", user.id)
       .eq("tenant_id", tenant.id)
       .order("created_at", { ascending: true });
 
-    const cuentas = propias ?? [];
-    const existing =
-      identidad.tipo === "negocio"
-        ? cuentas.find((cuenta) => cuenta.id === identidad.negocio.businessId)
-        : cuentas.length === 1
-          ? cuentas[0]
-          : undefined;
+    const cuentas: CuentaPresencia[] = propias ?? [];
+    const elegida = elegirCuenta(identidad, cuentas);
+    const existing = elegida.tipo === "cuenta" ? elegida.cuenta : undefined;
 
     if (!existing && cuentas.length > 1) {
       return { status: "error", message: COPY.elegiNegocio };
+    }
+
+    // Un Checkout nuevo sobre una cuenta con plan vigente abre una SEGUNDA
+    // suscripción: el webhook pisa `stripe_subscription_id` y la vieja sigue
+    // cobrando sin que nada en la app la muestre ni la pueda cancelar.
+    if (planVigente(existing)) {
+      return { status: "error", message: COPY.yaTienePlan };
     }
 
     let businessAccountId = existing?.id ?? null;
@@ -227,6 +238,76 @@ export async function iniciarSuscripcion(
     // Nunca un error técnico crudo al usuario (§5.6). Log sin PII.
     console.error(
       `[pagos] Error creando Checkout Session — tenant=${tenant.slug} plan=${planId}`,
+      error instanceof Error ? error.message : error,
+    );
+    return { status: "error", message: COPY.errorGenerico };
+  }
+}
+
+export type AbrirPortalResult = IniciarSuscripcionResult;
+
+/**
+ * Abre el portal de facturación de Stripe para gestionar o CANCELAR.
+ *
+ * La cancelación vuelve como `customer.subscription.updated` (si es al fin del
+ * período) y después `.deleted`; esta action no escribe nada.
+ */
+export async function abrirPortalPresencia(): Promise<AbrirPortalResult> {
+  const guard = await requireTenantMatch();
+  if (!guard.ok) {
+    if (guard.reason === "unauthenticated") return { status: "sin_sesion" };
+    return { status: "error", message: guard.message };
+  }
+  const { tenant, supabase, user } = guard;
+
+  if (!isStripeConfigured) {
+    console.info(
+      `[pagos] Intento de portal de presencia con Stripe sin configurar — tenant=${tenant.slug}`,
+    );
+    return { status: "no_configurado" };
+  }
+
+  // `owner_id` explícito aunque la RLS ya filtre: la policy de select deja ver
+  // las cuentas ajenas a domain_admin, y un admin no abre el portal de otro.
+  const [identidad, { data: propias, error: selectError }] = await Promise.all([
+    getIdentidadActiva(),
+    supabase
+      .from("business_accounts")
+      .select(COLUMNAS_CUENTA)
+      .eq("owner_id", user.id)
+      .eq("tenant_id", tenant.id)
+      .order("created_at", { ascending: true }),
+  ]);
+
+  if (selectError) {
+    console.error(
+      `[pagos] No se pudo leer business_accounts para el portal — tenant=${tenant.slug} code=${selectError.code ?? "?"}`,
+    );
+    return { status: "error", message: COPY.errorGenerico };
+  }
+
+  const elegida = elegirCuenta(identidad, (propias ?? []) as CuentaPresencia[]);
+  if (elegida.tipo === "ambigua") {
+    return { status: "error", message: COPY.elegiNegocioPortal };
+  }
+  const customer = elegida.tipo === "cuenta" ? elegida.cuenta.stripe_customer_id : null;
+  if (!customer) {
+    return { status: "error", message: COPY.sinPlan };
+  }
+
+  try {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    const stripe = getStripe();
+    const configuration = await portalConfigurationId(stripe);
+    const session = await stripe.billingPortal.sessions.create({
+      ...(configuration ? { configuration } : {}),
+      customer,
+      return_url: `${siteUrl}/negocios/presencia`,
+    });
+    return { status: "redirect", url: session.url };
+  } catch (error) {
+    console.error(
+      `[pagos] Error abriendo el portal de presencia — tenant=${tenant.slug}`,
       error instanceof Error ? error.message : error,
     );
     return { status: "error", message: COPY.errorGenerico };

@@ -25,6 +25,10 @@ const COPY = {
   facturadoAnual: (total: string) => `Facturado ${total} una vez al año`,
   recomendado: "El más elegido",
   elegir: (nombre: string) => `Elegir ${nombre}`,
+  tuPlan: "Tu plan",
+  otrosPlanes: "Así se comparan los planes",
+  cambioDePlan:
+    "Para pasarte a otro plan, primero cancelá el actual desde «Gestionar o cancelar mi plan». Cuando termine, elegí el nuevo acá.",
   notaHonesta:
     "Pagar no cambia tu Trust Score, no altera los resultados del verificador del centro de seguridad y no garantiza conducta: solo mejora la visibilidad de tu negocio en el directorio. Cancelás cuando quieras.",
   errorGenerico:
@@ -49,11 +53,14 @@ export function PlanesPresencia({
   planes,
   precios,
   stripeConfigured,
+  planActual = null,
 }: {
   planes: PlanPresencia[];
   /** Los 6 precios vigentes de la comunidad — la misma lectura que cobra. */
   precios: PreciosPresencia;
   stripeConfigured: boolean;
+  /** Con un plan vigente no se ofrece elegir otro: sería una segunda suscripción. */
+  planActual?: PlanId | null;
 }) {
   const { toast } = useToast();
   const [intervalo, setIntervalo] = useState<Intervalo>("mensual");
@@ -94,6 +101,13 @@ export function PlanesPresencia({
 
   return (
     <div className="mt-6">
+      {planActual && (
+        <div className="mb-5">
+          <h2 className="font-display text-lg font-bold text-foreground">{COPY.otrosPlanes}</h2>
+          <p className="mt-1 text-sm text-foreground-secondary">{COPY.cambioDePlan}</p>
+        </div>
+      )}
+
       {/* Toggle mensual / anual con ahorro visible */}
       <div
         role="group"
@@ -154,11 +168,18 @@ export function PlanesPresencia({
                     {plan.descripcion}
                   </p>
                 </div>
-                {plan.recomendado && (
-                  <Badge variant="brand" className="shrink-0">
-                    <Star size={12} weight="fill" aria-hidden="true" />
-                    {COPY.recomendado}
+                {planActual === plan.id ? (
+                  <Badge variant="success" className="shrink-0">
+                    <Check size={12} weight="bold" aria-hidden="true" />
+                    {COPY.tuPlan}
                   </Badge>
+                ) : (
+                  plan.recomendado && (
+                    <Badge variant="brand" className="shrink-0">
+                      <Star size={12} weight="fill" aria-hidden="true" />
+                      {COPY.recomendado}
+                    </Badge>
+                  )
                 )}
               </div>
 
@@ -202,15 +223,17 @@ export function PlanesPresencia({
                 ))}
               </ul>
 
-              <Button
-                variant={plan.recomendado ? "primary" : "outline"}
-                size="lg"
-                className="w-full"
-                loading={loadingPlan === plan.id}
-                onClick={() => elegirPlan(plan.id)}
-              >
-                {COPY.elegir(plan.nombre)}
-              </Button>
+              {!planActual && (
+                <Button
+                  variant={plan.recomendado ? "primary" : "outline"}
+                  size="lg"
+                  className="w-full"
+                  loading={loadingPlan === plan.id}
+                  onClick={() => elegirPlan(plan.id)}
+                >
+                  {COPY.elegir(plan.nombre)}
+                </Button>
+              )}
             </BezelCard>
           );
         })}
