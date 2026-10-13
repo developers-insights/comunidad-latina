@@ -85,7 +85,7 @@ describe("/legal/reembolsos — lo que Stripe busca en la política de reembolso
     await texto();
     expect(seccion("sin-reembolso")).toMatch(/Compras entre usuarios/);
     expect(seccion("sin-reembolso")).toMatch(/Stripe Identity es gratis/);
-    expect(seccion("contracargos")).toMatch(/puede\s+quedar en pausa/);
+    expect(seccion("contracargos")).toMatch(/lo revisamos junto con Stripe/);
   });
 
   it("no inventa datos que no existen: ni teléfono ni dirección postal", async () => {

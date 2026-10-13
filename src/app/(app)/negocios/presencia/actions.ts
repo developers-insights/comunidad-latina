@@ -5,6 +5,7 @@ import { isStripeConfigured } from "@/lib/config/services";
 import { getIdentidadActiva } from "@/lib/perfil-activo/identidad";
 import { getPrice } from "@/lib/pricing/read";
 import { getStripe, PLANES_PRESENCIA } from "@/lib/stripe";
+import { portalConfigurationId } from "@/lib/stripe/portal";
 import { crearCheckoutSession } from "@/lib/stripe/checkout";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -296,7 +297,10 @@ export async function abrirPortalPresencia(): Promise<AbrirPortalResult> {
 
   try {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-    const session = await getStripe().billingPortal.sessions.create({
+    const stripe = getStripe();
+    const configuration = await portalConfigurationId(stripe);
+    const session = await stripe.billingPortal.sessions.create({
+      ...(configuration ? { configuration } : {}),
       customer,
       return_url: `${siteUrl}/negocios/presencia`,
     });

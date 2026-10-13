@@ -58,7 +58,7 @@ export function MiPlan({
 
       {stripeConfigured && subscriptionId ? (
         <Suspense fallback={<VigenciaEsqueleto />}>
-          <VigenciaYAyuda subscriptionId={subscriptionId} />
+          <VigenciaYAyuda subscriptionId={subscriptionId} pagoPendiente={pagoPendiente} />
         </Suspense>
       ) : (
         <p className="text-sm text-foreground-secondary">{COPY.ayuda(null)}</p>
@@ -69,7 +69,13 @@ export function MiPlan({
   );
 }
 
-async function VigenciaYAyuda({ subscriptionId }: { subscriptionId: string }) {
+async function VigenciaYAyuda({
+  subscriptionId,
+  pagoPendiente,
+}: {
+  subscriptionId: string;
+  pagoPendiente: boolean;
+}) {
   const [vigencia, formatDate] = await Promise.all([
     leerVigencia(subscriptionId),
     getViewerFormatDate(),
@@ -90,7 +96,7 @@ async function VigenciaYAyuda({ subscriptionId }: { subscriptionId: string }) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      {fecha && (
+      {fecha && !pagoPendiente && (
         <p className="numeric text-sm font-medium text-foreground">{COPY.renueva(fecha)}</p>
       )}
       <p className="text-sm text-foreground-secondary">{COPY.ayuda(fecha)}</p>

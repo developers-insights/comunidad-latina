@@ -5,6 +5,7 @@ import { isStripeConfigured } from "@/lib/config/services";
 import { getPrice } from "@/lib/pricing/read";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
+import { portalConfigurationId } from "@/lib/stripe/portal";
 import { crearCheckoutSession } from "@/lib/stripe/checkout";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { COPY } from "@/components/marketplace/copy";
@@ -229,7 +230,10 @@ export async function abrirPortalMembresia(input: unknown): Promise<MembresiaRes
   }
 
   try {
-    const session = await getStripe().billingPortal.sessions.create({
+    const stripe = getStripe();
+    const configuration = await portalConfigurationId(stripe);
+    const session = await stripe.billingPortal.sessions.create({
+      ...(configuration ? { configuration } : {}),
       customer: membership.stripe_customer_id,
       return_url: `${siteUrl()}/marketplace/membresia`,
     });

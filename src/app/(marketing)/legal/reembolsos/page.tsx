@@ -300,8 +300,8 @@ export default async function ReembolsosPage() {
       <LegalSection id="contracargos" title="Si hablás con tu banco">
         <p className={legalProse.p}>
           Si ves un cobro raro, escribinos primero: casi siempre lo resolvemos más rápido que el
-          banco. Si abrís un reclamo (contracargo) con tu banco, el beneficio que pagaste puede
-          quedar en pausa mientras se resuelve.
+          banco. Si abrís un reclamo (contracargo) con tu banco, lo revisamos junto con Stripe
+          y respondemos con la información del cobro.
         </p>
       </LegalSection>
 
