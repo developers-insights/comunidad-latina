@@ -108,11 +108,13 @@ export const COPY = {
     explore: [
       { label: "Propiedades", href: "/propiedades" },
       { label: "Guías", href: "/guias" },
+      { label: "Precios", href: "/precios" },
     ],
     communityTitle: "Comunidad",
     community: [
       { label: "Entrá", href: "/entrar" },
       { label: "Para negocios", href: "/negocios/presencia" },
+      { label: "Contacto", href: "/contacto" },
     ],
     legalTitle: "Legal",
     // Esta lista alimenta el footer Y los cross-links al pie de cada documento
@@ -129,6 +131,7 @@ export const COPY = {
       { label: "Política de cookies", href: "/legal/cookies" },
       { label: "Normas de la comunidad", href: "/legal/normas" },
       { label: "Reglas del Marketplace", href: "/legal/marketplace" },
+      { label: "Cancelación y reembolsos", href: "/legal/reembolsos" },
     ],
     soon: "Pronto",
     disclaimer:

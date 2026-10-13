@@ -23,6 +23,7 @@ const TOC = [
   { id: "lo-que-publicas", label: "Lo que publicás" },
   { id: "verificacion", label: "Sobre la verificación" },
   { id: "vivienda-y-negocios", label: "Vivienda, negocios y acuerdos entre usuarios" },
+  { id: "pagos", label: "Pagos, cancelación y reembolsos" },
   { id: "moderacion", label: "Moderación, reportes y sanciones" },
   { id: "borrar-tu-cuenta", label: "Borrar tu cuenta" },
   { id: "cambios", label: "Cambios a estos Términos" },
@@ -190,6 +191,26 @@ export default async function TerminosPage() {
         <p className={legalProse.p}>
           Cualquier acuerdo lo cierran las partes directamente, fuera de la plataforma, bajo su
           propia responsabilidad.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="pagos" title="Pagos, cancelación y reembolsos">
+        <p className={legalProse.p}>
+          Algunas funciones son pagas, como las suscripciones para negocios o los impulsos de un
+          aviso. Los precios están en dólares estadounidenses (USD) y los cobra Stripe: nosotros
+          no guardamos los datos de tu tarjeta.
+        </p>
+        <p className={legalProse.p}>
+          Las suscripciones se renuevan solas y las podés cancelar cuando quieras: no te volvemos
+          a cobrar y el beneficio sigue hasta el fin del período que ya pagaste. Cuándo te
+          devolvemos el dinero y cómo pedirlo está en la{" "}
+          <Link
+            href="/legal/reembolsos"
+            className="font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 hover:decoration-brand-ink"
+          >
+            Política de cancelación y reembolsos
+          </Link>
+          .
         </p>
       </LegalSection>
 
