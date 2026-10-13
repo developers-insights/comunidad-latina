@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { PRICE_SLOTS, parseAmountToCents, slotKey, AMOUNT_ERROR_COPY } from "@/lib/pricing";
 import { normalizeCurrency } from "@/lib/pricing/money";
@@ -130,6 +130,7 @@ export async function saveTenantPrice(
   });
 
   revalidatePath("/admin/global/precios");
+  revalidateTag("tenant-prices", "max");
 
   const shown = `${currency} ${(amount.cents / 100).toFixed(2)}`;
   return { status: "success", message: COPY.saved(slot.label, shown) };
