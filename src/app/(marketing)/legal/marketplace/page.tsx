@@ -4,6 +4,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { JsonLd } from "@/components/marketing/json-ld";
 import {
   LegalCallout,
+  LegalContact,
   LegalHeader,
   LegalSection,
   LegalToc,
@@ -353,7 +354,7 @@ export default async function MarketplaceLegalPage() {
         </p>
         <p className={legalProse.p}>
           Para reclamos de propiedad intelectual, apelaciones o cualquier duda sobre estas
-          Reglas, escribinos a [correo de contacto legal — completar].
+          Reglas, escribinos a <LegalContact />.
         </p>
       </LegalSection>
     </article>

@@ -1,9 +1,12 @@
 import { SealCheck } from "@phosphor-icons/react/dist/ssr";
 import { Banner } from "@/components/ui";
 import { isStripeConfigured } from "@/lib/config/services";
+import { getIdentidadActiva } from "@/lib/perfil-activo/identidad";
 import { PLAN_IDS, PLANES_PRESENCIA } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { COLUMNAS_CUENTA, elegirCuenta, planVigente, type CuentaPresencia } from "./cuenta";
+import { MiPlan } from "./mi-plan";
 import { PlanesPresencia } from "./planes-presencia";
 import { leerPreciosPresencia } from "./precios";
 import { SectionTopBar } from "@/components/shell";
@@ -33,7 +36,11 @@ export default async function PresenciaPage({
   // Si esto fallara, `getTenantPrices` ya cae a las constantes del código: la
   // pantalla nunca queda sin precio (§7).
   const [tenant, supabase] = await Promise.all([getTenant(), createClient()]);
-  const precios = await leerPreciosPresencia(supabase, tenant.id);
+  const [precios, cuenta] = await Promise.all([
+    leerPreciosPresencia(supabase, tenant.id),
+    leerCuentaPropia(supabase, tenant.id),
+  ]);
+  const plan = planVigente(cuenta);
 
   return (
     <>
@@ -59,11 +66,44 @@ export default async function PresenciaPage({
       </h1>
       <p className="mt-1 text-sm text-foreground-secondary">{COPY.subtitulo}</p>
 
+      {plan && cuenta && (
+        <MiPlan
+          plan={plan}
+          planStatus={cuenta.plan_status ?? null}
+          subscriptionId={cuenta.stripe_subscription_id ?? null}
+          stripeConfigured={isStripeConfigured}
+        />
+      )}
+
       <PlanesPresencia
         planes={PLAN_IDS.map((id) => PLANES_PRESENCIA[id])}
         precios={precios}
         stripeConfigured={isStripeConfigured}
+        planActual={plan}
       />
     </>
   );
+}
+
+/** Misma elección de cuenta que `iniciarSuscripcion` y `abrirPortalPresencia`. */
+async function leerCuentaPropia(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+): Promise<CuentaPresencia | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const [identidad, { data }] = await Promise.all([
+    getIdentidadActiva(),
+    supabase
+      .from("business_accounts")
+      .select(COLUMNAS_CUENTA)
+      .eq("owner_id", user.id)
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true }),
+  ]);
+  const elegida = elegirCuenta(identidad, (data ?? []) as CuentaPresencia[]);
+  return elegida.tipo === "cuenta" ? elegida.cuenta : null;
 }

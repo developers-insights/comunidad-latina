@@ -24,6 +24,7 @@ export interface PriceBlock {
   summary: string;
   billing: Billing;
   lines: PriceLine[];
+  addOns?: { title: string; lines: PriceLine[] };
   notes: string[];
   cta: { label: string; href: string };
 }
@@ -137,20 +138,23 @@ export function buildPriceGroups(prices: readonly ResolvedPrice[]): PriceGroup[]
       "Pone tu aviso al frente de los resultados por unos días. Se marca como publicidad.",
     billing: "unico",
     lines: durationLines(prices, "boost"),
-    notes: [
-      "Al precio de los días se le suma un recargo según hasta dónde querés llegar:",
-      ...(["local", "nacional", "global"] as const).map((scope) => {
-        const label = { local: "Tu zona", nacional: "Todo el país", global: "Todas las comunidades" }[
-          scope
-        ];
+    addOns: {
+      title: "Más el recargo por alcance",
+      lines: (["local", "nacional", "global"] as const).flatMap((scope) => {
         const price = findPrice(prices, "boost_scope", scope, "unico");
-        const value =
-          !price || price.amountCents === 0
-            ? "sin recargo"
-            : `+ ${formatCents(price.amountCents, price.currency)}`;
-        return `${label}: ${value}`;
+        if (!price) return [];
+        return [
+          {
+            label: price.label,
+            amount:
+              price.amountCents === 0
+                ? "Sin recargo"
+                : `+ ${formatCents(price.amountCents, price.currency)}`,
+          },
+        ];
       }),
-    ],
+    },
+    notes: [],
     cta: { label: "Impulsar un aviso", href: "/impulsar" },
   };
 

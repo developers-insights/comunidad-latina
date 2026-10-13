@@ -87,7 +87,7 @@ export default async function ContactoPage() {
 
         <div className="mt-8 overflow-hidden rounded-xl border border-border-subtle bg-[radial-gradient(120%_90%_at_0%_0%,var(--color-brand-tint),transparent_60%)] p-3 sm:p-5">
           <div className="rounded-lg border border-border bg-surface p-5 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_12px_32px_-16px_rgba(0,0,0,0.18)] sm:p-6">
-            <div className="flex items-start gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
               <span
                 aria-hidden="true"
                 className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-tint text-brand-ink"

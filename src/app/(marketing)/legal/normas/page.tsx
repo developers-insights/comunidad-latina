@@ -4,6 +4,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { JsonLd } from "@/components/marketing/json-ld";
 import {
   LegalCallout,
+  LegalContact,
   LegalHeader,
   LegalSection,
   LegalToc,
@@ -182,8 +183,7 @@ export default async function NormasPage() {
 
       <LegalSection id="contacto" title="Contacto">
         <p className={legalProse.p}>
-          Si algo no te cierra o querés apelar una decisión de moderación, escribinos a [correo de
-          contacto legal — completar].
+          Si algo no te cierra o querés apelar una decisión de moderación, escribinos a <LegalContact />.
         </p>
       </LegalSection>
     </article>
