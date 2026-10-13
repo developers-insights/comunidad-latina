@@ -1,5 +1,12 @@
 # PROGRESS — Comunidad Latina
 
+## Web lista para la revisión de Stripe (2026-10-12, PR #4)
+
+- Públicas sin login: `/precios` (todos los productos con el precio del tenant vía `tenant_public_prices`, cache 300 s con tag `tenant-prices`), `/contacto`, `/legal/reembolsos`, y sección `#pagos` en Términos. Pie con links a las tres.
+- Presencia Verificada ya se gestiona/cancela sola (`abrirPortalPresencia`) y no deja abrir un segundo Checkout con un plan vigente (antes la vieja suscripción seguía cobrando sin poder cancelarse).
+- Los 4 portales de facturación usan `src/lib/stripe/portal.ts`: config propia buscada por metadata `uso=suscripciones-comunidad`, sin cambio de plan (los webhooks no sincronizan el plan desde `.updated` y los precios son `price_data` inline) y cancelación al fin del período, como promete la política.
+- Pendiente del cliente: dirección postal y estado de la LLC (`LEGAL_GOVERNING_STATE` sigue `null`), correo del dominio en vez de `comunidadlatinallc@gmail.com`, confirmar que `STRIPE_SECRET_KEY` de producción es live. Cambiar de plan en Presencia hoy es cancelar y esperar al fin del período.
+
 ## Música sin superposición + varios videos por publicación (2026-10-08, PR #3)
 
 Portadas al código actual las dos ramas WIP del 26/08 (`claude/community-feed-music-playback-90c5d0`, `claude/multiple-video-upload-f88c00`). No se mergearon tal cual: tenían 136 commits de atraso y chocaban con el feed.
