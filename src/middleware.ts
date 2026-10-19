@@ -164,6 +164,6 @@ export const config = {
      * - favicon, sw.js, manifest (PWA)
      * - archivos de imagen/fuente estáticos
      */
-    "/((?!_next/static|_next/image|favicon\\.ico|sw\\.js|manifest\\.webmanifest|images/|icons/|fonts/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?)$).*)",
+    "/((?!_next/static|\\.well-known/|_next/image|favicon\\.ico|sw\\.js|manifest\\.webmanifest|images/|icons/|fonts/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?)$).*)",
   ],
 };
