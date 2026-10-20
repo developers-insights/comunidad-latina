@@ -229,9 +229,10 @@ export default async function PrivacidadPage() {
         <ul className={legalProse.ul}>
           <li>
             <strong className={legalProse.strong}>Para revisar lo que se publica.</strong> Cuando
-            alguien publica un aviso o una foto, el texto se manda a OpenAI y la imagen a Google
-            Cloud Vision para detectar estafas, violencia o contenido prohibido. Es automático y
-            pasa con todo lo que se publica.
+            alguien publica un aviso o un mensaje, el texto se manda a OpenAI para detectar
+            estafas, violencia o contenido prohibido. Es automático y pasa con todo lo que se
+            publica. Las fotos y los videos no van a ningún sistema automático: los revisa una
+            persona de nuestro equipo antes de que se vean.
           </li>
           <li>
             <strong className={legalProse.strong}>Para responder tus preguntas.</strong> Si usás
@@ -281,8 +282,7 @@ export default async function PrivacidadPage() {
             número y el mensaje con el código, nada más.
           </li>
           <li>
-            <strong className={legalProse.strong}>OpenAI</strong>,{" "}
-            <strong className={legalProse.strong}>Google Cloud Vision</strong> y{" "}
+            <strong className={legalProse.strong}>OpenAI</strong> y{" "}
             <strong className={legalProse.strong}>Anthropic</strong> — lo explicado arriba sobre
             inteligencia artificial.
           </li>

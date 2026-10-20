@@ -23,7 +23,7 @@ plugins {
 def twaManifest = [
     applicationId: 'com.comunidadlatina.app',
     hostName: 'www.comunidadlatina.com', // The domain being opened in the TWA.
-    launchUrl: '/feed', // The start path for the TWA. Must be relative to the domain.
+    launchUrl: '/feed?origen=android', // The start path for the TWA. Must be relative to the domain.
     name: 'Comunidad Latina', // The application name.
     launcherName: 'Comunidad', // The name shown on the Android Launcher.
     themeColor: '#1A5EDB', // The color used for the status bar.
@@ -57,7 +57,7 @@ android {
         applicationId "com.comunidadlatina.app"
         minSdkVersion 24
         targetSdkVersion 36
-        versionCode 1
+        versionCode 2
         versionName "1.0.0"
 
         // The name for the application

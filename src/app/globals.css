@@ -1270,3 +1270,11 @@
     display: none;
   }
 }
+
+/* Pantallas de compra adentro de la app de Android: ver components/canal/canal-app.tsx. */
+html[data-canal="android"] [data-solo-web] {
+  display: none !important;
+}
+html[data-canal="android"] [data-aviso-app] {
+  display: block !important;
+}

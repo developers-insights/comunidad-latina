@@ -8,6 +8,7 @@ import { MotionProvider } from "@/components/motion/motion-provider";
 import { SplashScreen } from "@/components/experience/splash-screen";
 import { ConsentBanner } from "@/components/legal/consent-banner";
 import { DARK_THEME_COLOR, ThemeColorSync, ThemeScript } from "@/components/theme";
+import { CanalScript } from "@/components/canal/canal-app";
 import "./globals.css";
 
 // Display: General Sans variable (Fontshare), self-hosted en src/fonts/.
@@ -96,6 +97,7 @@ export default async function RootLayout({
         {/* Antes del primer paint: estampa .light/.dark en <html> y deja el
             <meta name="theme-color"> en el color del tema resuelto. */}
         <ThemeScript brandHex={tenant.brandHex} />
+        <CanalScript />
       </head>
       <body className="flex min-h-full flex-col bg-canvas font-sans text-foreground">
         {/* LazyMotion: carga las features de animación async → `m` (todo el árbol)

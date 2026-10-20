@@ -73,3 +73,6 @@ supabase/.branches/
 .vercel
 .env*
 !.env.example
+
+# Íconos y splash de la app de Android (los genera bubblewrap; sin ellos gradle no compila).
+!android-twa/app/src/main/res/**/*.png

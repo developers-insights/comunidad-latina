@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SectionTopBar } from "@/components/shell";
+import { SoloEnLaWeb } from "@/components/canal/canal-app";
 
 /**
  * Impulsar una publicación — la salida de la pantalla.
@@ -15,7 +16,7 @@ export default function ImpulsarPostLayout({ children }: { children: ReactNode }
   return (
     <>
       <SectionTopBar fallbackHref="/feed" />
-      {children}
+      <SoloEnLaWeb>{children}</SoloEnLaWeb>
     </>
   );
 }

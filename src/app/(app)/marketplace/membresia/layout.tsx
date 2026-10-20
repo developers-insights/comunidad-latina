@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SectionTopBar } from "@/components/shell";
+import { SoloEnLaWeb } from "@/components/canal/canal-app";
 
 /**
  * Membresía de tienda — la salida de la pantalla.
@@ -14,7 +15,7 @@ export default function MembresiaLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <SectionTopBar fallbackHref="/marketplace" />
-      {children}
+      <SoloEnLaWeb>{children}</SoloEnLaWeb>
     </>
   );
 }
