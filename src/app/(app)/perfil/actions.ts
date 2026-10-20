@@ -22,6 +22,7 @@ import {
 import { PRIVACY_LEVELS, normalizePrivacy } from "@/lib/profile/privacy";
 import { MIN_AGE, ageFromBirthdate } from "@/lib/profile/age";
 import { isKnownTimeZone } from "@/lib/time/timezone";
+import { SUPPORT_EMAIL } from "@/lib/support/contact";
 
 const COPY = {
   nameShort: "Contanos cómo te llamás (al menos 2 letras).",
@@ -53,7 +54,8 @@ const COPY = {
   tooManyReports:
     "Hiciste varios reportes hoy y ya los estamos mirando. Volvé mañana si necesitás sumar otro — así el equipo llega a revisarlos bien.",
   businessAccountBlocked:
-    "Tenés un negocio activo en la plataforma — antes de eliminar tu cuenta hay que dar de baja esa suscripción. Escribinos a hola@comunidadlatina.com y te ayudamos a resolverlo.",
+    `Tenés un negocio activo en la plataforma — antes de eliminar tu cuenta hay que dar de baja esa suscripción. Escribinos a ${SUPPORT_EMAIL} y te ayudamos a resolverlo.`,
+  contractsBlocked: `Participaste en contratos de trabajo de la plataforma y esos registros los tenemos que conservar. Escribinos a ${SUPPORT_EMAIL} desde el correo de tu cuenta y la damos de baja por vos.`,
 } as const;
 
 function firstIssuePerField(issues: z.core.$ZodIssue[]): Record<string, string> {
@@ -672,6 +674,25 @@ export async function deleteAccountAction(): Promise<ActionResult> {
       });
       return { ok: false, formError: COPY.genericError };
     }
+  }
+
+  // gig_contracts (0024) y gig_contract_signatures (0165) apuntan a profiles
+  // sin ON DELETE: son registros contractuales firmados y las firmas son
+  // inmutables, así que no se pueden anonimizar ni cascadear. Sin este chequeo
+  // deleteUser revienta con foreign_key_violation y la persona ve "probá de
+  // nuevo". La baja de quien tiene contratos se hace a mano desde soporte.
+  const { count: contratos, error: contratosError } = await admin
+    .from("gig_contracts")
+    .select("id", { count: "exact", head: true })
+    .or(`client_id.eq.${user.id},creator_id.eq.${user.id}`);
+  if (contratosError) {
+    console.error("[perfil] deleteAccount: no se pudieron contar contratos", {
+      code: contratosError.code,
+    });
+    return { ok: false, formError: COPY.genericError };
+  }
+  if ((contratos ?? 0) > 0) {
+    return { ok: false, formError: COPY.contractsBlocked };
   }
 
   const storageCleanup = await collectStorageCleanup(admin, user.id);

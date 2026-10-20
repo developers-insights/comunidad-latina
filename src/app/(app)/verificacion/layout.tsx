@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SectionTopBar } from "@/components/shell";
+import { SoloEnLaWeb } from "@/components/canal/canal-app";
 
 /**
  * El check azul — la salida de la pantalla.
@@ -14,7 +15,7 @@ export default function VerificacionLayout({ children }: { children: ReactNode }
   return (
     <>
       <SectionTopBar fallbackHref="/perfil" />
-      {children}
+      <SoloEnLaWeb>{children}</SoloEnLaWeb>
     </>
   );
 }
