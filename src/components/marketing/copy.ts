@@ -133,6 +133,7 @@ export const COPY = {
       { label: "Reglas del Marketplace", href: "/legal/marketplace" },
       { label: "Cancelación y reembolsos", href: "/legal/reembolsos" },
       { label: "Eliminar tu cuenta", href: "/legal/eliminar-cuenta" },
+      { label: "Seguridad infantil", href: "/legal/seguridad-infantil" },
     ],
     soon: "Pronto",
     disclaimer:
