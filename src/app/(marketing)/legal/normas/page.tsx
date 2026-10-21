@@ -113,6 +113,16 @@ export default async function NormasPage() {
             no solicitada, avisos falsos, precios irreales o cuentas duplicadas.
           </li>
           <li>
+            <strong className={legalProse.strong}>Cualquier contenido que sexualice o ponga en
+            riesgo a menores</strong>
+            {" — "}tolerancia cero: se borra, la cuenta se cierra para siempre y lo denunciamos a
+            las autoridades. Ver{" "}
+            <Link href="/legal/seguridad-infantil" className="font-medium text-brand-ink underline decoration-brand-subtle underline-offset-2 hover:decoration-brand-ink">
+              Seguridad infantil
+            </Link>
+            .
+          </li>
+          <li>
             <strong className={legalProse.strong}>Contenido ilegal</strong> — cualquier cosa que
             viole la ley, incluida la venta de bienes o servicios ilegales.
           </li>
