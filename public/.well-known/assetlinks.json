@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "com.comunidadlatina.app",
       "sha256_cert_fingerprints": [
-        "CC:9D:05:3C:63:E9:FC:A3:1B:32:BF:86:B6:4D:E2:61:94:4C:90:FB:D7:A8:19:1A:F6:81:21:6F:5A:72:01:FB"
+        "CC:9D:05:3C:63:E9:FC:A3:1B:32:BF:86:B6:4D:E2:61:94:4C:90:FB:D7:A8:19:1A:F6:81:21:6F:5A:72:01:FB",
+        "22:FA:12:3B:46:D0:E4:C6:23:EB:38:93:2F:96:E6:BD:A3:92:15:20:DC:0C:83:2E:3A:13:59:DF:E3:6D:D6:59"
       ]
     }
   }
