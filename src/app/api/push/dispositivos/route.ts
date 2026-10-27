@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { guardarTokenPush } from "@/lib/push/cookie";
 
 export const runtime = "nodejs";
 
@@ -40,20 +41,6 @@ export async function POST(request: Request) {
     console.error("[push] no se pudo registrar el dispositivo", { code: error.code });
     return NextResponse.json({ error: "No se pudo registrar" }, { status: 500 });
   }
-  return NextResponse.json({ ok: true });
-}
-
-/** Baja al cerrar sesión: el teléfono deja de recibir los avisos de esta cuenta. */
-export async function DELETE(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: true });
-
-  const parsed = bodySchema.pick({ token: true }).safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Token inválido" }, { status: 400 });
-
-  await supabase.from("push_devices").delete().eq("token", parsed.data.token.toLowerCase());
+  await guardarTokenPush(parsed.data.token.toLowerCase());
   return NextResponse.json({ ok: true });
 }
