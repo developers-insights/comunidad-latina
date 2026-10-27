@@ -102,7 +102,7 @@ export function OAuthButtons({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div data-oculto-ios className="flex flex-col gap-3">
       {withDivider && <AuthDivider label={COPY.divider} />}
 
       <FormError>{error}</FormError>

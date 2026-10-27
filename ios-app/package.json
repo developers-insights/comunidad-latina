@@ -1,0 +1,25 @@
+{
+  "name": "comunidad-latina-ios",
+  "private": true,
+  "version": "1.0.0",
+  "description": "App de iOS de Comunidad Latina: Capacitor sobre www.comunidadlatina.com con push nativo",
+  "scripts": {
+    "sync": "cap sync ios",
+    "assets": "capacitor-assets generate --ios --iconBackgroundColor '#FCFCFB' --splashBackgroundColor '#FCFCFB'"
+  },
+  "dependencies": {
+    "@capacitor/app": "8.1.2",
+    "@capacitor/browser": "8.0.5",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/haptics": "8.0.2",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/push-notifications": "8.1.3",
+    "@capacitor/share": "8.0.3",
+    "@capacitor/splash-screen": "8.0.2",
+    "@capacitor/status-bar": "8.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "8.5.3"
+  }
+}

@@ -163,7 +163,7 @@ export function InstallPrompt() {
 
   return (
     <>
-      <div className="pointer-events-none fixed inset-x-0 bottom-24 z-40 px-4 pb-[env(safe-area-inset-bottom)]">
+      <div data-solo-web className="pointer-events-none fixed inset-x-0 bottom-24 z-40 px-4 pb-[env(safe-area-inset-bottom)]">
         <div className="pointer-events-auto mx-auto max-w-lg overflow-hidden rounded-xl bg-surface-raised shadow-lg ring-1 ring-border">
           <Banner
             variant="info"

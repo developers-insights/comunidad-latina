@@ -1272,9 +1272,15 @@
 }
 
 /* Pantallas de compra adentro de la app de Android: ver components/canal/canal-app.tsx. */
-html[data-canal="android"] [data-solo-web] {
+html[data-canal] [data-solo-web] {
   display: none !important;
 }
-html[data-canal="android"] [data-aviso-app] {
+html[data-canal] [data-aviso-app] {
   display: block !important;
+}
+/* Google bloquea su login dentro de WKWebView (disallowed_useragent) y, si
+   se ofrece, Apple exige Sign in with Apple (4.8): en la app de iOS se entra
+   con email. */
+html[data-canal="ios"] [data-oculto-ios] {
+  display: none !important;
 }

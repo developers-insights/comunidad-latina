@@ -5323,6 +5323,41 @@ export type Database = {
           },
         ]
       }
+      push_devices: {
+        Row: {
+          created_at: string
+          id: string
+          last_seen_at: string
+          platform: string
+          profile_id: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          platform: string
+          profile_id: string
+          token: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          platform?: string
+          profile_id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_devices_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rag_chunks: {
         Row: {
           chunk_index: number
