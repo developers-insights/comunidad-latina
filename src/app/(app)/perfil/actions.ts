@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { DAY_MS, limit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
+import { soltarTokenPush } from "@/lib/push/cookie";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { COUNTRY_CODES } from "@/components/auth/countries";
 import type { ActionResult } from "@/components/auth/action-result";
@@ -513,6 +514,10 @@ export async function updateTimeZoneAction(
 
 export async function signOutAction(): Promise<void> {
   const supabase = await createClient();
+  // Antes del signOut: con la sesión todavía viva la RLS deja borrar el propio
+  // dispositivo, y el teléfono deja de recibir los avisos de esta cuenta.
+  const pushToken = await soltarTokenPush();
+  if (pushToken) await supabase.from("push_devices").delete().eq("token", pushToken);
   await supabase.auth.signOut();
   redirect("/entrar");
 }

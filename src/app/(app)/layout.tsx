@@ -20,6 +20,7 @@ import { AccountGate } from "@/components/shell/account-gate";
 import { InternalHistoryTracker } from "@/components/shell/internal-history-tracker";
 import { PresenceBeat } from "@/components/messaging/presence-beat";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { PushNativo } from "@/components/canal/push-nativo";
 import { isMuxConfigured } from "@/lib/config/services";
 import { getAuthUserId } from "@/lib/supabase/server";
 import { getZonaActiva } from "@/lib/zona/server";
@@ -194,6 +195,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         unread={shell.unread}
       />
       <InstallPrompt />
+      {viewerId ? <PushNativo /> : null}
       {/* El timbre va en el shell y no en /llamadas (2026-10-06): montado sólo
           allá, una llamada a alguien que estaba en el feed o en un chat no sonaba
           nunca y quedaba "perdida" sin que nadie pidiera token. */}

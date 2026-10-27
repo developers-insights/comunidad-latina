@@ -2,9 +2,10 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 /**
- * Canal "app de Android" (la TWA de Google Play, `android-twa/`).
+ * Canal "app de tienda": la TWA de Google Play (`android-twa/`, data-canal="android")
+ * y la app de iOS con Capacitor (`ios-app/`, data-canal="ios").
  *
- * Google Play no deja vender bienes digitales (impulsos, check azul, membresías,
+ * Google Play y Apple no dejan vender bienes digitales (impulsos, check azul, membresías,
  * Presencia Verificada) con un cobro propio dentro de una app de Play, ni
  * mandar a pagar afuera sin estar inscripto en su programa de links externos.
  * Por eso, adentro de la app, las pantallas de compra muestran un aviso en vez
@@ -12,7 +13,8 @@ import Link from "next/link";
  *
  * Cómo se detecta, antes del primer paint y sin flash: la TWA abre
  * `/feed?origen=android` (launchUrl en android-twa) y Chrome manda el referrer
- * `android-app://com.comunidadlatina.app`. Se guarda en sessionStorage y NO en
+ * `android-app://com.comunidadlatina.app`; la app de iOS abre `/feed?origen=ios`
+ * y además Capacitor inyecta `window.Capacitor` en el WKWebView. Se guarda en sessionStorage y NO en
  * una cookie a propósito: la TWA comparte cookies con el Chrome del celular, y
  * con cookie las compras quedarían escondidas también en el navegador normal.
  * sessionStorage es por pestaña, y la TWA es su propia pestaña.
@@ -21,7 +23,7 @@ import Link from "next/link";
 const CANAL_KEY = "cl-canal";
 const ANDROID_PACKAGE = "com.comunidadlatina.app";
 
-export const canalScriptSource = `(function(){try{var s=window.sessionStorage,q=new URLSearchParams(location.search);if(q.get("origen")==="android"||document.referrer.indexOf("android-app://${ANDROID_PACKAGE}")===0){s.setItem("${CANAL_KEY}","android")}if(s.getItem("${CANAL_KEY}")==="android"){document.documentElement.setAttribute("data-canal","android")}}catch(e){}})();`;
+export const canalScriptSource = `(function(){try{var s=window.sessionStorage,q=new URLSearchParams(location.search),o=q.get("origen");if(o==="android"||document.referrer.indexOf("android-app://${ANDROID_PACKAGE}")===0){s.setItem("${CANAL_KEY}","android")}if(o==="ios"||(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatform()==="ios")){s.setItem("${CANAL_KEY}","ios")}var c=s.getItem("${CANAL_KEY}");if(c==="android"||c==="ios"){document.documentElement.setAttribute("data-canal",c)}}catch(e){}})();`;
 
 export function CanalScript() {
   return <script dangerouslySetInnerHTML={{ __html: canalScriptSource }} />;

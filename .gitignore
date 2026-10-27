@@ -76,3 +76,7 @@ supabase/.branches/
 
 # Íconos y splash de la app de Android (los genera bubblewrap; sin ellos gradle no compila).
 !android-twa/app/src/main/res/**/*.png
+
+# Ícono fuente de la app de iOS (lo consume @capacitor/assets).
+!ios-app/assets/*.png
+!ios-app/ios/App/App/Assets.xcassets/**/*.png

@@ -28,6 +28,21 @@ describe("canalScriptSource", () => {
     expect(document.documentElement.getAttribute("data-canal")).toBe("android");
   });
 
+  it("marca la app de iOS cuando abre con ?origen=ios", () => {
+    window.history.replaceState(null, "", "/feed?origen=ios");
+    correrScript();
+    expect(document.documentElement.getAttribute("data-canal")).toBe("ios");
+  });
+
+  it("marca la app de iOS cuando Capacitor está presente", () => {
+    const w = window as unknown as { Capacitor?: unknown };
+    w.Capacitor = { getPlatform: () => "ios" };
+    window.history.replaceState(null, "", "/feed");
+    correrScript();
+    delete w.Capacitor;
+    expect(document.documentElement.getAttribute("data-canal")).toBe("ios");
+  });
+
   it("no toca nada en el navegador normal", () => {
     window.history.replaceState(null, "", "/verificacion");
     correrScript();
