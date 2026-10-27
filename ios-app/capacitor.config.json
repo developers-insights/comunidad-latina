@@ -5,11 +5,13 @@
   "server": {
     "url": "https://www.comunidadlatina.com/feed?origen=ios",
     "errorPath": "offline.html",
-    "allowNavigation": ["www.comunidadlatina.com", "comunidadlatina.com"]
+    "allowNavigation": [
+      "www.comunidadlatina.com",
+      "comunidadlatina.com"
+    ]
   },
   "ios": {
     "contentInset": "never",
-    "limitsNavigationsToAppBoundDomains": true,
     "backgroundColor": "#FCFCFB",
     "scheme": "Comunidad Latina"
   },
@@ -21,7 +23,11 @@
       "showSpinner": false
     },
     "PushNotifications": {
-      "presentationOptions": ["badge", "sound", "alert"]
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
     }
   }
 }

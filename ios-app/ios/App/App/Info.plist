@@ -76,10 +76,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>WKAppBoundDomains</key>
-	<array>
-		<string>www.comunidadlatina.com</string>
-		<string>comunidadlatina.com</string>
-	</array>
 </dict>
 </plist>
