@@ -30,7 +30,7 @@ export function AppShellSkeleton() {
       className="flex min-h-dvh flex-col bg-canvas"
     >
       {/* Header sticky del shell */}
-      <div className="sticky top-0 z-10 border-b border-border-subtle bg-surface/85 backdrop-blur-md">
+      <div className="sticky top-0 z-10 border-b border-border-subtle bg-surface/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-lg items-center justify-between px-4">
           <Skeleton className="h-6 w-32 rounded-md" />
           <div className="flex items-center gap-2">

@@ -97,7 +97,7 @@ export function SectionTopBar({
   return (
     <div
       className={cn(
-        "sticky top-[59px] z-30 -mx-4 -mt-4 mb-3 flex min-h-12 items-center gap-2",
+        "sticky top-[calc(59px+env(safe-area-inset-top))] z-30 -mx-4 -mt-4 mb-3 flex min-h-12 items-center gap-2",
         "border-b border-border-subtle bg-canvas/90 px-2 backdrop-blur-md",
         className,
       )}

@@ -155,7 +155,7 @@ export function GlobalSearch({ historyKey, zones = [], className }: GlobalSearch
           al pasar por debajo. */}
       <div
         role="search"
-        className="sticky top-[59px] z-30 -mx-4 bg-canvas px-4 pb-3 pt-1"
+        className="sticky top-[calc(59px+env(safe-area-inset-top))] z-30 -mx-4 bg-canvas px-4 pb-3 pt-1"
       >
         {/* Double-bezel (§5): carcasa mate + núcleo concéntrico. Le da a la
             barra el mismo peso físico que las tarjetas de confianza. */}

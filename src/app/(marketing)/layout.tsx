@@ -18,7 +18,7 @@ export default async function MarketingLayout({ children }: { children: ReactNod
       >
         Saltar al contenido
       </a>
-      <header className="sticky top-0 z-40 border-b border-border-subtle bg-surface/85 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-border-subtle bg-surface/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-4">
           <Link
             href="/"

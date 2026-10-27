@@ -81,7 +81,7 @@ export async function Header({ tenant, className }: { tenant: Tenant; className?
   // Single-community: si el tenant no trae logo propio, cae al logo de la
   // plataforma (las tres figuras azul·amarillo·rojo).
   const logoSrc = tenant.logoUrl ?? "/brand/logo-mark.png";
-  const headerClass = ["bg-surface/85 backdrop-blur-md", className]
+  const headerClass = ["bg-surface/85 pt-[env(safe-area-inset-top)] backdrop-blur-md", className]
     .filter(Boolean)
     .join(" ");
 
