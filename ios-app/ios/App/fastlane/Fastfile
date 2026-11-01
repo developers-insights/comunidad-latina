@@ -1,0 +1,40 @@
+default_platform(:ios)
+APP_ID = "com.comunidadlatina.app".freeze
+
+platform :ios do
+  lane :release do
+    key = app_store_connect_api_key(
+      key_id: "VHQNBVM7VS",
+      issuer_id: ENV.fetch("CL_ISS"),
+      key_filepath: File.expand_path("~/.appstoreconnect/private_keys/AuthKey_VHQNBVM7VS.p8"),
+      in_house: false,
+    )
+    kc_db = "cl-ci.keychain-db"
+    kc_path = File.expand_path("~/Library/Keychains/#{kc_db}")
+    kc_pw = ENV.fetch("CL_KC_PW")
+    prev = sh("security list-keychains -d user", log: false).split("\n").map { |l| l.strip.delete('"') }.reject(&:empty?)
+    begin
+      unless File.exist?(kc_path)
+        sh("security create-keychain -p #{kc_pw} #{kc_db}", log: false)
+      end
+      sh("security set-keychain-settings -lut 21600 #{kc_db}", log: false)
+      sh("security unlock-keychain -p #{kc_pw} #{kc_db}", log: false)
+      sh("security find-certificate -a -c 'Apple Worldwide Developer Relations' -p #{File.expand_path('~/Library/Keychains/login.keychain-db')} > /tmp/wwdr.pem", log: false)
+      sh("security import /tmp/wwdr.pem -k #{kc_path} 2>/dev/null; true", log: false)
+      sh("security list-keychains -d user -s #{kc_db}", log: false)
+      cert(api_key: key, keychain_path: kc_path, keychain_password: kc_pw, output_path: File.expand_path("certs"))
+      sigh(api_key: key, app_identifier: APP_ID, platform: "ios", output_path: File.expand_path("certs"))
+      sh("security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k #{kc_pw} #{kc_db}", log: false)
+      profile_name = lane_context[SharedValues::SIGH_NAME]
+      update_code_signing_settings(use_automatic_signing: false, path: "App.xcodeproj", team_id: "T82842D44Y",
+        code_sign_identity: "Apple Distribution", profile_name: profile_name, bundle_identifier: APP_ID,
+        targets: ["App"], build_configurations: ["Release"])
+      build_app(project: "App.xcodeproj", scheme: "App", configuration: "Release", export_method: "app-store",
+        output_directory: "/tmp/cl-build", output_name: "ComunidadLatina.ipa", clean: true,
+        export_options: { provisioningProfiles: { APP_ID => profile_name } })
+      upload_to_testflight(api_key: key, ipa: "/tmp/cl-build/ComunidadLatina.ipa", skip_waiting_for_build_processing: true)
+    ensure
+      sh("security list-keychains -d user -s #{prev.map { |k| "'#{k}'" }.join(' ')}", log: false) unless prev.empty?
+    end
+  end
+end
