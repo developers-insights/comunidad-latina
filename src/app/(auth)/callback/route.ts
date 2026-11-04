@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { EmailOtpType, Session, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { finalizeOAuthSession } from "@/lib/auth/finalize-oauth";
 import { safeInternalPath } from "@/lib/url/safe-href";
@@ -17,6 +18,19 @@ import { resolveRequestOrigin } from "../recuperar/origin";
  * sin `tenant_id` en el JWT y sin fila en `profiles`: una app vacía y rota.
  * Ver el comentario largo de `lib/auth/provision.ts`.
  */
+
+/**
+ * Magic link y recuperación llegan con `?token_hash=…&type=…` (las plantillas de
+ * Supabase arman el link así) y no con `?code=`: el `code` de PKCE sólo se canjea
+ * en el mismo navegador que pidió el correo, y la mayoría abre el mail en otra
+ * app (Gmail en el celular). Eso daba `pkce_code_verifier_not_found` y "enlace
+ * vencido" a todo el que quería recuperar la cuenta (04/11/2026).
+ */
+const EMAIL_OTP_TYPES = new Set<EmailOtpType>(["magiclink", "recovery", "email"]);
+
+function emailOtpType(raw: string | null): EmailOtpType | null {
+  return raw && EMAIL_OTP_TYPES.has(raw as EmailOtpType) ? (raw as EmailOtpType) : null;
+}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -43,28 +57,50 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/entrar?error=proveedor", origin));
   }
 
-  if (code) {
-    const supabase = await createClient();
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  const tokenHash = url.searchParams.get("token_hash");
+  const otpType = emailOtpType(url.searchParams.get("type"));
 
-    if (!error && data.user) {
-      // Provisión, chequeo de comunidad, cuentas pre-reclamadas, refresh del
-      // JWT y foto de Google: lo mismo que el botón de Google Identity Services.
-      const result = await finalizeOAuthSession({
-        supabase,
-        user: data.user,
-        accessToken: data.session.access_token,
-        next,
-      });
-      const target = result.ok ? result.redirectTo : `/entrar?error=${result.reason}`;
-      return NextResponse.redirect(new URL(target, origin));
+  if (code || (tokenHash && otpType)) {
+    const supabase = await createClient();
+    const { data, error } = code
+      ? await supabase.auth.exchangeCodeForSession(code)
+      : await supabase.auth.verifyOtp({ type: otpType!, token_hash: tokenHash! });
+
+    if (!error && data.user && data.session) {
+      return finish(supabase, data.user, data.session, next, origin);
     }
 
-    console.error("[auth] callback: exchangeCodeForSession falló", {
+    console.error("[auth] callback: canje del enlace falló", {
+      via: code ? "code" : otpType,
       code: error?.code ?? "sin_usuario",
     });
+
+    // El mismo enlace suele llegar dos veces en el mismo segundo (el cliente de
+    // mail lo abre y el navegador lo repite): el primero ya abrió la sesión y
+    // el segundo encuentra el token gastado. Si la sesión está, no es un error.
+    const { data: current } = await supabase.auth.getUser();
+    if (current.user) return NextResponse.redirect(new URL(next, origin));
   }
 
   // Enlace vencido o ya usado → de vuelta a /entrar con aviso cálido.
   return NextResponse.redirect(new URL("/entrar?error=enlace", origin));
+}
+
+async function finish(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: User,
+  session: Session,
+  next: string,
+  origin: string,
+) {
+  // Provisión, chequeo de comunidad, cuentas pre-reclamadas, refresh del
+  // JWT y foto de Google: lo mismo que el botón de Google Identity Services.
+  const result = await finalizeOAuthSession({
+    supabase,
+    user,
+    accessToken: session.access_token,
+    next,
+  });
+  const target = result.ok ? result.redirectTo : `/entrar?error=${result.reason}`;
+  return NextResponse.redirect(new URL(target, origin));
 }
