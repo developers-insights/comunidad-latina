@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   exchangeCodeForSession: vi.fn(),
+  verifyOtp: vi.fn(),
+  getUser: vi.fn(),
   signOut: vi.fn(),
   refreshSession: vi.fn(),
   ensureProfileForOAuthUser: vi.fn(),
@@ -13,6 +15,8 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: {
       exchangeCodeForSession: mocks.exchangeCodeForSession,
+      verifyOtp: mocks.verifyOtp,
+      getUser: mocks.getUser,
       signOut: mocks.signOut,
       refreshSession: mocks.refreshSession,
     },
@@ -72,6 +76,8 @@ beforeEach(() => {
     created: false,
     claimsChanged: false,
   });
+  mocks.verifyOtp.mockResolvedValue(session(EMAIL_ONLY));
+  mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
   mocks.refreshSession.mockResolvedValue({ error: null });
   mocks.signOut.mockResolvedValue({ error: null });
   mocks.syncEmailVerified.mockResolvedValue(true);
@@ -195,6 +201,57 @@ describe("GET /callback — sesiones de email", () => {
     const res = await GET(request("?code=abc&next=%2Frecuperar%2Factualizar"));
 
     expect(mocks.ensureProfileForOAuthUser).not.toHaveBeenCalled();
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/recuperar/actualizar`);
+  });
+});
+
+describe("GET /callback — enlaces con token_hash", () => {
+  it("recuperación abierta en otro navegador → sesión y a fijar la contraseña", async () => {
+    const res = await GET(
+      request("?next=%2Frecuperar%2Factualizar&token_hash=hash-1&type=recovery"),
+    );
+
+    expect(mocks.verifyOtp).toHaveBeenCalledWith({ type: "recovery", token_hash: "hash-1" });
+    expect(mocks.exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/recuperar/actualizar`);
+  });
+
+  it("magic link → al next", async () => {
+    const res = await GET(request("?next=%2Fmensajes&token_hash=hash-2&type=magiclink"));
+
+    expect(mocks.verifyOtp).toHaveBeenCalledWith({ type: "magiclink", token_hash: "hash-2" });
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/mensajes`);
+  });
+
+  it("un type que no es de correo se ignora", async () => {
+    const res = await GET(request("?token_hash=hash-3&type=signup"));
+
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/entrar?error=enlace`);
+  });
+
+  it("token gastado → ?error=enlace", async () => {
+    mocks.verifyOtp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "otp_expired" },
+    });
+
+    const res = await GET(request("?token_hash=viejo&type=magiclink"));
+
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/entrar?error=enlace`);
+  });
+
+  it("token gastado por la apertura doble, con la sesión ya abierta → entra igual", async () => {
+    mocks.verifyOtp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "otp_expired" },
+    });
+    mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+
+    const res = await GET(
+      request("?next=%2Frecuperar%2Factualizar&token_hash=hash-1&type=recovery"),
+    );
+
     expect(res.headers.get("location")).toBe(`${ORIGIN}/recuperar/actualizar`);
   });
 });
