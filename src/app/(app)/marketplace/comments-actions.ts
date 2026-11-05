@@ -17,6 +17,7 @@ import {
 } from "@/lib/moderation";
 import { COPY } from "@/components/marketplace/copy";
 import { firstPhotoUrl } from "@/components/listings/helpers";
+import { isPhoneRequiredError } from "@/lib/phone/error";
 
 /**
  * Server actions de COMENTARIOS DE AVISOS (migración 0038, tabla
@@ -221,6 +222,7 @@ export type CreateListingCommentResult =
         | "tenant-mismatch"
         | "invalid"
         | "moderation"
+        | "phone-required"
         | "error";
       message?: string;
     };
@@ -308,6 +310,7 @@ export async function createListingCommentAction(input: {
     console.warn("[marketplace] insert de comentario falló", {
       code: insertError?.code,
     });
+    if (isPhoneRequiredError(insertError)) return { ok: false, code: "phone-required" };
     return { ok: false, code: "error" };
   }
 

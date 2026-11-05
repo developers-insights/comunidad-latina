@@ -437,6 +437,7 @@ export const COPY = {
       grabarVideo: "Grabar un video",
       ayudaAlbumes:
         "Tu teléfono abre su propia galería, así elegís del álbum que quieras.",
+      ilegible: "No pudimos abrir esa imagen. Probá con otra foto.",
       seleccion: (cantidad: number) =>
         cantidad === 1 ? "1 archivo seleccionado" : `${cantidad} archivos seleccionados`,
       seleccionFotos: (cantidad: number) =>

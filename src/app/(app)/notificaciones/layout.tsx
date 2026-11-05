@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SectionTopBar } from "@/components/shell";
+import { exigirSesion } from "@/lib/auth/exigir-sesion";
 
 /**
  * Notificaciones — la salida de la pantalla.
@@ -10,7 +11,9 @@ import { SectionTopBar } from "@/components/shell";
  * historial de la app detrás y, si no, cae a `/feed`.
  * Ver `components/shell/section-top-bar.tsx`.
  */
-export default function NotificacionesLayout({ children }: { children: ReactNode }) {
+export default async function NotificacionesLayout({ children }: { children: ReactNode }) {
+  await exigirSesion("/notificaciones");
+
   return (
     <>
       <SectionTopBar fallbackHref="/feed" />

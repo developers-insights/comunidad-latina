@@ -87,7 +87,7 @@ export function EventCard({
   const mediaOverlayTopLeft = (
     event.free || event.date?.isPast ? (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/90 px-3 py-1.5 text-xs font-bold text-foreground backdrop-blur-sm">
-        {event.free ? COPY.events.freeChip : COPY.events.pastLabel}
+        {event.date?.isPast ? COPY.events.pastLabel : COPY.events.freeChip}
       </span>
     ) : undefined
   );

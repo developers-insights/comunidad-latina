@@ -16,6 +16,8 @@ export type CodigoDeLlamada =
   | "call-full"
   /** `ACCOUNT_SUSPENDED` (0021): la cuenta no puede iniciar nada. */
   | "account-suspended"
+  /** `PHONE_VERIFICATION_REQUIRED` (0181): la comunidad exige teléfono verificado. */
+  | "phone-required"
   /** La RLS dijo que no: no sos participante, o hay bloqueo entre las dos personas. */
   | "forbidden"
   /** La llamada ya no existe o ya terminó. */
@@ -49,6 +51,8 @@ export function codigoDeLlamada(
       return "call-full";
     case "ACCOUNT_SUSPENDED":
       return "account-suspended";
+    case "PHONE_VERIFICATION_REQUIRED":
+      return "phone-required";
     case "AUTH_REQUIRED":
       return "unauthenticated";
     case "USER_BLOCKED":

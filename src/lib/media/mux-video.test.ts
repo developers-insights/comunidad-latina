@@ -151,6 +151,11 @@ describe("requestMuxUpload — nunca tira, siempre contesta", () => {
     await expect(requestMuxUpload()).resolves.toEqual({ ok: false, reason: "falló" });
   });
 
+  it("403 dice que falta el teléfono: subir por el bucket rebotaría igual al publicar", async () => {
+    stubFetch({ status: 403, ok: false });
+    await expect(requestMuxUpload()).resolves.toEqual({ ok: false, reason: "telefono" });
+  });
+
   it("un 500 del servidor tampoco explota", async () => {
     stubFetch({ status: 500, ok: false });
     await expect(requestMuxUpload()).resolves.toEqual({ ok: false, reason: "falló" });

@@ -167,7 +167,11 @@ export default async function PerfilPage({
 
   const score = trust?.score ?? 0;
   const level = normalizeTrustLevel(trust?.level, score);
-  const signals = trustSignalsFrom(trust?.signals ?? null, card.identityVerified);
+  const signals = trustSignalsFrom(
+    trust?.signals ?? null,
+    card.identityVerified,
+    card.createdAt,
+  );
   const firstName = card.displayName.split(/\s+/)[0] ?? card.displayName;
   const country = countryName(card.countryOrigin);
   const location =

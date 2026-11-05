@@ -30,6 +30,7 @@ import {
   problemaDeServicios,
   type TipoDeFotoDeNegocio,
 } from "@/lib/negocios/pagina";
+import { phoneRequiredCopy } from "@/lib/phone/error";
 import { EDITAR_NEGOCIO_COPY as C } from "./copy";
 import type { EditarPaginaState, FotoDeNegocioResultado } from "./estado";
 
@@ -228,7 +229,7 @@ export async function guardarPaginaDeNegocioAction(
       listingId: datos.listingId,
       code: error.code,
     });
-    return { estado: "error", mensaje: GENERICO };
+    return { estado: "error", mensaje: phoneRequiredCopy(error) ?? GENERICO };
   }
 
   switch (data) {

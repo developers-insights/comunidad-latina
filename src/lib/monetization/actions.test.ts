@@ -255,6 +255,49 @@ describe("saveListingCtasAction — el gate de premium", () => {
   });
 });
 
+describe("saveListingCtasAction — links de compra de ejemplo", () => {
+  it.each([
+    ["product", "purchase", "https://example.com/comprar"],
+    ["product", "purchase", "http://tiendadeana.com"],
+    ["product", "purchase", "https://localhost/x"],
+    ["event", "tickets", "https://example.com/entradas"],
+    ["event", "tickets", "https://127.0.0.1/x"],
+  ])("%s · %s: %s no se guarda y el error señala el campo", async (kind, field, url) => {
+    const stub = useGuardOk({ listing: { data: listingRow({ kind }), error: null } });
+
+    const result = await saveListingCtasAction({
+      listingId: LISTING_ID,
+      ctas: { [field]: url },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.field).toBe(field);
+    expect(!result.ok && result.error).toMatch(/link real/i);
+    expect(updatePatch(stub)).toBeNull();
+  });
+
+  it("un link real de compra se guarda", async () => {
+    const stub = useGuardOk({ listing: { data: listingRow({ kind: "product" }), error: null } });
+
+    const result = await saveListingCtasAction({
+      listingId: LISTING_ID,
+      ctas: { purchase: "https://tiendadeana.com/pedido" },
+    });
+
+    expect(result).toEqual({ ok: true, saved: ["purchase"] });
+    expect(updatePatch(stub)?.cta_purchase_url).toBe("https://tiendadeana.com/pedido");
+  });
+
+  it("dejar el campo vacío sigue siendo borrar el botón, no un error", async () => {
+    const stub = useGuardOk({ listing: { data: listingRow({ kind: "product" }), error: null } });
+
+    const result = await saveListingCtasAction({ listingId: LISTING_ID, ctas: { purchase: "   " } });
+
+    expect(result).toEqual({ ok: true, saved: [] });
+    expect(updatePatch(stub)?.cta_purchase_url).toBeNull();
+  });
+});
+
 describe("saveListingCtasAction — links que parecen links", () => {
   it.each([
     ["javascript:alert(1)", "javascript: — el que zod.url() deja pasar"],

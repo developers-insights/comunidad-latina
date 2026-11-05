@@ -1,5 +1,6 @@
 "use server";
 
+import { requireSiteUrl } from "@/lib/config/site-url";
 import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { z } from "zod";
@@ -391,7 +392,7 @@ export async function startPayment(contractId: string): Promise<StartPaymentResu
   const escrow = await loadEscrowContract(admin, contractId);
   if (!escrow) return fail(ACCESS_COPY.notAllowed);
   try {
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    const siteUrl = requireSiteUrl();
     const opened = await openGigCheckout({
       admin,
       stripe: getStripe(),

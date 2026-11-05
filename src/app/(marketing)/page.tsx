@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -26,7 +27,7 @@ import { ListingMiniCard } from "@/components/marketing/listing-mini-card";
 import { JsonLd } from "@/components/marketing/json-ld";
 import { Reveal } from "@/components/marketing/reveal";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+const SITE_URL = siteUrlForMetadata();
 
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getTenant();

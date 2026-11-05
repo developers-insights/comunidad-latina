@@ -265,6 +265,7 @@ export const COPY = {
         removeLabel: "Quitar foto",
         tooMany: "Podés subir hasta 6 fotos.",
         tooBig: "Esa foto es muy pesada — probá con una de menos de 8 MB.",
+        unreadable: "No pudimos abrir esa foto. Probá con otra, en JPG o PNG.",
         reviewNote:
           "Las fotos pasan por un control de seguridad antes de publicarse.",
       },

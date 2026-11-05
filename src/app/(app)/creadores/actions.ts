@@ -40,6 +40,7 @@ import {
 import { notifyContractParty, recordContractEvent } from "@/lib/creators/escrow";
 import { dollarsToCents } from "@/components/creators/money";
 import { COPY } from "@/components/creators/copy";
+import { phoneRequiredCopy } from "@/lib/phone/error";
 
 /**
  * Server actions del Creator Marketplace (feedback cliente 2026-07-19).
@@ -162,7 +163,7 @@ export async function createGigDraft(rawInput: GigDraftInput): Promise<CreateGig
 
   if (error || !created) {
     console.warn("[creadores] insert de gig falló", { code: error?.code });
-    return { ok: false, error: COPY.publish.errors.generic };
+    return { ok: false, error: phoneRequiredCopy(error) ?? COPY.publish.errors.generic };
   }
 
   return { ok: true, listingId: created.id };
@@ -428,7 +429,7 @@ export async function applyToGig(rawInput: z.input<typeof applySchema>): Promise
       return { ok: true, alreadyApplied: true };
     }
     console.warn("[creadores] apply falló", { gigId, code: error.code });
-    return { ok: false, error: GENERIC_ERROR };
+    return { ok: false, error: phoneRequiredCopy(error) ?? GENERIC_ERROR };
   }
 
   return { ok: true };
@@ -563,7 +564,7 @@ export async function upsertCreatorProfile(
 
   if (error) {
     console.warn("[creadores] upsert de perfil falló", { code: error.code });
-    return { ok: false, error: COPY.profile.errors.generic };
+    return { ok: false, error: phoneRequiredCopy(error) ?? COPY.profile.errors.generic };
   }
 
   return { ok: true };
@@ -693,7 +694,7 @@ export async function saveServicePackage(
 
     if (error) {
       console.warn("[creadores] update de paquete falló", { code: error.code });
-      return { ok: false, error: COPY.packages.errors.generic };
+      return { ok: false, error: phoneRequiredCopy(error) ?? COPY.packages.errors.generic };
     }
     if (!updated) return { ok: false, error: COPY.packages.errors.notFound };
     return { ok: true, id: (updated as { id: string }).id };
@@ -726,6 +727,9 @@ export async function saveServicePackage(
     .maybeSingle();
 
   if (error) {
+    const faltaTelefono = phoneRequiredCopy(error);
+    if (faltaTelefono) return { ok: false, error: faltaTelefono };
+
     // 23514 = el CHECK/trigger de la base. El único que puede saltar acá con
     // datos ya validados es el tope de 6 (carrera entre dos pestañas), así que
     // se traduce a su mensaje en vez de al genérico.
@@ -1122,7 +1126,7 @@ export async function submitReview(
       return { ok: true, alreadyLeft: true };
     }
     console.warn("[creadores] insert de reseña falló", { contractId, code: error.code });
-    return { ok: false, error: COPY.reviews.errors.generic };
+    return { ok: false, error: phoneRequiredCopy(error) ?? COPY.reviews.errors.generic };
   }
 
   return { ok: true };

@@ -6,7 +6,7 @@ import {
   ShoppingBagOpen,
 } from "@phosphor-icons/react/dist/ssr";
 import { BezelCard, buttonVariants } from "@/components/ui";
-import { safeExternalHref } from "@/lib/url/safe-href";
+import { linkDeCompraValido } from "@/lib/url/purchase-link";
 import { cn } from "@/lib/utils";
 import { COPY } from "./copy";
 import { EXTERNAL_CHECKOUT_FACTS } from "./membership";
@@ -27,9 +27,9 @@ import { EXTERNAL_CHECKOUT_FACTS } from "./membership";
  * no cumple su función.
  *
  * SEGURIDAD DEL DESTINO: la URL la cargó un comercio, no el código. Pasa
- * SIEMPRE por `safeExternalHref`, que clasifica por ORIGEN RESUELTO y no por
- * prefijo de string (`//evil.com` y `/\evil.com` engañan a un `startsWith`) y
- * sólo admite http/https — `javascript:` y `data:` devuelven null.
+ * SIEMPRE por `linkDeCompraValido`, que se apoya en `safeExternalHref` (clasifica
+ * por ORIGEN RESUELTO, no por prefijo de string) y además exige https y un dominio
+ * real: ni `javascript:`, ni `example.com`, ni `localhost`.
  *
  * `null` significa "no muestres el botón", NO "mostralo roto": sin destino
  * verificable la persona se queda con el chat interno, que es el canal
@@ -49,16 +49,16 @@ export function ExternalPurchaseCta({
   storeName,
   className,
 }: ExternalPurchaseCtaProps) {
-  const target = safeExternalHref(purchaseUrl);
+  const href = linkDeCompraValido(purchaseUrl);
 
-  // Sin destino, o con un destino que no es http(s): no hay botón. Preferimos
-  // la ausencia antes que un botón que no lleva a ningún lado.
-  if (!target || !target.external) return null;
+  // Sin un destino donde se pueda comprar de verdad no hay botón. Preferimos la
+  // ausencia antes que un botón que no lleva a ningún lado.
+  if (!href) return null;
 
   const seller = storeName ?? COPY.seller.fallbackStoreName;
   // El dominio real, a la vista: es la única forma de que alguien pueda
   // reconocer (o desconfiar de) el sitio antes de salir.
-  const host = hostOf(target.href);
+  const host = hostOf(href);
 
   return (
     <BezelCard
@@ -92,7 +92,7 @@ export function ExternalPurchaseCta({
 
       <div className="flex flex-col gap-2">
         <a
-          href={target.href}
+          href={href}
           target="_blank"
           rel="noopener noreferrer nofollow"
           aria-label={COPY.purchase.ariaCta(seller)}
@@ -139,8 +139,8 @@ export function ExternalPurchaseCta({
 }
 
 /**
- * Host legible del destino. `safeExternalHref` ya garantizó que la URL parsea
- * y que es http(s), así que este `new URL` no puede tirar — el try/catch está
+ * Host legible del destino. `linkDeCompraValido` ya garantizó que la URL parsea
+ * y que es https, así que este `new URL` no puede tirar — el try/catch está
  * por disciplina, no por un caso conocido.
  */
 function hostOf(href: string): string | null {

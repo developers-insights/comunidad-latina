@@ -75,6 +75,8 @@ import {
   requiresVenue,
   resolveEventDates,
 } from "@/lib/eventos/detalles";
+import { linkDeCompraValido } from "@/lib/url/purchase-link";
+import { phoneRequiredCopy } from "@/lib/phone/error";
 
 /**
  * Server actions de /publicar.
@@ -147,7 +149,7 @@ const COPY = {
   eventOnlineUrlRequired:
     "Pegá el enlace por donde se entra al evento (tiene que empezar con https://).",
   eventTicketsUrlInvalid:
-    "Ese enlace de entradas no se entiende. Copialo completo, con https:// adelante.",
+    "Necesitamos el enlace de entradas real de tu boletería, con https:// adelante. Los enlaces de prueba no sirven.",
   /**
    * Contradicción, no dato faltante: "en venta" y "por mes" no pueden ser
    * ciertos a la vez, y elegir cuál gana sería inventar lo que la persona quiso
@@ -338,10 +340,10 @@ const draftSchema = z
           message: COPY.eventOnlineUrlRequired,
         });
       }
-      // El enlace de entradas es opcional, pero si vino y no se entiende se
-      // avisa en vez de tragárselo: un botón que no aparece sin explicación es
-      // la clase de silencio que después se reporta como "no me guardó nada".
-      if (value.eventTicketsUrl?.trim() && !normalizeEventUrl(value.eventTicketsUrl)) {
+      // El enlace de entradas es opcional, pero si vino y no sirve se avisa en
+      // vez de tragárselo: un botón que no aparece sin explicación es la clase
+      // de silencio que después se reporta como "no me guardó nada".
+      if (value.eventTicketsUrl?.trim() && !linkDeCompraValido(value.eventTicketsUrl)) {
         ctx.addIssue({
           code: "custom",
           path: ["eventTicketsUrl"],
@@ -492,8 +494,9 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
     // columna cta_tickets_url, que la 0048 le prohíbe a un aviso free —y un
     // aviso NACE free—, así que no puede escribirse desde acá aunque quisiera.
     // La regla de precedencia entre los dos está en resolveEventTicketsUrl().
-    const ticketsUrl = normalizeEventUrl(input.eventTicketsUrl);
-    if (ticketsUrl) attrs[EVENT_TICKETS_URL_ATTR] = ticketsUrl;
+    // Un evento gratis no vende nada: el formulario ya esconde el campo.
+    const ticketsUrl = linkDeCompraValido(input.eventTicketsUrl);
+    if (ticketsUrl && !isFreeEvent) attrs[EVENT_TICKETS_URL_ATTR] = ticketsUrl;
     // Gratis o pago: se escribe el booleano tal cual vino. Hasta hoy esta clave
     // sólo la escribían los scripts de seed y `parseEventAttrs` la leía sin que
     // ningún formulario la produjera nunca — el chip "Gratis" existía y no
@@ -547,7 +550,7 @@ export async function createListingDraft(rawInput: DraftInput): Promise<CreateDr
 
   if (error || !created) {
     console.warn("[vivienda] insert de borrador falló", { code: error?.code });
-    return { ok: false, error: GENERIC_ERROR };
+    return { ok: false, error: phoneRequiredCopy(error) ?? GENERIC_ERROR };
   }
 
   // Dirección exacta OPCIONAL → tabla privada solo-dueño; jamás se publica.

@@ -81,6 +81,59 @@ describe("resolveOriginAsync — allowlist del código", () => {
     expect(await resolveOriginAsync(h)).toBe("https://comunidad-latina-sigma.vercel.app");
   });
 
+  it.each([
+    ["dominicanos.com:x@evil.com", "usuario y clave"],
+    ["dominicanos.com:@evil.com", "clave vacía"],
+    ["dominicanos.com@evil.com", "sólo usuario"],
+    ["localhost:3000@evil.com", "se hace pasar por loopback"],
+    ["dominicanos.com/@evil.com", "con ruta"],
+    ["dominicanos.com\\@evil.com", "barra invertida"],
+    ["dominicanos.com/ruta", "con ruta propia"],
+    ["dominicanos.com?x=1", "con query"],
+    ["dominicanos.com#x", "con fragmento"],
+    ["dominicanos.com:8443", "puerto ajeno"],
+  ])("el token nunca sale a un host armado a mano: %s (%s)", async (forjado) => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.comunidadlatina.com";
+    const h = new Headers({ "x-forwarded-host": forjado });
+    expect(await resolveOriginAsync(h)).toBe("https://www.comunidadlatina.com");
+  });
+
+  it("/confirmar pasa por el mismo corte: resolveRequestOrigin tampoco honra userinfo", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.comunidadlatina.com";
+    const req = new Request("https://www.comunidadlatina.com/confirmar", {
+      headers: { "x-forwarded-host": "dominicanos.com:x@evil.com" },
+    });
+    expect(await resolveRequestOrigin(req)).toBe("https://www.comunidadlatina.com");
+  });
+
+  it("el puerto 443 explícito se acepta y no queda en el origin", async () => {
+    const h = new Headers({ "x-forwarded-host": "dominicanos.com:443" });
+    expect(await resolveOriginAsync(h)).toBe("https://dominicanos.com");
+  });
+
+  it("el origin sale del valor parseado: minúsculas y sin punto final", async () => {
+    const h = new Headers({ "x-forwarded-host": "DOMINICANOS.com." });
+    expect(await resolveOriginAsync(h)).toBe("https://dominicanos.com");
+  });
+
+  it("fuerza https fuera de loopback aunque x-forwarded-proto diga http", async () => {
+    const h = new Headers({
+      "x-forwarded-host": "dominicanos.com",
+      "x-forwarded-proto": "http",
+    });
+    expect(await resolveOriginAsync(h)).toBe("https://dominicanos.com");
+  });
+
+  it("en loopback respeta el proto declarado", async () => {
+    const h = new Headers({ host: "localhost:3000", "x-forwarded-proto": "https" });
+    expect(await resolveOriginAsync(h)).toBe("https://localhost:3000");
+  });
+
+  it("acepta [::1] con puerto en dev local", async () => {
+    const h = new Headers({ host: "[::1]:3000" });
+    expect(await resolveOriginAsync(h)).toBe("http://[::1]:3000");
+  });
+
   it("acota el esquema: un x-forwarded-proto raro no se copia a la URL", async () => {
     const h = new Headers({
       "x-forwarded-host": "dominicanos.com",
@@ -116,6 +169,20 @@ describe("resolveOriginAsync — allowlist del código", () => {
   it("sin host ni env cae a localhost:3000", async () => {
     const h = new Headers();
     expect(await resolveOriginAsync(h)).toBe("http://localhost:3000");
+  });
+
+  it("en producción fuera de Vercel un host loopback tampoco se honra", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.comunidadlatina.com";
+    const h = new Headers({ "x-forwarded-host": "localhost:3000" });
+    expect(await resolveOriginAsync(h)).toBe("https://www.comunidadlatina.com");
+    vi.unstubAllEnvs();
+  });
+
+  it("en producción sin URL configurada falla en vez de armar un enlace a localhost", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    await expect(resolveOriginAsync(new Headers())).rejects.toThrow(/NEXT_PUBLIC_SITE_URL/);
+    vi.unstubAllEnvs();
   });
 
   it("en Vercel un host loopback NO se honra, aunque NEXT_PUBLIC_SITE_URL sea localhost", async () => {
@@ -190,6 +257,11 @@ describe("isAllowedOriginHostAsync — allowlist del código", () => {
 
   it("rechaza vacío", async () => {
     expect(await isAllowedOriginHostAsync("   ")).toBe(false);
+  });
+
+  it("rechaza userinfo y puertos ajenos también por acá", async () => {
+    expect(await isAllowedOriginHostAsync("dominicanos.com:x@evil.com")).toBe(false);
+    expect(await isAllowedOriginHostAsync("dominicanos.com:8443")).toBe(false);
   });
 });
 

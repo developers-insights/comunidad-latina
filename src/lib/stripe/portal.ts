@@ -1,3 +1,4 @@
+import { requireSiteUrl } from "@/lib/config/site-url";
 import "server-only";
 import type Stripe from "stripe";
 
@@ -27,7 +28,7 @@ export async function portalConfigurationId(stripe: Stripe): Promise<string | un
       return cachedId;
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+    const siteUrl = requireSiteUrl();
     const creada = await stripe.billingPortal.configurations.create({
       business_profile: {
         privacy_policy_url: `${siteUrl}/legal/privacidad`,

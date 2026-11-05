@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Check, EnvelopeSimple, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
@@ -10,7 +11,7 @@ import { getPublicPrices } from "./data";
 import { FREE_ITEMS, buildPriceGroups } from "./model";
 import { PriceCard } from "./price-card";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+const SITE_URL = siteUrlForMetadata();
 
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getTenant();

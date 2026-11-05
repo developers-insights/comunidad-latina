@@ -25,6 +25,8 @@ import {
   type HelpStatus,
 } from "@/lib/comunidad";
 import { notifyHelpReply } from "./notify";
+import { phoneRequiredCopy } from "@/lib/phone/error";
+import { PHONE_REQUIRED_COPY, isPhoneRequiredError } from "@/lib/phone/error";
 
 /**
  * =============================================================================
@@ -424,7 +426,7 @@ export async function responderPedido(rawInput: {
     if (mensaje.includes("ACCOUNT_SUSPENDED")) {
       return { ok: false, error: R.errors.suspendida };
     }
-    return { ok: false, error: R.errors.generic };
+    return { ok: false, error: phoneRequiredCopy(error) ?? R.errors.generic };
   }
 
   // El aviso va DESPUÉS de que la fila existe y no puede desarmarla: si algo
@@ -514,6 +516,7 @@ export async function borrarRespuesta(rawInput: {
  */
 function traducirErrorDeBase(mensaje: string | undefined, porDefecto: string): string {
   if (!mensaje) return porDefecto;
+  if (isPhoneRequiredError({ message: mensaje })) return PHONE_REQUIRED_COPY;
   if (mensaje.includes("TOO_MANY_OPEN")) return C.errors.cupo;
   if (mensaje.includes("ACCOUNT_SUSPENDED")) return C.errors.suspendida;
   if (mensaje.includes("BAD_RESOURCE")) return C.errors.resource;

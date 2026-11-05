@@ -10,7 +10,9 @@ import {
   type SearchPayload,
 } from "@/components/search/helpers";
 import { clientIpFromHeaders, limit } from "@/lib/rate-limit";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
+import { getTenant } from "@/lib/tenant/resolve";
 
 /**
  * GET /buscar/api?q=… — la búsqueda global de la barra de /buscar.
@@ -36,6 +38,16 @@ import { createClient } from "@/lib/supabase/server";
  * anon key + cookies del usuario, así que la RLS decide qué ve cada quien. No
  * hay ni un `.eq('tenant_id', …)` acá: el día que se agregue uno, la barrera
  * real deja de ser la única y empiezan a existir dos verdades.
+ *
+ * VISITANTES: sin sesión no hay JWT del que sacar la comunidad, así que se le
+ * pasa `p_tenant` con la del dominio (0182). La RPC lo ignora si hay sesión,
+ * pero acá tampoco se manda: quien entró busca en SU comunidad, siempre.
+ *
+ * LA EXCEPCIÓN AL "SIN ADMIN CLIENT" ES PERSONAS PARA VISITANTES. `global_search`
+ * está abierta a la anon key y por eso no devuelve personas sin sesión: sería un
+ * padrón de la comunidad. Ese grupo sale de `buscar_personas_visitante`, que sólo
+ * ejecuta service_role, y este handler es lo único que la llama: con la comunidad
+ * que dijo el dominio (nada del request) y detrás de un tope por IP más bajo.
  */
 
 export const runtime = "nodejs";
@@ -60,6 +72,13 @@ const QuerySchema = z.object({
 const RATE_MAX = 120;
 const RATE_WINDOW_MS = 60_000;
 
+/**
+ * Tope por IP de la búsqueda de personas sin sesión. Alcanza para escribir varias
+ * búsquedas por minuto y le pone piso a quien barre nombres. Es sólo de ese grupo:
+ * pasarlo saca a las personas de la respuesta, y avisos y publicaciones siguen.
+ */
+const VISITOR_PEOPLE_RATE_MAX = 30;
+
 const EMPTY: SearchPayload = { query: "", groups: [], total: 0 };
 
 export async function GET(request: Request) {
@@ -82,20 +101,32 @@ export async function GET(request: Request) {
     );
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("global_search", {
-    q: query.slice(0, MAX_SEARCH_LENGTH),
-    limit_per_type: LIMIT_PER_TYPE,
-  });
+  const [supabase, userId] = await Promise.all([createClient(), getAuthUserId()]);
+  const term = query.slice(0, MAX_SEARCH_LENGTH);
+  const tenantId = userId ? null : (await getTenant()).id;
+
+  const [{ data, error }, personas] = await Promise.all([
+    supabase.rpc("global_search", {
+      q: term,
+      limit_per_type: LIMIT_PER_TYPE,
+      ...(tenantId ? { p_tenant: tenantId } : {}),
+    }),
+    tenantId ? personasParaVisitante(request, tenantId, term) : Promise.resolve([]),
+  ]);
 
   if (error) {
+    // Código desplegado antes que la 0182: la RPC todavía no conoce `p_tenant`. Un
+    // visitante ve la pantalla vacía de siempre, no un error.
+    if (error.code === "PGRST202" && !userId) {
+      return NextResponse.json({ ...EMPTY, query });
+    }
     // Sin detalle del error al cliente (§5.6) y sin el término en el log: lo
     // que alguien busca es dato sensible y no se persiste en claro (§5.4).
     console.warn("[buscar] global_search falló", { code: error.code });
     return NextResponse.json({ error: "search_failed" }, { status: 502 });
   }
 
-  const rows = (data ?? []) as RawSearchRow[];
+  const rows = [...personas, ...((data ?? []) as RawSearchRow[])];
   const groups = groupSearchResults(rows, await sponsoredVideoIds(supabase, rows));
 
   return NextResponse.json({
@@ -103,6 +134,37 @@ export async function GET(request: Request) {
     groups,
     total: countResults(groups),
   } satisfies SearchPayload);
+}
+
+/**
+ * El grupo "Personas" para quien no tiene sesión. Si falla o se pasa del tope, el
+ * grupo no aparece y el resto de la búsqueda sigue: los avisos no pueden caerse por
+ * esto. Sin el término en el log, igual que arriba.
+ */
+async function personasParaVisitante(
+  request: Request,
+  tenantId: string,
+  term: string,
+): Promise<RawSearchRow[]> {
+  const ip = clientIpFromHeaders(request.headers);
+  if (!limit(`buscar-visitante:${ip}`, VISITOR_PEOPLE_RATE_MAX, RATE_WINDOW_MS).ok) return [];
+
+  try {
+    const { data, error } = await createAdminClient().rpc("buscar_personas_visitante", {
+      p_tenant: tenantId,
+      q: term,
+    });
+    if (error) {
+      console.warn("[buscar] personas para visitantes falló", { code: error.code });
+      return [];
+    }
+    return (data ?? []) as RawSearchRow[];
+  } catch (error) {
+    console.warn("[buscar] personas para visitantes sin admin client", {
+      name: error instanceof Error ? error.name : "desconocido",
+    });
+    return [];
+  }
 }
 
 /**

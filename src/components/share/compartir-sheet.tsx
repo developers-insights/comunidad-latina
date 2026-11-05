@@ -20,6 +20,7 @@ import { reenviarMensajeAction } from "./reenviar-mensaje-action";
 import type { Destino } from "@/app/(app)/mensajes/api/destinos/route";
 import { SHARE_COPY } from "./copy";
 import type { CompartidoKind } from "./enlace-interno";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE } from "@/lib/phone/error";
 
 /**
  * =============================================================================
@@ -242,6 +243,14 @@ export function CompartirSheet(props: CompartirSheetProps) {
           title: SHARE_COPY.errorSesionTitle,
           description: SHARE_COPY.errorSesionBody,
           variant: "danger",
+        });
+        return;
+      }
+      if (resultado.code === "phone-required") {
+        toast({
+          title: PHONE_REQUIRED_TITLE,
+          description: PHONE_REQUIRED_COPY,
+          variant: "warning",
         });
         return;
       }

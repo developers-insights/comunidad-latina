@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -31,7 +32,7 @@ import {
  * y que revisar NO es garantizar — porque no lo es.
  */
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+const SITE_URL = siteUrlForMetadata();
 
 const TOC = [
   { id: "lo-que-si", label: "Lo que sí podés vender" },

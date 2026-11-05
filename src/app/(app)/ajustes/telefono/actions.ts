@@ -4,13 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
-import {
-  isPhoneVerificationEnabled,
-  isPhonePepperConfigured,
-  isSmsConfigured,
-  isWhatsAppOtpConfigured,
-} from "@/lib/config/services";
+import { isWhatsAppOtpConfigured } from "@/lib/config/services";
 import { channelFor, type OtpChannel } from "@/lib/phone/channel";
+import { phoneFlowProblem } from "@/lib/phone/gate";
 import { maskPhone, parsePhone } from "@/lib/phone/e164";
 import { getSmsSender, verificationSmsBody } from "@/lib/phone/sms";
 import {
@@ -26,6 +22,7 @@ import type { ActionResult } from "@/components/auth/action-result";
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * ⚠️ TODO ESTE FLUJO ESTÁ APAGADO POR DEFECTO, Y NO ES UN OLVIDO
+ * (exigirlo es otra llave: `tenants.phone_required`, ver `lib/phone/gate.ts`)
  * ═══════════════════════════════════════════════════════════════════════════
  * `isPhoneVerificationEnabled` sale de `PHONE_VERIFICATION_ENABLED === "true"` y
  * hoy nadie la define. La migración 0030 dejó el motivo escrito y 0066 lo
@@ -82,21 +79,19 @@ function looksLikeUsAttempt(raw: string): boolean {
   return digits === 10 || digits === 11;
 }
 
-/** El gate legal + el pepper, en un solo lugar. */
+/** El gate legal + el pepper + el proveedor, en un solo lugar (`lib/phone/gate.ts`). */
 function blocked(): { ok: false; formError: string } | null {
-  if (!isPhoneVerificationEnabled) return { ok: false, formError: COPY.disabled };
-  if (!isPhonePepperConfigured) {
-    // Un hash sin sal es una tabla arcoíris de seis dígitos, o sea nada. Sin
-    // pepper NO se emiten códigos: mejor no ofrecer la función que ofrecerla
-    // rota de una forma que nadie ve.
+  const problem = phoneFlowProblem();
+  if (!problem) return null;
+  // Un hash sin pepper es una tabla arcoíris de seis dígitos, o sea nada: mejor
+  // no ofrecer la función que ofrecerla rota de una forma que nadie ve.
+  if (problem === "sin_pepper") {
     console.error("[telefono] PHONE_CODE_PEPPER sin configurar — flujo deshabilitado");
-    return { ok: false, formError: COPY.disabled };
   }
-  if ((process.env.NODE_ENV === "production" || process.env.VERCEL_ENV) && !isSmsConfigured) {
+  if (problem === "sin_sms") {
     console.error("[telefono] proveedor SMS incompleto — flujo deshabilitado");
-    return { ok: false, formError: COPY.disabled };
   }
-  return null;
+  return { ok: false, formError: COPY.disabled };
 }
 
 async function sessionContext() {
@@ -259,6 +254,8 @@ export async function verifyPhoneCodeAction(
 
   revalidatePath("/perfil");
   revalidatePath("/ajustes/telefono");
+  // El aviso del shell vive en el layout de (app).
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 
@@ -288,5 +285,7 @@ export async function removePhoneAction(): Promise<ActionResult> {
 
   revalidatePath("/perfil");
   revalidatePath("/ajustes/telefono");
+  // El aviso del shell vive en el layout de (app).
+  revalidatePath("/", "layout");
   return { ok: true };
 }

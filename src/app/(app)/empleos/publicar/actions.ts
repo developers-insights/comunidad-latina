@@ -55,6 +55,7 @@ import {
   normalizeWorkDays,
   resolveSalaryRange,
 } from "@/lib/empleos/detalles";
+import { phoneRequiredCopy } from "@/lib/phone/error";
 
 /**
  * Server actions de /empleos/publicar — publicar un EMPLEO comunitario
@@ -295,7 +296,12 @@ export async function createJobDraft(
     // ninguno, y "probá de nuevo en un ratito" la dejaría reintentando algo que
     // nunca va a funcionar.
     const isLinkError = typeof error?.message === "string" && error.message.includes("VINCULO_INVALIDO");
-    return { ok: false, error: isLinkError ? C.errors.businessLinkInvalid : C.errors.generic };
+    return {
+      ok: false,
+      error: isLinkError
+        ? C.errors.businessLinkInvalid
+        : (phoneRequiredCopy(error) ?? C.errors.generic),
+    };
   }
 
   return { ok: true, listingId: created.id };
@@ -595,7 +601,7 @@ export async function createServiceDraft(
 
   if (error || !created) {
     console.warn("[empleos] insert de borrador de servicio falló", { code: error?.code });
-    return { ok: false, error: COPY.servicePublish.errors.generic };
+    return { ok: false, error: phoneRequiredCopy(error) ?? COPY.servicePublish.errors.generic };
   }
 
   return { ok: true, listingId: created.id };

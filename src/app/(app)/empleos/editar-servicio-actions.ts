@@ -27,6 +27,7 @@ import {
   statusDespuesDeEditar,
 } from "@/lib/listings/edicion";
 import { republicarAvisoEditado, vuelveAPublicarse } from "@/lib/listings/republicar";
+import { phoneRequiredCopy } from "@/lib/phone/error";
 import { encolarSiQuedaEnRevision } from "@/lib/listings/cola";
 import {
   SERVICE_USER_FACING_ISSUES,
@@ -303,7 +304,10 @@ export async function editarServicioAction(rawInput: {
       listingId,
       code: updateError?.code,
     });
-    return { ok: false, error: errorDeVideoDeLaBase(updateError) ?? GENERICO };
+    return {
+      ok: false,
+      error: phoneRequiredCopy(updateError) ?? errorDeVideoDeLaBase(updateError) ?? GENERICO,
+    };
   }
 
   let status: "published" | "pending_review" | "paused" = statusInicial;

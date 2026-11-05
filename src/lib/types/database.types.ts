@@ -6888,10 +6888,22 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      buscar_personas_visitante: {
+        Args: { p_tenant: string; q: string }
+        Returns: {
+          href: string
+          id: string
+          image_url: string
+          rank: number
+          result_type: string
+          subtitle: string
+          title: string
+        }[]
+      }
       get_creator_commission: { Args: never; Returns: number }
       get_tenant_by_domain: { Args: { p_domain: string }; Returns: Json }
       global_search: {
-        Args: { limit_per_type?: number; q: string }
+        Args: { limit_per_type?: number; p_tenant?: string; q: string }
         Returns: {
           href: string
           id: string

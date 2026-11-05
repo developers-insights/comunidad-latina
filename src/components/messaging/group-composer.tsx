@@ -26,6 +26,7 @@ import { PhotoPicker } from "./photo-picker";
 import { ArchivoPrevia } from "./archivo-previa";
 import { LocationPicker } from "./location-picker";
 import { VoiceRecorder } from "./voice-recorder";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE } from "@/lib/phone/error";
 
 /**
  * Composer del chat de grupo.
@@ -198,6 +199,14 @@ export function GroupComposer({
         return;
       }
 
+      if (resultado.code === "phone-required") {
+        toast({
+          title: PHONE_REQUIRED_TITLE,
+          description: PHONE_REQUIRED_COPY,
+          variant: "warning",
+        });
+        return;
+      }
       if (resultado.code === "flagged") {
         toast({
           title: COPY.composer.flaggedTitle,

@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -13,7 +14,7 @@ import {
   legalProse,
 } from "@/components/legal/legal-prose";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+const SITE_URL = siteUrlForMetadata();
 const UPDATED = "12 de octubre de 2026";
 const LEGAL_ENTITY = "Comunidad Latina LLC";
 const PAYMENTS_SUBJECT = findTopic("pagos").subject;

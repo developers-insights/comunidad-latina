@@ -27,7 +27,10 @@ import { KNOWN_TENANT_DOMAINS } from "@/lib/tenant/resolve";
  *  - los hosts que calcula la plataforma (`VERCEL_PROJECT_PRODUCTION_URL`,
  *    `VERCEL_URL`, `VERCEL_BRANCH_URL`) — así los previews siguen andando,
  *  - el host de `NEXT_PUBLIC_SITE_URL`,
- *  - localhost / 127.0.0.1 en cualquier puerto, SÓLO fuera de Vercel (dev).
+ *  - localhost / 127.0.0.1 en cualquier puerto, SÓLO en dev local.
+ *
+ * Y sólo como host pelado: sin usuario, clave, ruta, query ni fragmento, y con
+ * puerto 443 o ninguno (ver `parseRequestHost`).
  *
  * Lo legítimo no cambia: el enlace sigue volviendo al MISMO host donde la
  * persona se registró, siempre que ese host sea nuestro.
@@ -82,23 +85,66 @@ function isLoopback(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
 }
 
+/** Un host del request ya desarmado: de acá sale el origin, nunca del texto crudo. */
+interface ParsedHost {
+  /** Sin puerto, en minúsculas y sin punto final. */
+  hostname: string;
+  /** `hostname`, más el puerto sólo en loopback. Es lo que va en el origin. */
+  host: string;
+  loopback: boolean;
+}
+
+/**
+ * Desarma el header con el parser de URL del runtime, que es el mismo criterio con
+ * el que después un cliente de correo va a abrir el enlace.
+ *
+ * POR QUÉ NO ALCANZA CON `split(":")[0]` (revisión 2026-11-05): con
+ * `X-Forwarded-Host: dominicanos.com:x@evil.com` esa cuenta da "dominicanos.com",
+ * pasa la allowlist, y el origin se armaba con el valor crudo. Para una URL eso es
+ * el usuario `dominicanos.com`, la clave `x` y el host `evil.com`: el token de
+ * recuperación salía a evil.com. Por eso se rechaza todo lo que no sea un host
+ * pelado, y el origin se construye con lo parseado.
+ *
+ * Puerto: sólo 443 o ninguno. `new URL` ya normaliza el 443 a vacío. Loopback es la
+ * única excepción, porque en dev local el puerto es lo normal.
+ */
+function parseRequestHost(raw: string): ParsedHost | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  let url: URL;
+  try {
+    url = new URL(`https://${trimmed}`);
+  } catch {
+    return null;
+  }
+
+  if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    return null;
+  }
+
+  const hostname = url.hostname.replace(/\.$/, "");
+  if (!hostname) return null;
+
+  const loopback = isLoopback(hostname);
+  if (url.port && !loopback) return null;
+
+  return { hostname, host: url.port ? `${hostname}:${url.port}` : hostname, loopback };
+}
+
 /**
  * Loopback + mapa hardcodeado de tenants + hosts que declara la plataforma.
  * No consulta la base: es el respaldo cuando la base no puede consultarse.
  */
-function isKnownOriginHost(host: string): boolean {
-  const normalized = host.trim().toLowerCase();
-  if (!normalized) return false;
-
-  const hostname = normalized.split(":")[0];
-  // En Vercel nadie legítimo llega por loopback: honrarlo sólo serviría para
+function isKnownOriginHost(parsed: ParsedHost): boolean {
+  // En un deploy nadie legítimo llega por loopback: honrarlo sólo serviría para
   // que un header forjado deje un enlace a localhost dentro de un correo.
-  if (isLoopback(hostname)) {
-    return process.env.VERCEL_ENV !== "production" && process.env.VERCEL_ENV !== "preview";
+  if (parsed.loopback) {
+    return process.env.NODE_ENV !== "production" && !process.env.VERCEL_ENV;
   }
-  if (KNOWN_TENANT_DOMAINS.has(hostname)) return true;
+  if (KNOWN_TENANT_DOMAINS.has(parsed.hostname)) return true;
 
-  return configuredHosts().some((known) => known.toLowerCase() === normalized);
+  return configuredHosts().some((known) => known.toLowerCase() === parsed.host);
 }
 
 /**
@@ -111,14 +157,19 @@ function isKnownOriginHost(host: string): boolean {
  * devuelven `false`, que es el mismo `false` de siempre: la base puede sumar
  * hosts propios, nunca aflojar el corte.
  */
-export async function isAllowedOriginHostAsync(host: string): Promise<boolean> {
-  if (isKnownOriginHost(host)) return true;
+async function isAllowedParsedHost(parsed: ParsedHost): Promise<boolean> {
+  if (isKnownOriginHost(parsed)) return true;
 
-  const hostname = normalizeHost(host);
+  const hostname = normalizeHost(parsed.hostname);
   if (!hostname) return false;
 
   const lookup = await lookupTenantDomain(hostname);
   return lookup.status === "match";
+}
+
+export async function isAllowedOriginHostAsync(host: string): Promise<boolean> {
+  const parsed = parseRequestHost(host);
+  return parsed ? isAllowedParsedHost(parsed) : false;
 }
 
 /** El host del request, si vino. `x-forwarded-host` primero, como el proxy. */
@@ -132,21 +183,17 @@ function canonicalOrigin(): string {
 }
 
 /**
- * `esquema://host` para un host YA validado.
+ * `esquema://host` para un host YA validado y parseado.
  *
- * El esquema se acota a http|https: un `x-forwarded-proto` arbitrario no puede
- * convertirse en el prefijo de una URL que después se pinta como <a href>
- * dentro de un correo.
+ * Fuera de loopback siempre es https: estos enlaces llevan un token de sesión y un
+ * `x-forwarded-proto: http` no puede bajarlos a texto plano. En loopback se respeta
+ * http|https; un valor arbitrario no puede convertirse en el prefijo de una URL que
+ * después se pinta como <a href> dentro de un correo.
  */
-function originFor(headers: Headers, host: string): string {
+function originFor(headers: Headers, parsed: ParsedHost): string {
+  if (!parsed.loopback) return `https://${parsed.host}`;
   const proto = headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-  const scheme =
-    proto === "http" || proto === "https"
-      ? proto
-      : isLoopback(host.split(":")[0])
-        ? "http"
-        : "https";
-  return `${scheme}://${host}`;
+  return `${proto === "https" ? "https" : "http"}://${parsed.host}`;
 }
 
 /**
@@ -154,9 +201,10 @@ function originFor(headers: Headers, host: string): string {
  * base caída con host desconocido) devuelve la URL canónica del deploy.
  */
 export async function resolveOriginAsync(headers: Headers): Promise<string> {
-  const host = requestHost(headers);
-  if (!host) return canonicalOrigin();
-  return (await isAllowedOriginHostAsync(host)) ? originFor(headers, host) : canonicalOrigin();
+  const raw = requestHost(headers);
+  const parsed = raw ? parseRequestHost(raw) : null;
+  if (!parsed) return canonicalOrigin();
+  return (await isAllowedParsedHost(parsed)) ? originFor(headers, parsed) : canonicalOrigin();
 }
 
 /**

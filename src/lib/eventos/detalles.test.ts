@@ -27,6 +27,7 @@ import {
   readEventDetails,
   requiresVenue,
   resolveEventDates,
+  eventTicketsCta,
   resolveEventTicketsUrl,
 } from "./detalles";
 
@@ -216,6 +217,62 @@ describe("resolveEventTicketsUrl — premium gana, base es el respaldo", () => {
 // Fechas y capacidad
 // ---------------------------------------------------------------------------
 
+describe("resolveEventTicketsUrl — un link de ejemplo no es un link", () => {
+  it.each([
+    ["https://example.com/entradas"],
+    ["https://example.net/x"],
+    ["http://boleteria.com/x"],
+    ["https://localhost/x"],
+    ["https://127.0.0.1/x"],
+  ])("%s no se ofrece, ni en la columna premium ni en attrs", (url) => {
+    expect(resolveEventTicketsUrl(url, null)).toBeNull();
+    expect(resolveEventTicketsUrl(null, { [EVENT_TICKETS_URL_ATTR]: url })).toBeNull();
+  });
+
+  it("si el premium es de ejemplo, cae al respaldo real", () => {
+    const base = { [EVENT_TICKETS_URL_ATTR]: "https://boleteria.com/fiesta" };
+    expect(resolveEventTicketsUrl("https://example.com/entradas", base)).toEqual({
+      href: "https://boleteria.com/fiesta",
+      source: "base",
+    });
+  });
+});
+
+describe("eventTicketsCta — cuándo hay botón", () => {
+  const conLink = { [EVENT_TICKETS_URL_ATTR]: "https://boleteria.com/fiesta" };
+
+  it("evento pago, vigente y con link real → hay botón", () => {
+    expect(eventTicketsCta(null, { ...conLink, [EVENT_FREE_ATTR]: false }, false)?.href).toBe(
+      "https://boleteria.com/fiesta",
+    );
+  });
+
+  it("evento que no declaró si se cobra → hay botón", () => {
+    expect(eventTicketsCta(null, conLink, false)).not.toBeNull();
+  });
+
+  it("evento gratis → no hay botón, aunque tenga link", () => {
+    expect(eventTicketsCta(null, { ...conLink, [EVENT_FREE_ATTR]: true }, false)).toBeNull();
+    expect(
+      eventTicketsCta("https://boleteria.com/x", { [EVENT_FREE_ATTR]: true }, false),
+    ).toBeNull();
+  });
+
+  it("evento terminado → no hay botón, aunque tenga link", () => {
+    expect(eventTicketsCta("https://boleteria.com/x", conLink, true)).toBeNull();
+  });
+
+  it("el caso del QA: festival gratis, terminado y con link de ejemplo → no hay botón", () => {
+    expect(
+      eventTicketsCta(
+        "https://example.com/entradas",
+        { [EVENT_FREE_ATTR]: true, [EVENT_TICKETS_URL_ATTR]: "https://example.com/entradas" },
+        true,
+      ),
+    ).toBeNull();
+  });
+});
+
 describe("resolveEventDates", () => {
   it("devuelve ISO canónico", () => {
     const result = resolveEventDates("2026-09-01T20:00:00Z", null);
@@ -342,6 +399,11 @@ describe("readEventDetails", () => {
       [EVENT_TICKETS_URL_ATTR]: "/interno",
     });
     expect(details.onlineUrl).toBeNull();
+    expect(details.ticketsUrl).toBeNull();
+  });
+
+  it("no devuelve un enlace de boletos de ejemplo", () => {
+    const details = readEventDetails({ [EVENT_TICKETS_URL_ATTR]: "https://example.com/entradas" });
     expect(details.ticketsUrl).toBeNull();
   });
 

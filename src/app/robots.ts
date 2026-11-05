@@ -1,3 +1,4 @@
+import { requireSiteUrl, siteUrlForMetadata } from "@/lib/config/site-url";
 import type { MetadataRoute } from "next";
 import { lookupTenantDomain, normalizeHost } from "@/lib/tenant/domain-lookup";
 import { domainFallbackSlug } from "@/lib/tenant/resolve";
@@ -27,7 +28,7 @@ import { domainFallbackSlug } from "@/lib/tenant/resolve";
 export const dynamic = "force-dynamic";
 
 function baseUrl(): string {
-  return (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  return siteUrlForMetadata();
 }
 
 /**
@@ -64,9 +65,11 @@ function baseUrl(): string {
 async function isIndexable(): Promise<boolean> {
   let hostname: string;
   try {
-    hostname = normalizeHost(new URL(baseUrl()).hostname);
+    // `requireSiteUrl` y no `baseUrl()`: el respaldo canónico de la metadata no
+    // puede decidir si se indexa. Sin URL propia válida, este deploy no se indexa.
+    hostname = normalizeHost(new URL(requireSiteUrl()).hostname);
   } catch {
-    return false; // NEXT_PUBLIC_SITE_URL mal formada → no indexar (fail-closed).
+    return false; // NEXT_PUBLIC_SITE_URL ausente o mal formada → no indexar (fail-closed).
   }
 
   const lookup = await lookupTenantDomain(hostname);

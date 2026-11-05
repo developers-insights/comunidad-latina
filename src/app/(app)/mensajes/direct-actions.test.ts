@@ -87,6 +87,20 @@ describe("abrirChatDirectoAction", () => {
     expect(mocks.avisarSolicitudNueva).not.toHaveBeenCalled();
   });
 
+  it("sin teléfono verificado devuelve phone-required y no avisa a nadie (0181)", async () => {
+    stubConRpc({
+      error: {
+        message: "PHONE_VERIFICATION_REQUIRED: para publicar y escribir, primero confirmá tu teléfono.",
+        code: "P0001",
+      },
+    });
+
+    const resultado = await abrirChatDirectoAction({ profileId: OTRO_ID });
+
+    expect(resultado).toEqual({ ok: false, code: "phone-required" });
+    expect(mocks.avisarSolicitudNueva).not.toHaveBeenCalled();
+  });
+
   it("un id que no es uuid no llega ni al guard", async () => {
     await expect(
       abrirChatDirectoAction({ profileId: "manuel-navarro" }),

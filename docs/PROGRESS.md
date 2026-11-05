@@ -1,5 +1,16 @@
 # PROGRESS — Comunidad Latina
 
+## Arreglos de auth y QA de Henry, migración pendiente (2026-11-05, rama `claude/migracion-auth-qa`)
+
+Código listo en la rama, **sin desplegar**. La migración de Supabase no arrancó: la Mac usada no tiene `envkit` ni credenciales de `developers@`. Plan y orden en `docs/decisiones/migracion-supabase-cliente.md`.
+
+- **Sólo con el deploy:** F01 (`exigirSesion` en layouts: el redirect bajo `loading.tsx` rompía con #310), F02 (`src/lib/eventos/vigencia.ts`), F03/F04 al mostrar (`src/lib/url/purchase-link.ts`), F05 en las pantallas de perfil, B02, y recuperación por Resend con host validado (`src/lib/auth/recovery.ts`).
+- **Piden migración:** 0181 (teléfono, nace apagado), 0182 (búsqueda para visitantes y antigüedad en el resto de las pantallas), 0183 (CHECK de links, antes correr `docs/decisiones/limpieza-links-compra.sql`). No están aplicadas en ninguna base.
+- **Corrección a lo que decía el código:** el Site URL del origen NO está en localhost; lo está el del destino. El comentario de `confirmation.ts` era viejo y se corrigió. Por eso el redirect a localhost de B no se reprodujo en producción.
+- **B02 no se reprodujo** con un PNG válido. Se arregló el modo de falla provocable; hay que repetir con el archivo del QA.
+- **Sin probar:** nada contra una base real ni con SMS o mail reales. Las migraciones corrieron sólo en un Postgres local descartable con stubs.
+- Los límites de envío por cuenta siguen en memoria, por instancia: Upstash no está instalado.
+
 ## Web lista para la revisión de Stripe (2026-10-12, PR #4)
 
 - Públicas sin login: `/precios` (todos los productos con el precio del tenant vía `tenant_public_prices`, cache 300 s con tag `tenant-prices`), `/contacto`, `/legal/reembolsos`, y sección `#pagos` en Términos. Pie con links a las tres.

@@ -22,8 +22,9 @@ import { buildTrustSignals, toTrustLevel } from "@/lib/trust/signals";
 export function trustSignalsFrom(
   signals: Json | null | undefined,
   identityVerified: boolean,
+  fechaDeAlta?: string | null,
 ): TrustSignal[] {
-  return buildTrustSignals(signals ?? {}, identityVerified);
+  return buildTrustSignals(signals ?? {}, identityVerified, fechaDeAlta);
 }
 
 /** Normaliza el `level` de la DB; si viene raro, se deriva del score (canon). */

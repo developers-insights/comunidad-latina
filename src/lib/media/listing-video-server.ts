@@ -10,6 +10,7 @@ import {
 import { isOwnPosterPath, isOwnVideoPath } from "./own-media-path";
 import { POST_MEDIA_BUCKET } from "./upload-video";
 import { MAX_VIDEO_BYTES, formatVideoTooBigMessage } from "./video-upload-limits";
+import { PHONE_REQUIRED_COPY, isPhoneRequiredError } from "@/lib/phone/error";
 
 export const listingVideoInputSchema = z
   .object({
@@ -111,6 +112,8 @@ export function columnasDeVideo(columns: ListingVideoColumns | null): object {
 
 export function errorDeVideoDeLaBase(error: { message?: string } | null | undefined): string | null {
   const message = error?.message ?? "";
+  // Editar el texto de un aviso es publicar (0181): el trigger corta igual que en el alta.
+  if (isPhoneRequiredError(error)) return PHONE_REQUIRED_COPY;
   if (message.includes("LISTING_VIDEO_NEEDS_PREMIUM")) {
     return LISTING_VIDEO_COPY.motivos["necesita-premium"](null);
   }

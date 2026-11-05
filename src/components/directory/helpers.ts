@@ -1,3 +1,4 @@
+import { esFechaSinHora, eventoTerminado } from "@/lib/eventos/vigencia";
 import type { Json } from "@/lib/types/database.types";
 import { DEFAULT_TIME_ZONE } from "@/lib/utils";
 
@@ -142,11 +143,13 @@ export function eventDateParts(
   locale = "es-US",
   /** Zona de quien mira. Sin elección explícita, la de la comunidad. */
   timeZone: string = DEFAULT_TIME_ZONE,
+  /** `attrs.ends_at`: `isPast` sale de `eventoTerminado`, el criterio único. */
+  endsAt?: string | null,
 ): EventDateParts | null {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
 
-  const hasTime = /T\d{2}:\d{2}/.test(iso) && !/T00:00(?::00)?(?:[Z+-]|$)/.test(iso);
+  const hasTime = !esFechaSinHora(iso);
   const zone = hasTime ? timeZone : "UTC";
 
   const day = new Intl.DateTimeFormat(locale, { day: "numeric", timeZone: zone }).format(date);
@@ -168,5 +171,11 @@ export function eventDateParts(
       }).format(date)
     : "";
 
-  return { day, month, full, time, isPast: date.getTime() < Date.now() - 6 * 60 * 60 * 1000 };
+  return {
+    day,
+    month,
+    full,
+    time,
+    isPast: eventoTerminado({ startsAt: iso, endsAt }, new Date(), timeZone),
+  };
 }

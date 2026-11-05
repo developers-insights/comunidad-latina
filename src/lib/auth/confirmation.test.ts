@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *
  * Garantías cubiertas:
  *  - El enlace del correo apunta a NUESTRA ruta /confirmar con el `token_hash`
- *    minteado por la Admin API — nunca al `action_link` de Supabase, que
- *    redirige al Site URL del proyecto (hoy localhost) y rompería en producción.
+ *    minteado por la Admin API — nunca al `action_link` de Supabase, que depende
+ *    de los ajustes del dashboard y no conoce el host de cada comunidad.
  *  - El `next` viaja en el enlace, así que la persona aterriza donde estaba.
  *  - Sin Resend configurado no se manda nada (dev) y la cuenta no queda rota:
  *    el enlace se loguea en el server.

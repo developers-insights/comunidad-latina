@@ -24,10 +24,11 @@ const mocks = vi.hoisted(() => ({
   maybeSingle: vi.fn(),
   sendConfirmationEmail: vi.fn(),
   limit: vi.fn(),
+  host: "comunidad.test",
 }));
 
 vi.mock("next/headers", () => ({
-  headers: async () => new Headers({ host: "comunidad.test", "x-forwarded-proto": "https" }),
+  headers: async () => new Headers({ host: mocks.host, "x-forwarded-proto": "https" }),
 }));
 vi.mock("@/lib/rate-limit", () => ({
   limit: mocks.limit,
@@ -191,6 +192,24 @@ describe("registerAction", () => {
  *     columnas;
  *   · el HANDLE es único POR TENANT, no global.
  */
+describe("registerAction — sitio mal configurado", () => {
+  it("corta ANTES de crear la cuenta, no con una cuenta sin correo posible", async () => {
+    mocks.host = "localhost:3000";
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", "");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.limit.mockReturnValue({ ok: true });
+
+    const result = await registerAction(VALID);
+
+    expect(result.ok).toBe(false);
+    expect(mocks.createUser).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+    mocks.host = "comunidad.test";
+  });
+});
+
 describe("registerAction — apellido y nombre de usuario", () => {
   it("el apellido va a profiles_private, nunca a profiles", async () => {
     await registerAction({ ...VALID });

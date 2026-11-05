@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
+import type { User } from "@supabase/supabase-js";
+import { isStaffRole } from "@/app/admin/guard";
 import { isMuxConfigured } from "@/lib/config/services";
 import { MUX_NEW_ASSET_SETTINGS, MUX_UPLOAD_TIMEOUT_SECONDS, getMux } from "@/lib/mux/client";
+import { decidePhoneGate } from "@/lib/phone/gate";
+import { PHONE_REQUIRED_COPY } from "@/lib/phone/error";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireTenantMatch } from "@/lib/tenant/guard";
@@ -17,6 +21,7 @@ import { requireTenantMatch } from "@/lib/tenant/guard";
  *   → 503 { error: "mux_no_configurado", message }   Mux sin claves
  *   → 401 { error: "sin_sesion", message }           sin sesión
  *   → 409 { error: "comunidad_distinta", message }   el JWT y el dominio no coinciden
+ *   → 403 { error: "telefono_requerido", message }   la comunidad lo exige y falta verificarlo
  *   → 429 { error: "demasiadas_subidas", message }   techo por hora
  *   → 502 { error: "mux_falló", message }            Mux no respondió
  *
@@ -42,8 +47,11 @@ import { requireTenantMatch } from "@/lib/tenant/guard";
  * 2. `requireTenantMatch()` ANTES de cualquier efecto colateral, que es la regla
  *    escrita en `lib/tenant/guard.ts`: si el guard corriera después, el cupo
  *    consumido y el borrador creado quedarían huérfanos.
- * 3. Rate limit.
- * 4. Borrador → subida en Mux → id de la subida en el borrador.
+ * 3. Teléfono. El borrador se crea con service_role, así que el trigger de la 0181
+ *    no lo ve: sin este corte, una cuenta sin verificar subía el video entero (Mux
+ *    factura la transcodificación) y recién al publicar rebotaba.
+ * 4. Rate limit.
+ * 5. Borrador → subida en Mux → id de la subida en el borrador.
  *
  * ── POR QUÉ EL BORRADOR VA ANTES QUE LA SUBIDA ──────────────────────────────
  * `passthrough` viaja a Mux cuando se crea la subida y vuelve en el webhook, así
@@ -99,6 +107,36 @@ function origenDelRequest(request: Request): string {
   return `${proto}://${host}`;
 }
 
+/**
+ * Mismo criterio que `app.enforce_phone_verified()`: el staff pasa y un perfil
+ * inexistente no corta. Si la lectura falla se deja seguir: esto sólo evita gastar
+ * una subida, y quien obliga es el trigger al publicar.
+ */
+async function faltaTelefono(user: User): Promise<boolean> {
+  const isStaff = isStaffRole(user.app_metadata?.role);
+  if (isStaff) return false;
+
+  const { data: perfil, error } = await createAdminClient()
+    .from("profiles")
+    .select("phone_verified")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (error) {
+    console.warn(`[mux:subida] No se pudo leer el teléfono verificado — code=${error.code}`);
+    return false;
+  }
+  if (!perfil) return false;
+
+  const gate = decidePhoneGate({
+    hasSession: true,
+    isStaff,
+    phoneVerified: perfil.phone_verified,
+    tenantRequires: true,
+    flowProblem: null,
+  });
+  return gate !== "libre";
+}
+
 export async function POST(request: Request) {
   // 1 · ¿Está encendido el camino de Mux? -----------------------------------
   if (!isMuxConfigured) {
@@ -127,7 +165,15 @@ export async function POST(request: Request) {
   }
   const { tenant, user } = guard;
 
-  // 3 · Techo por hora -------------------------------------------------------
+  // 3 · Teléfono, sólo donde la comunidad lo exige ---------------------------
+  if (tenant.phoneRequired === true && (await faltaTelefono(user))) {
+    return NextResponse.json(
+      { error: "telefono_requerido", message: PHONE_REQUIRED_COPY },
+      { status: 403 },
+    );
+  }
+
+  // 4 · Techo por hora -------------------------------------------------------
   if (!limit(`mux-subida:${user.id}`, SUBIDAS_POR_HORA, HOUR_MS).ok) {
     return NextResponse.json(
       {
@@ -141,7 +187,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
 
   /**
-   * 4 · El borrador.
+   * 5 · El borrador.
    *
    * Con `service_role` a propósito: `posts_insert` (0046) exige
    * `status in ('published','pending_review')`, o sea que un cliente NO puede
@@ -184,7 +230,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // 5 · La subida en Mux -----------------------------------------------------
+  // 6 · La subida en Mux -----------------------------------------------------
   let uploadId: string;
   let uploadUrl: string;
   try {
@@ -230,7 +276,7 @@ export async function POST(request: Request) {
   }
 
   /**
-   * 6 · El id de la subida en el borrador.
+   * 7 · El id de la subida en el borrador.
    *
    * Este UPDATE es lo que hace posible el webhook: sin `mux_upload_id` grabado,
    * el evento que llegue dentro de un minuto no tiene con qué encontrar esta

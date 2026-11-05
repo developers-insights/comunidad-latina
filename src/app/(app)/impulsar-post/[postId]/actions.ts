@@ -1,5 +1,6 @@
 "use server";
 
+import { requireSiteUrl } from "@/lib/config/site-url";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { isPagosDemoPermitido, isStripeConfigured } from "@/lib/config/services";
@@ -284,7 +285,7 @@ export async function crearCampanaPost(
     // 4. Checkout one-time con el precio vigente de la comunidad (mismo patrón
     //    que el boost: el mismo entero que quedó en la fila viaja a Stripe).
     const stripe = getStripe();
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    const siteUrl = requireSiteUrl();
     const session = await crearCheckoutSession({
       mode: "payment",
       customer_email: user.email,

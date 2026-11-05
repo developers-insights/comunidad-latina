@@ -12,6 +12,7 @@ import {
   hrefDeCompartido,
   type CompartidoKind,
 } from "@/components/share/enlace-interno";
+import { isPhoneRequiredError } from "@/lib/phone/error";
 
 /**
  * =============================================================================
@@ -78,6 +79,7 @@ export type CompartirResult =
         | "invalid"
         | "rate-limited"
         | "flagged"
+        | "phone-required"
         | "error";
     };
 
@@ -256,6 +258,12 @@ export async function compartirEnChatAction(input: {
    * reintenta UNA vez con la fila de respaldo. Cualquier otro error es un "no"
    * de la base (42501: no soy miembro, el hilo está bloqueado) y se respeta.
    */
+  /**
+   * El trigger de la 0181 cortó algún envío. Se recuerda para que, si NO salió
+   * ninguno, la persona lea "confirmá tu teléfono" y no un error genérico.
+   */
+  let cortadoPorTelefono = false;
+
   async function insertarMensaje(
     tabla: string,
     destinoColumna: Record<string, string>,
@@ -263,6 +271,7 @@ export async function compartirEnChatAction(input: {
     const { error } = await sinTipar.from(tabla).insert(filaDelMensaje(destinoColumna));
     if (!error) return true;
 
+    if (isPhoneRequiredError(error)) cortadoPorTelefono = true;
     if (!faltaLaMigracion(error.code)) {
       console.warn("[compartir] el mensaje no se pudo insertar", {
         tabla,
@@ -295,6 +304,7 @@ export async function compartirEnChatAction(input: {
       .from(tabla)
       .insert(filaDelMensaje(destinoColumna));
     if (reintento) {
+      if (isPhoneRequiredError(reintento)) cortadoPorTelefono = true;
       console.warn("[compartir] el mensaje no se pudo insertar (respaldo)", {
         tabla,
         code: reintento.code,
@@ -316,6 +326,7 @@ export async function compartirEnChatAction(input: {
       p_profile_id: profileId,
     });
     if (error) {
+      if (isPhoneRequiredError(error)) cortadoPorTelefono = true;
       // Sin PII: ni el id de la otra persona ni su nombre.
       console.warn("[compartir] no se pudo abrir la conversación", { code: error.code });
       return false;
@@ -380,7 +391,9 @@ export async function compartirEnChatAction(input: {
   }
   const fallidos = destinos.length - enviados;
 
-  if (enviados === 0) return { ok: false, code: "error" };
+  if (enviados === 0) {
+    return { ok: false, code: cortadoPorTelefono ? "phone-required" : "error" };
+  }
 
   for (const id of conversacionesTocadas) {
     tocarTimbre(supabase, { ambito: "directo", id }, user.id, "nuevo");

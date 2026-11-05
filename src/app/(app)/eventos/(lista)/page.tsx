@@ -3,7 +3,15 @@ import { fetchListingVideos } from "@/lib/media/listing-video-queries";
 import Link from "next/link";
 import { Megaphone } from "@phosphor-icons/react/dist/ssr";
 import { Chip, EmptyState, SectionCta, SectionHeading, buttonVariants } from "@/components/ui";
-import { extractSponsored } from "./sponsored";
+import {
+  armarListado,
+  corteDeVigencia,
+  filtroDeVigentes,
+  topeDePasados,
+  unirVentanas,
+  type EventRow,
+  type When,
+} from "./reparto";
 import {
   COPY,
   EventCard,
@@ -32,6 +40,7 @@ import { t } from "@/lib/i18n";
 import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
+import { DEFAULT_TIME_ZONE } from "@/lib/utils";
 import { resolverVistaZona } from "@/lib/zona/server";
 
 export const metadata = { title: "Eventos" };
@@ -77,7 +86,6 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
  * algo), así que `eq` sobre `attrs->>category` dice justo lo que se quiere y
  * deja que la base descarte filas antes del tope de 40.
  */
-type When = "" | "mes" | "pasados";
 type Ticket = "" | "gratis" | "pago";
 
 interface Filters {
@@ -86,12 +94,6 @@ interface Filters {
   entrada: Ticket;
   ciudad: string;
   categoria: string;
-}
-
-/** Tarjeta + la fecha CRUDA, que `EventCardModel.date` ya no conserva. */
-interface EventRow {
-  card: EventCardModel;
-  startsAt: string | null;
 }
 
 function firstValue(value: string | string[] | undefined): string {
@@ -162,35 +164,58 @@ async function EventosContent({ filters }: { filters: Filters }) {
   // compartido muestra lo que promete) y si no, la zona elegida en el header.
   const vistaZona = await resolverVistaZona(tenant.id, filters.ciudad);
 
-  // Orden cronológico por fecha del evento (attrs.starts_at); los sin fecha
-  // van al final. El volumen de eventos activos es chico — sin cursor.
-  let query = supabase
-    .from("listings")
-    .select("id, title, area_label, attrs, photos, publisher_name, created_by, created_at")
-    .eq("tenant_id", tenant.id)
-    .eq("kind", "event")
-    .eq("status", "published");
+  // Una sola lista no alcanza: en orden ascendente el tope de 40 se llenaba con los
+  // eventos más viejos, y en descendente, con más de 40 futuros, con los más lejanos.
+  // Por eso son dos consultas con los mismos filtros, partidas por `corte`: la de
+  // vigentes sube desde ahí, la de pasados baja. Es sólo la ventana, no el orden final
+  // ni el criterio de fecha: eso lo decide `armarListado` en memoria, porque `ends_at`
+  // y la zona no se pueden expresar en un filtro de PostgREST sobre un JSONB.
+  const eventosDeLaVista = () => {
+    let query = supabase
+      .from("listings")
+      .select("id, title, area_label, attrs, photos, publisher_name, created_by, created_at")
+      .eq("tenant_id", tenant.id)
+      .eq("kind", "event")
+      .eq("status", "published");
 
-  if (filters.q) {
-    // Mismo índice FTS que /propiedades y /marketplace (listings.search, 0004).
-    query = query.textSearch("search", filters.q, { type: "websearch", config: "spanish" });
-  }
-  if (filters.ciudad) query = query.eq("area_label", filters.ciudad);
-  // Sin ciudad en la URL manda "Tu zona", ya resuelta a etiquetas exactas. Va
-  // en SQL y no en memoria para que el tope de 40 filas traiga 40 eventos DE LA
-  // ZONA, y no los 40 primeros de la comunidad recortados después a tres.
-  else if (vistaZona.areaLabels.length > 0) {
-    query = query.in("area_label", vistaZona.areaLabels);
-  }
-  if (filters.categoria) query = query.eq("attrs->>category", filters.categoria);
+    if (filters.q) {
+      // Mismo índice FTS que /propiedades y /marketplace (listings.search, 0004).
+      query = query.textSearch("search", filters.q, { type: "websearch", config: "spanish" });
+    }
+    if (filters.ciudad) query = query.eq("area_label", filters.ciudad);
+    // Sin ciudad en la URL manda "Tu zona", ya resuelta a etiquetas exactas. Va
+    // en SQL y no en memoria para que el tope de 40 filas traiga 40 eventos DE LA
+    // ZONA, y no los 40 primeros de la comunidad recortados después a tres.
+    else if (vistaZona.areaLabels.length > 0) {
+      query = query.in("area_label", vistaZona.areaLabels);
+    }
+    if (filters.categoria) query = query.eq("attrs->>category", filters.categoria);
+    return query;
+  };
+
+  const corte = corteDeVigencia(new Date());
+  const tope = topeDePasados(filters.cuando, { maxEventos: MAX_EVENTS, maxPasados: MAX_PAST });
 
   // Boosts activos del tenant en PARALELO con el listado: `boosts` no filtra
   // por `kind` (es agnóstica — cualquier listing se puede impulsar, /impulsar
   // ya lo prueba), así que esta query no depende de `rows` y se solapa el
   // round-trip en vez de encadenarlo (mismo espíritu que el resto del
   // archivo: nunca una query después de otra si no hace falta).
-  const [{ data: rows, error }, { data: activeBoosts }] = await Promise.all([
-    query.order("attrs->>starts_at", { ascending: true, nullsFirst: false }).limit(MAX_EVENTS),
+  const [
+    { data: vigentes, error },
+    { data: anteriores, error: pasadosError },
+    { data: activeBoosts },
+  ] = await Promise.all([
+    eventosDeLaVista()
+      .or(filtroDeVigentes(corte))
+      .order("attrs->>starts_at", { ascending: true, nullsFirst: false })
+      .limit(MAX_EVENTS),
+    tope > 0
+      ? eventosDeLaVista()
+          .lt("attrs->>starts_at", corte)
+          .order("attrs->>starts_at", { ascending: false })
+          .limit(tope)
+      : Promise.resolve({ data: null, error: null }),
     supabase
       .from("boosts")
       .select("listing_id")
@@ -201,9 +226,12 @@ async function EventosContent({ filters }: { filters: Filters }) {
       .limit(SPONSORED_LIMIT),
   ]);
 
-  if (error) {
-    console.warn("[directorios] query de eventos falló", { code: error.code });
+  if (error || pasadosError) {
+    console.warn("[directorios] query de eventos falló", {
+      code: error?.code ?? pasadosError?.code,
+    });
   }
+  const rows = unirVentanas(vigentes, anteriores);
 
   // Solo importa SI un listing_id está boosteado — no se distingue por `kind`
   // acá tampoco: si un id no cae dentro de los eventos ya filtrados por
@@ -213,7 +241,7 @@ async function EventosContent({ filters }: { filters: Filters }) {
   // Organizadores con cuenta: perfil + Trust Score en batch (una query por
   // tabla, no una por evento). Regla: donde hay autor, TrustScoreBadge inline.
   const publisherIds = [
-    ...new Set((rows ?? []).map((row) => row.created_by).filter((id): id is string => Boolean(id))),
+    ...new Set(rows.map((row) => row.created_by).filter((id): id is string => Boolean(id))),
   ];
   const [{ data: profiles }, { data: trustRows }, videos] = await Promise.all([
     publisherIds.length > 0
@@ -237,14 +265,14 @@ async function EventosContent({ filters }: { filters: Filters }) {
             signals: unknown;
           }[],
         }),
-    fetchListingVideos(supabase, (rows ?? []).map((row) => row.id)),
+    fetchListingVideos(supabase, rows.map((row) => row.id)),
   ]);
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
   const trustById = new Map((trustRows ?? []).map((t) => [t.profile_id, t]));
 
-  // Se conserva `startsAt` junto a la tarjeta: `EventCardModel.date` ya viene
+  // Se conservan las fechas junto a la tarjeta: `EventCardModel.date` ya viene
   // formateado para pintar (día, mes, "es pasado") y no tiene la fecha cruda,
-  // que es la que necesita el filtro "este mes".
+  // que es la que necesita `armarListado`.
   /**
    * MIS AVISOS DE ESTA PÁGINA — para el menú ⋯ de cada tarjeta.
    *
@@ -257,11 +285,11 @@ async function EventosContent({ filters }: { filters: Filters }) {
   const viewerId = await getAuthUserId();
   const misAvisos = new Set(
     viewerId
-      ? (rows ?? []).filter((row) => row.created_by === viewerId).map((row) => row.id)
+      ? rows.filter((row) => row.created_by === viewerId).map((row) => row.id)
       : [],
   );
 
-  const allEvents: EventRow[] = (rows ?? []).map((row) => {
+  const allEvents: EventRow[] = rows.map((row) => {
     const attrs = parseEventAttrs(row.attrs);
     const profile = row.created_by ? profileById.get(row.created_by) : undefined;
     const trust = row.created_by ? trustById.get(row.created_by) : undefined;
@@ -271,7 +299,7 @@ async function EventosContent({ filters }: { filters: Filters }) {
       title: row.title,
       venueArea: attrs.venueArea ?? row.area_label,
       date: attrs.startsAt
-        ? eventDateParts(attrs.startsAt, tenant.locale, viewerZone ?? undefined)
+        ? eventDateParts(attrs.startsAt, tenant.locale, viewerZone ?? undefined, attrs.endsAt)
         : null,
       free: attrs.free,
       photoUrl: firstPhotoUrl(row.photos),
@@ -294,7 +322,7 @@ async function EventosContent({ filters }: { filters: Filters }) {
           : null,
       publisherName: row.created_by ? memberName : (row.publisher_name ?? null),
     };
-    return { card, startsAt: attrs.startsAt };
+    return { card, startsAt: attrs.startsAt, endsAt: attrs.endsAt };
   });
 
   // `entrada` se resuelve en memoria y no en SQL a propósito: `attrs.free` es
@@ -306,19 +334,22 @@ async function EventosContent({ filters }: { filters: Filters }) {
     ({ card }) =>
       filters.entrada === "" || (filters.entrada === "gratis" ? card.free : !card.free),
   );
-  const { upcoming, past } = splitByWhen(filtered, filters.cuando);
-  const isEmpty = upcoming.length === 0 && past.length === 0;
+  // Patrocinados: salen de lo que ya pasó por q/entrada/ciudad/cuando, así que uno
+  // que no matchea el filtro activo no aparece. La decisión de orden completa está
+  // en el comentario de `extractSponsored`.
+  const listado = armarListado(filtered, filters.cuando, boostedIds, {
+    now: new Date(),
+    timeZone: viewerZone ?? DEFAULT_TIME_ZONE,
+    maxPasados: MAX_PAST,
+    maxPatrocinados: SPONSORED_LIMIT,
+  });
+  const { patrocinados: sponsored, proximos: upcomingRest, pasados: pastRest } = listado;
+  const isEmpty =
+    sponsored.length === 0 && upcomingRest.length === 0 && pastRest.length === 0;
   const filtering = Boolean(
     filters.q || filters.cuando || filters.entrada || filters.ciudad || filters.categoria,
   );
 
-  // Patrocinados: se sacan de `upcoming`/`past` — que ya son el resultado de
-  // aplicar q/entrada/ciudad (arriba) y `cuando` (recién, en splitByWhen) —
-  // así que un patrocinado que no matchea el filtro activo simplemente no
-  // está en ninguna de las dos listas y no aparece. Ver la decisión de orden
-  // completa en el comentario de `extractSponsored`.
-  const { sponsored, rest } = extractSponsored([upcoming, past], boostedIds, SPONSORED_LIMIT);
-  const [upcomingRest, pastRest] = rest;
 
   return (
     <>
@@ -427,7 +458,10 @@ async function EventosContent({ filters }: { filters: Filters }) {
 
           {pastRest.length > 0 && (
             <>
-              {(sponsored.length > 0 || upcomingRest.length > 0) && (
+              {listado.sinProximos && (
+                <p className="text-sm text-foreground-secondary">{C.noUpcoming}</p>
+              )}
+              {listado.rotularPasados && (
                 <h2 className="mt-4 text-sm font-semibold text-foreground-muted">
                   {C.pastSectionTitle}
                 </h2>
@@ -515,41 +549,6 @@ function cityOptions(events: readonly EventRow[], active: string): FilterOption[
       .sort((a, b) => a.localeCompare(b, "es"))
       .map((city) => ({ value: city, label: city })),
   ];
-}
-
-/**
- * Reparte las tarjetas en los dos bloques según el filtro temporal.
- *
- * Sin filtro se conserva el comportamiento histórico de la pantalla (los
- * próximos, y una cola corta de los últimos que pasaron) porque es el que el
- * cliente ya vio y aprobó. Los filtros explícitos muestran UN bloque solo.
- */
-function splitByWhen(
-  events: readonly EventRow[],
-  when: When,
-): { upcoming: EventCardModel[]; past: EventCardModel[] } {
-  const upcoming = events.filter(({ card }) => !card.date || !card.date.isPast);
-  const past = events.filter(({ card }) => card.date?.isPast);
-  const cards = (list: readonly EventRow[]) => list.map((entry) => entry.card);
-
-  if (when === "pasados") {
-    // Los que pasaron, del más reciente al más viejo, y TODOS: si alguien pidió
-    // ver lo que pasó, recortarle la lista a cinco es contestarle otra cosa.
-    return { upcoming: [], past: cards([...past].reverse()) };
-  }
-
-  if (when === "mes") {
-    const now = new Date();
-    const sameMonth = upcoming.filter(({ startsAt }) => {
-      if (!startsAt) return false; // sin fecha no se puede afirmar que sea de este mes
-      const date = new Date(startsAt);
-      if (Number.isNaN(date.getTime())) return false;
-      return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
-    });
-    return { upcoming: cards(sameMonth), past: [] };
-  }
-
-  return { upcoming: cards(upcoming), past: cards([...past].reverse().slice(0, MAX_PAST)) };
 }
 
 // ---------------------------------------------------------------------------

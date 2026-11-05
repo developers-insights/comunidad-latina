@@ -1,3 +1,4 @@
+import { requireSiteUrl } from "@/lib/config/site-url";
 import { NextResponse } from "next/server";
 import { isStripeConfigured } from "@/lib/config/services";
 import { isCreatorOfTenant, onboardingLink } from "@/lib/creators/payout-onboarding";
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
       tenantId: guard.tenant.id,
       profileId: guard.user.id,
       email: guard.user.email ?? null,
-      siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? new URL(request.url).origin,
+      siteUrl: requireSiteUrl(),
     });
     return NextResponse.redirect(url);
   } catch (error) {

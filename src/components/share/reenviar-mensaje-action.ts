@@ -12,6 +12,7 @@ import {
   rutaDeAdjunto,
 } from "@/lib/messaging/adjuntos";
 import { COMPARTIDO_KINDS } from "./enlace-interno";
+import { isPhoneRequiredError } from "@/lib/phone/error";
 
 export type ReenviarMensajeResult =
   | { ok: true; enviados: number; fallidos: number }
@@ -23,6 +24,7 @@ export type ReenviarMensajeResult =
         | "invalid"
         | "rate-limited"
         | "forbidden"
+        | "phone-required"
         | "error";
     };
 
@@ -151,11 +153,15 @@ export async function reenviarMensajeAction(
     };
   }
 
+  /** El trigger de la 0181 cortó algún envío (ver `compartir-actions.ts`). */
+  let cortadoPorTelefono = false;
+
   async function insertar(tabla: string, destino: Record<string, string>) {
     const { error: insertError } = await supabase
       .from(tabla)
       .insert(filaDeMensaje(destino, mensaje));
     if (!insertError) return true;
+    if (isPhoneRequiredError(insertError)) cortadoPorTelefono = true;
     console.warn("[reenviar] un destino rechazó el mensaje", {
       tabla,
       code: insertError.code,
@@ -174,6 +180,7 @@ export async function reenviarMensajeAction(
       "solicitar_contacto_directo",
       { p_profile_id: destino.id },
     );
+    if (isPhoneRequiredError(rpcError)) cortadoPorTelefono = true;
     if (rpcError || typeof conversationId !== "string" || !conversationId) return false;
     const ok = await insertar("messages", { conversation_id: conversationId });
     if (ok) conversacionesTocadas.add(conversationId);
@@ -191,7 +198,9 @@ export async function reenviarMensajeAction(
     }
   }
 
-  if (enviados === 0) return { ok: false, code: "error" };
+  if (enviados === 0) {
+    return { ok: false, code: cortadoPorTelefono ? "phone-required" : "error" };
+  }
 
   for (const id of conversacionesTocadas) {
     tocarTimbre(supabase, { ambito: "directo", id }, user.id, "nuevo");

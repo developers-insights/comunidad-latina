@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database.types";
 import { eventDateParts, parseEventAttrs } from "@/components/directory";
+import { eventoTerminado } from "@/lib/eventos/vigencia";
 
 /**
  * =============================================================================
@@ -52,40 +53,18 @@ export interface EventoDelNegocio {
 }
 
 /**
- * "Vigente" para esta sección: hoy o más adelante, EN LA ZONA DE QUIEN MIRA.
- *
- * No se compara contra el instante exacto (`now.getTime()`): un evento que
- * empezó esta mañana y sigue en curso —la ficha no sabe cuánto dura si el
- * aviso no declaró `ends_at`— desaparecería a media tarde si se comparara así.
- * Se compara el DÍA CALENDARIO: mientras `starts_at` caiga hoy o después (en la
- * zona de quien mira, no en UTC ni en la del servidor), el evento se sigue
- * mostrando. Es la "tolerancia razonable" de la spec, sin inventar una
- * duración por defecto que ningún aviso declaró.
- *
- * Misma regla de fondo que `memberSinceLabel` (perfil/profile-tabs.ts): una
- * fecha se decide en la zona de quien LEE, no en la de quien escribió ni en la
- * del servidor — si no, un evento de "hoy" en Los Ángeles puede leerse "de
- * ayer" para el servidor en UTC y desaparecer antes de tiempo.
+ * "Vigente" para esta sección: todavía no terminó. El criterio es el mismo del
+ * listado y de la ficha (`lib/eventos/vigencia.ts`), en la zona de quien mira. Una
+ * fecha ilegible no se puede mostrar, así que acá no cuenta como vigente.
  */
-export function eventoSigueVigente(startsAtIso: string, now: Date, timeZone: string): boolean {
-  const startsAt = new Date(startsAtIso);
-  if (Number.isNaN(startsAt.getTime())) return false;
-  return localDateKey(startsAt, timeZone) >= localDateKey(now, timeZone);
-}
-
-/**
- * "2026-08-26" — el día calendario de `date` EN `timeZone`, como texto.
- * `en-CA` es el truco: es el único locale de `Intl` cuyo formato corto es
- * exactamente `YYYY-MM-DD`, que ordena bien como STRING (no hace falta
- * reconstruir un `Date` en esa zona para comparar).
- */
-function localDateKey(date: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+export function eventoSigueVigente(
+  startsAtIso: string,
+  now: Date,
+  timeZone: string,
+  endsAtIso?: string | null,
+): boolean {
+  if (Number.isNaN(new Date(startsAtIso).getTime())) return false;
+  return !eventoTerminado({ startsAt: startsAtIso, endsAt: endsAtIso }, now, timeZone);
 }
 
 /**
@@ -107,6 +86,7 @@ interface EventoCandidato {
   title: string;
   areaLabel: string | null;
   startsAt: string;
+  endsAt: string | null;
   free: boolean;
 }
 
@@ -155,6 +135,7 @@ export async function fetchEventosDelNegocio(
             title: row.title,
             areaLabel: row.area_label,
             startsAt: details.startsAt,
+            endsAt: details.endsAt,
             free: details.free,
           }
         : null;
@@ -167,11 +148,11 @@ export async function fetchEventosDelNegocio(
   const now = new Date();
 
   return candidatos
-    .filter((c) => eventoSigueVigente(c.startsAt, now, timeZone))
+    .filter((c) => eventoSigueVigente(c.startsAt, now, timeZone, c.endsAt))
     .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
     .slice(0, limit)
     .map((c) => {
-      const parts = eventDateParts(c.startsAt, locale, timeZone);
+      const parts = eventDateParts(c.startsAt, locale, timeZone, c.endsAt);
       return {
         id: c.id,
         titulo: c.title,

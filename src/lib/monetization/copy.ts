@@ -233,6 +233,8 @@ export const COPY = {
       "Revisá el número: escribilo completo con el código de país, por ejemplo +1 305 555 0134.",
     invalidUrl:
       "Ese link no se entiende. Tiene que empezar con https:// y llevar a una página real.",
+    invalidPurchaseUrl:
+      "Necesitamos el link real de tu tienda o boletería, con https:// adelante. Los enlaces de prueba no sirven.",
     invalidAddress: "Escribí la dirección completa, para que el mapa la encuentre.",
     tooManyTries:
       "Guardaste muchos cambios seguidos. Esperá un momento y probá de nuevo — no se perdió nada.",

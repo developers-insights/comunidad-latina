@@ -62,21 +62,50 @@ function asFiniteNumber(value: unknown): number | null {
 }
 
 /**
+ * Meses calendario COMPLETOS entre el alta y `ahora`, en UTC. Es la misma regla
+ * de `app.sincronizar_antiguedad()` (0182), para que el perfil y las pantallas
+ * que leen el jsonb digan lo mismo. `null` si la fecha no sirve.
+ */
+export function mesesEnLaComunidad(
+  fechaDeAlta: string,
+  ahora: Date = new Date(),
+): number | null {
+  const alta = new Date(fechaDeAlta);
+  if (Number.isNaN(alta.getTime())) return null;
+  const meses =
+    (ahora.getUTCFullYear() - alta.getUTCFullYear()) * 12 +
+    (ahora.getUTCMonth() - alta.getUTCMonth());
+  const cumpleElMes = new Date(alta);
+  cumpleElMes.setUTCMonth(alta.getUTCMonth() + meses);
+  return Math.max(0, cumpleElMes > ahora ? meses - 1 : meses);
+}
+
+/**
  * `trust_scores.signals` (jsonb, forma del seed: months_in_community,
  * transactions_ok, endorsements_count) → lista legible para el TrustScoreSheet.
  * Nunca inventa señales: solo traduce las que existen; las faltantes van en
  * gris como "todavía no".
+ *
+ * `fechaDeAlta` es `profiles.created_at`. Si viene, manda sobre el jsonb:
+ * `months_in_community` lo escribió el seed una sola vez y nada lo actualizaba
+ * hasta la 0182, por eso GEOVANNY figuraba "hace 8 meses" con alta en julio. Las
+ * pantallas que no tienen la fecha a mano leen el jsonb, que la 0182 mantiene
+ * al día desde esa misma columna.
  */
 export function buildTrustSignals(
   signals: Json,
   identityVerified: boolean,
+  fechaDeAlta?: string | null,
 ): TrustSignal[] {
   const record =
     signals !== null && typeof signals === "object" && !Array.isArray(signals)
       ? (signals as Record<string, unknown>)
       : {};
 
-  const months = asFiniteNumber(record.months_in_community) ?? 0;
+  const months =
+    (fechaDeAlta ? mesesEnLaComunidad(fechaDeAlta) : null) ??
+    asFiniteNumber(record.months_in_community) ??
+    0;
   const transactions = asFiniteNumber(record.transactions_ok) ?? 0;
   const endorsements = asFiniteNumber(record.endorsements_count) ?? 0;
   const reportsUpheld = asFiniteNumber(record.reports_upheld) ?? 0;

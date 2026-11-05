@@ -441,7 +441,7 @@ async function main() {
       'Un domingo de música en vivo, comida típica y feria de emprendedores dominicanos. Traé a la familia — hay actividades para los niños.',
     area_label: 'Flushing Meadows, Queens',
     photos: [pic('evento_festival', 0), pic('evento_festival', 1)].filter(Boolean),
-    attrs: { starts_at: daysAhead(12), ends_at: daysAhead(12), free: true, venue_area: 'Flushing Meadows Corona Park', family_friendly: true },
+    attrs: { starts_at: daysAhead(12), ends_at: daysAhead(12.25), free: true, venue_area: 'Flushing Meadows Corona Park', family_friendly: true },
     created_by: ramonId,
     source: 'user',
   });

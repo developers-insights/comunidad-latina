@@ -35,6 +35,7 @@ import {
 } from "@/components/ui";
 import { cn, DEFAULT_CURRENCY } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { imagenLegible } from "@/lib/media/imagen-legible";
 import { Celebration, useCelebration } from "@/components/motion";
 import { COPY, firstPhotoUrl, formatListingPrice } from "@/components/listings";
 import { OfrecerImpulso } from "@/components/boosts/ofrecer-impulso";
@@ -730,7 +731,7 @@ export function PublishForm({
         return DIR_COPY.event.endsError;
       }
       if (!eventTicket) return DIR_COPY.event.ticketError;
-      if (eventTicketsUrl.trim() && !looksLikeUrl(eventTicketsUrl)) {
+      if (eventTicket !== "gratis" && eventTicketsUrl.trim() && !looksLikeUrl(eventTicketsUrl)) {
         return DIR_COPY.event.ticketsUrlError;
       }
       if (!eventMode) return DIR_COPY.event.modeError;
@@ -767,9 +768,20 @@ export function PublishForm({
     setStep(0);
   }
 
-  function addPhotos(fileList: FileList | null) {
+  async function addPhotos(fileList: FileList | null) {
     if (!fileList) return;
-    const incoming = Array.from(fileList);
+    const selected = Array.from(fileList);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    // `accept="image/*"` deja pasar formatos que el navegador no sabe dibujar
+    // (un HEIC en Chrome): sin este filtro quedaría una miniatura rota en el
+    // borrador y una foto que después nadie puede ver.
+    const legibles = await Promise.all(selected.map(imagenLegible));
+    const incoming = selected.filter((_, index) => legibles[index]);
+    if (incoming.length < selected.length) {
+      toast({ title: C.steps.photos.unreadable, variant: "warning" });
+    }
+
     setPhotos((current) => {
       const next = [...current];
       for (const file of incoming) {
@@ -787,7 +799,6 @@ export function PublishForm({
       }
       return next;
     });
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function removePhoto(index: number) {
@@ -893,7 +904,8 @@ export function PublishForm({
           eventCategory: isEvent ? eventCategory || null : null,
           eventMode: isEvent && eventMode ? eventMode : null,
           eventOnlineUrl: isOnlineEvent ? eventOnlineUrl.trim() || null : null,
-          eventTicketsUrl: isEvent ? eventTicketsUrl.trim() || null : null,
+          eventTicketsUrl:
+            isEvent && eventTicket !== "gratis" ? eventTicketsUrl.trim() || null : null,
           // `null` mientras no eligió (el paso 2 no deja avanzar sin elegir, así
           // que sólo pasa si el kind no es evento).
           eventFree: isEvent && eventTicket ? eventTicket === "gratis" : null,
@@ -1522,23 +1534,25 @@ export function PublishForm({
                   attrs.tickets_url. El botón premium vive en la columna
                   cta_tickets_url, que la base le prohíbe a un aviso free. La
                   precedencia entre los dos está en resolveEventTicketsUrl(). */}
-              <Field
-                htmlFor="pub-event-tickets-url"
-                label={DIR_COPY.event.ticketsUrlLabel}
-                help={DIR_COPY.event.ticketsUrlHelp}
-                optional
-              >
-                <Input
-                  id="pub-event-tickets-url"
-                  type="url"
-                  inputMode="url"
-                  autoComplete="url"
-                  value={eventTicketsUrl}
-                  maxLength={500}
-                  placeholder={DIR_COPY.event.ticketsUrlPlaceholder}
-                  onChange={(event) => setEventTicketsUrl(event.target.value)}
-                />
-              </Field>
+              {eventTicket !== "gratis" && (
+                <Field
+                  htmlFor="pub-event-tickets-url"
+                  label={DIR_COPY.event.ticketsUrlLabel}
+                  help={DIR_COPY.event.ticketsUrlHelp}
+                  optional
+                >
+                  <Input
+                    id="pub-event-tickets-url"
+                    type="url"
+                    inputMode="url"
+                    autoComplete="url"
+                    value={eventTicketsUrl}
+                    maxLength={500}
+                    placeholder={DIR_COPY.event.ticketsUrlPlaceholder}
+                    onChange={(event) => setEventTicketsUrl(event.target.value)}
+                  />
+                </Field>
+              )}
 
               {/* DÓNDE. Va acá y no en el paso 3 porque decide QUÉ muestra el
                   paso 3: presencial pide zona y dirección, en línea pide el
@@ -1723,7 +1737,7 @@ export function PublishForm({
             multiple
             className="sr-only"
             aria-label={C.steps.photos.addLabel}
-            onChange={(event) => addPhotos(event.target.files)}
+            onChange={(event) => void addPhotos(event.target.files)}
           />
 
           {photos.length > 0 && (

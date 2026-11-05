@@ -32,6 +32,7 @@ import {
 } from "@/app/(app)/mensajes/adjuntos-actions";
 import { COPY_COMPOSER } from "./copy-composer";
 import type { GrabacionLista } from "./voice-recorder";
+import { PHONE_REQUIRED_COPY } from "@/lib/phone/error";
 
 /**
  * EL BOTÓN + Y TODO LO QUE PASA DETRÁS.
@@ -265,6 +266,7 @@ export function useAdjuntos(destino: DestinoDeAdjunto) {
   const traducir = useCallback((code: string, message?: string): string => {
     if (code === "peso") return COPY_COMPOSER.rechazo.peso;
     if (code === "tipo") return COPY_COMPOSER.rechazo.tipo;
+    if (code === "phone-required") return PHONE_REQUIRED_COPY;
     if (code === "tenant-mismatch" && message) return message;
     return COPY_COMPOSER.rechazo.genericoCuerpo;
   }, []);

@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowUpRight, Clock, EnvelopeSimple } from "@phosphor-icons/react/dist/ssr";
@@ -7,7 +8,7 @@ import { buttonVariants } from "@/components/ui";
 import { JsonLd } from "@/components/marketing/json-ld";
 import { LegalCallout, LegalSection, legalProse } from "@/components/legal/legal-prose";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+const SITE_URL = siteUrlForMetadata();
 const LEGAL_ENTITY = "Comunidad Latina LLC";
 
 const linkClass =

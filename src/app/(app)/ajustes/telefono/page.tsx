@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenant } from "@/lib/tenant/resolve";
 import { isPhoneVerificationEnabled, isWhatsAppOtpConfigured } from "@/lib/config/services";
+import { safeInternalPath } from "@/lib/url/safe-href";
 import { maskPhone } from "@/lib/phone/e164";
 import { CODE_TTL_MINUTES } from "@/lib/phone/verification";
 import { PhoneVerification } from "./phone-verification";
@@ -11,6 +13,10 @@ export const metadata = { title: "Tu teléfono" };
 
 /**
  * Ajustes › Tu teléfono.
+ *
+ * Cuando la comunidad lo exige (`tenants.phone_required`), acá llega el pedido
+ * del shell (`<PhoneGateBanner>`). "Ahora no" es honesto: leer sigue libre, y lo
+ * que no puede hacer sin verificar lo corta la base.
  *
  * ⚠️ RUTA APAGADA POR DEFECTO. Sin `PHONE_VERIFICATION_ENABLED=true` devuelve
  * 404 — ni siquiera una pantalla de "próximamente". El gate no es de producto
@@ -23,7 +29,11 @@ export const metadata = { title: "Tu teléfono" };
  * feature entera está deshabilitada por una razón externa al producto, y lo
  * honesto es que la ruta no exista.
  */
-export default async function TelefonoAjustesPage() {
+export default async function TelefonoAjustesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
   if (!isPhoneVerificationEnabled) notFound();
 
   const supabase = await createClient();
@@ -32,7 +42,11 @@ export default async function TelefonoAjustesPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/entrar?next=/ajustes/telefono");
 
-  const tenant = await getTenant();
+  const [tenant, query] = await Promise.all([getTenant(), searchParams]);
+  const required = tenant.phoneRequired === true;
+  // Adónde volver después de verificar. Sanitizado: viene de la URL.
+  const nextRaw = typeof query.next === "string" ? query.next : null;
+  const returnTo = nextRaw ? safeInternalPath(nextRaw, "/feed") : null;
 
   /**
    * El número se lee con el cliente ADMIN y no con el de sesión.
@@ -65,8 +79,9 @@ export default async function TelefonoAjustesPage() {
           Tu teléfono
         </h1>
         <p className="mt-1 text-sm text-foreground-secondary">
-          Un número verificado te ayuda a recuperar tu cuenta y le dice a la comunidad
-          que hay una persona real detrás de tu perfil.
+          {required
+            ? "Lo pedimos para cuidar a la comunidad: nos ayuda a saber que hay una persona real detrás de cada cuenta."
+            : "Un número verificado le dice a la comunidad que hay una persona real detrás de tu perfil."}
         </p>
       </header>
 
@@ -74,7 +89,18 @@ export default async function TelefonoAjustesPage() {
         verifiedPhone={masked}
         ttlMinutes={CODE_TTL_MINUTES}
         whatsappAvailable={isWhatsAppOtpConfigured}
+        required={required}
+        returnTo={returnTo}
       />
+
+      {required && !masked && (
+        <Link
+          href={returnTo ?? "/feed"}
+          className="self-center text-sm font-medium text-foreground-secondary underline underline-offset-2"
+        >
+          Ahora no, quiero seguir leyendo
+        </Link>
+      )}
 
       <p className="text-xs leading-relaxed text-foreground-muted">
         Tu número nunca aparece en tu perfil, ni en las búsquedas, ni se comparte con

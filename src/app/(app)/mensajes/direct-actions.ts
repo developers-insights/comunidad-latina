@@ -6,6 +6,7 @@ import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
 import { avisarSolicitudNueva } from "@/lib/notifications/solicitud-server";
+import { PHONE_REQUIRED_TOKEN } from "@/lib/phone/error";
 
 /**
  * CONTACTO DIRECTO PERSONA → PERSONA.
@@ -29,7 +30,7 @@ export type AbrirChatResult =
   | { ok: true; conversationId: string }
   | {
       ok: false;
-      code: "unauthenticated" | "tenant-mismatch" | "blocked" | "self" | "invalid" | "rate-limited" | "error";
+      code: "unauthenticated" | "tenant-mismatch" | "blocked" | "self" | "invalid" | "rate-limited" | "phone-required" | "error";
     };
 
 /**
@@ -47,6 +48,8 @@ function errorDelRpc(message: string | undefined): AbrirChatResult {
       return { ok: false, code: "self" };
     case "AUTH_REQUIRED":
       return { ok: false, code: "unauthenticated" };
+    case PHONE_REQUIRED_TOKEN:
+      return { ok: false, code: "phone-required" };
     case "PROFILE_NOT_FOUND":
       // Deliberadamente indistinguible de un bloqueo hacia afuera: la RPC ya
       // contesta lo mismo para "no existe" y "es de otra comunidad", y acá no

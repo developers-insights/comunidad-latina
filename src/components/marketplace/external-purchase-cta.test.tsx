@@ -51,6 +51,20 @@ describe("ExternalPurchaseCta — destino seguro", () => {
     expect(container.querySelector("a")).toBeNull();
   });
 
+  it("NO renderiza nada con un link de ejemplo ya guardado, ni sin https", () => {
+    for (const url of [
+      "https://example.com/comprar",
+      "https://example.net/x",
+      "http://tiendadeana.com",
+      "https://localhost:3000/x",
+      "https://127.0.0.1/x",
+    ]) {
+      const { container } = render(<ExternalPurchaseCta purchaseUrl={url} storeName={STORE} />);
+      expect(container.textContent).toBe("");
+      cleanup();
+    }
+  });
+
   it("NO renderiza nada sin URL", () => {
     for (const url of [null, undefined, "", "   "]) {
       const { container } = render(<ExternalPurchaseCta purchaseUrl={url} storeName={STORE} />);

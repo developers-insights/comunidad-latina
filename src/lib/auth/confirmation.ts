@@ -18,11 +18,11 @@ import { isResendConfigured, isSentryConfigured } from "@/lib/config/services";
  * verificado del proyecto.
  *
  * El enlace NO es el `action_link` que devuelve Supabase: ese pega en
- * `/auth/v1/verify` y después redirige al `Site URL` del proyecto (hoy
- * `localhost:3000`, porque los dominios de producción no están en la allow-list
- * del dashboard). Usamos el `hashed_token` contra nuestra propia ruta
- * `/confirmar`, que no depende de esa configuración y siempre vuelve al mismo
- * host donde la persona se registró.
+ * `/auth/v1/verify` y después redirige según el `Site URL` y la allow-list del
+ * dashboard, un solo juego de ajustes para todas las comunidades. Usamos el
+ * `hashed_token` contra nuestra propia ruta `/confirmar`, que no depende de las
+ * plantillas ni de la allow-list y siempre vuelve al mismo host donde la persona
+ * se registró, que es el de su comunidad.
  *
  * Verificado en vivo contra el proyecto (2026-08-01):
  *   - `generateLink({ type: "signup" })` sobre un usuario ya creado con

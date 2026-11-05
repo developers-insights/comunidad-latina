@@ -47,8 +47,8 @@ import { canUseActionButtons } from "@/lib/monetization";
 import { eventAudienceLabel, eventCategoryLabel } from "@/lib/eventos/categorias";
 import {
   EVENT_DETAILS_COPY,
+  eventTicketsCta,
   readEventDetails,
-  resolveEventTicketsUrl,
 } from "@/lib/eventos/detalles";
 import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { metadataDeCompartible } from "@/components/share/metadata";
@@ -252,7 +252,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
 
   const attrs = parseEventAttrs(listing.attrs);
   const date = attrs.startsAt
-    ? eventDateParts(attrs.startsAt, tenant.locale, viewerZone ?? undefined)
+    ? eventDateParts(attrs.startsAt, tenant.locale, viewerZone ?? undefined, attrs.endsAt)
     : null;
   const venue = attrs.venueArea ?? listing.area_label;
   const isOwner = Boolean(userId && listing.created_by === userId);
@@ -282,9 +282,12 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
    * fila NO va a existir —o existe pero el valor salió del respaldo gratuito—
    * el botón se pinta acá abajo. La condición es exactamente esa y no "si es
    * gratis": un premium VENCIDO también tiene que volver a mostrar su respaldo.
+   *
+   * `eventTicketsCta` es la que decide si hay botón: sin un link real, en un
+   * evento gratis o en uno que ya terminó, no hay ninguno de los dos.
    */
   const details = readEventDetails(listing.attrs);
-  const tickets = resolveEventTicketsUrl(listing.cta_tickets_url, listing.attrs);
+  const tickets = eventTicketsCta(listing.cta_tickets_url, listing.attrs, date?.isPast ?? false);
   const ticketsInActionsRow =
     tickets !== null && tickets.source === "premium" && canUseActionButtons(listing.tier);
   const categoryLabel = eventCategoryLabel(details.category);
@@ -494,7 +497,7 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
           subject={listing.title}
           isLoggedIn={Boolean(userId)}
           values={{
-            tickets: listing.cta_tickets_url,
+            tickets: tickets?.source === "premium" ? tickets.href : null,
             directions: listing.cta_address,
           }}
         />

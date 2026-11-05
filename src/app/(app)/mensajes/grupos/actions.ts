@@ -16,6 +16,7 @@ import {
   esUrlDeAvatarsPublico,
   supabaseSinTiparGrupos,
 } from "@/lib/messaging/grupos";
+import { isPhoneRequiredError } from "@/lib/phone/error";
 
 /**
  * =============================================================================
@@ -53,6 +54,8 @@ export type GrupoActionResult =
          * mandaría a tocar "Unirme" para siempre.
          */
         | "banned"
+        /** El trigger de la 0181: falta verificar el teléfono. */
+        | "phone-required"
         | "error";
       /** Copy ya listo para pantalla cuando el caso lo necesita. */
       message?: string;
@@ -191,6 +194,7 @@ export async function crearGrupoAction(input: {
     // esperable y tiene copy propio: "ya hay un grupo con ese nombre".
     if (error.code === "23505") return { ok: false, code: "duplicate" };
     console.warn("[grupos] no se pudo crear el grupo", { code: error.code });
+    if (isPhoneRequiredError(error)) return { ok: false, code: "phone-required" };
     return { ok: false, code: "error" };
   }
 
@@ -319,6 +323,7 @@ export async function solicitarIngresoAlGrupoAction(
 
   if (error) {
     console.warn("[grupos] no se pudo pedir ingreso", { code: error.code });
+    if (isPhoneRequiredError(error)) return { ok: false, code: "phone-required" };
     return { ok: false, code: "error" };
   }
   if (data === "sin_permiso" || data === "sin_sesion") {
@@ -751,6 +756,7 @@ export async function enviarMensajeAlGrupoAction(input: {
 
   if (error) {
     console.warn("[grupos] no se pudo enviar el mensaje", { code: error.code });
+    if (isPhoneRequiredError(error)) return { ok: false, code: "phone-required" };
     // 42501 = no soy miembro o el grupo está cerrado.
     return { ok: false, code: error.code === "42501" ? "forbidden" : "error" };
   }
