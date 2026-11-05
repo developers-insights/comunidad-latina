@@ -108,4 +108,24 @@ describe("EventCard: al detalle se entra SOLO por la píldora", () => {
 
     expect(viewer.open).not.toHaveBeenCalled();
   });
+
+  it("un evento gratis que ya pasó dice que ya pasó, no que la entrada es libre", () => {
+    render(
+      <EventCard
+        event={{
+          ...BASE,
+          free: true,
+          date: {
+            day: "15",
+            month: "AGO",
+            full: "sábado, 15 de agosto",
+            time: "16:00",
+            isPast: true,
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText("Ya pasó")).toBeTruthy();
+    expect(screen.queryByText("Entrada libre")).toBeNull();
+  });
 });

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PHONE_REQUIRED_COPY } from "@/lib/phone/error";
 
 /**
  * Tests de las server actions de MONETIZACIÓN — la parte que cobra.
@@ -222,6 +223,19 @@ describe("saveListingCtasAction — el gate de premium", () => {
     });
   });
 
+  it("traduce el corte del teléfono (0181)", async () => {
+    useGuardOk({
+      rpc: { data: null, error: { message: "PHONE_VERIFICATION_REQUIRED: confirmá tu teléfono." } },
+    });
+
+    const result = await saveListingCtasAction({
+      listingId: LISTING_ID,
+      ctas: { phone: "+1 305 555 0134" },
+    });
+
+    expect(result).toEqual({ ok: false, error: PHONE_REQUIRED_COPY });
+  });
+
   it("sólo guarda los botones que el MÓDULO ofrece", async () => {
     // Un evento ofrece boletos y cómo llegar; "comprar" no es suyo aunque venga.
     const stub = useGuardOk({ listing: { data: listingRow({ kind: "event" }), error: null } });
@@ -252,6 +266,49 @@ describe("saveListingCtasAction — el gate de premium", () => {
     });
     expect(result.ok).toBe(false);
     expect(updatePatch(stub)).toBeNull();
+  });
+});
+
+describe("saveListingCtasAction — links de compra de ejemplo", () => {
+  it.each([
+    ["product", "purchase", "https://example.com/comprar"],
+    ["product", "purchase", "http://tiendadeana.com"],
+    ["product", "purchase", "https://localhost/x"],
+    ["event", "tickets", "https://example.com/entradas"],
+    ["event", "tickets", "https://127.0.0.1/x"],
+  ])("%s · %s: %s no se guarda y el error señala el campo", async (kind, field, url) => {
+    const stub = useGuardOk({ listing: { data: listingRow({ kind }), error: null } });
+
+    const result = await saveListingCtasAction({
+      listingId: LISTING_ID,
+      ctas: { [field]: url },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.field).toBe(field);
+    expect(!result.ok && result.error).toMatch(/link real/i);
+    expect(updatePatch(stub)).toBeNull();
+  });
+
+  it("un link real de compra se guarda", async () => {
+    const stub = useGuardOk({ listing: { data: listingRow({ kind: "product" }), error: null } });
+
+    const result = await saveListingCtasAction({
+      listingId: LISTING_ID,
+      ctas: { purchase: "https://tiendadeana.com/pedido" },
+    });
+
+    expect(result).toEqual({ ok: true, saved: ["purchase"] });
+    expect(updatePatch(stub)?.cta_purchase_url).toBe("https://tiendadeana.com/pedido");
+  });
+
+  it("dejar el campo vacío sigue siendo borrar el botón, no un error", async () => {
+    const stub = useGuardOk({ listing: { data: listingRow({ kind: "product" }), error: null } });
+
+    const result = await saveListingCtasAction({ listingId: LISTING_ID, ctas: { purchase: "   " } });
+
+    expect(result).toEqual({ ok: true, saved: [] });
+    expect(updatePatch(stub)?.cta_purchase_url).toBeNull();
   });
 });
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { requireSiteUrl } from "@/lib/config/site-url";
 import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
 import { getIdentidadActiva } from "@/lib/perfil-activo/identidad";
@@ -174,7 +175,7 @@ export async function iniciarSuscripcion(
       businessAccountId = created.id;
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    const siteUrl = requireSiteUrl();
     const metadata = {
       tenant_id: tenant.id,
       business_account_id: businessAccountId,
@@ -296,7 +297,7 @@ export async function abrirPortalPresencia(): Promise<AbrirPortalResult> {
   }
 
   try {
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    const siteUrl = requireSiteUrl();
     const stripe = getStripe();
     const configuration = await portalConfigurationId(stripe);
     const session = await stripe.billingPortal.sessions.create({

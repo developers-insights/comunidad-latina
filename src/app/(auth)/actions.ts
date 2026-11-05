@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { headers } from "next/headers";
+import { after } from "next/server";
 import { limit, HOUR_MS, clientIpFromHeaders } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -10,6 +11,11 @@ import {
   sendConfirmationEmail,
   resendConfirmationForCredentials,
 } from "@/lib/auth/confirmation";
+import { canalDeRecuperacionListo, sendRecoveryEmail } from "@/lib/auth/recovery";
+import {
+  cuentaPuedePedirRecuperacion,
+  ipPuedePedirRecuperacion,
+} from "@/lib/auth/recovery-tope";
 import type { ActionResult } from "@/components/auth/action-result";
 import { safeInternalPath } from "@/lib/url/safe-href";
 import {
@@ -222,11 +228,16 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
 
   const tenant = await getTenant();
 
+  // ANTES de crear la cuenta: si el sitio está mal configurado se corta acá, y
+  // no después, con una cuenta creada y un correo que nunca va a salir.
+  let origin: string;
   let admin;
   try {
+    origin = await resolveOriginAsync(headerStore);
     admin = createAdminClient();
-  } catch {
-    // Admin client sin configurar (env incompleto) — degradación elegante.
+  } catch (error) {
+    // Env incompleto — degradación elegante.
+    console.error("[auth] registro: configuración incompleta", error);
     return { ok: false, formError: COPY.genericError };
   }
 
@@ -345,7 +356,7 @@ export async function registerAction(input: RegisterInput): Promise<ActionResult
     displayName,
     tenantName: tenant.name,
     brandHex: tenant.brandHex,
-    origin: await resolveOriginAsync(headerStore),
+    origin,
     next,
   });
 
@@ -485,9 +496,9 @@ export async function completeOnboardingAction(
 }
 
 // ---------------------------------------------------------------------------
-// Recuperación de contraseña (Supabase Auth, SMTP propio de Supabase — no
-// depende de Resend). Dos pasos:
-//   1) requestPasswordResetAction: manda el correo con el enlace de reset.
+// Recuperación de contraseña. Dos pasos:
+//   1) requestPasswordResetAction: Supabase firma el token y Resend lo entrega,
+//      con un enlace a nuestro dominio (ver src/lib/auth/recovery.ts).
 //   2) updatePasswordAction: con la sesión de recuperación ya activa (tras el
 //      /callback), fija la contraseña nueva.
 // ---------------------------------------------------------------------------
@@ -507,28 +518,48 @@ export async function requestPasswordResetAction(
   }
   const { email } = parsed.data;
 
-  // Rate limit por IP (misma política que el registro). La IP vive SOLO como key
-  // en memoria del limiter y expira con la ventana — nunca se persiste (§11).
+  // Rate limit por IP (misma política que el registro). Durable: a la base llega un
+  // HMAC, nunca la IP (§11).
   const headerStore = await headers();
-  const ip = clientIpFromHeaders(headerStore);
-  if (!limit(`recuperar:${ip}`, 5, HOUR_MS).ok) {
+  if (!(await ipPuedePedirRecuperacion(clientIpFromHeaders(headerStore)))) {
     return { ok: false, formError: COPY.tooManyAttempts };
   }
 
-  const origin = await resolveOriginAsync(headerStore);
-  const supabase = await createClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    // El callback canjea el code por sesión y manda a fijar la contraseña nueva.
-    redirectTo: `${origin}/callback?next=/recuperar/actualizar`,
-  });
-
-  if (error) {
-    // Anti-enumeración: pase lo que pase (email inexistente, límite de Supabase,
-    // etc.) devolvemos el MISMO éxito genérico. El detalle queda solo en el log.
-    console.error("[auth] recuperar: resetPasswordForEmail falló", {
-      code: error.code,
-    });
+  // Mal configurado se avisa ahora: decirle "ya te lo mandamos" sobre un correo que
+  // no puede salir la dejaría esperando. Es igual para todo correo, así que no dice
+  // si una cuenta existe, y va antes del tope por cuenta para no gastarlo en vano.
+  if (!canalDeRecuperacionListo()) {
+    return { ok: false, formError: COPY.genericError };
   }
+
+  let origin: string;
+  try {
+    origin = await resolveOriginAsync(headerStore);
+  } catch (error) {
+    console.error("[auth] recuperar: no se pudo resolver el origin", error);
+    return { ok: false, formError: COPY.genericError };
+  }
+
+  // Tope por cuenta: la IP sola no frena a quien rota de IP para llenarle la bandeja
+  // a una persona. Pasarlo responde lo mismo que un pedido normal; si avisara,
+  // delataría qué correos reciben pedidos.
+  if (!(await cuentaPuedePedirRecuperacion(email))) {
+    return { ok: true };
+  }
+
+  const tenant = await getTenant();
+
+  // Anti-enumeración, también por tiempo: responder después de mintear y mandar
+  // tardaría más para un correo real que para uno inexistente. `after` corre con la
+  // respuesta ya entregada. El detalle de cada falla queda en `sendRecoveryEmail`.
+  after(() =>
+    sendRecoveryEmail({
+      email,
+      tenantName: tenant.name,
+      brandHex: tenant.brandHex,
+      origin,
+    }),
+  );
 
   return { ok: true };
 }

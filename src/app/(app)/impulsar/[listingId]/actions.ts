@@ -1,5 +1,6 @@
 "use server";
 
+import { requireSiteUrl } from "@/lib/config/site-url";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { BOOST_SCOPES, BOOST_SCOPE_COPY, type BoostScope } from "@/lib/boosts";
@@ -194,7 +195,7 @@ export async function crearBoostCheckout(
     // 3. Checkout one-time. `price_data` inline con el precio vigente de la
     // comunidad; antes del go-live real, migrar a Prices del dashboard.
     const stripe = getStripe();
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    const siteUrl = requireSiteUrl();
     const session = await crearCheckoutSession({
       mode: "payment",
       customer_email: user.email,

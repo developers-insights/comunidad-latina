@@ -48,6 +48,7 @@ vi.mock("@/lib/tenant/guard", () => ({ requireTenantMatch: mocks.requireTenantMa
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mocks.createAdminClient }));
 vi.mock("@/lib/rate-limit", () => ({ limit: mocks.limit, HOUR_MS: 3_600_000 }));
 
+import { PHONE_REQUIRED_COPY } from "@/lib/phone/error";
 import { POST } from "./route";
 
 /* --------------------------- Stub del admin client ------------------------- */
@@ -194,6 +195,82 @@ describe("POST /api/mux/subida — sesión y comunidad", () => {
     expect(respuesta.status).toBe(409);
     expect(admin.calls).toEqual([]);
     expect(mocks.getMux).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/mux/subida — teléfono sin verificar", () => {
+  const CON_GATE = { ...TENANT, phoneRequired: true };
+
+  function guardConGate(user: object = USER) {
+    mocks.requireTenantMatch.mockResolvedValue({ ok: true, tenant: CON_GATE, user });
+  }
+
+  it("corta antes de crear el borrador y sin gastar cupo ni Mux", async () => {
+    guardConGate();
+    const admin = useAdmin({ profiles: { select: { data: { phone_verified: false }, error: null } } });
+    muxOk();
+
+    const respuesta = await POST(pedido());
+
+    expect(respuesta.status).toBe(403);
+    await expect(respuesta.json()).resolves.toMatchObject({
+      error: "telefono_requerido",
+      message: PHONE_REQUIRED_COPY,
+    });
+    expect(admin.calls.filter((c) => c.method === "insert")).toEqual([]);
+    expect(mocks.getMux).not.toHaveBeenCalled();
+    expect(mocks.limit).not.toHaveBeenCalled();
+  });
+
+  it("con el teléfono verificado sigue", async () => {
+    guardConGate();
+    useAdmin({
+      profiles: { select: { data: { phone_verified: true }, error: null } },
+      posts: { insert: BORRADOR },
+    });
+    muxOk();
+
+    expect((await POST(pedido())).status).toBe(200);
+  });
+
+  it("el staff no pasa por el gate, igual que en el trigger", async () => {
+    guardConGate({ ...USER, app_metadata: { role: "moderator" } });
+    const admin = useAdmin({ posts: { insert: BORRADOR } });
+    muxOk();
+
+    expect((await POST(pedido())).status).toBe(200);
+    expect(admin.calls.filter((c) => c.table === "profiles")).toEqual([]);
+  });
+
+  it("sin fila de perfil no corta: mismo criterio que app.telefono_al_dia", async () => {
+    guardConGate();
+    useAdmin({
+      profiles: { select: { data: null, error: null } },
+      posts: { insert: BORRADOR },
+    });
+    muxOk();
+
+    expect((await POST(pedido())).status).toBe(200);
+  });
+
+  it("si la lectura falla no corta: el que obliga es el trigger", async () => {
+    guardConGate();
+    useAdmin({
+      profiles: { select: { data: null, error: { code: "XX000" } } },
+      posts: { insert: BORRADOR },
+    });
+    muxOk();
+
+    expect((await POST(pedido())).status).toBe(200);
+  });
+
+  it("si la comunidad no lo exige ni siquiera lee el perfil", async () => {
+    guardOk();
+    const admin = useAdmin({ posts: { insert: BORRADOR } });
+    muxOk();
+
+    expect((await POST(pedido())).status).toBe(200);
+    expect(admin.calls.filter((c) => c.table === "profiles")).toEqual([]);
   });
 });
 

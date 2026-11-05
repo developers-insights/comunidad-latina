@@ -31,6 +31,14 @@ describe("eventoSigueVigente", () => {
     expect(eventoSigueVigente("2026-08-25T23:00:00Z", NOW, NY)).toBe(false);
   });
 
+  it("con `ends_at`, deja de estar vigente cuando terminó, aunque sea el mismo día", () => {
+    expect(eventoSigueVigente("2026-08-26T12:00:00Z", NOW, NY, "2026-08-26T14:00:00Z")).toBe(false);
+  });
+
+  it("con `ends_at`, uno de varios días sigue vigente aunque haya empezado ayer", () => {
+    expect(eventoSigueVigente("2026-08-25T12:00:00Z", NOW, NY, "2026-08-27T14:00:00Z")).toBe(true);
+  });
+
   it("fecha inválida en attrs → no vigente, no revienta", () => {
     expect(eventoSigueVigente("no-es-una-fecha", NOW, NY)).toBe(false);
   });

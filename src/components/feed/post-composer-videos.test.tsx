@@ -103,6 +103,7 @@ vi.mock("motion/react", async () =>
 import { PostComposerHost } from "./post-composer";
 import { ComposerTrigger } from "./composer-trigger";
 import { COPY } from "./copy";
+import { PHONE_REQUIRED_COPY } from "@/lib/phone/error";
 import { MAX_VIDEOS } from "@/lib/media/post-media-limits";
 
 const TENANT = "11111111-1111-4111-8111-111111111111";
@@ -342,6 +343,17 @@ describe("PostComposer — subidas en carrera, en cola y al salir", () => {
 });
 
 describe("PostComposer — con Mux el tope es un video", () => {
+  it("si falta el teléfono avisa y no sube nada, ni por Mux ni por el bucket", async () => {
+    mocks.requestMuxUpload.mockResolvedValue({ ok: false, reason: "telefono" });
+    mount(true);
+
+    await pickVideos(["a.mp4"]);
+
+    expect(await screen.findByText(PHONE_REQUIRED_COPY)).toBeTruthy();
+    expect(mocks.startMuxUpload).not.toHaveBeenCalled();
+    expect(mocks.uploads).toHaveLength(0);
+  });
+
   it("elegir dos deja uno solo, por Mux, y lo explica", async () => {
     mocks.requestMuxUpload.mockResolvedValue({
       ok: true,

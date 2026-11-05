@@ -727,4 +727,21 @@ describe("la foto del grupo tiene que ser de esta comunidad (H-9)", () => {
     ).resolves.toEqual({ ok: false, code: "invalid" });
     expect(stub.calls.some((c) => c.method === "update")).toBe(false);
   });
+
+  it("traduce el corte del teléfono (0181)", async () => {
+    guardOk(
+      crearStub({
+        terminal: {
+          chat_groups: {
+            error: { code: "P0001", message: "PHONE_VERIFICATION_REQUIRED: confirmá tu teléfono." },
+            count: null,
+          },
+        },
+      }),
+    );
+
+    await expect(
+      editarGrupoAction({ groupId: GROUP_ID, ...grupoValido }),
+    ).resolves.toEqual({ ok: false, code: "phone-required" });
+  });
 });

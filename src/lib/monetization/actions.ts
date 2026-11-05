@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { PHONE_REQUIRED_COPY, isPhoneRequiredError } from "@/lib/phone/error";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { requireTenantMatch } from "@/lib/tenant/guard";
+import { linkDeCompraValido } from "@/lib/url/purchase-link";
 import { safeExternalHref } from "@/lib/url/safe-href";
 import { COPY } from "./copy";
 import {
@@ -11,6 +13,7 @@ import {
   CTA_VALUE_KIND,
   EXTERNAL_CTA_KINDS,
   canUseActionButtons,
+  esCtaDeCompra,
   externalCtasFor,
   parseCtaKind,
   parseListingTier,
@@ -94,6 +97,10 @@ function normalizeCtaValue(
         : { error: COPY.errors.invalidPhone };
 
     case "url": {
+      if (esCtaDeCompra(kind)) {
+        const link = linkDeCompraValido(trimmed);
+        return link ? { value: link } : { error: COPY.errors.invalidPurchaseUrl };
+      }
       const safe = safeExternalHref(trimmed);
       // Sólo destinos EXTERNOS http(s): un botón "Sitio web" que apunta a una
       // ruta interna no es un sitio web, y la base exige `^https?://`.
@@ -199,6 +206,7 @@ export async function saveListingCtasAction(
   });
 
   if (error) {
+    if (isPhoneRequiredError(error)) return { ok: false, error: PHONE_REQUIRED_COPY };
     console.warn("[monetizacion] no se pudieron guardar los CTAs", {
       listingId: listing.id,
       code: error.code,

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SectionTopBar } from "@/components/shell";
+import { exigirSesion } from "@/lib/auth/exigir-sesion";
 
 /**
  * Formulario: crear un grupo — la salida de la pantalla.
@@ -10,7 +11,9 @@ import { SectionTopBar } from "@/components/shell";
  * historial de la app detrás y, si no, cae a `/mensajes/grupos`.
  * Ver `components/shell/section-top-bar.tsx`.
  */
-export default function NuevoGrupoLayout({ children }: { children: ReactNode }) {
+export default async function NuevoGrupoLayout({ children }: { children: ReactNode }) {
+  await exigirSesion("/mensajes/grupos/nuevo");
+
   return (
     <>
       <SectionTopBar fallbackHref="/mensajes/grupos" />

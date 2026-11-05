@@ -5,6 +5,7 @@ import { tocarTimbre } from "@/lib/messaging/timbre";
 import { z } from "zod";
 import { HOUR_MS, limit } from "@/lib/rate-limit";
 import { moderateText } from "@/lib/moderation";
+import { PHONE_REQUIRED_TOKEN } from "@/lib/phone/error";
 import { requireTenantMatch } from "@/lib/tenant/guard";
 import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
 import {
@@ -59,6 +60,8 @@ export type AccionDeMensajeResult =
         | "deleted"
         /** La policy no devolvió filas: no puedo tocar este mensaje. */
         | "forbidden"
+        /** Corregir es volver a publicar: pasa por el mismo gate que enviar (0181). */
+        | "phone-required"
         | "error";
     };
 
@@ -79,6 +82,8 @@ function codigoDelTrigger(message: string | undefined): AccionDeMensajeResult {
       return { ok: false, code: "not-author" };
     case "MESSAGE_DELETED":
       return { ok: false, code: "deleted" };
+    case PHONE_REQUIRED_TOKEN:
+      return { ok: false, code: "phone-required" };
     default:
       return { ok: false, code: "error" };
   }

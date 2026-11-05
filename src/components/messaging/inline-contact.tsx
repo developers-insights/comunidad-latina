@@ -9,6 +9,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { Button, Spinner } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { PHONE_REQUIRED_COPY } from "@/lib/phone/error";
 import { AUTH_REASON, useRequireAuth } from "@/components/auth/auth-sheet";
 import type { SendListingMessageResult } from "@/app/(app)/mensajes/inline-actions";
 
@@ -97,7 +98,7 @@ export type ListingMessageErrorCopy = Record<
    * quiera decirlo con sus palabras los define; quien no, hereda el texto de
    * abajo, que ya es honesto.
    */
-  Partial<Record<"rate-limited" | "flagged", string>>;
+  Partial<Record<"rate-limited" | "flagged" | "phone-required", string>>;
 
 /**
  * Lo que se dice cuando la pantalla no trajo su propia frase.
@@ -107,7 +108,9 @@ export type ListingMessageErrorCopy = Record<
  * pudo mandar. "Moderación" y "límite de tasa" no significan nada del otro
  * lado.
  */
-const FALLBACK_ERROR_COPY: Record<"rate-limited" | "flagged", string> = {
+const FALLBACK_ERROR_COPY: Record<"rate-limited" | "flagged" | "phone-required", string> = {
+  // El trigger de la 0181 cortó el mensaje: falta verificar el teléfono.
+  "phone-required": PHONE_REQUIRED_COPY,
   "rate-limited":
     "Mandaste varios mensajes seguidos. Esperá un ratito y volvé a intentar.",
   flagged:

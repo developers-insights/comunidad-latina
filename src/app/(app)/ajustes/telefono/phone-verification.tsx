@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CheckCircle, DeviceMobile, PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr";
 import {
   removePhoneAction,
@@ -38,9 +39,10 @@ import { BezelCard, Button, Field, Input, useToast } from "@/components/ui";
 const COPY = {
   stepPhoneTitle: "Verificá tu teléfono",
   stepPhoneBody:
-    "Es opcional. Te mandamos un código por SMS para confirmar que el número es tuyo. No se muestra en tu perfil ni se comparte con nadie.",
+    "Te mandamos un código por SMS para confirmar que el número es tuyo. No se muestra en tu perfil ni se comparte con nadie.",
   stepPhoneBodyWhatsApp:
-    "Es opcional. Te mandamos un código para confirmar que el número es tuyo: por SMS si es de Estados Unidos o Canadá, y por WhatsApp si es de otro país. No se muestra en tu perfil ni se comparte con nadie.",
+    "Te mandamos un código para confirmar que el número es tuyo: por SMS si es de Estados Unidos o Canadá, y por WhatsApp si es de otro país. No se muestra en tu perfil ni se comparte con nadie.",
+  stepPhoneRequired: "Lo necesitás para publicar y escribir en la comunidad.",
   phoneLabel: "Tu número de teléfono",
   phonePlaceholder: "(917) 555-0142",
   phoneHelp: "Si es de Estados Unidos, con los 10 dígitos alcanza.",
@@ -62,9 +64,11 @@ const COPY = {
 
   verifiedTitle: "Tu teléfono está verificado",
   verifiedBody: (masked: string) =>
-    `Verificamos ${masked}. Sirve para recuperar tu cuenta y suma a tu Trust Score.`,
+    `Verificamos ${masked}. Suma a tu Trust Score y cuida a la comunidad.`,
   remove: "Quitar mi teléfono",
   removed: "Listo, borramos tu número.",
+  removeRequiredHint:
+    "Si lo quitás, vas a poder seguir leyendo, pero para publicar y escribir te vamos a pedir un número de nuevo.",
   verified: "Listo, tu teléfono quedó verificado.",
 } as const;
 
@@ -83,14 +87,21 @@ export interface PhoneVerificationProps {
   ttlMinutes: number;
   /** Si los números de fuera de EE.UU. y Canadá pueden recibir el código por WhatsApp. */
   whatsappAvailable?: boolean;
+  /** La comunidad lo exige para publicar y chatear (`tenants.phone_required`). */
+  required?: boolean;
+  /** Ruta interna YA sanitizada a la que volver al verificar. */
+  returnTo?: string | null;
 }
 
 export function PhoneVerification({
   verifiedPhone,
   ttlMinutes,
   whatsappAvailable = false,
+  required = false,
+  returnTo = null,
 }: PhoneVerificationProps) {
   const { toast } = useToast();
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const codeRef = useRef<HTMLInputElement>(null);
 
@@ -137,6 +148,7 @@ export function PhoneVerification({
         setVerified(maskedPhone);
         setCode("");
         toast({ title: COPY.verified, variant: "success" });
+        if (returnTo) router.replace(returnTo);
         return;
       }
       setFieldErrors(result.fieldErrors ?? {});
@@ -180,6 +192,9 @@ export function PhoneVerification({
           </div>
         </div>
         <FormError>{formError}</FormError>
+        {required && (
+          <p className="text-xs leading-relaxed text-foreground-muted">{COPY.removeRequiredHint}</p>
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -216,6 +231,7 @@ export function PhoneVerification({
               : whatsappAvailable
                 ? COPY.stepPhoneBodyWhatsApp
                 : COPY.stepPhoneBody}
+            {!awaitingCode && required ? ` ${COPY.stepPhoneRequired}` : ""}
           </p>
         </div>
       </div>

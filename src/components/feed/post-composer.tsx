@@ -127,6 +127,7 @@ import {
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { ArrowRight, X } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE } from "@/lib/phone/error";
 
 /**
  * FORMATO Y PESO DE VIDEO: importados de `@/lib/media/video-upload-limits`,
@@ -824,6 +825,14 @@ export function PostComposerHost({
           if (pedido.ok) {
             ticket = pedido.ticket;
             route = "mux";
+          } else if (pedido.reason === "telefono") {
+            rejection ??= {
+              title: PHONE_REQUIRED_TITLE,
+              description: PHONE_REQUIRED_COPY,
+              variant: "warning",
+              duration: 8000,
+            };
+            continue;
           }
         }
         const fileCheck = route === rutaProbable ? chequeoInicial : checkVideoFile(file, route);
@@ -1744,6 +1753,17 @@ export function PostComposerHost({
           description: COPY.composer.autoria.rejectedBody,
           variant: "warning",
           duration: 9000,
+        });
+        return;
+      }
+      if (result.code === "phone-required") {
+        // El trigger de la 0181. El texto queda en el composer: se publica
+        // apenas confirme el teléfono.
+        toast({
+          title: PHONE_REQUIRED_TITLE,
+          description: PHONE_REQUIRED_COPY,
+          variant: "warning",
+          duration: 8000,
         });
         return;
       }

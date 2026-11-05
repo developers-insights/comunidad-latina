@@ -1,5 +1,6 @@
 "use server";
 
+import { requireSiteUrl } from "@/lib/config/site-url";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -82,7 +83,7 @@ export async function crearSesionIdentidad(): Promise<CrearSesionIdentidadResult
 
   try {
     const stripe = getStripe();
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    const siteUrl = requireSiteUrl();
     const cookieStore = await cookies();
 
     // Reuso (fiscal R3): si esta persona ya abrió una verificación y Stripe

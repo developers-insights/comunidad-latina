@@ -14,6 +14,7 @@ import {
   supabaseSinTipar,
 } from "@/lib/resenas";
 import type { ResenaState } from "./estado";
+import { PHONE_REQUIRED_COPY, isPhoneRequiredError } from "@/lib/phone/error";
 
 /**
  * =============================================================================
@@ -101,6 +102,7 @@ function mensajeDeError(
   const codigo = error.code ?? "";
   const texto = error.message ?? "";
 
+  if (isPhoneRequiredError(error)) return PHONE_REQUIRED_COPY;
   if (codigo === "23505") return C.errores.duplicada;
   if (texto.includes("PUNTAJE_AJENO") || texto.includes("RESENA_AJENA")) {
     return C.errores.sinPermisoRespuesta;

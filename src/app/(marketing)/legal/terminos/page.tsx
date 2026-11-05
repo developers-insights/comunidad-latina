@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -13,7 +14,7 @@ import {
   legalProse,
 } from "@/components/legal/legal-prose";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+const SITE_URL = siteUrlForMetadata();
 
 const TOC = [
   { id: "que-es-esto", label: "Qué es esta plataforma" },

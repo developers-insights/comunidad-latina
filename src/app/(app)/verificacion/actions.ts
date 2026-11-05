@@ -1,5 +1,6 @@
 "use server";
 
+import { requireSiteUrl } from "@/lib/config/site-url";
 import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
 import { getPrice } from "@/lib/pricing/read";
@@ -60,7 +61,7 @@ export type VerificacionResult =
   | { status: "redirect"; url: string };
 
 function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  return requireSiteUrl();
 }
 
 const activarSchema = z.object({

@@ -151,6 +151,24 @@ describe("botones externos", () => {
     ]);
   });
 
+  it("un link de compra de ejemplo o sin https no pinta botón, y uno real sí", () => {
+    for (const url of ["https://example.com/comprar", "http://tienda.com", "https://localhost/x"]) {
+      expect(
+        visibleCtasFor({ kind: "product", tier: "premium", values: { purchase: url } }),
+      ).toEqual(["chat"]);
+      expect(
+        visibleCtasFor({ kind: "event", tier: "premium", values: { tickets: url } }),
+      ).toEqual(["chat"]);
+    }
+    expect(
+      visibleCtasFor({
+        kind: "product",
+        tier: "premium",
+        values: { purchase: "https://tiendadeana.com/pedido" },
+      }),
+    ).toEqual(["purchase", "chat"]);
+  });
+
   it("el chat va SIEMPRE, incluso sin ningún valor cargado", () => {
     expect(visibleCtasFor({ kind: "property", tier: "premium" })).toEqual(["chat"]);
     expect(visibleCtasFor({ kind: "job", tier: "premium" })).toEqual(["chat"]);

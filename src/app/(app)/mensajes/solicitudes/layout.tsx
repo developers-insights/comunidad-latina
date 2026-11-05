@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SectionTopBar } from "@/components/shell";
+import { exigirSesion } from "@/lib/auth/exigir-sesion";
 
 /**
  * Mensajes › Solicitudes — la salida de la pantalla.
@@ -9,7 +10,9 @@ import { SectionTopBar } from "@/components/shell";
  * la app entera. En la PWA instalada no hay barra del navegador que salve la
  * situación. Ver `components/shell/section-top-bar.tsx`.
  */
-export default function SolicitudesLayout({ children }: { children: ReactNode }) {
+export default async function SolicitudesLayout({ children }: { children: ReactNode }) {
+  await exigirSesion("/mensajes/solicitudes");
+
   return (
     <>
       <SectionTopBar fallbackHref="/mensajes" />

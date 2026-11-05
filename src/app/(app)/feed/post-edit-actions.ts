@@ -22,6 +22,7 @@ import {
 } from "@/lib/social/post-editing";
 import { postMenuDenialOf } from "@/lib/social/post-menu";
 import { retireAssetFromSubject } from "@/lib/integrity/retire";
+import { phoneRequiredCopy } from "@/lib/phone/error";
 
 /**
  * =============================================================================
@@ -244,7 +245,12 @@ export async function editPostAction(input: {
 
   if (updateError) {
     console.warn("[feed] update de post falló", { code: updateError.code });
-    return { ok: false, code: "error", message: POST_EDIT_COPY.error.generic };
+    // Editar el texto es publicar (0181): el trigger corta igual que en el alta.
+    return {
+      ok: false,
+      code: "error",
+      message: phoneRequiredCopy(updateError) ?? POST_EDIT_COPY.error.generic,
+    };
   }
   // Sin fila devuelta la RLS rechazó la escritura (o el post cambió de estado
   // entre la lectura y el update). No se dice "listo" sobre algo que no pasó.

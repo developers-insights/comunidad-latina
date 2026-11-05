@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import localFont from "next/font/local";
@@ -39,7 +40,7 @@ export const metadata: Metadata = {
   // Sin esto Next resuelve las imágenes OG relativas contra localhost:3000 en
   // build (warning + URLs de OG rotas para crawlers). El dominio real por-tenant
   // se sirve por proxy/DNS; acá basta el origin canónico del sitio.
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com"),
+  metadataBase: new URL(siteUrlForMetadata()),
   title: {
     default: "Comunidad Latina",
     template: "%s · Comunidad Latina",

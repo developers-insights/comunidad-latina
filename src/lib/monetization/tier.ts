@@ -32,6 +32,7 @@ import {
   PREMIUM_DETAIL_MAX_SECONDS,
   normalizeDeclaredDuration,
 } from "@/lib/media/video-policy";
+import { linkDeCompraValido } from "@/lib/url/purchase-link";
 
 // ---------------------------------------------------------------------------
 // El tier
@@ -324,6 +325,11 @@ export function externalCtasFor(kind: unknown): readonly ExternalCtaKind[] {
  * contacto, y en premium sigue estando al lado de los botones pagos — nadie
  * pierde el canal protegido por pagar.
  */
+/** Los botones que llevan a pagar, y por eso validan con `linkDeCompraValido`. */
+export function esCtaDeCompra(kind: ExternalCtaKind): boolean {
+  return kind === "purchase" || kind === "tickets";
+}
+
 export function visibleCtasFor(input: {
   kind: unknown;
   tier: unknown;
@@ -334,7 +340,10 @@ export function visibleCtasFor(input: {
   if (canUseActionButtons(input.tier)) {
     for (const kind of externalCtasFor(input.kind)) {
       const value = input.values?.[kind];
-      if (typeof value === "string" && value.trim().length > 0) visible.push(kind);
+      if (typeof value !== "string" || value.trim().length === 0) continue;
+      // Un link de compra ya guardado puede ser de ejemplo: no se ofrece.
+      if (esCtaDeCompra(kind) && !linkDeCompraValido(value)) continue;
+      visible.push(kind);
     }
   }
   visible.push("chat");

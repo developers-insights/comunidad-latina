@@ -55,6 +55,7 @@ export const COPY = {
     dateToConfirm: "Fecha a confirmar",
     pastLabel: "Ya pasó",
     pastSectionTitle: "Ya pasaron",
+    noUpcoming: "Por ahora no hay eventos próximos. Estos fueron los últimos.",
     freeChip: "Entrada libre",
     viewEvent: "Ver evento",
     detail: {

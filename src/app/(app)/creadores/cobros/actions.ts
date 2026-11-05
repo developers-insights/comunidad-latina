@@ -1,5 +1,6 @@
 "use server";
 
+import { requireSiteUrl } from "@/lib/config/site-url";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isStripeConfigured } from "@/lib/config/services";
 import { isCreatorOfTenant, onboardingLink } from "@/lib/creators/payout-onboarding";
@@ -45,7 +46,7 @@ export async function startPayoutOnboarding(): Promise<PayoutLinkResult> {
       tenantId: g.guard.tenant.id,
       profileId: g.guard.user.id,
       email: g.guard.user.email ?? null,
-      siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+      siteUrl: requireSiteUrl(),
     });
     return { ok: true, url };
   } catch (error) {

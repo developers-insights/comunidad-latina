@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { Metadata } from "next";
 import { getTenant } from "@/lib/tenant/resolve";
 import { COPY } from "@/components/marketing/copy";
@@ -5,7 +6,7 @@ import { fetchPublishedGuides, toGuideCardData } from "@/components/marketing/da
 import { GuidesExplorer } from "@/components/marketing/guides-explorer";
 import { JsonLd } from "@/components/marketing/json-ld";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+const SITE_URL = siteUrlForMetadata();
 
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getTenant();

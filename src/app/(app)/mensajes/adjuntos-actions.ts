@@ -19,6 +19,7 @@ import {
   type Adjunto,
 } from "@/lib/messaging/adjuntos";
 import { esOndaValida } from "@/lib/messaging/audio";
+import { isPhoneRequiredError } from "@/lib/phone/error";
 
 /**
  * =============================================================================
@@ -71,9 +72,20 @@ export type AdjuntoActionResult =
         | "tipo"
         /** Pesa más de lo que el chat admite para ese tipo. */
         | "peso"
+        /** El trigger de la 0181: falta verificar el teléfono. */
+        | "phone-required"
         | "error";
       message?: string;
     };
+
+/** Qué código devolver cuando el INSERT del chat falló. */
+function codigoDeEscritura(error: {
+  code?: string | null;
+  message?: string | null;
+}): "phone-required" | "forbidden" | "error" {
+  if (isPhoneRequiredError(error)) return "phone-required";
+  return error.code === "42501" ? "forbidden" : "error";
+}
 
 /* -------------------------------------------------------------------------- */
 /* 1 · Preparar la subida                                                     */
@@ -289,7 +301,7 @@ export async function enviarAdjuntoAction(input: {
       .insert({ ...fila, group_id: destino.groupId });
     if (error) {
       console.warn("[mensajes] no se pudo enviar el adjunto al grupo", { code: error.code });
-      return { ok: false, code: error.code === "42501" ? "forbidden" : "error" };
+      return { ok: false, code: codigoDeEscritura(error) };
     }
     tocarTimbre(supabase, { ambito: "grupo", id: destino.groupId }, user.id, "nuevo");
     await avisar({
@@ -319,7 +331,7 @@ export async function enviarAdjuntoAction(input: {
     .insert({ ...fila, tenant_id: conversacion.tenant_id, conversation_id: destino.conversationId });
   if (error) {
     console.warn("[mensajes] no se pudo enviar el adjunto", { code: error.code });
-    return { ok: false, code: error.code === "42501" ? "forbidden" : "error" };
+    return { ok: false, code: codigoDeEscritura(error) };
   }
   tocarTimbre(supabase, { ambito: "directo", id: destino.conversationId }, user.id, "nuevo");
 

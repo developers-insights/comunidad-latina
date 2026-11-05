@@ -1,5 +1,19 @@
 # PROGRESS — Comunidad Latina
 
+## QA de Henry del 03/11: arreglos, migraciones y deploy (2026-11-05, PR #15 y rama `claude/comunidad-latina-cambios-6b3312`)
+
+Código y migraciones 0181 a 0184 en producción sobre `ktmbtpuhqqofdkisqseq`. La mudanza al Supabase del cliente sigue sin empezar: plan en `docs/decisiones/migracion-supabase-cliente.md`.
+
+- **F01:** `exigirSesion` en layouts; el mismo patrón se sacó de `/admin` con layouts por segmento. `redirect-bajo-loading.test.ts` ahora ve los helpers.
+- **F02:** vigencia en `src/lib/eventos/vigencia.ts`. El formulario manda la hora con zona (`instanteDeInputLocal`), porque antes el servidor la leía en UTC y un evento terminaba antes de empezar. Las filas viejas siguen corridas. Anuncios programados tenían el mismo bug.
+- **F03/F04:** `src/lib/url/purchase-link.ts` + CHECK 0183. Los dos links `example.com` se limpiaron con `docs/decisiones/limpieza-links-compra.sql`.
+- **F05:** la antigüedad sale de `profiles.created_at`, y esa columna ya no se edita por REST.
+- **B01:** `global_search` para visitantes (0182), sin cuentas dadas de baja ni posts ocultos.
+- **B02:** no se reprodujo con un PNG válido. Se arregló la falla provocable; hay que repetir con el archivo del QA en iPhone.
+- **Recuperación:** por Resend con host validado y tope durable en Postgres (0184), con caída al límite en memoria si la RPC falla.
+- **F06, código listo y gate APAGADO:** `tenants.phone_required` sigue en `false` en las dos comunidades. El SMS a EE.UU. se probó con entrega real el 05/11. WhatsApp no tiene sender en Twilio y la plantilla sigue sin aprobar, así que un número de RD u otro país no puede verificarse. Casi todas las cuentas están en `dominicanos`: prender hoy las deja en sólo lectura. Textos legales ya admiten el pedido de teléfono.
+- **Deuda conocida, fuera de este QA:** `profiles_select` deja a `anon` listar el padrón (documentado en 0079 y 0091); `/api/mux/subida` sin tope de duración; el enlace del correo se consume por GET; `global_search` sin rate limit si se llama directo.
+
 ## Web lista para la revisión de Stripe (2026-10-12, PR #4)
 
 - Públicas sin login: `/precios` (todos los productos con el precio del tenant vía `tenant_public_prices`, cache 300 s con tag `tenant-prices`), `/contacto`, `/legal/reembolsos`, y sección `#pagos` en Términos. Pie con links a las tres.

@@ -44,6 +44,7 @@ import {
   eliminarMensajeAction,
   reportarMensajeAction,
 } from "@/app/(app)/mensajes/mensaje-actions";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE } from "@/lib/phone/error";
 import { COPY } from "./copy";
 import { ACCIONES_COPY } from "./copy-acciones";
 import { ReactionBar } from "./reaction-bar";
@@ -936,6 +937,8 @@ function mensajeDeError(code: string): {
         description: ACCIONES_COPY.editar.flaggedBody,
         variant: "warning",
       };
+    case "phone-required":
+      return { title: PHONE_REQUIRED_TITLE, description: PHONE_REQUIRED_COPY, variant: "warning" };
     case "deleted":
       return { title: ACCIONES_COPY.errores.yaNoEsta, variant: "warning" };
     case "forbidden":

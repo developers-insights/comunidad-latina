@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -12,7 +13,7 @@ import { LegalCallout, LegalHeader, LegalSection, legalProse } from "@/component
  * safety de Play: si cambia el borrado, cambia esta página.
  */
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+const SITE_URL = siteUrlForMetadata();
 const UPDATED = "19 de octubre de 2026";
 const DELETE_SUBJECT = "Eliminar mi cuenta";
 

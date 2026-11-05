@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import { Megaphone, Siren } from "@phosphor-icons/react/dist/ssr";
 import { Field, Input, Textarea } from "@/components/ui";
 import { createBroadcast, type GlobalActionState } from "@/app/admin/global/actions";
+import { instanteDeInputLocal } from "@/lib/eventos/detalles";
 import { cn } from "@/lib/utils";
 import { ConfirmSlowDialog } from "./confirm-slow-dialog";
 import { PendingButton } from "./pending-button";
@@ -130,6 +131,10 @@ export function BroadcastForm({ tenants }: { tenants: BroadcastTenantOption[] })
     const form = formRef.current;
     if (!form) return;
     const fd = new FormData(form);
+    for (const campo of ["startsAt", "endsAt"]) {
+      const valor = String(fd.get(campo) ?? "");
+      if (valor) fd.set(campo, instanteDeInputLocal(valor) ?? valor);
+    }
     startTransition(() => formAction(fd));
   }
 

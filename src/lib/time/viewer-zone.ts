@@ -42,6 +42,8 @@ export interface ViewerAccount {
   /** `profiles.account_status` — lo consume el gate de sanciones (0021). */
   accountStatus: string | null;
   suspendedUntil: string | null;
+  /** `profiles.phone_verified` — lo consume el gate de teléfono (`lib/phone/gate.ts`). */
+  phoneVerified: boolean;
 }
 
 export const getViewerAccount = cache(async (): Promise<ViewerAccount | null> => {
@@ -57,7 +59,7 @@ export const getViewerAccount = cache(async (): Promise<ViewerAccount | null> =>
   // el shell.
   const { data } = await supabase
     .from("profiles")
-    .select("timezone, account_status, suspended_until")
+    .select("timezone, account_status, suspended_until, phone_verified")
     .eq("id", userId)
     .maybeSingle();
 
@@ -66,6 +68,7 @@ export const getViewerAccount = cache(async (): Promise<ViewerAccount | null> =>
     timezone: data?.timezone ?? null,
     accountStatus: data?.account_status ?? null,
     suspendedUntil: data?.suspended_until ?? null,
+    phoneVerified: data?.phone_verified === true,
   };
 });
 

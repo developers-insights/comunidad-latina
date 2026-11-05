@@ -28,6 +28,7 @@ import {
   type ListingVideoInput,
 } from "@/lib/media/listing-video-server";
 import { productDraftSchema, type DraftInput } from "./schema";
+import { phoneRequiredCopy } from "@/lib/phone/error";
 
 /**
  * Server actions de /marketplace/publicar.
@@ -166,7 +167,7 @@ export async function createProductDraft(rawInput: DraftInput): Promise<CreateDr
 
   if (error || !created) {
     console.warn("[marketplace] insert de borrador falló", { code: error?.code });
-    return { ok: false, error: GENERIC_ERROR };
+    return { ok: false, error: phoneRequiredCopy(error) ?? GENERIC_ERROR };
   }
 
   return { ok: true, listingId: created.id };

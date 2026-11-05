@@ -5,6 +5,7 @@ import {
   Camera,
   Check,
   FilmSlate,
+  ImageBroken,
   ImageSquare,
   Images,
   VideoCamera,
@@ -17,6 +18,7 @@ import {
   clasificarMime,
   validarAdjunto,
 } from "@/lib/messaging/adjuntos";
+import { imagenLegible } from "@/lib/media/imagen-legible";
 import { COPY_COMPOSER } from "./copy-composer";
 
 /**
@@ -74,7 +76,7 @@ interface Elegido {
   archivo: File;
   url: string;
   /** `null` si el tipo o el peso no pasan. Se muestra tachado, no se envía. */
-  problema: "tipo" | "peso" | "vacio" | null;
+  problema: "tipo" | "peso" | "vacio" | "ilegible" | null;
 }
 
 export function PhotoPicker({
@@ -114,14 +116,22 @@ export function PhotoPicker({
         return;
       }
       const guardados = recientesPorChat.get(chatId) ?? [];
-      setElegidos(
-        guardados.map((archivo) => ({
-          archivo,
-          url: URL.createObjectURL(archivo),
-          problema: revisar(archivo),
-        })),
+      // Si ya se eligió algo no se pisa: este cuadro puede llegar tarde (con la
+      // pestaña en segundo plano el navegador frena los frames), y reemplazar la
+      // lista generaba URLs nuevas que dejaban la selección apuntando a la nada
+      // y hacían desaparecer el botón de enviar.
+      setElegidos((previos) =>
+        previos.length > 0
+          ? previos
+          : guardados.map((archivo) => ({
+              archivo,
+              url: URL.createObjectURL(archivo),
+              problema: revisar(archivo),
+            })),
       );
-      setPestana(guardados.length > 0 ? "recientes" : "albumes");
+      setPestana((actual) =>
+        guardados.length > 0 ? "recientes" : actual === "recientes" ? "albumes" : actual,
+      );
     });
     return () => cancelAnimationFrame(cuadro);
   }, [open, chatId]);
@@ -139,17 +149,20 @@ export function PhotoPicker({
     () => elegidos.filter((item) => seleccion.includes(item.url)),
     [elegidos, seleccion],
   );
+  const hayIlegibles = elegidos.some((item) => item.problema === "ilegible");
   const soloFotos = seleccionados.every(
     (item) => clasificarMime(item.archivo.type) === "imagen",
   );
 
-  function sumar(lista: FileList | null) {
+  async function sumar(lista: FileList | null) {
     if (!lista || lista.length === 0) return;
-    const nuevos = Array.from(lista).map((archivo) => ({
-      archivo,
-      url: URL.createObjectURL(archivo),
-      problema: revisar(archivo),
-    }));
+    const nuevos = await Promise.all(
+      Array.from(lista).map(async (archivo) => ({
+        archivo,
+        url: URL.createObjectURL(archivo),
+        problema: await revisarConVistaPrevia(archivo),
+      })),
+    );
     recordar(
       chatId,
       nuevos.filter((item) => item.problema === null).map((item) => item.archivo),
@@ -196,7 +209,7 @@ export function PhotoPicker({
         multiple
         hidden
         onChange={(event) => {
-          sumar(event.target.files);
+          void sumar(event.target.files);
           event.target.value = "";
         }}
       />
@@ -211,7 +224,7 @@ export function PhotoPicker({
         capture="environment"
         hidden
         onChange={(event) => {
-          sumar(event.target.files);
+          void sumar(event.target.files);
           event.target.value = "";
         }}
       />
@@ -266,7 +279,13 @@ export function PhotoPicker({
                         item.problema !== null && "cursor-not-allowed opacity-40",
                       )}
                     >
-                      {esVideo ? (
+                      {item.problema === "ilegible" ? (
+                        <ImageBroken
+                          size={28}
+                          aria-hidden="true"
+                          className="absolute inset-0 m-auto text-foreground-muted"
+                        />
+                      ) : esVideo ? (
                         <video
                           src={item.url}
                           muted
@@ -310,6 +329,11 @@ export function PhotoPicker({
                 );
               })}
             </ul>
+          )}
+          {hayIlegibles && (
+            <p role="alert" className="mt-3 text-sm text-danger-ink">
+              {COPY_COMPOSER.galeria.ilegible}
+            </p>
           )}
         </TabsContent>
 
@@ -384,6 +408,13 @@ export function PhotoPicker({
 function revisar(archivo: File): "tipo" | "peso" | "vacio" | null {
   const validacion = validarAdjunto({ mime: archivo.type, bytes: archivo.size });
   return validacion.ok ? null : validacion.motivo;
+}
+
+/** Lo de `revisar`, más abrir la foto: sin esto llega rota a la cuadrícula. */
+async function revisarConVistaPrevia(archivo: File): Promise<Elegido["problema"]> {
+  const problema = revisar(archivo);
+  if (problema !== null || clasificarMime(archivo.type) !== "imagen") return problema;
+  return (await imagenLegible(archivo)) ? null : "ilegible";
 }
 
 function AtajoDeAlbum({

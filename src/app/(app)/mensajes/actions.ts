@@ -16,6 +16,7 @@ import { isOpenAIConfigured } from "@/lib/config/services";
 import { supabaseSinTiparMensajes } from "@/lib/messaging/adjuntos";
 import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
 import { estadoDelDescarte } from "@/lib/messaging/solicitud-descartada";
+import { isPhoneRequiredError } from "@/lib/phone/error";
 
 /**
  * Server actions del módulo MENSAJES — contacto protegido (§9.2).
@@ -27,7 +28,13 @@ export type ActionResult =
   | { ok: true }
   | {
       ok: false;
-      code: "flagged" | "invalid" | "unauthenticated" | "error" | "rate-limited";
+      code:
+        | "flagged"
+        | "invalid"
+        | "unauthenticated"
+        | "error"
+        | "rate-limited"
+        | "phone-required";
     };
 
 const uuidSchema = z.string().uuid();
@@ -171,7 +178,9 @@ export async function sendMessageAction(input: {
       body,
       ...(replyTo ? { reply_to: replyTo } : {}),
     });
-  if (insertError) return { ok: false, code: "error" };
+  if (insertError) {
+    return { ok: false, code: isPhoneRequiredError(insertError) ? "phone-required" : "error" };
+  }
 
   tocarTimbre(supabase, { ambito: "directo", id: conversationId }, user.id, "nuevo");
 

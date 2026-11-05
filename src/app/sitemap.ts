@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { MetadataRoute } from "next";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database.types";
@@ -33,7 +34,7 @@ import { DEFAULT_TENANT_SLUG } from "@/lib/tenant/resolve";
 const MAX_URLS = 1000;
 
 function baseUrl(): string {
-  return (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  return siteUrlForMetadata();
 }
 
 function anonClient() {

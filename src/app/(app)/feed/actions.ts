@@ -46,6 +46,7 @@ import { normalizarCredito } from "@/lib/feed/creditos-de-foto";
 import { MUX_FILTER_KEY } from "@/lib/media/mux-video";
 import { puedeFirmarComo } from "@/lib/feed/autoria";
 import { notifyPostComment, notifyPostReaction } from "./social-notifications";
+import { isPhoneRequiredError } from "@/lib/phone/error";
 
 /**
  * Server actions del módulo FEED SOCIAL.
@@ -239,7 +240,9 @@ export type CreatePostResult =
         | "photo"
         | "entity"
         | "error"
-        | "rate-limited";
+        | "rate-limited"
+        /** El trigger de la 0181: la comunidad exige teléfono y esta cuenta no lo verificó. */
+        | "phone-required";
     }
   /**
    * El video no cumple la política de duración (`src/lib/media/video-policy.ts`).
@@ -922,6 +925,7 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
       code: insertError?.code,
       viaMux: Boolean(muxPostDraftId),
     });
+    if (isPhoneRequiredError(insertError)) return { ok: false, code: "phone-required" };
     return { ok: false, code: "error" };
   }
 
@@ -1008,7 +1012,10 @@ export type CreateCommentResult =
        */
       entityListingId?: string | null;
     }
-  | { ok: false; code: "invalid" | "unauthenticated" | "flagged" | "error" }
+  | {
+      ok: false;
+      code: "invalid" | "unauthenticated" | "flagged" | "error" | "phone-required";
+    }
   /** El JWT y el header apuntan a comunidades distintas — copy ya resuelto. */
   | { ok: false; code: "tenant-mismatch"; message: string };
 
@@ -1113,6 +1120,7 @@ export async function createCommentAction(input: {
 
   if (insertError || !created) {
     console.warn("[feed] insert de comentario falló", { code: insertError?.code });
+    if (isPhoneRequiredError(insertError)) return { ok: false, code: "phone-required" };
     return { ok: false, code: "error" };
   }
 

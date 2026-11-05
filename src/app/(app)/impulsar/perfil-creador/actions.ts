@@ -1,5 +1,6 @@
 "use server";
 
+import { requireSiteUrl } from "@/lib/config/site-url";
 import { z } from "zod";
 import { isStripeConfigured } from "@/lib/config/services";
 import { getPrice } from "@/lib/pricing/read";
@@ -119,7 +120,7 @@ export async function crearImpulsoDePerfilCheckout(
     }
 
     const stripe = getStripe();
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    const siteUrl = requireSiteUrl();
     const session = await crearCheckoutSession({
       mode: "payment",
       customer_email: user.email,

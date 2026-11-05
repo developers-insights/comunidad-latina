@@ -17,6 +17,7 @@ import { ViewerTimeZoneProvider } from "@/components/time/viewer-time-zone";
 import { getViewerAccount } from "@/lib/time/viewer-zone";
 import { OfflineBanner } from "@/components/shell/offline-banner";
 import { AccountGate } from "@/components/shell/account-gate";
+import { PhoneGateBanner } from "@/components/shell/phone-gate-banner";
 import { InternalHistoryTracker } from "@/components/shell/internal-history-tracker";
 import { PresenceBeat } from "@/components/messaging/presence-beat";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
@@ -24,6 +25,7 @@ import { PushNativo } from "@/components/canal/push-nativo";
 import { isMuxConfigured } from "@/lib/config/services";
 import { getAuthUserId } from "@/lib/supabase/server";
 import { getZonaActiva } from "@/lib/zona/server";
+import { getPhoneGateStatus } from "@/lib/phone/gate";
 import { VigilanteDeLlamadas } from "@/components/calls/vigilante";
 import { atenderLlamadaAction, rechazarLlamadaAction } from "./llamadas/actions";
 
@@ -77,6 +79,18 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   ) {
     return <AccountGate kind="suspended" suspendedUntil={viewer.suspendedUntil} />;
   }
+
+  /**
+   * Gate de teléfono (0181). A diferencia de las sanciones, NO reemplaza el shell:
+   * quien falta verificar lee igual. No agrega consultas: sale de lo que ya se
+   * leyó arriba. Ver `lib/phone/gate.ts`.
+   */
+  const phoneGate = getPhoneGateStatus({
+    hasSession: Boolean(viewer),
+    isStaff: shell.isStaff,
+    phoneVerified: viewer?.phoneVerified ?? false,
+    tenantRequires: tenant.phoneRequired,
+  });
 
   return (
     /**
@@ -172,6 +186,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <div className="sticky top-0 z-40">
         <Header tenant={tenant} />
       </div>
+      {phoneGate !== "libre" && <PhoneGateBanner status={phoneGate} />}
       {/* Acá vivía <TenantMismatchBanner />. Se eliminó el 2026-08-13: avisaba
           de un problema de configuración nuestro con palabras que le pedían al
           usuario que lo resolviera. Ver la nota al final de lib/tenant/guard.ts. */}

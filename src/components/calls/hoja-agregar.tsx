@@ -7,6 +7,7 @@ import { Avatar, BottomSheet, Button, Input } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import type { CodigoDeLlamada } from "@/lib/calls/errores";
 import { COPY } from "./copy";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE } from "@/lib/phone/error";
 
 export interface CandidatoUI {
   id: string;
@@ -222,6 +223,8 @@ export function mensajeDeFallo(code: CodigoDeLlamada): { title: string; body: st
       return { title: COPY.fallos.llenaTitle, body: COPY.fallos.llenaBody };
     case "account-suspended":
       return { title: COPY.fallos.suspendidaTitle, body: COPY.fallos.suspendidaBody };
+    case "phone-required":
+      return { title: PHONE_REQUIRED_TITLE, body: PHONE_REQUIRED_COPY };
     case "forbidden":
       return { title: COPY.fallos.prohibidaTitle, body: COPY.fallos.prohibidaBody };
     case "gone":

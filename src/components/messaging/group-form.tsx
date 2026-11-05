@@ -29,6 +29,7 @@ import {
   prepararFotoDeGrupoAction,
 } from "@/app/(app)/mensajes/grupos/actions";
 import { COPY } from "./copy";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE } from "@/lib/phone/error";
 
 const BUCKET = "avatars";
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -175,6 +176,14 @@ export function GroupForm({ grupo }: { grupo?: GrupoEditable }) {
 
       if (resultado.code === "duplicate") {
         setErrorNombre(COPY.groups.nameTaken);
+        return;
+      }
+      if (resultado.code === "phone-required") {
+        toast({
+          title: PHONE_REQUIRED_TITLE,
+          description: PHONE_REQUIRED_COPY,
+          variant: "warning",
+        });
         return;
       }
       if (resultado.code === "flagged") {

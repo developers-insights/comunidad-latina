@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SectionTopBar } from "@/components/shell";
+import { exigirSesion } from "@/lib/auth/exigir-sesion";
 
 /**
  * Mensajes › Personas — la salida de la bandeja (pedido de Nacho, 22/9: «falta
@@ -13,7 +14,9 @@ import { SectionTopBar } from "@/components/shell";
  * en todas las pantallas, así que no hay un "padre" de la experiencia más
  * cercano que el inicio.
  */
-export default function MensajesListaLayout({ children }: { children: ReactNode }) {
+export default async function MensajesListaLayout({ children }: { children: ReactNode }) {
+  await exigirSesion("/mensajes");
+
   return (
     <>
       <SectionTopBar fallbackHref="/feed" />

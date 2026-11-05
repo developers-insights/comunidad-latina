@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -20,7 +21,7 @@ import { JsonLd } from "@/components/marketing/json-ld";
 import { Markdown } from "@/components/marketing/markdown";
 import { SaveOfflineButton } from "@/components/marketing/save-offline-button";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+const SITE_URL = siteUrlForMetadata();
 
 type Props = { params: Promise<{ slug: string }> };
 

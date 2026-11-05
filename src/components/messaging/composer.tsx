@@ -25,6 +25,7 @@ import { PhotoPicker } from "./photo-picker";
 import { ArchivoPrevia } from "./archivo-previa";
 import { LocationPicker } from "./location-picker";
 import { VoiceRecorder } from "./voice-recorder";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE } from "@/lib/phone/error";
 
 const MAX_LENGTH = 2000;
 
@@ -199,6 +200,12 @@ export function Composer({
          * llamada vive en otra ruta y esa revalidación no la alcanza.
          */
         if (refrescarAlEnviar) router.refresh();
+      } else if (result.code === "phone-required") {
+        toast({
+          title: PHONE_REQUIRED_TITLE,
+          description: PHONE_REQUIRED_COPY,
+          variant: "warning",
+        });
       } else if (result.code === "flagged") {
         toast({
           title: COPY.composer.flaggedTitle,

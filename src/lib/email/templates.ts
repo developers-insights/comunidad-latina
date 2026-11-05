@@ -1,5 +1,7 @@
 import "server-only";
 
+import { requireSiteUrl } from "@/lib/config/site-url";
+
 /**
  * =============================================================================
  * TEMPLATES DE EMAIL — HTML inline-styles premium (sin react-email)
@@ -30,8 +32,6 @@ const T = {
     "'Plus Jakarta Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif",
 } as const;
 
-const DEFAULT_SITE_URL = "http://localhost:3000";
-
 /**
  * Resuelve la URL base para los links del correo — dev / preview / producción
  * SIN pisar nada a mano por entorno.
@@ -50,7 +50,8 @@ const DEFAULT_SITE_URL = "http://localhost:3000";
  *     seteado bien `NEXT_PUBLIC_SITE_URL` a mano en el dashboard.
  *  2. Fuera de Vercel: `NEXT_PUBLIC_SITE_URL` si está seteada (dev local con
  *     un valor propio, o cualquier host que no sea Vercel).
- *  3. Nada de lo anterior: localhost (dev local puro, sin `.env.local`).
+ *  3. Nada de lo anterior: localhost, SÓLO en dev local. En un deploy lanza:
+ *     ver `requireSiteUrl()` en `src/lib/config/site-url.ts`.
  *
  * ⚠️ Multi-tenant: esto es un fallback GLOBAL por deploy — no distingue
  * dominicanos.com de comunidadlatina.com si el día de mañana ambos son
@@ -70,10 +71,7 @@ function computeSiteUrl(): string {
     return `https://${process.env.VERCEL_URL}`;
   }
 
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) return explicit.replace(/\/+$/, "");
-
-  return DEFAULT_SITE_URL;
+  return requireSiteUrl();
 }
 
 export function getSiteUrl(): string {
@@ -381,6 +379,40 @@ export function confirmAccountEmail(params: {
     html: baseLayout(
       { tenantName: params.tenantName, brandHex: params.brandHex },
       "Un paso más: confirmá tu email para activar tu cuenta.",
+      content,
+    ),
+  };
+}
+
+// -----------------------------------------------------------------------------
+// (f) Recuperar la contraseña — mismo criterio que (e): el enlace llega YA armado
+// (`sendRecoveryEmail`, src/lib/auth/recovery.ts). Este template no firma nada.
+// -----------------------------------------------------------------------------
+
+export function resetPasswordEmail(params: {
+  /** Enlace absoluto a `/callback` con el `token_hash` de recuperación. */
+  resetUrl: string;
+  tenantName: string;
+  brandHex: string;
+}): { subject: string; html: string } {
+  const content = `
+    <h1 style="margin:0 0 12px;font-family:${T.fontStack};font-size:22px;line-height:29px;font-weight:700;letter-spacing:-0.01em;color:${T.ink};">
+      Elegí una contraseña nueva
+    </h1>
+    <p style="margin:0 0 20px;font-family:${T.fontStack};font-size:15px;line-height:23px;color:${T.inkSoft};">
+      Nos pediste recuperar tu cuenta en ${escapeHtml(params.tenantName)}. Tocá el
+      botón y elegí tu contraseña nueva. Tu cuenta y todo lo tuyo siguen ahí.
+    </p>
+    ${ctaButton(params.resetUrl, "Elegir contraseña nueva", params.brandHex)}
+    <p style="margin:20px 0 0;font-family:${T.fontStack};font-size:13px;line-height:20px;color:${T.inkFaint};">
+      Si no fuiste vos, ignorá este correo: tu contraseña no cambia hasta que
+      toques el botón.
+    </p>`;
+  return {
+    subject: `Recuperá tu cuenta en ${params.tenantName}`,
+    html: baseLayout(
+      { tenantName: params.tenantName, brandHex: params.brandHex },
+      "Tocá el botón para elegir una contraseña nueva.",
       content,
     ),
   };

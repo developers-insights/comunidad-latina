@@ -31,12 +31,14 @@
  *   2. `attrs.tickets_url` es el respaldo: lo que cargó al publicar, antes de
  *      pagar nada. Sigue vivo, y si el premium vence o se limpia, vuelve solo.
  *
- * `resolveEventTicketsUrl()` es esa regla escrita una sola vez. Quien pinte el
- * botón la llama en vez de decidir por su cuenta.
+ * `resolveEventTicketsUrl()` es esa regla escrita una sola vez, y los dos valores
+ * pasan por `linkDeCompraValido`. Quien pinte el botón llama a `eventTicketsCta()`,
+ * que suma lo que depende del evento: si es gratis o ya terminó, no hay botón.
  *
  * Módulo PURO. Sin I/O, sin `server-only`.
  */
 
+import { linkDeCompraValido } from "@/lib/url/purchase-link";
 import { safeExternalHref } from "@/lib/url/safe-href";
 import { isEventAudience, isEventCategory } from "./categorias";
 
@@ -168,12 +170,24 @@ function asIso(value: unknown): string | null {
 // Coherencia de fechas
 // ---------------------------------------------------------------------------
 
+/**
+ * Valor de un `datetime-local` → instante ISO. Se llama EN EL NAVEGADOR al armar
+ * el payload: el input no trae zona, y resolverlo en el servidor, que corre en
+ * UTC, guardaba las 20:00 de Nueva York como 15:00 allá.
+ */
+export function instanteDeInputLocal(valor: string): string | null {
+  const fecha = new Date(valor);
+  return Number.isNaN(fecha.getTime()) ? null : fecha.toISOString();
+}
+
 export type EventDatesResolution =
   | { ok: true; startsAt: string; endsAt: string | null }
   | { ok: false; reason: "sin_inicio" | "fin_antes_del_inicio" };
 
 /**
- * Inicio y fin coherentes, en ISO canónico.
+ * Inicio y fin coherentes, en ISO canónico. Lo que llega con zona conserva su
+ * instante; lo que llega sin zona se lee en la del runtime, como siempre, porque
+ * acá ya no hay forma de saber cuál era.
  *
  * Un fin ANTERIOR al inicio es una contradicción, no un dato incompleto: se
  * rechaza en vez de descartar el fin en silencio. Si se descartara, la persona
@@ -210,9 +224,8 @@ export interface ResolvedTicketsUrl {
 }
 
 /**
- * Enlace de boletos que hay que mostrar. Ver el docblock del módulo: gana el
- * premium, el de `attrs` es el respaldo, y los dos pasan por la misma
- * validación antes de convertirse en un botón.
+ * Enlace de boletos vigente. Ver el docblock del módulo: gana el premium, el de
+ * `attrs` es el respaldo, y los dos pasan por la misma validación.
  *
  * Se le pasa la columna cruda de `listings` y el `attrs` completo, para que
  * quien renderiza no tenga que saber dónde vive cada uno.
@@ -221,15 +234,29 @@ export function resolveEventTicketsUrl(
   ctaTicketsUrl: unknown,
   attrs: unknown,
 ): ResolvedTicketsUrl | null {
-  const premium = normalizeEventUrl(ctaTicketsUrl);
+  const premium = linkDeCompraValido(ctaTicketsUrl);
   if (premium) return { href: premium, source: "premium" };
 
   const record =
     attrs !== null && typeof attrs === "object" && !Array.isArray(attrs)
       ? (attrs as Record<string, unknown>)
       : {};
-  const base = normalizeEventUrl(record[EVENT_TICKETS_URL_ATTR]);
+  const base = linkDeCompraValido(record[EVENT_TICKETS_URL_ATTR]);
   return base ? { href: base, source: "base" } : null;
+}
+
+/**
+ * El botón de boletos de la ficha, o `null` si no corresponde que exista: un
+ * evento gratis no tiene nada que vender y uno terminado ya no puede venderlo.
+ * `terminado` sale de `eventoTerminado` (lib/eventos/vigencia.ts).
+ */
+export function eventTicketsCta(
+  ctaTicketsUrl: unknown,
+  attrs: unknown,
+  terminado: boolean,
+): ResolvedTicketsUrl | null {
+  if (terminado || readEventDetails(attrs).free === true) return null;
+  return resolveEventTicketsUrl(ctaTicketsUrl, attrs);
 }
 
 // ---------------------------------------------------------------------------
@@ -301,7 +328,7 @@ export function readEventDetails(attrs: unknown): EventDetails {
         : null,
     mode: normalizeEventMode(record[EVENT_MODE_ATTR]),
     onlineUrl: normalizeEventUrl(record[EVENT_ONLINE_URL_ATTR]),
-    ticketsUrl: normalizeEventUrl(record[EVENT_TICKETS_URL_ATTR]),
+    ticketsUrl: linkDeCompraValido(record[EVENT_TICKETS_URL_ATTR]),
     capacity: normalizeCapacity(record[EVENT_CAPACITY_ATTR]),
     audience: isEventAudience(rawAudience) ? rawAudience : null,
     free: typeof rawFree === "boolean" ? rawFree : null,

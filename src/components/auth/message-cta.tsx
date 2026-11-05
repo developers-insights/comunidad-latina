@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChatCircle } from "@phosphor-icons/react/dist/ssr";
 import { Button, Spinner, useToast } from "@/components/ui";
 import { abrirChatDirectoAction } from "@/app/(app)/mensajes/direct-actions";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE } from "@/lib/phone/error";
 
 const COPY = {
   cta: "Enviar mensaje",
@@ -71,6 +72,14 @@ export function MessageCta({
 
       if (resultado.code === "blocked" || resultado.code === "self") {
         toast({ title: COPY.blocked, variant: "warning" });
+        return;
+      }
+      if (resultado.code === "phone-required") {
+        toast({
+          title: PHONE_REQUIRED_TITLE,
+          description: PHONE_REQUIRED_COPY,
+          variant: "warning",
+        });
         return;
       }
       if (resultado.code === "rate-limited") {

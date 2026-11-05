@@ -4,6 +4,9 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/ui";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+}));
 vi.mock("./actions", () => ({
   sendPhoneCodeAction: vi.fn(),
   verifyPhoneCodeAction: vi.fn(),
@@ -44,9 +47,29 @@ describe("PhoneVerification — consentimiento de SMS", () => {
     );
   });
 
-  it("aclara que verificar el teléfono es opcional", () => {
+  it("no dice que es opcional: la regla es teléfono verificado", () => {
     renderPaso1();
 
-    expect(document.body.textContent).toMatch(/opcional/i);
+    expect(document.body.textContent).not.toMatch(/opcional/i);
+  });
+
+  it("cuando la comunidad lo exige, explica para qué hace falta", () => {
+    render(
+      <ToastProvider>
+        <PhoneVerification verifiedPhone={null} ttlMinutes={10} required />
+      </ToastProvider>,
+    );
+
+    expect(document.body.textContent).toMatch(/publicar y escribir/i);
+  });
+
+  it("antes de quitar el número avisa qué pasa si la comunidad lo exige", () => {
+    render(
+      <ToastProvider>
+        <PhoneVerification verifiedPhone="+1 ••• 0142" ttlMinutes={10} required />
+      </ToastProvider>,
+    );
+
+    expect(document.body.textContent).toMatch(/seguir leyendo/i);
   });
 });

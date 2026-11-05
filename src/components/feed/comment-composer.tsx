@@ -12,6 +12,7 @@ import { TENANT_GUARD_COPY } from "@/lib/tenant/match";
 import { createCommentAction } from "@/app/(app)/feed/actions";
 import { createListingCommentAction } from "@/app/(app)/marketplace/comments-actions";
 import { COPY } from "./copy";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE } from "@/lib/phone/error";
 
 const MAX_LENGTH = 1000;
 
@@ -64,7 +65,7 @@ type SendOutcome =
   | { ok: true }
   | {
       ok: false;
-      code: "unauthenticated" | "tenant-mismatch" | "flagged" | "error";
+      code: "unauthenticated" | "tenant-mismatch" | "flagged" | "phone-required" | "error";
       message?: string;
     };
 
@@ -256,6 +257,14 @@ export function CommentComposer(props: CommentComposerProps) {
           description: result.message,
           variant: "warning",
           duration: 8000,
+        });
+        return;
+      }
+      if (result.code === "phone-required") {
+        toast({
+          title: PHONE_REQUIRED_TITLE,
+          description: PHONE_REQUIRED_COPY,
+          variant: "warning",
         });
         return;
       }

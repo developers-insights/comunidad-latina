@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -12,7 +13,7 @@ import { LegalCallout, LegalHeader, LegalSection, legalProse } from "@/component
  * (18 U.S.C. § 2258A) y tiene que cumplirse desde la moderación.
  */
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+const SITE_URL = siteUrlForMetadata();
 const UPDATED = "21 de octubre de 2026";
 const SUBJECT = "Seguridad infantil";
 

@@ -14,6 +14,7 @@ import {
   type VisibilidadDeGrupo,
 } from "@/lib/messaging/grupos";
 import { COPY } from "./copy";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE } from "@/lib/phone/error";
 
 /**
  * "Unirme" a un grupo público, de un toque, desde la lista.
@@ -72,6 +73,15 @@ export function GroupJoinButton({
        * reintentar no va a servir. Un "probá de nuevo" acá sería un botón que
        * no funciona más y nadie que lo explique.
        */
+      if (resultado.code === "phone-required") {
+        toast({
+          title: PHONE_REQUIRED_TITLE,
+          description: PHONE_REQUIRED_COPY,
+          variant: "warning",
+        });
+        return;
+      }
+
       if (resultado.code === "banned") {
         toast({ title: COPY_VETO.joinBanned, variant: "warning" });
         return;

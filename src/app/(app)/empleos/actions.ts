@@ -34,6 +34,7 @@ import {
   validateJobAnswers,
   type JobAnswer,
 } from "@/components/empleos/helpers";
+import { phoneRequiredCopy } from "@/lib/phone/error";
 
 /**
  * FLUJO DE RECLUTAMIENTO (tabla `job_applications`, migraciones 0040 + 0047).
@@ -323,7 +324,7 @@ export async function applyToJobAction(input: {
     }
     console.warn("[empleos] insert de postulación falló", { jobId, code: error.code });
     if (cvPath) await removeOrphanCv(supabase, cvPath, tenant.id, user.id);
-    return { ok: false, code: "error", message: GENERIC_ERROR };
+    return { ok: false, code: "error", message: phoneRequiredCopy(error) ?? GENERIC_ERROR };
   }
 
   // Aviso a las dos partes (best-effort, espejo de sendListingMessageAction):
@@ -950,7 +951,7 @@ export async function startCandidateConversationAction(input: {
     console.warn("[empleos] no se pudo abrir el chat con el candidato", {
       code: error?.code,
     });
-    return { ok: false, code: "error", message: GENERIC_ERROR };
+    return { ok: false, code: "error", message: phoneRequiredCopy(error) ?? GENERIC_ERROR };
   }
 
   return { ok: true, conversationId: created.id, reused: false };

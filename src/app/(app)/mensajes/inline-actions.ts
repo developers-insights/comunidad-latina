@@ -14,6 +14,8 @@ import { leadReceivedEmail } from "@/lib/email/templates";
 import { COPY } from "@/components/listings/copy";
 import { sigueDescartada } from "@/lib/messaging/solicitud-descartada";
 import { tocarTimbre } from "@/lib/messaging/timbre";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TOKEN } from "@/lib/phone/error";
+import { isPhoneRequiredError } from "@/lib/phone/error";
 
 /**
  * Mensaje INLINE desde una publicación (marketplace/eventos): crea —o reutiliza—
@@ -61,6 +63,7 @@ export type SendListingMessageResult =
         | "invalid"
         | "rate-limited"
         | "flagged"
+        | "phone-required"
         | "error";
       message?: string;
     };
@@ -96,6 +99,8 @@ function messageErrorFromRpc(message: string | undefined): SendListingMessageRes
         code: "error",
         message: "Tu cuenta está en revisión y por ahora no puede enviar mensajes.",
       };
+    case PHONE_REQUIRED_TOKEN:
+      return { ok: false, code: "phone-required", message: PHONE_REQUIRED_COPY };
     case "LISTING_HAS_NO_ACCOUNT":
       return {
         ok: false,
@@ -267,6 +272,9 @@ export async function sendListingMessageAction(input: {
     console.warn("[mensajes] insert del mensaje de presentación falló", {
       code: messageError.code,
     });
+    if (isPhoneRequiredError(messageError)) {
+      return { ok: false, code: "phone-required", message: PHONE_REQUIRED_COPY };
+    }
     // La solicitud YA salió: no mentimos diciendo que no pasó nada.
     return {
       ok: false,

@@ -1,3 +1,4 @@
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getTenant } from "@/lib/tenant/resolve";
@@ -12,7 +13,7 @@ import {
   legalProse,
 } from "@/components/legal/legal-prose";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://comunidadlatina.com";
+const SITE_URL = siteUrlForMetadata();
 
 const TOC = [
   { id: "resumen", label: "Resumen honesto" },
@@ -71,7 +72,7 @@ export default async function PrivacidadPage() {
 
       <LegalHeader
         title="Política de Privacidad"
-        updated="5 de octubre de 2026"
+        updated="5 de noviembre de 2026"
         intro={
           <>
             <strong className={legalProse.strong}>En criollo:</strong> pedimos lo mínimo
@@ -106,7 +107,8 @@ export default async function PrivacidadPage() {
           elijas), tu email y una contraseña.
         </p>
         <p className={legalProse.p}>
-          No pedimos teléfono, número de seguro social ni dirección postal en el registro. Si más
+          No pedimos teléfono, número de seguro social ni dirección postal en el registro. Algunas
+          comunidades piden confirmar el teléfono después, antes de publicar o escribir. Si más
           adelante contás tu zona o barrio —por ejemplo, para buscar vivienda—, es siempre
           aproximado.
         </p>
@@ -114,8 +116,8 @@ export default async function PrivacidadPage() {
 
       <LegalSection id="tu-telefono" title="Tu teléfono y los mensajes de texto">
         <p className={legalProse.p}>
-          Tu número de teléfono lo tenemos solo si elegís verificarlo, que es opcional. Lo usamos
-          para una sola cosa: mandarte el código de verificación que pediste y confirmar que el
+          Tu número de teléfono lo tenemos solo si lo verificás. Algunas comunidades lo piden antes
+          de publicar o escribir; en las demás es opcional. Lo usamos para una sola cosa: mandarte el código de verificación que pediste y confirmar que el
           número es tuyo. Si es de Estados Unidos o Canadá te llega por SMS; si es de otro país,
           por WhatsApp. No aparece en tu perfil ni en las búsquedas, y podés borrarlo cuando
           quieras desde <em>Ajustes › Tu teléfono</em>.

@@ -21,6 +21,7 @@ import type {
   TipoDeResultado,
 } from "@/app/(app)/mensajes/api/buscar/route";
 import { COPY } from "./copy";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE } from "@/lib/phone/error";
 
 /**
  * =============================================================================
@@ -147,6 +148,14 @@ export function InboxSearch() {
         // MISMO texto para bloqueo, ignorado y perfil inexistente: cuál de los
         // tres pasó no es información que tenga que volver a quien pregunta.
         toast({ title: COPY.inbox.directBlocked, variant: "warning" });
+        return;
+      }
+      if (resultado.code === "phone-required") {
+        toast({
+          title: PHONE_REQUIRED_TITLE,
+          description: PHONE_REQUIRED_COPY,
+          variant: "warning",
+        });
         return;
       }
       if (resultado.code === "rate-limited") {

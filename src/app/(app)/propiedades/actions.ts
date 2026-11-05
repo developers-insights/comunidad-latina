@@ -10,6 +10,7 @@ import { sendEmailInBackground } from "@/lib/email";
 import { getRecipientEmail } from "@/lib/email/recipients";
 import { leadReceivedEmail } from "@/lib/email/templates";
 import { COPY } from "@/components/listings/copy";
+import { PHONE_REQUIRED_COPY, PHONE_REQUIRED_TITLE, PHONE_REQUIRED_TOKEN } from "@/lib/phone/error";
 
 /**
  * Server actions del módulo VIVIENDA (lado detalle).
@@ -67,6 +68,13 @@ function contactErrorFromRpc(message: string | undefined): RequestContactResult 
         tone: "error",
         title: COPY.detail.contactUnavailableTitle,
         error: COPY.detail.contactUnavailableBody,
+      };
+    case PHONE_REQUIRED_TOKEN:
+      return {
+        ok: false,
+        tone: "info",
+        title: PHONE_REQUIRED_TITLE,
+        error: PHONE_REQUIRED_COPY,
       };
     case "AUTH_REQUIRED":
       return {

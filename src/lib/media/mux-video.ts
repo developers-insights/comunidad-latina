@@ -173,6 +173,11 @@ export type MuxUploadRequest =
    * un servicio de video de terceros detrás.
    */
   | { ok: false; reason: "sin-mux" }
+  /**
+   * El 403: la comunidad exige teléfono verificado y esta cuenta no lo tiene. No se
+   * cae al bucket: el video subiría entero para rebotar al publicar.
+   */
+  | { ok: false; reason: "telefono" }
   /** Cualquier otra cosa: red caída, 500, o una respuesta que no se entiende. */
   | { ok: false; reason: "falló" };
 
@@ -195,6 +200,7 @@ function esTicket(valor: unknown): valor is MuxUploadTicket {
  *
  *   ok            → UpChunk contra `uploadUrl`: resumible y sin nuestro tope de peso.
  *   sin-mux (503) → subida al bucket, como siempre, con su tope de 200 MB (parche del 2026-09-03 hasta que Mux tenga credenciales).
+ *   telefono (403) → no se sube nada: hay que confirmar el teléfono primero.
  *   falló         → también al bucket. Si el archivo entra por el tope viejo, la
  *                   persona publica igual y no se entera de nada; si no entra,
  *                   ahí sí se le avisa. Un problema nuestro no puede convertirse
@@ -226,6 +232,7 @@ export async function requestMuxUpload(options?: {
   // 503 es EL contrato: "Mux no está configurado". No se registra como error
   // porque no lo es — en desarrollo local es el estado normal.
   if (response.status === 503) return { ok: false, reason: "sin-mux" };
+  if (response.status === 403) return { ok: false, reason: "telefono" };
   if (!response.ok) return { ok: false, reason: "falló" };
 
   let payload: unknown;

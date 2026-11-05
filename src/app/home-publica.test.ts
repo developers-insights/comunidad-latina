@@ -32,7 +32,7 @@ describe("la home es pública", () => {
   it("una ruta privada sigue mandando al anónimo a /entrar", async () => {
     const { default: TelefonoAjustesPage } = await import("./(app)/ajustes/telefono/page");
 
-    await expect(TelefonoAjustesPage()).rejects.toThrow("NEXT_REDIRECT");
+    await expect(TelefonoAjustesPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
     expect(page.redirect).toHaveBeenCalledWith("/entrar?next=/ajustes/telefono");
   }, 30_000);
 });

@@ -397,7 +397,11 @@ describe("eventos", () => {
   it("el enlace de entradas va a attrs (base, gratis), nunca a la columna premium", async () => {
     const stub = useGuardOk();
 
-    await createListingDraft({ ...EVENT, eventTicketsUrl: "https://boleteria.com/fiesta" });
+    await createListingDraft({
+      ...EVENT,
+      eventFree: false,
+      eventTicketsUrl: "https://boleteria.com/fiesta",
+    });
 
     // La 0048 le prohíbe cta_tickets_url a un aviso `free`, y un aviso NACE
     // free: escribirla acá haría fallar el INSERT entero.
@@ -412,6 +416,30 @@ describe("eventos", () => {
     });
     expect(result.ok).toBe(false);
     expect(!result.ok && result.error).toMatch(/enlace de entradas/i);
+  });
+
+  it.each([
+    ["https://example.com/entradas"],
+    ["https://example.net/x"],
+    ["http://boleteria.com/fiesta"],
+    ["https://localhost/x"],
+    ["https://127.0.0.1/x"],
+  ])("no deja guardar %s como enlace de entradas", async (url) => {
+    const stub = useGuardOk();
+    const result = await createListingDraft({ ...EVENT, eventTicketsUrl: url });
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toMatch(/enlace de entradas/i);
+    expect(insertedRow(stub)).toBeUndefined();
+  });
+
+  it("un evento gratis no guarda enlace de entradas: no hay nada que comprar", async () => {
+    const stub = useGuardOk();
+    await createListingDraft({
+      ...EVENT,
+      eventFree: true,
+      eventTicketsUrl: "https://boleteria.com/fiesta",
+    });
+    expect(attrsOf(stub)).not.toHaveProperty("tickets_url");
   });
 
   it("exige la categoría y la modalidad", async () => {

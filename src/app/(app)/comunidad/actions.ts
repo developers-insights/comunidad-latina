@@ -36,6 +36,7 @@ import {
   isAcceptableHappenedOn,
   supabaseSinTiparComunidad,
 } from "@/lib/comunidad";
+import { phoneRequiredCopy } from "@/lib/phone/error";
 
 /**
  * =============================================================================
@@ -150,7 +151,7 @@ export async function createLostFoundCaseDraft(
 
   if (error || !created) {
     console.warn("[comunidad] insert de borrador falló", { code: error?.code });
-    return { ok: false, error: C.errors.generic };
+    return { ok: false, error: phoneRequiredCopy(error) ?? C.errors.generic };
   }
 
   return { ok: true, caseId: created.id };

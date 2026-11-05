@@ -27,6 +27,12 @@ export type Tenant = {
   modulesSoon: Record<string, boolean>;
   theme: Record<string, unknown> | null;
   /**
+   * `tenants.phone_required` (0181): si la comunidad exige teléfono verificado.
+   * Ausente en el fallback y antes de aplicar la migración, y eso significa "no
+   * se exige". Ver `lib/phone/gate.ts`.
+   */
+  phoneRequired?: boolean;
+  /**
    * `true` cuando la fila NO vino de la DB y `id` es un placeholder (DB caída,
    * seed pendiente, slug inexistente). Sirve para pintar branding igual —
    * degradación elegante §7 — pero JAMÁS para comparar contra el `tenant_id`
@@ -437,6 +443,7 @@ function mapTenantRow(row: Record<string, unknown>, fallback: Tenant): Tenant {
     modulesSoon:
       (asRecord(row.modules_soon) as Record<string, boolean> | null) ?? fallback.modulesSoon,
     theme: asRecord(row.theme) ?? fallback.theme,
+    phoneRequired: row.phone_required === true,
     // La fila vino de la DB: `id` es real, así que se puede comparar con el JWT.
     isFallback: false,
   };

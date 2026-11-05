@@ -37,6 +37,7 @@ import {
   statusDespuesDeEditar,
 } from "@/lib/listings/edicion";
 import { republicarAvisoEditado, vuelveAPublicarse } from "@/lib/listings/republicar";
+import { phoneRequiredCopy } from "@/lib/phone/error";
 import { encolarSiQuedaEnRevision } from "@/lib/listings/cola";
 
 /**
@@ -415,7 +416,10 @@ export async function editarAvisoAction(rawInput: {
       listingId: entrada.listingId,
       code: updateError?.code,
     });
-    return { ok: false, error: errorDeVideoDeLaBase(updateError) ?? GENERICO };
+    return {
+      ok: false,
+      error: phoneRequiredCopy(updateError) ?? errorDeVideoDeLaBase(updateError) ?? GENERICO,
+    };
   }
 
   // Las que salieron quedan ANOTADAS, no borradas: el libro de procedencia es
