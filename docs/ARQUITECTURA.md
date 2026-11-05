@@ -190,9 +190,9 @@ explícita, no por default.
 3. **Branding**: el root layout llama `getTenant()` y pinta las CSS variables de marca (`--color-brand-*`) generadas por `brand-pipeline.ts` como inline style en `<html>` — el resto de los tokens es fijo (Capa 1/2 del design system).
 4. **RLS es la frontera real**: el `tenant_id` del JWT (`app_metadata.tenant_id`) gobierna toda lectura/escritura autenticada. El filtro `.eq('tenant_id', …)` en queries de contenido público es por corrección de UX, no la barrera de seguridad.
 
-## 4. Auth (login sin teléfono — §5.4)
+## 4. Auth (login sin teléfono, gate opcional por comunidad)
 
-- Supabase Auth con **email + password** y **magic link** (OTP email). NUNCA pedir teléfono.
+- Supabase Auth con **email + password** y **magic link** (OTP email). El registro no pide teléfono; si la comunidad lo exige (`tenants.phone_required`, 0181), la cuenta sin teléfono verificado lee pero no publica ni chatea.
 - Registro: server action crea el usuario y setea `app_metadata: { tenant_id, role: 'member' }` vía cliente admin (service role) — el signup público NUNCA puede elegir su propio role/tenant desde el cliente.
 - `profiles` row se crea en el mismo server action (no trigger sobre auth.users, para control de errores).
 - Sesión: patrón `@supabase/ssr` completo (cookies, middleware refresh). `lib/supabase/admin.ts` importa `server-only`.

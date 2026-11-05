@@ -23,7 +23,7 @@ import {
 } from "@/components/legal/legal-prose";
 
 const SITE_URL = siteUrlForMetadata();
-const UPDATED = "5 de octubre de 2026";
+const UPDATED = "5 de noviembre de 2026";
 const LEGAL_ENTITY = "Comunidad Latina LLC";
 
 const TOC = [
@@ -78,7 +78,7 @@ function ConsentScreen() {
               Verificá tu teléfono
             </p>
             <p className="mt-0.5 text-sm leading-relaxed text-foreground-secondary">
-              Es opcional. Te mandamos un código por SMS para confirmar que el número es tuyo.
+              Te mandamos un código por SMS para confirmar que el número es tuyo.
             </p>
           </div>
         </div>
@@ -159,9 +159,9 @@ export default function SmsPolicyPage() {
 
       <LegalSection id="consentimiento" title="Cómo das tu consentimiento">
         <p className={legalProse.p}>
-          Verificar tu teléfono es <strong className={legalProse.strong}>opcional</strong>: no
-          hace falta para crear tu cuenta ni para usar {BRAND_NAME}. Si querés hacerlo, entrás a
-          tu cuenta, vas a <em>Ajustes › Tu teléfono</em>, escribís tu número y tocás «
+          No hace falta verificar tu teléfono para crear tu cuenta. Algunas comunidades lo piden
+          antes de publicar o escribir; en las demás es opcional. Para hacerlo, entrás a tu
+          cuenta, vas a <em>Ajustes › Tu teléfono</em>, escribís tu número y tocás «
           {SMS_SEND_CTA}». Justo debajo del botón está este aviso:
         </p>
         <ConsentScreen />
