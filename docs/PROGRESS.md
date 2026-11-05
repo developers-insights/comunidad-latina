@@ -2,7 +2,7 @@
 
 ## Arreglos de auth y QA de Henry, migración pendiente (2026-11-05, rama `claude/migracion-auth-qa`)
 
-Código listo en la rama, **sin desplegar**. La migración de Supabase no arrancó: la Mac usada no tiene `envkit` ni credenciales de `developers@`. Plan y orden en `docs/decisiones/migracion-supabase-cliente.md`.
+Código desplegado el 2026-11-05 sobre la base vieja, **sin las migraciones**. `NEXT_PUBLIC_SITE_URL` de producción quedó en el dominio real. La migración de Supabase no arrancó: la Mac usada no tiene `envkit` ni credenciales de `developers@`. Plan y orden en `docs/decisiones/migracion-supabase-cliente.md`.
 
 - **Sólo con el deploy:** F01 (`exigirSesion` en layouts: el redirect bajo `loading.tsx` rompía con #310), F02 (`src/lib/eventos/vigencia.ts`), F03/F04 al mostrar (`src/lib/url/purchase-link.ts`), F05 en las pantallas de perfil, B02, y recuperación por Resend con host validado (`src/lib/auth/recovery.ts`).
 - **Piden migración:** 0181 (teléfono, nace apagado), 0182 (búsqueda para visitantes y antigüedad en el resto de las pantallas), 0183 (CHECK de links, antes correr `docs/decisiones/limpieza-links-compra.sql`). No están aplicadas en ninguna base.
