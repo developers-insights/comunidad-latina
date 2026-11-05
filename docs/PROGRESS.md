@@ -1,15 +1,18 @@
 # PROGRESS — Comunidad Latina
 
-## Arreglos de auth y QA de Henry, migración pendiente (2026-11-05, rama `claude/migracion-auth-qa`)
+## QA de Henry del 03/11: arreglos, migraciones y deploy (2026-11-05, PR #15 y rama `claude/comunidad-latina-cambios-6b3312`)
 
-Código desplegado el 2026-11-05 sobre la base vieja, **sin las migraciones**. `NEXT_PUBLIC_SITE_URL` de producción quedó en el dominio real. La migración de Supabase no arrancó: la Mac usada no tiene `envkit` ni credenciales de `developers@`. Plan y orden en `docs/decisiones/migracion-supabase-cliente.md`.
+Código y migraciones 0181 a 0184 en producción sobre `ktmbtpuhqqofdkisqseq`. La mudanza al Supabase del cliente sigue sin empezar: plan en `docs/decisiones/migracion-supabase-cliente.md`.
 
-- **Sólo con el deploy:** F01 (`exigirSesion` en layouts: el redirect bajo `loading.tsx` rompía con #310), F02 (`src/lib/eventos/vigencia.ts`), F03/F04 al mostrar (`src/lib/url/purchase-link.ts`), F05 en las pantallas de perfil, B02, y recuperación por Resend con host validado (`src/lib/auth/recovery.ts`).
-- **Piden migración:** 0181 (teléfono, nace apagado), 0182 (búsqueda para visitantes y antigüedad en el resto de las pantallas), 0183 (CHECK de links, antes correr `docs/decisiones/limpieza-links-compra.sql`). No están aplicadas en ninguna base.
-- **Corrección a lo que decía el código:** el Site URL del origen NO está en localhost; lo está el del destino. El comentario de `confirmation.ts` era viejo y se corrigió. Por eso el redirect a localhost de B no se reprodujo en producción.
-- **B02 no se reprodujo** con un PNG válido. Se arregló el modo de falla provocable; hay que repetir con el archivo del QA.
-- **Sin probar:** nada contra una base real ni con SMS o mail reales. Las migraciones corrieron sólo en un Postgres local descartable con stubs.
-- Los límites de envío por cuenta siguen en memoria, por instancia: Upstash no está instalado.
+- **F01:** `exigirSesion` en layouts; el mismo patrón se sacó de `/admin` con layouts por segmento. `redirect-bajo-loading.test.ts` ahora ve los helpers.
+- **F02:** vigencia en `src/lib/eventos/vigencia.ts`. El formulario manda la hora con zona (`instanteDeInputLocal`), porque antes el servidor la leía en UTC y un evento terminaba antes de empezar. Las filas viejas siguen corridas. Anuncios programados tenían el mismo bug.
+- **F03/F04:** `src/lib/url/purchase-link.ts` + CHECK 0183. Los dos links `example.com` se limpiaron con `docs/decisiones/limpieza-links-compra.sql`.
+- **F05:** la antigüedad sale de `profiles.created_at`, y esa columna ya no se edita por REST.
+- **B01:** `global_search` para visitantes (0182), sin cuentas dadas de baja ni posts ocultos.
+- **B02:** no se reprodujo con un PNG válido. Se arregló la falla provocable; hay que repetir con el archivo del QA en iPhone.
+- **Recuperación:** por Resend con host validado y tope durable en Postgres (0184), con caída al límite en memoria si la RPC falla.
+- **F06, código listo y gate APAGADO:** `tenants.phone_required` sigue en `false` en las dos comunidades. El SMS a EE.UU. se probó con entrega real el 05/11. WhatsApp no tiene sender en Twilio y la plantilla sigue sin aprobar, así que un número de RD u otro país no puede verificarse. Casi todas las cuentas están en `dominicanos`: prender hoy las deja en sólo lectura. Textos legales ya admiten el pedido de teléfono.
+- **Deuda conocida, fuera de este QA:** `profiles_select` deja a `anon` listar el padrón (documentado en 0079 y 0091); `/api/mux/subida` sin tope de duración; el enlace del correo se consume por GET; `global_search` sin rate limit si se llama directo.
 
 ## Web lista para la revisión de Stripe (2026-10-12, PR #4)
 

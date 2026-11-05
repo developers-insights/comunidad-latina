@@ -393,6 +393,21 @@ describe("editarMensajeAction", () => {
     expect(resultado).toEqual({ ok: false, code: "edit-window-closed" });
   });
 
+  it("traduce el corte del teléfono (0181)", async () => {
+    guardOk(
+      crearStub({ updateError: { message: "PHONE_VERIFICATION_REQUIRED: confirmá tu teléfono." } }),
+    );
+
+    await expect(
+      editarMensajeAction({
+        ambito: "directo",
+        mensajeId: MENSAJE_ID,
+        hiloId: HILO_ID,
+        body: "corregido",
+      }),
+    ).resolves.toEqual({ ok: false, code: "phone-required" });
+  });
+
   it("traduce NOT_MESSAGE_AUTHOR y MESSAGE_DELETED", async () => {
     guardOk(crearStub({ updateError: { message: "NOT_MESSAGE_AUTHOR: no sos vos." } }));
     await expect(

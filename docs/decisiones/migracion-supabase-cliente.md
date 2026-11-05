@@ -1,8 +1,6 @@
 # Migración de Supabase a la cuenta del cliente
 
-Estado al 2026-11-05: **plan listo, migración sin empezar.** Ni el origen ni el destino se tocaron.
-El motivo es de acceso: la Mac donde se trabajó no tiene `envkit` y ninguna credencial de Supabase
-de `developers@insightsapps.tech`. Ver "Qué falta para arrancar".
+Estado al 2026-11-05: **plan listo, migración sin empezar.** Geovanny despausó el destino y nos dio rol de administrador el 04/11, y la PC de escritorio tiene `envkit`: ya no hay bloqueo de acceso. Las migraciones 0181 a 0184 se aplicaron en el origen, así que el destino va hasta la 0184 y la limpieza del paso 6 ya está hecha.
 
 | | Origen (producción hoy) | Destino (cuenta del cliente) |
 |---|---|---|
@@ -14,7 +12,7 @@ de `developers@insightsapps.tech`. Ver "Qué falta para arrancar".
 
 - **La base de origen es compartida.** `*_caughtcode`, `e_manager_*` y sus buckets no se migran ni se tocan.
   `fg_*` y el bucket `fogoneros` no aparecen en este repo: no son de Comunidad Latina.
-- **La verdad del esquema son `supabase/migrations/`** (hoy hasta la 0183), no la tabla de migraciones del
+- **La verdad del esquema son `supabase/migrations/`** (hoy hasta la 0184), no la tabla de migraciones del
   origen, que mezcla las de los tres productos.
 - **Nunca se borra nada del origen.** A la semana de estar estable, proponer la limpieza en Kairo.
 - **Sin Docker.** `pg_dump`/`psql` 17 nativos, por session pooler, y Management API para chequeos.
@@ -32,25 +30,17 @@ de `developers@insightsapps.tech`. Ver "Qué falta para arrancar".
 - **Crons:** 17 migraciones llaman a `cron.schedule`. `vercel.json` tiene además `/api/cron/creadores`.
 - **Vault:** las migraciones leen `push_dispatch_url` y `push_dispatch_secret`.
 
-## Qué falta para arrancar
-
-Cualquiera de las dos:
-
-1. Seguir desde la PC con `envkit` (`SUPABASE_ACCESS_TOKEN` en `_global`, namespace `comunidad_latina`), o
-2. Conseguir en esta Mac un token válido de `developers@` y las claves del namespace.
-
 ## Orden de ejecución
 
 Importa porque el código nuevo y las migraciones dependen entre sí.
 
 1. Inventario del origen sólo de Comunidad Latina: guardarlo acá abajo.
 2. Resetear la contraseña del destino y guardarla en envkit.
-3. Extensiones y migraciones 0001 a 0182 en el destino. Comparar objeto por objeto contra el origen.
+3. Extensiones y migraciones 0001 a 0184 en el destino. Comparar objeto por objeto contra el origen.
 4. Copiar `auth.users`, `auth.identities`, `auth.mfa_*`, y las tablas de `public` con
    `session_replication_role = replica`. Sincronizar secuencias. Reescribir URLs al ref nuevo.
 5. Copiar storage con conteo por bucket.
-6. En el destino: correr el `SELECT` de `docs/decisiones/limpieza-links-compra.sql`, revisar, limpiar,
-   y recién ahí aplicar la 0183. Con filas sucias la 0183 frena a propósito.
+6. En el destino: correr el `SELECT` de `docs/decisiones/limpieza-links-compra.sql`, que tiene que salir vacío.
 7. Recrear crons y vault con los valores del destino. Correr `get_advisors` y `npm run check:rls`.
 8. Config de auth igual al origen: `site_url`, allow list, SMTP Resend, plantillas, rate limits, JWT,
    Google y Twilio.

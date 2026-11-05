@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PHONE_REQUIRED_COPY } from "@/lib/phone/error";
 
 /**
  * Tests de las server actions de MONETIZACIÓN — la parte que cobra.
@@ -220,6 +221,19 @@ describe("saveListingCtasAction — el gate de premium", () => {
       cta_booking_url: null,
       cta_address: null,
     });
+  });
+
+  it("traduce el corte del teléfono (0181)", async () => {
+    useGuardOk({
+      rpc: { data: null, error: { message: "PHONE_VERIFICATION_REQUIRED: confirmá tu teléfono." } },
+    });
+
+    const result = await saveListingCtasAction({
+      listingId: LISTING_ID,
+      ctas: { phone: "+1 305 555 0134" },
+    });
+
+    expect(result).toEqual({ ok: false, error: PHONE_REQUIRED_COPY });
   });
 
   it("sólo guarda los botones que el MÓDULO ofrece", async () => {

@@ -122,6 +122,63 @@ describe("migración 0181 — contrato con la base", () => {
     for (const tabla of ["scam_reports", "appeals"]) expect(gated).not.toContain(tabla);
   });
 
+  it("la ficha que nace al comprar Presencia no se corta, y sólo ese insert", () => {
+    const marca = sql.indexOf("perform set_config('app.ficha_sistema', 'on', true);");
+    const fin = sql.indexOf("perform set_config('app.ficha_sistema', 'off', true);");
+    const insert = sql.indexOf("insert into public.listings", marca);
+
+    expect(marca).toBeGreaterThan(-1);
+    expect(insert).toBeGreaterThan(marca);
+    expect(fin).toBeGreaterThan(insert);
+    expect(sql).toMatch(/current_setting\('app\.ficha_sistema', true\)/);
+  });
+
+  it("editar es publicar: cada tabla de contenido tiene su trigger de UPDATE", () => {
+    const columnas: Record<string, string[]> = {
+      listing_reviews: ["body", "rating", "owner_reply"],
+      post_offers: ["titulo", "terminos", "codigo_cupon"],
+      chat_groups: ["name", "description", "avatar_url"],
+      messages: ["body"],
+      chat_group_messages: ["body"],
+      listings: [
+        "video_path",
+        "video_poster_path",
+        "cta_phone",
+        "cta_whatsapp",
+        "cta_website",
+        "cta_purchase_url",
+        "cta_tickets_url",
+        "cta_booking_url",
+        "cta_address",
+      ],
+    };
+
+    for (const [tabla, campos] of Object.entries(columnas)) {
+      const trigger = sql.match(
+        new RegExp(`create trigger ${tabla}_editar_exigir_telefono[\\s\\S]*?execute function`),
+      )?.[0];
+      expect(trigger, tabla).toBeDefined();
+      for (const campo of campos) {
+        expect(trigger, campo).toContain(`old.${campo} is distinct from new.${campo}`);
+      }
+    }
+  });
+
+  it("publicar un borrador se corta, y devolver un aviso por denuncias no", () => {
+    const trigger = sql.match(
+      /create trigger listings_publicar_exigir_telefono[\s\S]*?execute function/,
+    )?.[0];
+
+    expect(trigger).toContain("before update of status");
+    expect(trigger).toContain("old.status in ('draft', 'paused')");
+    expect(trigger).toContain("new.status in ('pending_review', 'published')");
+    expect(trigger).toContain("pg_trigger_depth() = 0");
+  });
+
+  it("bajar un mensaje nunca se corta, aunque vacíe el texto", () => {
+    expect(sql.match(/old\.body is distinct from new\.body and new\.deleted_at is null/g)).toHaveLength(2);
+  });
+
   it("no toca reacciones, follows ni guardados: los contadores disparan updates", () => {
     for (const tabla of ["reactions", "follows", "saves", "post_poll_votes"]) {
       expect(gated).not.toContain(tabla);
