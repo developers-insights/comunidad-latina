@@ -54,6 +54,8 @@ export function PhoneGateBanner({ status }: PhoneGateBannerProps) {
     if (status !== "pendiente") return;
     // En Ajustes no se interrumpe: ahí está la baja de la cuenta y la privacidad.
     if (pathname === "/ajustes" || pathname.startsWith("/ajustes/")) return;
+    // Navegar acá desmontaría la llamada en curso.
+    if (pathname === "/llamadas" || pathname.startsWith("/llamadas/")) return;
     if (!debePedirAhora()) return;
     const destino = `${window.location.pathname}${window.location.search}`;
     router.push(`${PHONE_PATH}?next=${encodeURIComponent(destino)}`);

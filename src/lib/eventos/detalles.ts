@@ -170,12 +170,24 @@ function asIso(value: unknown): string | null {
 // Coherencia de fechas
 // ---------------------------------------------------------------------------
 
+/**
+ * Valor de un `datetime-local` → instante ISO. Se llama EN EL NAVEGADOR al armar
+ * el payload: el input no trae zona, y resolverlo en el servidor, que corre en
+ * UTC, guardaba las 20:00 de Nueva York como 15:00 allá.
+ */
+export function instanteDeInputLocal(valor: string): string | null {
+  const fecha = new Date(valor);
+  return Number.isNaN(fecha.getTime()) ? null : fecha.toISOString();
+}
+
 export type EventDatesResolution =
   | { ok: true; startsAt: string; endsAt: string | null }
   | { ok: false; reason: "sin_inicio" | "fin_antes_del_inicio" };
 
 /**
- * Inicio y fin coherentes, en ISO canónico.
+ * Inicio y fin coherentes, en ISO canónico. Lo que llega con zona conserva su
+ * instante; lo que llega sin zona se lee en la del runtime, como siempre, porque
+ * acá ya no hay forma de saber cuál era.
  *
  * Un fin ANTERIOR al inicio es una contradicción, no un dato incompleto: se
  * rechaza en vez de descartar el fin en silencio. Si se descartara, la persona

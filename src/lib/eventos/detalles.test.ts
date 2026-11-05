@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   EVENT_AUDIENCES,
   EVENT_CATEGORIES,
@@ -26,10 +26,12 @@ import {
   normalizeEventUrl,
   readEventDetails,
   requiresVenue,
+  instanteDeInputLocal,
   resolveEventDates,
   eventTicketsCta,
   resolveEventTicketsUrl,
 } from "./detalles";
+import { esFechaSinHora, estadoDelEvento } from "./vigencia";
 
 /**
  * Estos tests cuidan tres cosas:
@@ -412,5 +414,70 @@ describe("readEventDetails", () => {
       expect(() => readEventDetails(attrs)).not.toThrow();
       expect(readEventDetails(attrs).free).toBeNull();
     }
+  });
+});
+
+/**
+ * F02: el servidor corre en UTC y un `datetime-local` no trae zona, así que las
+ * 20:00 de Nueva York se guardaban como 20:00Z. La zona sólo existe en el
+ * navegador: `TZ` simula el de quien publica.
+ */
+describe("instanteDeInputLocal", () => {
+  const zonaOriginal = process.env.TZ;
+  const NY = "America/New_York";
+
+  beforeEach(() => {
+    process.env.TZ = NY;
+  });
+
+  afterEach(() => {
+    process.env.TZ = zonaOriginal;
+  });
+
+  it("guarda el instante en la zona de quien carga, con y sin horario de verano", () => {
+    expect(instanteDeInputLocal("2026-11-08T20:00")).toBe("2026-11-09T01:00:00.000Z");
+    expect(instanteDeInputLocal("2026-07-08T20:00")).toBe("2026-07-09T00:00:00.000Z");
+  });
+
+  it("depende del navegador que carga, no de uno fijo", () => {
+    process.env.TZ = "America/Los_Angeles";
+    expect(instanteDeInputLocal("2026-11-08T20:00")).toBe("2026-11-09T04:00:00.000Z");
+  });
+
+  it("vacío o ilegible no es una fecha, y no lanza", () => {
+    expect(instanteDeInputLocal("")).toBeNull();
+    expect(instanteDeInputLocal("no es una fecha")).toBeNull();
+  });
+
+  /** Las 19:00 de Nueva York son medianoche en UTC: no puede leerse como día suelto. */
+  it("un evento a medianoche UTC sigue teniendo hora", () => {
+    const iso = instanteDeInputLocal("2026-11-08T19:00");
+    expect(iso).toBe("2026-11-09T00:00:00.000Z");
+    expect(esFechaSinHora(iso!)).toBe(false);
+  });
+
+  it("el servidor en UTC conserva el instante que mandó el navegador", () => {
+    const inicio = instanteDeInputLocal("2026-11-08T19:00");
+    const fin = instanteDeInputLocal("2026-11-08T22:00");
+    process.env.TZ = "UTC";
+    expect(resolveEventDates(inicio, fin)).toEqual({
+      ok: true,
+      startsAt: "2026-11-09T00:00:00.000Z",
+      endsAt: "2026-11-09T03:00:00.000Z",
+    });
+  });
+
+  it("un evento de 19:00 a 22:00 no pasa a 'Ya pasó' antes de empezar", () => {
+    const fechas = resolveEventDates(
+      instanteDeInputLocal("2026-11-08T19:00"),
+      instanteDeInputLocal("2026-11-08T22:00"),
+    );
+    if (!fechas.ok) throw new Error("fechas válidas");
+    const enNuevaYork = (hora: string) =>
+      estadoDelEvento(fechas, new Date(`2026-11-08T${hora}:00-05:00`), NY);
+
+    expect(enNuevaYork("18:00")).toBe("proximo");
+    expect(enNuevaYork("20:00")).toBe("en_curso");
+    expect(enNuevaYork("22:30")).toBe("terminado");
   });
 });

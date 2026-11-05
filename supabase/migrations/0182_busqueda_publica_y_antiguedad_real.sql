@@ -19,9 +19,10 @@
 --     deja leer y el filtro de `status = 'published'` no se toca. `p_tenant` no abre
 --     nada: sin sesión, los avisos y publicaciones de cualquier comunidad ya eran
 --     públicos (`listings_select`, `posts_select`), que es lo que hace que las
---     páginas de detalle funcionen para Google. Lo que sí se agrega para visitantes
---     es `p.hidden_at is null`: lo que el autor ocultó no sale en una búsqueda
---     pública. Con sesión esa rama no cambia.
+--     páginas de detalle funcionen para Google. Lo que sí se agrega es `hidden_at`:
+--     lo que el autor ocultó no sale en una búsqueda, salvo para él.
+--   · Una cuenta dada de baja (`account_status = 'banned'`) no aparece: ni ella ni
+--     sus avisos ni sus publicaciones, con sesión o sin ella.
 --   · PERSONAS NO SALE DE `global_search` SIN SESIÓN. La lista de personas de una
 --     comunidad es un padrón (§5.4). Con la anon key, que es pública, cualquiera
 --     podría barrerlo llamando a la RPC directo con "aaa", "aab"…, y ningún rate
@@ -49,6 +50,7 @@
 -- (`mesesEnLaComunidad`, lib/trust/signals.ts); esto arregla las otras, que
 -- leen el jsonb. Los perfiles del seed van a mostrar su antigüedad REAL en vez
 -- de la inventada: es lo que se pidió, pero el número de esas cuentas baja.
+-- Como ahora esa fecha decide, `protect_profile_columns` deja de dejar editarla.
 --
 -- ORDEN DE DESPLIEGUE: conviene esta migración antes que el código, pero el orden
 -- inverso ya no rompe. Sin ella, `/buscar/api` recibe PGRST202 y un visitante ve la
@@ -56,6 +58,35 @@
 -- =============================================================================
 
 begin;
+
+-- ---------------------------------------------------------------------------
+-- 0 · Quién quedó afuera de la búsqueda
+--
+-- SECURITY DEFINER porque `anon` no tiene grant sobre `profiles.account_status`
+-- (0058): con un join directo, `global_search`, que es INVOKER, le daría 42501 a
+-- todo visitante. Búsqueda por PK, sólo sobre las filas que ya matchearon. `null`
+-- da false: hay avisos del seed legal sin `created_by` que tienen que seguir saliendo.
+-- ---------------------------------------------------------------------------
+create function app.cuenta_baneada(p_perfil uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+      from public.profiles p
+     where p.id = p_perfil
+       and p.account_status = 'banned'
+  );
+$$;
+
+comment on function app.cuenta_baneada(uuid) is
+  'true si la cuenta está dada de baja. Definer porque anon no ve profiles.account_status y global_search corre como invoker. Perfil nulo o inexistente → false.';
+
+revoke execute on function app.cuenta_baneada(uuid) from public;
+grant execute on function app.cuenta_baneada(uuid) to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
 -- 1 · global_search con comunidad explícita para visitantes
@@ -152,6 +183,7 @@ begin
            extensions.similarity(app.unaccent_immutable(p.display_name), v_qu)::real
       from public.profiles p
      where p.tenant_id = v_tenant
+       and p.account_status <> 'banned'
        and app.unaccent_immutable(p.display_name) ilike v_like escape '\'
        and not app.pair_blocked(v_uid, p.id)
      order by extensions.similarity(app.unaccent_immutable(p.display_name), v_qu) desc,
@@ -216,6 +248,7 @@ begin
          and l.kind in ('property', 'business', 'professional', 'event', 'job',
                         'service', 'product')
          and l.search @@ v_ts
+         and not app.cuenta_baneada(l.created_by)
     ) v
    where v.rn <= v_limit;
 
@@ -252,9 +285,10 @@ begin
         join public.profiles au on au.id = p.author_id
        where p.tenant_id = v_tenant
          and p.status = 'published'
-         -- Lo que el autor ocultó (0097) no se le muestra a un visitante.
-         and (v_uid is not null or p.hidden_at is null)
+         -- Lo que el autor ocultó (0097) sólo lo sigue viendo él.
+         and (p.hidden_at is null or p.author_id = v_uid)
          and p.search @@ v_ts
+         and not app.cuenta_baneada(p.author_id)
          and (v_uid is null or not app.pair_blocked(v_uid, p.author_id))
     ) v
    where v.rn <= v_limit;
@@ -264,7 +298,7 @@ end;
 $$;
 
 comment on function public.global_search(text, int, uuid) is
-  'Búsqueda global agrupada por tipo, una sola ida. INSENSIBLE A LOS ACENTOS desde 0052. La comunidad sale del JWT; SIN SESIÓN (0182) sale de p_tenant, y con sesión p_tenant se ignora. SECURITY INVOKER: la RLS de cada tabla decide qué ve cada quien. Sin sesión NO devuelve personas (es un padrón, y esta RPC está abierta a la anon key): van por buscar_personas_visitante. Tampoco publicaciones ocultas por su autor. Devuelve VACÍO —no error— si q tiene menos de 2 caracteres o si no hay comunidad. q se recorta a 80 caracteres y limit_per_type se clampa a [1,20]. `rank` ordena DENTRO del grupo. `image_url` sale crudo (ruta de Storage o URL absoluta): lo resuelve la app.';
+  'Búsqueda global agrupada por tipo, una sola ida. INSENSIBLE A LOS ACENTOS desde 0052. La comunidad sale del JWT; SIN SESIÓN (0182) sale de p_tenant, y con sesión p_tenant se ignora. SECURITY INVOKER: la RLS de cada tabla decide qué ve cada quien. Sin sesión NO devuelve personas (es un padrón, y esta RPC está abierta a la anon key): van por buscar_personas_visitante. Publicaciones ocultas: sólo para su autor. Cuentas baneadas: ni ellas ni lo suyo. Devuelve VACÍO —no error— si q tiene menos de 2 caracteres o si no hay comunidad. q se recorta a 80 caracteres y limit_per_type se clampa a [1,20]. `rank` ordena DENTRO del grupo. `image_url` sale crudo (ruta de Storage o URL absoluta): lo resuelve la app.';
 
 revoke execute on function public.global_search(text, int, uuid) from public;
 grant execute on function public.global_search(text, int, uuid) to anon, authenticated, service_role;
@@ -337,6 +371,44 @@ grant execute on function public.buscar_personas_visitante(uuid, text) to servic
 -- ---------------------------------------------------------------------------
 -- 3 · Antigüedad real en trust_scores.signals
 -- ---------------------------------------------------------------------------
+
+-- Última versión: 0150. Lo único nuevo es `created_at`: acá pasa a ser la fuente de
+-- la antigüedad y `authenticated` tiene grant de UPDATE sobre esa columna, así que
+-- sin esto cualquiera se regalaba años en la comunidad por REST.
+create or replace function app.protect_profile_columns()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if coalesce(auth.jwt() ->> 'role', 'service_role') = 'service_role' then
+    return new;
+  end if;
+
+  if new.role is distinct from old.role
+     or new.identity_verified is distinct from old.identity_verified
+     or new.identity_verified_at is distinct from old.identity_verified_at
+     or new.phone_verified is distinct from old.phone_verified
+     or new.email_verified is distinct from old.email_verified
+     or new.verified_badge is distinct from old.verified_badge
+     or new.verified_badge_type is distinct from old.verified_badge_type
+     or new.numero_cl is distinct from old.numero_cl
+     or new.tenant_id is distinct from old.tenant_id
+     or new.created_at is distinct from old.created_at then
+    raise exception 'PROTECTED_COLUMNS: campos administrados de profiles sólo se modifican desde el sistema';
+  end if;
+
+  if (new.account_status is distinct from old.account_status
+      or new.suspended_until is distinct from old.suspended_until)
+     and not app.is_staff() then
+    raise exception 'PROTECTED_COLUMNS: account_status/suspended_until solo se modifican via moderación';
+  end if;
+
+  return new;
+end;
+$$;
+
 create function app.sincronizar_antiguedad()
 returns integer
 language plpgsql

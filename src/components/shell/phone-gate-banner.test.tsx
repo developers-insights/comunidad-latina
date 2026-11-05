@@ -54,6 +54,19 @@ describe("PhoneGateBanner", () => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
 
+  it.each(["/llamadas", "/llamadas/123"])("no corta una llamada en %s", (ruta) => {
+    mocks.pathname = ruta;
+    const { unmount } = render(<PhoneGateBanner status="pendiente" />);
+
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(document.body.textContent).toMatch(/seguir leyendo/i);
+
+    unmount();
+    mocks.pathname = "/feed";
+    render(<PhoneGateBanner status="pendiente" />);
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+  });
+
   it("con el servicio caído no manda a ningún lado y lo dice", () => {
     render(<PhoneGateBanner status="sin_salida" />);
 

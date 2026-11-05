@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { EventCardModel } from "@/components/directory";
+import { estadoDelEvento } from "@/lib/eventos/vigencia";
 import {
   armarListado,
   corteDeVigencia,
+  filtroDePasados,
   filtroDeVigentes,
   topeDePasados,
   unirVentanas,
@@ -39,6 +41,23 @@ const DICIEMBRE = fila("diciembre", "2026-12-20T18:00:00-05:00");
 const SIN_FECHA = fila("sin-fecha", null);
 
 const ids = (cards: readonly EventCardModel[]) => cards.map((c) => c.id);
+
+/**
+ * Evalúa el `.or()` real sobre una fila. Lee el string en vez de repetir la regla:
+ * si el filtro cambia, cambia lo que se prueba. Compara texto, como `attrs->>`.
+ */
+function cumple(filtro: string, row: EventRow): boolean {
+  const attrs: Record<string, string | null> = { starts_at: row.startsAt, ends_at: row.endsAt };
+  const condiciones = [...filtro.matchAll(/attrs->>(\w+)\.(gte|lt|is)\.(?:"([^"]+)"|null)/g)];
+  expect(condiciones.map(([texto]) => texto).join(",")).toBe(filtro);
+
+  return condiciones.some(([, clave, operador, valor]) => {
+    const actual = attrs[clave];
+    if (operador === "is") return actual === null;
+    if (actual === null) return false;
+    return operador === "gte" ? actual >= valor : actual < valor;
+  });
+}
 
 describe("armarListado — vista por defecto", () => {
   it("un evento terminado no cae entre los próximos", () => {
@@ -145,13 +164,21 @@ describe("armarListado — filtros de fecha", () => {
 describe("las dos ventanas de la consulta", () => {
   const TOPES = { maxEventos: 40, maxPasados: 5 };
 
-  it("el corte queda 30 días antes: un evento largo que sigue en curso entra", () => {
-    expect(corteDeVigencia(NOW)).toBe("2026-10-06T17:00:00.000Z");
+  it("el corte queda dos días antes: sólo cubre a los que no tienen fin", () => {
+    expect(corteDeVigencia(NOW)).toBe("2026-11-03T17:00:00.000Z");
   });
 
-  it("los vigentes incluyen a los que no tienen fecha", () => {
-    expect(filtroDeVigentes("2026-10-06T17:00:00.000Z")).toBe(
-      'attrs->>starts_at.gte."2026-10-06T17:00:00.000Z",attrs->>starts_at.is.null',
+  it("los vigentes miran el inicio, el fin, y a los que no tienen fecha", () => {
+    expect(filtroDeVigentes("2026-11-03T17:00:00.000Z")).toBe(
+      'attrs->>starts_at.gte."2026-11-03T17:00:00.000Z",' +
+        'attrs->>ends_at.gte."2026-11-03T17:00:00.000Z",' +
+        "attrs->>starts_at.is.null",
+    );
+  });
+
+  it("los pasados son los que terminaron antes del corte, o no declararon fin", () => {
+    expect(filtroDePasados("2026-11-03T17:00:00.000Z")).toBe(
+      'attrs->>ends_at.lt."2026-11-03T17:00:00.000Z",attrs->>ends_at.is.null',
     );
   });
 
@@ -166,6 +193,92 @@ describe("las dos ventanas de la consulta", () => {
     const b = { id: "b" };
     expect(unirVentanas([a, b], [{ id: "b" }]).map((fila) => fila.id)).toEqual(["a", "b"]);
     expect(unirVentanas(null, null)).toEqual([]);
+  });
+
+  describe("qué trae cada consulta", () => {
+    const corte = corteDeVigencia(NOW);
+    const entra = (row: EventRow, ahora: Date = NOW) =>
+      cumple(filtroDeVigentes(corteDeVigencia(ahora)), row);
+    const esPasado = (row: EventRow) =>
+      row.startsAt !== null && row.startsAt < corte && cumple(filtroDePasados(corte), row);
+
+    it("un futuro entra", () => {
+      expect(entra(DICIEMBRE)).toBe(true);
+    });
+
+    /** Empezó hace 35 días, termina en 7: con el margen viejo quedaba afuera. */
+    it("una feria larga en curso entra y aparece en `mes`", () => {
+      const feria = fila("feria", "2026-10-01T10:00:00.000Z", "2026-11-12T22:00:00.000Z");
+      expect(entra(feria)).toBe(true);
+      expect(esPasado(feria)).toBe(false);
+      expect(ids(armarListado([feria], "mes", new Set(), OPCIONES).proximos)).toEqual(["feria"]);
+    });
+
+    it("uno terminado hace semanas no entra: va por la ventana de pasados", () => {
+      const terminado = fila("terminado", "2026-10-10T10:00:00.000Z", "2026-10-11T22:00:00.000Z");
+      expect(entra(terminado)).toBe(false);
+      expect(esPasado(terminado)).toBe(true);
+    });
+
+    it("un terminado reciente sale de vigentes, pero el reparto lo manda a pasados", () => {
+      const reciente = fila("reciente", "2026-11-04T10:00:00.000Z", "2026-11-04T22:00:00.000Z");
+      expect(entra(reciente)).toBe(true);
+      expect(ids(armarListado([reciente], "", new Set(), OPCIONES).pasados)).toEqual(["reciente"]);
+    });
+
+    it("sin fin ni fecha: los viejos son pasados, los sin fecha son vigentes", () => {
+      const viejo = fila("viejo", "2026-10-10T10:00:00.000Z");
+      expect(entra(viejo)).toBe(false);
+      expect(esPasado(viejo)).toBe(true);
+      expect(entra(SIN_FECHA)).toBe(true);
+      expect(esPasado(SIN_FECHA)).toBe(false);
+    });
+
+    /** Inicio y fin iguales: hay filas sembradas así, y `estadoDelEvento` lo lee como sin fin. */
+    it("una fila con fin igual al inicio no queda colgada entre las dos ventanas", () => {
+      const iguales = fila("iguales", "2026-10-10T10:00:00.000Z", "2026-10-10T10:00:00.000Z");
+      expect(entra(iguales) || esPasado(iguales)).toBe(true);
+    });
+
+    /**
+     * El peor caso del margen: la comparación es de TEXTO, así que un huso de -11 se
+     * ordena 11 horas antes que su instante, y un evento sin fin dura hasta que se
+     * acaba el día en la zona de quien mira. Cerca de medianoche es donde se nota.
+     */
+    it.each([
+      ["2026-11-04T23:30:00-05:00", "America/New_York"],
+      ["2026-11-04T00:05:00-05:00", "America/New_York"],
+      ["2026-11-04T23:59:00-11:00", "Pacific/Pago_Pago"],
+      ["2026-11-04T00:01:00-11:00", "Pacific/Pago_Pago"],
+      ["2026-11-04T00:01:00+14:00", "Pacific/Kiritimati"],
+      ["2026-11-04", "Pacific/Pago_Pago"],
+      ["2026-11-04", "Pacific/Kiritimati"],
+    ])("sin fin, %s visto en %s: entra mientras no terminó", (startsAt, timeZone) => {
+      const evento = fila("sin-fin", startsAt);
+      const hora = 3_600_000;
+      const desde = new Date(startsAt).getTime() - 24 * hora;
+
+      for (let h = 0; h < 96; h += 1) {
+        const ahora = new Date(desde + h * hora);
+        if (estadoDelEvento(evento, ahora, timeZone) === "terminado") continue;
+        expect(entra(evento, ahora), ahora.toISOString()).toBe(true);
+      }
+    });
+
+    /** Antes los 40 lugares se llenaban de terminados y el próximo no llegaba a salir. */
+    it("con más de 40 terminados recientes, el próximo sigue entrando en el tope", () => {
+      const dia = 86_400_000;
+      const terminados = Array.from({ length: 45 }, (_, n) => {
+        const fin = new Date(NOW.getTime() - (3 + n * 0.5) * dia).toISOString();
+        return fila(`t${n}`, new Date(new Date(fin).getTime() - dia).toISOString(), fin);
+      });
+      const vigentes = [...terminados, MANANA]
+        .filter((row) => entra(row))
+        .sort((a, b) => a.startsAt!.localeCompare(b.startsAt!))
+        .slice(0, TOPES.maxEventos);
+
+      expect(vigentes.map((row) => row.card.id)).toEqual(["manana"]);
+    });
   });
 
   /**

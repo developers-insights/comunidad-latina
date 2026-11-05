@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ToastProvider } from "@/components/ui";
 import { COPY } from "@/components/listings";
 
@@ -39,6 +39,7 @@ vi.mock("./actions", () => ({
   finalizeListing: vi.fn(),
 }));
 
+import { createListingDraft } from "./actions";
 import { PublishForm } from "./publish-form";
 
 const C = COPY.publish;
@@ -308,5 +309,47 @@ describe("PublishForm — gate de identidad", () => {
     mount("job", { identidadVerificada: false });
     const link = screen.getByText(C.needIdentityCta).closest("a");
     expect(link?.getAttribute("href")).toBe("/perfil/verificar");
+  });
+});
+
+/**
+ * F02: la zona sólo existe en el navegador. Si el payload sale sin ella, el
+ * servidor en UTC guarda las 20:00 de Nueva York cinco horas antes.
+ */
+describe("PublishForm — evento: la hora sale con zona", () => {
+  const zonaOriginal = process.env.TZ;
+
+  afterEach(() => {
+    process.env.TZ = zonaOriginal;
+    vi.mocked(createListingDraft).mockReset();
+  });
+
+  it("manda inicio y fin como instantes, en la hora de quien publica", async () => {
+    process.env.TZ = "America/New_York";
+    vi.mocked(createListingDraft).mockResolvedValue({ ok: false, error: "alcanza con el payload" });
+
+    irAlPasoDePrecio("event");
+    const categoria = screen.getByLabelText("Categoría") as HTMLSelectElement;
+    fireEvent.change(categoria, { target: { value: categoria.options[1].value } });
+    fireEvent.change(document.querySelector("#pub-event-date")!, {
+      target: { value: "2026-11-08T20:00" },
+    });
+    fireEvent.change(document.querySelector("#pub-event-ends")!, {
+      target: { value: "2026-11-08T22:30" },
+    });
+    fireEvent.click(screen.getByText("Gratis"));
+    fireEvent.click(screen.getByText("En línea"));
+    fireEvent.click(screen.getByText(C.nav.next));
+    fireEvent.change(document.querySelector('input[type="url"]')!, {
+      target: { value: "https://ejemplo.com/sala" },
+    });
+    while (screen.queryByText(C.nav.next)) fireEvent.click(screen.getByText(C.nav.next));
+    fireEvent.click(screen.getByText(C.nav.submit));
+
+    await waitFor(() => expect(createListingDraft).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(createListingDraft).mock.calls[0][0]).toMatchObject({
+      eventStartsAt: "2026-11-09T01:00:00.000Z",
+      eventEndsAt: "2026-11-09T03:30:00.000Z",
+    });
   });
 });

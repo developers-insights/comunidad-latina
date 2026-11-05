@@ -58,6 +58,13 @@ export function phoneFlowProblem(): PhoneFlowProblem | null {
   return null;
 }
 
+/**
+ * Corre en cada render del shell: sin esto, una caída manda un evento por cada
+ * página que ve cada persona bloqueada.
+ */
+const ALERTA_CADA_MS = 10 * 60 * 1000;
+let ultimaAlerta: number | null = null;
+
 export type PhoneGateStatus =
   /** Nada que pedir: sin sesión, staff, verificada, o la comunidad no lo exige. */
   | "libre"
@@ -92,7 +99,12 @@ export function getPhoneGateStatus(input: {
     flowProblem,
   });
 
-  if (status === "sin_salida") {
+  const ahora = Date.now();
+  if (
+    status === "sin_salida" &&
+    (ultimaAlerta === null || ahora - ultimaAlerta >= ALERTA_CADA_MS)
+  ) {
+    ultimaAlerta = ahora;
     // La base bloquea a esta persona y la app no puede darle la salida. Se
     // arregla con `update tenants set phone_required = false`.
     console.error("[telefono] la comunidad exige teléfono y el flujo no está disponible", {

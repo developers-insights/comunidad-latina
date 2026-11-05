@@ -29,12 +29,12 @@ export interface ListadoDeEventos {
 }
 
 /**
- * Cuánto antes de hoy arranca la ventana de vigentes. Un evento largo que empezó
- * hace días sigue en curso, y `ends_at` no se puede filtrar desde PostgREST: de eso
- * se ocupa `armarListado`. También absorbe que la comparación sea de texto sobre un
- * JSONB, donde cada fecha trae su propio huso.
+ * Cuánto antes de ahora arranca la ventana de vigentes. Los que declaran fin entran
+ * por `ends_at`, así que esto sólo cubre a los que no lo tienen: duran hasta 24 horas
+ * según la zona de quien mira. Y absorbe que la comparación sea de texto sobre un
+ * JSONB, donde cada fecha trae su propio huso (hasta 14 horas de diferencia).
  */
-const MARGEN_DE_VIGENCIA_MS = 30 * 24 * 60 * 60 * 1000;
+const MARGEN_DE_VIGENCIA_MS = 2 * 24 * 60 * 60 * 1000;
 
 export function corteDeVigencia(now: Date): string {
   return new Date(now.getTime() - MARGEN_DE_VIGENCIA_MS).toISOString();
@@ -46,7 +46,15 @@ export function corteDeVigencia(now: Date): string {
  * reservados en esta sintaxis.
  */
 export function filtroDeVigentes(corte: string): string {
-  return `attrs->>starts_at.gte."${corte}",attrs->>starts_at.is.null`;
+  return `attrs->>starts_at.gte."${corte}",attrs->>ends_at.gte."${corte}",attrs->>starts_at.is.null`;
+}
+
+/**
+ * Lo que queda de la consulta de pasados además de `starts_at < corte`. Sin esto un
+ * evento largo en curso ocupaba acá un lugar del tope, y ya salió por los vigentes.
+ */
+export function filtroDePasados(corte: string): string {
+  return `attrs->>ends_at.lt."${corte}",attrs->>ends_at.is.null`;
 }
 
 /** Cuántos eventos anteriores al corte hacen falta para esta vista. */

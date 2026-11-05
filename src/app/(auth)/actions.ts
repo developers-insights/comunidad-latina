@@ -11,11 +11,11 @@ import {
   sendConfirmationEmail,
   resendConfirmationForCredentials,
 } from "@/lib/auth/confirmation";
+import { canalDeRecuperacionListo, sendRecoveryEmail } from "@/lib/auth/recovery";
 import {
-  canalDeRecuperacionListo,
-  claveDeLimitePorCuenta,
-  sendRecoveryEmail,
-} from "@/lib/auth/recovery";
+  cuentaPuedePedirRecuperacion,
+  ipPuedePedirRecuperacion,
+} from "@/lib/auth/recovery-tope";
 import type { ActionResult } from "@/components/auth/action-result";
 import { safeInternalPath } from "@/lib/url/safe-href";
 import {
@@ -518,11 +518,10 @@ export async function requestPasswordResetAction(
   }
   const { email } = parsed.data;
 
-  // Rate limit por IP (misma política que el registro). La IP vive SOLO como key
-  // en memoria del limiter y expira con la ventana — nunca se persiste (§11).
+  // Rate limit por IP (misma política que el registro). Durable: a la base llega un
+  // HMAC, nunca la IP (§11).
   const headerStore = await headers();
-  const ip = clientIpFromHeaders(headerStore);
-  if (!limit(`recuperar:${ip}`, 5, HOUR_MS).ok) {
+  if (!(await ipPuedePedirRecuperacion(clientIpFromHeaders(headerStore)))) {
     return { ok: false, formError: COPY.tooManyAttempts };
   }
 
@@ -543,9 +542,8 @@ export async function requestPasswordResetAction(
 
   // Tope por cuenta: la IP sola no frena a quien rota de IP para llenarle la bandeja
   // a una persona. Pasarlo responde lo mismo que un pedido normal; si avisara,
-  // delataría qué correos reciben pedidos. El limitador es en memoria por instancia
-  // (ver `lib/rate-limit`), así que el tope real es 3 × instancias.
-  if (!limit(claveDeLimitePorCuenta(email), 3, HOUR_MS).ok) {
+  // delataría qué correos reciben pedidos.
+  if (!(await cuentaPuedePedirRecuperacion(email))) {
     return { ok: true };
   }
 

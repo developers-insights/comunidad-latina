@@ -255,6 +255,7 @@ export async function editarGrupoAction(input: {
 
   if (error) {
     if (error.code === "23505") return { ok: false, code: "duplicate" };
+    if (isPhoneRequiredError(error)) return { ok: false, code: "phone-required" };
     console.warn("[grupos] no se pudo editar el grupo", { code: error.code });
     return { ok: false, code: "error" };
   }

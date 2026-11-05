@@ -6,6 +6,7 @@ import { Chip, EmptyState, SectionCta, SectionHeading, buttonVariants } from "@/
 import {
   armarListado,
   corteDeVigencia,
+  filtroDePasados,
   filtroDeVigentes,
   topeDePasados,
   unirVentanas,
@@ -168,8 +169,8 @@ async function EventosContent({ filters }: { filters: Filters }) {
   // eventos más viejos, y en descendente, con más de 40 futuros, con los más lejanos.
   // Por eso son dos consultas con los mismos filtros, partidas por `corte`: la de
   // vigentes sube desde ahí, la de pasados baja. Es sólo la ventana, no el orden final
-  // ni el criterio de fecha: eso lo decide `armarListado` en memoria, porque `ends_at`
-  // y la zona no se pueden expresar en un filtro de PostgREST sobre un JSONB.
+  // ni el criterio de fecha: eso lo decide `armarListado` en memoria, porque la zona de
+  // quien mira y los eventos sin fin no se pueden expresar en un filtro de PostgREST.
   const eventosDeLaVista = () => {
     let query = supabase
       .from("listings")
@@ -213,6 +214,7 @@ async function EventosContent({ filters }: { filters: Filters }) {
     tope > 0
       ? eventosDeLaVista()
           .lt("attrs->>starts_at", corte)
+          .or(filtroDePasados(corte))
           .order("attrs->>starts_at", { ascending: false })
           .limit(tope)
       : Promise.resolve({ data: null, error: null }),

@@ -2,7 +2,7 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database, Json } from "@/lib/types/database.types";
 
@@ -42,12 +42,14 @@ export interface StaffContext {
  * Verifica sesión + rol staff contra Supabase Auth (getUser revalida el token
  * contra el servidor, no confía en la cookie). Si el usuario no es staff del
  * nivel pedido, redirige — nunca renderiza nada del panel.
+ *
+ * Una página con `loading.tsx` que pide más que moderator necesita además un
+ * `layout.tsx` que pida ese rol: sin él el redirect viaja adentro del stream y
+ * rompe en el cliente (ver `lib/auth/exigir-sesion.ts`). Por eso una pantalla
+ * llega a pasar por acá tres veces, y `getCurrentUser` las deja en una lectura.
  */
 export async function requireStaff(min: StaffRole = "moderator"): Promise<StaffContext> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [supabase, user] = await Promise.all([createClient(), getCurrentUser()]);
 
   if (!user) redirect("/entrar");
 

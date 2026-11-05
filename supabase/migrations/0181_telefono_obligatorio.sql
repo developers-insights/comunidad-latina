@@ -54,7 +54,10 @@
 --   · business_accounts — AFUERA. Es la fila de facturación: sólo la leen el dueño y
 --     el admin (`business_accounts_select`), y lo público del negocio es su aviso
 --     `kind = 'business'`, que ya pasa por acá. Además `negocios/presencia` la crea
---     justo antes del checkout: cortarla acá cortaría un pago.
+--     justo antes del checkout: cortarla acá cortaría un pago. Esa fila dispara
+--     `business_accounts_ficha_al_alta`, que inserta el aviso: SECURITY DEFINER no
+--     cambia `auth.uid()`, así que `app.asegurar_ficha_de_negocio` levanta la marca
+--     `app.ficha_sistema` alrededor de ese insert, o comprar rebotaría antes de Stripe.
 --
 -- ── EL CORREO NO SE CHEQUEA ACÁ ──────────────────────────────────────────────
 -- Sin correo confirmado no hay sesión (el proyecto rechaza el login con
@@ -65,6 +68,10 @@
 -- ── LO QUE ESTE TRIGGER NO VE ────────────────────────────────────────────────
 -- `auth.uid()` nulo pasa, igual que en `enforce_account_active`: es service_role.
 -- Las escrituras del admin client no pasan por acá.
+--
+-- `app.ficha_sistema` no se puede prender desde afuera: `set_config` vive en
+-- `pg_catalog`, que PostgREST no expone, y ninguna función de `public` la recibe
+-- como parámetro. Es la misma técnica que `app.renovando_publicacion` (0098).
 -- =============================================================================
 
 begin;
@@ -120,6 +127,11 @@ begin
     return new;
   end if;
 
+  -- La ficha que crea el alta de un negocio: ver `app.asegurar_ficha_de_negocio`.
+  if coalesce(current_setting('app.ficha_sistema', true), 'off') = 'on' then
+    return new;
+  end if;
+
   if not app.telefono_al_dia(auth.uid()) then
     raise exception 'PHONE_VERIFICATION_REQUIRED: para publicar y escribir, primero confirmá tu teléfono.';
   end if;
@@ -129,7 +141,84 @@ end;
 $$;
 
 comment on function app.enforce_phone_verified() is
-  'BEFORE INSERT (y UPDATE del contenido en las tablas que lo admiten): corta publicar y chatear a las cuentas sin teléfono verificado cuando su comunidad lo exige (tenants.phone_required). Sin JWT o staff pasa. Hermano de app.enforce_account_active.';
+  'BEFORE INSERT (y UPDATE del contenido en las tablas que lo admiten): corta publicar y chatear a las cuentas sin teléfono verificado cuando su comunidad lo exige (tenants.phone_required). Sin JWT, staff o la marca local app.ficha_sistema pasa. Hermano de app.enforce_account_active.';
+
+-- ---------------------------------------------------------------------------
+-- La ficha que nace con un negocio no es publicar
+--
+-- Misma función que la 0121 salvo las dos líneas de `set_config`. Es `true` (local
+-- a la transacción) y se apaga enseguida: la marca cubre ese insert y nada más. Si
+-- el insert falla, el rollback también se la lleva.
+-- ---------------------------------------------------------------------------
+create or replace function app.asegurar_ficha_de_negocio(p_business uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_cuenta  public.business_accounts%rowtype;
+  v_listing uuid;
+begin
+  select * into v_cuenta from public.business_accounts where id = p_business;
+  if not found then
+    return null;
+  end if;
+  if v_cuenta.listing_id is not null then
+    return v_cuenta.listing_id;
+  end if;
+
+  -- ¿Hizo una a mano que TODAVÍA NO RECLAMÓ NINGUNA CUENTA? Se adopta.
+  --
+  -- El `not exists` es lo único que cambia respecto de la 0116, y es lo que
+  -- hace posible el segundo negocio: sin él, la cuenta nº 2 se adoptaba la
+  -- ficha de la nº 1 y los dos negocios quedaban con la misma cara pública.
+  -- Con una sola cuenta por persona el resultado es idéntico al de antes.
+  select l.id into v_listing
+  from public.listings l
+  where l.tenant_id = v_cuenta.tenant_id
+    and l.created_by = v_cuenta.owner_id
+    and l.kind = 'business'
+    and l.status = 'published'
+    and not exists (
+      select 1 from public.business_accounts otra
+       where otra.listing_id = l.id
+    )
+  order by l.created_at
+  limit 1;
+
+  if v_listing is null then
+    perform set_config('app.ficha_sistema', 'on', true);
+
+    insert into public.listings (
+      tenant_id, kind, title, status, created_by, attrs, source, published_at
+    )
+    values (
+      v_cuenta.tenant_id,
+      'business',
+      v_cuenta.name,
+      'published',
+      v_cuenta.owner_id,
+      case
+        when v_cuenta.category is null then '{}'::jsonb
+        else jsonb_build_object('category', v_cuenta.category)
+      end,
+      'user',
+      now()
+    )
+    returning id into v_listing;
+
+    perform set_config('app.ficha_sistema', 'off', true);
+  end if;
+
+  update public.business_accounts
+     set listing_id = v_listing
+   where id = p_business
+     and listing_id is null;
+
+  return v_listing;
+end;
+$fn$;
 
 -- Con `drop … if exists`: el archivo se puede volver a correr.
 do $$
@@ -216,14 +305,42 @@ execute function app.enforce_phone_verified();
 -- JWT, `auth.uid()` es nulo y `enforce_phone_verified` no corta.
 drop trigger if exists listings_editar_exigir_telefono on public.listings;
 create trigger listings_editar_exigir_telefono
-before update of title, description, attrs, photos, area_label on public.listings
+before update of
+  title, description, attrs, photos, area_label,
+  video_path, video_poster_path,
+  cta_phone, cta_whatsapp, cta_website, cta_purchase_url, cta_tickets_url,
+  cta_booking_url, cta_address
+on public.listings
 for each row
 when (
   old.title is distinct from new.title
   or old.description is distinct from new.description
   or old.photos is distinct from new.photos
   or old.area_label is distinct from new.area_label
+  or old.video_path is distinct from new.video_path
+  or old.video_poster_path is distinct from new.video_poster_path
+  or old.cta_phone is distinct from new.cta_phone
+  or old.cta_whatsapp is distinct from new.cta_whatsapp
+  or old.cta_website is distinct from new.cta_website
+  or old.cta_purchase_url is distinct from new.cta_purchase_url
+  or old.cta_tickets_url is distinct from new.cta_tickets_url
+  or old.cta_booking_url is distinct from new.cta_booking_url
+  or old.cta_address is distinct from new.cta_address
   or app.attrs_de_contenido(old.attrs) is distinct from app.attrs_de_contenido(new.attrs)
+)
+execute function app.enforce_phone_verified();
+
+-- `pg_trigger_depth() = 0`: cuando se levantan las denuncias, la 0118 devuelve el
+-- aviso de `paused` a `published` desde un trigger, con el `auth.uid()` de quien
+-- tocó la denuncia. Eso no es publicar, y lo de denunciar nunca se corta.
+drop trigger if exists listings_publicar_exigir_telefono on public.listings;
+create trigger listings_publicar_exigir_telefono
+before update of status on public.listings
+for each row
+when (
+  pg_trigger_depth() = 0
+  and old.status in ('draft', 'paused')
+  and new.status in ('pending_review', 'published')
 )
 execute function app.enforce_phone_verified();
 
@@ -232,6 +349,55 @@ create trigger listing_comments_editar_exigir_telefono
 before update of body on public.listing_comments
 for each row
 when (old.body is distinct from new.body)
+execute function app.enforce_phone_verified();
+
+drop trigger if exists listing_reviews_editar_exigir_telefono on public.listing_reviews;
+create trigger listing_reviews_editar_exigir_telefono
+before update of body, rating, owner_reply on public.listing_reviews
+for each row
+when (
+  old.body is distinct from new.body
+  or old.rating is distinct from new.rating
+  or old.owner_reply is distinct from new.owner_reply
+)
+execute function app.enforce_phone_verified();
+
+drop trigger if exists post_offers_editar_exigir_telefono on public.post_offers;
+create trigger post_offers_editar_exigir_telefono
+before update of titulo, terminos, codigo_cupon on public.post_offers
+for each row
+when (
+  old.titulo is distinct from new.titulo
+  or old.terminos is distinct from new.terminos
+  or old.codigo_cupon is distinct from new.codigo_cupon
+)
+execute function app.enforce_phone_verified();
+
+drop trigger if exists chat_groups_editar_exigir_telefono on public.chat_groups;
+create trigger chat_groups_editar_exigir_telefono
+before update of name, description, avatar_url on public.chat_groups
+for each row
+when (
+  old.name is distinct from new.name
+  or old.description is distinct from new.description
+  or old.avatar_url is distinct from new.avatar_url
+)
+execute function app.enforce_phone_verified();
+
+-- `new.deleted_at is null`: bajar un mensaje vacía `body`, y borrar lo propio nunca
+-- se corta. Marcar leído y las reacciones no tocan esta columna.
+drop trigger if exists messages_editar_exigir_telefono on public.messages;
+create trigger messages_editar_exigir_telefono
+before update of body on public.messages
+for each row
+when (old.body is distinct from new.body and new.deleted_at is null)
+execute function app.enforce_phone_verified();
+
+drop trigger if exists chat_group_messages_editar_exigir_telefono on public.chat_group_messages;
+create trigger chat_group_messages_editar_exigir_telefono
+before update of body on public.chat_group_messages
+for each row
+when (old.body is distinct from new.body and new.deleted_at is null)
 execute function app.enforce_phone_verified();
 
 drop trigger if exists creator_profiles_editar_exigir_telefono on public.creator_profiles;
@@ -272,6 +438,9 @@ execute function app.enforce_phone_verified();
 -- rol tiene grant de INSERT sobre ellas. Sin esto, quien no tiene perfil podía
 -- crearlo por REST con `phone_verified = true` y saltear todo el gate, o con el
 -- check azul puesto. El alta de la app usa service_role y no pasa por acá.
+--
+-- `created_at` por lo mismo: desde la 0182 es la fuente de la antigüedad, así que
+-- nacer con una fecha vieja regalaría años en la comunidad.
 -- ---------------------------------------------------------------------------
 drop policy if exists profiles_insert on public.profiles;
 create policy profiles_insert on public.profiles
@@ -284,6 +453,8 @@ with check (
   and identity_verified_at is null
   and phone_verified = false
   and verified_badge = false
+  and created_at >= now() - interval '1 minute'
+  and created_at <= now() + interval '1 minute'
 );
 
 commit;

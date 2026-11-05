@@ -6900,6 +6900,10 @@ export type Database = {
           title: string
         }[]
       }
+      consumir_tope_de_recuperacion: {
+        Args: { p_clave: string; p_maximo: number; p_ventana_segundos: number }
+        Returns: boolean
+      }
       get_creator_commission: { Args: never; Returns: number }
       get_tenant_by_domain: { Args: { p_domain: string }; Returns: Json }
       global_search: {

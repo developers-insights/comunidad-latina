@@ -69,6 +69,7 @@ import { EVENT_AUDIENCES, EVENT_CATEGORIES } from "@/lib/eventos/categorias";
 import {
   EVENT_MODE_OPTIONS,
   MAX_EVENT_CAPACITY,
+  instanteDeInputLocal,
   requiresVenue,
   type EventMode,
 } from "@/lib/eventos/detalles";
@@ -899,8 +900,8 @@ export function PublishForm({
           category:
             kind === "professional" && isProfessionalCategory(category) ? category : null,
           credentials: kind === "professional" ? credentials.trim() || null : null,
-          eventStartsAt: isEvent && eventStartsAt ? eventStartsAt : null,
-          eventEndsAt: isEvent && eventEndsAt ? eventEndsAt : null,
+          eventStartsAt: isEvent ? instanteDeInputLocal(eventStartsAt) : null,
+          eventEndsAt: isEvent ? instanteDeInputLocal(eventEndsAt) : null,
           eventCategory: isEvent ? eventCategory || null : null,
           eventMode: isEvent && eventMode ? eventMode : null,
           eventOnlineUrl: isOnlineEvent ? eventOnlineUrl.trim() || null : null,
