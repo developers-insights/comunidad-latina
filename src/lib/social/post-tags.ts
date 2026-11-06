@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { perfilesPublicos } from "@/lib/perfiles/publicos";
 
 /**
  * =============================================================================
@@ -114,7 +115,6 @@ type OpenClient = SupabaseClient;
 interface TagRow {
   post_id: string;
   profile_id: string;
-  profiles: { id: string; display_name: string; avatar_url: string | null } | null;
 }
 
 /**
@@ -139,7 +139,7 @@ export async function fetchPostTags(
   const open = supabase as OpenClient;
   const { data, error } = await open
     .from("post_tags")
-    .select("post_id, profile_id, profiles!post_tags_profile_id_fkey(id, display_name, avatar_url)")
+    .select("post_id, profile_id")
     .in("post_id", ids)
     .order("created_at", { ascending: true });
 
@@ -150,8 +150,13 @@ export async function fetchPostTags(
     return byPostId;
   }
 
-  for (const row of (data ?? []) as unknown as TagRow[]) {
-    const profile = row.profiles;
+  // Sin embed: `profiles` no se lee sin sesión (0186) y las etiquetas salen en el feed público.
+  const rows = (data ?? []) as unknown as TagRow[];
+  const { data: perfiles } = await perfilesPublicos(supabase, rows.map((row) => row.profile_id));
+  const perfilPorId = new Map(perfiles.map((perfil) => [perfil.id, perfil]));
+
+  for (const row of rows) {
+    const profile = perfilPorId.get(row.profile_id);
     if (!profile) continue; // perfil borrado a mitad de la lectura
     const list = byPostId.get(row.post_id) ?? [];
     list.push({

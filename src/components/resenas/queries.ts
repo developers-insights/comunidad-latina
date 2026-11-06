@@ -10,6 +10,7 @@ import {
   type ResenaVista,
   type ResumenPuntaje,
 } from "@/lib/resenas";
+import { perfilesPublicos } from "@/lib/perfiles/publicos";
 
 /**
  * Lectura de reseñas para la ficha de un aviso (negocio o profesional).
@@ -117,10 +118,7 @@ export async function fetchResenasDeAviso(
   const autores = new Map<string, { nombre: string; avatar: string | null }>();
 
   if (autorIds.length > 0) {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, display_name, avatar_url")
-      .in("id", autorIds);
+    const { data, error } = await perfilesPublicos(supabase, autorIds);
 
     if (error) {
       console.warn("[resenas] no se pudieron leer los autores", { code: error.code });

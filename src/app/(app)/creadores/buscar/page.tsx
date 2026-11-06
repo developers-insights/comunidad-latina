@@ -20,6 +20,7 @@ import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { leerChecksAzules } from "@/lib/verificacion/read";
 import { cn } from "@/lib/utils";
+import { perfilesPublicos } from "@/lib/perfiles/publicos";
 
 export const metadata = { title: "Buscar creadores" };
 
@@ -82,7 +83,7 @@ async function DirectoryContent() {
 
   const [profilesResult, followsResult, myProfileResult, checksAzules] = await Promise.all([
     profileIds.length > 0
-      ? supabase.from("profiles").select("id, display_name, avatar_url, identity_verified").in("id", profileIds)
+      ? perfilesPublicos(supabase, profileIds)
       : Promise.resolve({ data: [] as never[] }),
     userId && profileIds.length > 0
       ? supabase

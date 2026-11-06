@@ -103,7 +103,7 @@ export function GuidesExplorer({ guides }: { guides: GuideCardData[] }) {
       {filtered.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((guide) => (
-            <GuideCard key={guide.slug} guide={guide} />
+            <GuideCard key={guide.slug} guide={guide} titulo="h2" />
           ))}
         </div>
       ) : (

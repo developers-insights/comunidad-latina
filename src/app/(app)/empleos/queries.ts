@@ -41,6 +41,7 @@ import {
 } from "@/lib/empleos/application-status";
 import type { Tables } from "@/lib/types/database.types";
 import { timeAgo } from "@/lib/utils";
+import { perfilPublico, perfilesPublicos, puntajePublico, puntajesPublicos } from "@/lib/perfiles/publicos";
 
 /**
  * LECTURAS de Empleos. Un empleo es un `listings` kind='job' (0004) — no hay
@@ -394,16 +395,10 @@ export async function fetchJobsPage(input: {
   ];
   const [{ data: profiles }, { data: trusts }] = await Promise.all([
     memberIds.length
-      ? supabase
-          .from("profiles")
-          .select("id, display_name, avatar_url, identity_verified")
-          .in("id", memberIds)
+      ? perfilesPublicos(supabase, memberIds)
       : Promise.resolve({ data: [] as PublisherProfileRow[] }),
     memberIds.length
-      ? supabase
-          .from("trust_scores")
-          .select("profile_id, score, level, signals")
-          .in("profile_id", memberIds)
+      ? puntajesPublicos(supabase, memberIds)
       : Promise.resolve({ data: [] as PublisherTrustRow[] }),
   ]);
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
@@ -621,10 +616,7 @@ export async function fetchJobCandidates(input: {
   const [{ data: profiles }, { data: trusts }, { data: notes }, { data: saved }] =
     await Promise.all([
       sharedIds.length
-        ? supabase
-            .from("profiles")
-            .select("id, display_name, avatar_url, area_label, identity_verified")
-            .in("id", sharedIds)
+        ? perfilesPublicos(supabase, sharedIds)
         : Promise.resolve({
             data: [] as Array<{
               id: string;
@@ -635,10 +627,7 @@ export async function fetchJobCandidates(input: {
             }>,
           }),
       sharedIds.length
-        ? supabase
-            .from("trust_scores")
-            .select("profile_id, score, level, signals")
-            .in("profile_id", sharedIds)
+        ? puntajesPublicos(supabase, sharedIds)
         : Promise.resolve({
             data: [] as Array<{
               profile_id: string;
@@ -750,16 +739,8 @@ export async function fetchApplicantProfilePreview(
 ): Promise<ApplicantProfilePreview | null> {
   const supabase = await createClient();
   const [{ data: profile }, { data: trust }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("display_name, avatar_url, area_label, identity_verified")
-      .eq("id", viewerId)
-      .maybeSingle(),
-    supabase
-      .from("trust_scores")
-      .select("score, level")
-      .eq("profile_id", viewerId)
-      .maybeSingle(),
+    perfilPublico(supabase, viewerId),
+    puntajePublico(supabase, viewerId),
   ]);
 
   if (!profile) return null;

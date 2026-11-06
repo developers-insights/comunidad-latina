@@ -42,6 +42,7 @@ import {
 import { fetchTagsForPost } from "@/lib/social/post-tags";
 import { fetchPhotoCredits } from "@/lib/feed/creditos-de-foto";
 import { recortar } from "@/components/share/metadata";
+import { perfilPublico } from "@/lib/perfiles/publicos";
 
 /**
  * Lectura del post para la metadata, cache()-eada por request (mismo patrón que
@@ -88,11 +89,7 @@ export async function generateMetadata({
   let titulo = texto;
   if (!titulo && data.author_id) {
     const supabase = await createClient();
-    const { data: autor } = await supabase
-      .from("profiles")
-      .select("display_name")
-      .eq("id", data.author_id)
-      .maybeSingle();
+    const { data: autor } = await perfilPublico(supabase, data.author_id);
     titulo = autor?.display_name ? `Publicación de ${autor.display_name}` : null;
   }
 

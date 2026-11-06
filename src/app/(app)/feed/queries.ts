@@ -42,6 +42,7 @@ import {
   type MusicCategory,
   type MusicLicenseKind,
 } from "@/lib/media/audio-track";
+import { perfilesPublicos, puntajesPublicos } from "@/lib/perfiles/publicos";
 
 /**
  * Lecturas compartidas del módulo FEED (server-only). Siempre con el cliente
@@ -268,14 +269,8 @@ export async function fetchAuthorViews(
   if (ids.length === 0) return byId;
 
   const [profilesResult, trustResult] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, display_name, avatar_url, identity_verified")
-      .in("id", ids),
-    supabase
-      .from("trust_scores")
-      .select("profile_id, score, level, signals")
-      .in("profile_id", ids),
+    perfilesPublicos(supabase, ids),
+    puntajesPublicos(supabase, ids),
   ]);
 
   const trustById = new Map(

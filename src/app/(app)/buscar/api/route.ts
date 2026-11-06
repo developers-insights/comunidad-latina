@@ -40,8 +40,9 @@ import { getTenant } from "@/lib/tenant/resolve";
  * real deja de ser la única y empiezan a existir dos verdades.
  *
  * VISITANTES: sin sesión no hay JWT del que sacar la comunidad, así que se le
- * pasa `p_tenant` con la del dominio (0182). La RPC lo ignora si hay sesión,
- * pero acá tampoco se manda: quien entró busca en SU comunidad, siempre.
+ * pasa `p_tenant` con la del dominio (0182) y la llamada va con service_role
+ * (0186). La RPC lo ignora si hay sesión, pero acá tampoco se manda: quien entró
+ * busca en SU comunidad, siempre.
  *
  * LA EXCEPCIÓN AL "SIN ADMIN CLIENT" ES PERSONAS PARA VISITANTES. `global_search`
  * está abierta a la anon key y por eso no devuelve personas sin sesión: sería un
@@ -106,11 +107,9 @@ export async function GET(request: Request) {
   const tenantId = userId ? null : (await getTenant()).id;
 
   const [{ data, error }, personas] = await Promise.all([
-    supabase.rpc("global_search", {
-      q: term,
-      limit_per_type: LIMIT_PER_TYPE,
-      ...(tenantId ? { p_tenant: tenantId } : {}),
-    }),
+    tenantId
+      ? buscarComoVisitante(tenantId, term)
+      : supabase.rpc("global_search", { q: term, limit_per_type: LIMIT_PER_TYPE }),
     tenantId ? personasParaVisitante(request, tenantId, term) : Promise.resolve([]),
   ]);
 
@@ -134,6 +133,26 @@ export async function GET(request: Request) {
     groups,
     total: countResults(groups),
   } satisfies SearchPayload);
+}
+
+/**
+ * Sin sesión va con service_role: desde la 0186 `anon` no ejecuta `global_search`,
+ * así que este handler y su tope por IP son la única puerta. La RPC filtra sola por
+ * comunidad, estado y baja, y sin JWT queda en la rama de visitantes.
+ */
+async function buscarComoVisitante(tenantId: string, term: string) {
+  try {
+    return await createAdminClient().rpc("global_search", {
+      q: term,
+      limit_per_type: LIMIT_PER_TYPE,
+      p_tenant: tenantId,
+    });
+  } catch (error) {
+    console.warn("[buscar] visitante sin admin client", {
+      name: error instanceof Error ? error.name : "desconocido",
+    });
+    return { data: [], error: null };
+  }
 }
 
 /**

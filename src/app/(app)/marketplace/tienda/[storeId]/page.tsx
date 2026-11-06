@@ -25,6 +25,7 @@ import {
 } from "@/components/marketplace";
 import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
+import { perfilPublico } from "@/lib/perfiles/publicos";
 
 type Params = Promise<{ storeId: string }>;
 
@@ -140,7 +141,7 @@ async function TiendaContent({ storeId }: { storeId: string }) {
     // Identidad de quien administra la tienda (fix badge 2026-08-24) — GRATIS,
     // distinta de `store_verified` (el plan pago). Ver seller-chip.tsx.
     store.created_by
-      ? supabase.from("profiles").select("identity_verified").eq("id", store.created_by).maybeSingle()
+      ? perfilPublico(supabase, store.created_by)
       : Promise.resolve({ data: null }),
     // Calificaciones (listing_review_stats, 0093): la tienda ES un listing
     // kind='business', así que reusa el mismo lector que ya usan Negocios y

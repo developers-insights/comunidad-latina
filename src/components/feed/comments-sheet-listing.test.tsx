@@ -92,6 +92,8 @@ function makeClient(user: { id: string } | null) {
   return {
     auth: { getUser: async () => ({ data: { user } }) },
     from: (table: string) => chainFor(table),
+    rpc: async (fn: string) =>
+      fn === "perfiles_publicos" ? results.profiles : { data: [], error: null },
   };
 }
 

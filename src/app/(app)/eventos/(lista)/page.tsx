@@ -43,8 +43,16 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { DEFAULT_TIME_ZONE } from "@/lib/utils";
 import { resolverVistaZona } from "@/lib/zona/server";
+import { perfilesPublicos, puntajesPublicos } from "@/lib/perfiles/publicos";
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 
-export const metadata = { title: "Eventos" };
+const SITE_URL = siteUrlForMetadata();
+
+export const metadata = {
+  title: "Eventos",
+  description: "Encuentros, ferias y actividades de la comunidad latina cerca tuyo, con fecha, lugar y quién organiza.",
+  alternates: { canonical: `${SITE_URL}/eventos` },
+};
 
 const C = COPY.events;
 const MAX_EVENTS = 40;
@@ -247,18 +255,12 @@ async function EventosContent({ filters }: { filters: Filters }) {
   ];
   const [{ data: profiles }, { data: trustRows }, videos] = await Promise.all([
     publisherIds.length > 0
-      ? supabase
-          .from("profiles")
-          .select("id, display_name, identity_verified")
-          .in("id", publisherIds)
+      ? perfilesPublicos(supabase, publisherIds)
       : Promise.resolve({
           data: [] as { id: string; display_name: string | null; identity_verified: boolean }[],
         }),
     publisherIds.length > 0
-      ? supabase
-          .from("trust_scores")
-          .select("profile_id, score, level, signals")
-          .in("profile_id", publisherIds)
+      ? puntajesPublicos(supabase, publisherIds)
       : Promise.resolve({
           data: [] as {
             profile_id: string;

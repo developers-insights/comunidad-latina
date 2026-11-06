@@ -44,6 +44,7 @@ import {
   parseMarketplaceTab,
   type MarketplaceTabId,
 } from "../marketplace-tabs";
+import { perfilesPublicos } from "@/lib/perfiles/publicos";
 
 export const metadata = { title: "Marketplace" };
 
@@ -285,10 +286,7 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
           }[],
         }),
     privateOwnerIds.length > 0
-      ? supabase
-          .from("profiles")
-          .select("id, display_name, identity_verified")
-          .in("id", privateOwnerIds)
+      ? perfilesPublicos(supabase, privateOwnerIds)
       : Promise.resolve({
           data: [] as { id: string; display_name: string | null; identity_verified: boolean }[],
         }),
@@ -316,7 +314,7 @@ async function MarketplaceContent({ filters }: { filters: Filters }) {
   ];
   const storeOwnersResult =
     storeOwnerIds.length > 0
-      ? await supabase.from("profiles").select("id, identity_verified").in("id", storeOwnerIds)
+      ? await perfilesPublicos(supabase, storeOwnerIds)
       : { data: [] as { id: string; identity_verified: boolean }[] };
   const identityByStoreOwner = new Map(
     (storeOwnersResult.data ?? []).map((profile) => [profile.id, profile.identity_verified]),
@@ -575,7 +573,7 @@ async function MarketplaceStoresContent({ filters }: { filters: StoreFilters }) 
   //  · cantidad de artículos activos (ver src/lib/marketplace/store-directory.ts).
   const [ownersResult, followsResult, ratings, activeCounts] = await Promise.all([
     ownerIds.length > 0
-      ? supabase.from("profiles").select("id, identity_verified").in("id", ownerIds)
+      ? perfilesPublicos(supabase, ownerIds)
       : Promise.resolve({ data: [] as { id: string; identity_verified: boolean }[] }),
     viewerId && storeIds.length > 0
       ? supabase

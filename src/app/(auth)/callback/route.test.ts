@@ -36,9 +36,15 @@ vi.mock("@/lib/auth/preclaimed", async (importActual) => ({
   neutralizePreclaimedAccount: mocks.neutralizePreclaimedAccount,
 }));
 
-import { GET } from "./route";
+import { GET, POST } from "./route";
 
 const ORIGIN = "https://dominicanos.com";
+
+function pedido(query: string, headers: Record<string, string> = {}): Request {
+  const body = new FormData();
+  new URLSearchParams(query).forEach((valor, clave) => body.set(clave, valor));
+  return new Request(`${ORIGIN}/callback`, { method: "POST", body, headers });
+}
 
 function request(query: string, headers: Record<string, string> = {}): Request {
   return new Request(`${ORIGIN}/callback${query}`, {
@@ -205,10 +211,27 @@ describe("GET /callback — sesiones de email", () => {
   });
 });
 
-describe("GET /callback — enlaces con token_hash", () => {
+describe("POST /callback — enlaces con token_hash", () => {
+  it("el GET no gasta el token: lleva al botón de /enlace", async () => {
+    const res = await GET(request("?next=%2Fmensajes&token_hash=hash-2&type=magiclink"));
+
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    expect(res.headers.get("location")).toBe(
+      `${ORIGIN}/enlace?destino=%2Fcallback&token_hash=hash-2&type=magiclink&next=%2Fmensajes`,
+    );
+  });
+
+  it("un POST de otro sitio no canjea nada", async () => {
+    const res = await POST(
+      pedido("?token_hash=ajeno&type=magiclink", { "sec-fetch-site": "cross-site" }),
+    );
+
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/entrar?error=enlace`);
+  });
+
   it("recuperación abierta en otro navegador → sesión y a fijar la contraseña", async () => {
-    const res = await GET(
-      request("?next=%2Frecuperar%2Factualizar&token_hash=hash-1&type=recovery"),
+    const res = await POST(pedido("?next=%2Frecuperar%2Factualizar&token_hash=hash-1&type=recovery"),
     );
 
     expect(mocks.verifyOtp).toHaveBeenCalledWith({ type: "recovery", token_hash: "hash-1" });
@@ -217,14 +240,14 @@ describe("GET /callback — enlaces con token_hash", () => {
   });
 
   it("magic link → al next", async () => {
-    const res = await GET(request("?next=%2Fmensajes&token_hash=hash-2&type=magiclink"));
+    const res = await POST(pedido("?next=%2Fmensajes&token_hash=hash-2&type=magiclink"));
 
     expect(mocks.verifyOtp).toHaveBeenCalledWith({ type: "magiclink", token_hash: "hash-2" });
     expect(res.headers.get("location")).toBe(`${ORIGIN}/mensajes`);
   });
 
   it("un type que no es de correo se ignora", async () => {
-    const res = await GET(request("?token_hash=hash-3&type=signup"));
+    const res = await POST(pedido("?token_hash=hash-3&type=signup"));
 
     expect(mocks.verifyOtp).not.toHaveBeenCalled();
     expect(res.headers.get("location")).toBe(`${ORIGIN}/entrar?error=enlace`);
@@ -236,7 +259,7 @@ describe("GET /callback — enlaces con token_hash", () => {
       error: { code: "otp_expired" },
     });
 
-    const res = await GET(request("?token_hash=viejo&type=magiclink"));
+    const res = await POST(pedido("?token_hash=viejo&type=magiclink"));
 
     expect(res.headers.get("location")).toBe(`${ORIGIN}/entrar?error=enlace`);
   });
@@ -248,8 +271,7 @@ describe("GET /callback — enlaces con token_hash", () => {
     });
     mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
 
-    const res = await GET(
-      request("?next=%2Frecuperar%2Factualizar&token_hash=hash-1&type=recovery"),
+    const res = await POST(pedido("?next=%2Frecuperar%2Factualizar&token_hash=hash-1&type=recovery"),
     );
 
     expect(res.headers.get("location")).toBe(`${ORIGIN}/recuperar/actualizar`);

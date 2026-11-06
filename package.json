@@ -22,7 +22,7 @@
     "@mux/mux-player-react": "^3.13.2",
     "@mux/upchunk": "^3.5.0",
     "@phosphor-icons/react": "^2.1.10",
-    "@sentry/nextjs": "^10.63.0",
+    "@sentry/nextjs": "^11.11.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.0",
     "agora-rtc-sdk-ng": "^4.24.8",
@@ -37,10 +37,10 @@
     "react-dom": "19.2.4",
     "resend": "^6.17.1",
     "server-only": "^0.0.1",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.5",
     "stripe": "^22.3.0",
     "tailwind-merge": "^3.6.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@serwist/next": "^9.5.11",

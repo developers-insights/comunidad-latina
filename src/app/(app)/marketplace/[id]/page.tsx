@@ -49,6 +49,7 @@ import { metadataDeCompartible } from "@/components/share/metadata";
 import { getTenant } from "@/lib/tenant/resolve";
 import { cn } from "@/lib/utils";
 import { ProfileLink } from "@/components/social/profile-link";
+import { perfilPublico, puntajePublico } from "@/lib/perfiles/publicos";
 
 type Params = Promise<{ id: string }>;
 
@@ -207,16 +208,8 @@ export default async function ProductoDetallePage({ params }: { params: Params }
       let trust: StoreCardModel["trust"] = null;
       if (store.created_by) {
         const [{ data: profile }, { data: trustScore }] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("display_name, avatar_url, identity_verified")
-            .eq("id", store.created_by)
-            .maybeSingle(),
-          supabase
-            .from("trust_scores")
-            .select("score, level, signals")
-            .eq("profile_id", store.created_by)
-            .maybeSingle(),
+          perfilPublico(supabase, store.created_by),
+          puntajePublico(supabase, store.created_by),
         ]);
         const displayName = profile?.display_name ?? COPY.detail.communityMember;
         storeOwnerIdentityVerified = profile?.identity_verified ?? false;
@@ -257,16 +250,8 @@ export default async function ProductoDetallePage({ params }: { params: Params }
     };
   } else if (product.created_by) {
     const [{ data: profile }, { data: trustScore }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("display_name, avatar_url, identity_verified")
-        .eq("id", product.created_by)
-        .maybeSingle(),
-      supabase
-        .from("trust_scores")
-        .select("score, level, signals")
-        .eq("profile_id", product.created_by)
-        .maybeSingle(),
+      perfilPublico(supabase, product.created_by),
+      puntajePublico(supabase, product.created_by),
     ]);
     const displayName = profile?.display_name ?? COPY.detail.communityMember;
     privateSeller = {
