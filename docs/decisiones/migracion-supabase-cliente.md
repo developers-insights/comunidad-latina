@@ -1,8 +1,8 @@
 # Migración de Supabase a la cuenta del cliente
 
-Estado al 2026-11-05: **plan listo, migración sin empezar.** Geovanny despausó el destino y nos dio rol de administrador el 04/11, y la PC de escritorio tiene `envkit`: ya no hay bloqueo de acceso. Las migraciones 0181 a 0184 se aplicaron en el origen, así que el destino va hasta la 0184 y la limpieza del paso 6 ya está hecha.
+Estado al 2026-11-06: **mudanza hecha.** Producción corre en el destino desde el corte del 06/11. El origen quedó congelado (trigger `zz_mudanza` en las 113 tablas de CL) y con sus 32 crons apagados, sin borrar nada. A la semana de estar estable, proponer la limpieza en Kairo.
 
-| | Origen (producción hoy) | Destino (cuenta del cliente) |
+| | Origen (base vieja) | Destino (producción) |
 |---|---|---|
 | Ref | `ktmbtpuhqqofdkisqseq` | `vnfqzlcxpmofvsoxnptf` |
 | Org | `thmokrmynbamoukloork` (INSIGHTS manu) | `mfgffszuxbixgogcchdr` (dueño ecosistemalatino) |

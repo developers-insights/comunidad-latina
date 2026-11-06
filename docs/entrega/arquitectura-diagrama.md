@@ -71,7 +71,7 @@ flowchart LR
         API["Route Handlers\n/api/assistant\n/api/webhooks/stripe"]
     end
 
-    subgraph SupaProj["Supabase (proyecto ktmbtpuhqqofdkisqseq)"]
+    subgraph SupaProj["Supabase (proyecto vnfqzlcxpmofvsoxnptf)"]
         PG[("Postgres 17\ntenants, profiles, listings,\nposts, messages, payment_events...")]
         Auth["Supabase Auth\nemail+password, magic link\nJWT: app_metadata.role, tenant_id"]
         Storage["Supabase Storage\nfotos de avisos, avatares"]

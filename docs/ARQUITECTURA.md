@@ -10,7 +10,7 @@
 |---|---|
 | Framework | Next.js 15 (App Router, `src/`, alias `@/*`) + TypeScript estricto |
 | Estilos | Tailwind CSS v4 (tokens en `globals.css` vía `@theme`) |
-| DB/Auth/Storage/Realtime | Supabase (proyecto `ktmbtpuhqqofdkisqseq`, Postgres 17) — cliente `@supabase/ssr` + `@supabase/supabase-js` |
+| DB/Auth/Storage/Realtime | Supabase (proyecto `vnfqzlcxpmofvsoxnptf`, cuenta del cliente, Postgres 17) — cliente `@supabase/ssr` + `@supabase/supabase-js` |
 | Pagos | Stripe (degradado hoy — ver §7) |
 | Iconos | `@phosphor-icons/react` (peso Regular/Light; Fill solo estado activo). PROHIBIDO emoji como ícono funcional |
 | Motion | `motion` (framer-motion v12) + CSS transitions con los motion tokens |
