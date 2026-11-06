@@ -38,7 +38,7 @@ function request(query: string): Request {
 function pedido(query: string, headers: Record<string, string> = {}): Request {
   const body = new FormData();
   new URLSearchParams(query).forEach((valor, clave) => body.set(clave, valor));
-  return new Request(`${ORIGIN}/confirmar`, { method: "POST", body, headers });
+  return new Request(`${ORIGIN}/confirmar`, { method: "POST", body, headers: { "sec-fetch-site": "same-origin", ...headers } });
 }
 
 function confirmedUser() {
@@ -143,7 +143,11 @@ describe("POST /confirmar", () => {
       new Request("http://localhost:3000/confirmar", {
         method: "POST",
         body,
-        headers: { "x-forwarded-host": "dominicanos.com", "x-forwarded-proto": "https" },
+        headers: {
+          "sec-fetch-site": "same-origin",
+          "x-forwarded-host": "dominicanos.com",
+          "x-forwarded-proto": "https",
+        },
       }),
     );
 

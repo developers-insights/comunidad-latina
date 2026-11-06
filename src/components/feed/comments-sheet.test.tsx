@@ -189,7 +189,10 @@ function makeClient(f: Fixtures) {
     return chain;
   };
   return {
-    auth: { getUser: async () => ({ data: { user: f.user ?? null } }) },
+    auth: {
+      getUser: async () => ({ data: { user: f.user ?? null } }),
+      getSession: async () => ({ data: { session: {} } }),
+    },
     from: (table: string) => chainFor(table),
     rpc: async (fn: string) =>
       fn === "perfiles_publicos" ? resultFor("profiles") : resultFor("trust_scores"),

@@ -6928,8 +6928,28 @@ export type Database = {
           identity_verified: boolean
         }[]
       }
+      perfiles_visitante: {
+        Args: { p_ids: string[]; p_tenant: string }
+        Returns: {
+          area_label: string
+          avatar_url: string
+          display_name: string
+          id: string
+          identity_verified: boolean
+        }[]
+      }
       puntajes_publicos: {
         Args: { p_ids: string[] }
+        Returns: {
+          computed_at: string
+          level: string
+          profile_id: string
+          score: number
+          signals: Json
+        }[]
+      }
+      puntajes_visitante: {
+        Args: { p_ids: string[]; p_tenant: string }
         Returns: {
           computed_at: string
           level: string

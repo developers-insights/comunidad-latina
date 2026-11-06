@@ -7,7 +7,8 @@ import { DESTINOS_DE_ENLACE, type DestinoDeEnlace } from "@/lib/auth/enlace-corr
 export const metadata: Metadata = {
   title: "Continuar",
   robots: { index: false, follow: false },
-  referrer: "no-referrer",
+  // No "no-referrer": el POST saldría con `Origin: null`. Ver vieneDeOtroSitio.
+  referrer: "same-origin",
 };
 
 const TEXTO: Record<string, { titulo: string; cuerpo: string; boton: string }> = {

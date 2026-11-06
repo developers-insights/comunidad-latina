@@ -130,7 +130,8 @@ function createStub(result: QueryResult, perfiles: unknown[] = []) {
   } as any;
   const from = vi.fn(() => builder);
   const rpc = vi.fn(async () => ({ data: perfiles, error: null }));
-  return { client: { from, rpc } as unknown as SupabaseClient, from, calls };
+  const auth = { getSession: async () => ({ data: { session: {} } }) };
+  return { client: { from, rpc, auth } as unknown as SupabaseClient, from, calls };
 }
 
 describe("fetchPostTags", () => {
