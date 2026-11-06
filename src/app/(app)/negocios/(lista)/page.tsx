@@ -78,6 +78,7 @@ import {
   SECCION,
 } from "./list-shell";
 import type { AccionRapida } from "@/components/negocios";
+import { perfilesPublicos, puntajesPublicos } from "@/lib/perfiles/publicos";
 
 export const metadata = { title: "Negocios" };
 
@@ -418,13 +419,10 @@ async function NegociosContent({ filters }: { filters: Filters }) {
 
   const [scoresResult, ownersResult, ratings, horarios, fotosPropias, videos] = await Promise.all([
     ownerIds.length > 0
-      ? supabase
-          .from("trust_scores")
-          .select("profile_id, score, level, signals")
-          .in("profile_id", ownerIds)
+      ? puntajesPublicos(supabase, ownerIds)
       : Promise.resolve({ data: [] as null | { profile_id: string }[] }),
     ownerIds.length > 0
-      ? supabase.from("profiles").select("id, display_name, identity_verified").in("id", ownerIds)
+      ? perfilesPublicos(supabase, ownerIds)
       : Promise.resolve({ data: [] as null | { id: string }[] }),
     // Calificaciones: `listing_review_stats` (0093), UN `.in(...)` para toda la
     // página. La función es la del módulo hermano de Profesionales — la lectura

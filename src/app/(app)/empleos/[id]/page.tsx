@@ -61,6 +61,7 @@ import {
   fetchJobApplicationCounts,
   fetchViewerApplication,
 } from "../queries";
+import { perfilPublico, puntajePublico } from "@/lib/perfiles/publicos";
 
 const C = COPY.detail;
 
@@ -250,16 +251,8 @@ export default async function EmpleoDetallePage({ params }: { params: Params }) 
     fetchListingSaved(supabase, tenant.id, listing.id, userId),
     listing.created_by
       ? Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, display_name, avatar_url, identity_verified")
-            .eq("id", listing.created_by)
-            .maybeSingle(),
-          supabase
-            .from("trust_scores")
-            .select("score, level, signals")
-            .eq("profile_id", listing.created_by)
-            .maybeSingle(),
+          perfilPublico(supabase, listing.created_by),
+          puntajePublico(supabase, listing.created_by),
         ])
       : null,
   ]);

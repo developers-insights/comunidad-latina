@@ -35,6 +35,7 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { leerCheckAzul, leerChecksAzules } from "@/lib/verificacion/read";
 import { cn } from "@/lib/utils";
 import { ProfileLink } from "@/components/social/profile-link";
+import { perfilPublico, perfilesPublicos, puntajePublico, puntajesPublicos } from "@/lib/perfiles/publicos";
 
 export const metadata = { title: "Trabajo" };
 
@@ -76,8 +77,8 @@ export default async function GigDetailPage({ params }: { params: Promise<{ id: 
   let publisherBlock: React.ReactNode = null;
   if (gig.created_by) {
     const [{ data: profile }, { data: trust }, checkAzul] = await Promise.all([
-      supabase.from("profiles").select("id, display_name, avatar_url, identity_verified").eq("id", gig.created_by).maybeSingle(),
-      supabase.from("trust_scores").select("score, level, signals").eq("profile_id", gig.created_by).maybeSingle(),
+      perfilPublico(supabase, gig.created_by),
+      puntajePublico(supabase, gig.created_by),
       leerCheckAzul(supabase, gig.created_by),
     ]);
     const name = profile?.display_name ?? "Negocio de la comunidad";
@@ -301,10 +302,10 @@ async function OwnerApplications({
 
   const [{ data: profiles }, { data: trusts }, { data: creatorProfiles }, checksAzules] = await Promise.all([
     creatorIds.length
-      ? supabase.from("profiles").select("id, display_name, avatar_url, identity_verified").in("id", creatorIds)
+      ? perfilesPublicos(supabase, creatorIds)
       : Promise.resolve({ data: [] as never[] }),
     creatorIds.length
-      ? supabase.from("trust_scores").select("profile_id, score, level, signals").in("profile_id", creatorIds)
+      ? puntajesPublicos(supabase, creatorIds)
       : Promise.resolve({ data: [] as never[] }),
     creatorIds.length
       ? supabase

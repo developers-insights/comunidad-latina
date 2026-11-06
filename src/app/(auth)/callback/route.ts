@@ -3,6 +3,11 @@ import type { EmailOtpType, Session, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { finalizeOAuthSession } from "@/lib/auth/finalize-oauth";
 import { safeInternalPath } from "@/lib/url/safe-href";
+import {
+  camposDelEnlace,
+  paginaDelEnlace,
+  vieneDeOtroSitio,
+} from "@/lib/auth/enlace-correo";
 import { resolveRequestOrigin } from "../recuperar/origin";
 
 /**
@@ -57,21 +62,20 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/entrar?error=proveedor", origin));
   }
 
-  const tokenHash = url.searchParams.get("token_hash");
-  const otpType = emailOtpType(url.searchParams.get("type"));
+  if (url.searchParams.get("token_hash")) {
+    return NextResponse.redirect(paginaDelEnlace(origin, "/callback", request));
+  }
 
-  if (code || (tokenHash && otpType)) {
+  if (code) {
     const supabase = await createClient();
-    const { data, error } = code
-      ? await supabase.auth.exchangeCodeForSession(code)
-      : await supabase.auth.verifyOtp({ type: otpType!, token_hash: tokenHash! });
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.user && data.session) {
       return finish(supabase, data.user, data.session, next, origin);
     }
 
     console.error("[auth] callback: canje del enlace falló", {
-      via: code ? "code" : otpType,
+      via: "code",
       code: error?.code ?? "sin_usuario",
     });
 
@@ -84,6 +88,36 @@ export async function GET(request: Request) {
 
   // Enlace vencido o ya usado → de vuelta a /entrar con aviso cálido.
   return NextResponse.redirect(new URL("/entrar?error=enlace", origin));
+}
+
+/** El canje del magic link y la recuperación: lo dispara el botón de /enlace. */
+export async function POST(request: Request) {
+  const origin = await resolveRequestOrigin(request);
+  const campos = await camposDelEnlace(request);
+  const otpType = emailOtpType(campos.type);
+  const next = safeInternalPath(campos.next, "/feed");
+
+  if (campos.tokenHash && otpType && !vieneDeOtroSitio(request)) {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.verifyOtp({
+      type: otpType,
+      token_hash: campos.tokenHash,
+    });
+
+    if (!error && data.user && data.session) {
+      return finish(supabase, data.user, data.session, next, origin);
+    }
+
+    console.error("[auth] callback: canje del enlace falló", {
+      via: otpType,
+      code: error?.code ?? "sin_usuario",
+    });
+
+    const { data: current } = await supabase.auth.getUser();
+    if (current.user) return NextResponse.redirect(new URL(next, origin), 303);
+  }
+
+  return NextResponse.redirect(new URL("/entrar?error=enlace", origin), 303);
 }
 
 async function finish(
@@ -102,5 +136,5 @@ async function finish(
     next,
   });
   const target = result.ok ? result.redirectTo : `/entrar?error=${result.reason}`;
-  return NextResponse.redirect(new URL(target, origin));
+  return NextResponse.redirect(new URL(target, origin), 303);
 }

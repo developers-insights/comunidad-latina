@@ -57,6 +57,7 @@ import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { VENCIMIENTO_COPY } from "@/lib/listings";
 import { cn, timeAgo } from "@/lib/utils";
 import { ProfileLink } from "@/components/social/profile-link";
+import { perfilPublico, puntajePublico } from "@/lib/perfiles/publicos";
 
 const C = COPY.events;
 
@@ -171,16 +172,8 @@ export default async function EventoDetallePage({ params }: { params: Params }) 
       .limit(3),
     listing.created_by
       ? Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, display_name, avatar_url, identity_verified")
-            .eq("id", listing.created_by)
-            .maybeSingle(),
-          supabase
-            .from("trust_scores")
-            .select("score, level, signals")
-            .eq("profile_id", listing.created_by)
-            .maybeSingle(),
+          perfilPublico(supabase, listing.created_by),
+          puntajePublico(supabase, listing.created_by),
         ])
       : null,
     // ¿Ya lo guardé? (`saves`, 0038 — false si la migración todavía no corrió.)

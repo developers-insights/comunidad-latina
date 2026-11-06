@@ -58,8 +58,16 @@ import {
   propiedadesTabHref,
   type PropiedadesTabId,
 } from "../propiedades-tabs";
+import { perfilesPublicos, puntajesPublicos } from "@/lib/perfiles/publicos";
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 
-export const metadata = { title: "Vivienda" };
+const SITE_URL = siteUrlForMetadata();
+
+export const metadata = {
+  title: "Vivienda",
+  description: "Apartamentos y habitaciones publicados por gente de la comunidad, con verificación real de cada anunciante.",
+  alternates: { canonical: `${SITE_URL}/propiedades` },
+};
 
 const PAGE_SIZE = 10;
 
@@ -370,16 +378,10 @@ async function PropiedadesContent({ filters }: { filters: Filters }) {
           .order("checked_at", { ascending: false })
       : Promise.resolve({ data: [] as never[] }),
     publisherIds.length > 0
-      ? supabase
-          .from("profiles")
-          .select("id, display_name, avatar_url, identity_verified")
-          .in("id", publisherIds)
+      ? perfilesPublicos(supabase, publisherIds)
       : Promise.resolve({ data: [] as never[] }),
     publisherIds.length > 0
-      ? supabase
-          .from("trust_scores")
-          .select("profile_id, score, level, signals")
-          .in("profile_id", publisherIds)
+      ? puntajesPublicos(supabase, publisherIds)
       : Promise.resolve({ data: [] as never[] }),
     // Las zonas del filtro solo se derivan en la PRIMERA página (sin cursor):
     // en "cargar más" los chips ya se renderizaron, así que evitamos escanear

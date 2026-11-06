@@ -28,6 +28,7 @@ import {
   readServiceDetails,
 } from "@/lib/empleos/servicios";
 import { VENCIMIENTO_COPY } from "@/lib/listings";
+import { perfilPublico, puntajePublico } from "@/lib/perfiles/publicos";
 
 const C = COPY.service;
 
@@ -135,16 +136,8 @@ export async function ServiceDetail({
   if (listing.created_by) {
     const supabase = await createClient();
     const [{ data: profile }, { data: trust }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, display_name, avatar_url, identity_verified")
-        .eq("id", listing.created_by)
-        .maybeSingle(),
-      supabase
-        .from("trust_scores")
-        .select("score, level, signals")
-        .eq("profile_id", listing.created_by)
-        .maybeSingle(),
+      perfilPublico(supabase, listing.created_by),
+      puntajePublico(supabase, listing.created_by),
     ]);
 
     const displayName = profile?.display_name ?? C.offeredByUnknown;

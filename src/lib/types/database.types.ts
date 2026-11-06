@@ -6918,6 +6918,26 @@ export type Database = {
           title: string
         }[]
       }
+      perfiles_publicos: {
+        Args: { p_ids: string[] }
+        Returns: {
+          area_label: string
+          avatar_url: string
+          display_name: string
+          id: string
+          identity_verified: boolean
+        }[]
+      }
+      puntajes_publicos: {
+        Args: { p_ids: string[] }
+        Returns: {
+          computed_at: string
+          level: string
+          profile_id: string
+          score: number
+          signals: Json
+        }[]
+      }
       guardar_horario_de_aviso: {
         Args: { p_listing: string; p_time_zone: string; p_tramos: Json }
         Returns: undefined

@@ -35,6 +35,7 @@ import {
 } from "@/lib/comunidad";
 import type { Tables } from "@/lib/types/database.types";
 import { timeAgo } from "@/lib/utils";
+import { perfilesPublicos, puntajesPublicos } from "@/lib/perfiles/publicos";
 
 /**
  * LECTURAS del módulo Comunidad.
@@ -201,11 +202,8 @@ async function loadPublishers(
   }
 
   const [{ data: profiles }, { data: trusts }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, display_name, avatar_url, identity_verified")
-      .in("id", memberIds),
-    supabase.from("trust_scores").select("profile_id, score, level, signals").in("profile_id", memberIds),
+    perfilesPublicos(supabase, memberIds),
+    puntajesPublicos(supabase, memberIds),
   ]);
 
   return {
@@ -395,7 +393,7 @@ async function loadHelpLabels(
   const sinTipar = supabaseSinTiparComunidad(supabase);
   const [perfiles, recursos] = await Promise.all([
     autores.length > 0
-      ? supabase.from("profiles").select("id, display_name").in("id", autores)
+      ? perfilesPublicos(supabase, autores)
       : Promise.resolve({ data: [] as { id: string; display_name: string | null }[] }),
     fichas.length > 0
       ? sinTipar.from("community_resources").select("id, name").in("id", fichas)
@@ -610,10 +608,7 @@ export async function fetchHelpReplies(input: {
   if (rows.length === 0) return [];
 
   const autores = [...new Set(rows.map((row) => row.created_by))];
-  const { data: perfiles } = await supabase
-    .from("profiles")
-    .select("id, display_name")
-    .in("id", autores);
+  const { data: perfiles } = await perfilesPublicos(supabase, autores);
 
   const nombrePorAutor = new Map(
     ((perfiles ?? []) as { id: string; display_name: string | null }[]).map((row) => [

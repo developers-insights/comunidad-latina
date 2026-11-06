@@ -62,8 +62,16 @@ import {
   parseProfessionalsTab,
   professionalsTabHref,
 } from "../professional-tabs";
+import { perfilesPublicos, puntajesPublicos } from "@/lib/perfiles/publicos";
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 
-export const metadata = { title: "Profesionales" };
+const SITE_URL = siteUrlForMetadata();
+
+export const metadata = {
+  title: "Profesionales",
+  description: "Abogados, contadores, médicos y otros profesionales que atienden en español, con licencia verificada.",
+  alternates: { canonical: `${SITE_URL}/profesionales` },
+};
 
 const PAGE_SIZE = 12;
 const C = COPY.professionals;
@@ -349,16 +357,10 @@ async function ProfesionalesContent({ filters }: { filters: Filters }) {
           .order("checked_at", { ascending: false })
       : Promise.resolve({ data: [] as never[] }),
     publisherIds.length > 0
-      ? supabase
-          .from("profiles")
-          .select("id, display_name, avatar_url, identity_verified")
-          .in("id", publisherIds)
+      ? perfilesPublicos(supabase, publisherIds)
       : Promise.resolve({ data: [] as never[] }),
     publisherIds.length > 0
-      ? supabase
-          .from("trust_scores")
-          .select("profile_id, score, level, signals")
-          .in("profile_id", publisherIds)
+      ? puntajesPublicos(supabase, publisherIds)
       : Promise.resolve({ data: [] as never[] }),
     fetchLanguagesByProfile(supabase, publisherIds),
     fetchListingRatings(supabase, listingIds),

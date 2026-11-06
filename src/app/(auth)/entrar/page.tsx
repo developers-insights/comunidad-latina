@@ -5,8 +5,15 @@ import { LoginForm } from "@/components/auth/login-form";
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleClientIdProvider } from "@/components/auth/google-identity-context";
 import { availableOAuthProviders, googleIdentityClientId } from "../oauth-actions";
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 
-export const metadata = { title: "Entrar" };
+const SITE_URL = siteUrlForMetadata();
+
+export const metadata = {
+  title: "Entrar",
+  description: "Entrá a tu cuenta para publicar, escribirle a otras personas y seguir lo que pasa en tu comunidad.",
+  alternates: { canonical: `${SITE_URL}/entrar` },
+};
 
 export default async function EntrarPage({
   searchParams,

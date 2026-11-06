@@ -13,13 +13,13 @@ export function LanguageToggle() {
   const { toast } = useToast();
 
   const baseClass =
-    "inline-flex h-9 min-w-11 items-center justify-center rounded-full px-3 text-sm font-semibold transition-colors duration-(--duration-fast)";
+    "inline-flex h-11 min-w-11 items-center justify-center rounded-full px-3 text-sm font-semibold transition-colors duration-(--duration-fast)";
 
   return (
     <div
       role="group"
       aria-label={COPY.language.label}
-      className="inline-flex items-center gap-1 rounded-full border border-border bg-surface p-1"
+      className="inline-flex items-center gap-2 rounded-full border border-border bg-surface p-1"
     >
       <button type="button" aria-pressed="true" className={cn(baseClass, "bg-brand text-brand-foreground")}>
         ES

@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { isMuxConfigured } from "@/lib/config/services";
+import { ADVERTISING_VIDEO_MAX_SECONDS } from "@/lib/media/video-policy";
+import { getMux } from "@/lib/mux/client";
 import { verifyMuxSignature } from "@/lib/mux/webhook";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/types/database.types";
@@ -292,6 +295,20 @@ export async function POST(request: Request) {
           break;
         }
         const segundos = duracion(data.duration);
+        // Direct Upload no deja fijar un máximo y el tope del composer se saltea
+        // pidiendo la subida a mano: acá el largo deja de ser una promesa del
+        // navegador. Mux cobra por minuto guardado, así que el asset se borra.
+        if (segundos !== null && segundos > ADVERTISING_VIDEO_MAX_SECONDS) {
+          console.warn(`[mux:webhook] asset de ${Math.round(segundos)} s sobre el tope: se borra.`);
+          if (isMuxConfigured) await getMux().video.assets.delete(assetId);
+          tocado = await aplicarAlPost(
+            admin,
+            { uploadId: texto(data.upload_id), passthrough: texto(data.passthrough) },
+            { mux_status: "errored" },
+            ["uploading", "processing"],
+          );
+          break;
+        }
         tocado = await aplicarAlPost(
           admin,
           { uploadId: texto(data.upload_id), passthrough: texto(data.passthrough) },

@@ -24,6 +24,7 @@ import { t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { getTenant } from "@/lib/tenant/resolve";
 import { getViewerAccount } from "@/lib/time/viewer-zone";
+import { perfilesPublicos, puntajesPublicos } from "@/lib/perfiles/publicos";
 
 export const metadata = { title: "Creadores" };
 
@@ -96,13 +97,10 @@ async function FeedContent({ q }: { q: string }) {
 
   const [profilesResult, trustResult] = await Promise.all([
     publisherIds.length > 0
-      ? supabase
-          .from("profiles")
-          .select("id, display_name, avatar_url, identity_verified")
-          .in("id", publisherIds)
+      ? perfilesPublicos(supabase, publisherIds)
       : Promise.resolve({ data: [] as never[] }),
     publisherIds.length > 0
-      ? supabase.from("trust_scores").select("profile_id, score, level, signals").in("profile_id", publisherIds)
+      ? puntajesPublicos(supabase, publisherIds)
       : Promise.resolve({ data: [] as never[] }),
   ]);
 

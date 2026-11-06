@@ -30,6 +30,7 @@ import { CommentItem } from "./comment-item";
 import { CommentMenu } from "./comment-menu";
 import { COPY } from "./copy";
 import { COMMENT_THREAD_COPY, type AuthorView } from "./helpers";
+import { perfilesPublicos, puntajesPublicos } from "@/lib/perfiles/publicos";
 
 /**
  * HOJA DE COMENTARIOS estilo Instagram (feedback cliente 2026-07-21: "doy un
@@ -344,14 +345,8 @@ async function fetchAuthorViewsClient(
   if (ids.length === 0) return byId;
 
   const [profilesResult, trustResult] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, display_name, avatar_url, identity_verified")
-      .in("id", ids),
-    supabase
-      .from("trust_scores")
-      .select("profile_id, score, level, signals")
-      .in("profile_id", ids),
+    perfilesPublicos(supabase, ids),
+    puntajesPublicos(supabase, ids),
   ]);
 
   const trustById = new Map(

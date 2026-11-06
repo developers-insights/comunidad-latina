@@ -112,7 +112,7 @@ describe("diffTagIds", () => {
 type QueryResult = { data?: unknown; error?: unknown };
 
 /** Builder falso, encadenable y thenable (patrón de los tests de actions). */
-function createStub(result: QueryResult) {
+function createStub(result: QueryResult, perfiles: unknown[] = []) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const record =
     (method: string) =>
@@ -129,18 +129,26 @@ function createStub(result: QueryResult) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
   const from = vi.fn(() => builder);
-  return { client: { from } as unknown as SupabaseClient, from, calls };
+  const rpc = vi.fn(async () => ({ data: perfiles, error: null }));
+  return { client: { from, rpc } as unknown as SupabaseClient, from, calls };
 }
 
 describe("fetchPostTags", () => {
   it("agrupa por post y aplana el perfil", async () => {
-    const stub = createStub({
-      data: [
-        { post_id: "post-1", profile_id: "a", profiles: { id: "a", display_name: "Ana", avatar_url: null } },
-        { post_id: "post-1", profile_id: "p", profiles: { id: "p", display_name: "Pedro", avatar_url: "p.jpg" } },
-        { post_id: "post-2", profile_id: "j", profiles: { id: "j", display_name: "Julián", avatar_url: null } },
+    const stub = createStub(
+      {
+        data: [
+          { post_id: "post-1", profile_id: "a" },
+          { post_id: "post-1", profile_id: "p" },
+          { post_id: "post-2", profile_id: "j" },
+        ],
+      },
+      [
+        { id: "a", display_name: "Ana", avatar_url: null },
+        { id: "p", display_name: "Pedro", avatar_url: "p.jpg" },
+        { id: "j", display_name: "Julián", avatar_url: null },
       ],
-    });
+    );
 
     const byPost = await fetchPostTags(stub.client, ["post-1", "post-2"]);
 
@@ -167,7 +175,7 @@ describe("fetchPostTags", () => {
 
   it("ignora la fila cuyo perfil se borró a mitad de la lectura", async () => {
     const stub = createStub({
-      data: [{ post_id: "post-1", profile_id: "a", profiles: null }],
+      data: [{ post_id: "post-1", profile_id: "a" }],
     });
     expect((await fetchPostTags(stub.client, ["post-1"])).size).toBe(0);
   });

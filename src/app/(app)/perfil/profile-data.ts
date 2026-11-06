@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database.types";
+import { perfilesPublicos } from "@/lib/perfiles/publicos";
 
 /**
  * Consultas de las pestañas del perfil (contrato 2026-07-30 §B.5/§B.6).
@@ -138,10 +139,7 @@ export async function fetchFollowPeople(
   );
   if (ids.length === 0) return [];
 
-  const { data: people, error: peopleError } = await supabase
-    .from("profiles")
-    .select("id, display_name, avatar_url, area_label, identity_verified")
-    .in("id", ids);
+  const { data: people, error: peopleError } = await perfilesPublicos(supabase, ids);
 
   if (peopleError) {
     console.warn("[perfil] query de perfiles de follows falló", { code: peopleError.code });
@@ -207,10 +205,7 @@ export async function fetchProfileReviews(
   const rows = data ?? [];
   if (rows.length === 0) return [];
 
-  const { data: reviewers } = await supabase
-    .from("profiles")
-    .select("id, display_name, avatar_url")
-    .in("id", rows.map((r) => r.reviewer_id));
+  const { data: reviewers } = await perfilesPublicos(supabase, rows.map((r) => r.reviewer_id));
 
   const byId = new Map((reviewers ?? []).map((p) => [p.id, p]));
 

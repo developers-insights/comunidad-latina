@@ -5,10 +5,17 @@ import { getTenant } from "@/lib/tenant/resolve";
 import { sendEmailInBackground } from "@/lib/email";
 import { welcomeEmail } from "@/lib/email/templates";
 import { syncEmailVerified } from "@/lib/auth/email-verified";
+import {
+  camposDelEnlace,
+  paginaDelEnlace,
+  vieneDeOtroSitio,
+} from "@/lib/auth/enlace-correo";
 import { resolveRequestOrigin } from "../recuperar/origin";
 
 /**
- * Confirmación de cuenta: el enlace del correo pega acá con `?token_hash=…`.
+ * Confirmación de cuenta: el enlace del correo pega acá con `?token_hash=…` y pasa
+ * por /enlace, porque el GET lo abren también los escáneres de correo (ver
+ * lib/auth/enlace-correo.ts). El canje lo hace el POST del botón.
  *
  * Es hermana de /callback pero NO la misma cosa: /callback canjea un `?code=`
  * (PKCE, el flujo del magic link que arma el propio Supabase), y acá llega un
@@ -20,14 +27,21 @@ import { resolveRequestOrigin } from "../recuperar/origin";
  * entra directo desde el correo — sin volver a escribir la contraseña.
  */
 export async function GET(request: Request) {
-  const url = new URL(request.url);
   const origin = await resolveRequestOrigin(request);
-  const tokenHash = url.searchParams.get("token_hash");
+  if (new URL(request.url).searchParams.get("token_hash")) {
+    return NextResponse.redirect(paginaDelEnlace(origin, "/confirmar", request));
+  }
+  return NextResponse.redirect(new URL("/entrar?error=confirmacion", origin));
+}
+
+export async function POST(request: Request) {
+  const origin = await resolveRequestOrigin(request);
+  const { tokenHash, next: nextPedido } = await camposDelEnlace(request);
   // Ver safe-href.ts: el filtro por string dejaba salir del sitio con un tab
   // embebido, y acá el redirect ocurre con la sesión RECIÉN abierta.
-  const next = safeInternalPath(url.searchParams.get("next"), "/bienvenida");
+  const next = safeInternalPath(nextPedido, "/bienvenida");
 
-  if (tokenHash) {
+  if (tokenHash && !vieneDeOtroSitio(request)) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.verifyOtp({
       type: "signup",
@@ -71,7 +85,7 @@ export async function GET(request: Request) {
         });
       }
 
-      return NextResponse.redirect(new URL(next, origin));
+      return NextResponse.redirect(new URL(next, origin), 303);
     }
 
     console.error("[auth] confirmar: verifyOtp falló", { code: error?.code });
@@ -79,5 +93,5 @@ export async function GET(request: Request) {
 
   // Enlace vencido o ya usado (el token es de un solo uso) → a /entrar, donde
   // un intento de ingreso con la cuenta sin confirmar reenvía el enlace solo.
-  return NextResponse.redirect(new URL("/entrar?error=confirmacion", origin));
+  return NextResponse.redirect(new URL("/entrar?error=confirmacion", origin), 303);
 }

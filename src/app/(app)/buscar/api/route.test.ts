@@ -51,7 +51,8 @@ describe("GET /buscar/api", () => {
   it("sin sesión busca en la comunidad del dominio, sin importar lo que venga en la URL", async () => {
     getAuthUserId.mockResolvedValue(null);
     await buscar();
-    expect(rpc).toHaveBeenCalledWith("global_search", {
+    expect(rpc).not.toHaveBeenCalled();
+    expect(adminRpc).toHaveBeenCalledWith("global_search", {
       q: "Bizcocho",
       limit_per_type: 5,
       p_tenant: "comunidad-del-dominio",
@@ -64,7 +65,10 @@ describe("GET /buscar/api", () => {
 
   it("B01: un visitante encuentra a una persona por el admin client", async () => {
     getAuthUserId.mockResolvedValue(null);
-    adminRpc.mockResolvedValue({ data: [GEOVANNY], error: null });
+    adminRpc.mockImplementation(async (fn: string) => ({
+      data: fn === "buscar_personas_visitante" ? [GEOVANNY] : [],
+      error: null,
+    }));
 
     const respuesta = await buscar("GEOVANNY");
     const cuerpo = await respuesta.json();
@@ -110,14 +114,18 @@ describe("GET /buscar/api", () => {
     const respuesta = await buscar();
 
     expect(respuesta.status).toBe(200);
-    expect(rpc).toHaveBeenCalledOnce();
-    expect(adminRpc).not.toHaveBeenCalled();
+    expect(adminRpc).toHaveBeenCalledOnce();
+    expect(adminRpc).toHaveBeenCalledWith("global_search", expect.anything());
   });
 
   it("si la función de personas falla, los demás resultados igual salen", async () => {
     getAuthUserId.mockResolvedValue(null);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    adminRpc.mockResolvedValue({ data: null, error: { code: "XX000" } });
+    adminRpc.mockImplementation(async (fn) =>
+      fn === "buscar_personas_visitante"
+        ? { data: null, error: { code: "XX000" } }
+        : { data: [{ ...GEOVANNY, result_type: "marketplace", title: "Bizcocho", href: "/marketplace/1" }], error: null },
+    );
     rpc.mockResolvedValue({
       data: [{ ...GEOVANNY, result_type: "marketplace", title: "Bizcocho", href: "/marketplace/1" }],
       error: null,
@@ -139,7 +147,7 @@ describe("GET /buscar/api", () => {
   it("si la búsqueda falla responde error sin mostrar el detalle", async () => {
     getAuthUserId.mockResolvedValue(null);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    rpc.mockResolvedValue({ data: null, error: { code: "42501" } });
+    adminRpc.mockResolvedValue({ data: null, error: { code: "42501" } });
     const respuesta = await buscar();
     expect(respuesta.status).toBe(502);
     expect(await respuesta.json()).toEqual({ error: "search_failed" });

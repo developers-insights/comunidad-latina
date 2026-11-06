@@ -27,12 +27,18 @@ vi.mock("@/lib/tenant/resolve", () => ({
   KNOWN_TENANT_DOMAINS: new Set(["dominicanos.com"]),
 }));
 
-import { GET } from "./route";
+import { GET, POST } from "./route";
 
 const ORIGIN = "https://comunidad-latina-sigma.vercel.app";
 
 function request(query: string): Request {
   return new Request(`${ORIGIN}/confirmar${query}`);
+}
+
+function pedido(query: string, headers: Record<string, string> = {}): Request {
+  const body = new FormData();
+  new URLSearchParams(query).forEach((valor, clave) => body.set(clave, valor));
+  return new Request(`${ORIGIN}/confirmar`, { method: "POST", body, headers });
 }
 
 function confirmedUser() {
@@ -62,17 +68,34 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("GET /confirmar", () => {
+describe("GET /confirmar — lo abre cualquier escáner de correo", () => {
+  it("no gasta el token: lleva al botón de /enlace", async () => {
+    const res = await GET(request("?token_hash=hash-123&type=signup&next=%2Fguias"));
+
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    expect(res.headers.get("location")).toBe(
+      `${ORIGIN}/enlace?destino=%2Fconfirmar&token_hash=hash-123&type=signup&next=%2Fguias`,
+    );
+  });
+
+  it("un POST de otro sitio no canjea nada", async () => {
+    const res = await POST(pedido("?token_hash=ajeno", { "sec-fetch-site": "cross-site" }));
+
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/entrar?error=confirmacion`);
+  });
+});
+
+describe("POST /confirmar", () => {
   it("canjea el token y manda al destino que venía en el enlace", async () => {
-    const res = await GET(
-      request("?token_hash=hash-123&type=signup&next=%2Fpropiedades%3Fzona%3DNu%C3%B1oa"),
+    const res = await POST(pedido("?token_hash=hash-123&type=signup&next=%2Fpropiedades%3Fzona%3DNu%C3%B1oa"),
     );
 
     expect(mocks.verifyOtp).toHaveBeenCalledWith({
       type: "signup",
       token_hash: "hash-123",
     });
-    expect(res.status).toBe(307);
+    expect(res.status).toBe(303);
     // El acento viaja percent-encoded, como corresponde en un Location.
     expect(res.headers.get("location")).toBe(
       `${ORIGIN}/propiedades?zona=Nu%C3%B1oa`,
@@ -80,20 +103,20 @@ describe("GET /confirmar", () => {
   });
 
   it("manda la bienvenida recién al confirmar", async () => {
-    await GET(request("?token_hash=hash-123"));
+    await POST(pedido("?token_hash=hash-123"));
 
     expect(mocks.sendEmailInBackground).toHaveBeenCalledTimes(1);
     expect(mocks.sendEmailInBackground.mock.calls[0][0].to).toBe("rosa@ejemplo.com");
   });
 
   it("ignora un next externo (open redirect)", async () => {
-    const res = await GET(request("?token_hash=hash-123&next=https%3A%2F%2Fmalo.com"));
+    const res = await POST(pedido("?token_hash=hash-123&next=https%3A%2F%2Fmalo.com"));
 
     expect(res.headers.get("location")).toBe(`${ORIGIN}/bienvenida`);
   });
 
   it("sin token no toca Supabase y manda a pedir otro enlace", async () => {
-    const res = await GET(request(""));
+    const res = await POST(pedido(""));
 
     expect(mocks.verifyOtp).not.toHaveBeenCalled();
     expect(res.headers.get("location")).toBe(`${ORIGIN}/entrar?error=confirmacion`);
@@ -106,7 +129,7 @@ describe("GET /confirmar", () => {
     });
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const res = await GET(request("?token_hash=usado"));
+    const res = await POST(pedido("?token_hash=usado"));
 
     expect(res.headers.get("location")).toBe(`${ORIGIN}/entrar?error=confirmacion`);
     expect(mocks.sendEmailInBackground).not.toHaveBeenCalled();
@@ -114,8 +137,12 @@ describe("GET /confirmar", () => {
 
   it("en Vercel, un request.url interno (localhost) nunca termina en el Location", async () => {
     vi.stubEnv("VERCEL_ENV", "production");
-    const res = await GET(
-      new Request("http://localhost:3000/confirmar?token_hash=hash-123", {
+    const body = new FormData();
+    body.set("token_hash", "hash-123");
+    const res = await POST(
+      new Request("http://localhost:3000/confirmar", {
+        method: "POST",
+        body,
         headers: { "x-forwarded-host": "dominicanos.com", "x-forwarded-proto": "https" },
       }),
     );
