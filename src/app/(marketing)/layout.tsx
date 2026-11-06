@@ -22,7 +22,7 @@ export default async function MarketingLayout({ children }: { children: ReactNod
         <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-4">
           <Link
             href="/"
-            className="rounded-full font-display text-lg font-bold tracking-tight text-brand-ink"
+            className="inline-flex min-h-11 items-center rounded-full font-display text-lg font-bold tracking-tight text-brand-ink"
           >
             {/* Marca del programa, no nombre del tenant. Ver @/lib/brand. */}
             {BRAND_NAME}
@@ -77,12 +77,12 @@ export default async function MarketingLayout({ children }: { children: ReactNod
               <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">
                 {COPY.footer.exploreTitle}
               </h2>
-              <ul className="mt-2">
+              <ul className="mt-2 space-y-2">
                 {COPY.footer.explore.map((item) => (
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className="inline-flex min-h-11 items-center text-sm text-foreground-secondary transition-colors hover:text-foreground"
+                      className="inline-flex min-h-11 min-w-11 items-center text-sm text-foreground-secondary transition-colors hover:text-foreground"
                     >
                       {item.label}
                     </Link>
@@ -95,12 +95,12 @@ export default async function MarketingLayout({ children }: { children: ReactNod
               <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">
                 {COPY.footer.communityTitle}
               </h2>
-              <ul className="mt-2">
+              <ul className="mt-2 space-y-2">
                 {COPY.footer.community.map((item) => (
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className="inline-flex min-h-11 items-center text-sm text-foreground-secondary transition-colors hover:text-foreground"
+                      className="inline-flex min-h-11 min-w-11 items-center text-sm text-foreground-secondary transition-colors hover:text-foreground"
                     >
                       {item.label}
                     </Link>
@@ -113,12 +113,12 @@ export default async function MarketingLayout({ children }: { children: ReactNod
               <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">
                 {COPY.footer.legalTitle}
               </h2>
-              <ul className="mt-2">
+              <ul className="mt-2 space-y-2">
                 {COPY.footer.legal.map((item) => (
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className="inline-flex min-h-11 items-center text-sm text-foreground-secondary transition-colors hover:text-foreground"
+                      className="inline-flex min-h-11 min-w-11 items-center text-sm text-foreground-secondary transition-colors hover:text-foreground"
                     >
                       {item.label}
                     </Link>

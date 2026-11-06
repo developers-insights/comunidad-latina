@@ -35,7 +35,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     guide.summary ?? `Guía paso a paso de ${tenant.name}, con fuentes oficiales citadas.`;
 
   return {
-    title: guide.title,
+    // Absoluto: con la marca del template pasaba de 65 caracteres y Google lo cortaba.
+    title: { absolute: guide.title },
     description,
     keywords: guide.topics,
     alternates: { canonical: `${SITE_URL}/guias/${guide.slug}` },

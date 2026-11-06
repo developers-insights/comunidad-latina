@@ -12,6 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getTenant();
   return {
     title: `Guías para tu llegada — ${tenant.name}`,
+    alternates: { canonical: `${SITE_URL}/guias` },
     description:
       "Trámites explicados paso a paso, en tu idioma y con fuentes oficiales citadas: ITIN, licencia de conducir, tus derechos y más.",
     openGraph: {

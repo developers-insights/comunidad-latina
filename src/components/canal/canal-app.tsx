@@ -41,9 +41,9 @@ export function SoloEnLaWeb({ children }: { children: ReactNode }) {
       </div>
       <div data-aviso-app className="hidden px-4 py-10">
         <div className="mx-auto max-w-md rounded-2xl border border-border-subtle bg-surface p-6">
-          <h1 className="font-display text-xl font-bold tracking-tight text-foreground">
+          <h2 className="font-display text-xl font-bold tracking-tight text-foreground">
             Esto se contrata desde la web
-          </h1>
+          </h2>
           <p className="mt-3 leading-relaxed text-foreground-secondary">
             Los impulsos, la verificación y los planes se contratan en comunidadlatina.com, desde
             el navegador de tu celular o de tu computadora, con esta misma cuenta. Lo que contrates

@@ -109,9 +109,9 @@ export function ListingCard({
 
   const overlayBottom = (
     <div>
-      <h3 className="font-display text-base font-bold leading-snug line-clamp-2">
+      <h2 className="font-display text-base font-bold leading-snug line-clamp-2">
         {listing.title}
-      </h3>
+      </h2>
       <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
         {listing.priceLabel && (
           <span className="numeric text-lg font-bold">{listing.priceLabel}</span>
