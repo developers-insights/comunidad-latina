@@ -6923,14 +6923,9 @@ export type Database = {
         Returns: {
           area_label: string
           avatar_url: string
-          bio: string
-          country_origin: string
-          cover_url: string
-          created_at: string
           display_name: string
           id: string
           identity_verified: boolean
-          username: string
         }[]
       }
       puntajes_publicos: {

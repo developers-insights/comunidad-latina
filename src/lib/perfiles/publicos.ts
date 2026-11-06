@@ -14,14 +14,9 @@ type Cliente = Pick<SupabaseClient<Database>, "rpc">;
 export interface PerfilPublico {
   id: string;
   display_name: string;
-  username: string | null;
   avatar_url: string | null;
-  cover_url: string | null;
-  bio: string | null;
-  country_origin: string | null;
   area_label: string | null;
   identity_verified: boolean;
-  created_at: string;
 }
 
 export interface PuntajePublico {

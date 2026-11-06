@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
-import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 /**
  * next.config.ts — propiedad del módulo PWA (ARQUITECTURA.md §2).
@@ -397,6 +397,6 @@ export default process.env.NEXT_PUBLIC_SENTRY_DSN
       // …pero jamás públicos: se borran del bundle tras subirlos.
       sourcemaps: { deleteSourcemapsAfterUpload: true },
       // Tree-shake de los logger statements del SDK en producción.
-      disableLogger: true,
+      bundleSizeOptimizations: { excludeDebugStatements: true },
     })
   : baseConfig;

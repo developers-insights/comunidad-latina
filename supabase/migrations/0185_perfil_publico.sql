@@ -14,18 +14,15 @@
 --   2. Deploy del sitio leyendo por `perfiles_publicos` / `puntajes_publicos`.
 --   3. 0186: recién ahí se le saca `anon` a las tablas.
 
-create or replace function public.perfiles_publicos(p_ids uuid[])
+drop function if exists public.perfiles_publicos(uuid[]);
+
+create function public.perfiles_publicos(p_ids uuid[])
 returns table (
   id uuid,
   display_name text,
-  username text,
   avatar_url text,
-  cover_url text,
-  bio text,
-  country_origin text,
   area_label text,
-  identity_verified boolean,
-  created_at timestamptz
+  identity_verified boolean
 )
 language sql
 stable
@@ -35,8 +32,9 @@ as $$
   -- Sólo por id y con tope: quien no conoce el id de alguien no lo puede pedir.
   -- Con sesión vale la misma regla que profiles_select. Sin sesión se ve sólo
   -- gente que el sitio ya muestra: los ids salen de avisos y publicaciones.
-  select p.id, p.display_name, p.username, p.avatar_url, p.cover_url, p.bio,
-         p.country_origin, p.area_label, p.identity_verified, p.created_at
+  -- Sólo lo que muestra la firma de un aviso. Bio y país salen de `profile_card`,
+  -- que respeta la privacidad que eligió cada persona.
+  select p.id, p.display_name, p.avatar_url, p.area_label, p.identity_verified
     from public.profiles p
    where p.id = any (p_ids[1:200])
      and (
