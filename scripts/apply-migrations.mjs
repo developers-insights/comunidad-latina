@@ -10,7 +10,7 @@ import dotenv from 'dotenv'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 dotenv.config({ path: join(root, '.env.local') })
 
-const REF = 'ktmbtpuhqqofdkisqseq'
+const REF = 'vnfqzlcxpmofvsoxnptf'
 const PASSWORD = process.env.SUPABASE_DB_PASSWORD
 if (!PASSWORD) {
   console.error('Falta SUPABASE_DB_PASSWORD en .env.local')

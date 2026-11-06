@@ -37,7 +37,7 @@
  *
  * ⚠️ PROVENANCIA DEL DATO DEL BUCKET — dejarlo escrito porque quedó una duda
  * real sin cerrar: el coordinador de esta tarea confirmó `file_size_limit` y
- * `allowed_mime_types` consultando el proyecto Supabase `ktmbtpuhqqofdkisqseq`
+ * `allowed_mime_types` consultando el proyecto Supabase `vnfqzlcxpmofvsoxnptf`
  * (2026-08-24). La memoria de ESTE repo (`proyectos-supabase-comunidad-latina`)
  * documenta ese mismo ref como un proyecto LEGACY compartido con otro cliente
  * ("caughtcode"), y al proyecto real de Comunidad Latina como

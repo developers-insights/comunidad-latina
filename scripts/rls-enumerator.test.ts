@@ -81,7 +81,7 @@ describe("superficies no-public del enumerador", () => {
     // lo devolvía como el literal "{authenticated}" en vez de un array — el
     // gate de check:rls quedaba rojo siempre para estas 4 policies aunque
     // estuvieran bien configuradas. Verificado 2026-09-09 contra
-    // ktmbtpuhqqofdkisqseq.
+    // vnfqzlcxpmofvsoxnptf.
     const completasComoStringDePostgres = [
       ["escribiendo_directo_recibir", "SELECT"],
       ["escribiendo_directo_emitir", "INSERT"],

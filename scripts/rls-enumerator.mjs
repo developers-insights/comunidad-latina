@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import pg from 'pg';
 
-const DB_HOST = 'db.ktmbtpuhqqofdkisqseq.supabase.co';
+const DB_HOST = 'db.vnfqzlcxpmofvsoxnptf.supabase.co';
 const DB_PORT = 5432;
 
 /**

@@ -34,7 +34,7 @@ import pg from "pg";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
-const DB_HOST = "db.ktmbtpuhqqofdkisqseq.supabase.co";
+const DB_HOST = "db.vnfqzlcxpmofvsoxnptf.supabase.co";
 
 function connectionString(): string | null {
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
