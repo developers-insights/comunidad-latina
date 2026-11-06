@@ -63,7 +63,11 @@ function createStub(options: {
   };
   const from = vi.fn((table: string) => builderFor(table));
   return {
-    client: { from, rpc: async () => ({ data: [], error: null }) } as unknown as SupabaseClient<never>,
+    client: {
+      from,
+      rpc: async () => ({ data: [], error: null }),
+      auth: { getSession: async () => ({ data: { session: {} } }) },
+    } as unknown as SupabaseClient<never>,
     from,
     argsOf: (table: string, method: string) =>
       (calls[table] ?? []).filter((c) => c.method === method).map((c) => c.args),

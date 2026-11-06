@@ -20,9 +20,26 @@ export function paginaDelEnlace(origin: string, destino: DestinoDeEnlace, reques
   return salida;
 }
 
-/** Sin esto, otro sitio podría postear su propio token y dejarte en SU cuenta. */
+/**
+ * Sin esto, otro sitio podría postear su propio token y dejarte en SU cuenta.
+ *
+ * Safari anterior a 16.4 no manda `Sec-Fetch-Site`: ahí decide `Origin`, y sin ninguno
+ * de los dos se rechaza. `Origin: null` también, porque lo manda un iframe sandbox; por
+ * eso /enlace no puede ir con `no-referrer`, que deja ese valor en su propio POST.
+ */
 export function vieneDeOtroSitio(request: Request): boolean {
-  return request.headers.get("sec-fetch-site") === "cross-site";
+  const sitio = request.headers.get("sec-fetch-site");
+  if (sitio) return sitio === "cross-site";
+
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const origen = request.headers.get("origin");
+  if (!host || !origen) return true;
+
+  try {
+    return new URL(origen).host !== host.trim().toLowerCase();
+  } catch {
+    return true;
+  }
 }
 
 export async function camposDelEnlace(request: Request) {

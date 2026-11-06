@@ -43,7 +43,7 @@ const ORIGIN = "https://dominicanos.com";
 function pedido(query: string, headers: Record<string, string> = {}): Request {
   const body = new FormData();
   new URLSearchParams(query).forEach((valor, clave) => body.set(clave, valor));
-  return new Request(`${ORIGIN}/callback`, { method: "POST", body, headers });
+  return new Request(`${ORIGIN}/callback`, { method: "POST", body, headers: { "sec-fetch-site": "same-origin", ...headers } });
 }
 
 function request(query: string, headers: Record<string, string> = {}): Request {

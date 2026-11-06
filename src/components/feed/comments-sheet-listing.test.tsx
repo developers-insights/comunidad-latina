@@ -90,7 +90,10 @@ function makeClient(user: { id: string } | null) {
     return chain;
   };
   return {
-    auth: { getUser: async () => ({ data: { user } }) },
+    auth: {
+      getUser: async () => ({ data: { user } }),
+      getSession: async () => ({ data: { session: {} } }),
+    },
     from: (table: string) => chainFor(table),
     rpc: async (fn: string) =>
       fn === "perfiles_publicos" ? results.profiles : { data: [], error: null },
