@@ -36,6 +36,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: `${tenant.name} — Tu comunidad de confianza`,
+    alternates: { canonical: siteUrlForMetadata() },
     description,
     keywords: [
       `comunidad ${tenant.slug}`,
