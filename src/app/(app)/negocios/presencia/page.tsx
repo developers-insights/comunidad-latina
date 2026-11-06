@@ -10,8 +10,15 @@ import { MiPlan } from "./mi-plan";
 import { PlanesPresencia } from "./planes-presencia";
 import { leerPreciosPresencia } from "./precios";
 import { SectionTopBar } from "@/components/shell";
+import { siteUrlForMetadata } from "@/lib/config/site-url";
 
-export const metadata = { title: "Presencia Verificada" };
+const SITE_URL = siteUrlForMetadata();
+
+export const metadata = {
+  title: "Presencia Verificada",
+  description: "Mostrá tu negocio verificado ante la comunidad latina y hacé que te encuentren quienes buscan en español.",
+  alternates: { canonical: `${SITE_URL}/negocios/presencia` },
+};
 
 /** Copy local del módulo PAGOS — no toca src/lib/i18n (compartido). */
 const COPY = {

@@ -93,9 +93,11 @@ export function metadataDeCompartible(input: MetadataCompartibleInput): Metadata
       title: titulo,
       ...(descripcion ? { description: descripcion } : {}),
       url,
+      // Este `openGraph` reemplaza entero al del layout: sin foto hay que repetir el logo
+      // o el link sale pelado por WhatsApp.
       ...(input.imagenUrl
         ? { images: [{ url: input.imagenUrl, width: 1200, height: 630, alt: titulo }] }
-        : {}),
+        : { images: [{ url: "/brand/og-logo.png", width: 1200, height: 630, alt: titulo }] }),
     },
     twitter: {
       card: "summary_large_image",

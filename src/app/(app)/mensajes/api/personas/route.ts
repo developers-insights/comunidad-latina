@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { clientIpFromHeaders, limit } from "@/lib/rate-limit";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUserId } from "@/lib/supabase/server";
 import { supabaseSinTiparGrupos } from "@/lib/messaging/grupos";
 
 /**
@@ -86,6 +86,8 @@ export async function GET(request: Request) {
       },
     );
   }
+
+  if (!(await getAuthUserId())) return NextResponse.json({ ...VACIO, query });
 
   const supabase = await createClient();
   const { data, error } = await supabaseSinTiparGrupos(supabase).rpc(

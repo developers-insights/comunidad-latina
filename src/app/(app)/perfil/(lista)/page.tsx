@@ -36,6 +36,7 @@ import { fetchProfileCard, fullName } from "../profile-card";
 import { ProfileCompletion, missingProfileFields } from "../profile-completion";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { memberSinceLabel, parseProfileTab, profileTabHref } from "../profile-tabs";
+import { puntajePublico } from "@/lib/perfiles/publicos";
 
 export const metadata = { title: "Tu perfil" };
 
@@ -140,11 +141,7 @@ export default async function PerfilPage({
   const [card, { data: trust }, counts, { count: contractsCount }, checkAzul] =
     await Promise.all([
       fetchProfileCard(supabase, userId),
-      supabase
-        .from("trust_scores")
-        .select("score, level, signals")
-        .eq("profile_id", userId)
-        .maybeSingle(),
+      puntajePublico(supabase, userId),
       fetchProfileCounts(supabase, { tenantId: tenant.id, profileId: userId }),
       // Acceso a "Mis contratos" (pedido cliente 26/7, movido del nav de
       // Creadores): solo se muestra si el usuario tiene algo que ver ahí — como

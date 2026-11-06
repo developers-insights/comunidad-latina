@@ -10,6 +10,7 @@ import {
   AdvertiserListSkeleton,
   type AdvertiserCardModel,
 } from "./advertiser-card";
+import { perfilesPublicos, puntajesPublicos } from "@/lib/perfiles/publicos";
 
 /**
  * =============================================================================
@@ -117,14 +118,8 @@ export async function AdvertiserDirectoryContent() {
   // anunciantes de esta página — mismo patrón que ya usan /propiedades,
   // /profesionales y /negocios para publicador + Trust Score.
   const [profilesResult, trustResult] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, display_name, avatar_url, identity_verified")
-      .in("id", advertiserIds),
-    supabase
-      .from("trust_scores")
-      .select("profile_id, score, level, signals")
-      .in("profile_id", advertiserIds),
+    perfilesPublicos(supabase, advertiserIds),
+    puntajesPublicos(supabase, advertiserIds),
   ]);
 
   const profileById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));

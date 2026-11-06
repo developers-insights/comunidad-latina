@@ -53,6 +53,7 @@ import { getViewerFormatDate } from "@/lib/time/viewer-zone";
 import { VENCIMIENTO_COPY } from "@/lib/listings";
 import { cn } from "@/lib/utils";
 import { ProfileLink } from "@/components/social/profile-link";
+import { perfilPublico, puntajePublico } from "@/lib/perfiles/publicos";
 
 const C = COPY.professionals;
 
@@ -152,16 +153,8 @@ export default async function ProfesionalDetallePage({ params }: { params: Param
     getViewerFormatDate(),
     listing.created_by
       ? Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, display_name, avatar_url, identity_verified")
-            .eq("id", listing.created_by)
-            .maybeSingle(),
-          supabase
-            .from("trust_scores")
-            .select("score, level, signals")
-            .eq("profile_id", listing.created_by)
-            .maybeSingle(),
+          perfilPublico(supabase, listing.created_by),
+          puntajePublico(supabase, listing.created_by),
           supabase
             .from("listings")
             .select("id", { count: "exact", head: true })

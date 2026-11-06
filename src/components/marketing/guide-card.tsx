@@ -24,11 +24,14 @@ export function GuideCard({
   guide,
   priority = false,
   className,
+  titulo: Titulo = "h3",
 }: {
   guide: GuideCardData;
   /** true solo para covers above-the-fold en la landing. */
   priority?: boolean;
   className?: string;
+  /** En /guias la card cuelga directo del h1: ahí va "h2". */
+  titulo?: "h2" | "h3";
 }) {
   return (
     <Link
@@ -75,9 +78,9 @@ export function GuideCard({
           </div>
         )}
 
-        <h3 className="font-display text-lg font-semibold leading-snug text-foreground">
+        <Titulo className="font-display text-lg font-semibold leading-snug text-foreground">
           {guide.title}
-        </h3>
+        </Titulo>
 
         {guide.summary && (
           <p className="line-clamp-3 text-sm leading-relaxed text-foreground-secondary">

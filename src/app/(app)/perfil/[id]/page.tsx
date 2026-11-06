@@ -24,6 +24,7 @@ import { fetchProfileCounts } from "../profile-data";
 import { fetchProfileCard, fullName } from "../profile-card";
 import { getViewerTimeZone } from "@/lib/time/viewer-zone";
 import { memberSinceLabel, parseProfileTab, profileTabHref } from "../profile-tabs";
+import { puntajePublico } from "@/lib/perfiles/publicos";
 
 export const metadata = { title: "Perfil" };
 
@@ -112,11 +113,7 @@ export default async function PerfilPublicoPage({
     checkAzul,
   ] = await Promise.all([
     fetchProfileCard(supabase, id),
-    supabase
-      .from("trust_scores")
-      .select("score, level, signals")
-      .eq("profile_id", id)
-      .maybeSingle(),
+    puntajePublico(supabase, id),
     // "Miembro desde" se formatea con el reloj de QUIEN MIRA, no con el de la
     // comunidad: alguien en Los Ángeles viendo un alta del 1 de marzo a las
     // 02:00 UTC tiene que leer "febrero", que es cuando pasó para él.

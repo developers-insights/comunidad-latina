@@ -264,6 +264,12 @@ export function LoginForm({
             <Button type="submit" size="lg" loading={pending} className={authSubmitClass}>
               {COPY.submitPassword}
             </Button>
+            <p className="text-center text-xs text-foreground-muted">
+              Usamos tu correo sólo para darte acceso a tu cuenta.{" "}
+              <Link href="/legal/privacidad" className="underline underline-offset-2">
+                Privacidad
+              </Link>
+            </p>
           </form>
         </TabsContent>
 

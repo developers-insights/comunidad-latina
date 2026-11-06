@@ -32,7 +32,7 @@ const SITE_URL = siteUrlForMetadata();
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getTenant();
   const gentilicio = gentilicioDe(tenant.slug);
-  const description = `El lugar donde ${gentilicio} que llegan encuentran a su gente y resuelven su vida — vivienda revisada, guías de trámites en tu idioma y verificación contra registros oficiales.`;
+  const description = `Donde ${gentilicio} que llegan encuentran a su gente: vivienda revisada, guías de trámites en español y verificación real.`;
 
   return {
     title: `${tenant.name} — Tu comunidad de confianza`,

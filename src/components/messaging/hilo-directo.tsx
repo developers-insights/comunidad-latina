@@ -50,6 +50,7 @@ import {
 } from "@/components/share/enlace-interno";
 import { toTrustProps } from "@/components/messaging/trust";
 import { sigueDescartada } from "@/lib/messaging/solicitud-descartada";
+import { puntajePublico } from "@/lib/perfiles/publicos";
 
 type MessageRow = MensajeDelHilo;
 
@@ -175,11 +176,7 @@ export async function HiloDirecto({
   const delOtroP = supabaseP.then((supabase) =>
     Promise.all([
       other
-        ? supabase
-            .from("trust_scores")
-            .select("score, level, signals")
-            .eq("profile_id", other.id)
-            .maybeSingle()
+        ? puntajePublico(supabase, other.id)
         : Promise.resolve({ data: null }),
       // En esta tanda —y no en un efecto del cliente— para que el encabezado se
       // pinte completo de una, sin un "En línea" que aparece tarde.

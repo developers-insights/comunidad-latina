@@ -29,10 +29,10 @@ export default async function MarketingLayout({ children }: { children: ReactNod
           </Link>
 
           {/* El toggle de tema no es navegación: vive al lado del nav, no adentro. */}
-          <div className="flex items-center gap-1 sm:gap-2">
+          <div className="flex items-center gap-2">
             <ThemeToggle />
 
-            <nav aria-label="Principal" className="flex items-center gap-1 sm:gap-2">
+            <nav aria-label="Principal" className="flex items-center gap-2">
               <Link
                 href="/guias"
                 className="hidden min-h-11 items-center rounded-md px-3 text-sm font-medium text-foreground-secondary transition-colors hover:text-foreground sm:inline-flex"
@@ -45,7 +45,7 @@ export default async function MarketingLayout({ children }: { children: ReactNod
               >
                 Propiedades
               </Link>
-              <Link href="/entrar" className={buttonVariants({ variant: "primary", size: "sm" })}>
+              <Link href="/entrar" className={`${buttonVariants({ variant: "primary", size: "sm" })} min-h-11`}>
                 {t("common", "enter")}
               </Link>
             </nav>
@@ -74,15 +74,15 @@ export default async function MarketingLayout({ children }: { children: ReactNod
             </div>
 
             <nav aria-label={COPY.footer.exploreTitle}>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">
                 {COPY.footer.exploreTitle}
-              </h3>
-              <ul className="mt-4 space-y-3">
+              </h2>
+              <ul className="mt-2">
                 {COPY.footer.explore.map((item) => (
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className="text-sm text-foreground-secondary transition-colors hover:text-foreground"
+                      className="inline-flex min-h-11 items-center text-sm text-foreground-secondary transition-colors hover:text-foreground"
                     >
                       {item.label}
                     </Link>
@@ -92,15 +92,15 @@ export default async function MarketingLayout({ children }: { children: ReactNod
             </nav>
 
             <nav aria-label={COPY.footer.communityTitle}>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">
                 {COPY.footer.communityTitle}
-              </h3>
-              <ul className="mt-4 space-y-3">
+              </h2>
+              <ul className="mt-2">
                 {COPY.footer.community.map((item) => (
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className="text-sm text-foreground-secondary transition-colors hover:text-foreground"
+                      className="inline-flex min-h-11 items-center text-sm text-foreground-secondary transition-colors hover:text-foreground"
                     >
                       {item.label}
                     </Link>
@@ -110,15 +110,15 @@ export default async function MarketingLayout({ children }: { children: ReactNod
             </nav>
 
             <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">
                 {COPY.footer.legalTitle}
-              </h3>
-              <ul className="mt-4 space-y-3">
+              </h2>
+              <ul className="mt-2">
                 {COPY.footer.legal.map((item) => (
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className="text-sm text-foreground-secondary transition-colors hover:text-foreground"
+                      className="inline-flex min-h-11 items-center text-sm text-foreground-secondary transition-colors hover:text-foreground"
                     >
                       {item.label}
                     </Link>

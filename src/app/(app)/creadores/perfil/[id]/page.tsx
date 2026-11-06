@@ -26,6 +26,7 @@ import { leerCheckAzul } from "@/lib/verificacion/read";
 import { cn, formatDate } from "@/lib/utils";
 import { fetchServicePackages } from "../queries";
 import { ProfileLink } from "@/components/social/profile-link";
+import { perfilPublico, perfilesPublicos, puntajePublico } from "@/lib/perfiles/publicos";
 
 export const metadata = { title: "Perfil de creador" };
 
@@ -63,8 +64,8 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
       .select("profile_id, headline, bio, skills, portfolio_photos, rate_hint, available, completed_jobs, rating_avg, rating_count")
       .eq("profile_id", id)
       .maybeSingle(),
-    supabase.from("profiles").select("id, display_name, avatar_url, identity_verified, area_label").eq("id", id).maybeSingle(),
-    supabase.from("trust_scores").select("score, level, signals").eq("profile_id", id).maybeSingle(),
+    perfilPublico(supabase, id),
+    puntajePublico(supabase, id),
     supabase
       .from("gig_reviews")
       .select("id, reviewer_id, rating, body, created_at")
@@ -113,7 +114,7 @@ export default async function CreadorPublicoPage({ params }: { params: Promise<{
   const reviewerIds = [...new Set((reviews ?? []).map((r) => r.reviewer_id))];
   const [{ data: reviewers }, { data: existingFollow }, { data: existingConversation }] = await Promise.all([
     reviewerIds.length
-      ? supabase.from("profiles").select("id, display_name, avatar_url").in("id", reviewerIds)
+      ? perfilesPublicos(supabase, reviewerIds)
       : Promise.resolve({ data: [] as { id: string; display_name: string; avatar_url: string | null }[] }),
     userId
       ? supabase

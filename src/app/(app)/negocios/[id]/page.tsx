@@ -43,6 +43,7 @@ import { cn, DEFAULT_TIME_ZONE, timeAgo } from "@/lib/utils";
 import { businessCategoryLabel, businessCategoryOf } from "../categories";
 import { BUSINESS_PROFILE_COPY as C } from "./copy";
 import { ProfileLink } from "@/components/social/profile-link";
+import { perfilPublico, puntajePublico } from "@/lib/perfiles/publicos";
 
 /**
  * PERFIL COMPLETO DE UN NEGOCIO (call del 29/7, 1:05: "si le das ver al
@@ -542,16 +543,8 @@ type NegocioSupabase = Awaited<ReturnType<typeof createClient>>;
 
 async function fetchDuenoDelNegocio(supabase: NegocioSupabase, ownerId: string) {
   const [{ data: profile }, { data: trust }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, display_name, avatar_url, identity_verified")
-      .eq("id", ownerId)
-      .maybeSingle(),
-    supabase
-      .from("trust_scores")
-      .select("score, level, signals")
-      .eq("profile_id", ownerId)
-      .maybeSingle(),
+    perfilPublico(supabase, ownerId),
+    puntajePublico(supabase, ownerId),
   ]);
   return { profile, trust };
 }
