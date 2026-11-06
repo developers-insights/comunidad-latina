@@ -10,7 +10,7 @@ if (!process.env.SUPABASE_DB_PASSWORD) {
 const dry = process.argv.includes("--dry");
 
 const client = new pg.Client({
-  connectionString: `postgresql://postgres:${encodeURIComponent(process.env.SUPABASE_DB_PASSWORD)}@db.ktmbtpuhqqofdkisqseq.supabase.co:5432/postgres`,
+  connectionString: `postgresql://postgres:${encodeURIComponent(process.env.SUPABASE_DB_PASSWORD)}@db.vnfqzlcxpmofvsoxnptf.supabase.co:5432/postgres`,
   ssl: { rejectUnauthorized: false },
 });
 

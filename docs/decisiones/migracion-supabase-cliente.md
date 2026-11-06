@@ -1,8 +1,8 @@
 # Migración de Supabase a la cuenta del cliente
 
-Estado al 2026-11-05: **plan listo, migración sin empezar.** Geovanny despausó el destino y nos dio rol de administrador el 04/11, y la PC de escritorio tiene `envkit`: ya no hay bloqueo de acceso. Las migraciones 0181 a 0184 se aplicaron en el origen, así que el destino va hasta la 0184 y la limpieza del paso 6 ya está hecha.
+Estado al 2026-11-06: **mudanza hecha.** Producción corre en el destino desde el corte del 06/11. El origen quedó congelado (trigger `zz_mudanza` en las 113 tablas de CL) y con sus 32 crons apagados, sin borrar nada. A la semana de estar estable, proponer la limpieza en Kairo.
 
-| | Origen (producción hoy) | Destino (cuenta del cliente) |
+| | Origen (base vieja) | Destino (producción) |
 |---|---|---|
 | Ref | `ktmbtpuhqqofdkisqseq` | `vnfqzlcxpmofvsoxnptf` |
 | Org | `thmokrmynbamoukloork` (INSIGHTS manu) | `mfgffszuxbixgogcchdr` (dueño ecosistemalatino) |
@@ -65,6 +65,20 @@ La 0181 no cambia nada al aplicarse: `tenants.phone_required` nace en `false`. P
 `dominicanos` no se prende hasta tener WhatsApp de Twilio: los números de República Dominicana no reciben
 SMS y quedarían en modo lectura sin salida. Para apagar: primero la columna, después la env.
 
-## Inventario del origen
+## Inventario del origen (05/11)
 
-Pendiente: requiere acceso a la base.
+- 34 usuarios de CL de 37 en `auth.users`. Quedan afuera los 3 de `@metalwailers.com` (`fg_equipo`, sin perfil).
+- 113 tablas en `public` + `app`, 2.581 filas. 323 objetos y 440 MB en 9 buckets.
+- 32 crons, 2 secretos de Vault y la cola `pgmq.moderation`. Sin edge functions.
+- Twilio no está configurado en Auth del origen: el SMS lo manda la app con sus propias envs.
+
+## Lo que la mudanza corrigió de este plan
+
+- **`supabase/migrations/` no alcanza para reconstruir la base.** El origen tenía `0115_feed_siguiendo`,
+  `0116_alquilado_y_disponibilidad` y `0117_evento_de_un_negocio` del commit `a1bbe345`, que nunca llegó a `main`,
+  y 34 funciones, buckets, grants y una policy distintos a lo que dan las migraciones. **Producción mandó:** el
+  destino se alineó con el origen objeto por objeto por catálogo. El diff de `pg_dump -s` no sirve: el orden y los
+  CRLF lo llenan de ruido.
+- **Reproducir desde cero con estas migraciones no da la base real.** Hay que alinearlo aparte.
+- **Congelar:** revocar grants no alcanza, porque las RPC `security definer` escriben como `postgres`. Se usa un
+  trigger por sentencia `zz_mudanza` en cada tabla de CL. Tarda unos 30 s en aplicarse.

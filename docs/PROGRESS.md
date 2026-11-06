@@ -1,5 +1,9 @@
 # PROGRESS — Comunidad Latina
 
+## Mudanza al Supabase del cliente (2026-11-06)
+
+Producción pasó de `ktmbtpuhqqofdkisqseq` a `vnfqzlcxpmofvsoxnptf`. Todas las sesiones se cerraron: cada usuario vuelve a entrar. La base vieja queda congelada como respaldo. Detalle, vuelta atrás y lo que corrigió el plan: `docs/decisiones/migracion-supabase-cliente.md`.
+
 ## QA de Henry del 03/11: arreglos, migraciones y deploy (2026-11-05, PR #15 y rama `claude/comunidad-latina-cambios-6b3312`)
 
 Código y migraciones 0181 a 0184 en producción sobre `ktmbtpuhqqofdkisqseq`. La mudanza al Supabase del cliente sigue sin empezar: plan en `docs/decisiones/migracion-supabase-cliente.md`.

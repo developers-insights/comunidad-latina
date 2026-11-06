@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import pg from "pg";
 
-const REF = "ktmbtpuhqqofdkisqseq";
+const REF = "vnfqzlcxpmofvsoxnptf";
 const repo = process.cwd();
 const files = process.argv.slice(2);
 if (files.length === 0) { console.error("Pasá al menos un archivo de supabase/migrations/"); process.exit(2); }
